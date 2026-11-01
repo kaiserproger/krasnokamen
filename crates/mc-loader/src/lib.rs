@@ -1280,7 +1280,7 @@ mod tests {
             .unwrap();
         archive
             .write_all(
-                br#"{"schema":2,"screens":[{"id":"example:showcase","title":"Showcase","widgets":[]}],"blocks":[{"id":"example:ruby_block","model":"example:block/ruby_block","name":"Ruby Block","carrier":"minecraft:black_glazed_terracotta","drop_item":"example:ruby_block"}],"items":[],"assets":[]}"#,
+                br#"{"schema":2,"screens":[{"id":"example:showcase","title":"Showcase","widgets":[]}],"blocks":[{"id":"example:ruby_block","model":"example:block/ruby_block","name":"Ruby Block","carrier":"minecraft:pink_glazed_terracotta","drop_item":"example:ruby_block"}],"items":[],"assets":[]}"#,
             )
             .unwrap();
         archive.finish().unwrap();

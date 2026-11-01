@@ -8,7 +8,7 @@
 //! [`Event::OperationAnswered`](crate::events::Event::OperationAnswered) with the
 //! same `request`.
 
-use crate::{Command, domain_operations, inventories};
+use crate::{domain_operations, inventories, Command};
 
 /// Read one owned endpoint, optionally fenced to a revision.
 ///

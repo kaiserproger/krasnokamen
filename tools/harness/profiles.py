@@ -270,6 +270,7 @@ def run_java(ctx: ProfileContext) -> dict[str, Any]:
             str(AGENT_ROOT / "gradlew"),
             "--no-daemon",
             "--console=plain",
+            "--continue",
             ":bridge-core:test",
             ":java-agent:test",
             ":loader-core:test",

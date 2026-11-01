@@ -646,28 +646,194 @@ async fn unlock_session_removes_the_lock_only_when_the_fence_is_enabled() {
 }
 
 #[tokio::test]
-async fn unavailable_loader_item_authority_returns_correlated_failure_without_items() {
+async fn loader_block_grants_use_owned_carrier_items_atomically() {
+    use mc_data::item_components::{CustomItemDefinition, ItemFacts};
+    use mc_script::ScriptLoaderItemGrantFailure as Failure;
+
     let (mut state, actor) = fixture();
+    let owners = [
+        (
+            "ruby-live:block",
+            "ruby-live:item",
+            "minecraft:pink_glazed_terracotta",
+        ),
+        (
+            "sapphire-live:block",
+            "sapphire-live:item",
+            "minecraft:blue_glazed_terracotta",
+        ),
+    ];
+    let registry = Arc::make_mut(&mut state.registry);
+    registry.item_facts = std::mem::take(&mut registry.item_facts)
+        .with_custom_items(
+            owners.map(|(_, item, carrier)| CustomItemDefinition {
+                id: Identifier::parse(item).unwrap(),
+                carrier: Identifier::parse(carrier).unwrap(),
+                name: item.into(),
+                crafting_ingredient: None,
+                facts: ItemFacts {
+                    max_stack_size: Some(16),
+                    ..ItemFacts::default()
+                },
+            }),
+            &registry.items,
+        )
+        .unwrap();
+    let declarations = owners.map(
+        |(block, item, carrier)| mc_loader::CarrierBlockDeclaration {
+            id: block.into(),
+            name: block.into(),
+            model: block.into(),
+            carrier: carrier.into(),
+            drop_item: item.into(),
+        },
+    );
+    registry.carrier_blocks = crate::carrier_blocks::CarrierBlocks::admit(
+        &declarations,
+        &registry.blocks,
+        &registry.item_facts,
+    )
+    .unwrap();
+
+    for (owner, block, item) in [
+        ("ruby-live", "ruby-live:block", "ruby-live:item"),
+        ("sapphire-live", "sapphire-live:block", "sapphire-live:item"),
+    ] {
+        let request = mc_script::ScriptLoaderItemGrantRequest::try_new(
+            "item-grant",
+            ScriptPlayerId::new(1),
+            block,
+            20,
+        )
+        .unwrap();
+        let event = execute(
+            &mut state,
+            admit(owner, ScriptCommand::GrantLoaderBlockItem { request }).await,
+        )
+        .unwrap();
+        assert_eq!(event.target_plugin_id(), Some(owner));
+        assert!(
+            matches!(event.kind(), ScriptEventKind::LoaderItemGrantResult {
+            request_id, failure: None, ..
+        } if request_id == "item-grant")
+        );
+        let expected = crate::carrier_blocks::custom_stack(
+            &state.registry.item_facts,
+            &state.registry.items,
+            &Identifier::parse(item).unwrap(),
+        )
+        .unwrap();
+        let stacks: Vec<_> = state.players[&actor]
+            .inventory
+            .slots
+            .iter()
+            .filter(|stack| {
+                let mut one = (*stack).clone();
+                one.count = 1;
+                one == expected
+            })
+            .collect();
+        assert_eq!(stacks.iter().map(|stack| stack.count).sum::<i32>(), 20);
+        assert!(stacks.iter().all(|stack| stack.count <= 16));
+    }
+
+    for (owner, block, player, expected) in [
+        ("ruby-live", "sapphire-live:block", 1, Failure::NotOwned),
+        ("ruby-live", "ruby-live:unknown", 1, Failure::NotOwned),
+        (
+            "ruby-live",
+            "ruby-live:block",
+            999,
+            Failure::PlayerUnavailable,
+        ),
+    ] {
+        let before = state.players[&actor].inventory.clone();
+        let request = mc_script::ScriptLoaderItemGrantRequest::try_new(
+            "refused",
+            ScriptPlayerId::new(player),
+            block,
+            1,
+        )
+        .unwrap();
+        let event = execute(
+            &mut state,
+            admit(owner, ScriptCommand::GrantLoaderBlockItem { request }).await,
+        )
+        .unwrap();
+        assert!(
+            matches!(event.kind(), ScriptEventKind::LoaderItemGrantResult {
+            failure: Some(failure), ..
+        } if *failure == expected)
+        );
+        assert_eq!(state.players[&actor].inventory, before);
+    }
+
+    let stone = item(&state, "minecraft:stone", 64);
+    state.players.get_mut(&actor).unwrap().inventory.slots[..36].fill(stone);
+    state.players.get_mut(&actor).unwrap().inventory.slots[35] = ItemStack::EMPTY;
     let before = state.players[&actor].inventory.clone();
     let request = mc_script::ScriptLoaderItemGrantRequest::try_new(
-        "item-grant",
+        "full",
         ScriptPlayerId::new(1),
-        "shop:display-block",
+        "ruby-live:block",
+        20,
+    )
+    .unwrap();
+    let event = execute(
+        &mut state,
+        admit("ruby-live", ScriptCommand::GrantLoaderBlockItem { request }).await,
+    )
+    .unwrap();
+    assert!(matches!(
+        event.kind(),
+        ScriptEventKind::LoaderItemGrantResult {
+            failure: Some(Failure::InventoryFull),
+            ..
+        }
+    ));
+    assert_eq!(state.players[&actor].inventory, before);
+
+    crate::tick::run_tick(
+        &mut state,
+        &[PlayerInput::Leave {
+            connection: ConnectionId(1),
+        }],
+    );
+    let (mut child, child_actor) = fixture();
+    child.dimension = crate::dimensions::Dimension::Nether;
+    child.registry = Arc::clone(&state.registry);
+    state
+        .other_dimensions
+        .insert(crate::dimensions::Dimension::Nether, Box::new(child));
+    let request = mc_script::ScriptLoaderItemGrantRequest::try_new(
+        "child",
+        ScriptPlayerId::new(1),
+        "ruby-live:block",
         1,
     )
     .unwrap();
     let event = execute(
         &mut state,
-        admit("shop", ScriptCommand::GrantLoaderBlockItem { request }).await,
+        admit("ruby-live", ScriptCommand::GrantLoaderBlockItem { request }).await,
     )
     .unwrap();
-    assert_eq!(event.target_plugin_id(), Some("shop"));
+    assert!(matches!(
+        event.kind(),
+        ScriptEventKind::LoaderItemGrantResult { failure: None, .. }
+    ));
+    let child = &state.other_dimensions[&crate::dimensions::Dimension::Nether];
+    let expected = crate::carrier_blocks::custom_stack(
+        &child.registry.item_facts,
+        &child.registry.items,
+        &Identifier::parse("ruby-live:item").unwrap(),
+    )
+    .unwrap();
     assert!(
-        matches!(event.kind(), ScriptEventKind::LoaderItemGrantResult {
-        request_id, failure: Some(mc_script::ScriptLoaderItemGrantFailure::RuntimeUnavailable),
-        .. } if request_id == "item-grant")
+        child.players[&child_actor]
+            .inventory
+            .slots
+            .contains(&expected)
     );
-    assert_eq!(state.players[&actor].inventory, before);
 }
 
 #[tokio::test]

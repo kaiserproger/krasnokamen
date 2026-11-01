@@ -61,6 +61,8 @@
   "blocks": [{
     "id": "ruby-live:ruby_block",
     "model": "ruby-live:block/ruby_block",
+    "carrier": "minecraft:pink_glazed_terracotta",
+    "drop_item": "ruby-live:ruby_block",
     "name": "Ruby Fixture Block"
   }],
   "items": [{
@@ -71,6 +73,10 @@
     "id": "ruby-live:blade",
     "base_item": "minecraft:paper",
     "name": "Ruby Blade"
+  }, {
+    "id": "ruby-live:ruby_block",
+    "base_item": "minecraft:pink_glazed_terracotta",
+    "name": "Ruby Fixture Block"
   }],
   "assets": [{
     "id": "ruby-live:ruby_item_definition",
@@ -82,6 +88,11 @@
     "path": "assets/ruby-live/items/blade.json",
     "sha256": "@BLADE_SHA256@",
     "size_bytes": @BLADE_SIZE@
+  }, {
+    "id": "ruby-live:ruby_block_item_definition",
+    "path": "assets/ruby-live/items/ruby_block.json",
+    "sha256": "@BLOCK_ITEM_SHA256@",
+    "size_bytes": @BLOCK_ITEM_SIZE@
   }, {
     "id": "ruby-live:ruby_block_model",
     "path": "assets/ruby-live/models/block/ruby_block.json",

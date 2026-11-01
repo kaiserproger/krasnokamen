@@ -81,8 +81,10 @@ QA. Unit/smoke receipts do not prove in-world rendering or other operating syste
 
 ## Screen sharing (`solaris:screen`, protocol 1)
 
-A native client may show its captured desktop window on a `solaris:monitor`
-row. By default every other player sees only a generic "monitor is on" texture
+Screen-sharing protocol 1 addresses `computer:monitor` rows. This is relay
+support, not a native-content compatibility claim: the current package/client
+boundary is recorded below. By default every other player sees only a generic
+"monitor is on" texture
 (`ACTIVE`, no frames). A viewer may ask the owner for permission; only while
 the permission is active **and** the viewer looks at the row does the server
 turn `DEMAND` on for the owner and relay frames to that viewer. No input from
@@ -98,7 +100,7 @@ extending +X for sides 2/3 and +Z for 4/5), `u8 height` (1..=16, extending +Y), 
 (`Dimension::ALL` index, must equal the sender's dimension).
 
 Client -> server: `0 OPEN(id)` owner starts (within 8 blocks; every one of the width x height blocks must
-be a monitor, i.e. a `minecraft:black_glazed_terracotta` carrier state whose
+be a monitor, i.e. a `minecraft:gray_glazed_terracotta` carrier state whose
 `facing` equals `side`; at most 4 per owner and 128 open screens; one owner per rectangle); `1 CLOSE(id)`;
 `2 FRAME_PART(id, u32 seq, u16 w, u16 h, u8 codec=1 H.264, u8 key, u8 idx, u8 count, bytes)`
 with every part carrying the full header, <=30000 data bytes per part (the
@@ -239,19 +241,63 @@ Core admits one narrow Loader block shape; every other `blocks` shape is refused
 at startup. A bundle with `content = [.., "blocks", ..]` and `register_blocks`
 declares exactly one index entry
 `{"id","name","model","carrier","drop_item"}` (all five keys, owner-namespaced
-`id`/`drop_item`). `carrier` must be a core-reserved vanilla block (today only
-`minecraft:black_glazed_terracotta`: full cube, horizontal `facing`, no block
-entity, never generated) and `drop_item` an installed custom item whose carrier
-item is that block. The world, WAL and native store persist only the carrier's
-four `facing` states, so storage and vanilla clients are unchanged (they see
-black glazed terracotta); a carrier state *is* the custom block. Placing the
+`id`/`drop_item`). `carrier` must be a core-reserved vanilla block:
+`minecraft:gray_glazed_terracotta` for the monitor, or
+`minecraft:pink_glazed_terracotta` / `minecraft:blue_glazed_terracotta` for the
+two-owner Ruby/Sapphire fixture. All are full cubes with horizontal `facing`,
+no block entity. Each carrier may belong to only one
+declared block. `drop_item` must be an installed custom item whose carrier item
+is that block. The world, WAL and native store persist only the carrier's four
+`facing` states, so storage and vanilla clients are unchanged (they see the
+selected glazed terracotta); a carrier state *is* the custom block. Placing the
 custom item places the carrier state with vanilla facing (screen toward the
 placer); the plain carrier item can no longer be placed; breaking or exploding
 it drops the custom item (none in creative). Carrier states are server-dictated:
 the old per-client `carrier_block_state_ids` negotiation and its dead
 projection/report code are removed (a non-empty ack field is refused).
-`solaris:monitor` is shipped by the first-party `computer` package. Rows of
-adjacent monitors are a client rule, not core state.
+The optional first-party `computer` package now declares `computer:monitor`,
+including its custom item, gray carrier, authored model and textures. The logical
+ID uses the package-owned namespace; the old `solaris:monitor` lookup is removed,
+without an alias or an exception to owner validation. Relay channel names remain
+`solaris:screen` and `solaris:computer`.
+
+The genuine package and the unchanged Ruby/Sapphire fixtures passed simultaneous
+placement/rendering and custom-item break/pickup cycles on Fabric, NeoForge and
+Forge. Receipts: `20261101T065856-loader-v2-settlements-smoke-b7ev_wvt`,
+`20261101T065935-loader-v2-settlements-smoke-ncms3_27` and
+`20261101T070012-loader-v2-settlements-smoke-0a0j0s7_` under local
+`.analysis/validation/`. The monitor archive targets those three Java adapters;
+the native Loader still rejects block archives. These content gates do not prove
+native capture-to-monitor playback, terminal behavior or other operating systems.
+Rows of adjacent monitors remain a client rule, not core state.
+
+The original black/red palette was withdrawn after inspection of all 1,511 local
+vanilla 26.3 structure templates found black glazed terracotta in four trail-ruins
+templates (49 placed-block references) and red glazed terracotta in
+`trial_chambers/reward/ominous_vault.nbt` (two references). The replacement
+gray/pink/blue palette had no placed references in those templates; none of the
+1,144 inspected worldgen JSON files directly referenced glazed terracotta.
+This avoids the confirmed natural-template collisions, not every possible
+generation path or arbitrary imported player-built world.
+
+`CarrierBlocks::for_state` and `drop_for_state` identify only the block state,
+not its origin, so an admitted carrier still aliases matching imported vanilla
+states. Black/red declarations are rejected rather than retained as aliases.
+The persisted plugin startup identity includes custom-item carriers and
+carrier-block declarations. A copied old Ruby/Sapphire QA world was refused
+under the replacement packages with `native world plugin startup policy differs
+from its checkpoint`; it was not silently reinterpreted or rewritten. Existing
+worlds are not automatically migrated, and no second block-identity store is
+introduced.
+
+An admitted `grant-loader-block-item` resolves the requested block against these
+declarations and requires its namespace to match the issuing plugin. It grants
+the declaration's installed `drop_item`, including its custom item model and
+name, through the native player-inventory plan and commit. The whole bounded
+count must fit under the item's stack limit and inventory reservation rules;
+otherwise nothing is added. The correlated result reports the actual commit or
+refusal. This server-owned carrier path does not require a client Loader ACK:
+vanilla clients see the carrier item.
 
 Desktop input limits: with Wayland RemoteDesktop, pointer motion maps to the
 captured stream, but buttons and keys are seat-wide (no target window), so the

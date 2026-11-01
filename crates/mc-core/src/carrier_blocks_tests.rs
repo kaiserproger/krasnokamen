@@ -12,8 +12,8 @@ use crate::carrier_blocks::CarrierBlocks;
 use crate::farming_tests::{Y, block, put, setup};
 use crate::tick::{TickState, run_tick};
 
-const MONITOR: &str = "solaris:monitor";
-const CARRIER: &str = "minecraft:black_glazed_terracotta";
+const MONITOR: &str = "computer:monitor";
+const CARRIER: &str = "minecraft:gray_glazed_terracotta";
 
 fn id(name: &str) -> Identifier {
     Identifier::parse(name).expect("identifier")
@@ -23,7 +23,7 @@ fn declaration(carrier: &str, drop_item: &str) -> CarrierBlockDeclaration {
     CarrierBlockDeclaration {
         id: MONITOR.into(),
         name: "Monitor".into(),
-        model: "solaris:block/monitor".into(),
+        model: "computer:block/monitor".into(),
         carrier: carrier.into(),
         drop_item: drop_item.into(),
     }
@@ -103,6 +103,143 @@ fn only_a_reserved_horizontal_carrier_with_an_installed_drop_item_is_admitted() 
 }
 
 #[test]
+fn natural_black_and_red_glazed_states_keep_their_vanilla_drops() {
+    let (mut state, _) = monitor_setup();
+    let pickaxe = state
+        .registry
+        .items
+        .id_of(&id("minecraft:iron_pickaxe"))
+        .unwrap();
+    let tool = ItemStack::new(pickaxe, 1);
+    // These states occur in 26.3 trail ruins and the ominous-vault template.
+    for (x, carrier, facing) in [
+        (1, "black_glazed_terracotta", "south"),
+        (2, "red_glazed_terracotta", "west"),
+    ] {
+        let placed = block(&state, carrier, &[("facing", facing)]);
+        put(&mut state, x, Y + 1, 0, placed);
+        let drops = crate::block_drop_context::roll(
+            &state,
+            BlockPos { x, y: Y + 1, z: 0 },
+            placed,
+            &tool,
+            0,
+        )
+        .expect("vanilla glazed drops");
+        let vanilla_item = state
+            .registry
+            .items
+            .id_of(&id(&format!("minecraft:{carrier}")))
+            .unwrap();
+        assert_eq!(drops, vec![ItemStack::new(vanilla_item, 1)], "{carrier}");
+    }
+}
+
+#[test]
+fn naturally_generated_carriers_are_rejected_even_with_matching_custom_items() {
+    for carrier in [
+        "minecraft:black_glazed_terracotta",
+        "minecraft:red_glazed_terracotta",
+    ] {
+        let (mut state, _) = setup();
+        let registry = Arc::make_mut(&mut state.registry);
+        registry.item_facts = std::mem::take(&mut registry.item_facts)
+            .with_custom_items(
+                [CustomItemDefinition {
+                    id: id(MONITOR),
+                    carrier: id(carrier),
+                    name: "Monitor".into(),
+                    crafting_ingredient: None,
+                    facts: ItemFacts {
+                        max_stack_size: Some(64),
+                        ..ItemFacts::default()
+                    },
+                }],
+                &registry.items,
+            )
+            .expect("matching custom item");
+        assert!(
+            matches!(
+                CarrierBlocks::admit(
+                    &[declaration(carrier, MONITOR)],
+                    &registry.blocks,
+                    &registry.item_facts,
+                ),
+                Err(crate::config::CoreError::Registry(_))
+            ),
+            "{carrier} must not be admitted"
+        );
+    }
+}
+
+#[test]
+fn distinct_owners_keep_their_carrier_states_and_drops_separate() {
+    let (mut state, _) = monitor_setup();
+    let owners = [
+        ("ruby-live:ruby_block", "pink_glazed_terracotta"),
+        ("sapphire-live:sapphire_block", "blue_glazed_terracotta"),
+    ];
+    {
+        let registry = Arc::make_mut(&mut state.registry);
+        registry.item_facts = std::mem::take(&mut registry.item_facts)
+            .with_custom_items(
+                owners.map(|(item, carrier)| CustomItemDefinition {
+                    id: id(item),
+                    carrier: id(&format!("minecraft:{carrier}")),
+                    name: item.into(),
+                    crafting_ingredient: None,
+                    facts: ItemFacts {
+                        max_stack_size: Some(64),
+                        ..ItemFacts::default()
+                    },
+                }),
+                &registry.items,
+            )
+            .expect("owner block items");
+        let mut declarations = vec![declaration(CARRIER, MONITOR)];
+        declarations.extend(owners.map(|(item, carrier)| CarrierBlockDeclaration {
+            id: item.into(),
+            name: item.into(),
+            model: item.into(),
+            carrier: format!("minecraft:{carrier}"),
+            drop_item: item.into(),
+        }));
+        registry.carrier_blocks =
+            CarrierBlocks::admit(&declarations, &registry.blocks, &registry.item_facts)
+                .expect("distinct owners admitted");
+
+        let mut duplicate = declarations[1].clone();
+        duplicate.id = "ruby-live:duplicate".into();
+        declarations.push(duplicate);
+        assert!(
+            CarrierBlocks::admit(&declarations, &registry.blocks, &registry.item_facts).is_err(),
+            "a second identity cannot claim an already-owned carrier"
+        );
+    }
+    for (item, carrier) in owners {
+        let expected = crate::carrier_blocks::custom_stack(
+            &state.registry.item_facts,
+            &state.registry.items,
+            &id(item),
+        )
+        .expect("owner block stack");
+        for facing in ["east", "north", "south", "west"] {
+            let placed = block(&state, carrier, &[("facing", facing)]);
+            assert_eq!(state.registry.carrier_block_id(placed), Some(&id(item)));
+            assert_eq!(
+                state.registry.carrier_blocks.drop_for_state(
+                    placed,
+                    &state.registry.item_facts,
+                    &state.registry.items,
+                ),
+                Some(expected.clone()),
+                "{carrier} facing {facing} must drop its own owner's item"
+            );
+        }
+    }
+}
+
+#[test]
 fn custom_item_places_a_carrier_state_that_drops_the_custom_item() {
     let (mut state, player) = monitor_setup();
     let stone = block(&state, "stone", &[]);
@@ -118,7 +255,7 @@ fn custom_item_places_a_carrier_state_that_drops_the_custom_item() {
     );
     assert_eq!(
         placed,
-        block(&state, "black_glazed_terracotta", &[("facing", "north")])
+        block(&state, "gray_glazed_terracotta", &[("facing", "north")])
     );
     // Survival break rolls the custom item, not the carrier's vanilla loot.
     let drops = crate::block_drop_context::roll(
@@ -162,7 +299,7 @@ fn give_hands_out_the_custom_item() {
         &mut state,
         &[PlayerInput::Command {
             connection: ConnectionId(1),
-            command: "give @s solaris:monitor 3".to_owned(),
+            command: "give @s computer:monitor 3".to_owned(),
             permission_level: 4,
         }],
     );

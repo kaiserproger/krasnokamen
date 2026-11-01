@@ -3,7 +3,7 @@
 //! Repeating a durable operation ID with identical content replays its receipt.
 //! Plugins own social membership, population, housing and occupations.
 
-use crate::{Command, domain_operations, inventories, npcs, types};
+use crate::{domain_operations, inventories, npcs, types, Command};
 
 /// Adopt a loaded living entity near the authenticated player.
 /// `expected_entity_revision` is zero for a first adoption.

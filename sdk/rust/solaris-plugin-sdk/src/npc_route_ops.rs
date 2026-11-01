@@ -1,7 +1,7 @@
 //! Finite routes run by the native physical actor owner. Admission and command
 //! acceptance are not arrival; query the actual native status and receipt.
 
-use crate::{Command, domain_operations, npc_routes};
+use crate::{domain_operations, npc_routes, Command};
 
 #[must_use]
 pub fn admit_npc_route(

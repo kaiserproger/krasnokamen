@@ -1,5 +1,5 @@
 //! Generic physical world operations. Answers arrive asynchronously through operation events.
-use crate::{Command, domain_operations, world_structures as wire};
+use crate::{domain_operations, world_structures as wire, Command};
 
 /// Read bounded exact physical facts without registering a worksite.
 #[must_use]

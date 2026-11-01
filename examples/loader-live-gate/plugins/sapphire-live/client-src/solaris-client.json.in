@@ -45,18 +45,29 @@
   "blocks": [{
     "id": "sapphire-live:sapphire_block",
     "model": "sapphire-live:block/sapphire_block",
+    "carrier": "minecraft:blue_glazed_terracotta",
+    "drop_item": "sapphire-live:sapphire_block",
     "name": "Sapphire Fixture Block"
   }],
   "items": [{
     "id": "sapphire-live:sapphire",
     "base_item": "minecraft:paper",
     "name": "Sapphire Fixture Item"
+  }, {
+    "id": "sapphire-live:sapphire_block",
+    "base_item": "minecraft:blue_glazed_terracotta",
+    "name": "Sapphire Fixture Block"
   }],
   "assets": [{
     "id": "sapphire-live:sapphire_item_definition",
     "path": "assets/sapphire-live/items/sapphire.json",
     "sha256": "@ITEM_SHA256@",
     "size_bytes": @ITEM_SIZE@
+  }, {
+    "id": "sapphire-live:sapphire_block_item_definition",
+    "path": "assets/sapphire-live/items/sapphire_block.json",
+    "sha256": "@BLOCK_ITEM_SHA256@",
+    "size_bytes": @BLOCK_ITEM_SIZE@
   }, {
     "id": "sapphire-live:sapphire_block_model",
     "path": "assets/sapphire-live/models/block/sapphire_block.json",

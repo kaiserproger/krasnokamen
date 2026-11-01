@@ -1,7 +1,7 @@
 //! Data-only native mob composition, spawned by /sky-creeper in the caller's dimension.
 use solaris_plugin_sdk::{
-    Command, Config, Event, EventContext, Failure, Plugin, StartupContribution, commands,
-    export_plugin,
+    commands, export_plugin, Command, Config, Event, EventContext, Failure, Plugin,
+    StartupContribution,
 };
 
 #[derive(Default)]

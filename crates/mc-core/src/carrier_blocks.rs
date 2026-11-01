@@ -5,8 +5,9 @@
 //! native store only ever see the carrier states, so persistence is unchanged
 //! and vanilla clients show the carrier. Placement is the custom item's own
 //! vanilla carrier-item placement (facing included); breaking drops the custom
-//! item. Real carrier items cannot be placed, so a carrier state always means
-//! the custom block.
+//! item. Plain carrier-item placement is refused. Every admitted carrier state is
+//! interpreted as custom, including indistinguishable natural or imported states;
+//! the palette's known collisions are documented in ADR 0018.
 
 use mc_data::item_components::ItemFactsTable;
 use mc_data::items::ItemRegistry;
@@ -16,9 +17,13 @@ use mc_world::BlockRegistry;
 
 use crate::config::CoreError;
 
-/// Vanilla blocks a plugin may reserve as a carrier: full cubes with exactly a
-/// horizontal `facing` property, no block entity, never worldgen-placed.
-const RESERVED_CARRIERS: [&str; 1] = ["minecraft:black_glazed_terracotta"];
+/// Explicitly reservable full cubes with horizontal facing and no block entity.
+/// Outside known 26.3 structure placements; imported matching states still alias.
+const RESERVED_CARRIERS: [&str; 3] = [
+    "minecraft:gray_glazed_terracotta",
+    "minecraft:pink_glazed_terracotta",
+    "minecraft:blue_glazed_terracotta",
+];
 const HORIZONTAL_FACINGS: [&str; 4] = ["east", "north", "south", "west"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,6 +101,10 @@ impl CarrierBlocks {
             });
         }
         Ok(Self { blocks: admitted })
+    }
+
+    pub(crate) fn for_id(&self, id: &str) -> Option<&CarrierBlock> {
+        self.blocks.iter().find(|block| block.id.as_str() == id)
     }
 
     pub(crate) fn for_state(&self, state: u32) -> Option<&CarrierBlock> {

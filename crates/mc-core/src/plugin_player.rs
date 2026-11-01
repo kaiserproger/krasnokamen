@@ -199,6 +199,7 @@ pub(crate) fn execute(
     let session = match admitted.request() {
         ScriptCommand::InventoryStorageTransaction { transaction } => Some(transaction.player_id()),
         ScriptCommand::PlayerInventoryTransaction { transaction } => Some(transaction.player_id()),
+        ScriptCommand::GrantLoaderBlockItem { request } => Some(request.player_id()),
         ScriptCommand::OpenInventoryMenu { player_id, .. }
         | ScriptCommand::CloseInventoryMenu { player_id, .. }
         | ScriptCommand::ClientSound { player_id, .. }
@@ -483,17 +484,9 @@ fn execute_local(state: &mut TickState, admitted: AdmittedScriptCommand) -> Opti
             )
             .ok()
         }
-        ScriptCommand::GrantLoaderBlockItem { .. } => {
-            tracing::error!(
-                plugin = admitted.plugin_id(),
-                command = "grant-loader-block-item",
-                "plugin command refused: native Loader item authority unavailable"
-            );
-            admitted
-                .loader_item_grant_result(Some(
-                    mc_script::ScriptLoaderItemGrantFailure::RuntimeUnavailable,
-                ))
-                .ok()
+        ScriptCommand::GrantLoaderBlockItem { request } => {
+            let failure = grant_loader_block_item(state, admitted.plugin_id(), request).err();
+            admitted.loader_item_grant_result(failure).ok()
         }
         _ => {
             let family = match admitted.request() {
@@ -511,6 +504,54 @@ fn execute_local(state: &mut TickState, admitted: AdmittedScriptCommand) -> Opti
             None
         }
     }
+}
+
+fn grant_loader_block_item(
+    state: &mut TickState,
+    owner: &str,
+    request: &mc_script::ScriptLoaderItemGrantRequest,
+) -> Result<(), mc_script::ScriptLoaderItemGrantFailure> {
+    use mc_script::ScriptLoaderItemGrantFailure as Failure;
+
+    if !request
+        .block_id()
+        .strip_prefix(owner)
+        .is_some_and(|suffix| suffix.starts_with(':') && suffix.len() > 1)
+    {
+        return Err(Failure::NotOwned);
+    }
+    let block = state
+        .registry
+        .carrier_blocks
+        .for_id(request.block_id())
+        .ok_or(Failure::NotOwned)?;
+    let mut stack = crate::carrier_blocks::custom_stack(
+        &state.registry.item_facts,
+        &state.registry.items,
+        &block.drop_item,
+    )
+    .ok_or(Failure::RuntimeUnavailable)?;
+    let connection = ConnectionId(request.player_id().value());
+    if state.connections.entity_of(connection).is_none() {
+        return Err(Failure::PlayerUnavailable);
+    }
+    let endpoint = ScriptInventoryEndpoint::PlayerInventory {
+        player_id: request.player_id().value(),
+    };
+    let map_failure = |failure| match failure {
+        ScriptOperationFailure::NotFound => Failure::PlayerUnavailable,
+        ScriptOperationFailure::Capacity => Failure::InventoryFull,
+        _ => Failure::RuntimeUnavailable,
+    };
+    let mut image =
+        crate::plugin_inventories::plan_debit(state, owner, &endpoint, &BTreeMap::new())
+            .map_err(map_failure)?;
+    stack.count = i32::from(request.count());
+    crate::plugin_inventories::insert(state, &mut image, stack).map_err(map_failure)?;
+    crate::plugin_inventories::commit(state, owner, BTreeMap::from([(endpoint, image)]))
+        .map_err(map_failure)?;
+    refresh_menu(state, connection);
+    Ok(())
 }
 
 fn transact(

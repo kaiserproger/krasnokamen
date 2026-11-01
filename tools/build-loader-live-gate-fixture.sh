@@ -7,7 +7,7 @@ FIXTURE_ROOT="$REPO_ROOT/examples/loader-live-gate"
 PLUGIN_ROOT="$FIXTURE_ROOT/plugins"
 DEPLOY_ROOT="$REPO_ROOT/.analysis/loader-live-gate/plugins"
 GUEST_MANIFEST="$REPO_ROOT/sdk/rust/Cargo.toml"
-GUEST_MODULE="$REPO_ROOT/sdk/rust/target/wasm32-unknown-unknown/release/solaris_hello_plugin.wasm"
+GUEST_MODULE="${CARGO_TARGET_DIR:-"$REPO_ROOT/sdk/rust/target"}/wasm32-unknown-unknown/release/solaris_hello_plugin.wasm"
 MODE="build"
 
 usage() {
@@ -159,6 +159,7 @@ build_owner() {
     local source_root="$plugin_root/client-src"
     local stage_root="$FIXTURE_TMP/$owner-stage"
     local item_path="assets/$owner/items/$item_name.json"
+    local block_item_path="assets/$owner/items/${item_name}_block.json"
     local block_path="assets/$owner/models/block/${item_name}_block.json"
     local tone_path="assets/$owner/sounds/tone.ogg"
     local archive_output="$FIXTURE_TMP/$owner-rich-content.zip"
@@ -166,6 +167,7 @@ build_owner() {
 
     require_asset "$source_root/solaris-client.json.in"
     require_asset "$source_root/$item_path"
+    require_asset "$source_root/$block_item_path"
     require_asset "$source_root/$block_path"
     require_asset "$source_root/$tone_path"
     require_asset "$plugin_root/plugin.toml.in"
@@ -186,6 +188,8 @@ build_owner() {
     sed \
         -e "s/@ITEM_SHA256@/$(sha256 "$source_root/$item_path")/g" \
         -e "s/@ITEM_SIZE@/$(stat -c %s "$source_root/$item_path")/g" \
+        -e "s/@BLOCK_ITEM_SHA256@/$(sha256 "$source_root/$block_item_path")/g" \
+        -e "s/@BLOCK_ITEM_SIZE@/$(stat -c %s "$source_root/$block_item_path")/g" \
         -e "s/@BLOCK_SHA256@/$(sha256 "$source_root/$block_path")/g" \
         -e "s/@BLOCK_SIZE@/$(stat -c %s "$source_root/$block_path")/g" \
         -e "s/@TONE_SHA256@/$(sha256 "$source_root/$tone_path")/g" \

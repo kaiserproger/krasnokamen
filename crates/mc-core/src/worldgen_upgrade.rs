@@ -35,9 +35,10 @@ fn contract(config: &CoreConfig, revision: u32) -> Result<NativeGenerationContra
 /// Rewrite the header identity and generation/dimension records of the stopped world at
 /// `config.world_dir` to the current `WORLDGEN_REVISION`, in one durable transaction.
 ///
-/// Refuses (changing nothing) when the world is leased by a running server, has no native
-/// store, records a different seed/format/geometry, or records a newer revision.
-/// Running it again on an upgraded world verifies the contract and writes nothing.
+/// Refuses when the world is leased by a running server, has no native store,
+/// records a different seed/format/geometry, or records a newer revision. An
+/// unclean database is recovered under the lease before these checks; clean
+/// refused worlds are not written. A repeated upgrade writes no contract.
 pub fn upgrade_worldgen_revision(config: &CoreConfig) -> Result<WorldgenUpgrade, CoreError> {
     let storage = |error: mc_world::native::NativeError| CoreError::Storage(error.to_string());
     let lease = std::fs::File::open(&config.world_dir)
@@ -53,7 +54,7 @@ pub fn upgrade_worldgen_revision(config: &CoreConfig) -> Result<WorldgenUpgrade,
         return Err(crate::native_checkpoint::import_required(config));
     }
     let current = mc_worldgen::WORLDGEN_REVISION;
-    let stored_identity = NativeStore::read_identity(&path).map_err(storage)?;
+    let stored_identity = NativeStore::read_identity_for_update(&path).map_err(storage)?;
     let Some(stored) = revision_only_difference(config, stored_identity) else {
         return Err(CoreError::Storage(
             "world identity differs from the configured seed or format, not only in the worldgen \

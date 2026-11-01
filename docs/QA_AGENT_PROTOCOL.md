@@ -113,6 +113,13 @@ A gate counts as evidence only when all of these hold:
    attack, make disposable local copies, including previous-release worlds;
    never use the owner's originals or live server. Use private ports, data roots
    and Xvfb per breaker; kill only processes you started.
+   Browser and noVNC viewers need their own verified isolation: a harness Xvfb
+   does not isolate a browser tool running in another process. Never launch a
+   headed viewer on the owner's desktop, change its focus or use host input.
+   If the browser cannot be proven headless or bound to a private display,
+   leave that GUI check blocked; do not try its default launch. Track each
+   owned browser instance and close the whole instance at cleanup, not only
+   its tabs. Do not launch replacements while earlier instances remain.
 4. For a failure, retain the first failing receipt and reduce it to a repro.
    Re-run once only when it adds evidence, on disposable local state. Do not
    recreate corruption or repeat a destructive/security action on live data.

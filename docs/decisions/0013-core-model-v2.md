@@ -2514,6 +2514,12 @@ If redb reports an unclean writer shutdown requiring repair, export refuses with
 then export`. Runtime admission may perform redb's built-in recovery as the sole
 writer before semantic validation and owner startup; export never repairs the
 source or manufactures a temporary repaired copy.
+The offline `upgrade-worldgen` command holds the world directory lease and reads
+the identity read-only when redb is clean. If redb specifically reports that
+recovery is required, the command opens it as the sole writer for recovery before
+identity and state preflight; a refused unclean world may therefore have recovery
+bytes written. Clean refused worlds are not opened writable. The contract rewrite
+remains atomic, so the command can be rerun after interruption.
 Only export writes Anvil regions, entity regions, player `.dat`, `level.dat` and
 modern saved-data files; export emits no native DB/WAL/JSON contract sidecars.
 Absolute deadlines remain native; export rejects delays above `i32::MAX` rather

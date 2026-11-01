@@ -43,8 +43,8 @@ tools/build-loader-live-gate-fixture.sh --check
 
 `--check` regenerates each bundle and manifest from `client-src/` and compares
 them byte for byte with the tracked outputs; the default mode regenerates them.
-The bundle index declares both owners' screens, their custom block and item, the
-verified tone asset and the key bindings described below.
+The bundle indexes declare each owner's screens, block, items, models, verified
+tone and key bindings described below.
 
 Screen ids are opaque, owner-qualified routing keys; the schema has no screen
 `kind`. Showcase screens use the default modal presentation, while HUD and
@@ -165,8 +165,25 @@ One client bundle per owner, `rich-content`, schema 2, one archive per loader.
 | Screen (`settlement`) | `ruby-live:showcase` "Ruby Loader Fixture" | `sapphire-live:showcase` "Sapphire Loader Fixture" |
 | HUD (`hud`) | `ruby-live:hud` "Ruby HUD" | `sapphire-live:hud` "Sapphire HUD" |
 | Input HUD (`hud`, no widgets) | `ruby-live:input` | `sapphire-live:input` |
-| Block / item | `ruby-live:ruby_block` / `ruby-live:ruby` | `sapphire-live:sapphire_block` / `sapphire-live:sapphire` |
+| Block | `ruby-live:ruby_block` | `sapphire-live:sapphire_block` |
+| Block carrier / drop item | `minecraft:pink_glazed_terracotta` / `ruby-live:ruby_block` | `minecraft:blue_glazed_terracotta` / `sapphire-live:sapphire_block` |
+| Paper items | `ruby-live:ruby`, `ruby-live:blade` | `sapphire-live:sapphire` |
+| Item definitions | `assets/ruby-live/items/{ruby,blade,ruby_block}.json` | `assets/sapphire-live/items/{sapphire,sapphire_block}.json` |
+| Block model | `ruby-live:block/ruby_block` | `sapphire-live:block/sapphire_block` |
 | Sound | `ruby-live:tone` (440 Hz) | `sapphire-live:tone` (660 Hz) |
+
+The SDK startup contribution installs the paper items and the matching block
+items using the carriers above. Each block item definition references its owner's
+existing block model. The reserved palette is `minecraft:gray_glazed_terracotta`
+for the monitor, `minecraft:pink_glazed_terracotta` for Ruby, and
+`minecraft:blue_glazed_terracotta` for Sapphire. The explicit `carrier` and
+`drop_item` fields require a server that reserves this palette and a client that
+accepts these block fields.
+
+In a local Minecraft 26.3 inspection, none of these three selected carriers
+appeared in 1,511 structure templates, and no glazed terracotta identifier
+appeared directly in 1,144 worldgen JSON files. This is not proof of absence in
+every generation path or in imported player-built worlds.
 
 The input HUD declares the key bindings the client installs with the view:
 

@@ -688,14 +688,24 @@ impl Plugin for Hello {
             Mode::LoaderLive => {
                 let item = config.toml().and_then(|config| {
                     match config.get("item_owner").and_then(|owner| owner.as_str()) {
-                        Some("ruby-live") => Some(("ruby-live:ruby", "Ruby Fixture Item")),
-                        Some("sapphire-live") => {
-                            Some(("sapphire-live:sapphire", "Sapphire Fixture Item"))
-                        }
+                        Some("ruby-live") => Some((
+                            "ruby-live:ruby",
+                            "Ruby Fixture Item",
+                            "ruby-live:ruby_block",
+                            "minecraft:pink_glazed_terracotta",
+                            "Ruby Fixture Block",
+                        )),
+                        Some("sapphire-live") => Some((
+                            "sapphire-live:sapphire",
+                            "Sapphire Fixture Item",
+                            "sapphire-live:sapphire_block",
+                            "minecraft:blue_glazed_terracotta",
+                            "Sapphire Fixture Block",
+                        )),
                         _ => None,
                     }
                 });
-                Ok(item.map(|(id, name)| {
+                Ok(item.map(|(id, name, block_id, block_carrier, block_name)| {
                     let mut items = vec![lifecycle::ItemDefinition {
                         id: id.to_owned(),
                         carrier: "minecraft:paper".to_owned(),
@@ -709,6 +719,19 @@ impl Plugin for Hello {
                         crafting_ingredient: Some("minecraft:paper".to_owned()),
                         physical_profile: None,
                     }];
+                    items.push(lifecycle::ItemDefinition {
+                        id: block_id.to_owned(),
+                        carrier: block_carrier.to_owned(),
+                        name: block_name.to_owned(),
+                        max_stack_size: 64,
+                        max_damage: None,
+                        weapon: false,
+                        attack_damage_modifier: None,
+                        attack_speed_modifier: None,
+                        equippable_slot: None,
+                        crafting_ingredient: None,
+                        physical_profile: None,
+                    });
                     if id == "ruby-live:ruby" {
                         items.push(lifecycle::ItemDefinition {
                             id: "ruby-live:blade".to_owned(),

@@ -1,6 +1,7 @@
 use super::*;
 use crate::core::Core;
 use mc_world::native::NativeReadOnlyStore;
+use redb::ReadableTable;
 use std::path::PathBuf;
 
 const CACHE: usize = 16 * 1024 * 1024;
@@ -28,6 +29,60 @@ fn world_at(revision: u32) -> (PathBuf, CoreConfig) {
 
 fn stored_identity(dir: &std::path::Path) -> [u8; 32] {
     NativeStore::read_identity(&dir.join("native/state.redb")).unwrap()
+}
+
+#[test]
+fn interrupted_writer_world_upgrades_and_retry_is_idempotent() {
+    const CHILD: &str = "SOLARIS_WORLDGEN_UPGRADE_CRASH_CHILD";
+    if let Some(path) = std::env::var_os(CHILD) {
+        let database = redb::Database::open(path).unwrap();
+        let tx = database.begin_write().unwrap();
+        {
+            let mut globals = tx
+                .open_table(redb::TableDefinition::<&str, &[u8]>::new("global"))
+                .unwrap();
+            let scoreboard = globals.get("scoreboard").unwrap().unwrap().value().to_vec();
+            globals.insert("scoreboard", scoreboard.as_slice()).unwrap();
+        }
+        tx.commit().unwrap();
+        // Keep the committed writer open, just as a killed upgrade process does.
+        std::process::exit(39);
+    }
+
+    let old = mc_worldgen::WORLDGEN_REVISION - 1;
+    let (dir, config) = world_at(old);
+    let path = dir.join("native/state.redb");
+    let before =
+        NativeStore::inspect_read_only(&path, native_identity_at(&config, old), CACHE).unwrap();
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "worldgen_upgrade::tests::interrupted_writer_world_upgrades_and_retry_is_idempotent",
+            "--nocapture",
+        ])
+        .env(CHILD, &path)
+        .status()
+        .unwrap();
+    assert_eq!(status.code(), Some(39));
+
+    let report = upgrade_worldgen_revision(&config).expect("recover and upgrade interrupted world");
+    assert_eq!(report.from_revision, old);
+    assert_eq!(report.to_revision, mc_worldgen::WORLDGEN_REVISION);
+    assert!(report.rewritten);
+    let after = NativeStore::inspect_read_only(
+        &path,
+        native_identity_at(&config, mc_worldgen::WORLDGEN_REVISION),
+        CACHE,
+    )
+    .unwrap();
+    assert_eq!(format!("{before:?}"), format!("{after:?}"));
+    Core::open(config.clone())
+        .expect("upgraded world opens")
+        .shutdown();
+    let again = upgrade_worldgen_revision(&config).unwrap();
+    assert_eq!(again.from_revision, mc_worldgen::WORLDGEN_REVISION);
+    assert!(!again.rewritten);
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]

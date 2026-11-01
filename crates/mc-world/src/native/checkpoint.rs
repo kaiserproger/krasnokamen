@@ -597,20 +597,40 @@ pub struct NativeGenerationContract {
     pub generation: Vec<u8>,
     pub dimensions: Vec<u8>,
 }
+fn identity_from_transaction(tx: &redb::ReadTransaction) -> Result<[u8; 32], NativeError> {
+    let header = db(tx.open_table(super::HEADER))?;
+    let stored = db(header.get("identity"))?.ok_or_else(|| failure("world/identity", "missing"))?;
+    stored
+        .value()
+        .try_into()
+        .map_err(|_| failure("world/identity", "invalid length"))
+}
 
 impl NativeStore {
     /// Offline operator path: the stored header identity of a stopped world,
     /// without validating it against any configuration.
     pub fn read_identity(path: &std::path::Path) -> Result<[u8; 32], NativeError> {
         let database = super::read_only_database(path, super::DB_CACHE_BYTES)?;
-        let tx = db(database.begin_read())?;
-        let header = db(tx.open_table(super::HEADER))?;
-        let stored =
-            db(header.get("identity"))?.ok_or_else(|| failure("world/identity", "missing"))?;
-        stored
-            .value()
-            .try_into()
-            .map_err(|_| failure("world/identity", "invalid length"))
+        identity_from_transaction(&db(database.begin_read())?)
+    }
+
+    /// Read the identity for an offline update under the world directory lease.
+    /// A clean database is read-only; only a database requiring redb recovery is
+    /// opened writable. Recovery can change bytes even if the update is refused.
+    pub fn read_identity_for_update(path: &std::path::Path) -> Result<[u8; 32], NativeError> {
+        match redb::Database::builder()
+            .set_cache_size(super::DB_CACHE_BYTES)
+            .open_read_only(path)
+        {
+            Ok(database) => identity_from_transaction(&db(database.begin_read())?),
+            Err(redb::DatabaseError::RepairAborted) => {
+                let database = db(redb::Database::builder()
+                    .set_cache_size(super::DB_CACHE_BYTES)
+                    .open(path))?;
+                identity_from_transaction(&db(database.begin_read())?)
+            }
+            Err(error) => Err(NativeError::Database(error.into())),
+        }
     }
 
     /// Offline operator path: replace the header identity and the immutable

@@ -13,9 +13,9 @@ use crate::{
     server::EdgeServer,
 };
 
-/// `solaris:monitor` is carried by this vanilla block (core `carrier_block_id` confirms);
+/// `computer:monitor` is carried by this vanilla block (core `carrier_block_id` confirms);
 /// its `facing` property is the face the screen is on.
-const MONITOR_CARRIER: &str = "minecraft:black_glazed_terracotta";
+const MONITOR_CARRIER: &str = "minecraft:gray_glazed_terracotta";
 
 #[derive(Default)]
 pub(crate) struct Service {
@@ -126,7 +126,7 @@ impl Service {
                         .hub
                         .registry()
                         .carrier_block_id(state.0)
-                        .filter(|id| id.as_str() == "solaris:monitor")?;
+                        .filter(|id| id.as_str() == "computer:monitor")?;
                     let facing = server
                         .wire
                         .blocks

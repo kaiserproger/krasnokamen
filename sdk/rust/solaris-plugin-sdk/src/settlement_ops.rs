@@ -6,7 +6,7 @@
 //! these only build the operation envelope; the server's own DTOs validate and
 //! the native settlement owner decides.
 
-use crate::{Command, domain_operations, settlements, types};
+use crate::{domain_operations, settlements, types, Command};
 
 /// Read the server's current settlement snapshots. An empty list requests one
 /// bounded page; explicit names must each be valid registry names. This read

@@ -10,8 +10,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  SOLARIS_LOADER_REVISION: ae6e457ad13b56394987c7b68e202a3eb2cb0013
-  SOLARIS_PLUGINS_REVISION: 63540715138d5e74d5a00a595992d5ebe9056371
+  SOLARIS_LOADER_REVISION: a409ce101fd53895a4cff401956d72dffbdac15b
+  SOLARIS_PLUGINS_REVISION: 7c0520f1bb0fa015aacce8887b176d09901ce7c1
 
 permissions:
   contents: read
@@ -54,6 +54,9 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     env:
+      # Import and all-target test builds share a limited runner disk.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
       SOLARIS_HARNESS_MEMORY_MAX: 8G
       # Short run; the full suite is the local L2 `run correctness` gate.
       SOLARIS_NEXTEST_PROFILE: ci
@@ -83,6 +86,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@v2
         with:
+          # Do not restore the older cache containing debug-info artifacts.
+          prefix-key: v0-rust-test-no-debug
           workspaces: solaris -> target
       - uses: taiki-e/install-action@v2
         with:
