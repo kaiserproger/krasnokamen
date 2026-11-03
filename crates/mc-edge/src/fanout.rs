@@ -169,6 +169,7 @@ pub fn publish_with_registries<'a>(
                         view_distance,
                         cache,
                         &indices[&dimension],
+                        Some(registries),
                     )
                 });
             (viewer.connection, packets)

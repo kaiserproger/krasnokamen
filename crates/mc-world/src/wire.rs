@@ -110,6 +110,144 @@ pub struct BlockEntityWireRecord {
     pub nbt: Tag,
 }
 
+fn project_opaque_block_entity(
+    chunk: &Chunk,
+    registry: &BlockRegistry,
+    pos: BlockPos,
+    bytes: &[u8],
+) -> Option<BlockEntityWireRecord> {
+    let mut cur = Cursor::new(bytes);
+    let mut tag = mc_nbt::read_network(&mut cur).ok()?;
+    let type_name = block_entity_type_name(&tag)?;
+    if type_name.as_str() == "minecraft:decorated_pot"
+        && let Tag::Compound(fields) = &mut tag
+        && let Some((_, sherds)) = fields.iter_mut().find(|(key, _)| key == "sherds")
+        && mc_data::item_nbt::upgrade_pot_decorations(sherds).is_err()
+    {
+        return None;
+    }
+    let nbt = match type_name.as_str() {
+        "minecraft:chest"
+        | "minecraft:trapped_chest"
+        | "minecraft:barrel"
+        | "minecraft:hopper"
+        | "minecraft:dispenser"
+        | "minecraft:dropper" => Tag::Compound(Vec::new()),
+        "minecraft:furnace"
+        | "minecraft:smoker"
+        | "minecraft:blast_furnace"
+        | "minecraft:brewing_stand"
+        | "minecraft:shulker_box"
+        | "minecraft:crafter"
+        | "minecraft:chiseled_bookshelf" => {
+            let Tag::Compound(mut fields) = strip_persistent_block_entity_fields(tag) else {
+                return None;
+            };
+            fields.retain(|(key, _)| key != "Items");
+            Tag::Compound(fields)
+        }
+        "minecraft:decorated_pot" => {
+            let Tag::Compound(mut fields) = strip_persistent_block_entity_fields(tag) else {
+                return None;
+            };
+            // Unlike vanilla, do not disclose pot contents or unopened loot to clients.
+            fields.retain(|(key, _)| {
+                !matches!(key.as_str(), "item" | "LootTable" | "LootTableSeed")
+            });
+            Tag::Compound(fields)
+        }
+        "minecraft:brushable_block" => {
+            let revealed = chunk
+                .get_block(
+                    pos.x.rem_euclid(16) as u8,
+                    pos.y,
+                    pos.z.rem_euclid(16) as u8,
+                )
+                .and_then(|id| registry.by_id(id))
+                .is_some_and(|state| {
+                    state
+                        .properties
+                        .iter()
+                        .any(|(key, value)| key == "dusted" && value != "0")
+                });
+            if revealed {
+                brushable_update_tag(tag)
+            } else {
+                Tag::Compound(Vec::new())
+            }
+        }
+        "minecraft:lectern" => {
+            let Tag::Compound(mut fields) = strip_persistent_block_entity_fields(tag) else {
+                return None;
+            };
+            fields.retain(|(key, _)| key != "Book");
+            Tag::Compound(fields)
+        }
+        "minecraft:trial_spawner" => {
+            let active = chunk
+                .get_block(
+                    pos.x.rem_euclid(16) as u8,
+                    pos.y,
+                    pos.z.rem_euclid(16) as u8,
+                )
+                .and_then(|id| registry.by_id(id))
+                .is_some_and(|state| {
+                    state
+                        .properties
+                        .iter()
+                        .any(|(key, value)| key == "trial_spawner_state" && value == "active")
+                });
+            let Tag::Compound(fields) = tag else { return None };
+            trial_spawner_update_tag(&fields, active)
+        }
+        "minecraft:vault" => {
+            let Tag::Compound(fields) = tag else { return None };
+            let shared = fields
+                .into_iter()
+                .find(|(key, _)| key == "shared_data")
+                .map_or_else(|| Tag::Compound(Vec::new()), |(_, value)| value);
+            Tag::Compound(vec![("shared_data".into(), shared)])
+        }
+        _ => strip_persistent_block_entity_fields(tag),
+    };
+    Some(BlockEntityWireRecord { pos, type_name, nbt })
+}
+
+/// Project only the block entity at `pos`, using the same policy as chunk packets.
+#[must_use]
+pub fn client_block_entity(
+    chunk: &Chunk,
+    registry: &BlockRegistry,
+    pos: BlockPos,
+) -> Option<BlockEntityWireRecord> {
+    if let Some(furnace) = chunk.furnaces.get(&pos) {
+        return Some(BlockEntityWireRecord {
+            pos,
+            type_name: furnace_block_entity_type_for_block(chunk, registry, pos),
+            nbt: furnace_update_tag(furnace),
+        });
+    }
+    if chunk.chests.contains_key(&pos) {
+        return Some(BlockEntityWireRecord {
+            pos,
+            type_name: chest_block_entity_type_for_block(chunk, registry, pos),
+            nbt: Tag::Compound(Vec::new()),
+        });
+    }
+    if let Some(record) = chunk.block_entities.get(&pos)
+        .and_then(|bytes| project_opaque_block_entity(chunk, registry, pos, bytes))
+    {
+        return Some(record);
+    }
+    let state = chunk.get_block(pos.x.rem_euclid(16) as u8, pos.y, pos.z.rem_euclid(16) as u8)?;
+    registry.by_id(state).filter(|state| state.block.id.path().ends_with("_bed"))?;
+    Some(BlockEntityWireRecord {
+        pos,
+        type_name: Identifier::parse("minecraft:bed").expect("static bed identifier"),
+        nbt: Tag::Compound(Vec::new()),
+    })
+}
+
 pub fn client_block_entities(
     chunk: &Chunk,
     registry: &BlockRegistry,
@@ -122,109 +260,9 @@ pub fn client_block_entities(
         .collect();
     opaque_entries.sort_by_key(|(pos, _)| (pos.x, pos.y, pos.z));
     for (pos, bytes) in opaque_entries {
-        let mut cur = Cursor::new(bytes.as_slice());
-        let Ok(mut tag) = mc_nbt::read_network(&mut cur) else {
-            continue;
-        };
-        let Some(type_name) = block_entity_type_name(&tag) else {
-            continue;
-        };
-        if type_name.as_str() == "minecraft:decorated_pot"
-            && let Tag::Compound(fields) = &mut tag
-            && let Some((_, sherds)) = fields.iter_mut().find(|(key, _)| key == "sherds")
-            && mc_data::item_nbt::upgrade_pot_decorations(sherds).is_err()
-        {
-            continue;
+        if let Some(record) = project_opaque_block_entity(chunk, registry, *pos, bytes) {
+            records.push(record);
         }
-        let nbt = match type_name.as_str() {
-            "minecraft:chest"
-            | "minecraft:trapped_chest"
-            | "minecraft:barrel"
-            | "minecraft:hopper"
-            | "minecraft:dispenser"
-            | "minecraft:dropper" => Tag::Compound(Vec::new()),
-            "minecraft:furnace"
-            | "minecraft:smoker"
-            | "minecraft:blast_furnace"
-            | "minecraft:brewing_stand"
-            | "minecraft:shulker_box"
-            | "minecraft:crafter"
-            | "minecraft:chiseled_bookshelf" => {
-                let Tag::Compound(mut fields) = strip_persistent_block_entity_fields(tag) else {
-                    continue;
-                };
-                fields.retain(|(key, _)| key != "Items");
-                Tag::Compound(fields)
-            }
-            "minecraft:decorated_pot" => {
-                let Tag::Compound(mut fields) = strip_persistent_block_entity_fields(tag) else {
-                    continue;
-                };
-                // Unlike vanilla, do not disclose pot contents or unopened loot to clients.
-                fields.retain(|(key, _)| {
-                    !matches!(key.as_str(), "item" | "LootTable" | "LootTableSeed")
-                });
-                Tag::Compound(fields)
-            }
-            "minecraft:brushable_block" => {
-                let revealed = chunk
-                    .get_block(
-                        pos.x.rem_euclid(16) as u8,
-                        pos.y,
-                        pos.z.rem_euclid(16) as u8,
-                    )
-                    .and_then(|id| registry.by_id(id))
-                    .is_some_and(|state| {
-                        state
-                            .properties
-                            .iter()
-                            .any(|(key, value)| key == "dusted" && value != "0")
-                    });
-                if revealed {
-                    brushable_update_tag(tag)
-                } else {
-                    Tag::Compound(Vec::new())
-                }
-            }
-            "minecraft:lectern" => {
-                let Tag::Compound(mut fields) = strip_persistent_block_entity_fields(tag) else {
-                    continue;
-                };
-                fields.retain(|(key, _)| key != "Book");
-                Tag::Compound(fields)
-            }
-            "minecraft:trial_spawner" => {
-                let active = chunk
-                    .get_block(
-                        pos.x.rem_euclid(16) as u8,
-                        pos.y,
-                        pos.z.rem_euclid(16) as u8,
-                    )
-                    .and_then(|id| registry.by_id(id))
-                    .is_some_and(|state| {
-                        state
-                            .properties
-                            .iter()
-                            .any(|(key, value)| key == "trial_spawner_state" && value == "active")
-                    });
-                let Tag::Compound(fields) = tag else { continue };
-                trial_spawner_update_tag(&fields, active)
-            }
-            "minecraft:vault" => {
-                let Tag::Compound(fields) = tag else { continue };
-                let shared = fields
-                    .into_iter()
-                    .find(|(key, _)| key == "shared_data")
-                    .map_or_else(|| Tag::Compound(Vec::new()), |(_, value)| value);
-                Tag::Compound(vec![("shared_data".into(), shared)])
-            }
-            _ => strip_persistent_block_entity_fields(tag),
-        };
-        records.push(BlockEntityWireRecord {
-            pos: *pos,
-            type_name,
-            nbt,
-        });
     }
 
     let mut furnaces: Vec<_> = chunk.furnaces.iter().collect();

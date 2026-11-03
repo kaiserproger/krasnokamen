@@ -37,6 +37,15 @@ fn empty_chunk() -> Chunk {
     )
 }
 
+fn assert_single_entity_projection_matches(chunk: &Chunk, registry: &BlockRegistry) {
+    for record in client_block_entities(chunk, registry) {
+        let single = client_block_entity(chunk, registry, record.pos).expect("projected record");
+        assert_eq!(single.pos, record.pos);
+        assert_eq!(single.type_name, record.type_name);
+        assert_eq!(single.nbt, record.nbt);
+    }
+}
+
 fn air_chest_registry() -> BlockRegistry {
     BlockRegistry::from_report(&[
         BlockReport {
@@ -243,6 +252,7 @@ fn client_block_entities_emit_stripped_chest_update_tag() {
     chunk.chests.insert(pos, chest);
 
     let records = client_block_entities(&chunk, &registry);
+    assert_single_entity_projection_matches(&chunk, &registry);
 
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].pos, pos);
@@ -251,6 +261,16 @@ fn client_block_entities_emit_stripped_chest_update_tag() {
         panic!("expected compound update tag");
     };
     assert!(fields.is_empty());
+}
+
+#[test]
+fn client_block_entities_single_projection_handles_furnaces_and_absence() {
+    let registry = air_chest_registry();
+    let mut chunk = empty_chunk();
+    let pos = BlockPos { x: 2, y: 64, z: 3 };
+    chunk.furnaces.insert(pos, crate::chunk::FurnaceBlockEntity::default());
+    assert_single_entity_projection_matches(&chunk, &registry);
+    assert!(client_block_entity(&chunk, &registry, BlockPos { x: 3, y: 64, z: 3 }).is_none());
 }
 
 #[test]
@@ -324,6 +344,7 @@ fn client_block_entities_use_vanilla_trial_and_vault_update_tags() {
     chunk.block_entities.insert(vault_pos, bytes);
 
     let records = client_block_entities(&chunk, &registry);
+    assert_single_entity_projection_matches(&chunk, &registry);
     let mut encoded = Vec::new();
     mc_nbt::write_network(&mut encoded, &records[0].nbt).unwrap();
     let decoded = mc_nbt::read_network(&mut encoded.as_slice()).unwrap();
@@ -378,6 +399,7 @@ fn client_block_entities_strip_solaris_campfire_persistence_fields() {
     chunk.block_entities.insert(pos, bytes);
 
     let records = client_block_entities(&chunk, &registry);
+    assert_single_entity_projection_matches(&chunk, &registry);
 
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].type_name.as_str(), "minecraft:campfire");
@@ -473,8 +495,12 @@ fn client_block_entities_synthesize_bed_records_from_block_states() {
     let head_pos = BlockPos { x: 2, y: 64, z: 2 };
     chunk.set_block(2, 64, 3, bed_state("foot")).unwrap();
     chunk.set_block(2, 64, 2, bed_state("head")).unwrap();
+    // A corrupt opaque record is skipped by the full projection, which still
+    // synthesizes the bed from its block state.
+    chunk.block_entities.insert(foot_pos, vec![0xff]);
 
     let records = client_block_entities(&chunk, &registry);
+    assert_single_entity_projection_matches(&chunk, &registry);
 
     let mut positions: Vec<_> = records.iter().map(|record| record.pos).collect();
     positions.sort_by_key(|pos| (pos.x, pos.y, pos.z));
@@ -910,6 +936,7 @@ fn decorated_pot_26_3_chunk_projects_old_sherds_as_named_templates() {
     mc_nbt::write_network(&mut bytes, &tag).unwrap();
     chunk.block_entities.insert(pos, bytes.clone());
     let records = client_block_entities(&chunk, &air_chest_registry());
+    assert_single_entity_projection_matches(&chunk, &air_chest_registry());
     let pot = records.iter().find(|record| record.pos == pos).unwrap();
     let Tag::Compound(fields) = &pot.nbt else {
         panic!()

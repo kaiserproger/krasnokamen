@@ -15,9 +15,8 @@
 //! These are planning-only shortcuts; range, packet credit, movement cadence,
 //! per-viewer baselines and the packet encoders remain authoritative.
 //!
-//! [`plan_player_changes`] (child module `player_changes`) plans one
-//! connection's reliable core outbox; the pump calls it when draining the
-//! outbox and when replaying a stashed join burst.
+//! [`plan_player_changes`] plans reliable replay; normal pump routing defers
+//! public block-entity data to the snapshot's world FIFO.
 //!
 //! `Died` maps to a `SystemChat` death message (reliable); the respawn
 //! screen itself is driven by the client's own death handling. `Respawned`
@@ -28,6 +27,7 @@
 
 mod player_changes;
 pub use player_changes::plan_player_changes;
+pub(crate) use player_changes::plan_routed_player_changes;
 
 mod chunk_delta;
 mod entity_candidates;
@@ -387,8 +387,8 @@ pub struct ViewerState {
     /// Full repair debt for chunks still held by the client. Kept separately
     /// from initial admission so live edits cannot starve an unseen window.
     chunk_repairs: HashSet<(i32, i32)>,
-    /// Public block-entity payloads already routed reliably since the last
-    /// snapshot plan; they explain a content revision just like block deltas.
+    /// Chunks with public block-entity changes since the last snapshot plan;
+    /// they explain content revisions just like block deltas.
     block_entity_updates: HashSet<(i32, i32)>,
     /// Last delivered baked section layers; shared nibble allocations are COW.
     light_baseline: crate::light::LightBaseline,
@@ -408,6 +408,8 @@ pub struct ViewerState {
     /// Positions whose block update is still owed (no credit when the
     /// change happened): batched by section later with the newest state.
     pending_blocks: HashSet<mc_world::chunk::BlockPos>,
+    /// Public block entity projections owed after the corresponding block state.
+    pending_block_entities: HashSet<mc_world::chunk::BlockPos>,
     pub center_sent: Option<(i32, i32)>,
     radius_sent: Option<i32>,
     /// The pump skipped outputs since the last plan: their block changes
@@ -463,6 +465,7 @@ impl ViewerState {
             entity_tick: None,
             entity_interest: entity_interest::EntityInterest::default(),
             pending_blocks: HashSet::default(),
+            pending_block_entities: HashSet::default(),
             center_sent: None,
             radius_sent: None,
             skipped: false,
@@ -543,6 +546,7 @@ fn forget_everything(
         viewer.light_baseline.forget(chunk);
     }
     viewer.pending_blocks.clear();
+    viewer.pending_block_entities.clear();
     viewer.block_entity_updates.clear();
     viewer.center_sent = None;
     viewer.forget_all = false;
@@ -589,7 +593,7 @@ pub fn plan_viewer(
     };
     let index = TickPlanIndex::with_previous(output, viewer.entity_interest.previous())
         .with_reveals(output, chunk_cache.anti_xray());
-    plan_viewer_indexed(output, viewer, view_distance, chunk_cache, &index)
+    plan_viewer_indexed(output, viewer, view_distance, chunk_cache, &index, None)
 }
 
 pub(crate) fn plan_viewer_indexed(
@@ -598,6 +602,7 @@ pub(crate) fn plan_viewer_indexed(
     view_distance: i32,
     chunk_cache: &ChunkPacketCache,
     index: &TickPlanIndex,
+    registries: Option<&PlanRegistries<'_>>,
 ) -> Vec<PlannedPacket> {
     let view_distance = viewer
         .view_distance
@@ -610,6 +615,7 @@ pub(crate) fn plan_viewer_indexed(
         view_distance,
         chunk_cache,
         index,
+        registries,
         &mut scratch,
     );
     viewer.scratch = scratch;
@@ -628,6 +634,7 @@ fn plan_viewer_inner(
     view_distance: i32,
     chunk_cache: &ChunkPacketCache,
     index: &TickPlanIndex,
+    registries: Option<&PlanRegistries<'_>>,
     scratch: &mut PlanScratch,
 ) -> Vec<PlannedPacket> {
     let mut out = Vec::new();
@@ -799,7 +806,7 @@ fn plan_viewer_inner(
             }
         }
     }
-    // Reliable public block-entity updates and non-skipped block changes
+    // Public block-entity changes and non-skipped block changes
     // explain content revisions without full resends. A changed baked light
     // baseline covers light-only revisions; skips still require repairs.
     let skipped = std::mem::take(&mut viewer.skipped);
@@ -985,6 +992,51 @@ fn plan_viewer_inner(
         }
     }
     scratch.section_blocks = update.changes;
+    // A repair packet contains the latest projection; otherwise send the
+    // entity only after its block update and through the same world FIFO.
+    if !viewer.pending_block_entities.is_empty() {
+        use std::sync::LazyLock;
+        static BLOCKS: LazyLock<mc_world::BlockRegistry> = LazyLock::new(|| {
+            mc_world::BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+                .expect("required blocks report builds")
+        });
+        static TYPES: LazyLock<mc_data::block_entity_types::BlockEntityTypeRegistry> =
+            LazyLock::new(mc_data::block_entity_types::solaris_required_block_entity_types);
+        let blocks = registries.map_or_else(|| &*BLOCKS, |r| r.blocks);
+        let types = registries.map_or_else(|| &*TYPES, |r| r.block_entity_types);
+        scratch.blocks.clear();
+        scratch.blocks.extend(viewer.pending_block_entities.drain());
+        scratch.blocks.sort_unstable_by_key(|pos| (pos.x, pos.y, pos.z));
+        for &pos in &scratch.blocks {
+            let chunk = (pos.x.div_euclid(16), pos.z.div_euclid(16));
+            if !viewer.loaded_chunks.contains_key(&chunk) || viewer.chunk_repairs.contains(&chunk) {
+                continue;
+            }
+            if credit == 0 || viewer.pending_blocks.contains(&pos) {
+                viewer.pending_block_entities.insert(pos);
+                continue;
+            }
+            let Some(resident) = find_chunk(&snapshot.chunks, chunk) else {
+                continue;
+            };
+            let Some(record) = mc_world::wire::client_block_entity(&resident.chunk, blocks, pos)
+            else {
+                continue;
+            };
+            let Some(type_id) = types.id_of(&record.type_name).and_then(|id| i32::try_from(id).ok())
+            else {
+                continue;
+            };
+            let packet = mc_protocol::packets::play::ClientboundBlockEntityData {
+                position: mc_protocol::packets::play::pack_block_pos(pos.x, pos.y, pos.z),
+                block_entity_type: type_id,
+                nbt: record.nbt,
+            };
+            if !try_push(&mut out, &mut credit, |out| push_best_effort(out, conn, &packet)) {
+                viewer.pending_block_entities.insert(pos);
+            }
+        }
+    }
     // A full repair covers its own newest baked light. Other light debt
     // survives exhausted credit without replacing a chunk admission. Light
     // moves only with a chunk revision, so the delta names every candidate.
@@ -1091,7 +1143,8 @@ fn plan_viewer_inner(
             && !light_debt
             && !admission_debt
             && viewer.chunk_repairs.is_empty()
-            && viewer.pending_blocks.is_empty();
+            && viewer.pending_blocks.is_empty()
+            && viewer.pending_block_entities.is_empty();
         viewer.chunk_sync = Some(delta.sync(snapshot.dimension, viewer.loaded_chunks.len(), quiet));
     }
     #[cfg(test)]

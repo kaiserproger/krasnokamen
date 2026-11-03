@@ -22,7 +22,7 @@ impl SingleplayerPause {
         &mut self,
         state: &TickState,
         inputs: &mut Vec<PlayerInput>,
-        outbox: &std::sync::mpsc::Sender<Vec<(ConnectionId, Vec<PlayerChange>)>>,
+        outbox: &std::sync::mpsc::Sender<crate::core::TimedOutboxBatch>,
     ) -> bool {
         let joining = inputs
             .iter()
@@ -68,12 +68,12 @@ impl SingleplayerPause {
             if allowed {
                 self.owner = requested.then_some(*connection);
             } else {
-                let _ = outbox.send(vec![(
+                let _ = outbox.send((state.tick, vec![(
                     *connection,
                     vec![PlayerChange::Chat {
                         message: "Cannot pause: one online operator is required.".into(),
                     }],
-                )]);
+                )]));
             }
             false
         });

@@ -655,3 +655,6 @@ async fn moderation_selectors_filtered_ban_and_online_pardon() {
 
 #[path = "clock_queue_tests.rs"]
 mod clock_queue_tests;
+
+#[path = "shelf_update_queue_tests.rs"]
+mod shelf_update_queue_tests;

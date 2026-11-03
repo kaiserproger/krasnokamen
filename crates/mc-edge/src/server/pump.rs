@@ -52,7 +52,7 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                     // Drain terminal reliable disconnects before closing, both
                     // for graceful shutdown and for an authoritative failure.
                     let (mut connections, _) = server.connections.routing_snapshot();
-                    route_outbox(&server, &mut viewers, &mut connections);
+                    route_outbox(&server, &mut viewers, &mut connections, None);
                     if server.hub.shutdown_requested() {
                         tracing::info!(
                             connections = connections.len(),
@@ -69,7 +69,7 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
             };
             server.tick_stats.record(out.tick);
             let (mut connections, roster) = server.connections.routing_snapshot();
-            route_outbox(&server, &mut viewers, &mut connections);
+            route_outbox(&server, &mut viewers, &mut connections, Some(out.tick));
             server.console_state.drained(out.tick);
             let publish_start = std::time::Instant::now();
             publish_and_route(
@@ -152,6 +152,7 @@ pub(super) fn route_outbox(
     server: &Arc<EdgeServer>,
     viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
     connections: &mut HashMap<ConnectionId, ConnectionHandles>,
+    through_tick: Option<u64>,
 ) {
     // Ensure every live connection has a viewer entry before planning.
     // The entity id comes from the stashed `Joined` when available (the
@@ -173,7 +174,11 @@ pub(super) fn route_outbox(
             configured_viewer(server, id, entity, position, dimension)
         });
     }
-    for (connection, changes) in server.hub.try_drain_outbox() {
+    let batches = through_tick.map_or_else(
+        || server.hub.try_drain_outbox(),
+        |tick| server.hub.try_drain_outbox_through(tick),
+    );
+    for (connection, changes) in batches {
         if connection == mc_core::command_console::CONNECTION {
             crate::console::output(&server.console_state, &changes);
             continue;
@@ -250,19 +255,27 @@ pub(super) fn route_outbox(
             viewers.remove(&connection);
             continue;
         }
-        for planned in crate::plan::plan_player_changes(&changes, viewer) {
-            if handles.reliable_tx.try_send(planned.data).is_err() {
-                server.connections.remove(connection);
-                connections.remove(&connection);
-                server
-                    .net_counters
-                    .reliable_drops
-                    .fetch_add(1, Ordering::Relaxed);
-                viewers.remove(&connection);
-                break;
-            }
+        if !route_changes(&changes, viewer, handles, server) {
+            connections.remove(&connection);
+            viewers.remove(&connection);
         }
     }
+}
+
+pub(super) fn route_changes(
+    changes: &[mc_core::boundary::PlayerChange],
+    viewer: &mut crate::plan::ViewerState,
+    handles: &ConnectionHandles,
+    server: &Arc<EdgeServer>,
+) -> bool {
+    for planned in crate::plan::plan_routed_player_changes(changes, viewer) {
+        if handles.reliable_tx.try_send(planned.data).is_err() {
+            server.connections.remove(viewer.connection);
+            server.net_counters.reliable_drops.fetch_add(1, Ordering::Relaxed);
+            return false;
+        }
+    }
+    true
 }
 
 /// Publish one tick to all viewers and route the addressed packets.

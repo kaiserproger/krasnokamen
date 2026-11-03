@@ -4598,3 +4598,13 @@ sweep uses the same container decoder and rejection.
 Serial passes that edit a block and must see it immediately use
 `TickState::write_block` (world write plus staging for the canonical block
 phase) instead of pairing `set_block` with `merge_block_writes.push` by hand.
+
+### Block-entity updates and queued chunks
+
+The pump drains core outbox batches only through the snapshot tick it is
+planning. For a held chunk, public block-entity events create per-position
+world-delivery debt rather than entering the reliable lane, which can overtake
+an older queued chunk. After owed block updates, the viewer planner projects
+the newest snapshot at that position onto the credit-limited world FIFO. A
+full chunk repair covers the debt. The existing payload remains available to
+join-tail replay and other direct player-change consumers.

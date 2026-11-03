@@ -16,7 +16,7 @@ pub(super) struct TickChannels {
     pub(super) ticket_rx: Receiver<RemoteTicket>,
     pub(super) moderation_selector_rx: Receiver<moderation_selector::Request>,
     /// Reliable FIFO handoff; only the tick owns the sender.
-    pub(super) outbox: std::sync::mpsc::Sender<OutboxBatch>,
+    pub(super) outbox: std::sync::mpsc::Sender<TimedOutboxBatch>,
     pub(super) tick_broadcast: broadcast::Sender<TickOutput>,
     pub(super) timing_broadcast: broadcast::Sender<(u64, TickTimes)>,
     pub(super) work_tx: std::sync::mpsc::SyncSender<JournalWork>,
@@ -312,7 +312,7 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
         if !drains.is_empty() {
             channels
                 .outbox
-                .send(drains)
+                .send((output.tick, drains))
                 .expect("reliable outbox receiver dropped");
         }
         if state.require_plugin_login {
@@ -643,6 +643,6 @@ pub(super) fn halt_authority(state: &mut TickState, channels: &TickChannels, rea
         .collect();
     channels
         .outbox
-        .send(drains)
+        .send((state.tick, drains))
         .expect("reliable outbox receiver dropped");
 }

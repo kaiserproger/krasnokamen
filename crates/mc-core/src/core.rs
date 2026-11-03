@@ -45,6 +45,7 @@ mod stop;
 mod stop_tests;
 
 type OutboxBatch = Vec<(ConnectionId, Vec<PlayerChange>)>;
+pub(crate) type TimedOutboxBatch = (u64, OutboxBatch);
 
 #[path = "core_session.rs"]
 mod session;
@@ -56,13 +57,23 @@ mod session_tests;
 
 /// Only edge consumers share this receiver; the tick owns its sender.
 #[derive(Debug)]
-struct ReliableOutbox(parking_lot::Mutex<std::sync::mpsc::Receiver<OutboxBatch>>);
+struct ReliableOutbox(parking_lot::Mutex<OutboxReceiver>);
+
+#[derive(Debug)]
+struct OutboxReceiver {
+    receiver: std::sync::mpsc::Receiver<TimedOutboxBatch>,
+    pending: Option<TimedOutboxBatch>,
+}
 
 impl ReliableOutbox {
-    fn drain(&self) -> OutboxBatch {
-        let receiver = self.0.lock();
+    fn drain(&self, through: u64) -> OutboxBatch {
+        let mut receiver = self.0.lock();
         let mut store: HashMap<ConnectionId, Vec<PlayerChange>> = HashMap::new();
-        for batch in receiver.try_iter() {
+        while let Some((tick, batch)) = receiver.pending.take().or_else(|| receiver.receiver.try_recv().ok()) {
+            if tick > through {
+                receiver.pending = Some((tick, batch));
+                break;
+            }
             for (connection, queue) in batch {
                 let slot = store.entry(connection).or_default();
                 if !slot
@@ -758,7 +769,7 @@ impl Core {
                 input_dropped: AtomicU64::new(0),
                 tick_tx: tick_tx.downgrade(),
                 timing_tx: timing_tx.downgrade(),
-                outbox: ReliableOutbox(parking_lot::Mutex::new(outbox_rx)),
+                outbox: ReliableOutbox(parking_lot::Mutex::new(OutboxReceiver { receiver: outbox_rx, pending: None })),
                 shutdown_tx: std::sync::Mutex::new(Some(shutdown_tx)),
                 tick_handle: std::sync::Mutex::new(Some(tick_handle)),
                 journal_handle: std::sync::Mutex::new(Some(journal_handle)),
@@ -1046,7 +1057,12 @@ impl Core {
     /// The tick hands off owned batches before broadcasting; per-connection
     /// order is preserved even when the edge misses world publications.
     pub fn try_drain_outbox(&self) -> Vec<(ConnectionId, Vec<PlayerChange>)> {
-        self.inner.outbox.drain()
+        self.inner.outbox.drain(u64::MAX)
+    }
+
+    /// Drain only batches represented in the published snapshot, preserving newer batches.
+    pub fn try_drain_outbox_through(&self, tick: u64) -> Vec<(ConnectionId, Vec<PlayerChange>)> {
+        self.inner.outbox.drain(tick)
     }
 
     /// Force a durable checkpoint through the tick capture and journal writer.

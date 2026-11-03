@@ -1414,7 +1414,7 @@ pub async fn serve_with_console(
                 let hub = Arc::clone(&server.hub);
                 tokio::task::spawn_blocking(move || hub.shutdown()).await?;
                 let (mut connections, _) = server.connections.routing_snapshot();
-                route_outbox(&server, &mut HashMap::new(), &mut connections);
+                route_outbox(&server, &mut HashMap::new(), &mut connections, None);
                 if let Some(console) = &console {
                     console.abort();
                 }

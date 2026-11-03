@@ -46,6 +46,27 @@ pub fn plan_player_changes(
     out
 }
 
+/// Route world-backed updates through the snapshot planner instead of the
+/// reliable lane, which can overtake an already queued chunk packet.
+pub(crate) fn plan_routed_player_changes(
+    changes: &[PlayerChange],
+    viewer: &mut ViewerState,
+) -> Vec<PlannedPacket> {
+    let mut out = Vec::new();
+    for change in changes {
+        if let PlayerChange::BlockEntityData { position, .. } = change {
+            let chunk = (position.x.div_euclid(16), position.z.div_euclid(16));
+            if viewer.loaded_chunks.contains_key(&chunk) {
+                viewer.block_entity_updates.insert(chunk);
+                viewer.pending_block_entities.insert(*position);
+            }
+        } else {
+            plan_change(change, viewer, &mut out);
+        }
+    }
+    out
+}
+
 fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<PlannedPacket>) {
     let conn = viewer.connection;
     match change {

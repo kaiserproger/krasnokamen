@@ -106,7 +106,7 @@ async fn client_view_distance_join_grow_and_shrink() {
         .unwrap();
     let mut connections = server.connections.snapshot().into_iter().collect();
     let mut viewers = HashMap::new();
-    route_outbox(&server, &mut viewers, &mut connections);
+    route_outbox(&server, &mut viewers, &mut connections, None);
     let chunks = (-8..=8)
         .flat_map(|x| (-8..=8).map(move |z| (x, z)))
         .map(|(x, z)| {
