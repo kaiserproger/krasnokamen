@@ -331,6 +331,35 @@ exclusive server-load performance gate. If owner mutation rules change,
 retain conservative `row_mut` custody for genuinely changing state; remove
 the corresponding no-op proof rather than bypassing journal equality.
 
+## Missing-column portal classification (2026-11-03)
+
+Cold, eligible non-player rows with zero portal timers previously reached the
+serial contact scan even when every covered block read would return `None`.
+After the existing warm proof, the classifier may stamp that negative result
+only for a nonempty box wholly within one absent chunk column with no pending
+overlay in that column. Players, armed timers, resident or cross-column boxes
+and overlay-touched columns retain the existing paths. The proof uses current
+`block_at` semantics, not an assumption that unloaded terrain is air. Its
+correctness requires the overlay and chunk residency to remain unchanged from
+cache construction through the contact scan; queued travel writes follow that
+scan. Re-prove or remove the shortcut if this ordering changes.
+
+On an instrumented release fixture with one million synthetic inactive rows,
+three warm ticks and six samples in each of two alternating processes per arm,
+the nonresident stationary portal phase had process medians of 45.691 and
+45.439 ms baseline versus 11.382 and 11.524 ms with the shortcut. For resident
+inactive rows the corresponding medians were 7.573 and 7.632 ms versus 7.089
+and 7.443 ms. These are diagnostic phase timings, not server throughput or a
+representative gameplay no-regression claim; the fixture omits production
+journal draining. Raw runs and executable hashes are in the local
+`rnd-20261102/opt-finish-20261103/` receipts.
+
+Serial differential controls cover overlay insertion/removal, negative
+boundaries, dimension transitions, End shape and gateways; deliberately removing
+the overlay or boundary fence fails the corresponding contact witness. If the
+proof ceases to hold, revert the missing-column classifier and world helper;
+the existing serial path and warm proof remain authoritative.
+
 ## Native military — Decision 009 (owner authorization, 2026-10-20)
 
 The owner explicitly requested native barracks recruits, superseding the prior

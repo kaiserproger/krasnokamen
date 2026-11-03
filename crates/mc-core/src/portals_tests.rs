@@ -1897,3 +1897,361 @@ fn portal_classifier_micro() {
         }
     }
 }
+
+// Compare the classifier against the real serial contact owner.
+#[test]
+fn nonresident_portal_classifier_matches_serial_transitions() {
+    fn run(candidate: bool) -> Vec<String> {
+        let (mut state, player) = worlds();
+        let cow = mc_data::entity_types::entity_type_contract_26_1_2_by_name("minecraft:cow")
+            .unwrap()
+            .protocol_id;
+        let far = [16000.5, 70.0, 0.5];
+        let a = state.spawn_mob(cow, far, 10.0);
+        let b = state.spawn_mob(cow, [16001.5, 70.0, 0.5], 10.0);
+        let timer = state.spawn_mob(cow, [16002.5, 70.0, 0.5], 10.0);
+        let slot = state.entities.slot_of(timer).unwrap();
+        state.entities.row_mut(slot).entity_life.portal.cooldown = 3;
+        let elapsed = state.spawn_mob(cow, [16003.5, 70.0, 0.5], 10.0);
+        let slot = state.entities.slot_of(elapsed).unwrap();
+        state.entities.row_mut(slot).entity_life.portal.elapsed = 8;
+        // Straddles resident/nonresident column boundaries after loading.
+        let _cross = state.spawn_mob(cow, [16015.9, 70.0, 0.5], 10.0);
+        let overlay_mob = state.spawn_mob(cow, [16032.5, 70.0, 0.5], 10.0);
+        let nether = state.other_dimensions.get_mut(&Dimension::Nether).unwrap();
+        let child = nether.spawn_mob(cow, far, 10.0);
+        let player_slot = state.entities.slot_of(player).unwrap();
+        state.entities.set_pos(player_slot, [16004.5, 70.0, 0.5]);
+        let portal = state_id(&state, "minecraft:nether_portal", &[("axis", "x")]);
+        let mut result = Vec::new();
+        for step in 0..7 {
+            match step {
+                1 => {
+                    let s = state.entities.slot_of(a).unwrap();
+                    state.entities.set_pos(s, [16000.6, 70.0, 0.5]);
+                    state.world.set_block(16032, 70, 0, portal);
+                }
+                2 => {
+                    let s = state.entities.slot_of(b).unwrap();
+                    state.entities.remove(s);
+                }
+                3 => {
+                    load(&mut state, far, 0);
+                }
+                4 => {
+                    state.world.set_block(16000, 70, 0, portal);
+                }
+                5 => {
+                    state.world.fold_overlay();
+                }
+                6 => {
+                    let s = state.entities.slot_of(a).unwrap();
+                    state.entities.set_pos(s, [16001.5, 70.0, 0.5]);
+                }
+                _ => {}
+            }
+            let mut changes = BTreeMap::new();
+            travel::finish_with(
+                &mut state,
+                &mut changes,
+                if candidate { Some(0) } else { None },
+            );
+            let mut snapshot = format!("{changes:?}");
+            for dim in [Dimension::Overworld, Dimension::Nether, Dimension::End] {
+                let world: &TickState = if state.dimension == dim {
+                    &state
+                } else {
+                    &state.other_dimensions[&dim]
+                };
+                for i in 0..world.entities.len() {
+                    let slot = crate::entities::EntitySlot(i as u32);
+                    let body = world.entities.body(slot);
+                    let row = world.entities.row(slot);
+                    let proof = world
+                        .portal_contact_stamps
+                        .get(i)
+                        .copied()
+                        .flatten()
+                        .map(|v| (v.entity, v.position, v.shape, v.min, v.max, v.revision));
+                    snapshot += &format!(
+                        " {dim:?} {:?} {:?} {:?} {} {} {proof:?}",
+                        body.id,
+                        body.kind,
+                        world.entities.pos(slot),
+                        row.entity_life.portal.cooldown,
+                        row.entity_life.portal.elapsed
+                    );
+                }
+                snapshot += &format!(" tickets={:?}", world.tickets);
+            }
+            assert!(
+                state.other_dimensions[&Dimension::Nether]
+                    .entities
+                    .slot_of(child)
+                    .is_some()
+            );
+            if step == 0 {
+                assert_eq!(
+                    state
+                        .entities
+                        .row(state.entities.slot_of(timer).unwrap())
+                        .entity_life
+                        .portal
+                        .cooldown,
+                    2
+                );
+            }
+            if step == 0 {
+                assert_eq!(
+                    state
+                        .entities
+                        .row(state.entities.slot_of(elapsed).unwrap())
+                        .entity_life
+                        .portal
+                        .elapsed,
+                    4
+                );
+            }
+            if step == 1 {
+                assert!(
+                    state
+                        .entities
+                        .row(state.entities.slot_of(overlay_mob).unwrap())
+                        .entity_life
+                        .portal
+                        .elapsed
+                        > 0,
+                    "nonresident overlay portal must contact"
+                );
+            }
+            if step == 4 {
+                assert!(
+                    state
+                        .entities
+                        .row(state.entities.slot_of(a).unwrap())
+                        .entity_life
+                        .portal
+                        .elapsed
+                        > 0
+                );
+            }
+            result.push(snapshot);
+        }
+        result
+    }
+    let reference = run(false);
+    for threads in [1, 4] {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
+        let got = pool.install(|| run(true));
+        assert_eq!(
+            got, reference,
+            "nonresident transition mismatch with {threads} threads"
+        );
+    }
+}
+
+#[test]
+fn nonresident_portal_negative_boundary_removal_and_dimension_match_serial() {
+    fn run(classified: bool) -> Vec<String> {
+        let (mut state, _) = worlds();
+        let cow = mc_data::entity_types::entity_type_contract_26_1_2_by_name("minecraft:cow")
+            .unwrap()
+            .protocol_id;
+        // The first covered column is -1001, but the portal lies in -1000.
+        let cross = state.spawn_mob(cow, [-16000.1, 70.0, 0.5], 10.0);
+        let child = (0..8)
+            .find_map(|_| {
+                let id = state
+                    .other_dimensions
+                    .get_mut(&Dimension::Nether)
+                    .unwrap()
+                    .spawn_mob(cow, [-16032.5, 70.0, 0.5], 10.0);
+                if state.entities.slot_of_any(id).is_some() {
+                    let nether = state.other_dimensions.get_mut(&Dimension::Nether).unwrap();
+                    let slot = nether.entities.slot_of(id).unwrap();
+                    nether.entities.remove(slot);
+                    None
+                } else {
+                    Some(id)
+                }
+            })
+            .expect("distinct Nether entity id");
+        let portal = state_id(&state, "minecraft:nether_portal", &[("axis", "x")]);
+        let air = state.registry.states.air;
+        let mut transcript = Vec::new();
+        for step in 0..4 {
+            if step == 1 || step == 2 {
+                let block = if step == 1 { portal } else { air };
+                state.world.set_block(-16000, 70, 0, block);
+                state
+                    .other_dimensions
+                    .get_mut(&Dimension::Nether)
+                    .unwrap()
+                    .world
+                    .set_block(-16033, 70, 0, block);
+            }
+            if step == 3 {
+                // Admission permits the retained air overlays to actually fold.
+                load(&mut state, [-15999.5, 70.0, 0.5], 0);
+                load(
+                    state.other_dimensions.get_mut(&Dimension::Nether).unwrap(),
+                    [-16032.5, 70.0, 0.5],
+                    0,
+                );
+                state.world.fold_overlay();
+                state
+                    .other_dimensions
+                    .get_mut(&Dimension::Nether)
+                    .unwrap()
+                    .world
+                    .fold_overlay();
+            }
+            let mut changes = BTreeMap::new();
+            travel::finish_with(&mut state, &mut changes, classified.then_some(0));
+            let nether = &state.other_dimensions[&Dimension::Nether];
+            let over_slot = state
+                .entities
+                .slot_of(cross)
+                .expect("boundary mob retained");
+            let nether_slot = nether.entities.slot_of(child).expect("nether mob retained");
+            let over_elapsed = state.entities.row(over_slot).entity_life.portal.elapsed;
+            let nether_elapsed = nether.entities.row(nether_slot).entity_life.portal.elapsed;
+            if step == 1 {
+                assert_eq!(
+                    over_elapsed, 1,
+                    "negative boundary overlay portal must contact"
+                );
+                assert_eq!(nether_elapsed, 1, "nether overlay portal must contact");
+            }
+            if step == 2 {
+                assert_eq!(
+                    over_elapsed, 0,
+                    "boundary overlay removal must stop contact"
+                );
+                assert_eq!(
+                    nether_elapsed, 0,
+                    "nether overlay removal must stop contact"
+                );
+            }
+            transcript.push(format!(
+                "{changes:?} {:?} {:?} {:?} {:?} {:?} {:?}",
+                state.entities.pos(over_slot),
+                nether.entities.pos(nether_slot),
+                state.entities.row(over_slot).entity_life.portal,
+                nether.entities.row(nether_slot).entity_life.portal,
+                state.tickets,
+                nether.tickets
+            ));
+        }
+        transcript
+    }
+    let serial = run(false);
+    for threads in [1, 4] {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
+        assert_eq!(pool.install(|| run(true)), serial, "{threads} threads");
+    }
+}
+
+// Exercise the actual End owner, including the portal's vertical inside shape
+// and a gateway with a real block entity and an already resident exit.
+#[test]
+fn nonresident_end_portal_and_gateway_match_serial() {
+    fn run(classified: bool) -> Vec<String> {
+        let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
+        let mut state = local(Dimension::End, registry);
+        let cow = mc_data::entity_types::entity_type_contract_26_1_2_by_name("minecraft:cow")
+            .unwrap()
+            .protocol_id;
+        let end_id = state.spawn_mob(cow, [16000.5, 70.75, 0.5], 10.0);
+        let gateway_id = state.spawn_mob(cow, [16032.5, 75.0, 0.5], 10.0);
+        let portal = state_id(&state, "minecraft:end_portal", &[]);
+        let gateway = state_id(&state, "minecraft:end_gateway", &[]);
+        let pos = BlockPos {
+            x: 16032,
+            y: 75,
+            z: 0,
+        };
+        let mut transcript = Vec::new();
+        for step in 0..3 {
+            if step == 1 {
+                // Missing End column plus pending portal overlay: y=70.75 is
+                // exactly outside its inside shape. A gateway becomes resident.
+                state.world.set_block(16000, 70, 0, portal);
+                load(&mut state, [16032.5, 75.0, 0.5], 0);
+                state.world.set_block(pos.x, pos.y, pos.z, gateway);
+                state.world.fold_overlay();
+                crate::end_portals::save_gateway(
+                    &mut state,
+                    pos,
+                    crate::end_portals::Gateway {
+                        exit: Some(BlockPos { x: 8, y: 70, z: 8 }),
+                        exact: true,
+                        age: 0,
+                        cooldown_until: 0,
+                    },
+                );
+            }
+            if step == 2 {
+                let slot = state.entities.slot_of(end_id).unwrap();
+                state.entities.set_pos(slot, [16000.5, 70.749, 0.5]);
+            }
+            let mut changes = BTreeMap::new();
+            travel::finish_with(&mut state, &mut changes, classified.then_some(0));
+            let end_slot = state
+                .entities
+                .slot_of(end_id)
+                .expect("End portal mob retained");
+            let gateway_slot = state
+                .entities
+                .slot_of(gateway_id)
+                .expect("gateway mob retained");
+            let elapsed = state.entities.row(end_slot).entity_life.portal.elapsed;
+            let gateway_pos = state.entities.pos(gateway_slot);
+            if step == 1 {
+                assert_eq!(elapsed, 0, "end_inside_shape_excludes_upper_edge");
+                assert_eq!(
+                    gateway_pos,
+                    [8.5, 70.0, 8.5],
+                    "end_gateway_transfers_to_exact_exit"
+                );
+                assert_eq!(
+                    state.entities.row(gateway_slot).entity_life.portal.cooldown,
+                    300,
+                    "end_gateway_arms_mob_cooldown"
+                );
+            }
+            if step == 2 {
+                // No Overworld is installed in this isolated End owner, so
+                // contact arms elapsed but cannot finish a dimension transfer.
+                assert_eq!(elapsed, 1, "end_inside_shape_dip_must_contact");
+            }
+            transcript.push(format!(
+                "{changes:?} {:?} {:?} {:?} {:?} {:?}",
+                state.entities.pos(end_slot),
+                gateway_pos,
+                state.entities.row(end_slot).entity_life.portal,
+                state.entities.row(gateway_slot).entity_life.portal,
+                state.tickets
+            ));
+        }
+        transcript
+    }
+    let serial = run(false);
+    for threads in [1, 4] {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
+        assert_eq!(
+            pool.install(|| run(true)),
+            serial,
+            "End differential on {threads} threads"
+        );
+    }
+}

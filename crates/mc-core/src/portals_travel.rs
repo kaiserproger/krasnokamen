@@ -185,14 +185,33 @@ fn classify_row(
         *stamp = None;
         return None;
     }
-    // Cold/mismatched rows need the serial body; leave their geometry lazy.
-    if stamp
-        .as_ref()
-        .is_none_or(|stamp| stamp.entity != entities.body(slot).id)
-    {
-        return Some(());
+    // Preserve the established warm-resident fast path before probing
+    // residency. A failed quiet proof already supplies the covered cells.
+    let body = entities.body(slot);
+    let covered = if stamp.as_ref().is_some_and(|proof| proof.entity == body.id) {
+        let (quiet, covered) = quiet_proof(entities, chunks, cache, slot, stamp);
+        if quiet {
+            return None;
+        }
+        covered.expect("failed quiet proof supplies coverage")
+    } else {
+        contact_box(entities, slot)
+    };
+    // Current block_at reads of an absent untouched single column are None.
+    // Reproduce the serial negative stamp; players and timers were fenced above.
+    if chunks.contact_box_missing_column(covered.0, covered.1, cache) {
+        *stamp = Some(crate::world::ContactStamp {
+            entity: body.id,
+            position: entities.pos(slot),
+            shape: [body.half_width, body.height],
+            min: covered.0,
+            max: covered.1,
+            probes: [],
+            revision: chunks.revision_now(),
+        });
+        return None;
     }
-    (!quiet_proof(entities, chunks, cache, slot, stamp).0).then_some(())
+    Some(())
 }
 
 fn contact_gate(

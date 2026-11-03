@@ -319,6 +319,26 @@ pub(crate) struct ContactStamp<const N: usize = 0> {
 }
 
 impl ChunkWorld {
+    /// A single entirely missing, overlay-untouched column returns None for
+    /// every block_at cell in this box. Missing data is not cached as terrain.
+    pub(crate) fn contact_box_missing_column(
+        &self,
+        min: (i32, i32, i32),
+        max: (i32, i32, i32),
+        cache: &SectionMatchCache,
+    ) -> bool {
+        if min.0 > max.0 || min.1 > max.1 || min.2 > max.2 {
+            return false;
+        }
+        let x = min.0.div_euclid(16);
+        let z = min.2.div_euclid(16);
+        if max.0.div_euclid(16) != x || max.2.div_euclid(16) != z {
+            return false;
+        }
+        let chunk = ChunkPos { x, z };
+        !self.chunks.contains_key(&chunk) && !cache.overlay_chunks.contains(&chunk)
+    }
+
     /// Prove a previous contact-cell read is still current. Chunk revisions
     /// conservatively wake all covered sections; pending overlay edits wake
     /// before fold updates those revisions. `cache` must be reset for this pass.
