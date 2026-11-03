@@ -560,6 +560,33 @@ fn kelp_bonemeal_grows_into_flowing_and_falling_water_under_air() {
 }
 
 #[test]
+fn kelp_random_ticks_grow_into_flowing_and_falling_water_under_air() {
+    for level in ["1", "8"] {
+        let (mut state, _) = setup();
+        state
+            .gamerules
+            .insert("random_tick_speed".into(), FAST.into());
+        let tip = block(&state, "kelp", &[("age", "0")]);
+        let water = block(&state, "water", &[("level", level)]);
+        let air = state.registry.states.air;
+        put(&mut state, -3, Y + 1, 1, tip);
+        put(&mut state, -3, Y + 2, 1, water);
+        put(&mut state, -3, Y + 3, 1, air);
+        let plant = block(&state, "kelp_plant", &[]);
+        let grown = (0..2000).any(|_| {
+            let _ = run_tick(&mut state, &[]);
+            at(&state, -3, Y + 1, 1) == plant
+        });
+        assert!(grown, "kelp grew naturally into water level {level}");
+        assert_eq!(
+            at(&state, -3, Y + 2, 1),
+            block(&state, "kelp", &[("age", "1")]),
+            "water level {level}"
+        );
+    }
+}
+
+#[test]
 fn wheat_seeds_refuse_planting_in_darkness_but_accept_light() {
     let (mut state, player) = setup();
     let wet = block(&state, "farmland", &[("moisture", "7")]);

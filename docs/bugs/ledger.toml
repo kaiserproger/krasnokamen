@@ -658,7 +658,7 @@ repro = "source"
 severity = "major"
 status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#KELP-FLOWING-GROWTH"
-regression = ["cargo:mc-core:farming_tests::kelp_bonemeal_grows_into_flowing_and_falling_water_under_air"]
+regression = ["cargo:mc-core:farming_tests::kelp_bonemeal_grows_into_flowing_and_falling_water_under_air", "cargo:mc-core:farming_tests::kelp_random_ticks_grow_into_flowing_and_falling_water_under_air"]
 failing_first = "reported"
 
 [[bug]]
@@ -1625,14 +1625,23 @@ regression = ["cargo:mc-core:bees::tests::flowerless_bee_finds_wither_rose_and_r
 
 [[bug]]
 id = "ARMADILLO-THREAT-ROLL"
-title = "Armadillo threat response lacks defensive rolling, damage reduction or spider deterrence (also reported as ARMADILLO-ROLL-ABSENT)."
+title = "An armadillo threatened by an undead mob fails to reduce incoming damage."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMADILLO-THREAT-ROLL,ARMADILLO-ROLL-ABSENT"
+regression = ["cargo:mc-core:mounts::tests::armadillo_curls_against_undead_and_halves_melee_damage"]
+
+[[bug]]
+id = "ARMADILLO-SPIDER-DETERRENCE"
+title = "Armadillo defensive rolling may not deter spiders."
 area = "gameplay"
 repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMADILLO-THREAT-ROLL,ARMADILLO-ROLL-ABSENT"
 regression = []
-repro_check = "cargo:mc-core:mounts::tests::armadillo_curls_against_undead_and_halves_melee_damage"
 
 [[bug]]
 id = "ARMADILLO-SCUTE-SHED"
@@ -2288,13 +2297,14 @@ regression = []
 
 [[bug]]
 id = "HUNT-REJOIN-LOCALE"
-title = "Rejoining a non-root dimension loses negotiated UI locale"
+title = "Rejoining in the Nether or End loses the negotiated UI locale."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-multiplayer-sync-next/REPORT.yaml"
-regression = []
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-multiplayer-sync-next/REPORT.yaml; /run/media/kaiserroman/games/solaris-work/wt/server-bugs-20261103/.analysis/codex-logs/server-bugs/report.md#real-client-ab"
+regression = ["cargo:mc-core:dimensions::tests::rejoin_child_dimension_keeps_initial_client_locale"]
+failing_first = "reported"
 
 [[bug]]
 id = "HUNT-CURSOR-CLOSE"
@@ -2318,13 +2328,36 @@ regression = []
 
 [[bug]]
 id = "HUNT-BUCKET-WASH"
-title = "Direct bucket wash may incorrectly attribute block mining"
+title = "Pouring an offhand water bucket onto cobweb incorrectly mines it using the main-hand tool."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-block-interactions-next/REPORT.yaml"
-regression = []
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-block-interactions-next/REPORT.yaml; /run/media/kaiserroman/games/solaris-work/wt/server-bugs-20261103/.analysis/codex-logs/server-bugs/report.md"
+regression = ["cargo:mc-core:fluids_tests::parity::offhand_bucket_wash_does_not_mine_with_main_hand"]
+failing_first = "reported"
+
+[[bug]]
+id = "HUNT-PICKUP-STARVATION"
+title = "An item or player without inventory capacity can starve another pickup, including when capacity is lost before merge."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoBugHunt/pickup-starvation.txt; /run/media/kaiserroman/games/solaris-work/wt/server-bugs-20261103/.analysis/codex-logs/server-bugs/report.md"
+regression = ["cargo:mc-core:tick_tests::full_stack_does_not_starve_another_ground_item_that_fits", "cargo:mc-core:tick_tests::full_player_does_not_reserve_pickup_from_nearby_player", "cargo:mc-core:tick_tests::pickup_losing_capacity_before_merge_does_not_block_another_player"]
+failing_first = "reported"
+
+[[bug]]
+id = "HUNT-BRUSHABLE-LOOT-PRIVACY"
+title = "Unopened brushable blocks expose loot table, seed or hidden item in client updates."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/wt/server-bugs-20261103/.analysis/codex-logs/server-bugs/report.md#real-client-ab"
+regression = ["cargo:mc-core:command_world::tests::brushable_command_direct_update_hides_unopened_loot", "cargo:mc-edge:chunks::chunks_tests::container_wire_tests::brushable_chunk_update_hides_loot_and_preserves_rendered_item"]
+failing_first = "reported"
 
 [[bug]]
 id = "MODEL-ZOMBIE-ARMS"

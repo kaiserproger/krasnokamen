@@ -2386,8 +2386,19 @@ fn shared_destroy_command_settles_open_chest_before_the_next_click() {
 
 #[test]
 fn rejoin_child_dimension_keeps_initial_client_locale() {
-    for (split, include_view) in [(false, true), (true, true), (false, false)] {
-        let (mut state, _, _) = worlds();
+    for (dimension, split, include_view) in [
+        (Dimension::Nether, false, true),
+        (Dimension::Nether, true, true),
+        (Dimension::Nether, false, false),
+        (Dimension::End, false, true),
+        (Dimension::End, true, true),
+        (Dimension::End, false, false),
+    ] {
+        let (mut state, _, bob) = worlds();
+        if dimension == Dimension::End {
+            command(&mut state, 1, "execute in the_end run tp Bob 8 150 8");
+            assert_eq!(travel::locate(&state, bob).unwrap().0, dimension);
+        }
         crate::tick::run_tick(
             &mut state,
             &[PlayerInput::Leave {
@@ -2419,15 +2430,15 @@ fn rejoin_child_dimension_keeps_initial_client_locale() {
             metadata.push(join);
             crate::tick::run_tick(&mut state, &metadata);
         }
-        let nether = &state.other_dimensions[&Dimension::Nether];
-        assert!(nether.connections.entity_of(connection).is_some());
+        let child = &state.other_dimensions[&dimension];
+        assert!(child.connections.entity_of(connection).is_some());
         assert_eq!(
-            nether.connections.locale_of(connection),
+            child.connections.locale_of(connection),
             Some("ru_ru"),
-            "split={split}, view={include_view}"
+            "dimension={dimension:?}, split={split}, view={include_view}"
         );
         assert_eq!(
-            nether.connections.view_distance_of(connection),
+            child.connections.view_distance_of(connection),
             include_view.then_some(5)
         );
         assert_eq!(state.connections.locale_of(connection), None);
