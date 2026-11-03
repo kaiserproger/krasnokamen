@@ -102,12 +102,14 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     if ctx.scenario_id == "native-v2-radius-full-view":
         # G5 radius split: full client view square with a smaller sim radius.
         view_distance, simulation_distance = 8, 4
+    # The towns gate tests plugin protection with non-operators, not spawn protection.
+    town_spawn_setting = "spawn_protection = 0\n" if ctx.scenario_id == "java-v2-p5-towns" else ""
     config.write_text(f'''[server]
 name = "shared-{kind}-probe"
 motd = "Shared Python MCP gameplay probe"
 view_distance = {view_distance}
 simulation_distance = {simulation_distance}
-[network]
+{town_spawn_setting}[network]
 bind_address = "127.0.0.1"
 port = {port}
 [auth]

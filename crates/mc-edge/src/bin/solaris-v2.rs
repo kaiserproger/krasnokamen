@@ -61,13 +61,14 @@ async fn run(cli: Cli, mut cfg: mc_edge::config::EdgeConfig) -> anyhow::Result<(
         )
     });
 
-    let listener = tokio::net::TcpListener::bind(cfg.bind_addr()).await?;
+    // Do not expose a listening socket until the edge and legacy profiles are ready.
+    let server = mc_edge::server::EdgeServer::new(core, data, tags, cfg)?;
+    let listener = tokio::net::TcpListener::bind(server.cfg.bind_addr()).await?;
     info!(
         addr = %listener.local_addr()?,
-        name = %cfg.server.name,
+        name = %server.cfg.server.name,
         "Solaris is listening (edge v2)"
     );
-    let server = mc_edge::server::EdgeServer::new(core, data, tags, cfg)?;
     // Serve the state the tick pump updates (owned by the server).
     if let Some((addr, port, allowed)) = dashboard {
         if allowed {

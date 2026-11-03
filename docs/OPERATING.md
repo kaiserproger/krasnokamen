@@ -48,6 +48,8 @@ Import stages, validates and publishes the cache; a failed derivation preserves
 the previous cache. Verify is offline and checks the same content used by
 startup, not the complete server/plugin deployment. Serving never downloads
 implicitly. Missing or incomplete content fails before world/listener startup.
+The game port is bound only after the edge server and optional legacy protocol
+profile have initialized; a TCP connection cannot enter their startup backlog.
 
 Selection order: `[data].vanilla_data_dir`, `SOLARIS_CONTENT_CACHE`,
 `$XDG_DATA_HOME/solaris/content/26.3` (otherwise

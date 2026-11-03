@@ -736,6 +736,10 @@ def _building(leg: Leg, short: int, residents: list[str], station: tuple[int, in
     steps.check("refused_upgrade_keeps_level", in_menu(steps.observe(), page))
 
     steps.fixture(f"setblock {station[0]} {station[1]} {station[2]} minecraft:composter")
+    steps.call("minecraft_wait_for_block_state", {
+        "x": station[0], "y": station[1], "z": station[2],
+        "block_id": "minecraft:composter", "timeout_seconds": steps.remaining(),
+    })
     leg.slot(BUILDING_ICON, "refresh_workshop")
     leg.wait(lambda s: in_menu(s, page) and "Ready for level 2" in lore(leg.components(BUILDING_ICON)),
              "ready_for_level_2")

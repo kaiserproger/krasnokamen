@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
+from pathlib import Path
 from unittest import mock
 
 from . import scenarios
@@ -29,6 +31,19 @@ class JavaP5Tests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "entities"):
                 client_probes.run(ctx, "inventory")
             binary.assert_not_called()
+
+    def test_towns_fixture_disables_spawn_protection(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            artifact = Path(root)
+            ctx = mock.Mock(scenario_id="java-v2-p5-towns", client="java", windowed=False,
+                            extra_args=[], platform=None, timeout_seconds=450, artifact_dir=artifact)
+            with (mock.patch.object(client_probes, "plugin_directory", return_value=artifact),
+                  mock.patch.object(client_probes, "_server_binary", return_value=artifact / "server"),
+                  mock.patch.object(client_probes.runtime, "REPO_ROOT", artifact),
+                  mock.patch.object(client_probes, "prepare_operator_fixture", side_effect=RuntimeError("stop"))):
+                with self.assertRaisesRegex(RuntimeError, "stop"):
+                    client_probes.run(ctx, "entities")
+            self.assertIn("spawn_protection = 0", (artifact / "server.toml").read_text())
 
     def test_real_screenshot_and_ordinary_action_tools_required(self) -> None:
         self.assertTrue({"minecraft_screenshot", "minecraft_press_inputs", "minecraft_click_screen_button", "minecraft_break_block"} <= java_p5.REQUIRED_TOOLS)

@@ -71,6 +71,25 @@ class SettlementStorageLegTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"SOLARIS_SERVER_VANILLA_DATA_DIR": root}):
                 self.assertEqual(storage.farmer_id(), 5)
 
+    def test_workshop_refresh_waits_for_second_station(self) -> None:
+        leg = mock.Mock()
+        leg.detail = {}
+        steps = leg.steps
+        leg.menu.return_value = {"container": {"slots": [{"slot": 0, "name": "#2 Farmer workshop"}]}}
+        leg.components.return_value = {}
+        leg.wait.side_effect = RuntimeError("stop after refresh")
+        with self.assertRaisesRegex(RuntimeError, "stop after refresh"):
+            storage._building(leg, 2, ["a", "b"], (196, 77, -445))
+        calls = leg.mock_calls
+        send = next(i for i, call in enumerate(calls) if call == mock.call.steps.fixture(
+            "setblock 196 77 -445 minecraft:composter"))
+        fence = next(i for i, call in enumerate(calls) if call[0] == "steps.call"
+                     and call[1][0] == "minecraft_wait_for_block_state")
+        refresh = next(i for i, call in enumerate(calls) if call == mock.call.slot(
+            storage.BUILDING_ICON, "refresh_workshop"))
+        self.assertLess(send, fence)
+        self.assertLess(fence, refresh)
+
     def test_scenario_requires_window_before_server_resolution(self) -> None:
         ctx = mock.Mock(scenario_id="native-v2-settlement-storage", client="native", windowed=False)
         with mock.patch.object(client_probes, "_server_binary") as binary:

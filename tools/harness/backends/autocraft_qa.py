@@ -26,7 +26,8 @@ is done, cancelling that finished step must cancel the unfinished bread step,
 which then crafts nothing more while the finished step keeps its receipt.
 
 Fixture commands (pad, blocks, /give, summon, bind) are recorded separately and
-never count as behaviour evidence.
+never count as behaviour evidence. The storage chest must be observed before
+certification; sending its setblock command alone is not a completion fence.
 """
 from __future__ import annotations
 
@@ -256,6 +257,7 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     chest = (sx + 2, y0, sz + 2)
     probe.fixture(f"setblock {chest[0]} {chest[1]} {chest[2]} "
                   "minecraft:chest[facing=north,type=single,waterlogged=false]")
+    _expect(probe, chest, "minecraft:chest", "storage_chest_placed")
     wx, wz = ox - 8, oz + 4
     table = (wx + 3, y0, wz + 3)
     probe.fixture(f"setblock {wx + 1} {y0} {wz + 1} minecraft:cartography_table")
