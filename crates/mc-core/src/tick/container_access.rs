@@ -9,15 +9,17 @@ pub(super) fn can_open(state: &TickState, pos: BlockPos) -> bool {
         return false;
     };
     match block.block.id.path() {
-        "chest" | "trapped_chest" => super::container_cells(state, (pos.x, pos.y, pos.z))
-            .into_iter()
-            .all(|(x, y, z)| {
-                state
-                    .world
-                    .block_at(x, y + 1, z)
-                    .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
-                    .is_some_and(|above| !crate::redstone::conducts(above))
-            }),
+        name if matches!(name, "chest" | "trapped_chest") || crate::copper::chest(name) => {
+            super::container_cells(state, (pos.x, pos.y, pos.z))
+                .into_iter()
+                .all(|(x, y, z)| {
+                    state
+                        .world
+                        .block_at(x, y + 1, z)
+                        .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
+                        .is_some_and(|above| !crate::redstone::conducts(above))
+                })
+        }
         name if name == "shulker_box" || name.ends_with("_shulker_box") => {
             let facing = block
                 .properties

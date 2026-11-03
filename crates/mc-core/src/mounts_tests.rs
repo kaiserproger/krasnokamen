@@ -620,7 +620,9 @@ fn armadillo_curls_against_undead_and_halves_melee_damage() {
     let (mut state, _actor, pos) = fixture();
     let armadillo = spawn(&mut state, "armadillo", pos);
     let _threat = spawn(&mut state, "zombie", [pos[0] + 2.0, pos[1], pos[2]]);
-    for _ in 0..5 {
+    // Threat scans run every 10 ticks (vanilla's scare sensor also scans
+    // periodically), so give it a full second to roll up.
+    for _ in 0..20 {
         run_tick(&mut state, &[]);
     }
     let aslot = slot(&state, armadillo);
@@ -725,8 +727,7 @@ fn wolf_body_armor_absorbs_melee_damage_and_wears() {
 
 #[test]
 fn armadillo_scute_timer_drops_scute() {
-    // ARMADILLO-SCUTE-SHED timer leg (post-fix coverage): a timer at expiry
-    // drops a scute on the next tick.
+    // The scute timer expires on the next scheduled armadillo update.
     let (mut state, _actor, pos) = fixture();
     let armadillo = spawn(&mut state, "armadillo", pos);
     let slot = slot(&state, armadillo);
@@ -745,7 +746,7 @@ fn armadillo_scute_timer_drops_scute() {
         .as_mut()
         .expect("armadillo state")
         .seeded = true;
-    for _ in 0..3 {
+    for _ in 0..10 {
         run_tick(&mut state, &[]);
     }
     let scutes = state
@@ -764,4 +765,36 @@ fn armadillo_scute_timer_drops_scute() {
         .map(|stack| stack.count)
         .sum::<i32>();
     assert!(scutes >= 1, "expired scute timer must drop a scute");
+}
+
+#[test]
+fn armadillo_scute_timer_tracks_game_ticks() {
+    let (mut state, _actor, pos) = fixture();
+    let armadillo = spawn(&mut state, "armadillo", pos);
+    let slot = slot(&state, armadillo);
+    let timer = state
+        .entities
+        .row_mut(slot)
+        .entity_life
+        .armadillo
+        .get_or_insert_with(crate::armadillo::ArmadilloState::default);
+    timer.seeded = true;
+    timer.scute_ticks = 100;
+
+    for _ in 0..10 {
+        run_tick(&mut state, &[]);
+    }
+
+    assert_eq!(
+        state
+            .entities
+            .row(slot)
+            .entity_life
+            .armadillo
+            .as_ref()
+            .unwrap()
+            .scute_ticks,
+        90,
+        "ten game ticks must advance the scute timer by ten ticks"
+    );
 }

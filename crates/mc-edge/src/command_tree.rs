@@ -43,7 +43,7 @@ const SETTLEMENT_HELP: &[(&str, &str)] = &[
     ("guide", "Step-by-step in-game settlement tutorial."),
     (
         "menu",
-        "Open the settlement dialogs (also: /settlement alone). Pages: main, buildings, certify, residents, production, army, projects, settings.",
+        "Open the settlement dialogs (also: /settlement alone). Pages: main, buildings, map, storage, certify, residents, production, army, projects, settings.",
     ),
     (
         "building",
@@ -52,6 +52,10 @@ const SETTLEMENT_HELP: &[(&str, &str)] = &[
     (
         "build",
         "Start a fully funded blueprint building or native-built upgrade: <blueprint> | upgrade <buildingId>. Owner/operator of the claimed settlement here; one active project, real materials from storage.",
+    ),
+    (
+        "layout",
+        "Show the settlement street plan here: roads, lamps, lots, blocked cells and the next street work.",
     ),
     (
         "create",

@@ -502,6 +502,7 @@ pub struct TickState {
     pub(crate) brewing: crate::brewing::BrewingStands,
     pub(crate) crafters: crate::crafter::Crafters,
     pub(crate) merge_shulker_placements: Vec<crate::shulker::Placement>,
+    pub(crate) merge_banner_placements: Vec<(BlockPos, u32, Vec<u8>)>,
     pub(crate) vibrations: crate::vibration::Bus,
     pub(crate) sculk: crate::sculk::SculkState,
     pub(crate) trial_spawners: crate::trial_spawner::Spawners,
@@ -551,6 +552,8 @@ pub struct TickState {
     pub(crate) autonomy_queue: crate::settlements::autonomy::AutonomyQueue,
     /// Per-connection certify-dialog corner marks (transient UI draft, never persisted).
     pub(crate) settlement_marks: HashMap<ConnectionId, crate::settlements::ui::Marks>,
+    /// Per-connection settlement icon menu (transient display window, never persisted).
+    pub(crate) settlement_menus: HashMap<ConnectionId, crate::settlements::ui::menus::Open>,
     pub(crate) tick_budget: crate::tick_budget::Budget,
     /// Global `/tick` rate manager (moved between worlds with the other globals).
     pub(crate) tick_control: crate::tick_control::TickControl,
@@ -729,6 +732,7 @@ impl TickState {
             brewing: crate::brewing::BrewingStands::default(),
             crafters: crate::crafter::Crafters::default(),
             merge_shulker_placements: Vec::new(),
+            merge_banner_placements: Vec::new(),
             merge_command_block_entities: Vec::new(),
             vibrations: crate::vibration::Bus::default(),
             sculk: crate::sculk::SculkState::default(),
@@ -768,6 +772,7 @@ impl TickState {
             settlement_sequence: 0,
             autonomy_queue: Default::default(),
             settlement_marks: HashMap::default(),
+            settlement_menus: HashMap::default(),
             tick_budget: Default::default(),
             tick_control: Default::default(),
             locate: Default::default(),
@@ -1490,6 +1495,7 @@ fn run_dimension_tick_inner<'a>(
     }
     crate::shulker::commit_placements(state);
     crate::block_entity_defaults::after_blocks(state, &block_writes);
+    crate::block_entity_defaults::commit_banners(state);
     crate::trial_spawner::after_blocks(state, &block_writes);
     crate::monster_spawner::after_blocks(state, &block_writes);
     crate::vault::after_blocks(state, &block_writes);

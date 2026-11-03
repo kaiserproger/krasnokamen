@@ -219,6 +219,7 @@ pub(crate) fn prepare(
             "VillagerData" => matches!(name, "minecraft:villager" | "minecraft:zombie_villager"),
             "InLove" | "LoveCause" => ageable,
             "Color" | "Sheared" => name == "minecraft:sheep",
+            "Pumpkin" => name == "minecraft:snow_golem",
             "Type" | "stew_effects" => name == "minecraft:mooshroom",
             "Trusting" => name == "minecraft:ocelot",
             "Trusted" => name == "minecraft:fox",
@@ -256,7 +257,8 @@ pub(crate) fn prepare(
             | "NoBasePlate"
             | "Marker"
             | "Invisible"
-            | "Sheared" => Tag::Byte(i8::from(number(value, key)? != 0.0)),
+            | "Sheared"
+            | "Pumpkin" => Tag::Byte(i8::from(number(value, key)? != 0.0)),
             "Health" => {
                 let v = number(value, key)?;
                 if v <= 0.0 || v > f64::from(f32::MAX) {
@@ -656,6 +658,12 @@ pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
             crate::blueprint::SHEEP_WOOL_DATA_INDEX,
             EntityDataValue::Byte(wool as i8),
         ));
+    }
+    if native.id == "minecraft:snow_golem"
+        && let Some((_, Tag::Byte(pumpkin))) =
+            native.extra_fields.iter().find(|(key, _)| key == "Pumpkin")
+    {
+        crate::entity_life::set_snow_golem_pumpkin(appearance, *pumpkin != 0);
     }
     if let Some((_, Tag::String(name))) = native
         .extra_fields

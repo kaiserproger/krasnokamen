@@ -219,6 +219,36 @@ pub(super) fn assert_signal_cache_matches_full_scan(state: &TickState) {
 }
 
 #[test]
+fn item_replace_air_clears_chest_and_unpowers_comparator_and_lamp() {
+    let mut state = state();
+    chest_and_comparator(&mut state, "chest");
+    let lamp = BlockPos { x: 4, y: 200, z: 6 };
+    place(&mut state, lamp, "redstone_lamp", &[("lit", "false")]);
+    join(&mut state, CONNECTION);
+    command(
+        &mut state,
+        "item replace block 6 200 6 container.0 with minecraft:stone",
+    );
+    advance(&mut state, 10);
+    assert_eq!(comparator_output(&state, COMPARATOR), 1);
+    assert_eq!(prop(at(&state, lamp).unwrap(), "lit"), Some("true"));
+
+    command(
+        &mut state,
+        "item replace block 6 200 6 container.0 with minecraft:air",
+    );
+    assert_eq!(state.block_entities[&key(CHEST)].slots[0], ItemStack::EMPTY);
+    advance(&mut state, 10);
+    assert_eq!(containers::signal(&state, CHEST), 0);
+    assert_eq!(comparator_output(&state, COMPARATOR), 0);
+    assert_eq!(
+        prop(at(&state, COMPARATOR).unwrap(), "powered"),
+        Some("false")
+    );
+    assert_eq!(prop(at(&state, lamp).unwrap(), "lit"), Some("false"));
+}
+
+#[test]
 fn comparator_tracks_real_menu_pickup_and_return_without_explicit_wake() {
     let mut state = state();
     chest_and_comparator(&mut state, "chest");

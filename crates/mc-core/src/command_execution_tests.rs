@@ -131,6 +131,26 @@ fn admin_item_replace_entity_changes_slot() {
 }
 
 #[test]
+fn admin_item_replace_air_clears_player_slot() {
+    let (mut state, alice, _) = fixture();
+    command(
+        &mut state,
+        alice,
+        "item replace entity @s hotbar.0 with stone 3",
+    );
+    assert_eq!(state.players[&alice].inventory.slots[0].count, 3);
+    command(
+        &mut state,
+        alice,
+        "item replace entity @s hotbar.0 with minecraft:air",
+    );
+    assert_eq!(
+        state.players[&alice].inventory.slots[0],
+        mc_data::ItemStack::EMPTY
+    );
+}
+
+#[test]
 fn admin_loot_unknown_table_reports_error() {
     let (mut state, alice, _) = fixture();
     command(
@@ -1370,7 +1390,104 @@ fn chat_routing_preserves_message_and_unprivileged_selector_literals() {
         "commands.message.display.outgoing"
     ));
     assert!(parse("msg @a hello", false).is_err());
-    assert_eq!(expand_message(&state, alice, "mail @é @"), "mail @é @");
+}
+
+#[test]
+fn chat_selectors_render_named_and_unnamed_mobs() {
+    fn contains(tag: &Tag, expected: &str) -> bool {
+        match tag {
+            Tag::String(value) => value == expected,
+            Tag::Compound(fields) => fields.iter().any(|(_, value)| contains(value, expected)),
+            Tag::List(list) => list.elements.iter().any(|value| contains(value, expected)),
+            _ => false,
+        }
+    }
+
+    let (mut state, alice, _) = fixture();
+    let pig_type = state.registry.entity_type_id("minecraft:pig").unwrap();
+    let named = state.spawn_mob(pig_type, [2.0, 80.0, 0.0], 10.0);
+    state.spawn_mob(pig_type, [3.0, 80.0, 0.0], 10.0);
+    let slot = state.entities.slot_of(named).unwrap();
+    Arc::make_mut(&mut state.entities.row_mut(slot).appearance).custom_name =
+        Some("SelectorPigQA".into());
+    command(&mut state, alice, "say PIGS @e[type=minecraft:pig]");
+    let rendered = state.outbox[&ConnectionId(2)]
+        .iter()
+        .find_map(|change| match change {
+            PlayerChange::StyledChat { content } if contains(content, "chat.type.announcement") => {
+                Some(content)
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert!(contains(rendered, "SelectorPigQA"));
+    assert!(contains(rendered, "entity.minecraft.pig"));
+    command(&mut state, alice, "team add red");
+    command(&mut state, alice, "team join red Alice");
+    command(&mut state, alice, "team join red Bob");
+    for (input, key) in [
+        ("me PIGS @e[type=minecraft:pig]", "chat.type.emote"),
+        (
+            "tell Bob PIGS @e[type=minecraft:pig]",
+            "commands.message.display.incoming",
+        ),
+        ("teammsg PIGS @e[type=minecraft:pig]", "chat.type.team.text"),
+    ] {
+        state.outbox.clear();
+        command(&mut state, alice, input);
+        let rendered = state.outbox[&ConnectionId(2)]
+            .iter()
+            .find_map(|change| match change {
+                PlayerChange::StyledChat { content } if contains(content, key) => Some(content),
+                _ => None,
+            })
+            .unwrap();
+        assert!(contains(rendered, "SelectorPigQA"), "{input}");
+        assert!(contains(rendered, "entity.minecraft.pig"), "{input}");
+    }
+    state.outbox.clear();
+    command(&mut state, alice, "say mail @é @ @e[unknown=@s]");
+    let literal = state.outbox[&ConnectionId(2)]
+        .iter()
+        .find_map(|change| match change {
+            PlayerChange::StyledChat { content } if contains(content, "chat.type.announcement") => {
+                Some(content)
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert!(contains(literal, "mail @é @ @e[unknown=@s]"));
+}
+
+#[test]
+fn empty_chat_selector_uses_valid_component() {
+    fn valid_extra(tag: &Tag) -> bool {
+        match tag {
+            Tag::Compound(fields) => fields.iter().all(|(key, value)| {
+                !(key == "extra" && matches!(value, Tag::List(list) if list.elements.is_empty()))
+                    && valid_extra(value)
+            }),
+            Tag::List(list) => list.elements.iter().all(valid_extra),
+            _ => true,
+        }
+    }
+    let (mut state, alice, _) = fixture();
+    command(
+        &mut state,
+        alice,
+        "say @e[type=minecraft:pig,name=NoSuchPig]",
+    );
+    let chat = state.outbox[&ConnectionId(2)]
+        .iter()
+        .find_map(|change| match change {
+            PlayerChange::StyledChat { content } => Some(content),
+            _ => None,
+        })
+        .unwrap();
+    assert!(
+        valid_extra(chat),
+        "Java component codec rejects empty extra"
+    );
 }
 
 #[test]
@@ -2380,6 +2497,93 @@ fn settlement_building_commands_select_executor_town_and_enforce_owner() {
     );
 }
 
+/// `/settlement layout` shows anyone standing in the settlement the street
+/// work its real terrain allows: while water cuts the avenue between the bell
+/// and a house, no paving toward it is offered; once the water is gone it is.
+/// The read changes nothing, and outside every settlement nothing is selected.
+#[test]
+fn settlement_layout_follows_a_flooded_then_open_avenue_without_changes() {
+    use crate::settlements::allocator::tests::block;
+    use crate::settlements::buildings::{Building, BuildingId, BuildingKind};
+    let (mut state, alice, bob) = fixture();
+    command(&mut state, alice, "settlement layout");
+    assert_eq!(
+        build_last_chat(&state, ConnectionId(1)),
+        crate::settlements::building_commands::NO_SETTLEMENT
+    );
+    let alice_slot = state.entities.slot_of(alice).unwrap();
+    state.entities.set_pos(alice_slot, [8.5, 201.0, 8.5]);
+    command(&mut state, alice, "settlement create town");
+    let id = state.settlements.find("town").unwrap().id;
+    crate::settlements::construction::tests::open_plan(&mut state);
+    // Grass on the avenue south of the plaza, a player-certified house beside
+    // it, and a water channel across the avenue between the two.
+    let (grass, water) = (
+        block(&state, "minecraft:grass_block", &[]),
+        block(&state, "minecraft:water", &[]),
+    );
+    for x in 7..=9 {
+        for z in 13..=23 {
+            state.world.set_block(x, 200, z, grass);
+        }
+        state.world.set_block(x, 200, 16, water);
+    }
+    state.world.fold_overlay();
+    let record = state.settlements.get_mut(id).unwrap();
+    record.building_sequence += 1;
+    let house = BuildingId((id.0 << 32) | record.building_sequence);
+    record.buildings.insert(
+        house,
+        Building {
+            id: house,
+            settlement: id,
+            kind: BuildingKind::House,
+            level: 1,
+            bounds: mc_script::ScriptWorldBounds::new([11, 200, 25], [15, 204, 30]).unwrap(),
+            work_points: Vec::new(),
+            revision: 1,
+            natural_zone: false,
+        },
+    );
+    let revision = state.settlements.get(id).unwrap().revision;
+    let writes = state.plugin_block_writes.len();
+    command(&mut state, alice, "settlement layout");
+    let flooded = build_last_chat(&state, ConnectionId(1));
+    assert!(!flooded.contains("pave road"), "{flooded}");
+    assert_eq!(
+        state.world.block_at(8, 200, 16),
+        Some(water),
+        "nothing bulldozed"
+    );
+    for x in 7..=9 {
+        state.world.set_block(x, 200, 16, grass);
+    }
+    state.world.fold_overlay();
+    command(&mut state, alice, "settlement layout");
+    let open = build_last_chat(&state, ConnectionId(1));
+    assert!(open.contains("pave road"), "{open}");
+    // Visitors read the same plan; reads change nothing.
+    let bob_slot = state.entities.slot_of(bob).unwrap();
+    state.entities.set_pos(bob_slot, [8.5, 201.0, 12.5]);
+    command(&mut state, bob, "settlement layout");
+    assert_eq!(build_last_chat(&state, ConnectionId(2)), open);
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(record.revision, revision);
+    assert!(record.project.is_none());
+    assert_eq!(state.plugin_block_writes.len(), writes);
+    assert_eq!(
+        state.world.block_at(8, 200, 13),
+        Some(grass),
+        "nothing paved"
+    );
+    state.entities.set_pos(bob_slot, [200.0, 80.0, 0.0]);
+    command(&mut state, bob, "settlement layout");
+    assert_eq!(
+        build_last_chat(&state, ConnectionId(2)),
+        crate::settlements::building_commands::NO_SETTLEMENT
+    );
+}
+
 #[test]
 fn settlement_autonomous_claim_refuses_other_mutations_and_other_players() {
     let (mut state, alice, bob) = fixture();
@@ -2508,7 +2712,7 @@ fn settlement_build_starts_funded_order_without_touching_blocks_or_stock() {
     use crate::settlements::allocator::tests::block;
     let (mut state, alice, bob) = fixture();
     let alice_slot = state.entities.slot_of(alice).unwrap();
-    state.entities.set_pos(alice_slot, [2.5, 201.0, 2.5]);
+    state.entities.set_pos(alice_slot, [8.5, 201.0, 8.5]);
     // Exact syntax works; malformed shapes fail at parse and reach no record.
     assert!(parse("settlement build house", true).is_ok());
     assert!(parse("settlement build upgrade 7", true).is_ok());
@@ -2519,19 +2723,9 @@ fn settlement_build_starts_funded_order_without_touching_blocks_or_stock() {
     // ids are free-form; validation happens at execution). Only extra words
     // or a non-numeric id after `upgrade` fail at parse.
     assert!(parse("settlement build upgrade 1 extra", true).is_err());
-    // Flatten ground around the anchor so the bounded site scan finds a
-    // free loaded site deterministically.
-    for x in 0..16 {
-        for z in 0..16 {
-            state
-                .world
-                .set_block(x, 200, z, state.registry.states.stone);
-            for y in 201..224 {
-                state.world.set_block(x, y, z, state.registry.states.air);
-            }
-        }
-    }
-    state.world.fold_overlay();
+    // The construction tests' anchor and open street plan: the house takes a
+    // free road-fronting lot, and the bounded site scan finds it deterministically.
+    crate::settlements::construction::tests::open_plan(&mut state);
     state
         .world
         .set_block(1, 201, 1, block(&state, "minecraft:chest", &[]));

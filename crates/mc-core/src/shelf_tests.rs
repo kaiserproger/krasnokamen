@@ -153,11 +153,7 @@ fn shelf_checkpoint_native_chunk_restart_preserves_stacks_and_alignment() {
     let projected = state.world.chunk(ChunkPos { x: 0, z: 0 }).unwrap();
     assert!(!projected.furnaces.contains_key(&POS));
     assert!(!projected.chests.contains_key(&POS));
-    let records = mc_world::wire::client_block_entities(
-        projected,
-        &state.registry.blocks,
-        &state.registry.items,
-    );
+    let records = mc_world::wire::client_block_entities(projected, &state.registry.blocks);
     let shelf = records.iter().find(|record| record.pos == POS).unwrap();
     assert_eq!(shelf.type_name.as_str(), "minecraft:shelf");
     let registry = mc_data::block_entity_types::solaris_required_block_entity_types();
@@ -490,6 +486,53 @@ fn chiseled_bookshelf_stores_and_returns_books() {
     state.players.get_mut(&actor).unwrap().inventory.slots[0] = ItemStack::EMPTY;
     assert!(use_on(&mut state, actor, Hand::Main, POS, 3, [0.5; 3]));
     assert_eq!(state.players[&actor].inventory.slots[0].count, 1);
+}
+
+#[test]
+fn chiseled_bookshelf_updates_hide_items_without_losing_custody() {
+    let (mut state, actor) = fixture(None);
+    let id = block(&state, "chiseled_bookshelf", &[("facing", "south")]);
+    state.world.set_block(8, 201, 8, id);
+    state.world.fold_overlay();
+    let mut book = stack(&state, "book", 1);
+    book.custom_name = Some("private shelf book".into());
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] = book.clone();
+    state.outbox.clear();
+
+    assert!(use_on(&mut state, actor, Hand::Main, POS, 3, [0.5; 3]));
+    assert_eq!(state.block_entities[&key(POS)].slots[4], book);
+    let stored = &state
+        .world
+        .chunk(ChunkPos { x: 0, z: 0 })
+        .unwrap()
+        .block_entities[&POS];
+    let Tag::Compound(stored_fields) = mc_nbt::read_network(&mut &stored[..]).unwrap() else {
+        panic!("stored shelf must be a compound");
+    };
+    assert!(stored_fields.iter().any(|(key, _)| key == "Items"));
+    let fields = state
+        .outbox
+        .values()
+        .flatten()
+        .find_map(|change| match change {
+            PlayerChange::BlockEntityData {
+                position,
+                block_entity_type,
+                nbt: Tag::Compound(fields),
+            } if *position == POS
+                && *block_entity_type == BlockEntityKind::ChiseledBookshelf.protocol_id() =>
+            {
+                Some(fields)
+            }
+            _ => None,
+        })
+        .expect("bookshelf update must be published");
+    assert!(!fields.iter().any(|(key, _)| key == "Items"));
+    assert!(
+        fields
+            .iter()
+            .any(|(key, value)| key == "last_interacted_slot" && *value == Tag::Int(4))
+    );
 }
 
 #[test]

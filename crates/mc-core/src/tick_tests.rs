@@ -2437,6 +2437,145 @@ fn shearing_drops_colored_wool_once_and_wears_the_shears() {
     );
 }
 
+#[test]
+fn snow_golem_shearing_is_once_and_survives_checkpoint_and_disk_wal() {
+    use crate::journal::{
+        JournalWriter, Replay, ReplayEntity, read_complete_batches_after, replay_batches,
+    };
+
+    let mut state = test_state();
+    let registry = test_registry();
+    let item = |name: &str| {
+        registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap()
+    };
+    let golem_type = registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:snow_golem").unwrap())
+        .unwrap();
+    let actor = join(&mut state, 403, "snow-shearer");
+    let actor_slot = state.entities.slot_of(actor).unwrap();
+    state.entities.set_pos(actor_slot, [8.0, 80.0, 7.0]);
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] =
+        mc_data::ItemStack::new(item("minecraft:shears"), 1);
+    let golem = state.spawn_mob(golem_type, [8.0, 80.0, 8.0], 8.0);
+    state.world.ensure_blocking(&state.desired_chunks());
+    let checkpoint_tick = state.tick;
+    let (_, chunks, _) = crate::core::checkpoint_data_for(&state, checkpoint_tick);
+    let dir = tempfile::tempdir().unwrap();
+    mc_world::anvil::entity_regions::write_entity_regions(
+        dir.path(),
+        &registry.items,
+        &chunks,
+        u32::try_from(checkpoint_tick).expect("checkpoint tick fits entity region timestamp"),
+    )
+    .unwrap();
+    let back =
+        mc_world::anvil::entity_regions::read_entity_regions(dir.path(), &registry.items).unwrap();
+    let native = back
+        .values()
+        .flat_map(|chunk| &chunk.entities)
+        .find(|record| record.id == "minecraft:snow_golem")
+        .unwrap();
+    assert!(
+        native
+            .extra_fields
+            .contains(&("Pumpkin".to_owned(), mc_nbt::Tag::Byte(1)))
+    );
+    let base = ReplayEntity {
+        uuid: native.uuid.to_string(),
+        type_id: golem_type,
+        pos: native.pos,
+        vel: [0.0; 3],
+        yaw: native.yaw,
+        pitch: native.pitch,
+        ground: native.on_ground,
+        health: native.health,
+        alive: true,
+        age: native.age as u32,
+        breed_cooldown: native.breed_cooldown as u32,
+        pickup_delay: native.pickup_delay as u32,
+        item: native.item.clone(),
+        appearance: crate::core::appearance_from_vanilla_entity(native),
+        active_effects: Default::default(),
+        villager: None,
+        projectile: None,
+        state: crate::journal::EntityStateImage::from_record(&registry, native).unwrap(),
+        tick: checkpoint_tick,
+    };
+    let shear = || PlayerInput::InteractEntity {
+        connection: ConnectionId(403),
+        target: golem,
+        hand: crate::boundary::Hand::Main,
+        location: [0.0; 3],
+    };
+    let (output, _, _) = run_tick(&mut state, &[shear()]);
+    assert!(output.changes.entities_appearance_changed.contains(&golem));
+    let pumpkins: i32 = output
+        .changes
+        .entities_spawned
+        .iter()
+        .filter_map(|id| state.entities.slot_of(*id))
+        .filter_map(|slot| state.entities.row(slot).item.as_ref())
+        .filter(|stack| stack.item_id == item("minecraft:carved_pumpkin"))
+        .map(|stack| stack.count)
+        .sum();
+    assert_eq!(pumpkins, 1);
+    assert_eq!(state.players[&actor].inventory.slots[0].damage, Some(1));
+    let slot = state.entities.slot_of(golem).unwrap();
+    assert_eq!(
+        crate::entity_life::snow_golem_pumpkin_flags(&state.entities.row(slot).appearance) & 0x10,
+        0
+    );
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
+    writer.append(output.tick, output.tick, &entries).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+    let batches =
+        read_complete_batches_after(&dir.path().join("journal"), checkpoint_tick).unwrap();
+    let mut replay = Replay {
+        tick: checkpoint_tick,
+        ..Replay::default()
+    };
+    replay.entities.insert(golem.0, base);
+    let replay = replay_batches(replay, &batches);
+    let mut restored = test_state();
+    crate::core::restore_entity(&mut restored, golem.0, &replay.entities[&golem.0]).unwrap();
+    let restored_slot = restored.entities.slot_of(golem).unwrap();
+    assert_eq!(
+        crate::entity_life::snow_golem_pumpkin_flags(
+            &restored.entities.row(restored_slot).appearance
+        ) & 0x10,
+        0
+    );
+    let (_, chunks, _) = crate::core::checkpoint_data_for(&restored, output.tick);
+    let native = chunks
+        .values()
+        .flat_map(|chunk| &chunk.entities)
+        .find(|record| record.id == "minecraft:snow_golem")
+        .unwrap();
+    assert!(
+        native
+            .extra_fields
+            .contains(&("Pumpkin".to_owned(), mc_nbt::Tag::Byte(0)))
+    );
+    assert!(
+        crate::core::appearance_from_vanilla_entity(native)
+            .extra
+            .iter()
+            .any(
+                |(index, value)| *index == crate::entity_life::SNOW_GOLEM_PUMPKIN_INDEX
+                    && matches!(value, crate::journal::EntityDataValueImage::Byte(0))
+            )
+    );
+    let (again, _, _) = run_tick(&mut state, &[shear()]);
+    assert!(again.changes.entities_spawned.is_empty());
+    assert_eq!(state.players[&actor].inventory.slots[0].damage, Some(1));
+}
+
 /// Blocker #3: a torn checkpoint (failure between domain writes) publishes no
 /// manifest and prunes nothing — reopen equals the last durable journal
 /// state, no dupe.
@@ -3021,6 +3160,91 @@ fn pickup_fills_inventory_and_syncs() {
     let total: i32 = player.inventory.slots.iter().map(|slot| slot.count).sum();
     assert_eq!(total, 5, "one dropped dirt picked back up, total {total}");
 }
+
+#[test]
+fn full_stack_does_not_starve_another_ground_item_that_fits() {
+    let (mut state, player, pos) = flat_player_fixture();
+    state.gamerules.insert("spawn_mobs".into(), "false".into());
+    let item = |name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap()
+    };
+    let dirt = item("minecraft:dirt");
+    let diamond = item("minecraft:diamond");
+    for slot in &mut state.players.get_mut(&player).unwrap().inventory.slots {
+        *slot = mc_data::ItemStack::new(dirt, 64);
+    }
+    state.players.get_mut(&player).unwrap().inventory.slots[0] =
+        mc_data::ItemStack::new(diamond, 63);
+    let blocked = crate::tick::spawn_item_entity(&mut state, pos, mc_data::ItemStack::new(dirt, 1));
+    let fitting =
+        crate::tick::spawn_item_entity(&mut state, pos, mc_data::ItemStack::new(diamond, 1));
+    for id in [blocked, fitting] {
+        let slot = state.entities.slot_of(id).unwrap();
+        state.entities.body_mut(slot).pickup_delay = 0;
+        state.entities.set_vel(slot, [0.0; 3]);
+    }
+    let (output, _, _) = run_tick(&mut state, &[]);
+    assert_eq!(state.players[&player].inventory.slots[0].count, 64);
+    assert!(state.entities.slot_of(fitting).is_none());
+    let blocked_slot = state
+        .entities
+        .slot_of(blocked)
+        .expect("unfittable stack remains");
+    assert_eq!(
+        state
+            .entities
+            .row(blocked_slot)
+            .item
+            .as_ref()
+            .unwrap()
+            .count,
+        1
+    );
+    assert!(
+        !output.changes.entity_events.iter().any(|event| matches!(
+            event,
+            crate::boundary::EntityEvent::Pickup { item, .. } if *item == blocked
+        )),
+        "zero-capacity collision must not publish a pickup"
+    );
+    assert!(output.changes.entity_events.iter().any(|event| matches!(
+        event,
+        crate::boundary::EntityEvent::Pickup { item, collector, count: 1 }
+            if *item == fitting && *collector == player
+    )));
+}
+
+#[test]
+fn full_player_does_not_reserve_pickup_from_nearby_player() {
+    let (mut state, full, pos) = flat_player_fixture();
+    let other = join(&mut state, 2, "other");
+    let other_slot = state.entities.slot_of(other).unwrap();
+    state.entities.set_pos(other_slot, pos);
+    state.gamerules.insert("spawn_mobs".into(), "false".into());
+    let dirt = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:dirt").unwrap())
+        .unwrap();
+    for slot in &mut state.players.get_mut(&full).unwrap().inventory.slots {
+        *slot = mc_data::ItemStack::new(dirt, 64);
+    }
+    let ground = crate::tick::spawn_item_entity(&mut state, pos, mc_data::ItemStack::new(dirt, 1));
+    let item_slot = state.entities.slot_of(ground).unwrap();
+    state.entities.body_mut(item_slot).pickup_delay = 0;
+    state.entities.set_vel(item_slot, [0.0; 3]);
+    let (output, _, _) = run_tick(&mut state, &[]);
+    assert!(state.entities.slot_of(ground).is_none());
+    assert!(output.changes.entity_events.iter().any(|event| matches!(
+        event, crate::boundary::EntityEvent::Pickup { item, collector, count: 1 }
+        if *item == ground && *collector == other
+    )));
+}
+
 /// Partial pickup keeps the remainder on the ground: a full inventory takes
 /// nothing and the entity survives; space for half takes half.
 #[test]

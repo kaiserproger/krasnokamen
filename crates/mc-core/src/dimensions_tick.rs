@@ -179,16 +179,21 @@ pub(crate) fn run_tick(
         swap_globals(state, world);
         let child_start = phase_start.map(|_| std::time::Instant::now());
         // Unknown-connection metadata runs in the root before Join resolves
-        // UUID locality to this dimension. Move only that pending value,
-        // rather than copying it into every world's connection registry.
+        // UUID locality to this dimension. Move the pending metadata with it.
         for (input, target) in inputs.iter().zip(&routes) {
             if *target == dimension
                 && let PlayerInput::Join { connection, .. } = input
                 && state.connections.entity_of(*connection).is_none()
-                && let Some(view) = state.connections.view_distance_of(*connection)
             {
+                let view = state.connections.view_distance_of(*connection);
+                let locale = state.connections.locale_of(*connection).map(str::to_owned);
                 state.connections.remove_by_connection(*connection);
-                world.connections.set_view_distance(*connection, view);
+                if let Some(view) = view {
+                    world.connections.set_view_distance(*connection, view);
+                }
+                if let Some(locale) = locale {
+                    world.connections.set_locale(*connection, locale);
+                }
             }
         }
         let (child_output, mut child_drains, child_times) = crate::tick::run_dimension_tick(

@@ -185,6 +185,10 @@ fn interact_parity_brushing_completes_once() {
                 mc_nbt::Tag::String("minecraft:archaeology/desert_pyramid".into()),
             ),
             ("LootTableSeed".into(), mc_nbt::Tag::Long(42)),
+            (
+                "private_marker".into(),
+                mc_nbt::Tag::String("not client data".into()),
+            ),
         ]);
         let mut bytes = Vec::new();
         mc_nbt::write_network(&mut bytes, &nbt).unwrap();
@@ -205,8 +209,44 @@ fn interact_parity_brushing_completes_once() {
         use_on(&mut state, POS, 1, [0.5; 3]);
         let mut dusted = [false; 4];
         dusted[0] = true;
+        let mut saw_reveal = false;
         for _ in 0..200 {
-            run_tick(&mut state, &[]);
+            let (_, drains, _) = run_tick(&mut state, &[]);
+            for (_, changes) in drains {
+                for change in changes {
+                    if let crate::boundary::PlayerChange::BlockEntityData {
+                        position,
+                        block_entity_type,
+                        nbt,
+                        ..
+                    } = change
+                        && position == POS
+                        && block_entity_type
+                            == mc_data::block_entity_kinds::BlockEntityKind::BrushableBlock
+                                .protocol_id()
+                    {
+                        let mc_nbt::Tag::Compound(fields) = nbt else {
+                            panic!("brush update must be a compound")
+                        };
+                        assert!(
+                            fields.iter().any(|(name, value)| name == "item"
+                                && matches!(value, mc_nbt::Tag::Compound(_))),
+                            "revealed item is rendered"
+                        );
+                        assert!(
+                            fields.iter().any(|(name, _)| name == "hit_direction"),
+                            "render orientation is present"
+                        );
+                        assert!(
+                            fields
+                                .iter()
+                                .all(|(name, _)| matches!(name.as_str(), "item" | "hit_direction")),
+                            "private saved fields must not reach viewers"
+                        );
+                        saw_reveal = true;
+                    }
+                }
+            }
             for (n, seen) in dusted.iter_mut().enumerate().skip(1) {
                 if state.world.block_at(POS.x, POS.y, POS.z)
                     == Some(block(&state, source, &[("dusted", &n.to_string())]))
@@ -218,6 +258,7 @@ fn interact_parity_brushing_completes_once() {
                 break;
             }
         }
+        assert!(saw_reveal, "brushing must send a visible item update");
         assert!(
             dusted.into_iter().all(|seen| seen),
             "all dust stages appear"

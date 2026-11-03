@@ -1012,11 +1012,11 @@ pub(crate) fn execute(
                     ..
                 }
             ) {
-                message.clone()
+                text(message)
             } else {
                 expand_message(state, executor, message)
             };
-            let content = translated(key, vec![name, text(message)]);
+            let content = translated(key, vec![name, message]);
             if connection == crate::command_console::CONNECTION {
                 state.push_player(
                     connection,
@@ -1075,7 +1075,7 @@ pub(crate) fn execute(
             let message = if *selectors {
                 expand_message(state, executor, message)
             } else {
-                message.clone()
+                text(message)
             };
             for recipient in recipients {
                 feedback(
@@ -1089,7 +1089,7 @@ pub(crate) fn execute(
                     vec![
                         text(&display_name),
                         entity_name(state, executor),
-                        text(&message),
+                        message.clone(),
                     ],
                 );
             }
@@ -1099,11 +1099,7 @@ pub(crate) fn execute(
                         members,
                         content: translated(
                             "chat.type.team.text",
-                            vec![
-                                text(display_name),
-                                entity_name(state, executor),
-                                text(message),
-                            ],
+                            vec![text(display_name), entity_name(state, executor), message],
                         ),
                     },
                 );
@@ -1130,7 +1126,7 @@ pub(crate) fn execute(
             let message = if *selectors {
                 expand_message(state, executor, message)
             } else {
-                message.clone()
+                text(message)
             };
             for target in targets {
                 if let Some(recipient) = state.connections.entity_connection(target) {
@@ -1138,14 +1134,14 @@ pub(crate) fn execute(
                         state,
                         recipient,
                         "commands.message.display.incoming",
-                        vec![entity_name(state, executor), text(&message)],
+                        vec![entity_name(state, executor), message.clone()],
                     );
                 }
                 feedback(
                     state,
                     connection,
                     "commands.message.display.outgoing",
-                    vec![entity_name(state, target), text(&message)],
+                    vec![entity_name(state, target), message.clone()],
                 );
             }
         }
@@ -1460,18 +1456,17 @@ fn clear(
     }
 }
 
-fn expand_message(state: &TickState, executor: EntityId, message: &str) -> String {
-    let mut expanded = String::with_capacity(message.len());
+fn expand_message(state: &TickState, executor: EntityId, message: &str) -> Tag {
+    let mut components = Vec::new();
     let mut offset = 0;
+    let mut literal_start = 0;
     while let Some(relative) = message[offset..].find('@') {
         let start = offset + relative;
-        expanded.push_str(&message[offset..start]);
         let rest = &message[start..];
         if !matches!(
             rest.as_bytes().get(1),
             Some(b'p' | b'a' | b'r' | b's' | b'e')
         ) {
-            expanded.push('@');
             offset = start + 1;
             continue;
         }
@@ -1480,21 +1475,44 @@ fn expand_message(state: &TickState, executor: EntityId, message: &str) -> Strin
         } else {
             2.min(rest.len())
         };
-        let candidate = &rest[..end];
-        if let Ok(target) = crate::commands::target_of(candidate) {
-            let names = resolve_target(state, executor, &target)
-                .into_iter()
-                .filter_map(|id| state.connections.name_of(id))
-                .collect::<Vec<_>>()
-                .join(", ");
-            expanded.push_str(&names);
-        } else {
-            expanded.push_str(candidate);
+        let Ok(target) = crate::commands::target_of(&rest[..end]) else {
+            offset = start + end;
+            continue;
+        };
+        if literal_start < start {
+            components.push(text(&message[literal_start..start]));
+        }
+        for (index, entity) in resolve_target(state, executor, &target)
+            .into_iter()
+            .enumerate()
+        {
+            if index != 0 {
+                components.push(text(", "));
+            }
+            components.push(entity_name(state, entity));
         }
         offset = start + end;
+        literal_start = offset;
     }
-    expanded.push_str(&message[offset..]);
-    expanded
+    if literal_start == 0 {
+        return text(message);
+    }
+    if literal_start < message.len() {
+        components.push(text(&message[literal_start..]));
+    }
+    if components.is_empty() {
+        return text("");
+    }
+    Tag::Compound(vec![
+        ("text".into(), Tag::String(String::new())),
+        (
+            "extra".into(),
+            Tag::List(mc_nbt::ListTag {
+                element_type: mc_nbt::tag_type::COMPOUND,
+                elements: components,
+            }),
+        ),
+    ])
 }
 
 #[cfg(test)]

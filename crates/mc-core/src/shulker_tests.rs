@@ -74,7 +74,6 @@ fn all_seventeen_shulker_blocks_setblock_save_native_id_and_open_native_menu() {
         let records = mc_world::wire::client_block_entities(
             state.world.chunk(ChunkPos { x: 0, z: 0 }).unwrap(),
             &state.registry.blocks,
-            &state.registry.items,
         );
         assert_eq!(
             records
@@ -345,4 +344,69 @@ fn hydrated_custody_skips_cached_nbt_decode_and_cold_corruption_is_sticky() {
             .reason,
         error
     );
+}
+
+#[test]
+fn viewer_transitions_emit_shulker_lid_events_for_nearby_players() {
+    use crate::boundary::PlayerChange;
+
+    let (mut state, first) = fixture(None);
+    install(&mut state, first, "purple_shulker_box[facing=up]");
+    let second_connection = ConnectionId(2);
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: second_connection,
+            uuid: uuid::Uuid::new_v4(),
+            name: "second".into(),
+            permission_level: 0,
+        }],
+    );
+    let second = state.connections.entity_of(second_connection).unwrap();
+    let second_slot = state.entities.slot_of(second).unwrap();
+    state.entities.set_pos(second_slot, [9.5, 201.0, 10.5]);
+    state.entities.set_ground(second_slot, true);
+
+    let use_box = |connection| PlayerInput::UseItemOn {
+        connection,
+        hand: Hand::Main,
+        position: POS,
+        face: 3,
+        cursor: [0.5; 3],
+        sequence: 1,
+    };
+    let assert_event = |drains: &[(ConnectionId, Vec<PlayerChange>)], connection, expected| {
+        let changes = &drains.iter().find(|(id, _)| *id == connection).unwrap().1;
+        assert!(
+            changes.iter().any(|change| matches!(
+                change,
+                PlayerChange::BlockEvent { position, action: 1, parameter, .. }
+                    if *position == POS && *parameter == expected
+            )),
+            "missing shulker lid event {expected} for {connection:?}"
+        );
+    };
+    let (_, drains, _) = run_tick(&mut state, &[use_box(ConnectionId(1))]);
+    assert_event(&drains, ConnectionId(1), 1);
+    assert_event(&drains, second_connection, 1);
+    let (_, drains, _) = run_tick(&mut state, &[use_box(second_connection)]);
+    assert_event(&drains, ConnectionId(1), 1);
+    assert_event(&drains, second_connection, 1);
+    let window = state.players[&first].open.as_ref().unwrap().window;
+    let (_, drains, _) = run_tick(
+        &mut state,
+        &[PlayerInput::ContainerClose {
+            connection: ConnectionId(1),
+            window,
+        }],
+    );
+    assert_event(&drains, ConnectionId(1), 1);
+    assert_event(&drains, second_connection, 1);
+    let (_, drains, _) = run_tick(
+        &mut state,
+        &[PlayerInput::Leave {
+            connection: second_connection,
+        }],
+    );
+    assert_event(&drains, ConnectionId(1), 0);
 }

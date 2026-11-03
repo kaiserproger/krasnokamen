@@ -55,27 +55,19 @@
 
 use std::io::Cursor;
 
-use mc_data::items::ItemRegistry;
 use mc_data::{Identifier, Registry};
-use mc_nbt::{ListTag, Tag, tag_type};
+use mc_nbt::Tag;
 use thiserror::Error;
 
 use crate::block::BlockRegistry;
 use crate::chunk::{
-    BIOME_VOLUME, BiomeSection, BlockPos, ChestBlockEntity, Chunk, FurnaceBlockEntity, FurnaceSlot,
-    LIGHT_LAYER_BYTES, SECTION_COUNT,
+    BIOME_VOLUME, BiomeSection, BlockPos, Chunk, FurnaceBlockEntity, LIGHT_LAYER_BYTES,
+    SECTION_COUNT,
 };
 use crate::light::{ChunkLight, LightLayer};
 use crate::section::SECTION_DIM;
 use crate::section::{ChunkSection, PackedBitArray, SECTION_VOLUME};
 
-/// Bits per entry vanilla 26.1.2 expects in `GlobalPalette` (direct)
-/// mode for the block-state container. Sized to comfortably hold the
-/// 29 873 states the bundled jar enumerates
-/// (`ceil(log2(29 873)) = 15`); when the registry grows in a future
-/// patch the encoder uses the wider of this constant and the actual
-/// ceiling computed from the registry size.
-const DIRECT_BITS: u8 = 15;
 /// Above this bit-width the wire switches from the LinearPalette /
 /// HashMapPalette indirect formats to GlobalPalette (direct). Matches
 /// vanilla's threshold (`Strategy.getConfigurationForBitCount`).
@@ -121,7 +113,6 @@ pub struct BlockEntityWireRecord {
 pub fn client_block_entities(
     chunk: &Chunk,
     registry: &BlockRegistry,
-    items: &ItemRegistry,
 ) -> Vec<BlockEntityWireRecord> {
     let mut records = Vec::new();
     let mut opaque_entries: Vec<_> = chunk
@@ -146,6 +137,62 @@ pub fn client_block_entities(
             continue;
         }
         let nbt = match type_name.as_str() {
+            "minecraft:chest"
+            | "minecraft:trapped_chest"
+            | "minecraft:barrel"
+            | "minecraft:hopper"
+            | "minecraft:dispenser"
+            | "minecraft:dropper" => Tag::Compound(Vec::new()),
+            "minecraft:furnace"
+            | "minecraft:smoker"
+            | "minecraft:blast_furnace"
+            | "minecraft:brewing_stand"
+            | "minecraft:shulker_box"
+            | "minecraft:crafter"
+            | "minecraft:chiseled_bookshelf" => {
+                let Tag::Compound(mut fields) = strip_persistent_block_entity_fields(tag) else {
+                    continue;
+                };
+                fields.retain(|(key, _)| key != "Items");
+                Tag::Compound(fields)
+            }
+            "minecraft:decorated_pot" => {
+                let Tag::Compound(mut fields) = strip_persistent_block_entity_fields(tag) else {
+                    continue;
+                };
+                // Unlike vanilla, do not disclose pot contents or unopened loot to clients.
+                fields.retain(|(key, _)| {
+                    !matches!(key.as_str(), "item" | "LootTable" | "LootTableSeed")
+                });
+                Tag::Compound(fields)
+            }
+            "minecraft:brushable_block" => {
+                let revealed = chunk
+                    .get_block(
+                        pos.x.rem_euclid(16) as u8,
+                        pos.y,
+                        pos.z.rem_euclid(16) as u8,
+                    )
+                    .and_then(|id| registry.by_id(id))
+                    .is_some_and(|state| {
+                        state
+                            .properties
+                            .iter()
+                            .any(|(key, value)| key == "dusted" && value != "0")
+                    });
+                if revealed {
+                    brushable_update_tag(tag)
+                } else {
+                    Tag::Compound(Vec::new())
+                }
+            }
+            "minecraft:lectern" => {
+                let Tag::Compound(mut fields) = strip_persistent_block_entity_fields(tag) else {
+                    continue;
+                };
+                fields.retain(|(key, _)| key != "Book");
+                Tag::Compound(fields)
+            }
             "minecraft:trial_spawner" => {
                 let active = chunk
                     .get_block(
@@ -187,18 +234,18 @@ pub fn client_block_entities(
         records.push(BlockEntityWireRecord {
             pos: *pos,
             type_name,
-            nbt: furnace_update_tag(furnace, items),
+            nbt: furnace_update_tag(furnace),
         });
     }
 
     let mut chests: Vec<_> = chunk.chests.iter().collect();
     chests.sort_by_key(|(pos, _)| (pos.x, pos.y, pos.z));
-    for (pos, chest) in chests {
+    for (pos, _) in chests {
         let type_name = chest_block_entity_type_for_block(chunk, registry, *pos);
         records.push(BlockEntityWireRecord {
             pos: *pos,
             type_name,
-            nbt: chest_update_tag(chest, items),
+            nbt: Tag::Compound(Vec::new()),
         });
     }
 
@@ -277,6 +324,16 @@ pub fn client_heightmaps(chunk: &Chunk) -> Vec<HeightmapEntry> {
             })
         })
         .collect()
+}
+
+/// Project a brushable block to the data used for client rendering.
+#[must_use]
+pub fn brushable_update_tag(tag: Tag) -> Tag {
+    let Tag::Compound(mut fields) = tag else {
+        return Tag::Compound(Vec::new());
+    };
+    fields.retain(|(key, _)| matches!(key.as_str(), "item" | "hit_direction"));
+    Tag::Compound(fields)
 }
 
 fn block_entity_type_name(tag: &Tag) -> Option<Identifier> {
@@ -361,9 +418,8 @@ fn chest_block_entity_type_for_block(
     Identifier::parse(kind.vanilla_id()).unwrap()
 }
 
-fn furnace_update_tag(furnace: &FurnaceBlockEntity, items: &ItemRegistry) -> Tag {
+fn furnace_update_tag(furnace: &FurnaceBlockEntity) -> Tag {
     Tag::Compound(vec![
-        ("Items".into(), item_list_tag(&furnace.slots, items)),
         (
             "lit_time_remaining".into(),
             Tag::Short(furnace.burn_remaining),
@@ -375,10 +431,6 @@ fn furnace_update_tag(furnace: &FurnaceBlockEntity, items: &ItemRegistry) -> Tag
         ),
         ("cooking_total_time".into(), Tag::Short(furnace.cook_total)),
     ])
-}
-
-fn chest_update_tag(chest: &ChestBlockEntity, items: &ItemRegistry) -> Tag {
-    Tag::Compound(vec![("Items".into(), item_list_tag(&chest.slots, items))])
 }
 
 /// Absolute positions of every bed half in the chunk, section by section.
@@ -417,32 +469,6 @@ fn bed_block_positions(chunk: &Chunk, registry: &BlockRegistry) -> Vec<BlockPos>
         }
     }
     beds
-}
-
-fn item_list_tag(slots: &[FurnaceSlot], items: &ItemRegistry) -> Tag {
-    let item_tags = slots
-        .iter()
-        .enumerate()
-        .filter_map(|(slot, stack)| {
-            if stack.is_empty() {
-                return None;
-            }
-            let name = items.name_of(stack.item_id)?;
-            Some(Tag::Compound(vec![
-                ("Slot".into(), Tag::Int(slot as i32)),
-                ("id".into(), Tag::String(name.as_str().to_string())),
-                ("count".into(), Tag::Int(stack.count)),
-            ]))
-        })
-        .collect::<Vec<_>>();
-    Tag::List(ListTag {
-        element_type: if item_tags.is_empty() {
-            tag_type::END
-        } else {
-            tag_type::COMPOUND
-        },
-        elements: item_tags,
-    })
 }
 
 /// Encode all sections of `chunk` into the paletted-container blob
@@ -494,6 +520,7 @@ fn encode_chunk_data_inner(
     debug_assert_eq!(chunk.sections.len(), chunk.geometry().section_count());
     debug_assert_eq!(chunk.biomes.len(), chunk.geometry().section_count());
     let mut buf = Vec::with_capacity(chunk.geometry().section_count() * 16);
+    let direct_bits = bits_for_distinct_values(blocks.len());
     for (index, (stored, bsec)) in chunk.sections.iter().zip(chunk.biomes.iter()).enumerate() {
         let sec = overrides
             .get(index)
@@ -503,7 +530,7 @@ fn encode_chunk_data_inner(
         // fluid_count as a fast gate before scanning entity/fluid overlap.
         buf.extend_from_slice(&(sec.non_air_count() as i16).to_be_bytes());
         buf.extend_from_slice(&(section_fluid_count(sec, blocks) as i16).to_be_bytes());
-        encode_block_palette(&mut buf, sec, project);
+        encode_block_palette(&mut buf, sec, direct_bits, project);
         encode_biome_palette(&mut buf, bsec, biomes)?;
     }
     Ok(buf)
@@ -540,6 +567,7 @@ fn section_fluid_count(section: &ChunkSection, blocks: &BlockRegistry) -> u16 {
 fn encode_block_palette(
     buf: &mut Vec<u8>,
     section: &ChunkSection,
+    direct_bits: u8,
     project: &dyn Fn(crate::block::BlockStateId) -> crate::block::BlockStateId,
 ) {
     match (section.palette(), section.indices()) {
@@ -559,7 +587,7 @@ fn encode_block_palette(
         }
         (Some(palette), Some(indices)) => {
             if indices.bits_per_entry() >= DIRECT_BITS_THRESHOLD {
-                encode_block_direct(buf, palette, indices, project);
+                encode_block_direct(buf, palette, indices, direct_bits, project);
             } else {
                 let bits = indices.bits_per_entry().max(4);
                 buf.push(bits);
@@ -585,16 +613,16 @@ fn encode_block_palette(
 /// Emit a section's block container in vanilla's `GlobalPalette`
 /// (direct) shape: a single `bits_per_entry` byte, *no* palette
 /// section, then a packed long array containing every cell's raw
-/// global state-id at [`DIRECT_BITS`] per entry. Triggered when our
+/// global state-id at the block registry's bit width per entry. Triggered when our
 /// internal palette has grown past the indirect threshold
 /// (~256 entries → ≥ 9 bits per palette index).
 fn encode_block_direct(
     buf: &mut Vec<u8>,
     palette: &[crate::block::BlockStateId],
     indices: &PackedBitArray,
+    bits: u8,
     project: &dyn Fn(crate::block::BlockStateId) -> crate::block::BlockStateId,
 ) {
-    let bits = DIRECT_BITS.max(indices.bits_per_entry());
     let direct = pack_fixed_longs(bits, SECTION_VOLUME, |cell| {
         let p = indices.get(cell) as usize;
         project(palette[p]).0

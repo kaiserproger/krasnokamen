@@ -344,6 +344,18 @@ pub struct PreservedItemComponent {
     pub baseline: Option<Vec<u8>>,
 }
 
+/// Runtime-only bundle UI state. It is not part of stack/component equality.
+#[derive(Debug, Clone, Default)]
+pub struct BundleSelection(pub Option<usize>);
+
+impl PartialEq for BundleSelection {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for BundleSelection {}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct ExtendedItemComponents {
@@ -370,6 +382,8 @@ pub struct ExtendedItemComponents {
     pub custom_data: Option<Vec<u8>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub preserved_components: Vec<PreservedItemComponent>,
+    #[serde(skip)]
+    pub bundle_selection: BundleSelection,
 }
 
 impl ExtendedItemComponents {
@@ -394,6 +408,7 @@ impl ExtendedItemComponents {
         max_damage: None,
         custom_data: None,
         preserved_components: Vec::new(),
+        bundle_selection: BundleSelection(None),
     };
 
     #[must_use]
@@ -538,6 +553,19 @@ impl ItemStack {
 mod tests {
     use super::*;
     use mc_nbt::Tag;
+
+    #[test]
+    fn bundle_selection_is_transient_and_not_stack_identity() {
+        let mut stack = ItemStack::new(1, 1);
+        stack.extended_mut().repair_cost = 3;
+        let before = serde_json::to_value(&stack).unwrap();
+        let unselected = stack.clone();
+        stack.extended_mut().bundle_selection.0 = Some(2);
+        assert_eq!(stack, unselected);
+        assert_eq!(serde_json::to_value(&stack).unwrap(), before);
+        let restored: ItemStack = serde_json::from_value(before).unwrap();
+        assert_eq!(restored.extended().bundle_selection.0, None);
+    }
 
     #[test]
     fn equality_preserves_optional_empty_and_owned_component_values() {

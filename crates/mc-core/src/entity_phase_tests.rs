@@ -57,6 +57,17 @@ fn pickup_lanes_use_current_liveness_delay_and_post_move_slot_order() {
             connection: crate::boundary::ConnectionId(1),
         },
     );
+    let collect = |state: &TickState, intents: &mut Vec<Intent>| {
+        collect_pickup_intents_from(
+            state.entities.bodies(),
+            state.entities.positions(),
+            state.entities.player_slots(),
+            state.entities.item_slots(),
+            |_, _| true,
+            &state.seq_counter,
+            intents,
+        );
+    };
     let pos = state.entities.pos(player_slot);
     let mut ids = Vec::new();
     for _ in 0..4 {
@@ -77,7 +88,7 @@ fn pickup_lanes_use_current_liveness_delay_and_post_move_slot_order() {
     state.entities.body_mut(last).pickup_delay = 0;
     // Fresh rows have zero motion flags. Admission still sees both kinds.
     let mut intents = Vec::new();
-    collect_pickup_intents(&state, &mut intents);
+    collect(&state, &mut intents);
     assert_eq!(intents.len(), 1);
     assert!(matches!(intents[0].kind, IntentKind::PickupItem { item, .. } if item == ids[3]));
     // Motion writeback makes the earlier item eligible in this very tick.
@@ -95,19 +106,19 @@ fn pickup_lanes_use_current_liveness_delay_and_post_move_slot_order() {
         },
     );
     intents.clear();
-    collect_pickup_intents(&state, &mut intents);
+    collect(&state, &mut intents);
     assert_eq!(intents.len(), 1);
     assert_eq!(intents[0].actor, player);
     assert!(matches!(intents[0].kind, IntentKind::PickupItem { item, .. } if item == ids[2]));
     // Removing the dead item compacts the last item ahead of the earlier one.
     state.entities.remove(dead);
     intents.clear();
-    collect_pickup_intents(&state, &mut intents);
+    collect(&state, &mut intents);
     assert_eq!(intents.len(), 1);
     assert!(matches!(intents[0].kind, IntentKind::PickupItem { item, .. } if item == ids[3]));
     state.entities.body_mut(player_slot).alive = false;
     intents.clear();
-    collect_pickup_intents(&state, &mut intents);
+    collect(&state, &mut intents);
     assert!(intents.is_empty());
 }
 
@@ -844,9 +855,17 @@ fn full_step_without_early_rest(
     state: &TickState,
     slot: EntitySlot,
 ) -> (MoveWrite, Vec<RawIntent>) {
+    full_step_with_period(state, slot, 1)
+}
+
+fn full_step_with_period(
+    state: &TickState,
+    slot: EntitySlot,
+    period: u8,
+) -> (MoveWrite, Vec<RawIntent>) {
     let view = PrepView::of(state);
     let flags = state.entities.motion_flags(slot);
-    let row = read_row(&view, slot, flags, 1, &RarePrep::of(state, slot)).0;
+    let row = read_row(&view, slot, flags, period, &RarePrep::of(state, slot)).0;
     let targets = [];
     let cow_cells = HashMap::default();
     let world = &state.world;
@@ -980,6 +999,116 @@ fn idle_wander_decision_rest_matches_full_step_for_two_episodes() {
             "{species}: {rested_decisions} decision rests"
         );
     }
+}
+
+#[test]
+fn far_resting_cow_levitates_on_non_decision_tick() {
+    let (mut state, slot) = resting_cow();
+    let id = state.entities.body(slot).id;
+    state
+        .entities
+        .row_mut(slot)
+        .active_effects
+        .add(crate::effects::ActiveEffect::new(
+            crate::effects::EffectId::Levitation,
+            100,
+            0,
+        ));
+    state.entities.prepare_motion_hints(&state.registry);
+    let flags = state.entities.motion_flags(slot);
+    let period = MOB_FAR_PERIOD as u8;
+    state.tick = (1..120)
+        .find(|&tick| {
+            !motion_thinks(tick, flags, period)
+                && crate::entity_motion::wander(
+                    state.entities.body(slot).movement,
+                    id.0,
+                    tick,
+                    state.entities.row(slot).speed,
+                ) == [0.0; 3]
+        })
+        .unwrap();
+    assert!(state.players.is_empty());
+    let before = state.entities.pos(slot);
+    let (reference, raw) = full_step_without_early_rest(&state, slot);
+    assert!(raw.is_empty());
+    assert!(
+        reference.pos[1] > before[1],
+        "reference must actually levitate"
+    );
+    let (non_decision, _) = full_step_with_period(&state, slot, period);
+    let _ = run_entity_phase(&mut state, true);
+    assert_eq!(
+        state.entities.pos(slot).map(f64::to_bits),
+        reference.pos.map(f64::to_bits),
+        "real phase must integrate levitation on the first non-decision tick"
+    );
+    assert_eq!(
+        non_decision.pos.map(f64::to_bits),
+        reference.pos.map(f64::to_bits),
+        "step_entity's own non-decision fast path must not suppress levitation"
+    );
+    assert_eq!(
+        state.entities.vel(slot).map(f64::to_bits),
+        reference.vel.map(f64::to_bits)
+    );
+    assert_eq!(state.entities.ground(slot), reference.ground);
+}
+
+#[test]
+fn pending_console_support_removal_wakes_far_resting_cow() {
+    let (mut state, slot) = resting_cow();
+    let id = state.entities.body(slot).id;
+    state.entities.prepare_motion_hints(&state.registry);
+    let flags = state.entities.motion_flags(slot);
+    let period = MOB_FAR_PERIOD as u8;
+    state.tick = (1..120)
+        .find(|&tick| {
+            !motion_thinks(tick, flags, period)
+                && crate::entity_motion::wander(
+                    state.entities.body(slot).movement,
+                    id.0,
+                    tick,
+                    state.entities.row(slot).speed,
+                ) == [0.0; 3]
+        })
+        .unwrap();
+    assert!(state.players.is_empty());
+    assert!(can_early_rest(&mut state, slot));
+    let revision = state.world.chunk_revision(0, 0);
+    let (command, _ack) =
+        crate::command_console::ConsoleCommand::new("setblock 8 100 8 minecraft:air".to_owned());
+    command.execute(&mut state, &mut ChangeSet::default());
+    assert_eq!(
+        state.world.block_at(8, 100, 8),
+        Some(state.registry.states.air)
+    );
+    assert_eq!(state.world.chunk_revision(0, 0), revision);
+    assert!(
+        state
+            .world
+            .pending_block_chunks()
+            .contains(&ChunkPos { x: 0, z: 0 })
+    );
+    let (expected, raw) = full_step_without_early_rest(&state, slot);
+    assert!(raw.is_empty());
+    assert!(!expected.ground, "the full physics step must lose support");
+    let (non_decision, _) = full_step_with_period(&state, slot, period);
+    let _ = run_entity_phase(&mut state, true);
+    assert_eq!(
+        non_decision.pos.map(f64::to_bits),
+        expected.pos.map(f64::to_bits)
+    );
+    assert_eq!(non_decision.ground, expected.ground);
+    assert_eq!(
+        state.entities.pos(slot).map(f64::to_bits),
+        expected.pos.map(f64::to_bits)
+    );
+    assert_eq!(
+        state.entities.vel(slot).map(f64::to_bits),
+        expected.vel.map(f64::to_bits)
+    );
+    assert_eq!(state.entities.ground(slot), expected.ground);
 }
 
 #[test]

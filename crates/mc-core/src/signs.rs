@@ -22,39 +22,6 @@ pub(crate) fn invalidate(state: &mut TickState, writes: &[(BlockPos, u32)]) {
     state.sign_editors.retain(|_, editor| {
         editor.opened_tick == tick || !writes.iter().any(|(pos, _)| *pos == editor.position)
     });
-    // Flow/support/falling edits do not enter container-break staging.
-    // Tombstone removed opaque signs in their block tick, before replay can
-    // reapply an older text post-image over the replacement block.
-    for (pos, new) in writes {
-        let removed = state
-            .world
-            .chunk(crate::boundary::ChunkPos {
-                x: pos.x.div_euclid(16),
-                z: pos.z.div_euclid(16),
-            })
-            .is_some_and(|chunk| {
-                chunk.block_entities.contains_key(pos)
-                    && chunk
-                        .get_block(
-                            pos.x.rem_euclid(16) as u8,
-                            pos.y,
-                            pos.z.rem_euclid(16) as u8,
-                        )
-                        .and_then(|old| state.registry.blocks.by_id(old))
-                        .zip(state.registry.blocks.by_id(mc_world::BlockStateId(*new)))
-                        .is_some_and(|(old, new)| old.block.id != new.block.id)
-            });
-        if removed {
-            state.world.set_opaque_block_entity(*pos, None);
-            if !state
-                .opaque_changes
-                .iter()
-                .any(|(cell, nbt)| *cell == *pos && nbt.is_none())
-            {
-                state.opaque_changes.push((*pos, None));
-            }
-        }
-    }
 }
 
 pub(crate) fn editable(state: &BlockState) -> bool {

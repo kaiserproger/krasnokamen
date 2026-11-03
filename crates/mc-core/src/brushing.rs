@@ -158,6 +158,7 @@ fn loot(state: &mut TickState, pos: BlockPos, face: [i32; 3], reveal: bool) -> O
         .set_opaque_block_entity(pos, Some(bytes.clone()));
     state.opaque_changes.push((pos, Some(bytes)));
     state.world.mark_block_entity_visible(pos);
+    let nbt = mc_world::wire::brushable_update_tag(nbt);
     let viewers: Vec<_> = state
         .players
         .values()

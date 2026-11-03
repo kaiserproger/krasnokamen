@@ -7,7 +7,7 @@
 //! prediction of a click matches the server result.
 
 pub mod anvil;
-mod bundle;
+pub(crate) mod bundle;
 #[cfg(test)]
 mod bundle_tests;
 mod click;
@@ -142,6 +142,16 @@ impl Default for PlayerInventory {
             slots: vec![ItemStack::EMPTY; PLAYER_SLOTS],
             selected: 0,
         }
+    }
+}
+
+impl PlayerInventory {
+    pub(crate) fn can_add(&self, rules: &ItemRules<'_>, stack: &ItemStack) -> bool {
+        !stack.is_empty()
+            && (self
+                .slot_with_space(stack, rules.max_stack(stack).min(CONTAINER_MAX_STACK))
+                .is_some()
+                || (0..36).any(|index| self.slots[index].is_empty()))
     }
 }
 

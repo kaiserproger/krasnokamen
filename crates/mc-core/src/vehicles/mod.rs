@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 pub use containers::VehicleMenus;
 pub(crate) use containers::{
-    click, container_slots_for_player, insert_one, is_open, pull_into_hopper,
+    click, container_slots_for_player, insert_one, is_open, pull_into_hopper, select_bundle_item,
 };
 pub(crate) use persistence::{from_record, to_fields, validate_replay};
 

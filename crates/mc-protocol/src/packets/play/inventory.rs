@@ -557,6 +557,38 @@ impl Packet for ServerboundContainerClick {
     }
 }
 
+/// `Serverbound Bundle Item Selected` (SB), using menu slot and item index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ServerboundSelectBundleItem {
+    pub slot: i32,
+    pub selected_index: i32,
+}
+
+impl Packet for ServerboundSelectBundleItem {
+    // Local 26.3 packets.json: minecraft:bundle_item_selected.
+    const ID: i32 = 0x03;
+
+    fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
+        buf.write_varint(self.slot);
+        buf.write_varint(self.selected_index);
+        Ok(())
+    }
+
+    fn decode<B: Buf>(buf: &mut B) -> Result<Self, CodecError> {
+        let slot = buf.read_varint()?;
+        let selected_index = buf.read_varint()?;
+        if selected_index < -1 {
+            return Err(CodecError::NotSupported(
+                "invalid bundle selected item index",
+            ));
+        }
+        Ok(Self {
+            slot,
+            selected_index,
+        })
+    }
+}
+
 /// `Serverbound Set Carried Item` (SB). Sent when the client scrolls
 /// the hotbar — `slot` ∈ `0..=8`. Per ADR 0002, verified against
 /// `javap -p`: `ServerboundSetCarriedItemPacket(short slot)`.

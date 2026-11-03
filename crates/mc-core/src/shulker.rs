@@ -256,6 +256,52 @@ fn flush(state: &mut TickState, checkpoint: bool) {
 }
 pub(crate) fn run(state: &mut TickState) {
     flush(state, false);
+    let mut dirty = state.open_containers.take_animation_dirty();
+    dirty.sort_unstable();
+    dirty.dedup();
+    let mut recipients = Vec::new();
+    for &(x, y, z) in &dirty {
+        let pos = BlockPos { x, y, z };
+        let Some((block, block_state)) = state.world.block_at(x, y, z).and_then(|id| {
+            let block = state.registry.blocks.by_id(mc_world::BlockStateId(id))?;
+            if !is_block(block.block.id.path()) {
+                return None;
+            }
+            Some((u32::try_from(block.block.raw_id).ok()?, id))
+        }) else {
+            continue;
+        };
+        // The client consumes 1 as opening and 0 as closing. Sending the
+        // boolean viewer state also handles several opens in the same tick.
+        let parameter = u8::from(
+            state
+                .open_containers
+                .values()
+                .any(|cell| *cell == (x, y, z)),
+        );
+        recipients.clear();
+        recipients.extend(state.players.iter().filter_map(|(entity, player)| {
+            let slot = state.entities.slot_of(*entity)?;
+            let p = state.entities.pos(slot);
+            let distance = (p[0] - f64::from(x)).powi(2)
+                + (p[1] - f64::from(y)).powi(2)
+                + (p[2] - f64::from(z)).powi(2);
+            (distance < 64.0 * 64.0).then_some(player.connection)
+        }));
+        for &connection in &recipients {
+            state.push_player(
+                connection,
+                crate::boundary::PlayerChange::BlockEvent {
+                    position: pos,
+                    block,
+                    state: block_state,
+                    action: 1,
+                    parameter,
+                },
+            );
+        }
+    }
+    state.open_containers.recycle_animation_dirty(dirty);
 }
 pub(crate) fn checkpoint(state: &mut TickState) {
     flush(state, true);

@@ -168,6 +168,7 @@ impl Bot {
                 | MoveEntityPosRot::ID
                 | EntityPositionSync::ID
                 | RemoveEntities::ID
+                | ClientboundTakeItemEntity::ID
                 | ClientboundSetEntityData::ID
                 | ClientboundOpenScreen::ID
                 | ClientboundContainerSetContent::ID
@@ -197,6 +198,48 @@ impl Bot {
                     "nonfinite damage source position"
                 );
                 state.damage_event(self.index, self.entity_id, &packet, window);
+                if packet.entity_id == self.entity_id
+                    && let Some(event) = state.first_self_damage(self.index, &packet, [self.x,self.y,self.z], window)
+                {
+                    emit(&event)?;
+                }
+            }
+            ClientboundTakeItemEntity::ID => {
+                let packet = ClientboundTakeItemEntity::decode(&mut body)?;
+                if let Some(window) = window {
+                    state.item_collections_received += 1;
+                    if state.item_collections.len() == MECHANIC_COLLECTION_CAP {
+                        state.item_collections_truncated += 1;
+                        emit(&json!({"event":"item_collection_overflow","observer_bot":self.index,
+                            "sequence":state.item_collections_received,
+                            "retention_truncated":state.item_collections_truncated}))?;
+                    } else {
+                        let visible = |id: i32| {
+                            state.wire_ids.get(&id)
+                                .and_then(|uuid| state.entities.get(uuid))
+                                .filter(|entity| entity.visible_to(self.index))
+                        };
+                        let item = visible(packet.item_entity_id);
+                        let collector = visible(packet.player_entity_id);
+                        let row = json!({
+                            "event":"item_collection_observed",
+                            "retention_truncated":state.item_collections_truncated,
+                            "sequence": state.item_collections_received,
+                            "elapsed_us": state.measurement_epoch.map(|epoch| epoch.elapsed().as_micros()),
+                            "window": window,
+                            "observer_bot": self.index,
+                            "item_entity_id": packet.item_entity_id,
+                            "item_uuid": item.map(|entity| entity.uuid),
+                            "item": item.filter(|entity| entity.item_observer == Some(self.index))
+                                .and_then(|entity| entity.item.as_ref()),
+                            "collector_entity_id": packet.player_entity_id,
+                            "collector_uuid": collector.map(|entity| entity.uuid),
+                            "amount": packet.amount,
+                        });
+                        emit(&row)?;
+                        state.item_collections.push(row);
+                    }
+                }
             }
             AddEntity::ID => {
                 let packet = AddEntity::decode(&mut body)?;
@@ -327,6 +370,7 @@ impl Bot {
                             EntityDataValue::Int { value, .. } => json!({"int":value}),
                             EntityDataValue::ItemStack { .. } => {
                                 entity.item = item.clone();
+                                entity.item_observer = Some(self.index);
                                 json!({"item":item})
                             }
                             _ => continue,
@@ -528,6 +572,9 @@ impl Bot {
                 }
                 if died {
                     state.receipt(window, "death");
+                    for event in state.fail_hauls_for_dead_bot(self.index, [self.x,self.y,self.z]) {
+                        emit(&event)?;
+                    }
                 }
             }
             ClientboundRespawn::ID => {
@@ -542,6 +589,8 @@ impl Bot {
                 for entity in state.entities.values_mut() {
                     entity.hide(self.index);
                 }
+                state.villager_observation_seq[self.index as usize] =
+                    state.villager_observation_seq[self.index as usize].saturating_add(1);
                 state.receipt(window, "respawn");
                 self.surfaces.clear();
                 self.mechanic_bot.menu = None;
@@ -571,11 +620,16 @@ impl Bot {
                 state.receipt(window, "explosion");
             }
             ClientboundSystemChat::ID => {
-                if !state.command_observers.contains(&self.index) {
+                if !state.command_observers.contains(&self.index)
+                    && state.runtime_commands[self.index as usize].is_none() {
                     return Ok(());
                 }
                 let packet = ClientboundSystemChat::decode(&mut body)?;
                 let tag = mc_nbt::read_network(&mut packet.content_nbt.as_slice())?;
+                if let Some(event) = state.runtime_chat(self.index, &tag) {
+                    state.runtime_record(&event);
+                    emit(&event)?;
+                }
                 state.record_reply(self.index, window, &tag);
                 for pending in &self.mechanic_bot.pending {
                     if let MechanicExpectation::Feedback(expected) = &pending.expectation

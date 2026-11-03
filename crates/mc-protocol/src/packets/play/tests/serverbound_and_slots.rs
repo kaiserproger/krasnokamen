@@ -1437,6 +1437,34 @@ fn hashed_stack_component_hashes_encode_rejects_removed_over_ceiling_without_wri
 }
 
 #[test]
+fn bundle_selection_decodes_vanilla_varints_and_rejects_invalid_index() {
+    assert_eq!(ServerboundSelectBundleItem::ID, 3);
+    for (bytes, slot, selected_index) in [
+        (&[0x24, 0x01][..], 36, 1),
+        (&[0xac, 0x02, 0xff, 0xff, 0xff, 0xff, 0x0f][..], 300, -1),
+    ] {
+        let mut input = bytes;
+        let packet = ServerboundSelectBundleItem::decode(&mut input).unwrap();
+        assert_eq!(
+            packet,
+            ServerboundSelectBundleItem {
+                slot,
+                selected_index
+            }
+        );
+        assert!(input.is_empty());
+        let mut encoded = Vec::new();
+        packet.encode(&mut encoded).unwrap();
+        assert_eq!(encoded, bytes);
+    }
+    assert!(ServerboundSelectBundleItem::decode(&mut &[0x24][..]).is_err());
+    assert!(
+        ServerboundSelectBundleItem::decode(&mut &[0x24, 0xfe, 0xff, 0xff, 0xff, 0x0f][..])
+            .is_err()
+    );
+}
+
+#[test]
 fn set_carried_item_round_trip() {
     round_trip(ServerboundSetCarriedItem { slot: 0 });
     round_trip(ServerboundSetCarriedItem { slot: 8 });

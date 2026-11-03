@@ -185,6 +185,72 @@ fn copper_eight_chest_and_statue_variants_preserve_all_properties() {
 }
 
 #[test]
+fn copper_chest_lids_require_clear_space_for_all_variants_and_both_halves() {
+    let mut state = fixture(None);
+    let player = join(&mut state);
+    let click = |pos| PlayerInput::UseItemOn {
+        connection: ConnectionId(1),
+        hand: Hand::Main,
+        position: pos,
+        face: 1,
+        cursor: [0.5; 3],
+        sequence: 1,
+    };
+    for age in 0..4 {
+        for waxed in [false, true] {
+            let name = name("copper_chest", age, waxed);
+            install(
+                &mut state,
+                A,
+                name.strip_prefix("minecraft:").unwrap(),
+                "single",
+                vec![],
+            );
+            state
+                .world
+                .set_block(A.x, A.y + 1, A.z, state.registry.states.stone);
+            run_tick(&mut state, &[click(A)]);
+            assert!(
+                state.players[&player].open.is_none(),
+                "{name} opened under stone"
+            );
+            state
+                .world
+                .set_block(A.x, A.y + 1, A.z, state.registry.states.air);
+            run_tick(&mut state, &[click(A)]);
+            let window = state.players[&player]
+                .open
+                .as_ref()
+                .expect("clear lid opens")
+                .window;
+            run_tick(
+                &mut state,
+                &[PlayerInput::ContainerClose {
+                    connection: ConnectionId(1),
+                    window,
+                }],
+            );
+        }
+    }
+    install(&mut state, A, "copper_chest", "left", vec![]);
+    install(
+        &mut state,
+        B,
+        "waxed_oxidized_copper_chest",
+        "right",
+        vec![],
+    );
+    state
+        .world
+        .set_block(B.x, B.y + 1, B.z, state.registry.states.stone);
+    run_tick(&mut state, &[click(A)]);
+    assert!(
+        state.players[&player].open.is_none(),
+        "other half's blocked lid must prevent opening"
+    );
+}
+
+#[test]
 fn copper_single_and_mixed_double_use_native_menus_and_comparator() {
     let mut state = fixture(None);
     let player = join(&mut state);

@@ -43,6 +43,8 @@ pub struct PlayerState {
     pub connection: ConnectionId,
     /// Retained player root fields, including personal EnderItems owned by ender_chest.
     pub(crate) opaque_player_fields: Vec<u8>,
+    /// Transient selections for personal EnderItems, whose durable backing is NBT.
+    pub(crate) ender_bundle_selections: Vec<(usize, ItemStack)>,
     pub statistics: mc_data::statistics::PlayerStatistics,
     pub inventory: PlayerInventory,
     /// Vanilla advancement document, including retained unknown entries.
@@ -178,6 +180,13 @@ impl PlayerState {
         self.using.is_some()
     }
 
+    pub(crate) fn using_bundle(&self, rules: &ItemRules<'_>) -> bool {
+        self.using.is_some_and(|using| {
+            let held = &self.inventory.slots[self.held_slot(using.hand)];
+            held.item_id == using.item_id && crate::inventory::bundle::is_bundle(rules, held)
+        })
+    }
+
     pub(crate) fn brush_use(&self, rules: &ItemRules<'_>) -> Option<(Hand, u32)> {
         let using = self.using?;
         let held = &self.inventory.slots[self.held_slot(using.hand)];
@@ -195,6 +204,7 @@ impl PlayerState {
         Self {
             connection,
             opaque_player_fields: Vec::new(),
+            ender_bundle_selections: Vec::new(),
             statistics: mc_data::statistics::PlayerStatistics::default(),
             inventory: PlayerInventory::default(),
             advancement_progress: crate::journal::empty_advancement_progress(),
@@ -710,12 +720,22 @@ impl PlayerState {
     /// inventory; what does not fit is dropped.
     pub fn close(&mut self, rules: &ItemRules<'_>) -> PlayerEffects {
         let before = self.inventory_menu.contents(&self.inventory, &[]);
+        let had_cursor = !self
+            .open
+            .as_ref()
+            .unwrap_or(&self.inventory_menu)
+            .carried
+            .is_empty();
         let dropped = match self.open.take() {
             Some(mut menu) => menu.close(rules, &mut self.inventory),
             None => self.inventory_menu.close(rules, &mut self.inventory),
         };
+        let mut changes = self.sync(&before);
+        if had_cursor {
+            changes.push(PlayerChange::Cursor { item: None });
+        }
         PlayerEffects {
-            changes: self.sync(&before),
+            changes,
             dropped,
             ..PlayerEffects::default()
         }
@@ -1056,6 +1076,15 @@ impl PlayerState {
         else {
             return;
         };
+        if crate::inventory::bundle::is_bundle(rules, held) {
+            self.using = Some(ItemUse {
+                hand,
+                remaining: 200,
+                elapsed: 0,
+                item_id: held.item_id,
+            });
+            return;
+        }
         if rules
             .items
             .name_of(held.item_id)
@@ -1151,6 +1180,34 @@ impl PlayerState {
         let held = &self.inventory.slots[slot];
         if held.is_empty() || held.item_id != item_use.item_id {
             self.using = None;
+            return PlayerEffects::default();
+        }
+        if crate::inventory::bundle::is_bundle(rules, held) {
+            let drop_now = item_use.remaining == 200
+                || (item_use.remaining < 190 && item_use.remaining.is_multiple_of(2));
+            item_use.remaining -= 1;
+            item_use.elapsed = item_use.elapsed.saturating_add(1);
+            self.using = (item_use.remaining > 0).then_some(item_use);
+            if drop_now
+                && let Some(mut contents) = crate::inventory::bundle::read(rules, held)
+                && let Some(dropped) =
+                    crate::inventory::bundle::remove_selected(held, &mut contents)
+            {
+                let before = self.snapshot();
+                if crate::inventory::bundle::write(
+                    rules,
+                    &mut self.inventory.slots[slot],
+                    &contents,
+                ) {
+                    self.statistics
+                        .increment(StatType::Used, item_use.item_id, 1);
+                    return PlayerEffects {
+                        changes: self.sync(&before),
+                        dropped: vec![dropped],
+                        ..PlayerEffects::default()
+                    };
+                }
+            }
             return PlayerEffects::default();
         }
         item_use.elapsed = item_use.elapsed.saturating_add(1);

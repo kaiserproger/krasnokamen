@@ -23,6 +23,74 @@ pub(in crate::tick) fn select_slot(
         }
     }
 }
+pub(in crate::tick) fn select_bundle_item(
+    state: &mut TickState,
+    (connection, slot, selected_index): (ConnectionId, i32, i32),
+) {
+    use crate::inventory::{SlotRef, bundle};
+    let Some(entity) = state.connections.by_connection.get(&connection).copied() else {
+        return;
+    };
+    if state.entities.slot_of(entity).is_none() {
+        return;
+    }
+    let Ok(slot) = usize::try_from(slot) else {
+        return;
+    };
+    let Some(player) = state.players.get(&entity) else {
+        return;
+    };
+    let menu = player.open.as_ref().unwrap_or(&player.inventory_menu);
+    let Some(target) = menu.kind.slot(slot) else {
+        return;
+    };
+    let registry = Arc::clone(&state.registry);
+    let rules = registry.item_rules();
+    match target {
+        SlotRef::Inventory(index) => {
+            if let Some(stack) = state
+                .players
+                .get_mut(&entity)
+                .and_then(|p| p.inventory.slots.get_mut(index))
+            {
+                bundle::select(&rules, stack, selected_index);
+            }
+        }
+        SlotRef::Grid(index) => {
+            let player = state.players.get_mut(&entity).unwrap();
+            let menu = player.open.as_mut().unwrap_or(&mut player.inventory_menu);
+            if let Some(stack) = menu.grid.get_mut(index) {
+                bundle::select(&rules, stack, selected_index);
+            }
+        }
+        SlotRef::Result => {
+            let player = state.players.get_mut(&entity).unwrap();
+            let menu = player.open.as_mut().unwrap_or(&mut player.inventory_menu);
+            bundle::select(&rules, &mut menu.result, selected_index);
+        }
+        SlotRef::Container(index) => {
+            if crate::ender_chest::is_open(state, entity) {
+                crate::ender_chest::select_bundle_item(state, entity, index, selected_index);
+            } else if crate::mounts::menus::target(state, entity).is_some() {
+                crate::mounts::menus::select_bundle_item(state, entity, index, selected_index);
+            } else if crate::vehicles::is_open(state, entity) {
+                crate::vehicles::select_bundle_item(state, entity, index, selected_index);
+            } else if let Some(open) = state.open_containers.get(&entity).copied() {
+                let cells = container_cells(state, open);
+                let mut offset = index;
+                for cell in cells {
+                    if let Some(record) = state.block_entities.get_mut(&cell) {
+                        if let Some(stack) = record.slots.get_mut(offset) {
+                            bundle::select(&rules, stack, selected_index);
+                            break;
+                        }
+                        offset -= record.slots.len();
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// Vanilla `handlePickItemFromBlock`: within block reach (plus one block) of a
 /// loaded block whose item form exists.
@@ -329,8 +397,8 @@ pub(in crate::tick) fn container_click(
     };
     if effects.container_changed {
         crate::block_log::note_container(state, entity, &open_cells, &container);
-        store_container_slots(state, &open_cells, &container);
     }
+    store_container_slots(state, &open_cells, &container);
     if let Some(pos) = state.open_containers.get(&entity)
         && let Some(progress) = state
             .block_entities

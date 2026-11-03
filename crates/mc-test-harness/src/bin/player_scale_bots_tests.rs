@@ -24,10 +24,12 @@ fn terrain_bot(x: f64, y: i16, z: f64, direction: u32) -> Bot {
             StateFacts {
                 passable: true,
                 support: false,
+                support_height: 0,
             },
             StateFacts {
                 passable: false,
                 support: true,
+                support_height: 4096,
             },
         ],
         dirt_item: 1,
@@ -314,6 +316,311 @@ async fn full_body_steps_work_across_negative_and_positive_chunk_edges() -> Resu
 }
 
 #[tokio::test]
+async fn fractional_path_steps_to_full_block_without_jump_and_stops_at_obstruction() -> Result<()> {
+    let mut bot = terrain_bot(0.5, 64, 0.5, 0);
+    Arc::get_mut(&mut bot.facts)
+        .unwrap()
+        .states
+        .push(StateFacts {
+            passable: false,
+            support: true,
+            support_height: 3840,
+        });
+    for surface in bot.surfaces.values_mut() {
+        for column in &mut surface.columns {
+            column.top = 2;
+        }
+    }
+    bot.surfaces.get_mut(&(0, 0)).unwrap().columns[1].top = 1;
+    bot.y = 63.9375;
+    let (mut client, mut peer, mut buffer) = connection().await?;
+    let (input, movement) = movement_tick(&mut bot, &mut client, &mut peer, &mut buffer).await?;
+    assert!(input.forward);
+    assert!(!input.jump);
+    assert_eq!(movement.y, 64.0);
+    assert!(movement.x > 0.5);
+    bot.surfaces.get_mut(&(0, 0)).unwrap().columns[2].walkable = false;
+    bot.x = 1.65;
+    let (_, blocked) = movement_tick(&mut bot, &mut client, &mut peer, &mut buffer).await?;
+    assert_eq!(blocked.x, 1.65);
+    bot.surfaces.get_mut(&(0, 0)).unwrap().columns[2].walkable = true;
+    bot.direction = 0;
+    for _ in 0..6 {
+        let (input, _) = movement_tick(&mut bot, &mut client, &mut peer, &mut buffer).await?;
+        assert!(!input.jump);
+    }
+    assert_eq!(bot.y, 63.9375);
+    Ok(())
+}
+
+#[test]
+fn collision_support_recognizes_path_and_farmland_but_rejects_fence() {
+    let blocks = mc_data::blocks::solaris_required_blocks_report();
+    for name in ["minecraft:dirt_path", "minecraft:farmland"] {
+        let block = blocks
+            .iter()
+            .find(|block| block.id.as_str() == name)
+            .unwrap();
+        let state = &block.states[0];
+        let properties: Vec<_> = state
+            .properties
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        assert_eq!(
+            collision_support_height(state.id, &block.id, &properties),
+            Some(3840)
+        );
+    }
+    let block = blocks
+        .iter()
+        .find(|block| block.id.as_str() == "minecraft:oak_fence")
+        .unwrap();
+    let state = &block.states[0];
+    let properties: Vec<_> = state
+        .properties
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    assert_eq!(
+        collision_support_height(state.id, &block.id, &properties),
+        None
+    );
+}
+
+#[test]
+fn observed_farmland_with_wheat_is_walkable_but_solid_and_hazard_cells_are_not() -> Result<()> {
+    let blocks = mc_data::blocks::solaris_required_blocks_report();
+    let names = [
+        "minecraft:air",
+        "minecraft:farmland",
+        "minecraft:wheat",
+        "minecraft:composter",
+        "minecraft:water",
+        "minecraft:fire",
+    ];
+    let entries: Vec<_> = names
+        .iter()
+        .map(|name| {
+            let block = blocks
+                .iter()
+                .find(|block| block.id.as_str() == *name)
+                .unwrap();
+            let state = block.states.iter().find(|state| state.default).unwrap();
+            (block, state)
+        })
+        .collect();
+    let max = entries.iter().map(|(_, state)| state.id).max().unwrap() as usize;
+    let mut states = vec![StateFacts::default(); max + 1];
+    for (block, state) in &entries {
+        states[state.id as usize] = bot_state_facts(state.id, &block.id, &state.properties);
+    }
+    assert!(states[entries[2].1.id as usize].passable);
+    for index in [3, 4, 5] {
+        assert!(!states[entries[index].1.id as usize].passable);
+    }
+    for name in [
+        "minecraft:lava",
+        "minecraft:powder_snow",
+        "minecraft:magma_block",
+        "minecraft:sweet_berry_bush",
+        "minecraft:wither_rose",
+    ] {
+        let block = blocks
+            .iter()
+            .find(|block| block.id.as_str() == name)
+            .unwrap();
+        let state = &block.states[0];
+        let facts = bot_state_facts(state.id, &block.id, &state.properties);
+        assert!(
+            !facts.passable && !facts.support,
+            "{name} must remain unsafe"
+        );
+    }
+    let slab = blocks
+        .iter()
+        .find(|block| block.id.as_str() == "minecraft:oak_slab")
+        .unwrap();
+    let wet = slab
+        .states
+        .iter()
+        .find(|state| {
+            state
+                .properties
+                .get("waterlogged")
+                .is_some_and(|v| v == "true")
+        })
+        .unwrap();
+    let wet_facts = bot_state_facts(wet.id, &slab.id, &wet.properties);
+    assert!(!wet_facts.passable && !wet_facts.support);
+    let facts = Facts {
+        states,
+        dirt_item: 0,
+        dirt_state: 0,
+        air_state: entries[0].1.id as i32,
+        projectile_type_ids: [0; 2],
+        grass_states: Vec::new(),
+    };
+    let mut values = [0_i32; 256];
+    for (index, (_, state)) in entries.iter().enumerate() {
+        values[index] = state.id as i32;
+    }
+    let mut words = vec![0_u64; 4096_usize.div_ceil(21)];
+    for column in 0..4 {
+        for (y, value) in [(0, 1_usize), (1, column + 2)] {
+            let index = y * 256 + column;
+            words[index / 21] |= (value as u64) << ((index % 21) * 3);
+        }
+    }
+    let bytes: Vec<u8> = words.into_iter().flat_map(u64::to_be_bytes).collect();
+    let air = entries[0].1.id as i32;
+    let mut sections: [Option<Palette<'_>>; HEIGHT / 16] = std::array::from_fn(|_| {
+        let mut values = [0_i32; 256];
+        values[0] = air;
+        Some(Palette {
+            bits: 0,
+            values,
+            len: 1,
+            words: &[],
+        })
+    });
+    sections[9] = Some(Palette {
+        bits: 3,
+        values,
+        len: entries.len(),
+        words: &bytes,
+    });
+    let wheat = observed_column(&sections, 0, &facts)?;
+    assert!(wheat.walkable);
+    assert_eq!(wheat.feet_y, 81);
+    assert_eq!(facts.get(wheat.top).support_height, 3840);
+    for column in 1..4 {
+        assert!(!observed_column(&sections, column, &facts)?.walkable);
+    }
+    Ok(())
+}
+
+#[test]
+fn farmer_path_routes_around_known_obstruction_and_rejects_missing_terrain() -> Result<()> {
+    let mut bot = terrain_bot(0.5, 64, 0.5, 0);
+    bot.surfaces.get_mut(&(0, 0)).unwrap().columns[1].walkable = false;
+    let route = bot.farmer_path([3.5, 64.0, 0.5])?.route;
+    assert!(route.len() > 2);
+    assert!(!route.iter().any(|point| point[0] == 1 && point[2] == 0));
+    assert!(
+        route
+            .windows(2)
+            .all(|edge| { (edge[0][0] - edge[1][0]).abs() + (edge[0][2] - edge[1][2]).abs() == 1 })
+    );
+    bot.surfaces.clear();
+    assert!(bot.farmer_path([3.5, 64.0, 0.5]).is_err());
+    Ok(())
+}
+
+#[test]
+fn source_approach_path_requires_exact_waypoint_and_known_terrain() -> Result<()> {
+    let mut bot = terrain_bot(0.5, 64, 0.5, 0);
+    let path = bot.source_approach_path([3, 64, 2])?;
+    assert_eq!(path.route.last(), Some(&[3, 64, 2]));
+    assert!(
+        path.route
+            .windows(2)
+            .all(|edge| (edge[0][0] - edge[1][0]).abs() + (edge[0][2] - edge[1][2]).abs() == 1)
+    );
+    bot.surfaces.get_mut(&(0, 0)).unwrap().columns[2 * 16 + 3].walkable = false;
+    assert!(bot.source_approach_path([3, 64, 2]).is_err());
+    Ok(())
+}
+
+#[test]
+fn farmer_retained_route_requires_safe_edges_and_progress_to_current_target() {
+    let mut bot = terrain_bot(0.5, 64, 0.5, 0);
+    let route = [[0, 64, 0], [1, 64, 0], [2, 64, 0]];
+    assert!(
+        bot.farmer_retained_route(&route, 0, [8.5, 64.0, 0.5])
+            .is_ok()
+    );
+    assert!(
+        bot.farmer_route_hysteresis(&route, 0, [5.5, 64.0, 0.5])
+            .is_ok()
+    );
+    assert!(
+        bot.farmer_route_hysteresis(&route, 0, [8.5, 64.0, 0.5])
+            .is_err()
+    );
+    assert!(
+        bot.farmer_retained_route(&route, 0, [-8.5, 64.0, 0.5])
+            .is_err()
+    );
+    assert!(
+        bot.farmer_retained_route(&route, 2, [8.5, 64.0, 0.5])
+            .is_err()
+    );
+    bot.surfaces.get_mut(&(0, 0)).unwrap().columns[1].walkable = false;
+    assert!(
+        bot.farmer_route_hysteresis(&route, 0, [5.5, 64.0, 0.5])
+            .is_err()
+    );
+    assert!(
+        bot.farmer_retained_route(&route, 0, [8.5, 64.0, 0.5])
+            .is_err()
+    );
+}
+
+#[test]
+fn farmer_astar_reaches_distant_goal_without_exhausting_open_area() -> Result<()> {
+    let mut bot = terrain_bot(0.5, 64, 0.5, 0);
+    for x in -6..=6 {
+        for z in -6..=6 {
+            bot.surfaces.insert(
+                (x, z),
+                Surface {
+                    x,
+                    z,
+                    columns: [Column {
+                        feet_y: 64,
+                        top: 1,
+                        below: 1,
+                        walkable: true,
+                    }; 256],
+                    platform_cells: None,
+                },
+            );
+        }
+    }
+    let result = bot.farmer_path([90.5, 64.0, 0.5])?;
+    assert!(
+        result.stats.expanded < 512,
+        "goal-directed search expanded {}",
+        result.stats.expanded
+    );
+    assert!(result.stats.discovered < FARMER_PATH_NODE_CAP);
+    assert!((result.route.last().unwrap()[0] - 90).abs() <= 1);
+    Ok(())
+}
+
+#[test]
+fn farmer_astar_reports_exhausted_received_frontier() {
+    let mut bot = terrain_bot(0.5, 64, 0.5, 0);
+    for surface in bot.surfaces.values_mut() {
+        for column in &mut surface.columns {
+            column.walkable = false;
+        }
+    }
+    bot.surfaces.get_mut(&(0, 0)).unwrap().columns[0].walkable = true;
+    let error = bot.farmer_path([3.5, 64.0, 0.5]).err().unwrap();
+    let failure = error.downcast_ref::<FarmerSearchFailure>().unwrap();
+    assert_eq!(
+        failure.reason,
+        "farmer unreachable through received walkable terrain"
+    );
+    assert_eq!(failure.stats.expanded, 1);
+    assert_eq!(failure.stats.frontier, 0);
+    assert!(failure.stats.blocked_edges > 0);
+    assert!(!failure.stats.target_column.as_ref().unwrap().walkable);
+}
+
+#[tokio::test]
 async fn missing_neighbor_forbids_horizontal_entry_without_an_invented_jump() -> Result<()> {
     let mut bot = terrain_bot(15.65, 63, 0.5, 0);
     bot.surfaces.retain(|&(cx, _), _| cx != 1);
@@ -474,6 +781,7 @@ async fn projectile_shared_set_dedupes_across_bots() -> Result<()> {
         states: vec![StateFacts {
             passable: true,
             support: false,
+            support_height: 0,
         }],
         dirt_item: 1,
         dirt_state: 1,
@@ -800,6 +1108,26 @@ fn open_loop_is_opt_in_and_control_is_strict() {
     assert!(serde_json::from_value::<RunControl>(json!({"event":"stop"})).is_ok());
     assert!(serde_json::from_value::<RunControl>(json!({"event":"run","extra":1})).is_err());
     assert!(serde_json::from_value::<RunControl>(json!({"event":"stop","extra":1})).is_err());
+    assert!(
+        serde_json::from_value::<RunControl>(json!({"event":"command","id":"job-1",
+        "bot":0,"command":"settlement status","expected_prefix":"settlement"}))
+        .is_ok()
+    );
+    assert!(
+        serde_json::from_value::<RunControl>(json!({"event":"command","id":"job-1",
+        "bot":0,"command":"settlement status","expected_prefix":"settlement","extra":1}))
+        .is_err()
+    );
+    assert!(
+        serde_json::from_value::<RunControl>(json!({"event":"start_haul","id":"haul-2","bot":0}))
+            .is_ok()
+    );
+    assert!(
+        serde_json::from_value::<RunControl>(
+            json!({"event":"start_haul","id":"haul-2","bot":0,"extra":1})
+        )
+        .is_err()
+    );
     assert!(serde_json::from_value::<RunControl>(json!({"event":"pause"})).is_err());
 }
 
@@ -1037,8 +1365,8 @@ async fn open_loop_edits_do_not_wait_for_previous_observations() -> Result<()> {
     );
     bot.no_edits = false;
     let (mut client, _peer, _buffer) = connection().await?;
-    assert!(bot.edit(&mut client).await?);
-    assert!(bot.edit(&mut client).await?);
+    assert_eq!(bot.edit(&mut client).await?, EditAttempt::Written);
+    assert_eq!(bot.edit(&mut client).await?, EditAttempt::Written);
     assert_eq!(bot.acks.len(), 2);
     assert_eq!(bot.observations.len(), 2);
     assert_eq!(bot.metrics.break_updates_observed, 0);
@@ -1048,6 +1376,56 @@ async fn open_loop_edits_do_not_wait_for_previous_observations() -> Result<()> {
     bot.update(position, 0, "duplicate_test_update", Some("steady"));
     assert_eq!(bot.metrics.windows[0].edit.completed, 1);
     assert_eq!(bot.metrics.break_updates_observed, 1);
+    Ok(())
+}
+
+#[test]
+fn landing_requires_received_walkable_supported_target() {
+    let mut bot = terrain_bot(0.5, 64, 0.5, 0);
+    assert_eq!(bot.landing_height(0, 0), Some(64));
+    bot.surfaces.get_mut(&(0, 0)).unwrap().columns[0].walkable = false;
+    assert_eq!(bot.landing_height(0, 0), None);
+    bot.surfaces.remove(&(0, 0));
+    assert_eq!(bot.landing_height(0, 0), None);
+}
+
+#[tokio::test]
+async fn one_bot_uses_another_valid_direction_without_replaying_slots() -> Result<()> {
+    let mut bot = terrain_bot(0.5, 64, 0.5, 0);
+    configure_open_loop(
+        &mut bot,
+        json!([{"name":"steady","duration_ms":10000,"edit_hz":2}]),
+        Duration::from_millis(550),
+    );
+    bot.no_edits = false;
+    bot.surfaces.get_mut(&(0, 0)).unwrap().columns[2].walkable = false;
+    let (mut client, _peer, _buffer) = connection().await?;
+    bot.open_loop_poll(&mut client).await?;
+    assert_eq!(bot.metrics.windows[0].edit.admitted, 1);
+    assert_eq!(bot.metrics.windows[0].edit.writes_completed, 1);
+    assert_eq!(bot.metrics.windows[0].edit.dropped_unavailable, 0);
+    assert_eq!(unpack_block_pos(bot.observations[0].position), (0, 63, 2));
+    Ok(())
+}
+
+#[tokio::test]
+async fn unavailable_candidates_fail_without_synthetic_edit() -> Result<()> {
+    let mut bot = terrain_bot(0.5, 64, 0.5, 0);
+    configure_open_loop(
+        &mut bot,
+        json!([{"name":"steady","duration_ms":10000,"edit_hz":2}]),
+        Duration::from_millis(550),
+    );
+    bot.no_edits = false;
+    bot.surfaces.clear();
+    let (mut client, _peer, _buffer) = connection().await?;
+    bot.open_loop_poll(&mut client).await?;
+    let counters = &bot.metrics.windows[0];
+    assert_eq!(counters.edit.admitted, 0);
+    assert_eq!(counters.edit.writes_completed, 0);
+    assert_eq!(counters.edit.dropped_unavailable, 1);
+    assert_eq!(counters.edit_unavailable.no_eligible_candidate, 1);
+    assert!(bot.observations.is_empty());
     Ok(())
 }
 
@@ -1306,14 +1684,17 @@ fn obstructed_surface_is_not_walkable_even_with_a_cave_floor_below() -> Result<(
             StateFacts {
                 passable: true,
                 support: false,
+                support_height: 0,
             },
             StateFacts {
                 passable: false,
                 support: true,
+                support_height: 4096,
             },
             StateFacts {
                 passable: false,
                 support: false,
+                support_height: 0,
             },
         ],
         dirt_item: 1,

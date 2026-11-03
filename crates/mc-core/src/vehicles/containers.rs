@@ -35,6 +35,34 @@ pub(crate) fn container_slots_for_player(
     let slot = state.entities.slot_of(vehicle)?;
     Some(&state.entities.row(slot).entity_life.vehicle.as_ref()?.slots)
 }
+pub(crate) fn select_bundle_item(
+    state: &mut TickState,
+    player: EntityId,
+    index: usize,
+    selected: i32,
+) {
+    let Some(vehicle) = target(state, player) else {
+        return;
+    };
+    if !available(state, player, vehicle) {
+        return;
+    }
+    let Some(slot) = state.entities.slot_of(vehicle) else {
+        return;
+    };
+    let registry = Arc::clone(&state.registry);
+    if let Some(stack) = state
+        .entities
+        .row_mut(slot)
+        .entity_life
+        .vehicle
+        .as_mut()
+        .and_then(|vehicle| vehicle.slots.get_mut(index))
+    {
+        crate::inventory::bundle::select(&registry.item_rules(), stack, selected);
+    }
+}
+
 fn available(state: &TickState, player: EntityId, vehicle: EntityId) -> bool {
     let (Some(p), Some(v)) = (
         state.entities.slot_of(player),
@@ -168,6 +196,16 @@ pub(crate) fn click(
             .as_mut()
             .unwrap()
             .slots = slots;
+    } else if let Some(vehicle) = state
+        .entities
+        .row_mut(vehicle_slot)
+        .entity_life
+        .vehicle
+        .as_mut()
+    {
+        for (target, source) in vehicle.slots.iter_mut().zip(&slots) {
+            crate::inventory::bundle::copy_selection(target, source);
+        }
     }
     crate::tick::apply_player_effects(state, connection, player, effects, changes);
     if changed {

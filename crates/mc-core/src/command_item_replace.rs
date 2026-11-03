@@ -319,8 +319,12 @@ pub(crate) fn execute(
             if *count > state.registry.item_rules().max_stack(&stack) {
                 return Err("Item count exceeds stack limit".into());
             }
-            stack.count = *count;
-            stack
+            if item.item.as_str() == "minecraft:air" {
+                ItemStack::EMPTY
+            } else {
+                stack.count = *count;
+                stack
+            }
         }
     };
     let count = write_slots(state, executor, &command.destination, &stack)?;

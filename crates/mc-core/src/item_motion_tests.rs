@@ -281,6 +281,158 @@ fn built_base_downward_drop_stocks_nonfull_hopper_pair() {
 }
 
 #[test]
+fn frozen_item_merge_keeps_both_stacks() {
+    let (mut state, _, _) = flat_player_fixture();
+    state.gamerules.insert("spawn_mobs".into(), "false".into());
+    let item = stack(&state, "dirt", 1);
+    let first = crate::tick::spawn_item_entity(&mut state, [4.5, 70.0, 4.5], item.clone());
+    let second = crate::tick::spawn_item_entity(&mut state, [4.75, 70.0, 4.5], item.clone());
+    let first_uuid = state
+        .entities
+        .row(state.entities.slot_of(first).unwrap())
+        .uuid;
+    let second_uuid = state
+        .entities
+        .row(state.entities.slot_of(second).unwrap())
+        .uuid;
+    assert_ne!(first_uuid, second_uuid);
+
+    // Align once to the actual source-tick cadence, then advance only via run_tick.
+    state.tick = 20;
+    state.tick_control.set_frozen(true);
+    for expected_tick in 20..40 {
+        assert_eq!(state.tick, expected_tick);
+        assert!(state.tick_control.frozen());
+        assert_eq!(state.tick_control.steps(), 0);
+        assert!(!state.tick_control.sprinting());
+        let (output, _, _) = run_tick(&mut state, &[]);
+        assert!(!state.tick_control.runs_normally());
+        assert!(
+            state.world.is_active(0, 0),
+            "items must be in an active chunk"
+        );
+        for (id, uuid) in [(first, first_uuid), (second, second_uuid)] {
+            let slot = state
+                .entities
+                .slot_of(id)
+                .expect("frozen item remains live");
+            assert_eq!(state.entities.row(slot).uuid, uuid);
+            assert_eq!(
+                state.entities.row(slot).item.as_ref().unwrap().full_stack(),
+                item
+            );
+            assert!(!output.changes.entities_removed.contains(&id));
+        }
+    }
+}
+
+#[test]
+fn frozen_item_merge_step_control() {
+    let (mut state, _, _) = flat_player_fixture();
+    state.gamerules.insert("spawn_mobs".into(), "false".into());
+    let item = stack(&state, "dirt", 1);
+    let first = crate::tick::spawn_item_entity(&mut state, [4.5, 70.0, 4.5], item.clone());
+    let second = crate::tick::spawn_item_entity(&mut state, [4.75, 70.0, 4.5], item);
+    let first_uuid = state
+        .entities
+        .row(state.entities.slot_of(first).unwrap())
+        .uuid;
+    let second_uuid = state
+        .entities
+        .row(state.entities.slot_of(second).unwrap())
+        .uuid;
+    assert_ne!(first_uuid, second_uuid);
+    state.tick = 20;
+    state.tick_control.set_frozen(true);
+    assert!(state.tick_control.step(1));
+    let (output, _, _) = run_tick(&mut state, &[]);
+    assert!(state.world.is_active(0, 0));
+    assert!(state.tick_control.frozen());
+    assert!(state.tick_control.runs_normally());
+    assert_eq!(state.tick_control.steps(), 0);
+    let survivors: Vec<_> = [(first, first_uuid), (second, second_uuid)]
+        .into_iter()
+        .filter_map(|(id, uuid)| state.entities.slot_of(id).map(|slot| (id, uuid, slot)))
+        .collect();
+    assert_eq!(
+        survivors.len(),
+        1,
+        "one original item must survive the merge"
+    );
+    let (survivor, uuid, slot) = survivors[0];
+    assert_eq!(state.entities.row(slot).uuid, uuid);
+    assert_eq!(
+        state.entities.row(slot).item.as_ref().unwrap().full_stack(),
+        stack(&state, "dirt", 2)
+    );
+    let donor = if survivor == first { second } else { first };
+    assert!(output.changes.entities_removed.contains(&donor));
+    assert!(!output.changes.entities_removed.contains(&survivor));
+
+    run_tick(&mut state, &[]);
+    assert!(!state.tick_control.runs_normally());
+    assert!(state.tick_control.frozen());
+    assert_eq!(state.tick_control.steps(), 0);
+}
+
+#[test]
+fn frozen_item_merge_stops_again_after_a_step_and_player_drop_still_applies() {
+    let (mut state, actor, _) = flat_player_fixture();
+    state.gamerules.insert("spawn_mobs".into(), "false".into());
+    let item = stack(&state, "dirt", 1);
+    let first = crate::tick::spawn_item_entity(&mut state, [4.5, 70.0, 4.5], item.clone());
+    let second = crate::tick::spawn_item_entity(&mut state, [4.75, 70.0, 4.5], item.clone());
+    state.tick = 20;
+    state.tick_control.set_frozen(true);
+    assert!(state.tick_control.step(1));
+    let (step, _, _) = run_tick(&mut state, &[]);
+    assert!(
+        step.changes.entities_removed.contains(&first)
+            || step.changes.entities_removed.contains(&second)
+    );
+    assert_eq!(state.tick_control.steps(), 0);
+
+    // The step is exhausted: a fresh pair must survive the next merge cadence.
+    let left = crate::tick::spawn_item_entity(&mut state, [12.5, 70.0, 4.5], item.clone());
+    let right = crate::tick::spawn_item_entity(&mut state, [12.75, 70.0, 4.5], item.clone());
+    let actor_slot = state.entities.slot_of(actor).unwrap();
+    state.entities.set_pos(actor_slot, [0.5, 70.0, 0.5]);
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] = item.clone();
+    let (drop, _, _) = run_tick(
+        &mut state,
+        &[PlayerInput::DropSelected {
+            connection: ConnectionId(1),
+            whole_stack: true,
+        }],
+    );
+    assert_eq!(
+        drop.changes.entities_spawned.len(),
+        1,
+        "player drop remains admitted while frozen"
+    );
+    assert!(state.players[&actor].inventory.slots[0].is_empty());
+    for _ in 0..20 {
+        let (output, _, _) = run_tick(&mut state, &[]);
+        assert!(!state.tick_control.runs_normally());
+        for id in [left, right] {
+            let slot = state
+                .entities
+                .slot_of(id)
+                .expect("held item remains live after step");
+            assert_eq!(
+                state.entities.row(slot).item.as_ref().unwrap().full_stack(),
+                item
+            );
+            assert!(!output.changes.entities_removed.contains(&id));
+        }
+    }
+    assert!(
+        state.tick > 40,
+        "the held period crossed the next merge cadence"
+    );
+}
+
+#[test]
 fn item_entities_merge_on_vanilla_cadence_with_components_delays_and_stack_limits() {
     let (mut state, _, _) = flat_player_fixture();
     let stone_48 = stack(&state, "stone", 48);

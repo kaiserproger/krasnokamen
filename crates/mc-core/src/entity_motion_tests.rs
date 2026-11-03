@@ -133,6 +133,48 @@ fn zombie_and_animal_blueprints_walk_onto_one_block_rise() {
 }
 
 #[test]
+fn hostile_flat_ground_chase_distance_matches_tuned_speed() {
+    let registry = crate::registry::CoreRegistry::load(None).expect("registry");
+    let world = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    for (name, expected) in [("minecraft:zombie", 3.8), ("minecraft:spider", 5.0)] {
+        let type_id = registry
+            .entity_types
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap();
+        let blueprint = registry.blueprint(type_id).unwrap();
+        let mut body = input(blueprint.movement, Vec3::new(0.5, 0.0, 0.5)).body;
+        body.aabb = Aabb {
+            half_width: blueprint.half_width,
+            height: blueprint.height,
+        };
+        for tick in 0..20 {
+            let mut state = input(blueprint.movement, body.position);
+            state.body = body;
+            state.drive = steer(
+                blueprint.movement,
+                [body.position.x, body.position.y, body.position.z],
+                [100.5, 0.0, 0.5],
+                f64::from(blueprint.params.speed),
+            );
+            state.tick = tick;
+            body = step(state, &world, |_, _| true).body;
+        }
+        let distance = body.position.x - 0.5;
+        assert!(
+            (distance - expected).abs() < 1e-5,
+            "{name}: {distance} blocks per second"
+        );
+        assert!(body.on_ground);
+    }
+}
+
+#[test]
 fn low_ceiling_prevents_ground_obstacle_jump() {
     let world = Habitat(|x, y, _| {
         if y < 0 || y == 1 || (x == 1 && y == 0) {

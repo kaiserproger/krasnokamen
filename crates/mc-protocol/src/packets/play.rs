@@ -139,7 +139,8 @@ pub use inventory::{
     RecipeBookSlotDisplay, RecipeBookType, RecipeBookTypeSettings, RecipePropertySet,
     ServerboundContainerButtonClick, ServerboundContainerClick, ServerboundContainerClose,
     ServerboundPlaceRecipe, ServerboundRecipeBookChangeSettings, ServerboundRecipeBookSeenRecipe,
-    ServerboundSetCarriedItem, ServerboundSetCreativeModeSlot, StonecutterRecipeEntry,
+    ServerboundSelectBundleItem, ServerboundSetCarriedItem, ServerboundSetCreativeModeSlot,
+    StonecutterRecipeEntry,
 };
 pub use login_flow::{
     ClientboundCustomPayload, ClientboundKeepAlive, ClientboundRespawn, ClientboundTransfer,

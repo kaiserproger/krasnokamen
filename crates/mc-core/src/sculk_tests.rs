@@ -79,6 +79,25 @@ fn prop(s: &TickState, pos: BlockPos, key: &str) -> String {
     property(block(s, pos).unwrap(), key).unwrap().to_owned()
 }
 #[test]
+fn sensor_placed_through_dimension_command_commit_receives_vibrations() {
+    let mut s = state(None);
+    crate::vibration::tick(&mut s);
+    let id = s
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:sculk_sensor").unwrap())
+        .unwrap()
+        .default
+        .0;
+    s.write_block(SENSOR, id);
+    crate::dimensions::commands::commit(&mut s, &mut Default::default());
+    emit(&mut s, [5.5, 201.5, 3.5], GameEvent::BlockActivate, None);
+    advance(&mut s, 2);
+    assert_eq!(prop(&s, SENSOR, "sculk_sensor_phase"), "active");
+    assert_eq!(comparator(&s, SENSOR), Some(10));
+}
+
+#[test]
 fn wool_wall_and_wool_floor_block_vibrations_but_stone_transmits() {
     let mut s = state(None);
     place(&mut s, SENSOR, "sculk_sensor", &[]);

@@ -1239,6 +1239,146 @@ mod tests {
     }
 
     #[test]
+    fn setblock_bookshelf_item_survives_consumer_extraction() {
+        let (mut state, actor) = fixture();
+        let pos = BlockPos { x: 1, y: 200, z: 0 };
+        apply(
+            &mut state,
+            actor,
+            r#"setblock 1 200 0 minecraft:chiseled_bookshelf[facing=north,slot_0_occupied=true]{Items:[{Slot:0b,id:"minecraft:book",count:1,components:{"minecraft:custom_data":{probe:"BOOKSHELF_PRIVATE_803d"}}}]}"#,
+        )
+        .unwrap();
+        run_tick(&mut state, &[]);
+        let image = crate::command_data::block(&state, pos).unwrap();
+        let item = crate::command_nbt_path::get(&image, "Items[0]").unwrap();
+        assert_eq!(
+            *crate::command_nbt_path::get(
+                &image,
+                "Items[0].components.\"minecraft:custom_data\".probe"
+            )
+            .unwrap(),
+            mc_nbt::Tag::String("BOOKSHELF_PRIVATE_803d".into())
+        );
+        let mc_nbt::Tag::Compound(fields) = item.as_ref() else {
+            panic!("expected item compound");
+        };
+        let expected = mc_data::item_nbt::stack_from_fields(&state.registry.items, fields)
+            .unwrap()
+            .unwrap();
+        assert!(!expected.is_empty());
+        let slot = state.entities.slot_of(actor).unwrap();
+        state.entities.set_pos(slot, [1.83, 200.0, -1.5]);
+        let use_slot = |cursor, sequence| PlayerInput::UseItemOn {
+            connection: ConnectionId(1),
+            hand: crate::boundary::Hand::Main,
+            position: pos,
+            face: 2,
+            cursor,
+            sequence,
+        };
+        // Empty slot 1 must not create or consume the marker.
+        run_tick(&mut state, &[use_slot([0.5, 0.75, 0.0], 1)]);
+        assert!(state.players[&actor].inventory.slots[0].is_empty());
+        run_tick(&mut state, &[use_slot([0.83, 0.75, 0.0], 2)]);
+        assert_eq!(state.players[&actor].inventory.slots[0], expected);
+        assert!(state.block_entities[&(1, 200, 0)].slots[0].is_empty());
+        assert!(state.block_entities[&(1, 200, 0)].slots[1].is_empty());
+    }
+
+    #[test]
+    fn brushable_command_direct_update_hides_unopened_loot() {
+        use crate::boundary::PlayerChange;
+        use mc_nbt::Tag;
+
+        let (mut state, actor) = fixture();
+        let pos = BlockPos { x: 1, y: 200, z: 0 };
+        state
+            .world
+            .set_block(1, 199, 0, state.registry.states.stone);
+        state.world.set_block(1, 200, 0, state.registry.states.air);
+        state.world.fold_overlay();
+        apply(&mut state, actor, r#"setblock 1 200 0 suspicious_sand[dusted=0]{LootTable:"minecraft:archaeology/desert_well",LootTableSeed:42L}"#).unwrap();
+        crate::dimensions::commands::commit(&mut state, &mut crate::boundary::ChangeSet::default());
+        let update = state
+            .outbox
+            .values()
+            .flatten()
+            .find_map(|change| match change {
+                PlayerChange::BlockEntityData {
+                    position,
+                    block_entity_type,
+                    nbt,
+                } if *position == pos => {
+                    assert_eq!(*block_entity_type, 40, "26.3 brushable block entity id");
+                    Some(nbt)
+                }
+                _ => None,
+            })
+            .expect("command must publish the block entity to the viewer");
+        assert_eq!(
+            update,
+            &Tag::Compound(vec![]),
+            "direct update must not reveal loot"
+        );
+        let saved = crate::command_data::block(&state, pos).unwrap();
+        assert_eq!(
+            *crate::command_nbt_path::get(&saved, "LootTable").unwrap(),
+            Tag::String("minecraft:archaeology/desert_well".into())
+        );
+        assert_eq!(
+            *crate::command_nbt_path::get(&saved, "LootTableSeed").unwrap(),
+            Tag::Long(42)
+        );
+    }
+
+    #[test]
+    fn shared_command_commit_preserves_brushable_nbt_after_family_replacement() {
+        let (mut state, actor) = fixture();
+        let pos = BlockPos { x: 1, y: 200, z: 0 };
+        state
+            .world
+            .set_block(1, 199, 0, state.registry.states.stone);
+        state.world.set_block(1, 200, 0, state.registry.states.air);
+        state.world.fold_overlay();
+
+        // Exercise the shared-command commit from air and an existing sign.
+        for old in ["air", "oak_sign"] {
+            if old != "air" {
+                apply(&mut state, actor, &format!("setblock 1 200 0 {old}")).unwrap();
+                crate::dimensions::commands::commit(
+                    &mut state,
+                    &mut crate::boundary::ChangeSet::default(),
+                );
+            }
+            apply(
+                &mut state,
+                actor,
+                "setblock 1 200 0 suspicious_sand[dusted=0]{item:{id:\"minecraft:diamond\",count:1},hit_direction:3}",
+            )
+            .unwrap();
+            crate::dimensions::commands::commit(
+                &mut state,
+                &mut crate::boundary::ChangeSet::default(),
+            );
+
+            let image = crate::command_data::block(&state, pos).unwrap();
+            assert_eq!(
+                *crate::command_nbt_path::get(&image, "item.id").unwrap(),
+                mc_nbt::Tag::String("minecraft:diamond".into()),
+                "{old} -> sand must retain the commanded item"
+            );
+            assert_eq!(
+                *crate::command_nbt_path::get(&image, "item.count").unwrap(),
+                mc_nbt::Tag::Int(1)
+            );
+            assert_eq!(
+                *crate::command_nbt_path::get(&image, "hit_direction").unwrap(),
+                mc_nbt::Tag::Int(3)
+            );
+        }
+    }
+
+    #[test]
     fn fill_outline_hollow_keep_and_filter_have_distinct_footprints() {
         for mode in ["outline", "hollow", "keep", "replace stone"] {
             let (mut state, actor) = fixture();

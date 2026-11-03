@@ -110,6 +110,61 @@ fn click(pos: BlockPos, sequence: i32) -> PlayerInput {
         sequence,
     }
 }
+
+#[test]
+fn offhand_bucket_wash_does_not_mine_with_main_hand() {
+    let (mut state, player, pos) = setup();
+    near(&mut state, player, pos);
+    let cobweb = named(&state, "cobweb", &[]);
+    let sword = mc_data::ItemStack::new(item(&state, "diamond_sword"), 1);
+    let water_bucket = item(&state, "water_bucket");
+    let empty_bucket = item(&state, "bucket");
+    place(&mut state, pos, cobweb);
+    assert!(matches!(
+        crate::fluids::flow_into(&state, pos, crate::fluids::Fluid::Water),
+        Some(crate::fluids::Flow::Wash(_))
+    ));
+    let block_id = state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(cobweb))
+        .unwrap()
+        .block
+        .raw_id as u32;
+    let inventory = &mut state.players.get_mut(&player).unwrap().inventory;
+    inventory.slots[0] = sword.clone();
+    inventory.slots[crate::inventory::OFF_HAND] = mc_data::ItemStack::new(water_bucket, 1);
+    run_tick(
+        &mut state,
+        &[PlayerInput::UseItemOn {
+            connection: ConnectionId(1),
+            position: pos,
+            hand: Hand::Off,
+            face: 1,
+            cursor: [0.5; 3],
+            sequence: 1,
+        }],
+    );
+    assert_eq!(
+        state.world.block_at(pos.x, pos.y, pos.z),
+        Some(state.registry.states.water)
+    );
+    let player = &state.players[&player];
+    assert_eq!(
+        player.inventory.slots[crate::inventory::OFF_HAND].item_id,
+        empty_bucket
+    );
+    assert_eq!(
+        player.inventory.slots[0], sword,
+        "pouring must not damage the main-hand tool"
+    );
+    assert_eq!(
+        player
+            .statistics
+            .get(mc_data::statistics::StatType::Mined, block_id),
+        0
+    );
+}
 #[test]
 fn waterlogged_bucket_fill_drain_and_break_preserve_one_source_and_one_drop() {
     let (mut state, player, pos) = setup();

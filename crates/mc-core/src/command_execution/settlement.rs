@@ -344,6 +344,16 @@ pub(super) fn settlement(
                 Err(message) => error(state, connection, message),
             }
         }
+        SettlementCommand::Layout => {
+            use crate::settlements::building_commands;
+            let message = building_commands::containing(state, executor)
+                .and_then(|id| state.settlements.get(id))
+                .map_or_else(
+                    || building_commands::NO_SETTLEMENT.to_owned(),
+                    |record| crate::settlements::layout::report(state, record),
+                );
+            error(state, connection, message);
+        }
         SettlementCommand::Build { blueprint } => {
             build_command(
                 state,

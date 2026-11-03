@@ -8,6 +8,7 @@ include!("player_scale_bots_visibility.rs");
 const MECHANIC_CELL_CAP: usize = 65536;
 const MECHANIC_ENTITY_CAP: usize = 16384;
 const MECHANIC_ACTION_CAP: usize = 65536;
+const MECHANIC_COLLECTION_CAP: usize = 16384;
 const MECHANIC_SLOT_CAP: usize = 128;
 
 #[derive(Debug, Deserialize)]
@@ -22,6 +23,8 @@ struct MechanicSpec {
     containers: Vec<ContainerProbe>,
     #[serde(default)]
     actions: Vec<MechanicAction>,
+    #[serde(default)]
+    hauls: Vec<HaulSpec>,
     #[serde(default = "default_action_hz")]
     action_hz: u32,
     #[serde(default = "default_burst_action_hz")]
@@ -174,6 +177,8 @@ struct EntityReceipt {
     visibility: Vec<u64>,
     #[serde(skip)]
     reader_positions: Vec<Option<[f64; 3]>>,
+    #[serde(skip)]
+    reader_versions: Vec<u64>,
     move_count: u64,
     remove_count: u64,
     spawn_count: u64,
@@ -184,6 +189,8 @@ struct EntityReceipt {
     flags: Option<i8>,
     pose: Option<String>,
     item: Option<SlotImage>,
+    #[serde(skip)]
+    item_observer: Option<u32>,
     metadata: std::collections::BTreeMap<u8, Value>,
     received_by_window: std::collections::BTreeMap<String, u64>,
 }
@@ -214,6 +221,7 @@ struct PlayerReceipt {
     saturation_credited: f64,
     damage_events: u64,
     damage_amount: f64,
+    first_self_damage: Option<Value>,
     deaths: u64,
     respawns: u64,
     world_epoch: u64,
@@ -273,11 +281,22 @@ struct Mechanics {
     container_positions: HashSet<i64>,
     command_observers: HashSet<u32>,
     menus: Vec<MenuReceipt>,
+    haul_reports: Vec<Value>,
+    haul_requests: Vec<Option<usize>>,
+    runtime_commands: Vec<Option<RuntimeCommand>>,
+    runtime_receive_seq: Vec<u64>,
+    runtime_ids: HashSet<String>,
+    runtime_events: Vec<Value>,
+    runtime_events_truncated: u64,
     players: Vec<PlayerReceipt>,
     entities: HashMap<Uuid, EntityReceipt>,
+    villager_observation_seq: Vec<u64>,
     actions: Vec<MechanicActionReceipt>,
     wire_ids: HashMap<i32, Uuid>,
     damage_events: Vec<MechanicDamageTrace>,
+    item_collections: Vec<Value>,
+    item_collections_received: u64,
+    item_collections_truncated: u64,
     damage_events_received: u64,
     damage_events_unresolved: u64,
     damage_events_truncated: u64,
@@ -321,6 +340,55 @@ impl Mechanics {
             spec.action_hz <= 1000 && spec.burst_action_hz <= 1000,
             "mechanic rate exceeds 1000 Hz"
         );
+        ensure!(spec.hauls.len() <= 4096 && (spec.hauls.is_empty()
+            || (!spec.snapshot_only && args.open_loop && !args.mechanic_read_only)),
+            "haul requires bounded open-loop writable mode");
+        let mut haul_ids = HashSet::new();
+        for (haul_index, haul) in spec.hauls.iter().enumerate() {
+            ensure!(haul.bot < args.clients && haul.observer_bot < args.clients
+                && haul.bot != haul.observer_bot
+                && !haul.item.is_empty() && haul.count > 0 && (1000..=300_000).contains(&haul.timeout_ms)
+                && haul.source != haul.destination
+                && haul_route_valid(&haul.source_route) && haul_route_valid(&haul.destination_route)
+                && haul.source_route.last() == haul.destination_route.first()
+                && haul.source_route.first() != haul.source_route.last()
+                && haul.destination_route.first() != haul.destination_route.last()
+                && !spec.actions.iter().any(|action| action.bot == haul.bot),
+                "invalid haul actor, observer, route, item or conflicting actions");
+            ensure!(!haul.defer_start || (haul.id.is_some()
+                && !spec.hauls[..haul_index].iter().any(|earlier| earlier.bot == haul.bot)),
+                "defer_start requires an id and is valid only on the bot's first haul");
+            if let Some(id) = &haul.id {
+                ensure!(!id.is_empty() && id.len() <= 128
+                    && id.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+                    && haul_ids.insert(id), "invalid or duplicate haul id");
+            } else {
+                ensure!(spec.hauls.iter().filter(|other| other.bot == haul.bot).count() == 1,
+                    "each repeated haul needs a unique id");
+            }
+            ensure!(spec.entities.iter().any(|probe| probe.kind == "minecraft:player" && probe.reader_images),
+                "haul requires minecraft:player reader_images");
+            if haul.farmer_delivery.is_some() {
+                ensure!(haul.item == "minecraft:wheat", "farmer delivery requires wheat");
+                ensure!(spec.entities.iter().any(|probe| probe.kind == "minecraft:villager" && probe.reader_images)
+                    && spec.entities.iter().any(|probe| probe.kind == "minecraft:item"),
+                    "farmer delivery requires villager reader_images and item probes");
+            }
+            let source = spec.containers.iter().find(|probe| probe.name == haul.source && probe.bot == haul.bot)
+                .context("haul source probe missing")?;
+            let destination = spec.containers.iter().find(|probe| probe.name == haul.destination && probe.bot == haul.bot)
+                .context("haul destination probe missing")?;
+            ensure!(source.position != destination.position, "haul source and destination must differ");
+            for (name, endpoint) in [(&haul.source, haul.source_route.last()), (&haul.destination, haul.destination_route.last())] {
+                let container = spec.containers.iter().find(|probe| &probe.name == name && probe.bot == haul.bot)
+                    .context("haul requires actor-owned container probes")?;
+                let point = endpoint.expect("validated route");
+                let distance = (f64::from(container.position[0]) - f64::from(point[0])).powi(2)
+                    + (f64::from(container.position[1]) - f64::from(point[1]) - 1.12).powi(2)
+                    + (f64::from(container.position[2]) - f64::from(point[2])).powi(2);
+                ensure!(distance <= 36.0, "haul endpoint outside container reach");
+            }
+        }
         let mut names = HashSet::new();
         let mut positions = HashMap::new();
         let mut chunks: HashMap<(i32, i32), Vec<usize>> = HashMap::new();
@@ -416,6 +484,8 @@ impl Mechanics {
                         | "click_slot"
                         | "use_block"
                         | "break_block"
+                        | "start_destroy_block"
+                        | "finish_destroy_block"
                         | "attack_entity"
                         | "entity_interact"
                         | "use_item"
@@ -444,7 +514,8 @@ impl Mechanics {
             }
             if matches!(
                 action.kind.as_str(),
-                "open_container" | "use_block" | "break_block"
+                "open_container" | "use_block" | "break_block" | "start_destroy_block"
+                    | "finish_destroy_block"
             ) {
                 ensure!(action.position.is_some(), "block action needs position");
             }
@@ -592,6 +663,23 @@ impl Mechanics {
             menus: (0..spec.containers.len())
                 .map(|_| MenuReceipt::default())
                 .collect(),
+            haul_reports: spec.hauls.iter().map(|haul| json!({
+                "id":haul.id,"bot":haul.bot,"observer_bot":haul.observer_bot,"player_uuid":haul.player_uuid,
+                "defer_start":haul.defer_start,
+                "status":"pending","completed":false,"error":null,"source_arrival":null,"source_transfer":null,
+                "destination_arrival":null,"destination_transfer":null,
+                "farmer_delivery":haul.farmer_delivery.as_ref().map(|delivery| json!({
+                    "farmer_uuid":delivery.farmer_uuid,"withdrawal":null,
+                    "pursuit_plans":[],"pursuit_search_failure":null,"pursuit_arrival":null,
+                    "first_route_refusal":null,"drop_offer":null,"drop_written":null,"drop":null,"completed":false
+                }))
+            })).collect(),
+            haul_requests: vec![None; args.clients as usize],
+            runtime_commands: (0..args.clients).map(|_| None).collect(),
+            runtime_receive_seq: vec![0; args.clients as usize],
+            runtime_ids: HashSet::new(),
+            runtime_events: Vec::new(),
+            runtime_events_truncated: 0,
             players: (0..args.clients)
                 .map(|_| PlayerReceipt::default())
                 .collect(),
@@ -609,6 +697,7 @@ impl Mechanics {
             container_positions,
             command_observers,
             entities: HashMap::new(),
+            villager_observation_seq: vec![0; args.clients as usize],
             actions,
             identity_errors: 0,
             position_errors: 0,
@@ -632,6 +721,9 @@ impl Mechanics {
             save_completions: 0,
             wire_ids: HashMap::new(),
             damage_events: Vec::new(),
+            item_collections: Vec::new(),
+            item_collections_received: 0,
+            item_collections_truncated: 0,
             damage_events_received: 0,
             damage_events_unresolved: 0,
             damage_events_truncated: 0,
@@ -679,6 +771,7 @@ impl Mechanics {
             player.initial_inventory.clone_from(&player.final_inventory);
             player.damage_events = 0;
             player.damage_amount = 0.0;
+            player.first_self_damage = None;
             player.deaths = 0;
             player.respawns = 0;
             player.inventory_updates = 0;
@@ -697,6 +790,9 @@ impl Mechanics {
         }
         self.explosions.clear();
         self.damage_events.clear();
+        self.item_collections.clear();
+        self.item_collections_received = 0;
+        self.item_collections_truncated = 0;
         self.damage_events_received = 0;
         self.damage_events_unresolved = 0;
         self.damage_events_truncated = 0;
@@ -902,6 +998,8 @@ impl Mechanics {
             }
             if let Some(reader) = entity.reader_positions.get_mut(bot as usize) {
                 *reader = Some([packet.x, packet.y, packet.z]);
+                entity.reader_versions[bot as usize] =
+                    entity.reader_versions[bot as usize].saturating_add(1);
             }
             if entity.observer_bot == bot || !primary_visible {
                 entity.observer_bot = bot;
@@ -941,6 +1039,14 @@ impl Mechanics {
                     } else {
                         Vec::new()
                     },
+                    reader_versions: if self.spec.entities.iter().any(|probe|
+                        probe.reader_images && probe.kind == *kind) {
+                        let mut versions = vec![0; self.players.len()];
+                        versions[bot as usize] = 1;
+                        versions
+                    } else {
+                        Vec::new()
+                    },
                     move_count: 0,
                     death_events: 0,
                     dead: false,
@@ -951,10 +1057,15 @@ impl Mechanics {
                     flags: None,
                     pose: None,
                     item: None,
+                    item_observer: None,
                     metadata: Default::default(),
                     received_by_window: Default::default(),
                 },
             );
+        }
+        if kind.as_str() == "minecraft:villager" {
+            self.villager_observation_seq[bot as usize] =
+                self.villager_observation_seq[bot as usize].saturating_add(1);
         }
         self.wire_ids.insert(packet.entity_id, packet.uuid);
         self.receipt(window, "entity_spawn");
@@ -990,6 +1101,12 @@ impl Mechanics {
                     .all(|x| x.is_finite() && x.abs() < 30_000_000.0)
             }) {
                 *reader = next;
+                entity.reader_versions[bot as usize] =
+                    entity.reader_versions[bot as usize].saturating_add(1);
+                if entity.kind == "minecraft:villager" {
+                    self.villager_observation_seq[bot as usize] =
+                        self.villager_observation_seq[bot as usize].saturating_add(1);
+                }
             } else {
                 self.position_errors += 1;
                 return;
@@ -1037,6 +1154,10 @@ impl Mechanics {
             let entity = self.entities.get_mut(uuid).expect("indexed identity");
             if entity.hide(bot) {
                 entity.remove_count += u64::from(window.is_some());
+                if entity.kind == "minecraft:villager" {
+                    self.villager_observation_seq[bot as usize] =
+                        self.villager_observation_seq[bot as usize].saturating_add(1);
+                }
                 self.receipt(window, "entity_remove");
             } else {
                 // Respawn clears a view implicitly; subsequent remove packets
@@ -1149,12 +1270,19 @@ impl Mechanics {
             "movement_scope": "actual received SetCenterChunk snapshot-derived cache centers; not per-movement acknowledgements or client-predicted walking distance",
             "nutrition_scope": "actual received food/saturation increases, excluding respawn resets; nutrition credits are not exclusive consumption attribution",
             "players": players,
+            "hauls": self.haul_reports,
+            "runtime_commands": self.runtime_events,
+            "runtime_commands_truncated": self.runtime_events_truncated,
             "reader_scope": "per-bot decoded frames/bytes in actual receive windows; selected readers limit pre-decoding server socket reads via bounded Tokio relay; final_observed_entities includes currently visible declared probes only, not authoritative world membership",
             "received_by_window": self.receive_windows, "explosions": self.explosions,
             "explosion_scope": "bounded ClientboundExplode rows from primary observer bot 0 only; per-window explosion receipt counts include all observers; rows are received effects, not authoritative source attribution",
             "damage_events": self.damage_events, "damage_events_received": self.damage_events_received,
             "damage_events_unresolved": self.damage_events_unresolved, "damage_events_truncated": self.damage_events_truncated,
             "projectile_hits": self.projectile_hits, "projectile_duplicate_hits": self.projectile_duplicate_hits,
+            "item_collections": self.item_collections,
+            "item_collections_received": self.item_collections_received,
+            "item_collections_truncated": self.item_collections_truncated,
+            "item_collection_scope": "received per-observer take-item packets, not an arrival fence or proof of retained inventory; identities and item metadata are null when unavailable; fanout is not deduplicated",
             "damage_events_filtered": self.damage_events_filtered,
             "damage_scope": "actual DamageEvent references resolved to previously received UUIDs; retain own-victim or primary-view declared-victim traces once, filter other view fanout; unresolved IDs remain null",
             "deaths": self.players.iter().map(|player| player.deaths).sum::<u64>(),
@@ -1175,7 +1303,7 @@ impl Mechanics {
             "cell_scope": "first fresh-section observer owns each physical cell; absent probes are null, never assumed air",
             "bounds": {"cells": MECHANIC_CELL_CAP, "entities": MECHANIC_ENTITY_CAP, "actions": MECHANIC_ACTION_CAP,
                 "menu_slots": MECHANIC_SLOT_CAP, "reply_count": MECHANIC_REPLY_CAP, "reply_bytes": MECHANIC_REPLY_BYTES, "damage_events": MECHANIC_DAMAGE_CAP,
-                "chunk_center_traces_per_bot": MECHANIC_CENTER_TRACE_CAP},
+                "item_collections": MECHANIC_COLLECTION_CAP, "chunk_center_traces_per_bot": MECHANIC_CENTER_TRACE_CAP},
             "unavailable_evidence": ["these protocol probes do not expose server command queue age",
                 "removal packets do not distinguish death from view unload",
                 "villager home/job Brain memories are not transmitted by public entity metadata"]
@@ -1238,6 +1366,8 @@ struct PendingMenuClose {
 #[derive(Default)]
 struct BotMechanics {
     assigned: Vec<usize>,
+    haul: Option<HaulState>,
+    observer_follow: Option<ObserverFollow>,
     cursor: usize,
     pending: VecDeque<PendingMechanic>,
     opening: Option<usize>,
@@ -1467,7 +1597,19 @@ impl Bot {
                         Some(MechanicExpectation::MenuChanged(transfer))
                     }
                 }
-                "use_block" | "break_block" => {
+                "start_destroy_block" => {
+                    let p = action.position.expect("validated position");
+                    let pos = pack_block_pos(p[0], p[1], p[2]);
+                    if state.positions.get(&pos).and_then(|index| {
+                        state.cells[*index].reader_states.get(self.index as usize).copied().flatten()
+                    }).is_none() {
+                        self.mechanic_bot.last_unavailable_reason =
+                            Some("target_cell_not_received");
+                        return Ok(false);
+                    }
+                    None
+                }
+                "use_block" | "break_block" | "finish_destroy_block" => {
                     let p = action.position.expect("validated position");
                     let pos = pack_block_pos(p[0], p[1], p[2]);
                     if self.mechanic_bot.pending.iter().any(|pending| {
@@ -1489,7 +1631,7 @@ impl Bot {
                     Some(MechanicExpectation::Cell(
                         pos,
                         before,
-                        action.kind == "break_block",
+                        action.kind != "use_block",
                     ))
                 }
                 "attack_entity" | "entity_interact" => {
@@ -1583,7 +1725,8 @@ impl Bot {
         }
         if matches!(
             kind.as_str(),
-            "open_container" | "use_block" | "break_block"
+            "open_container" | "use_block" | "break_block" | "start_destroy_block"
+                | "finish_destroy_block"
         ) {
             let p = position.expect("validated position");
             if p.iter()
@@ -1656,7 +1799,7 @@ impl Bot {
                     )?;
                 }
             }
-            "break_block" | "drop_stack" => {
+            "break_block" | "start_destroy_block" | "finish_destroy_block" | "drop_stack" => {
                 self.sequence = self
                     .sequence
                     .checked_add(1)
@@ -1664,10 +1807,10 @@ impl Bot {
                 let [x, y, z] = position.unwrap_or([0, 0, 0]);
                 client
                     .write_packet(&ServerboundPlayerAction {
-                        action: if kind == "break_block" {
-                            PlayerActionKind::StartDestroyBlock
-                        } else {
-                            PlayerActionKind::DropAllItems
+                        action: match kind.as_str() {
+                            "break_block" | "start_destroy_block" => PlayerActionKind::StartDestroyBlock,
+                            "finish_destroy_block" => PlayerActionKind::StopDestroyBlock,
+                            _ => PlayerActionKind::DropAllItems,
                         },
                         position: pack_block_pos(x, y, z),
                         direction: Direction::Up,
@@ -1837,6 +1980,9 @@ impl Bot {
         if self.mechanic_read_only {
             return Ok(());
         }
+        self.runtime_command_poll(client, elapsed).await?;
+        self.haul_poll(client, elapsed).await?;
+        self.observer_follow_poll()?;
         self.release_held(client, elapsed).await?;
         let Some(shared) = self.mechanics.as_ref().map(Arc::clone) else {
             return Ok(());

@@ -534,6 +534,7 @@ impl TickState {
                 let rules = self.registry.item_rules();
                 let victim_uuid = self.entities.row(slot).uuid;
                 let mut combat_hits = Vec::new();
+                let mut infection_attacker = None;
                 let was_alive = self.entities.body(slot).alive;
                 let resists_magic = match self.entities.body(slot).kind {
                     EntityKind::Mob { type_id } => self
@@ -602,6 +603,15 @@ impl TickState {
                     } else {
                         amount
                     };
+                    if before_hit > 0.0 && row.health <= 0.0 {
+                        infection_attacker = match piece.source {
+                            Some(
+                                crate::intent::DamageSource::Melee { attacker, .. }
+                                | crate::intent::DamageSource::Mace { attacker, .. },
+                            ) => Some(attacker),
+                            _ => None,
+                        };
+                    }
                     crate::statistics::damage_dealt(
                         &mut self.players,
                         piece.source,
@@ -652,7 +662,7 @@ impl TickState {
                 if villager {
                     crate::villager::brain::harmed(self, id, player_hit, killed);
                 }
-                if killed && crate::villager::conversion::infect(self, slot, killer) {
+                if killed && crate::villager::conversion::infect(self, slot, infection_attacker) {
                     continue;
                 }
                 if killed && crate::end_fight::begin_death(self, slot) {

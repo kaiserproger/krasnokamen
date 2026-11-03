@@ -276,23 +276,10 @@ impl TickState {
                             && crate::fluids::fluid_at(&self.registry.states, *new).is_some()
                     })
                 {
-                    let wear = self.block_break_tool_wear(intent.actor, old);
-                    let Ok(wear) = self.player_tool_wear_plan(intent.actor, wear) else {
+                    let Some(drops) = self.prepare_pop_block_loot(*pos, old) else {
                         return false;
                     };
-                    let xp = self.block_break_experience(intent.actor, old);
-                    let rolled =
-                        crate::block_drop_context::player_drops(self, intent.actor, *pos, old);
-                    let Some(drops) = crate::block_drop_context::admit(self, *pos, rolled) else {
-                        return false;
-                    };
-                    self.record_block_mined(intent.actor, old);
-                    self.apply_player_tool_wear(intent.actor, wear);
-                    self.stage_container_removal(
-                        *pos,
-                        !crate::block_drop_context::retains_contents(&drops),
-                    );
-                    self.merge_broken.push((intent.actor, *pos, old, drops, xp));
+                    self.merge_command_broken.push((*pos, old, drops));
                 }
                 for (write_pos, write_state) in &intent.footprint.block_write {
                     self.merge_block_writes.push((*write_pos, *write_state));
@@ -356,6 +343,7 @@ impl TickState {
                 }
                 if crate::bees::place_from_item(self, intent).is_err()
                     || crate::shulker::place_from_item(self, intent).is_err()
+                    || crate::block_entity_defaults::stage_banner(self, intent).is_err()
                 {
                     self.merge_block_writes.truncate(staged);
                     return false;
@@ -698,6 +686,9 @@ impl TickState {
                 let before = moving.count;
                 player.inventory.add(&rules, &mut moving);
                 let taken = before - moving.count;
+                if taken == 0 {
+                    continue;
+                }
                 if taken > 0 {
                     player
                         .statistics
@@ -1158,6 +1149,18 @@ impl TickState {
         block: u32,
         spawned: &mut Vec<EntityId>,
     ) -> bool {
+        let Some(drops) = self.prepare_pop_block_loot(pos, block) else {
+            return false;
+        };
+        self.spawn_block_loot(pos, drops, pos.x as u64 ^ pos.z as u64, spawned);
+        true
+    }
+
+    fn prepare_pop_block_loot(
+        &mut self,
+        pos: BlockPos,
+        block: u32,
+    ) -> Option<Vec<mc_data::ItemStack>> {
         let drops =
             if crate::command_rules::boolean(self, crate::command_rules::BoolRule::BLOCK_DROPS) {
                 crate::block_drop_context::roll(
@@ -1170,11 +1173,8 @@ impl TickState {
             } else {
                 Ok(Vec::new())
             };
-        let Some(drops) = crate::block_drop_context::admit(self, pos, drops) else {
-            return false;
-        };
+        let drops = crate::block_drop_context::admit(self, pos, drops)?;
         self.stage_container_removal(pos, !crate::block_drop_context::retains_contents(&drops));
-        self.spawn_block_loot(pos, drops, pos.x as u64 ^ pos.z as u64, spawned);
-        true
+        Some(drops)
     }
 }

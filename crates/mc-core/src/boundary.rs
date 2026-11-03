@@ -214,6 +214,12 @@ pub enum PlayerInput {
     },
     /// Selected hotbar slot changed.
     SelectSlot { connection: ConnectionId, slot: u8 },
+    /// Change the transient selection on a bundle in the current menu.
+    SelectBundleItem {
+        connection: ConnectionId,
+        slot: i32,
+        selected_index: i32,
+    },
     /// Vanilla pick block (middle click on a block).
     PickItemFromBlock {
         connection: ConnectionId,
@@ -388,6 +394,7 @@ impl PlayerInput {
             | Self::VehicleInput { connection, .. }
             | Self::MoveVehicle { connection, .. }
             | Self::SelectSlot { connection, .. }
+            | Self::SelectBundleItem { connection, .. }
             | Self::PickItemFromBlock { connection, .. }
             | Self::PickItemFromEntity { connection, .. }
             | Self::ContainerClick { connection, .. }

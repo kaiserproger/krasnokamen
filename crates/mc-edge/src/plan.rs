@@ -282,7 +282,6 @@ fn encode_chunk(
         crate::chunks::EncodeInputs {
             biomes: registries.biomes,
             blocks: registries.blocks,
-            items: registries.items,
             block_entity_types: registries.block_entity_types,
         },
         &hidden,

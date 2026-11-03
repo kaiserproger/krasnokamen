@@ -28,9 +28,9 @@ use mc_protocol::packets::play::{
     ServerboundPickItemFromBlock, ServerboundPickItemFromEntity, ServerboundPlaceRecipe,
     ServerboundPlayerAction, ServerboundPlayerCommand, ServerboundPlayerInput,
     ServerboundPlayerLoaded, ServerboundPunch, ServerboundRenameItem, ServerboundResourcePack,
-    ServerboundSeenAdvancements, ServerboundSelectTrade, ServerboundSetBeacon,
-    ServerboundSetCarriedItem, ServerboundSetCreativeModeSlot, ServerboundSignUpdate,
-    ServerboundUseItem, ServerboundUseItemOn, unpack_block_pos,
+    ServerboundSeenAdvancements, ServerboundSelectBundleItem, ServerboundSelectTrade,
+    ServerboundSetBeacon, ServerboundSetCarriedItem, ServerboundSetCreativeModeSlot,
+    ServerboundSignUpdate, ServerboundUseItem, ServerboundUseItemOn, unpack_block_pos,
 };
 
 /// Rotation of the last rotation-bearing movement frame, for position-only
@@ -67,6 +67,14 @@ pub fn decode_play_frame(
                 yaw: p.yaw,
                 pitch: p.pitch,
                 on_ground: false,
+            });
+        }
+        ServerboundSelectBundleItem::ID => {
+            let p = read::<ServerboundSelectBundleItem>(body)?;
+            out.push(PlayerInput::SelectBundleItem {
+                connection: conn,
+                slot: p.slot,
+                selected_index: p.selected_index,
             });
         }
         ServerboundSeenAdvancements::ID => {

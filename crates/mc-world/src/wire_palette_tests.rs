@@ -28,7 +28,9 @@ fn compact_block_palettes_emit_vanilla_words_and_projected_states() {
             );
         }
         let mut bytes = Vec::new();
-        encode_block_palette(&mut bytes, &section, &|state| BlockStateId(state.0 + 1000));
+        encode_block_palette(&mut bytes, &section, 15, &|state| {
+            BlockStateId(state.0 + 1000)
+        });
         let bits = bytes[0] as usize;
         let mut cursor = 1;
         if palette_len == 1 {
@@ -72,5 +74,51 @@ fn compact_block_palettes_emit_vanilla_words_and_projected_states() {
             }
         }
         assert_eq!(cursor, bytes.len());
+    }
+}
+
+#[test]
+fn direct_palette_preserves_high_26_3_states_and_projection() {
+    // 26.3 reports/blocks.json has dense IDs 0..=35722; the last is
+    // minecraft:firefly_bush. 26.1.2 has 29873 states, all below 32768.
+    let registry_size = 35_723;
+    let bits = bits_for_distinct_values(registry_size);
+    assert_eq!(bits, 16);
+    let mut section = ChunkSection::filled(BlockStateId(0), BlockStateId(0));
+    let state_at = |cell: usize| {
+        if cell % 257 == 256 {
+            35_722
+        } else {
+            (cell % 257) as u32
+        }
+    };
+    for cell in 0..SECTION_VOLUME {
+        section.set(
+            (cell % 16) as u8,
+            (cell / 256) as u8,
+            ((cell / 16) % 16) as u8,
+            BlockStateId(state_at(cell)),
+        );
+    }
+    // Exercise projection in both directions without inventing registry IDs.
+    let project = |state: BlockStateId| match state.0 {
+        1 => BlockStateId(35_722),
+        35_722 => BlockStateId(1),
+        _ => state,
+    };
+    let mut bytes = Vec::new();
+    encode_block_palette(&mut bytes, &section, bits, &project);
+    assert_eq!(bytes[0], 16);
+    let per_word = 64 / usize::from(bytes[0]);
+    assert_eq!(bytes.len(), 1 + SECTION_VOLUME.div_ceil(per_word) * 8);
+    for cell in 0..SECTION_VOLUME {
+        let start = 1 + (cell / per_word) * 8;
+        let word = u64::from_be_bytes(bytes[start..start + 8].try_into().unwrap());
+        let decoded = ((word >> ((cell % per_word) * usize::from(bits))) & 0xffff) as u32;
+        assert_eq!(
+            decoded,
+            project(BlockStateId(state_at(cell))).0,
+            "cell {cell}"
+        );
     }
 }

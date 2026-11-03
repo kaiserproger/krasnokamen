@@ -76,6 +76,7 @@ impl PlayerState {
             dig_progress: None,
             delayed_dig: None,
             opaque_player_fields: Vec::new(),
+            ender_bundle_selections: self.ender_bundle_selections.clone(),
             statistics: self.statistics.clone(),
             inventory: self.inventory.clone(),
             advancement_progress: std::sync::Arc::clone(&self.advancement_progress),

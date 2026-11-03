@@ -135,6 +135,10 @@ pub(super) fn store_container_slots(
                 position,
             );
             state.world.mark_block_entity_dirty(position);
+        } else {
+            for (target, source) in record.slots.iter_mut().zip(mine) {
+                crate::inventory::bundle::copy_selection(target, source);
+            }
         }
     }
 }

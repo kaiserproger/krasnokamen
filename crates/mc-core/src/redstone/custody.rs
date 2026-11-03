@@ -163,6 +163,7 @@ impl<'a> IntoIterator for &'a BlockEntities {
 pub struct OpenContainers {
     viewers: HashMap<EntityId, Cell>,
     dirty: DirtyPositions,
+    animation_dirty: Vec<Cell>,
 }
 
 impl OpenContainers {
@@ -171,8 +172,10 @@ impl OpenContainers {
         if previous != Some(cell) {
             if let Some(previous) = previous {
                 self.dirty.mark_dirty(previous);
+                self.animation_dirty.push(previous);
             }
             self.dirty.mark_dirty(cell);
+            self.animation_dirty.push(cell);
         }
         previous
     }
@@ -180,17 +183,29 @@ impl OpenContainers {
     pub fn remove(&mut self, viewer: &EntityId) -> Option<Cell> {
         let cell = self.viewers.remove(viewer)?;
         self.dirty.mark_dirty(cell);
+        self.animation_dirty.push(cell);
         Some(cell)
     }
 
     pub fn clear(&mut self) {
         for (_, cell) in self.viewers.drain() {
             self.dirty.mark_dirty(cell);
+            self.animation_dirty.push(cell);
         }
     }
 
     pub(crate) fn drain_dirty_into(&mut self, cells: &mut Vec<Cell>) {
         self.dirty.drain_into(cells);
+    }
+
+    pub(crate) fn take_animation_dirty(&mut self) -> Vec<Cell> {
+        std::mem::take(&mut self.animation_dirty)
+    }
+
+    pub(crate) fn recycle_animation_dirty(&mut self, mut cells: Vec<Cell>) {
+        cells.clear();
+        debug_assert!(self.animation_dirty.is_empty());
+        self.animation_dirty = cells;
     }
 }
 

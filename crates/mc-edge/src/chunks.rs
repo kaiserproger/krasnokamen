@@ -15,8 +15,6 @@ pub struct EncodeInputs<'a> {
     pub biomes: &'a Registry,
     /// Block table.
     pub blocks: &'a BlockRegistry,
-    /// Item table for block-entity encoding.
-    pub items: &'a mc_data::items::ItemRegistry,
     /// Block-entity type table.
     pub block_entity_types: &'a mc_data::block_entity_types::BlockEntityTypeRegistry,
 }
@@ -44,7 +42,6 @@ pub fn encode_chunk_packet_with_sections(
     let EncodeInputs {
         biomes,
         blocks,
-        items,
         block_entity_types,
     } = inputs;
     let data = mc_world::wire::encode_chunk_data_with_sections(chunk, biomes, blocks, sections)?;
@@ -55,21 +52,20 @@ pub fn encode_chunk_packet_with_sections(
             data: h.data,
         })
         .collect();
-    let block_entities: Vec<BlockEntityInfo> =
-        mc_world::wire::client_block_entities(chunk, blocks, items)
-            .into_iter()
-            .filter_map(|record| {
-                let type_id = block_entity_types.id_of(&record.type_name)?;
-                let packed_xz =
-                    ((record.pos.x.rem_euclid(16) as u8) << 4) | record.pos.z.rem_euclid(16) as u8;
-                Some(BlockEntityInfo {
-                    packed_xz,
-                    y: record.pos.y.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
-                    type_id: i32::try_from(type_id).ok()?,
-                    nbt: record.nbt,
-                })
+    let block_entities: Vec<BlockEntityInfo> = mc_world::wire::client_block_entities(chunk, blocks)
+        .into_iter()
+        .filter_map(|record| {
+            let type_id = block_entity_types.id_of(&record.type_name)?;
+            let packed_xz =
+                ((record.pos.x.rem_euclid(16) as u8) << 4) | record.pos.z.rem_euclid(16) as u8;
+            Some(BlockEntityInfo {
+                packed_xz,
+                y: record.pos.y.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
+                type_id: i32::try_from(type_id).ok()?,
+                nbt: record.nbt,
             })
-            .collect();
+        })
+        .collect();
     let light = crate::light::chunk_light(chunk);
     Ok(LevelChunkWithLight {
         chunk_x: pos.x,

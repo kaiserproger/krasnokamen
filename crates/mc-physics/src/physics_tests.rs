@@ -319,6 +319,79 @@ fn vanilla_axis_order_steps_onto_half_block_terrace() {
 }
 
 #[test]
+fn captured_worker_steps_from_path_under_overhead_stone() {
+    let position = Vec3::new(149.7, 71.9375, 4.500000000000001);
+    let body = Aabb {
+        half_width: 0.3,
+        height: 1.95,
+    };
+    let result = resolve_collision_displacement(
+        &CapturedPathStepWorld { low_ceiling: false },
+        position,
+        body,
+        Vec3::new(0.25, -0.08, 0.0),
+        true,
+        STEP_HEIGHT,
+    )
+    .expect("captured worker movement resolves");
+
+    assert!((result.delta.x - 0.25).abs() < 1.0e-12);
+    assert!((result.delta.y - 0.0625).abs() < 1.0e-12);
+    assert_eq!(result.delta.z, 0.0);
+    assert!(result.grounded);
+    assert!(result.stepped);
+    // The final feet clear both the path and next floor, and the head
+    // remains below the overhead block while overlapping its x/z footprint.
+    let feet = position.y + result.delta.y;
+    assert!(feet >= 72.0);
+    assert!(feet + body.height <= 74.0);
+}
+
+#[test]
+fn full_block_rise_remains_blocked_by_step_height() {
+    let result = resolve_collision_displacement(
+        &OneBlockStepWorld,
+        Vec3::new(0.7, 64.0, 0.5),
+        Aabb {
+            half_width: 0.3,
+            height: 1.95,
+        },
+        Vec3::new(0.25, -0.08, 0.0),
+        true,
+        STEP_HEIGHT,
+    )
+    .expect("full-block movement resolves");
+
+    assert!(result.delta.x.abs() < 1.0e-12);
+    assert!(result.delta.y.abs() < 1.0e-12);
+    assert!(result.grounded);
+    assert!(!result.stepped);
+    assert!(result.collided);
+}
+
+#[test]
+fn captured_path_step_is_blocked_by_genuinely_low_ceiling() {
+    let result = resolve_collision_displacement(
+        &CapturedPathStepWorld { low_ceiling: true },
+        Vec3::new(149.7, 71.9375, 4.500000000000001),
+        Aabb {
+            half_width: 0.3,
+            height: 1.95,
+        },
+        Vec3::new(0.25, -0.08, 0.0),
+        true,
+        STEP_HEIGHT,
+    )
+    .expect("low-ceiling movement resolves");
+
+    assert!(result.delta.x.abs() < 1.0e-12);
+    assert!(result.delta.y.abs() < 1.0e-12);
+    assert!(result.grounded);
+    assert!(!result.stepped);
+    assert!(result.collided);
+}
+
+#[test]
 fn horizontal_sweep_partial_travel_is_symmetric_for_negative_direction() {
     let obstacle = WorldAabb {
         min_x: -1.4,
@@ -507,6 +580,43 @@ impl BlockSampler for FarmlandToFullBlockStepWorld {
         } else {
             BlockCollisionHeight::FULL_BLOCK
         })
+    }
+}
+
+// Five captured collision boxes, plus an optional lower ceiling subshape.
+struct CapturedPathStepWorld {
+    low_ceiling: bool,
+}
+
+impl BlockSampler for CapturedPathStepWorld {
+    fn material_at(&self, x: i32, y: i32, z: i32) -> BlockMaterial {
+        if z == 4
+            && (matches!((x, y), (149 | 150, 70) | (149 | 150, 71) | (150, 74))
+                || (self.low_ceiling && (x, y) == (150, 73)))
+        {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    }
+
+    fn collision_boxes_at(&self, x: i32, y: i32, z: i32, emit: &mut dyn FnMut(BlockCollisionBox)) {
+        if !self.material_at(x, y, z).is_solid() {
+            return;
+        }
+        if (x, y, z) == (149, 71, 4) {
+            emit(
+                BlockCollisionBox::from_sixteenths(0, 0, 0, 16, 15, 16)
+                    .expect("valid path collision box"),
+            );
+        } else if (x, y, z) == (150, 73, 4) {
+            emit(
+                BlockCollisionBox::from_sixteenths(0, 15, 0, 16, 16, 16)
+                    .expect("valid low ceiling collision box"),
+            );
+        } else {
+            emit(BlockCollisionBox::FULL_BLOCK);
+        }
     }
 }
 

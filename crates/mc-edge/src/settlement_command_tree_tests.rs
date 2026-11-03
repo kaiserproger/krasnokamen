@@ -114,6 +114,7 @@ fn settlement_is_native_player_command_with_typed_arguments_and_help() {
         "menu",
         "building",
         "build",
+        "layout",
         "create",
         "claim",
         "list",

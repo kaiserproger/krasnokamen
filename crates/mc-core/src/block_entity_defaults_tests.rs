@@ -294,6 +294,17 @@ fn setblock_with_nbt_sends_the_block_entity_to_connected_viewers() {
     state.world.fold_overlay();
     state.outbox.clear();
     state.commit_merge_effects();
+    let changes = state.outbox.get(&ConnectionId(1)).expect("viewer outbox");
+    let block_update = changes.iter().position(|change| {
+        matches!(change, crate::boundary::PlayerChange::BlockResynced { position, .. } if *position == pos)
+    });
+    let entity_update = changes.iter().position(|change| {
+        matches!(change, crate::boundary::PlayerChange::BlockEntityData { position, .. } if *position == pos)
+    });
+    assert!(
+        block_update.is_some_and(|block| entity_update.is_some_and(|entity| block < entity)),
+        "the client must receive the block before its entity data"
+    );
     let sent: Vec<_> = state
         .outbox
         .values()
@@ -314,4 +325,128 @@ fn setblock_with_nbt_sends_the_block_entity_to_connected_viewers() {
     };
     assert!(mc_data::item_nbt::field(fields, "front_text").is_some());
     assert!(mc_data::item_nbt::field(fields, "x").is_none());
+}
+
+#[test]
+fn patterned_banner_item_use_preserves_layers_in_world_wire_and_journal() {
+    use crate::boundary::{Hand, PlayerChange, PlayerInput};
+    use mc_data::{Identifier, item_stack::BannerPattern};
+
+    let (mut state, actor) = fixture(None);
+    let pos = BlockPos { x: 8, y: 201, z: 8 };
+    let mut banner = crate::crafter::tests::stack(&state, "white_banner", 1);
+    banner.extended_mut().banner_patterns = vec![
+        BannerPattern {
+            pattern: Identifier::parse("minecraft:cross").unwrap(),
+            color: 14,
+        },
+        BannerPattern {
+            pattern: Identifier::parse("minecraft:stripe_top").unwrap(),
+            color: 11,
+        },
+    ];
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] = banner;
+    let (output, drains, _) = crate::tick::run_tick(
+        &mut state,
+        &[PlayerInput::UseItemOn {
+            connection: ConnectionId(1),
+            hand: Hand::Main,
+            position: BlockPos { x: 8, y: 200, z: 8 },
+            face: 1,
+            cursor: [0.5, 1.0, 0.5],
+            sequence: 1,
+        }],
+    );
+    assert!(state.players[&actor].inventory.slots[0].is_empty());
+    let expected = Tag::List(mc_nbt::ListTag {
+        element_type: mc_nbt::tag_type::COMPOUND,
+        elements: vec![
+            Tag::Compound(vec![
+                ("pattern".into(), Tag::String("minecraft:cross".into())),
+                ("color".into(), Tag::String("red".into())),
+            ]),
+            Tag::Compound(vec![
+                ("pattern".into(), Tag::String("minecraft:stripe_top".into())),
+                ("color".into(), Tag::String("blue".into())),
+            ]),
+        ],
+    });
+    let image = &state
+        .world
+        .chunk(ChunkPos { x: 0, z: 0 })
+        .unwrap()
+        .block_entities[&pos];
+    let Tag::Compound(fields) = mc_nbt::read_network(&mut image.as_slice()).unwrap() else {
+        panic!()
+    };
+    assert_eq!(
+        mc_data::item_nbt::field(&fields, "patterns"),
+        Some(&expected)
+    );
+    let block = state.world.block_at(pos.x, pos.y, pos.z).unwrap();
+    let (_, changes) = drains
+        .iter()
+        .find(|(connection, _)| *connection == ConnectionId(1))
+        .unwrap();
+    assert!(changes.windows(2).any(|pair| matches!(&pair[0],
+        PlayerChange::BlockResynced { position, block: sent }
+            if *position == pos && *sent == block)
+        && matches!(&pair[1],
+            PlayerChange::BlockEntityData { position, block_entity_type, nbt: Tag::Compound(fields) }
+                if *position == pos && *block_entity_type == BlockEntityKind::Banner.protocol_id()
+                    && mc_data::item_nbt::field(fields, "patterns") == Some(&expected))),
+        "the viewer must receive the banner block before its matching data");
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let batches = vec![(state.tick, state.tick, entries)];
+    let replay = crate::journal::replay_batches(crate::journal::Replay::default(), &batches);
+    let bytes = replay.opaque_block_entities[&(8, 201, 8)].as_ref().unwrap();
+    let Tag::Compound(fields) = mc_nbt::read_network(&mut bytes.as_slice()).unwrap() else {
+        panic!()
+    };
+    assert_eq!(
+        mc_data::item_nbt::field(&fields, "patterns"),
+        Some(&expected)
+    );
+}
+
+#[test]
+fn refused_patterned_banner_item_use_does_not_change_custody() {
+    use crate::boundary::{Hand, PlayerInput};
+    use mc_data::{Identifier, item_stack::BannerPattern};
+
+    let (mut state, actor) = fixture(None);
+    let mut banner = crate::crafter::tests::stack(&state, "white_banner", 1);
+    banner.extended_mut().banner_patterns.push(BannerPattern {
+        pattern: Identifier::parse("minecraft:cross").unwrap(),
+        color: 14,
+    });
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] = banner.clone();
+    state
+        .world
+        .set_block(8, 201, 8, state.registry.states.stone);
+    state.world.fold_overlay();
+    crate::tick::run_tick(
+        &mut state,
+        &[PlayerInput::UseItemOn {
+            connection: ConnectionId(1),
+            hand: Hand::Main,
+            position: BlockPos { x: 8, y: 200, z: 8 },
+            face: 1,
+            cursor: [0.5, 1.0, 0.5],
+            sequence: 2,
+        }],
+    );
+    assert_eq!(state.players[&actor].inventory.slots[0], banner);
+    assert_eq!(
+        state.world.block_at(8, 201, 8),
+        Some(state.registry.states.stone)
+    );
+    assert!(
+        !state
+            .world
+            .chunk(ChunkPos { x: 0, z: 0 })
+            .unwrap()
+            .block_entities
+            .contains_key(&BlockPos { x: 8, y: 201, z: 8 })
+    );
 }

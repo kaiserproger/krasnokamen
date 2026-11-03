@@ -247,13 +247,17 @@ fn persist(state: &mut TickState, pos: BlockPos, last_slot: i32) {
     ];
     mc_data::storage_blocks::encode_items(&mut fields, &record.slots, &state.registry.items);
     fields.push(("last_interacted_slot".into(), Tag::Int(last_slot)));
-    let nbt = Tag::Compound(fields);
+    let mut nbt = Tag::Compound(fields);
     let mut bytes = Vec::new();
     mc_nbt::write_network(&mut bytes, &nbt).expect("chiseled shelf NBT encodes");
     state
         .world
         .set_opaque_block_entity(pos, Some(bytes.clone()));
     state.opaque_changes.push((pos, Some(bytes)));
+    // Persist full custody; observers only need the public comparator state.
+    if let Tag::Compound(fields) = &mut nbt {
+        fields.retain(|(key, _)| key != "Items");
+    }
     state.world.mark_block_entity_visible(pos);
     let viewers: Vec<_> = state.players.values().map(|p| p.connection).collect();
     for connection in viewers {

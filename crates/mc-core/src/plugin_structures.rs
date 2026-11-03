@@ -340,6 +340,12 @@ fn resource_plan(stages: &[ScriptStructureStagePlan]) -> ScriptInventoryResource
             .collect(),
     )
 }
+/// A settlement structure whose stages carry no material (street paving)
+/// reserves no inventory, so it has no resource plan to validate; its stages
+/// still bound the work. Every other structure needs at least one material.
+fn material_free(stages: &[ScriptStructureStagePlan]) -> bool {
+    stages.iter().all(|stage| stage.materials.is_empty())
+}
 fn planned_cells(
     state: &TickState,
     instance: &BlueprintInstance,
@@ -1357,6 +1363,18 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
                                     .is_some_and(|name| name.as_str() == resource)
                         }
                         (None, None) => cell.quantity == 0,
+                        (Some(_), None) => {
+                            cell.quantity == 0
+                                && record
+                                    .snapshot
+                                    .blueprint_id
+                                    .strip_prefix("solaris-settlements:")
+                                    .is_some_and(|blueprint| {
+                                        crate::settlements::layout::free_paving(
+                                            state, blueprint, cell.state,
+                                        )
+                                    })
+                        }
                         _ => false,
                     };
                     if !valid {
@@ -1384,7 +1402,9 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
             }
         }
         let plan = resource_plan(&record.snapshot.stages);
-        plan.validate().map_err(|_| malformed())?;
+        if record.settlement.is_none() || !material_free(&record.snapshot.stages) {
+            plan.validate().map_err(|_| malformed())?;
+        }
         if inventories::resource_plan_hash(&plan) != record.snapshot.resource_plan_hash {
             return Err(malformed());
         }

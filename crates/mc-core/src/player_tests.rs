@@ -164,6 +164,36 @@ fn total(player: &PlayerState, effects: &PlayerEffects, item: u32) -> i32 {
 }
 
 #[test]
+fn close_publishes_cursor_clear_after_inventory_and_crafting_pickup() {
+    let data = Data::new();
+    let rules = data.rules();
+    for crafting in [false, true] {
+        let mut p = player();
+        p.inventory.slots[0] = ItemStack::new(APPLE, 3);
+        let window = if crafting {
+            p.open_menu(&rules, MenuKind::CraftingTable, "Crafting".into(), &[]);
+            p.open.as_ref().unwrap().window
+        } else {
+            0
+        };
+        let slot = if crafting { 37 } else { 36 };
+        p.click(&rules, window, 0, slot, 0, ClickMode::Pickup, &mut []);
+        let menu = p.open.as_ref().unwrap_or(&p.inventory_menu);
+        assert_eq!(menu.carried, ItemStack::new(APPLE, 3));
+        let effects = p.close(&rules);
+        assert!(p.inventory_menu.carried.is_empty());
+        assert_eq!(total(&p, &effects, APPLE), 3);
+        assert!(
+            effects
+                .changes
+                .iter()
+                .any(|change| matches!(change, PlayerChange::Cursor { item: None })),
+            "closing window {window} must publish the authoritative empty cursor"
+        );
+    }
+}
+
+#[test]
 fn eating_finishes_after_the_use_time_and_leaves_the_bowl() {
     let data = Data::new();
     let rules = data.rules();

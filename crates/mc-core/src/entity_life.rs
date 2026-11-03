@@ -49,6 +49,7 @@ pub enum Harvest {
     Flower(mc_data::item_stack::StewEffect),
     ShearWool,
     ShearMooshroom,
+    ShearSnowGolem,
     Dye(u8),
 }
 
@@ -64,6 +65,44 @@ pub struct HarvestPlan {
 
 fn item(state: &TickState, name: &str) -> Option<u32> {
     state.registry.items.id_of(&Identifier::parse(name).ok()?)
+}
+
+/// Snow golem metadata defaults to a pumpkin when the accessor is absent.
+pub(crate) const SNOW_GOLEM_PUMPKIN_INDEX: u8 = 16;
+const SNOW_GOLEM_PUMPKIN_BIT: u8 = 0x10;
+
+pub(crate) fn snow_golem_pumpkin_flags(appearance: &crate::boundary::EntityAppearance) -> u8 {
+    appearance
+        .extra
+        .iter()
+        .find_map(|(index, value)| match value {
+            crate::boundary::EntityDataValue::Byte(flags) if *index == SNOW_GOLEM_PUMPKIN_INDEX => {
+                Some(*flags as u8)
+            }
+            _ => None,
+        })
+        .unwrap_or(SNOW_GOLEM_PUMPKIN_BIT)
+}
+
+pub(crate) fn set_snow_golem_pumpkin(
+    appearance: &mut crate::boundary::EntityAppearance,
+    present: bool,
+) {
+    let flags = snow_golem_pumpkin_flags(appearance);
+    let flags = if present {
+        flags | SNOW_GOLEM_PUMPKIN_BIT
+    } else {
+        flags & !SNOW_GOLEM_PUMPKIN_BIT
+    };
+    let value = crate::boundary::EntityDataValue::Byte(flags as i8);
+    match appearance
+        .extra
+        .iter_mut()
+        .find(|(index, _)| *index == SNOW_GOLEM_PUMPKIN_INDEX)
+    {
+        Some(entry) => entry.1 = value,
+        None => appearance.extra.push((SNOW_GOLEM_PUMPKIN_INDEX, value)),
+    }
 }
 
 pub fn adult(row: &ColdRow) -> bool {
@@ -619,6 +658,13 @@ fn harvest(
             }
         }
     }
+    if blueprint.name == "minecraft:snow_golem"
+        && name == "minecraft:shears"
+        && snow_golem_pumpkin_flags(&row.appearance) & SNOW_GOLEM_PUMPKIN_BIT != 0
+        && item(state, "minecraft:carved_pumpkin").is_some()
+    {
+        return Some(Harvest::ShearSnowGolem);
+    }
     if blueprint.wool {
         let wool = crate::tick::wool_of(&row.appearance);
         if name == "minecraft:shears" && adult(row) && wool & 0x10 == 0 {
@@ -668,7 +714,10 @@ fn below_harvest_cost_floors(state: &TickState, actor: EntityId, plan: &HarvestP
     if player.creative() {
         return false;
     }
-    let wear = matches!(plan.action, Harvest::ShearWool | Harvest::ShearMooshroom);
+    let wear = matches!(
+        plan.action,
+        Harvest::ShearWool | Harvest::ShearMooshroom | Harvest::ShearSnowGolem
+    );
     let rules = state.registry.item_rules();
     let breaks = wear
         && rules
@@ -845,6 +894,21 @@ pub fn apply(state: &mut TickState, actor: EntityId, plan: &HarvestPlan) {
             crate::tick::set_wool(
                 Arc::make_mut(&mut state.entities.row_mut(slot).appearance),
                 wool | 0x10,
+            );
+            state.appearance_changed.push(plan.target);
+            wear = true;
+            consume = false;
+        }
+        Harvest::ShearSnowGolem => {
+            let id = item(state, "minecraft:carved_pumpkin").expect("validated pumpkin");
+            let height = state.entities.body(slot).height;
+            state.merge_life_drops.push((
+                [pos[0], pos[1] + height * 0.85, pos[2]],
+                ItemStack::new(id, 1),
+            ));
+            set_snow_golem_pumpkin(
+                Arc::make_mut(&mut state.entities.row_mut(slot).appearance),
+                false,
             );
             state.appearance_changed.push(plan.target);
             wear = true;

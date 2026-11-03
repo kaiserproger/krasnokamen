@@ -92,6 +92,197 @@ fn route(state: &mut TickState, npc: &ScriptNpcSnapshot) -> ScriptNpcRouteStatus
     };
     (**route).clone()
 }
+#[test]
+fn deployed_item_keeps_exact_custody_across_permit_and_capacity_refusals() {
+    use mc_data::item_components::{CustomItemDefinition, ItemFacts};
+    use mc_data::item_profiles::{PhysicalItemProfile, ShieldProfile};
+    use mc_data::{Identifier, ItemStack};
+
+    let mut state = fixture();
+    let registry = Arc::get_mut(&mut state.registry).unwrap();
+    let id = |name: &str| Identifier::parse(name).unwrap();
+    registry.item_facts = registry
+        .item_facts
+        .clone()
+        .with_custom_items(
+            [CustomItemDefinition {
+                id: id("example:pavise"),
+                carrier: id("minecraft:paper"),
+                name: "Pavise".into(),
+                crafting_ingredient: None,
+                facts: ItemFacts {
+                    max_stack_size: Some(1),
+                    max_damage: Some(360),
+                    physical_profile: Some(Box::new(PhysicalItemProfile {
+                        attacks: Vec::new(),
+                        armor: None,
+                        stamina_capacity: 100.0,
+                        stamina_recovery_per_tick: 0.5,
+                        shield: Some(ShieldProfile {
+                            width_blocks: 1.0,
+                            height_blocks: 1.75,
+                            forward_offset_blocks: 0.55,
+                            bottom_offset_blocks: 0.0,
+                            activation_ticks: 8,
+                            manual: true,
+                            deployable: true,
+                            block_stamina_cost: 14.0,
+                            block_wear_per_damage_hp: 0.75,
+                            max_durability: 360,
+                            hook_disables_ticks: 30,
+                            impulse_limit: 1.2,
+                        }),
+                    })),
+                    ..ItemFacts::default()
+                },
+            }],
+            &registry.items,
+        )
+        .unwrap();
+    let npc = spawn(&mut state, "owner", "deployment-worker", 2.5);
+    let slot = owned_slot(&state, "owner", &npc.handle).unwrap();
+    let mut stack = ItemStack::new(
+        state.registry.items.id_of(&id("minecraft:paper")).unwrap(),
+        1,
+    );
+    stack.item_model = Some(Arc::new(id("example:pavise")));
+    stack.damage = Some(17);
+    Arc::make_mut(&mut state.entities.row_mut(slot).appearance).equipment[0] = Some(stack.clone());
+    let occupied = ItemStack::new(
+        state.registry.items.id_of(&id("minecraft:stone")).unwrap(),
+        1,
+    );
+    Arc::make_mut(&mut state.entities.row_mut(slot).appearance).equipment[1] =
+        Some(occupied.clone());
+
+    let route = route(&mut state, &npc);
+    let permit = ScriptNpcExecutionPermit::new(route.route_ref.clone(), route.executor_epoch);
+    let revision = records(&state, "owner").unwrap()[&npc.handle]
+        .controls
+        .revision;
+    let entity_uuid = uuid::Uuid::new_v4().to_string();
+    let deploy = |operation_id: &str, execution_permit| {
+        request(ScriptOperation::NpcOrder {
+            operation: ScriptNpcOrderOperation::DeployItem {
+                operation_id: operation_id.into(),
+                handle: npc.handle.clone(),
+                equipment_slot: 0,
+                expected_revision: revision,
+                execution_permit,
+                entity_uuid: entity_uuid.clone(),
+                support: ScriptBlockPosition::new(4, 63, 2),
+                position: ScriptPosition::try_new(4.5, 64.0, 2.5).unwrap(),
+                heading_degrees: 0,
+            },
+        })
+    };
+    let denied = execute(&mut state, "owner", &deploy("no-permit", None));
+    assert_eq!(denied.failure(), Some(ScriptOperationFailure::Busy));
+    assert_eq!(
+        state.entities.row(slot).appearance.equipment[0],
+        Some(stack.clone())
+    );
+    assert!(
+        state
+            .entities
+            .slot_of_uuid(uuid::Uuid::parse_str(&entity_uuid).unwrap())
+            .is_none()
+    );
+    assert_eq!(
+        records(&state, "owner").unwrap()[&npc.handle]
+            .controls
+            .revision,
+        revision
+    );
+    validate_permit(&state, "owner", &npc.handle, Some(&permit)).unwrap();
+
+    let deployed = execute(&mut state, "owner", &deploy("deploy", Some(permit.clone())));
+    let ScriptOperationPayload::NpcOrder { result } = deployed.payload() else {
+        panic!("deployment outcome: {deployed:?}");
+    };
+    let ScriptNpcOrderResult::ItemDeployed {
+        revision: deployed_revision,
+        ..
+    } = &**result
+    else {
+        panic!("deployment outcome: {deployed:?}");
+    };
+    let deployed_revision = *deployed_revision;
+    assert!(deployed_revision > revision);
+    assert_eq!(
+        records(&state, "owner").unwrap()[&npc.handle]
+            .controls
+            .revision,
+        deployed_revision
+    );
+    assert!(state.entities.row(slot).appearance.equipment[0].is_none());
+    let stand = state
+        .entities
+        .slot_of_uuid(uuid::Uuid::parse_str(&entity_uuid).unwrap())
+        .unwrap();
+    assert_eq!(
+        state.entities.row(stand).appearance.equipment[0],
+        Some(stack.clone())
+    );
+
+    let retract = |operation_id: &str, equipment_slot| {
+        request(ScriptOperation::NpcOrder {
+            operation: ScriptNpcOrderOperation::RetractItem {
+                operation_id: operation_id.into(),
+                handle: npc.handle.clone(),
+                expected_revision: deployed_revision,
+                execution_permit: Some(permit.clone()),
+                entity_uuid: entity_uuid.clone(),
+                equipment_slot,
+            },
+        })
+    };
+    let denied = execute(&mut state, "owner", &retract("occupied", 1));
+    assert_eq!(denied.failure(), Some(ScriptOperationFailure::Capacity));
+    assert_eq!(
+        state.entities.row(slot).appearance.equipment[1],
+        Some(occupied)
+    );
+    assert_eq!(
+        state.entities.row(stand).appearance.equipment[0],
+        Some(stack.clone())
+    );
+    assert!(state.entities.body(stand).alive);
+    assert_eq!(
+        records(&state, "owner").unwrap()[&npc.handle]
+            .controls
+            .revision,
+        deployed_revision
+    );
+    validate_permit(&state, "owner", &npc.handle, Some(&permit)).unwrap();
+
+    let retracted = execute(&mut state, "owner", &retract("retract", 0));
+    let ScriptOperationPayload::NpcOrder { result } = retracted.payload() else {
+        panic!("retraction outcome: {retracted:?}");
+    };
+    let ScriptNpcOrderResult::ItemRetracted {
+        revision: retracted_revision,
+        ..
+    } = &**result
+    else {
+        panic!("retraction outcome: {retracted:?}");
+    };
+    assert!(*retracted_revision > deployed_revision);
+    assert_eq!(
+        records(&state, "owner").unwrap()[&npc.handle]
+            .controls
+            .revision,
+        *retracted_revision
+    );
+    assert_eq!(
+        state.entities.row(slot).appearance.equipment[0],
+        Some(stack)
+    );
+    assert!(state.entities.row(stand).appearance.equipment[0].is_none());
+    assert!(!state.entities.body(stand).alive);
+    validate_permit(&state, "owner", &npc.handle, Some(&permit)).unwrap();
+    validate(&state).unwrap();
+}
 
 #[test]
 fn route_probe_shares_tick_budget_and_retries_after_global_reset() {

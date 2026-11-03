@@ -95,13 +95,41 @@ mod tests {
 
     #[test]
     fn gameplay_value_ordinals_match_java_contract() {
-        assert_eq!(GameMode::from_id(3), GameMode::Spectator);
-        assert_eq!(GameMode::Adventure.id(), 2);
-        assert_eq!(Direction::from_ordinal(5), Some(Direction::East));
-        assert_eq!(Direction::West.normal(), (-1, 0, 0));
+        for (id, mode) in [
+            (0, GameMode::Survival),
+            (1, GameMode::Creative),
+            (2, GameMode::Adventure),
+            (3, GameMode::Spectator),
+        ] {
+            assert_eq!(mode.id(), id);
+            assert_eq!(GameMode::from_id(id), mode);
+        }
+
+        for (ordinal, direction, normal) in [
+            (0, Direction::Down, (0, -1, 0)),
+            (1, Direction::Up, (0, 1, 0)),
+            (2, Direction::North, (0, 0, -1)),
+            (3, Direction::South, (0, 0, 1)),
+            (4, Direction::West, (-1, 0, 0)),
+            (5, Direction::East, (1, 0, 0)),
+        ] {
+            assert_eq!(Direction::from_ordinal(ordinal), Some(direction));
+            assert_eq!(direction.normal(), normal);
+        }
+        for invalid in [i32::MIN, -1, 6, i32::MAX] {
+            assert_eq!(Direction::from_ordinal(invalid), None);
+        }
+
+        assert_eq!(
+            InteractionHand::from_ordinal(0),
+            Some(InteractionHand::MainHand)
+        );
         assert_eq!(
             InteractionHand::from_ordinal(1),
             Some(InteractionHand::OffHand)
         );
+        for invalid in [-1, 2] {
+            assert_eq!(InteractionHand::from_ordinal(invalid), None);
+        }
     }
 }

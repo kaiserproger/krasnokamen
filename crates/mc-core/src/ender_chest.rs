@@ -102,6 +102,38 @@ pub(crate) fn is_open(state: &TickState, actor: EntityId) -> bool {
         .get(&actor)
         .is_some_and(|&(x, y, z)| is_chest(state, BlockPos { x, y, z }))
 }
+pub(crate) fn select_bundle_item(
+    state: &mut TickState,
+    actor: EntityId,
+    index: usize,
+    selected: i32,
+) {
+    let Some(player) = state.players.get_mut(&actor) else {
+        return;
+    };
+    let Ok(slots) = contents(&player.opaque_player_fields, &state.registry.items) else {
+        return;
+    };
+    let Some(mut stack) = slots.get(index).cloned() else {
+        return;
+    };
+    if let Some((_, cached)) = player
+        .ender_bundle_selections
+        .iter()
+        .find(|(slot, _)| *slot == index)
+        && *cached == stack
+    {
+        stack = cached.clone();
+    }
+    crate::inventory::bundle::select(&state.registry.item_rules(), &mut stack, selected);
+    player
+        .ender_bundle_selections
+        .retain(|(slot, _)| *slot != index);
+    if stack.extended().bundle_selection.0.is_some() {
+        player.ender_bundle_selections.push((index, stack));
+    }
+}
+
 pub(crate) fn open(
     state: &mut TickState,
     actor: EntityId,
@@ -180,6 +212,13 @@ pub(crate) fn click(
     let Ok(mut slots) = contents(&player.opaque_player_fields, &registry.items) else {
         return;
     };
+    for (index, cached) in &player.ender_bundle_selections {
+        if let Some(stack) = slots.get_mut(*index)
+            && *stack == *cached
+        {
+            *stack = cached.clone();
+        }
+    }
     let native = |player: &mut crate::player::PlayerState, slots: &mut [ItemStack]| {
         player.click(
             &registry.item_rules(),
@@ -208,6 +247,12 @@ pub(crate) fn click(
     };
     let player = state.players.get_mut(&actor).expect("chest owner");
     let effects = player.apply_inventory_transition(plan, &mut slots);
+    player.ender_bundle_selections = slots
+        .iter()
+        .enumerate()
+        .filter(|(_, stack)| stack.extended().bundle_selection.0.is_some())
+        .map(|(index, stack)| (index, stack.clone()))
+        .collect();
     if effects.container_changed {
         player.opaque_player_fields = bytes;
     }

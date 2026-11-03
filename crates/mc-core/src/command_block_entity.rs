@@ -71,6 +71,11 @@ pub(crate) fn prepare(
                 recipes_used: Arc::new(furnace.recipes_used),
             }),
         })
+    } else if kind == BlockEntityKind::ChiseledBookshelf {
+        Some(BlockEntityState {
+            slots: mc_data::storage_blocks::decode_slots(&fields, &state.registry.items, 6)?,
+            furnace: None,
+        })
     } else if let Some(size) = kind.inventory_size() {
         Some(BlockEntityState {
             slots: mc_data::storage_blocks::decode_slots(&fields, &state.registry.items, size)?,
@@ -136,10 +141,13 @@ pub(crate) fn install(state: &mut TickState, pos: BlockPos, mut image: Prepared)
 /// client record a later chunk send would carry (the block update alone leaves e.g. a
 /// sign's text empty until the chunk is re-sent).
 fn publish(state: &mut TickState, pos: BlockPos) {
+    let Some(block) = state.world.block_at(pos.x, pos.y, pos.z) else {
+        return;
+    };
     let Some(kind) = state
-        .world
-        .block_at(pos.x, pos.y, pos.z)
-        .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(block))
         .and_then(|block| BlockEntityKind::for_block(block.block.id.path()))
     else {
         return;
@@ -150,10 +158,9 @@ fn publish(state: &mut TickState, pos: BlockPos) {
     }) else {
         return;
     };
-    let Some(record) =
-        mc_world::wire::client_block_entities(chunk, &state.registry.blocks, &state.registry.items)
-            .into_iter()
-            .find(|record| record.pos == pos)
+    let Some(record) = mc_world::wire::client_block_entities(chunk, &state.registry.blocks)
+        .into_iter()
+        .find(|record| record.pos == pos)
     else {
         return;
     };
@@ -163,6 +170,15 @@ fn publish(state: &mut TickState, pos: BlockPos) {
         .map(|player| player.connection)
         .collect();
     for viewer in viewers {
+        // Reliable player changes precede ordinary world-update fanout.
+        // Create the client block entity before sending its data.
+        state.push_player(
+            viewer,
+            crate::boundary::PlayerChange::BlockResynced {
+                position: pos,
+                block,
+            },
+        );
         state.push_player(
             viewer,
             crate::boundary::PlayerChange::BlockEntityData {

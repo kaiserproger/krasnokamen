@@ -31,12 +31,6 @@ fn species_id_helpers_match_contract_and_blueprint_names() {
                 .is_some_and(|bp| bp.capabilities.hunts_monsters),
             blueprint == "minecraft:iron_golem"
         );
-        assert_eq!(
-            registry
-                .blueprint(type_id)
-                .is_some_and(|bp| bp.capabilities.hunts_villagers),
-            matches!(blueprint, "minecraft:zombie" | "minecraft:zombie_villager")
-        );
     }
 }
 

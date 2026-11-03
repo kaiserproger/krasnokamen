@@ -1442,6 +1442,66 @@ fn resolve_movement_with(
     }
 
     let raised = clip_y(body, step_height, collision_boxes);
+    let mut stepped =
+        resolve_step_candidate(body, desired, collision_boxes, resolve_horizontal, raised);
+    if axis_was_clipped(desired.x, stepped.delta.x) || axis_was_clipped(desired.z, stepped.delta.z)
+    {
+        // A full-height raise can hit a ceiling that a smaller real step clears.
+        // Only try support tops within the already-clear upward displacement.
+        let min_x = body.min_x.min(body.min_x + desired.x);
+        let max_x = body.max_x.max(body.max_x + desired.x);
+        let min_z = body.min_z.min(body.min_z + desired.z);
+        let max_z = body.max_z.max(body.max_z + desired.z);
+        let mut heights = SmallVec::<[f64; COLLISION_CANDIDATES_INLINE]>::new();
+        for obstacle in collision_boxes {
+            let height = obstacle.max_y - body.min_y;
+            if height > 0.0
+                && height < raised
+                && obstacle.min_x < max_x
+                && obstacle.max_x > min_x
+                && obstacle.min_z < max_z
+                && obstacle.max_z > min_z
+                && !heights.contains(&height)
+            {
+                heights.push(height);
+            }
+        }
+        heights.sort_unstable_by(f64::total_cmp);
+        for height in heights {
+            let candidate =
+                resolve_step_candidate(body, desired, collision_boxes, resolve_horizontal, height);
+            if horizontal_distance_squared(candidate.delta)
+                > horizontal_distance_squared(stepped.delta)
+            {
+                stepped = candidate;
+                if !axis_was_clipped(desired.x, stepped.delta.x)
+                    && !axis_was_clipped(desired.z, stepped.delta.z)
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    if horizontal_distance_squared(stepped.delta) <= horizontal_distance_squared(base) {
+        return ResolvedMovement {
+            delta: base,
+            grounded: base_grounded,
+            stepped: false,
+            collided: true,
+        };
+    }
+
+    stepped
+}
+
+fn resolve_step_candidate(
+    body: WorldAabb,
+    desired: Vec3,
+    collision_boxes: &[WorldAabb],
+    resolve_horizontal: HorizontalResolver,
+    raised: f64,
+) -> ResolvedMovement {
     let raised_box = body.moved(Vec3::new(0.0, raised, 0.0));
     let stepped_horizontal = resolve_horizontal(
         raised_box,
@@ -1456,16 +1516,6 @@ fn resolve_movement_with(
         raised + stepped_down,
         stepped_horizontal.z,
     );
-
-    if horizontal_distance_squared(stepped) <= horizontal_distance_squared(base) {
-        return ResolvedMovement {
-            delta: base,
-            grounded: base_grounded,
-            stepped: false,
-            collided: true,
-        };
-    }
-
     ResolvedMovement {
         delta: stepped,
         grounded: requested_down < 0.0 && axis_was_clipped(requested_down, stepped_down),

@@ -46,6 +46,189 @@ fn apply(state: &mut TickState, inputs: &[PlayerInput]) -> (Vec<Intent>, ChangeS
     apply_inputs(state, inputs, &mut intents, &mut changes);
     (intents, changes)
 }
+#[test]
+fn bundle_selection_input_uses_current_menu_slot_and_right_click_custody() {
+    let (mut state, entity) = fixture(false);
+    let id = |name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
+            .unwrap()
+    };
+    let mut bundle = mc_data::ItemStack::new(id("bundle"), 1);
+    let newest = mc_data::ItemStack::new(id("diamond"), 1);
+    let older = mc_data::ItemStack::new(id("apple"), 3).with_custom_name("older");
+    assert!(crate::inventory::bundle::write(
+        &state.registry.item_rules(),
+        &mut bundle,
+        &[newest.clone(), older.clone()]
+    ));
+    state.players.get_mut(&entity).unwrap().inventory.slots[0] = bundle;
+    let select = |slot, selected_index| PlayerInput::SelectBundleItem {
+        connection: SESSION,
+        slot,
+        selected_index,
+    };
+    apply(
+        &mut state,
+        &[select(36, 0), select(36, 1), select(-1, 0), select(500, 0)],
+    );
+    let state_id = state.players[&entity].inventory_menu.state_id;
+    apply(
+        &mut state,
+        &[PlayerInput::ContainerClick {
+            connection: SESSION,
+            window: 0,
+            state_id,
+            slot: 36,
+            button: 1,
+            mode: ClickMode::Pickup,
+        }],
+    );
+    let player = &state.players[&entity];
+    assert_eq!(player.inventory_menu.carried, older);
+    assert_eq!(
+        crate::inventory::bundle::read(&state.registry.item_rules(), &player.inventory.slots[0])
+            .unwrap(),
+        vec![newest]
+    );
+    assert_eq!(
+        player.inventory.slots[0].extended().bundle_selection.0,
+        None
+    );
+}
+#[test]
+fn bundle_selection_input_does_not_survive_primary_pickup_or_replacement() {
+    let (mut state, entity) = fixture(false);
+    let id = |name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
+            .unwrap()
+    };
+    let mut bundle = mc_data::ItemStack::new(id("bundle"), 1);
+    let newest = mc_data::ItemStack::new(id("diamond"), 1);
+    let older = mc_data::ItemStack::new(id("apple"), 1);
+    assert!(crate::inventory::bundle::write(
+        &state.registry.item_rules(),
+        &mut bundle,
+        &[newest.clone(), older.clone()]
+    ));
+    state.players.get_mut(&entity).unwrap().inventory.slots[0] = bundle.clone();
+    apply(
+        &mut state,
+        &[PlayerInput::SelectBundleItem {
+            connection: SESSION,
+            slot: 36,
+            selected_index: 1,
+        }],
+    );
+    for slot in [36, 37] {
+        let state_id = state.players[&entity].inventory_menu.state_id;
+        apply(
+            &mut state,
+            &[PlayerInput::ContainerClick {
+                connection: SESSION,
+                window: 0,
+                state_id,
+                slot,
+                button: 0,
+                mode: ClickMode::Pickup,
+            }],
+        );
+    }
+    state.players.get_mut(&entity).unwrap().inventory.slots[0] = bundle;
+    let state_id = state.players[&entity].inventory_menu.state_id;
+    apply(
+        &mut state,
+        &[PlayerInput::ContainerClick {
+            connection: SESSION,
+            window: 0,
+            state_id,
+            slot: 36,
+            button: 1,
+            mode: ClickMode::Pickup,
+        }],
+    );
+    assert_eq!(state.players[&entity].inventory_menu.carried, newest);
+    state
+        .players
+        .get_mut(&entity)
+        .unwrap()
+        .inventory_menu
+        .carried = mc_data::ItemStack::EMPTY;
+    let state_id = state.players[&entity].inventory_menu.state_id;
+    apply(
+        &mut state,
+        &[PlayerInput::ContainerClick {
+            connection: SESSION,
+            window: 0,
+            state_id,
+            slot: 37,
+            button: 1,
+            mode: ClickMode::Pickup,
+        }],
+    );
+    assert_eq!(state.players[&entity].inventory_menu.carried, newest);
+}
+
+#[test]
+fn bundle_selection_input_uses_open_menu_mapping_and_invalid_clears() {
+    let (mut state, entity) = fixture(false);
+    let id = |name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
+            .unwrap()
+    };
+    let mut bundle = mc_data::ItemStack::new(id("bundle"), 1);
+    assert!(crate::inventory::bundle::write(
+        &state.registry.item_rules(),
+        &mut bundle,
+        &[
+            mc_data::ItemStack::new(id("diamond"), 1),
+            mc_data::ItemStack::new(id("apple"), 1)
+        ]
+    ));
+    let player = state.players.get_mut(&entity).unwrap();
+    player.inventory.slots[0] = bundle;
+    player.open = Some(crate::inventory::Menu::new(
+        1,
+        crate::inventory::MenuKind::CraftingTable,
+    ));
+    let select = |slot, selected_index| PlayerInput::SelectBundleItem {
+        connection: SESSION,
+        slot,
+        selected_index,
+    };
+    apply(&mut state, &[select(37, 1)]);
+    assert_eq!(
+        state.players[&entity].inventory.slots[0]
+            .extended()
+            .bundle_selection
+            .0,
+        Some(1)
+    );
+    apply(&mut state, &[select(37, 999)]);
+    assert_eq!(
+        state.players[&entity].inventory.slots[0]
+            .extended()
+            .bundle_selection
+            .0,
+        None
+    );
+    apply(&mut state, &[select(37, 1), select(37, 1)]);
+    assert_eq!(
+        state.players[&entity].inventory.slots[0]
+            .extended()
+            .bundle_selection
+            .0,
+        None
+    );
+}
 
 #[test]
 fn auth_gate_competing_claimants_cannot_read_or_replace_saved_player() {

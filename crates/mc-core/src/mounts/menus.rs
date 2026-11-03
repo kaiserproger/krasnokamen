@@ -56,6 +56,33 @@ fn available(state: &TickState, actor: EntityId, target: EntityId) -> bool {
             .sum::<f64>()
             <= 64.0
 }
+pub(crate) fn select_bundle_item(
+    state: &mut TickState,
+    actor: EntityId,
+    index: usize,
+    selected: i32,
+) {
+    let Some(target) = target(state, actor) else {
+        return;
+    };
+    if !available(state, actor, target) {
+        return;
+    }
+    let Some(slot) = state.entities.slot_of(target) else {
+        return;
+    };
+    let registry = Arc::clone(&state.registry);
+    let row = state.entities.row_mut(slot);
+    let stack = match index {
+        0 => row.loot.saddle.as_deref_mut(),
+        1 => row.loot.body_armor.as_deref_mut(),
+        _ => row.entity_life.mount.cargo.get_mut(index - 2),
+    };
+    if let Some(stack) = stack {
+        crate::inventory::bundle::select(&registry.item_rules(), stack, selected);
+    }
+}
+
 fn slots(state: &TickState, slot: EntitySlot) -> Vec<ItemStack> {
     let row = state.entities.row(slot);
     let size = kind(state, slot).unwrap().container_size();
@@ -177,6 +204,17 @@ pub(crate) fn click(
         appearance.saddle = row.loot.saddle.as_deref().cloned();
         appearance.body_armor = row.loot.body_armor.as_deref().cloned();
         state.appearance_changed.push(target);
+    } else {
+        let row = state.entities.row_mut(slot);
+        if let Some(stack) = row.loot.saddle.as_deref_mut() {
+            crate::inventory::bundle::copy_selection(stack, &contents[0]);
+        }
+        if let Some(stack) = row.loot.body_armor.as_deref_mut() {
+            crate::inventory::bundle::copy_selection(stack, &contents[1]);
+        }
+        for (stack, source) in row.entity_life.mount.cargo.iter_mut().zip(&contents[2..]) {
+            crate::inventory::bundle::copy_selection(stack, source);
+        }
     }
     crate::tick::apply_player_effects(state, connection, actor, effects, changes);
     if changed {

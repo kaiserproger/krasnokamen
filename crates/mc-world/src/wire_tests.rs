@@ -1,9 +1,9 @@
 use super::*;
 use crate::block::BlockStateId;
-use crate::chunk::{Chunk, ChunkGeometry, ChunkPos, FurnaceSlot, Heightmap};
+use crate::chunk::{ChestBlockEntity, Chunk, ChunkGeometry, ChunkPos, FurnaceSlot, Heightmap};
 use mc_data::Registry;
 use mc_data::blocks::{BlockReport, BlockStateReport};
-use mc_data::items::{ItemRegistry, ItemReport};
+use mc_nbt::{ListTag, tag_type};
 use std::collections::BTreeMap;
 
 const AIR: BlockStateId = BlockStateId(0);
@@ -100,13 +100,6 @@ fn fluid_block_registry() -> BlockRegistry {
         single(10, "minecraft:tall_seagrass"),
     ])
     .unwrap()
-}
-
-fn item_registry() -> ItemRegistry {
-    ItemRegistry::from_report(&[ItemReport {
-        id: Identifier::parse("minecraft:stone").unwrap(),
-        protocol_id: 9,
-    }])
 }
 
 // ---- byte-level assertions ----
@@ -233,7 +226,6 @@ fn custom_geometry_encodes_chunk_data_and_baked_light_sections() {
 #[test]
 fn client_block_entities_emit_stripped_chest_update_tag() {
     let registry = air_chest_registry();
-    let items = item_registry();
     let mut chunk = empty_chunk();
     let pos = BlockPos { x: 2, y: 64, z: 3 };
     chunk.set_block(2, 64, 3, BlockStateId(1)).unwrap();
@@ -250,7 +242,7 @@ fn client_block_entities_emit_stripped_chest_update_tag() {
     };
     chunk.chests.insert(pos, chest);
 
-    let records = client_block_entities(&chunk, &registry, &items);
+    let records = client_block_entities(&chunk, &registry);
 
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].pos, pos);
@@ -258,12 +250,7 @@ fn client_block_entities_emit_stripped_chest_update_tag() {
     let Tag::Compound(fields) = &records[0].nbt else {
         panic!("expected compound update tag");
     };
-    assert!(
-        fields
-            .iter()
-            .all(|(key, _)| !matches!(key.as_str(), "id" | "x" | "y" | "z"))
-    );
-    assert!(fields.iter().any(|(key, _)| key == "Items"));
+    assert!(fields.is_empty());
 }
 
 #[test]
@@ -336,7 +323,7 @@ fn client_block_entities_use_vanilla_trial_and_vault_update_tags() {
     mc_nbt::write_network(&mut bytes, &vault).unwrap();
     chunk.block_entities.insert(vault_pos, bytes);
 
-    let records = client_block_entities(&chunk, &registry, &item_registry());
+    let records = client_block_entities(&chunk, &registry);
     let mut encoded = Vec::new();
     mc_nbt::write_network(&mut encoded, &records[0].nbt).unwrap();
     let decoded = mc_nbt::read_network(&mut encoded.as_slice()).unwrap();
@@ -361,7 +348,6 @@ fn client_block_entities_use_vanilla_trial_and_vault_update_tags() {
 #[test]
 fn client_block_entities_strip_solaris_campfire_persistence_fields() {
     let registry = air_chest_registry();
-    let items = item_registry();
     let mut chunk = empty_chunk();
     let pos = BlockPos { x: 2, y: 64, z: 3 };
     let tag = Tag::Compound(vec![
@@ -391,7 +377,7 @@ fn client_block_entities_strip_solaris_campfire_persistence_fields() {
     mc_nbt::write_network(&mut bytes, &tag).expect("encode campfire block entity");
     chunk.block_entities.insert(pos, bytes);
 
-    let records = client_block_entities(&chunk, &registry, &items);
+    let records = client_block_entities(&chunk, &registry);
 
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].type_name.as_str(), "minecraft:campfire");
@@ -470,7 +456,6 @@ fn air_bed_registry() -> BlockRegistry {
 #[test]
 fn client_block_entities_synthesize_bed_records_from_block_states() {
     let registry = air_bed_registry();
-    let items = item_registry();
     let bed_state = |part: &str| {
         registry
             .by_name_and_props(
@@ -489,7 +474,7 @@ fn client_block_entities_synthesize_bed_records_from_block_states() {
     chunk.set_block(2, 64, 3, bed_state("foot")).unwrap();
     chunk.set_block(2, 64, 2, bed_state("head")).unwrap();
 
-    let records = client_block_entities(&chunk, &registry, &items);
+    let records = client_block_entities(&chunk, &registry);
 
     let mut positions: Vec<_> = records.iter().map(|record| record.pos).collect();
     positions.sort_by_key(|pos| (pos.x, pos.y, pos.z));
@@ -511,7 +496,6 @@ fn client_block_entities_synthesize_bed_records_from_block_states() {
 #[test]
 fn stored_bed_block_entities_are_not_duplicated_by_synthesis() {
     let registry = air_bed_registry();
-    let items = item_registry();
     let bed_state = |part: &str| {
         registry
             .by_name_and_props(
@@ -539,7 +523,7 @@ fn stored_bed_block_entities_are_not_duplicated_by_synthesis() {
     mc_nbt::write_network(&mut bytes, &tag).expect("encode bed block entity");
     chunk.block_entities.insert(foot_pos, bytes);
 
-    let records = client_block_entities(&chunk, &registry, &items);
+    let records = client_block_entities(&chunk, &registry);
 
     assert_eq!(records.len(), 2);
     assert_eq!(
@@ -555,7 +539,7 @@ fn stored_bed_block_entities_are_not_duplicated_by_synthesis() {
 #[test]
 fn client_block_entities_leave_bedless_chunks_empty() {
     let chunk = empty_chunk();
-    let records = client_block_entities(&chunk, &air_bed_registry(), &item_registry());
+    let records = client_block_entities(&chunk, &air_bed_registry());
     assert!(records.is_empty());
 }
 
@@ -767,7 +751,7 @@ fn encodes_non_empty_block_section_into_present_mask() {
 fn block_palette_switches_to_direct_mode_past_256_entries() {
     // M5.c.3: build a section with 260 distinct synthetic states
     // and ensure the wire encoder emits the GlobalPalette
-    // (direct) shape — bits_per_entry first byte = DIRECT_BITS,
+    // (direct) shape — bits_per_entry is the global registry width,
     // VarInt palette length absent, raw packed long array follows.
     use crate::section::ChunkSection;
     let mut section = ChunkSection::filled(AIR, AIR);
@@ -780,12 +764,12 @@ fn block_palette_switches_to_direct_mode_past_256_entries() {
     }
 
     let mut buf = Vec::new();
-    encode_block_palette(&mut buf, &section, &|state| state);
+    encode_block_palette(&mut buf, &section, 15, &|state| state);
 
-    assert_eq!(buf[0], DIRECT_BITS, "first byte = direct bits");
+    assert_eq!(buf[0], 15, "first byte = direct bits");
     // No VarInt palette length: the next bytes are the packed
     // long array. Compute the expected long count.
-    let bits = DIRECT_BITS as usize;
+    let bits = 15;
     let expected_longs = SECTION_VOLUME.div_ceil(64 / bits);
     assert_eq!(
         buf.len() - 1,
@@ -809,7 +793,7 @@ fn block_palette_uses_vanilla_fixed_longs_for_five_bit_indirect() {
     }
 
     let mut buf = Vec::new();
-    encode_block_palette(&mut buf, &section, &|state| state);
+    encode_block_palette(&mut buf, &section, 15, &|state| state);
 
     assert_eq!(buf[0], 5, "17 states require five bits");
     let mut offset = 1;
@@ -886,7 +870,7 @@ fn block_palette_stays_indirect_for_small_palettes() {
     section.set(1, 0, 0, BlockStateId(2));
 
     let mut buf = Vec::new();
-    encode_block_palette(&mut buf, &section, &|state| state);
+    encode_block_palette(&mut buf, &section, 15, &|state| state);
 
     assert!(
         buf[0] < DIRECT_BITS_THRESHOLD,
@@ -915,11 +899,17 @@ fn decorated_pot_26_3_chunk_projects_old_sherds_as_named_templates() {
                 ("count".into(), Tag::Int(3)),
             ]),
         ),
+        (
+            "LootTable".into(),
+            Tag::String("minecraft:chests/simple_dungeon".into()),
+        ),
+        ("LootTableSeed".into(), Tag::Long(42)),
+        ("custom_public_field".into(), Tag::String("visible".into())),
     ]);
     let mut bytes = Vec::new();
     mc_nbt::write_network(&mut bytes, &tag).unwrap();
     chunk.block_entities.insert(pos, bytes.clone());
-    let records = client_block_entities(&chunk, &air_chest_registry(), &item_registry());
+    let records = client_block_entities(&chunk, &air_chest_registry());
     let pot = records.iter().find(|record| record.pos == pos).unwrap();
     let Tag::Compound(fields) = &pot.nbt else {
         panic!()
@@ -942,18 +932,60 @@ fn decorated_pot_26_3_chunk_projects_old_sherds_as_named_templates() {
             Some(&Tag::String(item.into()))
         );
     }
+    for key in ["item", "LootTable", "LootTableSeed"] {
+        assert!(
+            mc_data::item_nbt::field(fields, key).is_none(),
+            "pot contents must not disclose {key}"
+        );
+    }
     assert_eq!(
-        mc_data::item_nbt::field(fields, "item"),
-        mc_data::item_nbt::field(
-            match &tag {
-                Tag::Compound(fields) => fields,
-                _ => unreachable!(),
-            },
-            "item"
-        )
+        mc_data::item_nbt::field(fields, "custom_public_field"),
+        Some(&Tag::String("visible".into()))
     );
     assert_eq!(
         chunk.block_entities[&pos], bytes,
         "wire projection cannot mutate native custody"
     );
+}
+
+#[test]
+fn decorated_pot_wire_preserves_nested_sherd_templates() {
+    let mut chunk = empty_chunk();
+    let pos = BlockPos { x: 1, y: 64, z: 1 };
+    let sherds = Tag::Compound(vec![(
+        "back".into(),
+        Tag::Compound(vec![
+            (
+                "id".into(),
+                Tag::String("minecraft:angler_pottery_sherd".into()),
+            ),
+            (
+                "components".into(),
+                Tag::Compound(vec![(
+                    "item".into(),
+                    Tag::Compound(vec![("id".into(), Tag::String("minecraft:brick".into()))]),
+                )]),
+            ),
+        ]),
+    )]);
+    let tag = Tag::Compound(vec![
+        ("id".into(), Tag::String("minecraft:decorated_pot".into())),
+        ("sherds".into(), sherds.clone()),
+        ("item".into(), Tag::String("secret".into())),
+        ("LootTable".into(), Tag::String("secret_loot".into())),
+        ("LootTableSeed".into(), Tag::Long(42)),
+    ]);
+    let mut bytes = Vec::new();
+    mc_nbt::write_network(&mut bytes, &tag).unwrap();
+    chunk.block_entities.insert(pos, bytes.clone());
+    let records = client_block_entities(&chunk, &air_chest_registry());
+    let pot = records.iter().find(|record| record.pos == pos).unwrap();
+    let Tag::Compound(fields) = &pot.nbt else {
+        panic!()
+    };
+    assert_eq!(mc_data::item_nbt::field(fields, "sherds"), Some(&sherds));
+    for key in ["item", "LootTable", "LootTableSeed"] {
+        assert!(mc_data::item_nbt::field(fields, key).is_none());
+    }
+    assert_eq!(chunk.block_entities[&pos], bytes);
 }

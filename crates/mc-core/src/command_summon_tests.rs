@@ -43,6 +43,30 @@ fn persistence_required_iron_golem_template_and_checkpoint_are_native() {
 }
 
 #[test]
+fn snow_golem_pumpkin_summon_sets_authoritative_metadata() {
+    for (nbt, expected) in [("{Pumpkin:0b}", 0), ("{Pumpkin:1b}", 0x10), ("{}", 0x10)] {
+        let (state, id) = summon("snow_golem", nbt);
+        let slot = state.entities.slot_of(id).unwrap();
+        assert_eq!(
+            crate::entity_life::snow_golem_pumpkin_flags(&state.entities.row(slot).appearance)
+                & 0x10,
+            expected,
+        );
+        let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+        let record = chunks
+            .values()
+            .flat_map(|chunk| &chunk.entities)
+            .find(|record| record.uuid == state.entities.row(slot).uuid)
+            .unwrap();
+        assert!(
+            record
+                .extra_fields
+                .contains(&("Pumpkin".into(), Tag::Byte(i8::from(expected != 0))))
+        );
+    }
+}
+
+#[test]
 fn no_ai_is_applied() {
     let (state, id) = summon("cow", "{NoAI:1b}");
     assert!(

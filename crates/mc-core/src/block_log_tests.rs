@@ -217,6 +217,62 @@ fn chat(drains: &Drains, connection: ConnectionId) -> Vec<String> {
 }
 
 #[test]
+fn restored_sensor_retains_its_frequency_and_active_deadline() {
+    let mut rig = Rig::new();
+    let pos = rig.cell(0);
+    let name = mc_data::Identifier::parse("minecraft:sculk_sensor").unwrap();
+    let default = rig.state.registry.blocks.block(&name).unwrap().default;
+    let mut props = rig
+        .state
+        .registry
+        .blocks
+        .by_id(default)
+        .unwrap()
+        .properties
+        .clone();
+    for (key, value) in &mut props {
+        if key == "sculk_sensor_phase" {
+            *value = "active".into();
+        } else if key == "power" {
+            *value = "10".into();
+        }
+    }
+    let active = rig
+        .state
+        .registry
+        .blocks
+        .by_name_and_props(&name, &props)
+        .unwrap()
+        .0;
+    let image = mc_nbt::Tag::Compound(vec![
+        (
+            "id".into(),
+            mc_nbt::Tag::String("minecraft:sculk_sensor".into()),
+        ),
+        ("last_vibration_frequency".into(), mc_nbt::Tag::Int(7)),
+        (
+            "solaris:phase_until".into(),
+            mc_nbt::Tag::Long((rig.state.tick + 20) as i64),
+        ),
+    ]);
+    let mut nbt = Vec::new();
+    mc_nbt::write_network(&mut nbt, &image).unwrap();
+    rig.state.block_log.restores.push((
+        pos,
+        EntityImage {
+            slots: None,
+            nbt: Some(nbt),
+        },
+    ));
+    rig.state.write_block(pos, active);
+    crate::dimensions::commands::commit(&mut rig.state, &mut Default::default());
+    assert_eq!(crate::sculk::comparator(&rig.state, pos), Some(7));
+    rig.state.tick += 1;
+    crate::sculk::run(&mut rig.state, &mut Vec::new());
+    assert_eq!(crate::sculk::comparator(&rig.state, pos), Some(7));
+}
+
+#[test]
 fn grief_rollback_restores_blocks_and_chests_exactly_and_restore_reapplies() {
     let mut rig = Rig::new();
     let (stone_cell, dirt_cell, chest_cell, broken_cell) =

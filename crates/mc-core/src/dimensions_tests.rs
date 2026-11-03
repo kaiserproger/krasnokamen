@@ -2383,3 +2383,53 @@ fn shared_destroy_command_settles_open_chest_before_the_next_click() {
     crate::tick::run_tick(&mut state, &[click]);
     assert_eq!(diamonds(&state, alice), 5);
 }
+
+#[test]
+fn rejoin_child_dimension_keeps_initial_client_locale() {
+    for (split, include_view) in [(false, true), (true, true), (false, false)] {
+        let (mut state, _, _) = worlds();
+        crate::tick::run_tick(
+            &mut state,
+            &[PlayerInput::Leave {
+                connection: ConnectionId(2),
+            }],
+        );
+        let connection = ConnectionId(4);
+        let mut metadata = Vec::new();
+        if include_view {
+            metadata.push(PlayerInput::SetViewDistance {
+                connection,
+                view_distance: 5,
+            });
+        }
+        metadata.push(PlayerInput::SetLocale {
+            connection,
+            locale: "ru_ru".into(),
+        });
+        let join = PlayerInput::Join {
+            connection,
+            uuid: uuid::Uuid::from_u128(2),
+            name: "Bob".into(),
+            permission_level: 0,
+        };
+        if split {
+            crate::tick::run_tick(&mut state, &metadata);
+            crate::tick::run_tick(&mut state, &[join]);
+        } else {
+            metadata.push(join);
+            crate::tick::run_tick(&mut state, &metadata);
+        }
+        let nether = &state.other_dimensions[&Dimension::Nether];
+        assert!(nether.connections.entity_of(connection).is_some());
+        assert_eq!(
+            nether.connections.locale_of(connection),
+            Some("ru_ru"),
+            "split={split}, view={include_view}"
+        );
+        assert_eq!(
+            nether.connections.view_distance_of(connection),
+            include_view.then_some(5)
+        );
+        assert_eq!(state.connections.locale_of(connection), None);
+    }
+}

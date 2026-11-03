@@ -5,6 +5,30 @@ fn stack(items: &ItemRegistry, name: &str, count: i32) -> ItemStack {
 }
 
 #[test]
+fn smithing_advertised_inputs_match_server_slot_admission() {
+    let items = crate::items::solaris_required_items();
+    let mut tags = crate::tags::solaris_required_item_tags(&items);
+    let custom = stack(&items, "minecraft:stick", 1);
+    tags.registries
+        .entry(identifier("minecraft:item"))
+        .or_default()
+        .entry(identifier("minecraft:netherite_tool_materials"))
+        .or_default()
+        .push(custom.item_id as i32);
+    let sets = smithing_input_ids(&items, &tags);
+    for (name, id) in items.iter() {
+        let stack = ItemStack::new(id, 1);
+        for (slot, set) in sets.iter().enumerate() {
+            assert_eq!(
+                set.binary_search(&(id as i32)).is_ok(),
+                smithing_input_allowed(slot, &stack, &items, &tags),
+                "{name} slot {slot}"
+            );
+        }
+    }
+}
+
+#[test]
 fn station_brewing_transforms_contents_and_container_without_inventing_invalid_mix() {
     let items = crate::items::solaris_required_items();
     let mut bottle = stack(&items, "minecraft:potion", 1);

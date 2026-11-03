@@ -10,8 +10,8 @@ use mc_protocol::packets::play::{
     RecipeBookIngredient, RecipeBookSlotDisplay, RecipePropertySet, StonecutterRecipeEntry,
 };
 
-/// The join burst's recipe packets: `UpdateRecipes` (stonecutter list and
-/// campfire admission inputs) and a `RecipeBookAdd` replacing the client's book.
+/// The join burst's recipe packets: station admission sets, stonecutter recipes,
+/// and a `RecipeBookAdd` replacing the client's book.
 pub struct RecipePackets {
     pub update: ClientboundUpdateRecipes,
     pub book: ClientboundRecipeBookAdd,
@@ -52,8 +52,23 @@ pub(crate) fn initial_recipe_update(
         .iter()
         .filter_map(|recipe| stonecutter_recipe_entry(recipe, items, item_facts))
         .collect();
+    let smithing_inputs = mc_data::stations::smithing_input_ids(items, tags);
+    let mut item_sets = vec![campfire_inputs(recipes, items, tags)];
+    for (key, item_ids) in [
+        "minecraft:smithing_template",
+        "minecraft:smithing_base",
+        "minecraft:smithing_addition",
+    ]
+    .into_iter()
+    .zip(smithing_inputs)
+    {
+        item_sets.push(RecipePropertySet {
+            key: Identifier::parse(key).expect("static id"),
+            item_ids,
+        });
+    }
     ClientboundUpdateRecipes {
-        item_sets: vec![campfire_inputs(recipes, items, tags)],
+        item_sets,
         stonecutter_recipes,
     }
 }
@@ -340,6 +355,53 @@ mod tests {
         let item = |name| items.id_of(&Identifier::parse(name).unwrap()).unwrap() as i32;
         assert!(inputs.item_ids.contains(&item("minecraft:chicken")));
         assert!(!inputs.item_ids.contains(&item("minecraft:wheat")));
+        let mut body = Vec::new();
+        update.encode(&mut body).unwrap();
+        assert_eq!(
+            ClientboundUpdateRecipes::decode(&mut body.as_slice()).unwrap(),
+            update
+        );
+    }
+
+    #[test]
+    fn join_smithing_property_sets_admit_recipe_inputs_by_slot() {
+        let items = mc_data::items::solaris_required_items();
+        let facts = mc_data::item_components::solaris_required_item_facts();
+        let tags = mc_data::tags::solaris_required_item_tags(&items);
+        let recipes = mc_data::recipes::solaris_required_recipes();
+        let update = initial_recipe_update(&recipes, &items, &facts, &tags);
+        let item = |name| items.id_of(&Identifier::parse(name).unwrap()).unwrap() as i32;
+        for (key, accepted, rejected) in [
+            (
+                "minecraft:smithing_template",
+                "minecraft:netherite_upgrade_smithing_template",
+                "minecraft:diamond_sword",
+            ),
+            (
+                "minecraft:smithing_base",
+                "minecraft:diamond_sword",
+                "minecraft:netherite_ingot",
+            ),
+            (
+                "minecraft:smithing_addition",
+                "minecraft:netherite_ingot",
+                "minecraft:diamond_sword",
+            ),
+        ] {
+            let set = update
+                .item_sets
+                .iter()
+                .find(|set| set.key.as_str() == key)
+                .unwrap();
+            assert!(
+                set.item_ids.contains(&item(accepted)),
+                "{key} must admit {accepted}"
+            );
+            assert!(
+                !set.item_ids.contains(&item(rejected)),
+                "{key} must reject {rejected}"
+            );
+        }
         let mut body = Vec::new();
         update.encode(&mut body).unwrap();
         assert_eq!(

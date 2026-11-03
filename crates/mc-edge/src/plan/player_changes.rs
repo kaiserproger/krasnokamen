@@ -466,7 +466,52 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                 &ClientboundBlockEntityData {
                     position: pack_block_pos(position.x, position.y, position.z),
                     block_entity_type: *block_entity_type as i32,
-                    nbt: nbt.clone(),
+                    nbt: if [
+                        mc_data::block_entity_kinds::BlockEntityKind::Chest.protocol_id(),
+                        mc_data::block_entity_kinds::BlockEntityKind::TrappedChest.protocol_id(),
+                        mc_data::block_entity_kinds::BlockEntityKind::Barrel.protocol_id(),
+                    ]
+                    .contains(block_entity_type)
+                    {
+                        mc_nbt::Tag::Compound(Vec::new())
+                    } else if [
+                        mc_data::block_entity_kinds::BlockEntityKind::Furnace.protocol_id(),
+                        mc_data::block_entity_kinds::BlockEntityKind::Smoker.protocol_id(),
+                        mc_data::block_entity_kinds::BlockEntityKind::BlastFurnace.protocol_id(),
+                    ]
+                    .contains(block_entity_type)
+                    {
+                        match nbt {
+                            mc_nbt::Tag::Compound(fields) => mc_nbt::Tag::Compound(
+                                fields
+                                    .iter()
+                                    .filter(|(key, _)| key != "Items")
+                                    .cloned()
+                                    .collect(),
+                            ),
+                            _ => nbt.clone(),
+                        }
+                    } else if *block_entity_type
+                        == mc_data::block_entity_kinds::BlockEntityKind::DecoratedPot.protocol_id()
+                    {
+                        match nbt {
+                            mc_nbt::Tag::Compound(fields) => mc_nbt::Tag::Compound(
+                                fields
+                                    .iter()
+                                    .filter(|(key, _)| {
+                                        !matches!(
+                                            key.as_str(),
+                                            "item" | "LootTable" | "LootTableSeed"
+                                        )
+                                    })
+                                    .cloned()
+                                    .collect(),
+                            ),
+                            _ => nbt.clone(),
+                        }
+                    } else {
+                        nbt.clone()
+                    },
                 },
             );
             let chunk = (position.x.div_euclid(16), position.z.div_euclid(16));

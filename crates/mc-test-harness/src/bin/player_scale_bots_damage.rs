@@ -26,6 +26,39 @@ struct MechanicProjectileHit {
     source_type_id: i32,
 }
 impl Mechanics {
+    fn observed_damage_source(&self, bot: u32, wire_id: i32) -> Value {
+        let Some(entity) = self.wire_ids.get(&wire_id)
+            .and_then(|uuid| self.entities.get(uuid))
+            .filter(|entity| entity.visible_to(bot)) else { return Value::Null; };
+        let position = entity.reader_positions.get(bot as usize).copied().flatten()
+            .or_else(|| (entity.observer_bot == bot).then_some(entity.final_position));
+        json!({"entity_id":wire_id,"uuid":entity.uuid,"kind":entity.kind,
+            "received_position":position,"position_scope":"last received, not necessarily fresh"})
+    }
+
+    fn first_self_damage(&mut self, bot: u32, packet: &ClientboundDamageEvent,
+        predicted_position: [f64; 3], window: Option<&str>) -> Option<Value> {
+        let window = window?;
+        if self.players[bot as usize].first_self_damage.is_some() { return None; }
+        let victim_observations: Vec<_> = self.wire_ids.get(&packet.entity_id)
+            .and_then(|uuid| self.entities.get(uuid))
+            .into_iter().flat_map(|entity| entity.reader_positions.iter().enumerate()
+                .filter_map(move |(observer, position)| position.filter(|_| entity.visible_to(observer as u32))
+                    .map(|position| json!({"observer_bot":observer,"position":position}))))
+            .collect();
+        let event = json!({"event":"first_self_damage","bot":bot,"window":window,
+            "elapsed_us":self.measurement_epoch.map(|epoch| epoch.elapsed().as_micros()),
+            "victim_entity_id":packet.entity_id,"victim_client_predicted_position":predicted_position,
+            "victim_received_positions":victim_observations,
+            "source_type_id":packet.source_type_id,"source_direct_id":packet.source_direct_id,
+            "source_cause_id":packet.source_cause_id,"packet_source_position":packet.source_position,
+            "direct":self.observed_damage_source(bot, packet.source_direct_id),
+            "cause":self.observed_damage_source(bot, packet.source_cause_id),
+            "scope":"decoded packet and last visible source image; victim position is client-predicted"});
+        self.players[bot as usize].first_self_damage = Some(event.clone());
+        Some(event)
+    }
+
     fn damage_event(
         &mut self,
         bot: u32,

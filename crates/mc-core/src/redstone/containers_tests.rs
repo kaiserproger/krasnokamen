@@ -196,6 +196,69 @@ fn hopper_pushes_and_pulls_once_then_waits_eight_ticks() {
 }
 
 #[test]
+fn hopper_composting_consumes_seeds_even_when_level_does_not_advance() {
+    let mut state = state();
+    let composter = super::super::offset(HOPPER, (0, -1, 0)).unwrap();
+    place(
+        &mut state,
+        HOPPER,
+        "hopper",
+        &[("facing", "down"), ("enabled", "true")],
+    );
+    let mut advanced = 0;
+    let mut unchanged = 0;
+    for sample in 0..32 {
+        place(&mut state, composter, "composter", &[("level", "1")]);
+        let seed = item(&state, "wheat_seeds", 1);
+        set_slot(&mut state, HOPPER, 0, seed);
+        state.tick = sample * 8;
+        step(&mut state);
+        assert!(state.block_entities[&key(HOPPER)].slots[0].is_empty());
+        match crate::composter::output_level(&state, composter) {
+            Some(1) => unchanged += 1,
+            Some(2) => advanced += 1,
+            other => panic!("unexpected composter level: {other:?}"),
+        }
+    }
+    assert!(
+        unchanged > 0,
+        "failed compost rolls must consume seeds without advancing"
+    );
+    assert!(
+        advanced > 0,
+        "successful compost rolls must advance the level"
+    );
+}
+
+#[test]
+fn hopper_composting_skips_ineligible_items_and_keeps_input_when_full() {
+    let mut state = state();
+    let composter = super::super::offset(HOPPER, (0, -1, 0)).unwrap();
+    place(
+        &mut state,
+        HOPPER,
+        "hopper",
+        &[("facing", "down"), ("enabled", "true")],
+    );
+    place(&mut state, composter, "composter", &[("level", "0")]);
+    let stone = item(&state, "stone", 1);
+    let seed = item(&state, "wheat_seeds", 1);
+    set_slot(&mut state, HOPPER, 0, stone);
+    set_slot(&mut state, HOPPER, 1, seed.clone());
+    step(&mut state);
+    assert_eq!(state.block_entities[&key(HOPPER)].slots[0].count, 1);
+    assert!(state.block_entities[&key(HOPPER)].slots[1].is_empty());
+    assert_eq!(crate::composter::output_level(&state, composter), Some(1));
+
+    place(&mut state, composter, "composter", &[("level", "7")]);
+    set_slot(&mut state, HOPPER, 1, seed);
+    state.tick = 8;
+    step(&mut state);
+    assert_eq!(state.block_entities[&key(HOPPER)].slots[1].count, 1);
+    assert_eq!(crate::composter::output_level(&state, composter), Some(7));
+}
+
+#[test]
 fn disabled_hopper_keeps_custody_without_restarting_cooldown() {
     let mut state = state();
     let chest = super::super::offset(HOPPER, (1, 0, 0)).unwrap();

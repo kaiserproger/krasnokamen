@@ -914,7 +914,8 @@ pub fn vanilla_blueprints(
         },
         MobParams {
             max_health: 20.0,
-            speed: 4.3,
+            // Modest gameplay tuning from 4.3; this is not a vanilla parity claim.
+            speed: 3.8,
             attack_damage: 3.0,
             pickup_delay: 0,
             breed_cooldown: 0,
@@ -940,7 +941,8 @@ pub fn vanilla_blueprints(
         },
         MobParams {
             max_health: 16.0,
-            speed: 5.6,
+            // Modest gameplay tuning from 5.6; validate in a real actor scene.
+            speed: 5.0,
             attack_damage: 2.0,
             pickup_delay: 0,
             breed_cooldown: 0,
@@ -1418,7 +1420,10 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
             _ => SizeProfile::None,
         },
         equine_body_armor: matches!(name, "minecraft:horse" | "minecraft:zombie_horse"),
-        hunts_villagers: matches!(name, "minecraft:zombie" | "minecraft:zombie_villager"),
+        hunts_villagers: matches!(
+            name,
+            "minecraft:zombie" | "minecraft:zombie_villager" | "minecraft:husk"
+        ),
         hunts_monsters: name == "minecraft:iron_golem",
         hunts_living: name == "minecraft:zoglin",
         ignored_by_monster_hunters: name == "minecraft:creeper",

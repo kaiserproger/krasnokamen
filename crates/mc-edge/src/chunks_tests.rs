@@ -42,7 +42,6 @@ fn encodes_air_chunk_packet() {
         EncodeInputs {
             biomes: &biomes,
             blocks: &blocks,
-            items: &items(),
             block_entity_types: &be_types(),
         },
     )
@@ -72,7 +71,6 @@ fn unknown_biome_fails_closed() {
             EncodeInputs {
                 biomes: &biomes,
                 blocks: &blocks,
-                items: &items(),
                 block_entity_types: &be_types(),
             },
         )
@@ -283,3 +281,6 @@ fn stationary_viewer_sim_swing_sends_no_wire() {
         assert_eq!(repairs, 0, "sim {sim}: 0 repairs");
     }
 }
+
+#[path = "container_wire_tests.rs"]
+mod container_wire_tests;

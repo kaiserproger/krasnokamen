@@ -442,6 +442,11 @@ fn play_packet_ids_match_the_vanilla_report() {
         ),
         (
             "serverbound",
+            "minecraft:bundle_item_selected",
+            ServerboundSelectBundleItem::ID,
+        ),
+        (
+            "serverbound",
             "minecraft:container_button_click",
             ServerboundContainerButtonClick::ID,
         ),

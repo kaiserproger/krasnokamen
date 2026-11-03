@@ -104,13 +104,19 @@ pub(super) fn unchanged_entity_footprint(
     pos: [f64; 3],
     half_width: f64,
     chunk_revision: impl Fn(i32, i32) -> u64,
+    pending: &[ChunkPos],
     unchanged_since: u64,
 ) -> bool {
     let half = half_width + 0.001;
     let chunk = |v: f64| mc_physics::mth::floor_i32(v).div_euclid(16);
     let (x0, x1) = (chunk(pos[0] - half), chunk(pos[0] + half));
     let (z0, z1) = (chunk(pos[2] - half), chunk(pos[2] + half));
-    (x0..=x1).all(|cx| (z0..=z1).all(|cz| chunk_revision(cx, cz) <= unchanged_since))
+    (x0..=x1).all(|cx| {
+        (z0..=z1).all(|cz| {
+            chunk_revision(cx, cz) <= unchanged_since
+                && !pending.contains(&ChunkPos { x: cx, z: cz })
+        })
+    })
 }
 
 pub(super) fn motion_thinks(tick: u64, flags: u16, period: u8) -> bool {
@@ -134,6 +140,12 @@ pub(super) fn early_entity_rest(
         || (motion_thinks(view.tick, flags, period)
             && flags & crate::entities::MOTION_WANDER_REST == 0
             && !(targets_empty && flags & crate::entities::MOTION_TARGETLESS_WANDER_REST != 0))
+        || (flags & MOTION_EFFECTS != 0
+            && view
+                .entities
+                .row(slot)
+                .active_effects
+                .has(crate::effects::EffectId::Levitation))
         || !view.ground[slot.0 as usize]
         || view.velocities[slot.0 as usize] != [0.0; 3]
     {
@@ -168,6 +180,7 @@ pub(super) fn early_entity_rest(
         view.positions[slot.0 as usize],
         body.half_width,
         |cx, cz| view.world.chunk_revision(cx, cz),
+        view.world.pending_block_chunks(),
         unchanged_since,
     )
 }
@@ -1195,7 +1208,9 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         }
     }
     state.seq_counter = seq;
-    crate::item_motion::merge_neighbours(state);
+    if sim {
+        crate::item_motion::merge_neighbours(state);
+    }
     let commit_time = commit_start.elapsed();
     let post_start = std::time::Instant::now();
     // Pickup intents: players collect mature item entities in reach.
@@ -1390,11 +1405,13 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
         if row.movement == crate::blueprint::MovementClass::Walker
             && row.ground
             && row.vel == [0.0; 3]
+            && row.levitation <= 0.0
             && row.horizontal_impulse == [0.0; 2]
             && unchanged_entity_footprint(
                 row.pos,
                 row.half_width,
                 ctx.chunk_revision,
+                ctx.world.pending_block_chunks(),
                 ctx.unchanged_since,
             )
         {
@@ -1760,6 +1777,28 @@ pub(super) fn collect_pickup_intents(state: &TickState, intents: &mut Vec<Intent
             .player_slots()
             .filter(|slot| !state.entity_session_locked(state.entities.body(*slot).id)),
         state.entities.item_slots(),
+        |player, item| {
+            let Some(player) = state.players.get(&player) else {
+                return false;
+            };
+            let Some(row) = state
+                .entities
+                .slot_of(item)
+                .and_then(|slot| state.entities.row(slot).item.as_ref())
+            else {
+                return false;
+            };
+            let plain;
+            let stack = if let Some(stack) = &row.stack {
+                stack
+            } else {
+                plain = mc_data::ItemStack::new(row.item_id, row.count);
+                &plain
+            };
+            player
+                .inventory
+                .can_add(&state.registry.item_rules(), stack)
+        },
         &state.seq_counter,
         intents,
     );
@@ -1772,6 +1811,7 @@ pub(super) fn collect_pickup_intents_from(
     positions: &[[f64; 3]],
     player_slots: impl Iterator<Item = EntitySlot>,
     item_slots: impl Iterator<Item = EntitySlot>,
+    can_pickup: impl Fn(EntityId, EntityId) -> bool,
     seq_counter: &HashMap<EntityId, u32>,
     intents: &mut Vec<Intent>,
 ) {
@@ -1797,6 +1837,9 @@ pub(super) fn collect_pickup_intents_from(
             // Vanilla Player.aiStep checks the player's box inflated by
             // (1, .5, 1), intersecting the item's .25-wide/.25-high box.
             if dx.abs() >= 1.425 || dz.abs() >= 1.425 || dy <= -0.75 || dy >= 2.3 {
+                continue;
+            }
+            if !can_pickup(*player, *item) {
                 continue;
             }
             let next = seq_counter.get(player).copied().unwrap_or(0);

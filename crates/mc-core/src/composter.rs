@@ -192,16 +192,6 @@ pub(crate) fn schedule_fill(state: &mut TickState, pos: BlockPos, maturing: bool
     }
 }
 
-/// Whether this stack can feed a composter (vanilla compostable table).
-pub(crate) fn compostable(state: &TickState, stack: &ItemStack) -> bool {
-    state
-        .registry
-        .items
-        .name_of(stack.item_id)
-        .and_then(|id| chance(&Identifier::parse(id.as_str()).ok()?))
-        .is_some()
-}
-
 /// Ready level constant for automation extraction.
 pub(crate) const READY_LEVEL: u8 = READY;
 
@@ -217,21 +207,26 @@ pub(crate) fn empty_level(state: &mut TickState, pos: BlockPos) {
     }
 }
 
-/// Automation feed: advance the composter level by one compostable layer and
-/// schedule maturation. Returns the new level, or None when the composter is
-/// full/ready (hopper must retain its item).
-pub(crate) fn feed_level(state: &mut TickState, pos: BlockPos) -> Option<u8> {
+/// Attempt one hopper-fed item. A failed roll still consumes the item;
+/// a full composter or non-compostable item refuses it.
+pub(crate) fn feed_level(state: &mut TickState, pos: BlockPos, stack: &ItemStack) -> Option<u8> {
     let current = level(state, pos)?;
     if current >= FULL {
         return None;
     }
-    // Automation always advances one guaranteed layer per item (vanilla
-    // hopper-fed composters do not roll the manual chance per item here;
-    // the manual path keeps its own chance roll).
-    let next = level_state(state, pos, current + 1)?;
-    stage_level(state, pos, next);
-    schedule_fill(state, pos, current + 1 == FULL);
-    Some(current + 1)
+    let chance = state
+        .registry
+        .items
+        .name_of(stack.item_id)
+        .and_then(chance)?;
+    let succeeds = current == 0 || fill_seed(pos, state.tick as i32) % 100 < u64::from(chance);
+    let next = current + u8::from(succeeds);
+    if succeeds {
+        let block = level_state(state, pos, next)?;
+        stage_level(state, pos, block);
+        schedule_fill(state, pos, next == FULL);
+    }
+    Some(next)
 }
 
 /// Commits a use serially on the tick owner. Returning true prevents ordinary

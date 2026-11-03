@@ -6,6 +6,10 @@
 //! "recovery":false},{"name":"recovery","duration_ms":5000,"recovery":true}]}`.
 //! Rates are integer slots/second (movement/edits per bot, commands on bot 0).
 //! Stdin accepts newline JSON `{"event":"run"}` after ready, then `{"event":"stop"}`.
+//! During Run, `{"event":"command","id":"unique","bot":0,"command":"settlement status",
+//! "expected_prefix":"..."}` uses a fresh own-chat echo before the command packet.
+//! The bounded full matching literal reply is evidence of received chat, not proof
+//! of command success; protocol chat has no request ID. Inspect native state.
 //! Run establishes one shared monotonic epoch; no queued catch-up or gameplay
 //! before Run, during recovery, or after the schedule. SIGINT remains supported.
 //! Admission/write receipts are not mechanic completion; use observed work.
@@ -28,6 +32,43 @@
 //! `restore_reader` use ordinary window/at_ms slots. A bounded Tokio relay limits
 //! actual socket reads; mechanics.players records per-window receive progress and
 //! final entity identities visible to each reader.
+//! Survival mining uses mechanic actions `start_destroy_block` and
+//! `finish_destroy_block` with a declared block probe (`reader_images: true`).
+//! Schedule the finish after sufficient real digging time; a written start is
+//! not proof of a break, pickup, or tool durability. Finish completion observes
+//! a changed passable cell, not exclusive attribution. Collection rows record
+//! raw take-item packets, not retained custody or a server-side arrival fence.
+//! `hauls` in a mechanic spec require a named source and destination container,
+//! one exact plain item stack, surveyed cardinal feet routes, actor UUID and a
+//! separate player-observer bot. Arrival is a post-leg-start observer movement
+//! packet, not a server-tick fence; menu debit/credit is received-state evidence,
+//! not an exclusive attribution oracle. Missing geometry or observation times out.
+//! If the actor starts away from the source route, bounded received-terrain A*
+//! approaches its exact first waypoint; a fresh observer image fences the approach
+//! before the independently fenced source-container leg begins.
+//! A running haul's otherwise unassigned observer follows the actor using only
+//! its own received actor pose and terrain. Follow plans are not arrival proof;
+//! a busy observer fails explicitly, and after the haul it resumes normal movement.
+//! Optional `farmer_delivery` withdraws wheat and replans from the destination
+//! with bounded A* over received topmost terrain toward the villager's last
+//! received position, which may be stale. Valid routes tolerate up to four blocks
+//! of endpoint displacement; a failed replan may continue a revalidated route
+//! that still approaches the target, or wait for a genuinely changed received
+//! farmer position before retrying. Neither is arrival evidence.
+//! Before dropping, actor-visible villager position/version images are recorded;
+//! a known competitor within four horizontal blocks prevents the offer until a
+//! new observation. Missing or truncated images fail closed. The snapshot is
+//! neither same-tick nor proof that no unseen or later competitor exists.
+//! Completion proves only received player debit and a nearby new item identity;
+//! pickup and retained custody need independent proof.
+//! Additional ID-bearing hauls for a bot are started in order only by explicit
+//! `{"event":"start_haul","bot":0,"id":"next"}` after the preceding haul
+//! finishes. The harness must fence pickup and production before requesting one.
+//! Set `defer_start:true` and an ID on a bot's first haul to wait for that same
+//! explicit start command instead of starting automatically.
+//! `first_self_damage` is a receive-time diagnostic: the victim's local pose is
+//! predicted, and unobserved source identities/positions remain null. Observed
+//! actor or observer death immediately fails affected unfinished hauls.
 #![recursion_limit = "256"]
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -52,6 +93,10 @@ use tokio::sync::{Barrier, Semaphore, mpsc, watch};
 use tokio::task::JoinSet;
 use uuid::Uuid;
 include!("player_scale_bots_mechanics.rs");
+include!("player_scale_bots_haul.rs");
+include!("player_scale_bots_pursuit.rs");
+include!("player_scale_bots_observer.rs");
+include!("player_scale_bots_runtime.rs");
 include!("player_scale_bots_setup.rs");
 include!("player_scale_bots_auth.rs");
 include!("player_scale_bots_reader.rs");
@@ -375,6 +420,16 @@ struct RunEpoch {
 enum RunControl {
     Run {},
     Stop {},
+    Command {
+        id: String,
+        bot: u32,
+        command: String,
+        expected_prefix: String,
+    },
+    StartHaul {
+        id: String,
+        bot: u32,
+    },
 }
 
 #[derive(Default, Clone, Serialize)]
@@ -464,9 +519,19 @@ impl WorkReceipts {
 }
 
 #[derive(Default, Clone, Serialize)]
+struct EditUnavailable {
+    dead_or_respawning: u64,
+    edits_disabled: u64,
+    not_creative: u64,
+    no_eligible_candidate: u64,
+    pending_same_cell: u64,
+}
+
+#[derive(Default, Clone, Serialize)]
 struct WindowCounters {
     movement: SlotCounters,
     edit: SlotCounters,
+    edit_unavailable: EditUnavailable,
     command: SlotCounters,
     chat: SlotCounters,
     received: WorkReceipts,
@@ -487,6 +552,11 @@ impl WindowCounters {
     fn merge(&mut self, other: &Self) {
         self.movement.merge(&other.movement);
         self.edit.merge(&other.edit);
+        self.edit_unavailable.dead_or_respawning += other.edit_unavailable.dead_or_respawning;
+        self.edit_unavailable.edits_disabled += other.edit_unavailable.edits_disabled;
+        self.edit_unavailable.not_creative += other.edit_unavailable.not_creative;
+        self.edit_unavailable.no_eligible_candidate += other.edit_unavailable.no_eligible_candidate;
+        self.edit_unavailable.pending_same_cell += other.edit_unavailable.pending_same_cell;
         self.command.merge(&other.command);
         self.chat.merge(&other.chat);
         self.automatic_respawn_requests += other.automatic_respawn_requests;
@@ -678,6 +748,7 @@ impl Counters {
 struct StateFacts {
     passable: bool,
     support: bool,
+    support_height: u16,
 }
 struct Facts {
     states: Vec<StateFacts>,
@@ -686,6 +757,87 @@ struct Facts {
     air_state: i32,
     projectile_type_ids: [i32; 2],
     grass_states: Vec<i32>,
+}
+
+#[cfg(test)]
+fn collision_support_height(
+    id: u32,
+    block: &mc_data::Identifier,
+    properties: &[(String, String)],
+) -> Option<u16> {
+    simple_support_height(
+        mc_data::collision_shapes::vanilla_collision_shapes()
+            .get_for_state(id, block, properties)?,
+    )
+}
+
+fn simple_support_height(shape: mc_data::collision_shapes::CollisionShape<'_>) -> Option<u16> {
+    if shape.len() != 1 {
+        return None;
+    }
+    let [min_x, min_y, min_z, max_x, max_y, max_z] = shape.iter().next()?.coordinates();
+    let unit = mc_data::collision_shapes::COLLISION_UNITS_PER_BLOCK;
+    (min_x == 0
+        && min_y == 0
+        && min_z == 0
+        && max_x == unit
+        && max_z == unit
+        && (1..=unit).contains(&max_y))
+    .then_some(max_y as u16)
+}
+
+fn bot_state_facts(
+    id: u32,
+    block: &mc_data::Identifier,
+    properties: &std::collections::BTreeMap<String, String>,
+) -> StateFacts {
+    // Empty collision does not imply safe walking through fluid, damage or
+    // mobility/portal hazards. Waterlogged states also contain fluid.
+    if matches!(
+        block.path(),
+        "water"
+            | "lava"
+            | "bubble_column"
+            | "kelp"
+            | "kelp_plant"
+            | "seagrass"
+            | "tall_seagrass"
+            | "powder_snow"
+            | "fire"
+            | "soul_fire"
+            | "cactus"
+            | "sweet_berry_bush"
+            | "magma_block"
+            | "campfire"
+            | "soul_campfire"
+            | "wither_rose"
+            | "cobweb"
+            | "nether_portal"
+            | "end_portal"
+            | "end_gateway"
+            | "pointed_dripstone"
+            | "scaffolding"
+    ) || properties
+        .get("waterlogged")
+        .is_some_and(|value| value == "true")
+    {
+        return StateFacts::default();
+    }
+    let properties: Vec<_> = properties
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    let Some(shape) =
+        mc_data::collision_shapes::vanilla_collision_shapes().get_for_state(id, block, &properties)
+    else {
+        return StateFacts::default();
+    };
+    let height = simple_support_height(shape);
+    StateFacts {
+        passable: shape.is_empty(),
+        support: height.is_some(),
+        support_height: height.unwrap_or(0),
+    }
 }
 impl Facts {
     fn load() -> Result<Self> {
@@ -702,73 +854,8 @@ impl Facts {
         let mut grass_states = Vec::new();
         for block in blocks {
             let name = block.id.path();
-            // Deliberately only walk/edit on known full-cube terrain. Fluids, leaves,
-            // fences and partial shapes cannot masquerade as ground in this driver.
-            let support = matches!(
-                name,
-                "stone"
-                    | "dirt"
-                    | "grass_block"
-                    | "sand"
-                    | "red_sand"
-                    | "gravel"
-                    | "deepslate"
-                    | "granite"
-                    | "diorite"
-                    | "andesite"
-                    | "tuff"
-                    | "calcite"
-                    | "snow_block"
-                    | "podzol"
-                    | "mycelium"
-                    | "coarse_dirt"
-                    | "rooted_dirt"
-                    | "clay"
-                    | "terracotta"
-                    | "cobblestone"
-                    | "moss_block"
-                    | "bedrock"
-                    | "stone_bricks"
-                    | "mossy_stone_bricks"
-                    | "cracked_stone_bricks"
-                    | "chiseled_stone_bricks"
-                    | "mossy_cobblestone"
-                    | "bricks"
-                    | "sandstone"
-                    | "smooth_sandstone"
-                    | "cut_sandstone"
-                    | "chiseled_sandstone"
-                    | "red_sandstone"
-                    | "smooth_red_sandstone"
-                    | "cut_red_sandstone"
-                    | "chiseled_red_sandstone"
-                    | "smooth_stone"
-                    | "polished_andesite"
-                    | "polished_diorite"
-                    | "polished_granite"
-                    | "quartz_block"
-                    | "smooth_quartz"
-                    | "quartz_bricks"
-                    | "chiseled_quartz_block"
-            ) || name.ends_with("_planks")
-                || name.ends_with("_concrete")
-                || name.ends_with("_terracotta")
-                || name.ends_with("_wool");
-            let passable = matches!(
-                name,
-                "air"
-                    | "cave_air"
-                    | "void_air"
-                    | "short_grass"
-                    | "tall_grass"
-                    | "fern"
-                    | "large_fern"
-                    | "dandelion"
-                    | "poppy"
-                    | "dead_bush"
-            );
             for state in block.states {
-                states[state.id as usize] = StateFacts { passable, support };
+                states[state.id as usize] = bot_state_facts(state.id, &block.id, &state.properties);
                 if name == "dirt" && state.default {
                     dirt_state = Some(state.id as i32);
                 }
@@ -892,10 +979,8 @@ fn observed_column(
     facts: &Facts,
 ) -> Result<Column> {
     let (mut above_one, mut above_two) = (true, true);
-    // A support block lacking two passable cells above it (a trunk, leaves,
-    // water, a flower the model does not know) means the surface is obstructed.
-    // A deeper cave floor found below it is not reachable by walking, and must
-    // not be reported as terrain the body can enter.
+    // A support block lacking two passable cells above it (for example a trunk
+    // or water) is obstructed; a deeper cave floor is not reachable on foot.
     let mut obstructed = false;
     for section in (0..sections.len()).rev() {
         let blocks = sections[section].as_ref().expect("decoded section");
@@ -1029,6 +1114,14 @@ enum Edit {
     Break,
     Place,
 }
+#[derive(Debug, PartialEq)]
+enum EditAttempt {
+    Written,
+    NoCandidate,
+    Pending,
+    Capacity,
+}
+
 struct PendingAck {
     sequence: i32,
     sent: Instant,
@@ -1398,33 +1491,41 @@ impl Bot {
             .get(&(x.div_euclid(16), z.div_euclid(16)))
             .map(|surface| surface.columns[(z.rem_euclid(16) * 16 + x.rem_euclid(16)) as usize])
     }
-    fn ground_y(&self, x: f64, z: f64) -> Option<i16> {
-        // Ordinary standing players occupy a 0.6-wide body, not just the
-        // block containing their centre. Detect steps before the body hits them.
-        let mut ground = i16::MIN;
+    fn ground_y(&self, x: f64, z: f64) -> Option<f64> {
+        // Sample the entire 0.6-wide body footprint.
+        let mut ground = f64::NEG_INFINITY;
         for bx in (x - 0.3).floor() as i32..=(x + 0.3).floor() as i32 {
             for bz in (z - 0.3).floor() as i32..=(z + 0.3).floor() as i32 {
                 let column = self.column(bx, bz)?;
-                if !column.walkable {
+                let facts = self.facts.get(column.top);
+                if !column.walkable || !facts.support {
                     return None;
                 }
-                ground = ground.max(column.feet_y);
+                let top = f64::from(column.feet_y - 1) + f64::from(facts.support_height) / 4096.0;
+                ground = ground.max(top);
             }
         }
         Some(ground)
     }
-    fn support_y(&self, x: f64, z: f64, feet_y: f64) -> Option<i16> {
-        // Missing or obstructed columns forbid walking, but must not suspend
-        // gravity. Only an observed full-cube support at or below the feet can
-        // stop a fall; a taller neighbouring column must not hide intact support.
-        let mut ground: Option<i16> = None;
+    fn landing_height(&self, x: i32, z: i32) -> Option<i16> {
+        let column = self.column(x, z)?;
+        let ground = self.ground_y(f64::from(x) + 0.5, f64::from(z) + 0.5)?;
+        (column.walkable && (ground - f64::from(column.feet_y)).abs() < 0.001)
+            .then_some(column.feet_y)
+    }
+
+    fn support_y(&self, x: f64, z: f64, feet_y: f64) -> Option<f64> {
+        // Only actual received support tops at or below the feet stop a fall.
+        let mut ground: Option<f64> = None;
         for bx in (x - 0.3).floor() as i32..=(x + 0.3).floor() as i32 {
             for bz in (z - 0.3).floor() as i32..=(z + 0.3).floor() as i32 {
-                if let Some(column) = self.column(bx, bz)
-                    && f64::from(column.feet_y) <= feet_y + 0.001
-                    && self.facts.get(column.top).support
-                {
-                    ground = Some(ground.map_or(column.feet_y, |y| y.max(column.feet_y)));
+                if let Some(column) = self.column(bx, bz) {
+                    let facts = self.facts.get(column.top);
+                    let top =
+                        f64::from(column.feet_y - 1) + f64::from(facts.support_height) / 4096.0;
+                    if facts.support && top <= feet_y + 0.001 {
+                        ground = Some(ground.map_or(top, |y| y.max(top)));
+                    }
                 }
             }
         }
@@ -1660,12 +1761,7 @@ impl Bot {
                         2 => (-1, 0),
                         _ => (0, -1),
                     };
-                    let at = |x: i32, z: i32| -> Option<i16> {
-                        let surface = self.surfaces.get(&(x.div_euclid(16), z.div_euclid(16)))?;
-                        let column =
-                            surface.columns[(z.rem_euclid(16) * 16 + x.rem_euclid(16)) as usize];
-                        column.walkable.then_some(column.feet_y)
-                    };
+                    let at = |x: i32, z: i32| self.landing_height(x, z);
                     let mut landing: Option<(i64, i32, i32, i32)> =
                         if let Some(route) = self.street_routes.0.get(self.index as usize) {
                             let y = at(base_x, base_z)
@@ -1696,7 +1792,9 @@ impl Bot {
                                 continue;
                             }
                             let (sx, sz) = (x + step_x * stride, z + step_z * stride);
-                            let start_y = at(sx, sz).unwrap_or(column.feet_y);
+                            let Some(start_y) = at(sx, sz) else {
+                                continue;
+                            };
                             let mut run: i64 = 0;
                             let (mut px, mut pz) = (sx, sz);
                             while run < 64 {
@@ -1777,6 +1875,15 @@ impl Bot {
                     }
                     self.setup_fence(&mut client, "ready", true).await?;
                 }
+                ensure!(
+                    self.ground_y(self.x, self.z)
+                        .is_some_and(|ground| (ground - self.y).abs() < 0.001),
+                    "bot {} landing lacks received support at ({},{},{})",
+                    self.index,
+                    self.x,
+                    self.y,
+                    self.z
+                );
                 eprintln!(
                     "bot_landing index={} position=({},{},{}) ground_y={:?} creative={}",
                     self.index,
@@ -2380,17 +2487,18 @@ impl Bot {
             self.metrics.action_observation_timeouts += 1;
         }
     }
-    async fn edit(&mut self, client: &mut Client) -> Result<bool> {
+    async fn edit(&mut self, client: &mut Client) -> Result<EditAttempt> {
         let window = self.current_window();
         if self.acks.len() >= ACTION_CAP || self.observations.len() >= ACTION_CAP {
-            return Ok(false);
+            return Ok(EditAttempt::Capacity);
         }
         if !self.open_loop && !self.observations.is_empty() {
-            return Ok(false);
+            return Ok(EditAttempt::Pending);
         }
         let px = self.x.floor() as i32;
         let pz = self.z.floor() as i32;
         let mut candidate = None;
+        let mut pending_candidate = false;
         if let Some((x, y, z)) = self.hole {
             if let Some(column) = self.column(x, z)
                 && i32::from(column.feet_y) == y
@@ -2415,7 +2523,7 @@ impl Bot {
             } else {
                 (self.ticks / 80 + u64::from(self.index)) % 4
             };
-            for direction in 0..(if self.mechanics.is_some() { 4 } else { 1 }) {
+            for direction in 0..4 {
                 let (dx, dz) = match (offset + direction) % 4 {
                     0 => (2, 0),
                     1 => (0, 2),
@@ -2429,13 +2537,27 @@ impl Bot {
                     && (f64::from(column.feet_y) - self.y).abs() <= 1.0
                     && !self.mechanic_protected(x, i32::from(column.feet_y) - 1, z)
                 {
+                    let y = i32::from(column.feet_y) - 1;
+                    if self.open_loop
+                        && self
+                            .observations
+                            .iter()
+                            .any(|pending| pending.position == pack_block_pos(x, y, z))
+                    {
+                        pending_candidate = true;
+                        continue;
+                    }
                     candidate = Some((x, i32::from(column.feet_y) - 1, z, Edit::Break));
                     break;
                 }
             }
         }
         let Some((x, y, z, edit)) = candidate else {
-            return Ok(false);
+            return Ok(if pending_candidate {
+                EditAttempt::Pending
+            } else {
+                EditAttempt::NoCandidate
+            });
         };
         // Do not count one update as proof for duplicate in-flight requests.
         if self.open_loop
@@ -2444,7 +2566,7 @@ impl Bot {
                 .iter()
                 .any(|pending| pending.position == pack_block_pos(x, y, z))
         {
-            return Ok(false);
+            return Ok(EditAttempt::Pending);
         }
         self.sequence = self
             .sequence
@@ -2494,7 +2616,7 @@ impl Bot {
             window,
         });
         self.log_action(edit, x, y, z, sent);
-        Ok(true)
+        Ok(EditAttempt::Written)
     }
     async fn tick(&mut self, client: &mut Client) -> Result<()> {
         self.tick_demand(client, true).await.map(|_| ())
@@ -2561,7 +2683,9 @@ impl Bot {
             0.21585
         };
         let (dx, dz, yaw) = self
-            .street_step(speed)
+            .observer_follow_step(speed)
+            .or_else(|| self.haul_step(speed))
+            .or_else(|| self.street_step(speed))
             .unwrap_or_else(|| match self.direction {
                 0 => (speed, 0.0, -90.0),
                 1 => (0.0, speed, 0.0),
@@ -2577,15 +2701,20 @@ impl Bot {
             (min_x..=min_x + 15.0).contains(&nx) && (min_z..=min_z + 15.0).contains(&nz)
         });
         if inside_route && let Some(next_ground) = self.ground_y(nx, nz) {
-            let ground = f64::from(next_ground);
+            let ground = next_ground;
             let delta = ground - self.y;
             if (-1.01..=1.01).contains(&delta) {
-                if delta > 0.0 && self.velocity_y == 0.0 {
+                if delta > 0.6 && self.velocity_y == 0.0 {
                     self.velocity_y = 0.42;
                     jump = true;
                 }
-                // Ascend before advancing into a full-block step.
-                if delta <= 0.0 {
+                let step =
+                    delta > 0.0 && delta <= 0.6 && self.velocity_y == 0.0 && self.last_on_ground;
+                if step {
+                    self.y = ground;
+                }
+                // Full-block obstacles require a jump before advancing.
+                if delta <= 0.0 || step {
                     let old_chunk = (
                         (self.x.floor() as i32).div_euclid(16),
                         (self.z.floor() as i32).div_euclid(16),
@@ -2603,22 +2732,48 @@ impl Bot {
                     }
                 } else {
                     self.metrics.route_refusals_height_delta += 1;
+                    if dx != 0.0 || dz != 0.0 {
+                        self.trace_farmer_refusal(
+                            nx,
+                            nz,
+                            if jump {
+                                "jump_pending"
+                            } else {
+                                "height_pending"
+                            },
+                        )?;
+                    }
                 }
             } else if self.velocity_y == 0.0 {
                 self.metrics.route_refusals_height_delta += 1;
+                if dx != 0.0 || dz != 0.0 {
+                    self.trace_farmer_refusal(nx, nz, "height_delta_outside_step")?;
+                }
                 self.direction = (self.direction + 1) % 4;
             }
         } else {
-            // Distinguish unknown geometry from known-impassable columns so a
-            // single-bot causal trace can tell streaming lag from terrain.
-            if self.ground_y(nx, nz).is_none() {
+            let missing = ((nx - 0.3).floor() as i32..=(nx + 0.3).floor() as i32).any(|x| {
+                ((nz - 0.3).floor() as i32..=(nz + 0.3).floor() as i32)
+                    .any(|z| self.column(x, z).is_none())
+            });
+            let reason = if !inside_route {
+                "outside_route"
+            } else if missing {
+                "missing_column"
+            } else {
+                "unwalkable_column"
+            };
+            if inside_route && missing {
                 self.metrics.route_refusals_missing_column += 1;
             } else {
                 self.metrics.route_refusals_not_walkable += 1;
             }
+            if dx != 0.0 || dz != 0.0 {
+                self.trace_farmer_refusal(nx, nz, reason)?;
+            }
             self.direction = (self.direction + 1) % 4;
         }
-        let ground = self.support_y(self.x, self.z, self.y).map(f64::from);
+        let ground = self.support_y(self.x, self.z, self.y);
         let mut on_ground =
             self.velocity_y == 0.0 && ground.is_some_and(|ground| (self.y - ground).abs() < 0.001);
         if !on_ground {
@@ -2773,6 +2928,11 @@ impl Bot {
                 counters.drift_max_us = counters.drift_max_us.max(drift_us);
                 if self.respawn_pending || self.last_health <= 0.0 {
                     counters.dropped_unavailable += 1;
+                    if kind == 1 {
+                        self.metrics.windows[index]
+                            .edit_unavailable
+                            .dead_or_respawning += 1;
+                    }
                     continue;
                 }
                 match kind {
@@ -2785,13 +2945,30 @@ impl Bot {
                     1 => {
                         if self.acks.len() >= ACTION_CAP || self.observations.len() >= ACTION_CAP {
                             self.metrics.windows[index].edit.dropped_capacity += 1;
-                        } else if self.no_edits || !self.creative {
+                        } else if self.no_edits {
                             self.metrics.windows[index].edit.dropped_unavailable += 1;
-                        } else if self.edit(client).await? {
-                            self.metrics.windows[index].edit.admitted += 1;
-                            self.metrics.windows[index].edit.writes_completed += 1;
+                            self.metrics.windows[index].edit_unavailable.edits_disabled += 1;
+                        } else if !self.creative {
+                            self.metrics.windows[index].edit.dropped_unavailable += 1;
+                            self.metrics.windows[index].edit_unavailable.not_creative += 1;
                         } else {
-                            self.metrics.windows[index].edit.dropped_unavailable += 1;
+                            let attempt = self.edit(client).await?;
+                            let window = &mut self.metrics.windows[index];
+                            match attempt {
+                                EditAttempt::Written => {
+                                    window.edit.admitted += 1;
+                                    window.edit.writes_completed += 1;
+                                }
+                                EditAttempt::NoCandidate => {
+                                    window.edit.dropped_unavailable += 1;
+                                    window.edit_unavailable.no_eligible_candidate += 1;
+                                }
+                                EditAttempt::Pending => {
+                                    window.edit.dropped_unavailable += 1;
+                                    window.edit_unavailable.pending_same_cell += 1;
+                                }
+                                EditAttempt::Capacity => window.edit.dropped_capacity += 1,
+                            }
                         }
                     }
                     2 => {
@@ -3020,6 +3197,7 @@ fn aggregate(
                 "recovery": window.recovery,
                 "movement": totals.movement.json(offered(window.movement_hz, u64::from(args.clients))),
                 "edit": totals.edit.json(offered(window.edit_hz, u64::from(args.clients))),
+                "edit_unavailable": totals.edit_unavailable,
                 "command": totals.command.json(if args.mechanic_read_only { 0 } else { local.map_or(0, |local| window.command_slots(local)) }),
                 "chat": totals.chat.json(offered(window.chat_hz, u64::from(args.clients))),
                 "received": totals.received,
@@ -3028,22 +3206,28 @@ fn aggregate(
             start += duration;
             value
         }).collect();
-        let bots =
-            if matches!(event, "final" | "failure") {
-                snapshots.iter().enumerate().map(|(index, snapshot)| {
+        let bots = if matches!(event, "final" | "failure") {
+            snapshots.iter().enumerate().map(|(index, snapshot)| {
                 let snapshot = snapshot.lock().unwrap_or_else(|e| e.into_inner());
                 let mut received = WorkReceipts::default();
                 for window in &snapshot.windows {
                     received.add_delta(&window.received, &WorkReceipts::default());
                 }
+                let edit_windows: Vec<_> = args.schedule.windows.iter().zip(&snapshot.windows).zip(&windows)
+                    .map(|((spec, counters), total)| {
+                        let offered = total["edit"]["offered"].as_u64().expect("edit offered count")
+                            / u64::from(args.clients);
+                        json!({"name":spec.name, "edit":counters.edit.json(offered),
+                            "edit_unavailable":counters.edit_unavailable})
+                    }).collect();
                 json!({"bot": index, "received": received, "chats_sent": snapshot.chats_sent,
                     "movements_sent": snapshot.movements_sent,
                     "walking_distance_blocks": snapshot.walking_distance_blocks,
-                    "street_waypoints_reached": snapshot.street_waypoints_reached})
+                    "street_waypoints_reached": snapshot.street_waypoints_reached, "edit_windows":edit_windows})
             }).collect::<Vec<_>>()
-            } else {
-                Vec::new()
-            };
+        } else {
+            Vec::new()
+        };
         object.insert("open_loop".into(), json!({
             "epoch_unix_ms": epoch.map(|epoch| epoch.unix_ms),
             "epoch_unix_ns": epoch.map(|epoch| epoch.unix_ns),
@@ -3407,6 +3591,52 @@ async fn run(mut args: Args) -> Result<()> {
                     Some(Ok(RunControl::Stop {})) => {
                         if ready != args.clients { failure = Some("stopped before readiness".into()); }
                         break;
+                    }
+                    Some(Ok(RunControl::Command { id, bot, command, expected_prefix })) => {
+                        let accepted = (|| -> Result<Value> {
+                            ensure!(ready == args.clients && !args.mechanic_read_only, "bots not ready or read-only");
+                            let epoch = args.epoch.lock().unwrap_or_else(|e| e.into_inner())
+                                .as_ref().map(|epoch| epoch.instant).context("run has not started")?;
+                            ensure!(args.schedule.window_at(epoch.elapsed())
+                                .is_some_and(|index| !args.schedule.windows[index].recovery),
+                                "outside active measurement window");
+                            ensure!(bot < args.clients, "bot index outside population");
+                            ensure!(bot != 0 || args.schedule.windows.iter().all(|window|
+                                window.command_hz == 0 && window.commands.is_empty()
+                                    && window.command_interval_ms.is_none()),
+                                "scheduled commands conflict with runtime command");
+                            let shared = args.mechanics.as_ref().context("runtime command requires mechanic spec")?;
+                            let mut state = shared.lock();
+                            ensure!(!state.spec.actions.iter().any(|action|
+                                action.bot == bot && action.kind == "command"),
+                                "mechanic commands conflict with runtime command");
+                            let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+                            let event = state.runtime_enqueue(bot, id.clone(), command, expected_prefix,
+                                &format!("{}_{bot:04}", args.name_prefix), nonce)?;
+                            state.runtime_record(&event);
+                            Ok(event)
+                        })();
+                        let event = accepted.unwrap_or_else(|error| json!({
+                            "event":"runtime_command_rejected","id":id,"bot":bot,"reason":format!("{error:#}")
+                        }));
+                        emit(&event)?;
+                    }
+                    Some(Ok(RunControl::StartHaul { id, bot })) => {
+                        let result = (|| -> Result<usize> {
+                            ensure!(ready == args.clients && !args.mechanic_read_only, "bots not ready or read-only");
+                            let epoch = args.epoch.lock().unwrap_or_else(|e| e.into_inner())
+                                .as_ref().map(|epoch| epoch.instant).context("run has not started")?;
+                            ensure!(args.schedule.window_at(epoch.elapsed())
+                                .is_some_and(|index| !args.schedule.windows[index].recovery),
+                                "outside active measurement window");
+                            args.mechanics.as_ref().context("haul requires mechanic spec")?
+                                .lock().request_haul(bot, &id)
+                        })();
+                        let event = match result {
+                            Ok(index) => json!({"event":"haul_start_accepted","id":id,"bot":bot,"spec_index":index}),
+                            Err(error) => json!({"event":"haul_start_rejected","id":id,"bot":bot,"reason":format!("{error:#}")}),
+                        };
+                        emit(&event)?;
                     }
                     Some(Err(error)) => { failure = Some(format!("{error:#}")); break; }
                     None => controls = None,

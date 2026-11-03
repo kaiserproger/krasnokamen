@@ -82,7 +82,9 @@ pub(crate) fn prepare(
         batches.push(cells);
     }
     let plan = resource_plan(&stages);
-    plan.validate().map_err(|_| Failure::InvalidRequest)?;
+    if !material_free(&stages) {
+        plan.validate().map_err(|_| Failure::InvalidRequest)?;
+    }
     let snapshot = ScriptStructureSnapshot::new(
         id.clone(),
         format!("solaris-settlements:{blueprint}"),

@@ -1104,15 +1104,9 @@ fn feed_composter(state: &mut TickState, pos: BlockPos, target: BlockPos) -> boo
         if moving.is_empty() || !can_debit(state, pos, index) {
             continue;
         }
-        // Compostable check mirrors the manual use path (chance table).
-        if !crate::composter::compostable(state, &moving) {
+        // Skip ineligible stacks; full/ready composters refuse every slot.
+        if crate::composter::feed_level(state, target, &moving).is_none() {
             continue;
-        }
-        // Commit one item into the composter level.
-        let next = crate::composter::feed_level(state, target);
-        if next.is_none() {
-            // Full/ready composter: no debit, hopper keeps the item.
-            return false;
         }
         decrement_stack(
             &mut state

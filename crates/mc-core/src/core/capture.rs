@@ -30,6 +30,12 @@ pub(crate) fn appearance_from_vanilla_entity(
             ("CustomNameVisible", mc_nbt::Tag::Byte(value)) => {
                 image.custom_name_visible = *value != 0;
             }
+            ("Pumpkin", mc_nbt::Tag::Byte(value)) if record.id == "minecraft:snow_golem" => {
+                image.extra.push((
+                    crate::entity_life::SNOW_GOLEM_PUMPKIN_INDEX,
+                    crate::journal::EntityDataValueImage::Byte(if *value != 0 { 0x10 } else { 0 }),
+                ));
+            }
             ("IsBaby", mc_nbt::Tag::Byte(value))
                 if crate::entity_life::uses_is_baby(&record.id) =>
             {
@@ -259,6 +265,14 @@ pub(super) fn entity_capture_record(
                 .expect("live villager state satisfies persistence invariants")
         })
         .unwrap_or_default();
+    if name == "minecraft:snow_golem" {
+        extra_fields.push((
+            "Pumpkin".into(),
+            mc_nbt::Tag::Byte(i8::from(
+                crate::entity_life::snow_golem_pumpkin_flags(&row.appearance) & 0x10 != 0,
+            )),
+        ));
+    }
     if crate::entity_life::uses_is_baby(&name) && row.villager.is_none() {
         extra_fields.push((
             "IsBaby".into(),

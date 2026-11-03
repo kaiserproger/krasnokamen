@@ -107,8 +107,6 @@ fn threat_near(state: &TickState, self_slot: EntitySlot, at: [f64; 3]) -> bool {
 
 pub(crate) fn run(state: &mut TickState) {
     if !state.tick.is_multiple_of(CHECK_INTERVAL) {
-        // Scute shedding still ticks every check interval (compressed below).
-        run_interval(state);
         return;
     }
     run_interval(state);

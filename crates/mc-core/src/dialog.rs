@@ -467,6 +467,17 @@ impl Dialog {
         self
     }
 
+    /// Plain text paragraph of an explicit width (`plain_message`, 1..=1024).
+    #[must_use]
+    pub fn text_width(mut self, contents: impl Into<Text>, width: u32) -> Self {
+        self.body.push(Tag::Compound(vec![
+            ("type".to_owned(), string("minecraft:plain_message")),
+            ("contents".to_owned(), contents.into().0),
+            ("width".to_owned(), Tag::Int(width as i32)),
+        ]));
+        self
+    }
+
     #[must_use]
     pub fn input(mut self, input: Input) -> Self {
         self.inputs.push(input);

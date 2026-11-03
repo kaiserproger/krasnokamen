@@ -386,11 +386,7 @@ fn crafter_wal_checkpoint_restart_retains_slots_disabled_and_pulse_latch_once() 
     let projected = original.world.chunk(ChunkPos { x: 0, z: 0 }).unwrap();
     assert!(!projected.chests.contains_key(&POS));
     assert!(!projected.furnaces.contains_key(&POS));
-    let records = mc_world::wire::client_block_entities(
-        projected,
-        &original.registry.blocks,
-        &original.registry.items,
-    );
+    let records = mc_world::wire::client_block_entities(projected, &original.registry.blocks);
     let crafter = records.iter().find(|record| record.pos == POS).unwrap();
     assert_eq!(crafter.type_name.as_str(), "minecraft:crafter");
     assert_eq!(

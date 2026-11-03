@@ -167,6 +167,21 @@ pub(crate) fn commit(world: &mut TickState, changes: &mut ChangeSet) {
         crate::trial_spawner::after_blocks(world, &writes);
         crate::vault::after_blocks(world, &writes);
         crate::block_log::after_blocks(world);
+        for &(pos, id) in &writes {
+            if world
+                .registry
+                .blocks
+                .by_id(mc_world::BlockStateId(id))
+                .is_some_and(|block| {
+                    matches!(
+                        block.block.id.path(),
+                        "sculk_sensor" | "calibrated_sculk_sensor" | "sculk_catalyst"
+                    )
+                })
+            {
+                crate::sculk::changed(world, pos);
+            }
+        }
         world.world.fold_overlay();
         changes.entities_spawned.append(&mut spawned);
         changes.blocks.extend(

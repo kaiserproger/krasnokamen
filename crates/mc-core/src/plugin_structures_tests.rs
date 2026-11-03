@@ -1,6 +1,147 @@
 use super::*;
 use crate::boundary::ChunkPos;
 
+// A small village straddling the negative/zero chunk boundary. The generator
+// advertises the site; observations still come from the real resident chunks.
+struct FeatureVillageGenerator {
+    terrain: mc_worldgen::TerrainGenerator,
+}
+
+impl mc_world::ChunkGenerator for FeatureVillageGenerator {
+    fn generate(&self, pos: mc_world::ChunkPos) -> mc_world::Chunk {
+        mc_world::ChunkGenerator::generate(&self.terrain, pos)
+    }
+
+    fn village_sites_in_region(
+        &self,
+        min: (i32, i32),
+        max: (i32, i32),
+    ) -> Vec<mc_world::GeneratedVillageSite> {
+        if min.0 > 0 || min.1 > 0 || max.0 < 0 || max.1 < 0 {
+            return Vec::new();
+        }
+        vec![mc_world::GeneratedVillageSite {
+            start_chunk: (0, 0),
+            structure: mc_data::Identifier::parse("minecraft:village_plains").unwrap(),
+            min: mc_world::BlockPos {
+                x: -1,
+                y: 200,
+                z: 0,
+            },
+            max: mc_world::BlockPos { x: 0, y: 200, z: 0 },
+            pieces: Vec::new(),
+        }]
+    }
+}
+
+#[test]
+fn feature_query_hides_partial_chunks_then_reports_bounded_resident_contents() {
+    let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
+    let terrain = mc_worldgen::TerrainGenerator::new(42, registry.blocks.clone());
+    let world = crate::world::ChunkWorld::new(
+        42,
+        Arc::new(FeatureVillageGenerator { terrain }),
+        &registry,
+        mc_world::BlockStateId(registry.states.air),
+        [0, 201, 0],
+        mc_world::OVERWORLD_GEOMETRY,
+    );
+    let mut state = TickState::new(registry, world, 2, 512);
+    let left = ChunkPos { x: -1, z: 0 };
+    let right = ChunkPos { x: 0, z: 0 };
+    state
+        .world
+        .ensure_blocking(&[(left, 0)].into_iter().collect());
+    assert!(state.world.has_chunk(-1, 0));
+    assert!(!state.world.has_chunk(0, 0));
+
+    let composter = state
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:composter").unwrap())
+        .unwrap()
+        .default
+        .0;
+    state.world.set_block(-1, 200, 0, composter);
+    let request = ScriptOperationRequest::try_new(
+        "list-villages",
+        ScriptOperation::WorldStructure {
+            operation: ScriptWorldStructureOperation::ListFeatures {
+                cursor: Some("0:0".into()),
+                limit: 1,
+            },
+        },
+    )
+    .unwrap();
+    let outcome = execute(&mut state, "demo", &request);
+    let ScriptOperationPayload::WorldStructure { result } = outcome.payload() else {
+        panic!("expected structure outcome: {outcome:?}");
+    };
+    let ScriptWorldStructureResult::Features { page } = result.as_ref() else {
+        panic!("expected feature page");
+    };
+    assert_eq!(page.features.len(), 1);
+    let partial = &page.features[0];
+    assert_eq!(partial.bounds.min, [-1, 200, 0]);
+    assert_eq!(partial.bounds.max, [0, 200, 0]);
+    assert!(!partial.contents_known);
+    assert!(partial.blocks.is_empty());
+    assert!(partial.interaction_points.is_empty());
+    assert!(partial.entity_ids.is_empty());
+    let feature_id = partial.feature_id.clone();
+
+    state
+        .world
+        .ensure_blocking(&[(right, 0)].into_iter().collect());
+    state.world.set_block(0, 200, 0, composter);
+    // Adjacent content must not leak out of the advertised inclusive bounds.
+    state.world.set_block(1, 200, 0, composter);
+    let request = ScriptOperationRequest::try_new(
+        "query-village",
+        ScriptOperation::WorldStructure {
+            operation: ScriptWorldStructureOperation::QueryFeature {
+                feature_id: feature_id.clone(),
+            },
+        },
+    )
+    .unwrap();
+    let outcome = execute(&mut state, "demo", &request);
+    let ScriptOperationPayload::WorldStructure { result } = outcome.payload() else {
+        panic!("expected structure outcome: {outcome:?}");
+    };
+    let ScriptWorldStructureResult::Feature { feature } = result.as_ref() else {
+        panic!("expected feature");
+    };
+    assert_eq!(feature.feature_id, feature_id);
+    assert_eq!(feature.kind, "minecraft:village");
+    assert_eq!(feature.dimension, "minecraft:overworld");
+    assert_eq!(feature.bounds.min, [-1, 200, 0]);
+    assert_eq!(feature.bounds.max, [0, 200, 0]);
+    assert!(feature.contents_known);
+    assert_eq!(
+        feature.blocks,
+        vec![
+            ScriptWorldFeatureBlock::new([-1, 200, 0], "minecraft:composter".into()),
+            ScriptWorldFeatureBlock::new([0, 200, 0], "minecraft:composter".into()),
+        ]
+    );
+    assert_eq!(
+        feature.interaction_points,
+        vec![
+            ScriptWorksiteInteractionPoint::Workstation {
+                at: [-1, 200, 0],
+                capability: "minecraft:composter".into(),
+            },
+            ScriptWorksiteInteractionPoint::Workstation {
+                at: [0, 200, 0],
+                capability: "minecraft:composter".into(),
+            },
+        ]
+    );
+    assert!(feature.entity_ids.is_empty());
+    feature.validate().unwrap();
+}
+
 fn state() -> TickState {
     let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
     let terrain = mc_worldgen::TerrainGenerator::new(42, registry.blocks.clone());

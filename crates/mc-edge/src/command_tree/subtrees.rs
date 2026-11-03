@@ -36,6 +36,7 @@ pub(super) fn settlement_tree(t: &mut Tree, root: i32) {
     t.argument(build, "blueprint", word.clone(), true);
     let upgrade = t.literal(build, "upgrade", false);
     t.argument(upgrade, "id", word.clone(), true);
+    t.literal(root, "layout", true);
     let create = t.literal(root, "create", false);
     let name = t.argument(create, "name", word.clone(), true);
     t.argument(name, "radius", integer(Some(1), Some(256)), true);

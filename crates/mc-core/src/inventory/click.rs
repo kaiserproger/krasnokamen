@@ -607,7 +607,7 @@ impl Click<'_, '_> {
                 let Some(mut contents) = bundle::read(rules, self.carried) else {
                     return false;
                 };
-                let Some(mut removed) = bundle::remove_first(&mut contents) else {
+                let Some(mut removed) = bundle::remove_selected(self.carried, &mut contents) else {
                     return false;
                 };
                 if self.may_place(index, &removed) {
@@ -625,6 +625,12 @@ impl Click<'_, '_> {
             }
         }
         if bundle::is_bundle(rules, self.get(index)) {
+            if primary && self.carried.is_empty() {
+                if self.get(index).extended().bundle_selection.0.is_some() {
+                    bundle::select(rules, self.get_mut(index), -1);
+                }
+                return false;
+            }
             let Some(mut contents) = bundle::read(rules, self.get(index)) else {
                 return false;
             };
@@ -635,7 +641,7 @@ impl Click<'_, '_> {
             }
             if !primary
                 && self.carried.is_empty()
-                && let Some(removed) = bundle::remove_first(&mut contents)
+                && let Some(removed) = bundle::remove_selected(self.get(index), &mut contents)
             {
                 *self.carried = removed;
                 bundle::write(rules, self.get_mut(index), &contents);

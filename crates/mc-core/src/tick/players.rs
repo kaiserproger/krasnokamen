@@ -184,6 +184,9 @@ pub(super) fn apply_inputs<'a>(
         if handled {
             continue;
         }
+        if crate::settlements::ui::menus::input(state, input) {
+            continue;
+        }
         if let PlayerInput::PluginClientReady { connection } = input {
             input::session::plugin_client_ready(state, connection);
             continue;
@@ -246,6 +249,11 @@ pub(super) fn apply_inputs<'a>(
             PlayerInput::SelectSlot { connection, slot } => {
                 input::inventory::select_slot(state, (connection, slot))
             }
+            PlayerInput::SelectBundleItem {
+                connection,
+                slot,
+                selected_index,
+            } => input::inventory::select_bundle_item(state, (*connection, *slot, *selected_index)),
             PlayerInput::PickItemFromBlock {
                 connection,
                 position,
@@ -631,14 +639,24 @@ pub(super) fn tick_players(
             continue;
         };
         elytra::tick(state, entity);
-        // Eating progress.
-        let consumable_refused = state
+        let bundle_in_use = state
             .players
             .get(&entity)
-            .and_then(|player| player.finishing_consumable_debit())
-            .is_some_and(|debit| {
-                crate::plugin_inventories::below_player_debit_floors(state, entity, &[debit], None)
-            });
+            .is_some_and(|player| player.using_bundle(&state.registry.item_rules()));
+        // Eating progress.
+        let consumable_refused = !bundle_in_use
+            && state
+                .players
+                .get(&entity)
+                .and_then(|player| player.finishing_consumable_debit())
+                .is_some_and(|debit| {
+                    crate::plugin_inventories::below_player_debit_floors(
+                        state,
+                        entity,
+                        &[debit],
+                        None,
+                    )
+                });
         let consumable_event = (!consumable_refused)
             .then(|| {
                 state.players.get(&entity).and_then(|player| {
@@ -680,6 +698,9 @@ pub(super) fn tick_players(
         let pos = state.entities.pos(slot);
         for stack in effects.dropped {
             let id = spawn_item_entity(state, pos, stack);
+            if bundle_in_use {
+                crate::item_motion::throw_selected(state, entity, std::slice::from_ref(&id));
+            }
             changes.entities_spawned.push(id);
         }
         // Eye-in-water for drowning.

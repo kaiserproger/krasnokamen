@@ -125,6 +125,63 @@ fn input_matches(
             .is_some_and(|name| matches(value, name, stack.item_id, tags, "minecraft:item"))
 }
 
+/// Item IDs admitted by the template, base and addition smithing slots.
+pub fn smithing_input_ids(items: &ItemRegistry, tags: &TagsData) -> [Vec<i32>; 3] {
+    let mut inputs = [Vec::new(), Vec::new(), Vec::new()];
+    for recipe in &catalogue().smithing {
+        for (value, ids) in [&recipe.template, &recipe.base, &recipe.addition]
+            .into_iter()
+            .zip(&mut inputs)
+        {
+            collect_smithing_ids(value, items, tags, ids);
+        }
+    }
+    for ids in &mut inputs {
+        ids.sort_unstable();
+        ids.dedup();
+    }
+    inputs
+}
+
+fn collect_smithing_ids(
+    value: &serde_json::Value,
+    items: &ItemRegistry,
+    tags: &TagsData,
+    ids: &mut Vec<i32>,
+) {
+    match value {
+        serde_json::Value::String(value) => {
+            if let Some(tag) = value.strip_prefix('#') {
+                if let Some(members) = tags.raw_ids("minecraft:item", tag) {
+                    ids.extend(members.iter().copied().filter(|&id| {
+                        u32::try_from(id)
+                            .ok()
+                            .and_then(|id| items.name_of(id))
+                            .is_some()
+                    }));
+                }
+                if let Some(members) = catalogue().item_tags.get(tag) {
+                    ids.extend(members.iter().filter_map(|name| {
+                        items.id_of(name).and_then(|id| i32::try_from(id).ok())
+                    }));
+                }
+            } else if let Some(id) = Identifier::parse(value)
+                .ok()
+                .and_then(|name| items.id_of(&name))
+                .and_then(|id| i32::try_from(id).ok())
+            {
+                ids.push(id);
+            }
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                collect_smithing_ids(value, items, tags, ids);
+            }
+        }
+        _ => {}
+    }
+}
+
 pub fn smithing_result(
     input: &[ItemStack; 9],
     items: &ItemRegistry,
