@@ -1142,7 +1142,7 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CUSTODY-MOUNT-EXPORT"
-regression = []
+regression = ["cargo:mc-core:world_conversion::roundtrip_tests::imported_mount_cargo_menu_roundtrip_uses_native_contents"]
 
 [[bug]]
 id = "SETBLOCK-SNBT"

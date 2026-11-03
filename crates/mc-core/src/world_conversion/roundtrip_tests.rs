@@ -254,6 +254,159 @@ fn has_field(tag: &Tag, key: &str) -> bool {
 }
 
 #[test]
+fn imported_mount_cargo_menu_roundtrip_uses_native_contents() {
+    use crate::boundary::{ChangeSet, ClickMode, ConnectionId, Hand, PlayerInput};
+    use crate::mounts::tests as mount_tests;
+    use crate::tick::run_tick;
+    use mc_data::{Identifier, ItemStack};
+    use mc_nbt::{ListTag, tag_type};
+
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("anvil");
+    let native = temp.path().join("native");
+    let output = temp.path().join("export");
+    let again = temp.path().join("again");
+    for path in [&source, &native, &output, &again] {
+        std::fs::create_dir(path).unwrap();
+    }
+    let config = CoreConfig::new(native.clone(), 42);
+    modern_fixture(&source, &config);
+    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let diamond = registry
+        .items
+        .id_of(&Identifier::parse("minecraft:diamond").unwrap())
+        .unwrap();
+    let emerald = registry
+        .items
+        .id_of(&Identifier::parse("minecraft:emerald").unwrap())
+        .unwrap();
+    let mut fields =
+        mc_data::item_nbt::stack_to_fields(&registry.items, &ItemStack::new(diamond, 7)).unwrap();
+    fields.push(("Slot".into(), Tag::Byte(0)));
+    let uuid = uuid::Uuid::from_u128(0x123456);
+    let mount = mc_data::entity_nbt::VanillaEntity {
+        id: "minecraft:donkey".into(),
+        uuid,
+        wire_id: 200,
+        pos: [-8.0, 64.0, 24.0],
+        health: 20.0,
+        extra_fields: vec![
+            ("Tame".into(), Tag::Byte(1)),
+            ("ChestedHorse".into(), Tag::Byte(1)),
+            (
+                "Items".into(),
+                Tag::List(ListTag {
+                    element_type: tag_type::COMPOUND,
+                    elements: vec![Tag::Compound(fields)],
+                }),
+            ),
+        ],
+        ..Default::default()
+    };
+    let entity_dir = Dimension::Overworld.directory(&source).join("entities");
+    let mut chunks = mc_world::anvil::read_entity_regions(&entity_dir, &registry.items).unwrap();
+    chunks.get_mut(&(-1, 1)).unwrap().entities.push(mount);
+    mc_world::anvil::write_entity_regions(&entity_dir, &registry.items, &chunks, 79).unwrap();
+    import::convert(&config, &source, &native).unwrap();
+    let mut recovered = bridge::recover_offline(&config).unwrap();
+    let replay = &recovered.dimensions[&Dimension::Overworld];
+    let (&id, record) = replay
+        .entities
+        .iter()
+        .find(|(_, entity)| entity.uuid == uuid.to_string())
+        .unwrap();
+    let (mut state, actor, pos) = mount_tests::fixture();
+    let mut record = record.clone();
+    record.pos = pos;
+    crate::core::restore_entity(&mut state, id, &record).unwrap();
+    let target = crate::boundary::EntityId(id);
+    let slot = state.entities.slot_of(target).unwrap();
+    state.entities.row_mut(slot).entity_life.tamed = true;
+    run_tick(
+        &mut state,
+        &[PlayerInput::InteractEntitySecondary {
+            connection: ConnectionId(1),
+            target,
+            hand: Hand::Main,
+            location: [0.0; 3],
+        }],
+    );
+    let window = state.players[&actor].open.as_ref().unwrap().window;
+    let version = state.players[&actor].open.as_ref().unwrap().state_id;
+    crate::mounts::menus::click(
+        &mut state,
+        actor,
+        window,
+        version,
+        2,
+        0,
+        ClickMode::QuickMove,
+        &mut ChangeSet::default(),
+    );
+    assert!(state.entities.row(slot).entity_life.mount.cargo[0].is_empty());
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] = ItemStack::new(emerald, 5);
+    let version = state.players[&actor].open.as_ref().unwrap().state_id;
+    crate::mounts::menus::click(
+        &mut state,
+        actor,
+        window,
+        version,
+        44,
+        0,
+        ClickMode::QuickMove,
+        &mut ChangeSet::default(),
+    );
+    let expected = state.entities.row(slot).entity_life.mount.cargo.clone();
+    assert_eq!(expected[0], ItemStack::new(emerald, 5));
+    let (_, captured, _) = crate::core::checkpoint_data_for(&state, 80);
+    let entities =
+        bridge::encode_entities(Dimension::Overworld, &captured, &registry.items, 80).unwrap();
+    for replay in recovered.dimensions.values_mut() {
+        replay.tick = 80;
+    }
+    let mut checkpoint = bridge::encode_checkpoint(&recovered).unwrap();
+    checkpoint
+        .entities
+        .retain(|entity| entity.identity != *uuid.as_bytes());
+    checkpoint.entities.extend(
+        entities
+            .into_iter()
+            .filter(|entity| entity.identity == *uuid.as_bytes()),
+    );
+    drop(recovered);
+    let store = NativeStore::open(
+        &native.join("native/state.redb"),
+        bridge::native_identity(&config),
+    )
+    .unwrap();
+    store
+        .commit_checkpoint(
+            NativeCheckpoint {
+                tick: 80,
+                previous_tick: 79,
+                chunks: &[],
+                entities: &checkpoint.entities,
+                players: &checkpoint.players,
+                globals: &checkpoint.globals,
+            },
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
+    drop(store);
+    export::convert(&config, &native, &output).unwrap();
+    let again_config = CoreConfig::new(again.clone(), 42);
+    import::convert(&again_config, &output, &again).unwrap();
+    let recovered = bridge::recover_offline(&again_config).unwrap();
+    let record = recovered.dimensions[&Dimension::Overworld]
+        .entities
+        .values()
+        .find(|entity| entity.uuid == uuid.to_string())
+        .unwrap();
+    assert_eq!(record.state.entity_life.mount.cargo, expected);
+}
+
+#[test]
 fn modern_all_domains_three_dimension_borders_roundtrip_and_unknown_entity_checkpoint_survival() {
     let temp = tempfile::tempdir().unwrap();
     let source = temp.path().join("anvil");
