@@ -2385,6 +2385,39 @@ fn shared_destroy_command_settles_open_chest_before_the_next_click() {
 }
 
 #[test]
+fn destroyed_open_chest_rejects_extract_and_insert_clicks() {
+    for insert in [false, true] {
+        let (mut state, alice, _) = worlds();
+        let mut click = open_diamond_chest(&mut state, 1);
+        if insert {
+            state.block_entities.get_mut(&(10, 150, 8)).unwrap().slots[0] =
+                mc_data::ItemStack::EMPTY;
+            let diamond = diamond_id(&state);
+            state.players.get_mut(&alice).unwrap().inventory.slots[9] =
+                mc_data::ItemStack::new(diamond, 5);
+            if let PlayerInput::ContainerClick { slot, .. } = &mut click {
+                *slot = 27;
+            }
+        }
+        command(&mut state, 1, "setblock 10 150 8 air destroy");
+        assert!(state.players[&alice].open.is_none(), "insert={insert}");
+        crate::tick::run_tick(&mut state, &[click]);
+        assert_eq!(diamonds(&state, alice), 5, "insert={insert}");
+        if insert {
+            assert_eq!(state.players[&alice].inventory.slots[9].count, 5);
+        } else {
+            assert!(
+                state.players[&alice]
+                    .inventory
+                    .slots
+                    .iter()
+                    .all(|stack| { stack.item_id != diamond_id(&state) || stack.is_empty() })
+            );
+        }
+    }
+}
+
+#[test]
 fn rejoin_child_dimension_keeps_initial_client_locale() {
     for (dimension, split, include_view) in [
         (Dimension::Nether, false, true),

@@ -780,7 +780,8 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-1"
-regression = []
+regression = ["cargo:mc-core:dimensions::tests::destroyed_open_chest_rejects_extract_and_insert_clicks", "cargo:mc-core:dimensions::tests::shared_destroy_command_settles_open_chest_before_the_next_click"]
+failing_first = "reported"
 
 [[bug]]
 id = "END-RESTART"
