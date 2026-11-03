@@ -36,6 +36,11 @@ Typed-option constraints (fail closed with exit 2 on violation):
   `playable` 1500 s, `replay` 180 s). Graphical runs additionally need Linux
   `inotify`/`pidfd`/`Xvfb` plus client credentials (see below).
 
+The shared Java client launcher sets both `HOME` and JVM `user.home` to
+`.home` inside that client's game directory. Forge's home-derived Minecraft
+assets therefore use that private directory; provision assets there when
+needed. Gradle's separately configured cache is not isolated by this setting.
+
 Receipt statuses are `passed` | `failed` | `prepared` | `interrupted`. Only
 real completion is `passed`. `--check`/`--prepare` (and other
 preparation-only modes) report `prepared` with exit 0 — never a gameplay

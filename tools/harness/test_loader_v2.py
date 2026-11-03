@@ -13,6 +13,31 @@ from . import loader, profiles, runtime
 
 
 class LoaderV2Tests(unittest.TestCase):
+    def test_java_clients_use_private_home_for_all_platforms(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for platform in (None, *runtime.PLATFORMS):
+                with self.subTest(platform=platform), \
+                     mock.patch.dict(runtime.os.environ, {"JAVA_TOOL_OPTIONS": "-Xmx512m -Duser.home=/owner"}), \
+                     mock.patch.object(Path, "is_file", return_value=True), \
+                     mock.patch.object(runtime.os, "access", return_value=True), \
+                     mock.patch.object(runtime, "port_open", return_value=False), \
+                     mock.patch.object(runtime, "wait_port"), \
+                     mock.patch.object(runtime.subprocess, "Popen") as launch:
+                    _, handle = runtime.start_client(
+                        game_dir=root / "game", log_path=root / "client.log",
+                        token="unit-test-only", mcp_port=12345,
+                        username="HarnessUnit", display=":99", platform=platform,
+                    )
+                    handle.close()
+                    env = launch.call_args.kwargs["env"]
+                    home = root / "game" / ".home"
+                    self.assertEqual(
+                        env["JAVA_TOOL_OPTIONS"],
+                        f'-Xmx512m -Duser.home=/owner -Duser.home="{home}"',
+                    )
+                    self.assertEqual(env["HOME"], str(home))
+
     def test_v2_profile_never_builds_or_replaces_deployment(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -489,6 +489,14 @@ def start_client(
         )
     task = ":fabric-agent:runClientMcp" if platform is None else f":loader-{platform}:runClientMcp"
     env = os.environ.copy()
+    # HOME alone does not change Java's user.home on Unix. Pass the property
+    # to Gradle and its forked client so Forge's assets root is private too.
+    home = game_dir / ".home"
+    home.mkdir(parents=True, exist_ok=True)
+    env["HOME"] = str(home)
+    env["JAVA_TOOL_OPTIONS"] = (
+        f'{env.get("JAVA_TOOL_OPTIONS", "")} -Duser.home="{home}"'
+    ).strip()
     # The client must only ever use the harness-owned Xvfb, never the owner's desktop.
     env.pop("WAYLAND_DISPLAY", None)
     env.update(
