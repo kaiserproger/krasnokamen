@@ -582,18 +582,43 @@ const CHUNKS_PER_TICK: usize = 16;
 /// image to reconcile, so they precede even pending respawn forgets. Other
 /// work that does not fit stays unsent in the viewer
 /// cache and is planned again from a newer snapshot.
-pub fn plan_viewer(
+#[cfg(test)]
+pub(crate) fn plan_viewer(
     output: &TickOutput,
     viewer: &mut ViewerState,
     view_distance: i32,
     chunk_cache: &ChunkPacketCache,
 ) -> Vec<PlannedPacket> {
+    use std::sync::LazyLock;
+    static BIOMES: LazyLock<mc_data::Registry> =
+        LazyLock::new(|| crate::chunks::test_biome_registry(&["minecraft:plains"]));
+    static BLOCKS: LazyLock<mc_world::BlockRegistry> = LazyLock::new(|| {
+        mc_world::BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+            .expect("required blocks report builds")
+    });
+    static ITEMS: LazyLock<mc_data::items::ItemRegistry> =
+        LazyLock::new(mc_data::items::solaris_required_items);
+    static TYPES: LazyLock<mc_data::block_entity_types::BlockEntityTypeRegistry> =
+        LazyLock::new(mc_data::block_entity_types::solaris_required_block_entity_types);
+    let registries = PlanRegistries {
+        biomes: &BIOMES,
+        blocks: &BLOCKS,
+        items: &ITEMS,
+        block_entity_types: &TYPES,
+    };
     let Some(output) = output.in_dimension(viewer.dimension) else {
         return Vec::new();
     };
     let index = TickPlanIndex::with_previous(output, viewer.entity_interest.previous())
         .with_reveals(output, chunk_cache.anti_xray());
-    plan_viewer_indexed(output, viewer, view_distance, chunk_cache, &index, None)
+    plan_viewer_indexed(
+        output,
+        viewer,
+        view_distance,
+        chunk_cache,
+        &index,
+        &registries,
+    )
 }
 
 pub(crate) fn plan_viewer_indexed(
@@ -602,7 +627,7 @@ pub(crate) fn plan_viewer_indexed(
     view_distance: i32,
     chunk_cache: &ChunkPacketCache,
     index: &TickPlanIndex,
-    registries: Option<&PlanRegistries<'_>>,
+    registries: &PlanRegistries<'_>,
 ) -> Vec<PlannedPacket> {
     let view_distance = viewer
         .view_distance
@@ -634,7 +659,7 @@ fn plan_viewer_inner(
     view_distance: i32,
     chunk_cache: &ChunkPacketCache,
     index: &TickPlanIndex,
-    registries: Option<&PlanRegistries<'_>>,
+    registries: &PlanRegistries<'_>,
     scratch: &mut PlanScratch,
 ) -> Vec<PlannedPacket> {
     let mut out = Vec::new();
@@ -995,15 +1020,6 @@ fn plan_viewer_inner(
     // A repair packet contains the latest projection; otherwise send the
     // entity only after its block update and through the same world FIFO.
     if !viewer.pending_block_entities.is_empty() {
-        use std::sync::LazyLock;
-        static BLOCKS: LazyLock<mc_world::BlockRegistry> = LazyLock::new(|| {
-            mc_world::BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
-                .expect("required blocks report builds")
-        });
-        static TYPES: LazyLock<mc_data::block_entity_types::BlockEntityTypeRegistry> =
-            LazyLock::new(mc_data::block_entity_types::solaris_required_block_entity_types);
-        let blocks = registries.map_or_else(|| &*BLOCKS, |r| r.blocks);
-        let types = registries.map_or_else(|| &*TYPES, |r| r.block_entity_types);
         scratch.blocks.clear();
         scratch.blocks.extend(viewer.pending_block_entities.drain());
         scratch.blocks.sort_unstable_by_key(|pos| (pos.x, pos.y, pos.z));
@@ -1019,11 +1035,15 @@ fn plan_viewer_inner(
             let Some(resident) = find_chunk(&snapshot.chunks, chunk) else {
                 continue;
             };
-            let Some(record) = mc_world::wire::client_block_entity(&resident.chunk, blocks, pos)
+            let Some(record) =
+                mc_world::wire::client_block_entity(&resident.chunk, registries.blocks, pos)
             else {
                 continue;
             };
-            let Some(type_id) = types.id_of(&record.type_name).and_then(|id| i32::try_from(id).ok())
+            let Some(type_id) = registries
+                .block_entity_types
+                .id_of(&record.type_name)
+                .and_then(|id| i32::try_from(id).ok())
             else {
                 continue;
             };
