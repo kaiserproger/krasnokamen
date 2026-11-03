@@ -235,6 +235,9 @@ pub(crate) fn advance(
     handle: &str,
     builder: uuid::Uuid,
 ) -> Result<bool, Failure> {
+    if crate::settlements::economy::worker_reserved(state, Some(settlement), builder) {
+        return Err(Failure::Busy);
+    }
     let snapshot = status(state, settlement, handle)?;
     let stage = snapshot
         .stages
@@ -297,6 +300,9 @@ pub(super) fn debit(
     required: &BTreeMap<String, u64>,
 ) -> Result<(), Failure> {
     let uuid = uuid::Uuid::parse_str(builder).map_err(|_| Failure::InvalidRequest)?;
+    if crate::settlements::economy::worker_reserved(state, Some(id), uuid) {
+        return Err(Failure::Busy);
+    }
     let slot = state.entities.slot_of_uuid(uuid).ok_or(Failure::NotFound)?;
     if !state.entities.row(slot).villager.as_ref().is_some_and(|v| {
         v.settlement == Some(id)
@@ -572,6 +578,9 @@ pub(crate) fn fetch(
         .as_ref()
         .and_then(|v| v.settlement)
         .ok_or(Failure::Forbidden)?;
+    if crate::settlements::economy::worker_reserved(state, Some(id), uuid) {
+        return Err(Failure::Busy);
+    }
     let carry = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
     let plan = {
         let ledger = ledger(state)?;
@@ -695,6 +704,9 @@ pub(crate) fn return_carry(state: &mut TickState, id: SettlementId) {
         })
         .collect();
     for uuid in builders {
+        if crate::settlements::economy::worker_reserved(state, Some(id), uuid) {
+            continue;
+        }
         let Ok(carry) = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid }) else {
             continue;
         };

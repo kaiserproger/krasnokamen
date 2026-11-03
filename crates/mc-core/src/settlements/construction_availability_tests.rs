@@ -85,12 +85,84 @@ fn sheep(state: &mut TickState, pos: [f64; 3], wool: u8) -> EntitySlot {
 
 fn shepherd_town(state: &mut TickState) -> SettlementId {
     let id = settle(state);
-    worker(state, id, VillagerProfession::Shepherd);
+    let slot = worker(state, id, VillagerProfession::Shepherd);
+    let shears = item(state, "minecraft:shears");
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(shears, 1));
     id
 }
 
 #[test]
-fn no_shepherd_means_no_wool() {
+fn separate_workers_cannot_pool_unavailable_carried_iron() {
+    let mut state = state();
+    let id = settle(&mut state);
+    let first = worker(&mut state, id, VillagerProfession::None);
+    let second = worker(&mut state, id, VillagerProfession::None);
+    let iron = item(&state, "minecraft:iron_ingot");
+    for slot in [first, second] {
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .inventory[0] = Some(mc_data::ItemStack::new(iron, 1));
+    }
+    sheep(&mut state, [8.5, 201.0, 8.5], 0);
+    let wool = item(&state, "minecraft:white_wool");
+    assert_eq!(
+        missing_explanation(&state, id, wool, &[]),
+        Some((wool, SourceReason::Shears))
+    );
+}
+
+#[test]
+fn wool_requires_shears_or_two_real_ingots() {
+    let mut state = state();
+    let id = settle(&mut state);
+    let slot = worker(&mut state, id, VillagerProfession::None);
+    sheep(&mut state, [8.5, 201.0, 8.5], 0);
+    let wool = item(&state, "minecraft:white_wool");
+    assert_eq!(
+        missing_explanation(&state, id, wool, &[]),
+        Some((wool, SourceReason::Shears))
+    );
+    let iron = item(&state, "minecraft:iron_ingot");
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(iron, 2));
+    assert!(can_produce(&state, id, wool, &[]));
+}
+
+#[test]
+fn unemployed_resident_with_shears_supplies_wool_without_a_workshop() {
+    let mut state = state();
+    let id = settle(&mut state);
+    let slot = worker(&mut state, id, VillagerProfession::None);
+    let shears = item(&state, "minecraft:shears");
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(shears, 1));
+    sheep(&mut state, [8.5, 201.0, 8.5], 0);
+    let wool = item(&state, "minecraft:white_wool");
+    assert!(can_produce(&state, id, wool, &[]));
+}
+
+#[test]
+fn no_resident_means_no_wool() {
     let mut state = state();
     let id = settle(&mut state);
     sheep(&mut state, [8.5, 201.0, 8.5], 0);
@@ -264,7 +336,7 @@ fn bed_with_wood_covered_reports_wool_not_planks() {
     let id = settle(&mut state);
     worker(&mut state, id, VillagerProfession::Lumberjack);
     certify(&mut state, id, BuildingKind::LumberCamp);
-    // No shepherd and no sheep: the planks leg is covered, wool is not.
+    // No shearer and no sheep: the planks leg is covered, wool is not.
     let white_bed = item(&state, "minecraft:white_bed");
     let wool = item(&state, "minecraft:white_wool");
     assert!(!can_produce(&state, id, white_bed, &[]));
@@ -277,7 +349,15 @@ fn bed_with_wool_and_wood_is_producible() {
     let id = settle(&mut state);
     worker(&mut state, id, VillagerProfession::Lumberjack);
     certify(&mut state, id, BuildingKind::LumberCamp);
-    worker(&mut state, id, VillagerProfession::Shepherd);
+    let shearer = worker(&mut state, id, VillagerProfession::Shepherd);
+    let shears = item(&state, "minecraft:shears");
+    state
+        .entities
+        .row_mut(shearer)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(shears, 1));
     sheep(&mut state, [8.5, 201.0, 8.5], 0);
     let white_bed = item(&state, "minecraft:white_bed");
     assert!(can_produce(&state, id, white_bed, &[]));

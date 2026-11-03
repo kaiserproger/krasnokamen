@@ -231,7 +231,10 @@ fn missing_wheat_is_crafted_from_stored_hay_before_bread_and_survives_restart() 
     let jobs = town.jobs();
     assert_eq!(jobs["bake-1"].receipts.len(), 1);
     assert_eq!(jobs["bake"].receipts.len(), 3);
-    assert_eq!(town.carried("minecraft:bread"), 3);
+    assert_eq!(
+        town.carried("minecraft:bread") + town.stored("minecraft:bread"),
+        3
+    );
     assert_eq!(town.carried("minecraft:wheat"), 0);
     assert_eq!(town.carried("minecraft:hay_block"), 0);
     let policy = &town
@@ -253,7 +256,10 @@ fn missing_wheat_is_crafted_from_stored_hay_before_bread_and_survives_restart() 
     for _ in 0..100 {
         town.step();
     }
-    assert_eq!(town.carried("minecraft:bread"), 3);
+    assert_eq!(
+        town.carried("minecraft:bread") + town.stored("minecraft:bread"),
+        3
+    );
 }
 
 #[test]
@@ -455,7 +461,12 @@ fn a_double_chest_is_one_inventory_so_the_missing_wheat_is_planned_from_hay() {
     let steps = town.submit("bake", "solaris-settlements:bread", 2).unwrap();
     assert_eq!(describe(&steps), "open_hay x1 -> bread x2");
     town.run_until("bake");
-    assert_eq!(town.carried("minecraft:bread"), 2);
+    assert_eq!(
+        town.carried("minecraft:bread")
+            + town.stored("minecraft:bread")
+            + town.stored_at(right, "minecraft:bread"),
+        2
+    );
     assert_eq!(town.stored_at(right, "minecraft:hay_block"), 0);
     // 3 stored + 9 opened - 6 baked, every unit accounted for.
     let wheat = town.carried("minecraft:wheat")
@@ -564,3 +575,6 @@ fn cancelling_a_finished_dependency_cancels_the_unfinished_rest_of_its_order() {
         .production;
     assert_eq!(policy.cancelled, 1);
 }
+
+#[path = "autocraft_delivery_tests.rs"]
+mod output_delivery;

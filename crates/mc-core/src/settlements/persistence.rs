@@ -326,6 +326,20 @@ pub(crate) fn finish_recovery(state: &mut TickState) -> Result<(), CoreError> {
                 .map_err(|error| CoreError::Storage(format!("native settlement: {error}")))?;
             super::construction::validate_pending(&world.registry, record)
                 .map_err(|error| CoreError::Storage(format!("native settlement: {error}")))?;
+            // Old final jobs have no output-custody state. Do not infer which
+            // carried items were made by them or let future portions go untracked.
+            for job in record.economy.production.jobs.values() {
+                if !job.cancelled
+                    && job.done < job.count
+                    && job.delivery.is_none()
+                    && job.order.as_ref().is_none_or(|order| order == &job.id)
+                {
+                    return Err(CoreError::Storage(format!(
+                        "native settlement: legacy unfinished production job {} in settlement {}; stop and resolve it with the previous server before upgrading",
+                        job.id, record.id.0
+                    )));
+                }
+            }
             if !names.insert(record.name.clone()) {
                 return Err(CoreError::Storage(format!(
                     "native settlement: duplicate settlement name {}",

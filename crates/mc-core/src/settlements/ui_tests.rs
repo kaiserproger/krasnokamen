@@ -1061,7 +1061,7 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
         .iter()
         .map(|blueprint| format!("Order: {}", blueprint.id))
         .collect();
-    assert_eq!(expected.len(), 9);
+    assert_eq!(expected.len(), 10);
     for label in expected {
         assert!(
             page.actions.iter().any(

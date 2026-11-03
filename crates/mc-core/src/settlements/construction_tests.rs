@@ -46,6 +46,70 @@ pub(crate) fn fixture() -> (TickState, SettlementId, EntitySlot) {
     (state, id, slot)
 }
 
+#[test]
+fn storage_order_uses_acacia_logs_without_oak() {
+    let (mut state, id, builder) = fixture();
+    open_plan(&mut state);
+    let item = |name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
+            .unwrap()
+    };
+    let acacia = item("acacia_log");
+    let stone = item("cobblestone");
+    let coal = item("coal");
+    let chest = state.block_entities.get_mut(&(1, 201, 1)).unwrap();
+    for (slot, (item, count)) in [(acacia, 61), (stone, 50), (coal, 1)]
+        .into_iter()
+        .enumerate()
+    {
+        chest.slots[slot] = ItemStack::new(item, count);
+    }
+    request_build(&mut state, id, "storage").unwrap();
+    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    assert_eq!(project.blueprint, "storage");
+    complete(&mut state, id, builder);
+    let building = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .values()
+        .find(|building| building.kind == BuildingKind::Storage)
+        .unwrap()
+        .clone();
+    assert!(
+        state.block_entities[&(1, 201, 1)]
+            .slots
+            .iter()
+            .filter(|stack| stack.item_id == acacia)
+            .map(|stack| stack.count)
+            .sum::<i32>()
+            < 61
+    );
+    assert!(upgrade_available(&state, id, building.id));
+    let level = blueprints::get(&state.registry, "storage")
+        .unwrap()
+        .level(1)
+        .unwrap()
+        .rotated(Rotation::from_quarter_turns(project.rotation));
+    let acacia_blocks = level
+        .blocks
+        .iter()
+        .filter(|(offset, _)| {
+            let [x, y, z] = level.world(project.origin, *offset);
+            state
+                .world
+                .block_at(x, y, z)
+                .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
+                .is_some_and(|block| block.block.id.path() == "acacia_log")
+        })
+        .count();
+    assert!(acacia_blocks > 0, "the actual structure uses stocked wood");
+}
+
 /// Load the three-by-three chunks around the fixture as flat stone at y=200
 /// with air above, keeping the storage chest: one chunk is smaller than a
 /// street block, so the street plan's first lots lie in the neighbours. The

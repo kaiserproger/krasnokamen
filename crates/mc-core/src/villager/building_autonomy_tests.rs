@@ -650,7 +650,7 @@ fn empty_village_gathers_and_starts_storage_through_native_ticks() {
 }
 
 #[test]
-fn adopted_village_produces_stock_and_builds_without_player_supplies() {
+fn adopted_village_with_resident_shears_produces_stock_and_builds() {
     let mut state = village();
     let id = state
         .settlements
@@ -669,6 +669,30 @@ fn adopted_village_produces_stock_and_builds_without_player_supplies() {
             .iter()
             .all(mc_data::ItemStack::is_empty)
     );
+    // The fixture supplies a real tool to its generated shepherd; no wool or
+    // building materials are injected. Vanilla shearing cannot mint shears.
+    let shears = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:shears").unwrap())
+        .unwrap();
+    let shepherd = crate::settlements::construction::residents(&state, id)
+        .find(|&slot| {
+            state
+                .entities
+                .row(slot)
+                .villager
+                .as_ref()
+                .is_some_and(|v| v.data.profession == VillagerProfession::Shepherd)
+        })
+        .expect("generated shepherd");
+    state
+        .entities
+        .row_mut(shepherd)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(shears, 1));
     for kind in [BuildingKind::Mine, BuildingKind::LumberCamp] {
         assert!(
             !record

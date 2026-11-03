@@ -625,6 +625,15 @@ pub(super) fn needed_kinds(
     .filter_map(|(kind, needed)| needed.then_some(kind))
 }
 
+fn candidate_kinds<'a>(
+    state: &'a TickState,
+    record: &'a SettlementRecord,
+    images: &'a [super::inventory::Image],
+) -> impl Iterator<Item = BuildingKind> + 'a {
+    let _ = images;
+    needed_kinds(record, state.settlements.member_count(record.id))
+}
+
 pub(crate) fn sources(state: &TickState, id: SettlementId) -> Vec<[i32; 3]> {
     buildings::storage_points(state, id)
 }
@@ -1206,7 +1215,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
     // need cannot monopolize the single project slot.
     let images = executor::source_images(state, id);
     let catalog = blueprints::all(&state.registry);
-    let blueprint = needed_kinds(record, residents).find_map(|kind| {
+    let blueprint = candidate_kinds(state, record, &images).find_map(|kind| {
         let blueprint = catalog.iter().find(|blueprint| blueprint.kind == kind)?;
         let level = blueprint.level(1)?;
         funded_species(state, &level.materials, &images).map(|_| blueprint)
@@ -1324,6 +1333,7 @@ const BUILDER_CANDIDATES: usize = 8;
 fn release_trapped_builder(state: &mut TickState, id: SettlementId) -> bool {
     let incumbent = residents(state, id).find(|&slot| {
         state.entities.body(slot).alive
+            && !super::economy::worker_reserved(state, Some(id), state.entities.row(slot).uuid)
             && state.entities.row(slot).villager.as_ref().is_some_and(|v| {
                 v.settlement == Some(id)
                     && v.age >= 0
@@ -1372,7 +1382,9 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
     }
     let mut candidates = Vec::new();
     for slot in residents(state, id) {
-        if !resident_simulated(state, slot) {
+        if !resident_simulated(state, slot)
+            || super::economy::worker_reserved(state, Some(id), state.entities.row(slot).uuid)
+        {
             continue;
         }
         let body = state.entities.body(slot);
@@ -1564,7 +1576,7 @@ fn funded_candidate(
             .is_some_and(|level| funded_species(state, &level.materials, images).is_some());
     }
     let catalog = blueprints::all(&state.registry);
-    needed_kinds(record, state.settlements.member_count(record.id)).any(|kind| {
+    candidate_kinds(state, record, images).any(|kind| {
         catalog
             .iter()
             .find(|blueprint| blueprint.kind == kind)
@@ -1590,7 +1602,7 @@ pub(crate) fn waiting(state: &TickState, id: SettlementId) -> Vec<WaitingKind> {
     let queued = pending.and_then(|order| {
         blueprints::get(&state.registry, &order.blueprint).map(|blueprint| (blueprint, order.level))
     });
-    let autonomous = needed_kinds(record, state.settlements.member_count(id))
+    let autonomous = candidate_kinds(state, record, &images)
         .filter(|_| pending.is_none())
         .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
         .filter(|blueprint| active != Some(blueprint.id.as_str()))

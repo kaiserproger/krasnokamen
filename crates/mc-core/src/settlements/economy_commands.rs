@@ -147,6 +147,8 @@ pub(crate) fn execute(
                     "recipe_revision": job.recipe_revision,
                     "count": job.count,
                     "done": job.done,
+                    "delivery": job.delivery,
+                    "delivery_complete": job.delivery_complete(),
                     "paused": job.paused,
                     "cancelled": job.cancelled,
                     "next_due": job.next_due,

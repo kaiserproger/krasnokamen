@@ -26,6 +26,8 @@ const SKIP_PER_ATTEMPT: u32 = 1024;
 const REACH: f64 = 4.0;
 const MIN_TRUNK: u16 = 4;
 const MAX_TRUNK: u16 = 384;
+/// One work window for an unreached tree, including deferred path searches.
+const STALL_PATIENCE: u64 = 2_400;
 
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(from = "StoredProgress")]
@@ -39,6 +41,7 @@ pub struct Progress {
     pub layer: u16,
     pub has_target: bool,
     pub returning: bool,
+    pub stalled_since: u64,
 }
 
 /// Stored shape: [`Progress`] plus `vertical`, the search band that older
@@ -58,6 +61,8 @@ struct StoredProgress {
     layer: u16,
     has_target: bool,
     returning: bool,
+    #[serde(default)]
+    stalled_since: u64,
 }
 
 impl From<StoredProgress> for Progress {
@@ -72,6 +77,7 @@ impl From<StoredProgress> for Progress {
             layer: stored.layer,
             has_target: stored.has_target,
             returning: stored.returning,
+            stalled_since: stored.stalled_since,
         }
     }
 }
@@ -297,6 +303,7 @@ fn drop_target(v: &mut VillagerState) {
     v.lumber_progress.sapling = 0;
     v.lumber_progress.height = 0;
     v.lumber_progress.layer = 0;
+    v.lumber_progress.stalled_since = 0;
 }
 
 /// The bound settlement still owns the tree after radius/edit churn.
@@ -343,6 +350,7 @@ pub(super) fn work(
         || v.sleeping
         || v.activity == Activity::Panic
     {
+        v.lumber_progress.stalled_since = 0;
         return None;
     }
     // Owned binding snapshot: the borrow of `state` ends before `v` mutates.
@@ -392,6 +400,7 @@ pub(super) fn work(
     }
     if v.lumber_progress.returning {
         let target = mining::deposit(state, slot, v);
+        v.lumber_progress.stalled_since = 0;
         v.lumber_progress.returning = v.inventory.iter().any(Option::is_some);
         return target;
     }
@@ -427,6 +436,14 @@ pub(super) fn work(
         return None;
     }
     if !mining::near(state, slot, base, REACH) {
+        let started = &mut v.lumber_progress.stalled_since;
+        if *started == 0 {
+            *started = state.tick.max(1);
+        }
+        if state.tick.saturating_sub(*started) >= STALL_PATIENCE {
+            drop_target(v);
+            return None;
+        }
         // The brain has exhausted its approach and reached a retry deadline
         // without getting into harvesting reach. Keep the sweep cursor, not
         // an inaccessible tree that would pin this worker for every workday.
@@ -440,6 +457,7 @@ pub(super) fn work(
         }
         return Some(base);
     }
+    v.lumber_progress.stalled_since = 0;
     if state.tick < v.harvest_at {
         return Some(base);
     }

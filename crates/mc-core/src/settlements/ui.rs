@@ -481,7 +481,7 @@ fn busy_workers(state: &TickState, id: SettlementId) -> BTreeSet<Uuid> {
         .get(id)
         .into_iter()
         .flat_map(|record| record.economy.production.jobs.values())
-        .filter(|job| !job.cancelled && job.done < job.count)
+        .filter(|job| job.unfinished())
         .map(|job| job.worker)
         .collect()
 }
@@ -1028,6 +1028,14 @@ fn residents_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) 
 fn job_status(ctx: &Ctx, job: &super::production::Job) -> String {
     if job.cancelled {
         ctx.t(Key::JobCancelled).to_owned()
+    } else if job.delivery_pending() {
+        ctx.f(
+            Key::JobWaiting,
+            &[(
+                "reason",
+                job.paused.as_deref().unwrap_or("awaiting output storage"),
+            )],
+        )
     } else if job.done >= job.count {
         ctx.t(Key::JobDone).to_owned()
     } else {
@@ -1045,7 +1053,7 @@ fn orders_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, not
         return;
     };
     let mut jobs: Vec<_> = record.economy.production.jobs.values().collect();
-    jobs.sort_by_key(|job| (job.cancelled || job.done >= job.count, job.accepted_tick));
+    jobs.sort_by_key(|job| (!job.unfinished(), job.accepted_tick));
     let mut lines = Vec::new();
     let mut buttons = Vec::new();
     for job in jobs.iter().take(MAX_LISTED) {
@@ -1061,7 +1069,7 @@ fn orders_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, not
                 ("status", &job_status(ctx, job)),
             ],
         ));
-        if ctx.manage && !job.cancelled && job.done < job.count {
+        if ctx.manage && job.unfinished() {
             let (label, action) = if job.paused.as_deref() == Some("paused") {
                 (ctx.f(Key::Resume, &[("id", &job.id)]), "order_resume")
             } else {
@@ -1964,8 +1972,10 @@ fn source_reason(lang: Lang, reason: Option<super::construction::SourceReason>) 
         (Lang::Ru, Some(SourceReason::Farm)) => "нужна ферма",
         (Lang::En, Some(SourceReason::Farmer)) => "no farmer",
         (Lang::Ru, Some(SourceReason::Farmer)) => "нет фермера",
-        (Lang::En, Some(SourceReason::Shepherd)) => "no shepherd",
-        (Lang::Ru, Some(SourceReason::Shepherd)) => "нет пастуха",
+        (Lang::En, Some(SourceReason::Shearer)) => "no available resident",
+        (Lang::Ru, Some(SourceReason::Shearer)) => "нет свободного жителя",
+        (Lang::En, Some(SourceReason::Shears)) => "needs shears: 2 iron ingots",
+        (Lang::Ru, Some(SourceReason::Shears)) => "нужны ножницы: 2 железных слитка",
         (Lang::En, Some(SourceReason::Sheep)) => "no sheep of the required color",
         (Lang::Ru, Some(SourceReason::Sheep)) => "нет овцы нужного цвета",
         (Lang::En, Some(SourceReason::Unknown)) => "no source",
@@ -1983,6 +1993,8 @@ fn blueprint_label(ctx: &Ctx, blueprint: &str) -> &'static str {
         (Lang::Ru, "farm") => "Ферма",
         (Lang::En, "mason") => "Mason's workshop",
         (Lang::Ru, "mason") => "Мастерская каменщика",
+        (Lang::En, "shepherd") => "Shepherd's workshop",
+        (Lang::Ru, "shepherd") => "Мастерская пастуха",
         (Lang::En, "lumber_camp") => "Lumber camp",
         (Lang::Ru, "lumber_camp") => "Лесопилка",
         (Lang::En, "mine") => "Mine",

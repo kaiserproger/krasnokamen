@@ -852,3 +852,40 @@ fn lumberjack_never_targets_trees_in_loaded_chunks_that_do_not_simulate() {
         "the simulated tree, never the frozen-border one"
     );
 }
+
+#[test]
+fn deferred_tree_route_eventually_releases_the_lumberjack_for_another_tree() {
+    let (mut state, slot, mut villager) = fixture(BuildingKind::LumberCamp);
+    tree(&mut state, 10, 10, 4);
+    tree(&mut state, 12, 12, 4);
+    let mut changes = ChangeSet::default();
+    acquire(&mut state, slot, &mut villager, &mut changes);
+    assert_eq!(villager.lumber_progress.base, [10, 201, 10]);
+    state.entities.set_pos(slot, [3.5, 201.0, 3.5]);
+    // A deferred navigation search is neither a path nor a definitive failure.
+    // Repeated real work decisions must eventually let the sweep continue.
+    villager.navigation_search_failed = false;
+    let mut released = false;
+    for _ in 0..=120 {
+        state.tick += 20;
+        lumber::work(&mut state, slot, &mut villager, &mut changes);
+        if !villager.lumber_progress.has_target {
+            released = true;
+            break;
+        }
+    }
+    assert!(
+        released,
+        "a deferred route must not monopolize all later workdays"
+    );
+    state.tick += 20;
+    let next = lumber::work(&mut state, slot, &mut villager, &mut changes).unwrap();
+    assert_eq!([next.x, next.y, next.z], [12, 201, 12]);
+    follow(&mut state, slot, next);
+    state.tick += 20;
+    lumber::work(&mut state, slot, &mut villager, &mut changes);
+    assert_eq!(
+        count(&villager, mining::item_id(&state, "oak_log").unwrap()),
+        1
+    );
+}

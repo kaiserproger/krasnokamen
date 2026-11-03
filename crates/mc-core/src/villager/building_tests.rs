@@ -221,9 +221,28 @@ fn production_inputs_survive_farmer_work_and_deposit_until_completion_or_cancel(
         VillagerProfession::Farmer,
         "valid Farmer POI survives allocation"
     );
+    // A finished portion still owns its worker until the output is stored.
+    state.entities.set_pos(slot, [4.5, 201.0, 3.5]);
+    state.tick += 1000;
+    state.tick_budget.reset(state.tick);
+    crate::settlements::tick(&mut state, &mut changes);
+    assert!(
+        state
+            .settlements
+            .get(settlement)
+            .unwrap()
+            .economy
+            .production
+            .jobs["bread-input"]
+            .delivery_complete()
+    );
     let mut villager = state.entities.row_mut(slot).villager.take().unwrap();
     assert_eq!(wheat_in_carry(&villager), 0);
     villager.inventory[0] = Some(ItemStack::new(wheat, 3));
+    villager.inventory[1] = Some(ItemStack::new(
+        super::mining::item_id(&state, "bread").unwrap(),
+        3,
+    ));
     state.entities.row_mut(slot).villager = Some(villager);
     start(&mut state, "cancel-input");
     economy_commands::execute(

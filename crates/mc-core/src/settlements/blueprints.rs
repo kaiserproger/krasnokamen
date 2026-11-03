@@ -29,11 +29,12 @@ pub type ItemId = u32;
 /// reach of a ground-level stand point, so nothing may rise above y offset 8.
 pub const MAX_SIZE: [u8; 3] = [11, 9, 11];
 
-const SOURCES: [&str; 9] = [
+const SOURCES: [&str; 10] = [
     include_str!("../../assets/blueprints/house.json"),
     include_str!("../../assets/blueprints/storage.json"),
     include_str!("../../assets/blueprints/farm.json"),
     include_str!("../../assets/blueprints/mason.json"),
+    include_str!("../../assets/blueprints/shepherd.json"),
     include_str!("../../assets/blueprints/lumber_camp.json"),
     include_str!("../../assets/blueprints/mine.json"),
     include_str!("../../assets/blueprints/barracks.json"),

@@ -21,6 +21,11 @@ pub(crate) struct State {
     routes: BTreeMap<uuid::Uuid, (RouteKind, [i32; 3], bool)>,
     #[serde(skip)]
     route_generation: bool,
+    /// Derived ownership survives manual pause; no historical scan per body.
+    #[serde(skip)]
+    production_owners: BTreeMap<uuid::Uuid, (String, bool)>,
+    #[serde(skip)]
+    caravan_owners: BTreeMap<uuid::Uuid, bool>,
 }
 
 /// Ephemeral fair scheduling over authoritative contract maps. The two key
@@ -129,6 +134,31 @@ impl PartialEq for State {
 impl State {
     pub(super) fn refresh_routes(&mut self) {
         let generation = !self.route_generation;
+        for job in self
+            .production
+            .jobs
+            .values()
+            .filter(|job| job.unfinished() && job.after.is_none())
+        {
+            self.production_owners
+                .entry(job.worker)
+                .and_modify(|(name, seen)| {
+                    name.clone_from(&job.id);
+                    *seen = generation;
+                })
+                .or_insert_with(|| (job.id.clone(), generation));
+        }
+        self.production_owners
+            .retain(|_, (_, seen)| *seen == generation);
+        for shipment in self.caravan.shipments.values().filter(|shipment| {
+            matches!(
+                shipment.status,
+                caravan::Status::Loading | caravan::Status::Transit | caravan::Status::Arrived
+            ) || (shipment.status == caravan::Status::Blocked && shipment.loaded)
+        }) {
+            self.caravan_owners.insert(shipment.carrier, generation);
+        }
+        self.caravan_owners.retain(|_, seen| *seen == generation);
         let production = self.production.jobs.values().filter_map(|job| {
             production::target_for_job(job).map(|at| (job.worker, RouteKind::Production, at))
         });
@@ -144,10 +174,9 @@ impl State {
         self.route_generation = generation;
     }
 
-    fn assigned(&self, worker: uuid::Uuid, kind: RouteKind) -> bool {
-        self.routes
-            .get(&worker)
-            .is_some_and(|(assigned, _, _)| *assigned == kind)
+    pub(super) fn production_job(&self, worker: uuid::Uuid) -> Option<&production::Job> {
+        let (name, _) = self.production_owners.get(&worker)?;
+        self.production.jobs.get(name)
     }
 }
 
@@ -192,15 +221,15 @@ pub(crate) fn execute(
     let worker_busy = match &request {
         Request::Production(
             production::Request::Start { worker, .. } | production::Request::Order { worker, .. },
-        ) => record.economy.assigned(*worker, RouteKind::Caravan),
+        ) => record.economy.caravan_owners.contains_key(worker),
         Request::Production(production::Request::Resume { job }) => record
             .economy
             .production
             .jobs
             .get(job)
-            .is_some_and(|job| record.economy.assigned(job.worker, RouteKind::Caravan)),
+            .is_some_and(|job| record.economy.caravan_owners.contains_key(&job.worker)),
         Request::Caravan(caravan::Request::Open(open)) => {
-            record.economy.assigned(open.carrier, RouteKind::Production)
+            record.economy.production_owners.contains_key(&open.carrier)
         }
         _ => false,
     };
@@ -278,9 +307,10 @@ pub(crate) fn protected_carry(
         let Some(record) = world.settlements.get(settlement) else {
             return [0; 8];
         };
-        if !record
+        if record
             .economy
-            .assigned(world.entities.row(slot).uuid, RouteKind::Production)
+            .production_job(world.entities.row(slot).uuid)
+            .is_none()
         {
             return [0; 8];
         }
@@ -412,4 +442,67 @@ pub(crate) fn authorize_endpoint(
         }
     }
     Ok(())
+}
+
+/// Indexed authority checks used by actual native admissions/behaviors.
+/// Routes intentionally vanish on pause; these reservation indexes do not.
+pub(crate) fn production_reserved(
+    world: &TickState,
+    settlement: Option<SettlementId>,
+    worker: uuid::Uuid,
+) -> bool {
+    settlement
+        .and_then(|id| world.settlements.get(id))
+        .is_some_and(|record| record.economy.production_job(worker).is_some())
+}
+
+pub(crate) fn caravan_reserved(
+    world: &TickState,
+    settlement: Option<SettlementId>,
+    worker: uuid::Uuid,
+) -> bool {
+    settlement
+        .and_then(|id| world.settlements.get(id))
+        .is_some_and(|record| record.economy.caravan_owners.contains_key(&worker))
+}
+
+pub(crate) fn worker_reserved(
+    world: &TickState,
+    settlement: Option<SettlementId>,
+    worker: uuid::Uuid,
+) -> bool {
+    production_reserved(world, settlement, worker) || caravan_reserved(world, settlement, worker)
+}
+
+/// Matching pickup is deferred while an exact output pool is reserved. This
+/// never edits retained/owed or accepts an untracked gain to cover prior loss.
+pub(crate) fn defer_output_pickup(
+    world: &TickState,
+    settlement: Option<SettlementId>,
+    worker: uuid::Uuid,
+    stack: &mc_data::ItemStack,
+) -> bool {
+    settlement
+        .and_then(|id| world.settlements.get(id))
+        .and_then(|record| record.economy.production_job(worker))
+        .is_some_and(|job| {
+            job.delivery.as_ref().is_some_and(|delivery| {
+                delivery
+                    .lots
+                    .iter()
+                    .any(|lot| mc_data::inventory_semantics_26_1_2::can_stack(&lot.stack, stack))
+            })
+        })
+}
+
+/// Fast no-debt farm-scan path; no seed lookup/allocation for ordinary farmers.
+pub(crate) fn has_output_obligation(
+    world: &TickState,
+    settlement: Option<SettlementId>,
+    worker: uuid::Uuid,
+) -> bool {
+    settlement
+        .and_then(|id| world.settlements.get(id))
+        .and_then(|record| record.economy.production_job(worker))
+        .is_some_and(production::Job::delivery_pending)
 }

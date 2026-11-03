@@ -1,0 +1,44 @@
+{
+  "id": "shepherd",
+  "kind": "shepherd",
+  "palette": {
+    "C": "cobblestone",
+    "L": "loom[facing=north]"
+  },
+  "levels": [
+    {
+      "cert": [
+        3,
+        4,
+        3
+      ],
+      "entrance": [
+        1,
+        1,
+        2
+      ],
+      "layers": [
+        [
+          "CCC",
+          "CCC",
+          "CCC"
+        ],
+        [
+          "...",
+          ".L.",
+          "..."
+        ],
+        [
+          "...",
+          "...",
+          "..."
+        ],
+        [
+          "...",
+          "...",
+          "..."
+        ]
+      ]
+    }
+  ]
+}

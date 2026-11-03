@@ -4980,3 +4980,9 @@ fn panicking_villager_whose_flee_route_is_walled_off_retreats_home() {
         "a blocked flee must fall back to a reachable refuge, stuck at {pos:?}"
     );
 }
+
+#[path = "delivery_food_tests.rs"]
+mod delivery_food_tests;
+
+#[path = "delivery_pickup_tests.rs"]
+mod delivery_pickup_tests;

@@ -90,6 +90,7 @@ fn inside(bounds: ScriptWorldBounds, pos: BlockPos) -> bool {
 /// the whole volume has now been swept.
 fn sweep(
     state: &TickState,
+    slot: EntitySlot,
     v: &mut VillagerState,
     bounds: ScriptWorldBounds,
     dims: [u32; 3],
@@ -116,7 +117,9 @@ fn sweep(
         {
             continue;
         }
-        if mature_crop(state, pos).is_some() {
+        if mature_crop(state, pos)
+            .is_some_and(|(item, count, _)| !crop_deferred(state, slot, v, item, count))
+        {
             v.harvest_progress.best = Some((distance, pos));
         }
     }
@@ -156,6 +159,47 @@ fn mature_crop(state: &TickState, pos: BlockPos) -> Option<(u32, i32, u32)> {
     }
     let replanted = crate::farming::with_prop(&state.registry.blocks, id, "age", "0")?;
     Some((item_id(state, item)?, count, replanted))
+}
+
+fn net_seed(state: &TickState, v: &VillagerState, item: u32) -> Option<u32> {
+    v.settlement?;
+    state
+        .registry
+        .items
+        .name_of(item)
+        .and_then(|name| match name.path() {
+            "wheat" => item_id(state, "wheat_seeds"),
+            "beetroot" => item_id(state, "beetroot_seeds"),
+            _ => None,
+        })
+}
+
+/// A matching crop or net-seed output must not enter an exact owed pool.
+/// The index lookup is pause-independent; unrelated crops remain candidates.
+fn crop_deferred(
+    state: &TickState,
+    slot: EntitySlot,
+    v: &VillagerState,
+    item: u32,
+    count: i32,
+) -> bool {
+    let worker = state.entities.row(slot).uuid;
+    if !crate::settlements::economy::has_output_obligation(state, v.settlement, worker) {
+        return false;
+    }
+    crate::settlements::economy::defer_output_pickup(
+        state,
+        v.settlement,
+        worker,
+        &ItemStack::new(item, count),
+    ) || net_seed(state, v, item).is_some_and(|seed| {
+        crate::settlements::economy::defer_output_pickup(
+            state,
+            v.settlement,
+            worker,
+            &ItemStack::new(seed, 1),
+        )
+    })
 }
 
 fn count_of(v: &VillagerState, item: u32) -> i32 {
@@ -242,7 +286,11 @@ fn local(state: &mut TickState, slot: EntitySlot, v: &mut VillagerState, changes
             y: feet.y + dy,
             z: feet.z + dz,
         })
-        .find_map(|pos| mature_crop(state, pos).map(|crop| (pos, crop)));
+        .find_map(|pos| {
+            mature_crop(state, pos)
+                .filter(|(item, count, _)| !crop_deferred(state, slot, v, *item, *count))
+                .map(|crop| (pos, crop))
+        });
     let Some((pos, crop)) = found else {
         return;
     };
@@ -281,7 +329,9 @@ fn certified(
     // A broken, edited or re-certified crop releases the target and restarts
     // the sweep from the beginning.
     if let Some(target) = v.harvest_progress.target
-        && (!inside(bounds, target) || mature_crop(state, target).is_none())
+        && (!inside(bounds, target)
+            || mature_crop(state, target)
+                .is_none_or(|(item, count, _)| crop_deferred(state, slot, v, item, count)))
     {
         v.harvest_progress.target = None;
         v.harvest_progress.best = None;
@@ -289,7 +339,7 @@ fn certified(
     }
     if v.harvest_progress.target.is_none() && state.tick >= v.harvest_at {
         let feet = crate::settlements::allocator::at(state.entities.pos(slot));
-        let complete = sweep(state, v, bounds, dims, feet);
+        let complete = sweep(state, slot, v, bounds, dims, feet);
         // Partial sweeps must not repeat on every brain decision.
         v.harvest_at = state.tick + PERIOD;
         if complete {
@@ -324,6 +374,9 @@ fn harvest(
     pos: BlockPos,
     (item, count, replanted): (u32, i32, u32),
 ) -> bool {
+    if crop_deferred(state, slot, v, item, count) {
+        return false;
+    }
     let mut produce = ItemStack::new(item, count);
     let maximum = state.registry.item_rules().max_stack(&produce);
     let room: i32 = v
@@ -344,16 +397,7 @@ fn harvest(
     }
     // One net seed after replant is a deterministic vanilla-attainable yield.
     // Keep it real stock so the settlement can seed its own future fields.
-    let seed = state
-        .registry
-        .items
-        .name_of(item)
-        .and_then(|name| match name.path() {
-            "wheat" => item_id(state, "wheat_seeds"),
-            "beetroot" => item_id(state, "beetroot_seeds"),
-            _ => None,
-        })
-        .filter(|_| v.settlement.is_some());
+    let seed = net_seed(state, v, item);
     let before = seed.map(|_| v.inventory.clone());
     super::brain::add_inventory(v, &mut produce, maximum);
     if let Some(seed) = seed {
@@ -392,6 +436,14 @@ fn harvest(
     };
     if loaves > 0 {
         let mut baked = ItemStack::new(bread, loaves);
+        if crate::settlements::economy::defer_output_pickup(
+            state,
+            v.settlement,
+            state.entities.row(slot).uuid,
+            &baked,
+        ) {
+            return true;
+        }
         let maximum = state.registry.item_rules().max_stack(&baked);
         let stored = super::brain::add_inventory(v, &mut baked, maximum);
         take(v, wheat, stored * WHEAT_PER_BREAD, &protected);
@@ -415,6 +467,7 @@ pub(super) fn deposit(
         return None;
     }
     let bread = item_id(state, "bread")?;
+    let wheat = item_id(state, "wheat")?;
     let mut protected = crate::settlements::economy::protected_carry(state, slot, v);
     let mut needed = 3;
     let mut reserved: [Option<ItemStack>; 8] = std::array::from_fn(|_| None);
@@ -430,6 +483,20 @@ pub(super) fn deposit(
             stack.count -= count;
             protected[index] = protected[index].saturating_sub(count as u32);
             needed -= count;
+        }
+    }
+    // Preserve ingredients for the farmer's own breeding ration; depositing
+    // individual harvests before three wheat accumulate prevents bread baking.
+    let mut wheat_needed = needed * WHEAT_PER_BREAD;
+    for (index, stack) in v.inventory.iter().enumerate() {
+        if let Some(stack) = stack
+            && stack.item_id == wheat
+            && wheat_needed > 0
+        {
+            let available = stack.count.saturating_sub(protected[index] as i32);
+            let keep = available.min(wheat_needed);
+            protected[index] += keep as u32;
+            wheat_needed -= keep;
         }
     }
     for stack in &mut v.inventory {

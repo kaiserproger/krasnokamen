@@ -3,11 +3,12 @@ use crate::settlements::allocator::tests::test_state;
 use crate::settlements::buildings::{certify, upgrade};
 use crate::tick::TickState;
 
-const IDS: [(&str, usize); 9] = [
+const IDS: [(&str, usize); 10] = [
     ("house", 3),
     ("storage", 2),
     ("farm", 2),
     ("mason", 2),
+    ("shepherd", 1),
     ("lumber_camp", 2),
     ("mine", 2),
     ("barracks", 2),
@@ -38,8 +39,8 @@ fn catalog_has_every_blueprint_and_level_within_size_limits() {
     }
 }
 
-/// Owner rule: every item must bottom out in what workers produce (soil and seeds for
-/// the farm field); no iron/flint-dependent station blocks.
+/// Most materials bottom out in worker-produced resources. The shepherd's
+/// loom also accepts real delivered string, which the planner reports when absent.
 #[test]
 fn materials_use_only_worker_producible_items() {
     let state = test_state();
@@ -61,6 +62,7 @@ fn materials_use_only_worker_producible_items() {
         "crafting_table",
         "composter",
         "ladder",
+        "loom",
         "torch",
         "cobblestone",
         "cobblestone_wall",

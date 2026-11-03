@@ -200,3 +200,59 @@ fn certified_farm_sweep_is_bounded_and_resets_with_the_certificate() {
     assert_eq!(harvest::target(&v), None);
     assert_eq!(v.harvest_progress.cursor, harvest::SCAN_PROBES);
 }
+
+#[test]
+fn farmer_with_nearby_storage_bakes_wheat_harvested_through_brain_ticks() {
+    let (mut state, slot, villager) = fixture();
+    let chest = super::mining_tests::block(&state, "chest");
+    state.world.set_block(4, 201, 3, chest);
+    state.block_entities.insert(
+        (4, 201, 3),
+        crate::tick::BlockEntityState {
+            slots: vec![mc_data::ItemStack::EMPTY; 27],
+            furnace: None,
+        },
+    );
+    state
+        .settlements
+        .get_mut(villager.settlement.unwrap())
+        .unwrap()
+        .bootstrap_storage = Some([4, 201, 3]);
+    let farmland = super::mining_tests::block(&state, "farmland");
+    let wheat =
+        crate::settlements::allocator::tests::block(&state, "minecraft:wheat", &[("age", "7")]);
+    for x in 6..9 {
+        state.world.set_block(x, 200, 3, farmland);
+        state.world.set_block(x, 201, 3, wheat);
+    }
+    state.world.fold_overlay();
+    state.entities.row_mut(slot).villager = Some(villager);
+    let bread = super::mining::item_id(&state, "bread").unwrap();
+    for _ in 0..6000 {
+        state.tick_budget.reset(state.tick);
+        let mut changes = ChangeSet::default();
+        crate::settlements::allocator::tick(&mut state, &mut changes);
+        super::brain::tick(&mut state, &mut changes);
+        state.tick += 1;
+    }
+    let villager = state.entities.row(slot).villager.as_ref().unwrap();
+    assert!(
+        villager
+            .inventory
+            .iter()
+            .flatten()
+            .any(|stack| stack.item_id == bread && stack.count > 0),
+        "bread missing: pos={:?} activity={:?} job={:?} carry={:?} crops={:?} chest={:?}",
+        state.entities.pos(slot),
+        villager.activity,
+        villager.job_site,
+        villager.inventory,
+        (6..9)
+            .map(|x| state.world.block_at(x, 201, 3))
+            .collect::<Vec<_>>(),
+        state.block_entities.get(&(4, 201, 3))
+    );
+}
+
+#[path = "delivery_harvest_tests.rs"]
+mod delivery_harvest;

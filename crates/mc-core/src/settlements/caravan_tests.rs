@@ -332,7 +332,10 @@ struct Fixture {
 }
 
 fn fixture() -> Fixture {
-    let mut state = state();
+    fixture_in(state())
+}
+
+fn fixture_in(mut state: TickState) -> Fixture {
     floor(&mut state);
     place_chest(&mut state, SRC_CHEST);
     place_chest(&mut state, DST_CHEST);
@@ -1149,6 +1152,24 @@ fn production_and_caravan_share_one_real_body_without_conflicting_goals() {
     )
     .unwrap();
     let request = open(&f, "body-route", 3, None);
+    assert_eq!(
+        economy::execute(
+            &mut f.state,
+            f.settlement,
+            economy::Request::Caravan(request),
+        ),
+        Err(Failure::Blocked),
+        "paused production still owns the worker and any outstanding output",
+    );
+    economy::execute(
+        &mut f.state,
+        f.settlement,
+        economy::Request::Production(production::Request::Cancel {
+            job: "body-job".into(),
+        }),
+    )
+    .unwrap();
+    let request = open(&f, "body-route", 3, None);
     economy::execute(
         &mut f.state,
         f.settlement,
@@ -1159,8 +1180,14 @@ fn production_and_caravan_share_one_real_body_without_conflicting_goals() {
         economy::execute(
             &mut f.state,
             f.settlement,
-            economy::Request::Production(production::Request::Resume {
-                job: "body-job".into()
+            economy::Request::Production(production::Request::Start {
+                job: "new-body-job".into(),
+                worker: f.carrier_uuid,
+                recipe: "solaris-settlements:stick".into(),
+                count: 1,
+                station,
+                stand_at,
+                building: worksite(&workshop, "solaris:workshop"),
             })
         ),
         Err(Failure::Blocked)
@@ -1176,8 +1203,14 @@ fn production_and_caravan_share_one_real_body_without_conflicting_goals() {
     economy::execute(
         &mut f.state,
         f.settlement,
-        economy::Request::Production(production::Request::Resume {
-            job: "body-job".into(),
+        economy::Request::Production(production::Request::Start {
+            job: "new-body-job".into(),
+            worker: f.carrier_uuid,
+            recipe: "solaris-settlements:stick".into(),
+            count: 1,
+            station,
+            stand_at,
+            building: worksite(&workshop, "solaris:workshop"),
         }),
     )
     .unwrap();
@@ -1213,3 +1246,9 @@ fn finite_tick_budget_rotates_past_sixteen_idle_contracts() {
     assert_eq!(carry_total(&f.state, last_entity), 1);
     assert_eq!(chest_total(&f.state, SRC_CHEST, f.bread), 16);
 }
+
+#[path = "caravan_blocked_cancel_tests.rs"]
+mod blocked_cancel;
+
+#[path = "caravan_delivery_tests.rs"]
+mod delivery_ownership;

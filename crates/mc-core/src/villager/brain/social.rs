@@ -136,6 +136,14 @@ pub(super) fn pickup(
             continue;
         }
         let mut moving = item.full_stack();
+        if crate::settlements::economy::defer_output_pickup(
+            state,
+            v.settlement,
+            state.entities.row(slot).uuid,
+            &moving,
+        ) {
+            continue;
+        }
         let id = body.id;
         let maximum = state.registry.item_rules().max_stack(&moving);
         let count = add_inventory(v, &mut moving, maximum);

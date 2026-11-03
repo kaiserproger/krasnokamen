@@ -9,6 +9,8 @@ use mc_data::ItemStack;
 fn setup() -> (TickState, EntitySlot, Box<VillagerState>) {
     let (state, slot, mut v) = fixture(BuildingKind::Mine);
     v.data.profession = VillagerProfession::Shepherd;
+    let shears = mining::item_id(&state, "shears").unwrap();
+    v.inventory[0] = Some(ItemStack::new(shears, 1));
     (state, slot, v)
 }
 
@@ -34,6 +36,118 @@ fn carried(v: &VillagerState, item: u32) -> i32 {
         .filter(|stack| stack.item_id == item)
         .map(|stack| stack.count)
         .sum()
+}
+
+#[test]
+fn unemployed_resident_never_shears_without_tool_or_iron() {
+    let (mut state, slot, mut v) = setup();
+    v.data.profession = VillagerProfession::None;
+    v.inventory = std::array::from_fn(|_| None);
+    let sheep_slot = sheep(&mut state, [3.5, 201.0, 3.5], 0);
+    state.tick = 20;
+    shepherd::work(&mut state, slot, &mut v, &mut ChangeSet::default());
+    assert_eq!(
+        crate::tick::wool_of(&state.entities.row(sheep_slot).appearance),
+        0
+    );
+    assert!(v.inventory.iter().all(Option::is_none));
+}
+
+#[test]
+fn unemployed_worker_crafts_shears_from_stock_and_deposits_real_wool() {
+    let (mut state, slot, mut v) = setup();
+    v.data.profession = VillagerProfession::None;
+    v.job_site = None;
+    v.inventory = std::array::from_fn(|_| None);
+    storage(&mut state, &v, [4, 201, 3]);
+    let iron = mining::item_id(&state, "iron_ingot").unwrap();
+    let shears = mining::item_id(&state, "shears").unwrap();
+    let white = mining::item_id(&state, "white_wool").unwrap();
+    state.block_entities.get_mut(&(4, 201, 3)).unwrap().slots[0] = ItemStack::new(iron, 2);
+    let sheep_slot = sheep(&mut state, [3.5, 201.0, 3.5], 0);
+    state.entities.set_pos(slot, [3.5, 201.0, 3.5]);
+    let mut changes = ChangeSet::default();
+    state.tick = 20;
+    for _ in 0..5 {
+        shepherd::work(&mut state, slot, &mut v, &mut changes);
+    }
+    assert_eq!(
+        crate::tick::wool_of(&state.entities.row(sheep_slot).appearance),
+        0x10
+    );
+    assert_eq!(carried(&v, shears), 1);
+    assert_eq!(carried(&v, iron), 0);
+    let stock = &state.block_entities[&(4, 201, 3)].slots;
+    assert_eq!(
+        stock
+            .iter()
+            .filter(|item| item.item_id == iron)
+            .map(|item| item.count)
+            .sum::<i32>(),
+        0
+    );
+    assert!(
+        stock
+            .iter()
+            .any(|item| item.item_id == white && item.count > 0)
+    );
+}
+
+#[test]
+fn allocator_and_brain_allow_unemployed_resident_to_shear_and_store_wool() {
+    let (mut state, slot, mut v) = setup();
+    v.data.profession = VillagerProfession::None;
+    v.job_site = None;
+    v.inventory = std::array::from_fn(|_| None);
+    state
+        .settlements
+        .get_mut(v.settlement.unwrap())
+        .unwrap()
+        .buildings
+        .clear();
+    storage(&mut state, &v, [4, 201, 3]);
+    let shears = mining::item_id(&state, "shears").unwrap();
+    let white = mining::item_id(&state, "white_wool").unwrap();
+    state.block_entities.get_mut(&(4, 201, 3)).unwrap().slots[0] = ItemStack::new(shears, 1);
+    let sheep_slot = sheep(&mut state, [3.5, 201.0, 3.5], 0);
+    state.entities.set_pos(slot, [3.5, 201.0, 3.5]);
+    state.entities.row_mut(slot).villager = Some(v);
+    state.world.fold_overlay();
+    for _ in 0..100 {
+        state.tick += 20;
+        state.tick_budget.reset(state.tick);
+        let mut changes = ChangeSet::default();
+        crate::settlements::allocator::tick(&mut state, &mut changes);
+        crate::villager::brain::tick(&mut state, &mut changes);
+        if state.block_entities[&(4, 201, 3)]
+            .slots
+            .iter()
+            .any(|item| item.item_id == white && item.count > 0)
+        {
+            break;
+        }
+    }
+    assert_eq!(
+        crate::tick::wool_of(&state.entities.row(sheep_slot).appearance),
+        0x10
+    );
+    assert!(
+        state.block_entities[&(4, 201, 3)]
+            .slots
+            .iter()
+            .any(|item| item.item_id == white && item.count > 0)
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .data
+            .profession,
+        VillagerProfession::None
+    );
 }
 
 #[test]
@@ -88,7 +202,7 @@ fn shepherd_refuses_baby_foreign_and_distant_sheep() {
     let mut changes = ChangeSet::default();
     state.tick = 20;
     assert_eq!(shepherd::work(&mut state, slot, &mut v, &mut changes), None);
-    assert!(v.inventory.iter().all(Option::is_none));
+    assert_eq!(v.inventory.iter().flatten().count(), 1);
     assert_eq!(
         crate::tick::wool_of(&state.entities.row(baby).appearance),
         0,

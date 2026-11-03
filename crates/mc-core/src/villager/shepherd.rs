@@ -1,19 +1,11 @@
-//! Settlement shepherd: shears adult unsheared sheep inside the settlement
-//! radius and carries the vanilla-colored wool like any other gathered stock.
-//!
-//! A bound [`VillagerProfession::Shepherd`] scans the settlement chunks
-//! through the entity chunk index (never the whole world), walks to the
-//! nearest adult unsheared living sheep, and shears it once within reach.
-//! The whole yield must fit the real villager inventory first; otherwise the
-//! shepherd routes to physical settlement storage through
-//! [`super::mining::deposit`] and the sheep keeps its wool. No shears tool is
-//! required: the owner explicitly wants an attainable autonomous wool source.
-//! Regrowth reuses the native grazing logic untouched: only the sheared bit
-//! is set, the color byte is preserved.
+//! Settlement residents shear adult sheep with a real tool and carry wool to storage.
+//! Unemployed adults and optional shepherds share the same bounded sheep search.
+//! Shears are taken from settlement storage or crafted from two iron ingots.
 use super::mining;
 use super::{Activity, VillagerProfession, VillagerState};
 use crate::boundary::{BlockPos, ChangeSet, ChunkPos};
 use crate::entities::{EntityKind, EntitySlot};
+use crate::settlements::{buildings, inventory};
 use crate::tick::TickState;
 use mc_data::ItemStack;
 
@@ -65,7 +57,9 @@ fn find_sheep(
                     continue;
                 };
                 let body = state.entities.body(slot);
-                if !matches!(body.kind, EntityKind::Mob { type_id } if type_id == sheep) {
+                if !body.alive
+                    || !matches!(body.kind, EntityKind::Mob { type_id } if type_id == sheep)
+                {
                     continue;
                 }
                 let row = state.entities.row(slot);
@@ -92,12 +86,109 @@ fn find_sheep(
     best.map(|(slot, _)| slot)
 }
 
+fn wool(state: &TickState, stack: &ItemStack) -> bool {
+    state
+        .registry
+        .items
+        .name_of(stack.item_id)
+        .is_some_and(|name| name.namespace() == "minecraft" && name.path().ends_with("_wool"))
+}
+
 fn deposit(state: &mut TickState, slot: EntitySlot, v: &mut VillagerState) -> Option<BlockPos> {
-    let destination = mining::deposit(state, slot, v);
-    if destination.is_none() && v.inventory.iter().any(Option::is_some) {
-        v.harvest_at = state.tick + PERIOD;
+    let mut protected = crate::settlements::economy::protected_carry(state, slot, v);
+    for (index, stack) in v.inventory.iter().enumerate() {
+        if let Some(stack) = stack
+            && !wool(state, stack)
+        {
+            protected[index] = stack.count.max(0) as u32;
+        }
     }
-    destination
+    mining::deposit_with_protected(state, slot, v, protected)
+}
+
+fn acquire_tool(
+    state: &mut TickState,
+    slot: EntitySlot,
+    v: &mut VillagerState,
+    shears: u32,
+    iron: u32,
+) -> Option<BlockPos> {
+    let iron_count: i32 = v
+        .inventory
+        .iter()
+        .flatten()
+        .filter(|stack| stack.item_id == iron)
+        .map(|stack| stack.count)
+        .sum();
+    if iron_count >= 2 {
+        let mut carry = v.inventory.clone();
+        let mut remaining = 2;
+        for stack in &mut carry {
+            if let Some(item) = stack.as_mut().filter(|item| item.item_id == iron) {
+                let taken = remaining.min(item.count);
+                item.count -= taken;
+                remaining -= taken;
+                if item.count == 0 {
+                    *stack = None;
+                }
+            }
+        }
+        if let Some(empty) = carry.iter_mut().find(|stack| stack.is_none()) {
+            *empty = Some(ItemStack::new(shears, 1));
+            v.inventory = carry;
+        }
+        return None;
+    }
+    let settlement = v.settlement?;
+    for position in buildings::storage_points(state, settlement) {
+        let endpoint = inventory::Endpoint::Container {
+            dimension: state.dimension.name().into(),
+            position,
+        };
+        let Ok(before) = inventory::load(state, &endpoint) else {
+            continue;
+        };
+        let selected = [shears, iron].into_iter().find_map(|item| {
+            before
+                .slots
+                .iter()
+                .position(|stack| stack.item_id == item && stack.count > 0)
+                .map(|index| (item, index))
+        });
+        let Some((item, index)) = selected else {
+            continue;
+        };
+        let pos = BlockPos {
+            x: position[0],
+            y: position[1],
+            z: position[2],
+        };
+        if !mining::near(state, slot, pos, 2.5) {
+            return Some(pos);
+        }
+        let mut carried = v.inventory.clone();
+        let count = if item == shears {
+            1
+        } else {
+            (2 - iron_count).min(before.slots[index].count)
+        };
+        let Some(empty) = carried.iter_mut().find(|stack| stack.is_none()) else {
+            return deposit(state, slot, v);
+        };
+        let mut moving = before.slots[index].clone();
+        moving.count = count;
+        *empty = Some(moving);
+        let mut after = before.slots.clone();
+        after[index].count -= count;
+        if after[index].count == 0 {
+            after[index] = ItemStack::EMPTY;
+        }
+        if inventory::commit(state, vec![inventory::Change { before, after }]).is_ok() {
+            v.inventory = carried;
+            return None;
+        }
+    }
+    None
 }
 
 pub(super) fn work(
@@ -106,12 +197,21 @@ pub(super) fn work(
     v: &mut VillagerState,
     _changes: &mut ChangeSet,
 ) -> Option<BlockPos> {
-    if v.data.profession != VillagerProfession::Shepherd
-        || v.age < 0
+    if !matches!(
+        v.data.profession,
+        VillagerProfession::Shepherd | VillagerProfession::None
+    ) || v.age < 0
         || v.sleeping
         || v.conversion_time.is_some()
         || v.activity == Activity::Panic
     {
+        return None;
+    }
+    if crate::settlements::economy::worker_reserved(
+        state,
+        v.settlement,
+        state.entities.row(slot).uuid,
+    ) {
         return None;
     }
     let settlement = v.settlement?;
@@ -120,14 +220,33 @@ pub(super) fn work(
     let working = v.activity == Activity::Work
         && (2_000..9_000).contains(&state.day_time.rem_euclid(24_000))
         && crate::command_rules::boolean(state, crate::command_rules::BoolRule::MOB_GRIEFING);
-    if !working || v.inventory.iter().any(Option::is_some) {
+    let shears = mining::item_id(state, "shears")?;
+    let iron = mining::item_id(state, "iron_ingot")?;
+    if !working || v.inventory.iter().flatten().any(|stack| wool(state, stack)) {
         return deposit(state, slot, v);
     }
     if state.tick < v.harvest_at {
         return None;
     }
     let from = state.entities.pos(slot);
-    let target = find_sheep(state, anchor, radius, from)?;
+    let Some(target) = find_sheep(state, anchor, radius, from) else {
+        v.harvest_at = state.tick + PERIOD;
+        return None;
+    };
+    if !v
+        .inventory
+        .iter()
+        .flatten()
+        .any(|stack| stack.item_id == shears)
+    {
+        let before: i32 = v.inventory.iter().flatten().map(|stack| stack.count).sum();
+        let destination = acquire_tool(state, slot, v, shears, iron);
+        let after: i32 = v.inventory.iter().flatten().map(|stack| stack.count).sum();
+        if destination.is_none() && before == after {
+            v.harvest_at = state.tick + PERIOD;
+        }
+        return destination;
+    }
     let feet = state.entities.pos(target);
     let block = BlockPos {
         x: feet[0].floor() as i32,
@@ -165,6 +284,28 @@ pub(super) fn work(
     let appearance = std::sync::Arc::make_mut(&mut state.entities.row_mut(target).appearance);
     crate::tick::set_wool(appearance, wool | 0x10);
     state.appearance_changed.push(id);
+    if let Some(index) = v
+        .inventory
+        .iter()
+        .position(|stack| stack.as_ref().is_some_and(|stack| stack.item_id == shears))
+    {
+        let tool = v.inventory[index].as_mut().expect("tool exists");
+        let rules = state.registry.item_rules();
+        if let Some(maximum) = rules
+            .facts
+            .facts_for_stack(tool, rules.items)
+            .and_then(|facts| facts.max_damage)
+        {
+            let mut seed = (state.tick ^ u64::from(target.0)) as i32;
+            let wear = crate::enchantments::durability_damage(tool, 1, false, &mut seed);
+            let damage = tool.damage.unwrap_or(0).saturating_add(wear);
+            if u32::try_from(damage).is_ok_and(|damage| damage >= maximum) {
+                v.inventory[index] = None;
+            } else if wear > 0 {
+                tool.damage = Some(damage);
+            }
+        }
+    }
     v.harvest_at = state.tick + PERIOD;
     None
 }

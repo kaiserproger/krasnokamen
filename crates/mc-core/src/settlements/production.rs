@@ -29,6 +29,9 @@ const RETRY_TICKS: u64 = 20;
 /// Largest autocraft chain one order may admit.
 pub(super) const MAX_ORDER_STEPS: usize = 32;
 
+#[path = "production_delivery.rs"]
+mod delivery;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ToolWear {
@@ -60,6 +63,11 @@ pub(crate) struct Job {
     pub duration: u64,
     pub count: u32,
     pub done: u32,
+    /// Only standalone/final order jobs owe authored output to real storage.
+    /// None means this historical/intermediate job never tracked delivery;
+    /// never infer delivery of old carry merely from a recipe receipt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<delivery::Delivery>,
     pub station: [i32; 3],
     pub stand_at: [i32; 3],
     pub building: ScriptSettlementBuildingRef,
@@ -79,6 +87,27 @@ pub(crate) struct Job {
     /// Derived navigation only; stock and job progress remain the authorities.
     #[serde(skip)]
     fetch_at: Option<[i32; 3]>,
+}
+
+impl Job {
+    pub(super) fn delivery_pending(&self) -> bool {
+        self.delivery
+            .as_ref()
+            .is_some_and(delivery::Delivery::pending)
+    }
+
+    pub(super) fn unfinished(&self) -> bool {
+        !self.cancelled && (self.done < self.count || self.delivery_pending())
+    }
+
+    pub(crate) fn delivery_complete(&self) -> bool {
+        !self.cancelled
+            && self.done == self.count
+            && self
+                .delivery
+                .as_ref()
+                .is_some_and(|delivery| !delivery.invalidated && !delivery.pending())
+    }
 }
 
 /// One planned autocraft step: a recipe run `count` times at a live station.
@@ -183,6 +212,18 @@ pub(super) fn worker_slot(
         .slot_of_uuid(worker)
         .ok_or(Failure::NotFound)?;
     let row = world.entities.row(slot);
+    if row.villager.as_ref().is_some_and(|v| {
+        matches!(
+            v.data.profession,
+            crate::villager::VillagerProfession::Builder
+                | crate::villager::VillagerProfession::Soldier
+        ) || v.soldier.is_some()
+    }) {
+        return Err(Failure::Busy);
+    }
+    if super::economy::caravan_reserved(world, Some(settlement), worker) {
+        return Err(Failure::Busy);
+    }
     if !world.entities.body(slot).alive {
         return Err(Failure::NotFound);
     }
@@ -408,16 +449,19 @@ pub(super) fn protected_carry(
 ) -> [u32; 8] {
     let mut protected = [0_u32; 8];
     let row = world.entities.row(slot);
-    let Some(job) = world.settlements.get(settlement).and_then(|record| {
-        record
-            .economy
-            .production
-            .jobs
-            .values()
-            .find(|job| job.worker == row.uuid && target_for_job(job).is_some())
-    }) else {
+    let Some(job) = world
+        .settlements
+        .get(settlement)
+        .and_then(|record| record.economy.production_job(row.uuid))
+    else {
         return protected;
     };
+    if let Some(delivery) = &job.delivery {
+        delivery.protect(carry, &mut protected);
+    }
+    if job.done >= job.count || target_for_job(job).is_none() {
+        return protected;
+    }
     let Some(recipe) = world
         .registry
         .item_facts
@@ -1016,7 +1060,7 @@ fn admit(
     if state
         .jobs
         .values()
-        .any(|other| !other.cancelled && other.done < other.count && other.worker == worker)
+        .any(|other| other.unfinished() && other.worker == worker)
     {
         return Err(Failure::Busy);
     }
@@ -1036,6 +1080,7 @@ fn admit(
             duration,
             count,
             done: 0,
+            delivery: Some(delivery::Delivery::default()),
             station,
             stand_at,
             building,
@@ -1104,7 +1149,7 @@ fn admit_order(
     if state
         .jobs
         .values()
-        .any(|other| !other.cancelled && other.done < other.count && other.worker == worker)
+        .any(|other| other.unfinished() && other.worker == worker)
     {
         return Err(Failure::Busy);
     }
@@ -1116,6 +1161,7 @@ fn admit_order(
         station_live(world, recipe, &facts, step.station, step.stand_at)?;
         let duration = recipe.duration_ticks.max(1);
         let after = admitted.last().map(|previous| previous.id.clone());
+        let delivery = (id == order).then(delivery::Delivery::default);
         admitted.push(Job {
             id,
             owner: owner.to_owned(),
@@ -1125,6 +1171,7 @@ fn admit_order(
             duration,
             count: step.count,
             done: 0,
+            delivery,
             station: step.station,
             stand_at: step.stand_at,
             building: step.building,
@@ -1181,10 +1228,7 @@ pub(crate) fn execute(
             let Some(entry) = state.jobs.get_mut(&job) else {
                 return Err(Failure::NotFound);
             };
-            if entry.cancelled
-                || entry.done >= entry.count
-                || entry.paused.as_deref() == Some(MANUAL)
-            {
+            if !entry.unfinished() || entry.paused.as_deref() == Some(MANUAL) {
                 return Ok(false);
             }
             entry.paused = Some(MANUAL.to_owned());
@@ -1192,6 +1236,9 @@ pub(crate) fn execute(
             Ok(true)
         }
         Request::Resume { job } => {
+            if let Some(entry) = state.jobs.get(&job) {
+                worker_slot(world, settlement, entry.worker)?;
+            }
             let tick = world.tick;
             let Some(entry) = state.jobs.get_mut(&job) else {
                 return Err(Failure::NotFound);
@@ -1199,7 +1246,7 @@ pub(crate) fn execute(
             if entry.cancelled {
                 return Err(Failure::InvalidRequest);
             }
-            if entry.done >= entry.count || entry.paused.is_none() {
+            if !entry.unfinished() || entry.paused.is_none() {
                 return Ok(false);
             }
             entry.paused = None;
@@ -1222,7 +1269,7 @@ pub(crate) fn execute(
                 .values_mut()
                 .filter(|entry| entry.id == job || (order.is_some() && entry.order == order))
             {
-                if entry.cancelled || entry.done >= entry.count {
+                if !entry.unfinished() {
                     continue;
                 }
                 entry.cancelled = true;
@@ -1271,6 +1318,9 @@ fn tick_job(
     settlement: SettlementId,
     job: &mut Job,
 ) -> Result<bool, Failure> {
+    if job.delivery_pending() {
+        return delivery::store(world, settlement, job);
+    }
     let route_changed = job.fetch_at.take().is_some();
     // Resolve mutable physical evidence before borrowing the native recipe.
     let facts = building_facts(world, settlement, &job.building)?;
@@ -1297,6 +1347,17 @@ fn tick_job(
     if !reached(world, job) {
         return Ok(park(job, "awaiting reach", retry) | metadata_changed);
     }
+    let delivery_after = job
+        .delivery
+        .as_ref()
+        .map(|previous| {
+            delivery::after_production(
+                previous,
+                &plan.carry_after,
+                &plan.outputs[..recipe.outputs.len()],
+            )
+        })
+        .transpose()?;
     let changes = vec![
         inventory::Change {
             before: plan.carry_before,
@@ -1310,6 +1371,7 @@ fn tick_job(
     if let Err(failure) = inventory::commit(world, changes) {
         return Ok(park(job, pause_reason(failure), retry) | metadata_changed);
     }
+    job.delivery = delivery_after;
     job.done += 1;
     job.receipts.push(Receipt {
         job: job.id.clone(),
@@ -1320,7 +1382,9 @@ fn tick_job(
         outputs: plan.outputs,
         tool_wear: plan.wear,
     });
-    job.paused = None;
+    job.paused = job
+        .delivery_pending()
+        .then(|| "awaiting output storage".to_owned());
     job.next_due = world.tick.saturating_add(job.duration);
     Ok(true)
 }
@@ -1331,8 +1395,7 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut 
     let changed = state.cursor.run(
         &mut state.jobs,
         |job| {
-            !job.cancelled
-                && job.done < job.count
+            job.unfinished()
                 && job.after.is_none()
                 && job.paused.as_deref() != Some(MANUAL)
                 && job.next_due <= tick_now
@@ -1341,9 +1404,10 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut 
             if worker_slot(world, settlement, job.worker).is_err() {
                 return park(job, "missing worker", tick_now.saturating_add(RETRY_TICKS)).into();
             }
+            let produced_before = job.done;
             match tick_job(world, settlement, job) {
                 Ok(changed) => {
-                    if job.done >= job.count {
+                    if produced_before < job.count && job.done >= job.count {
                         finished.push(job.id.clone());
                     }
                     changed
@@ -1378,12 +1442,10 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut 
 /// Any nonterminal, noncancelled, ungated job needing tick. Auto-paused jobs
 /// that can resume are included; only the manual hold is parked.
 pub(crate) fn active(state: &State) -> bool {
-    state.jobs.values().any(|job| {
-        !job.cancelled
-            && job.done < job.count
-            && job.after.is_none()
-            && job.paused.as_deref() != Some(MANUAL)
-    })
+    state
+        .jobs
+        .values()
+        .any(|job| job.unfinished() && job.after.is_none() && job.paused.as_deref() != Some(MANUAL))
 }
 
 /// Native brain routing target for one worker: its live stand post, hidden
@@ -1399,15 +1461,13 @@ pub(crate) fn target(state: &State, worker: Uuid) -> Option<BlockPos> {
 
 pub(super) fn target_for_job(job: &Job) -> Option<BlockPos> {
     let at = job.fetch_at.unwrap_or(job.stand_at);
-    (!job.cancelled
-        && job.done < job.count
-        && job.after.is_none()
-        && job.paused.as_deref() != Some(MANUAL))
-    .then_some(BlockPos {
-        x: at[0],
-        y: at[1],
-        z: at[2],
-    })
+    (job.unfinished() && job.after.is_none() && job.paused.as_deref() != Some(MANUAL)).then_some(
+        BlockPos {
+            x: at[0],
+            y: at[1],
+            z: at[2],
+        },
+    )
 }
 
 pub(crate) fn validate(state: &State) -> Result<(), &'static str> {
@@ -1428,7 +1488,15 @@ pub(crate) fn validate(state: &State) -> Result<(), &'static str> {
         {
             return Err("invalid production job");
         }
-        if job.cancelled && job.done >= job.count {
+        if let Some(delivery) = &job.delivery {
+            delivery.validate()?;
+            if job.order.as_ref().is_some_and(|order| order != &job.id)
+                || (delivery.pending() && job.done == 0)
+            {
+                return Err("invalid delivery job");
+            }
+        }
+        if job.cancelled && job.done >= job.count && !job.delivery_pending() {
             return Err("invalid cancelled production job");
         }
         if job.receipts.len() != job.done as usize {

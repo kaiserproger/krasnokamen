@@ -963,7 +963,9 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                     }
                     Profession::Farmer => super::harvest::deposit(state, slot, &mut v)
                         .or_else(|| super::harvest::target(&v)),
-                    Profession::Shepherd => super::shepherd::work(state, slot, &mut v, changes),
+                    Profession::Shepherd | Profession::None => {
+                        super::shepherd::work(state, slot, &mut v, changes)
+                    }
                     _ => None,
                 }
             };
@@ -1007,7 +1009,13 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 } else {
                     v.navigation_target
                 }
-            } else if v.data.profession == Profession::Soldier {
+            } else if v.data.profession == Profession::Soldier
+                && !crate::settlements::economy::worker_reserved(
+                    state,
+                    v.settlement,
+                    state.entities.row(slot).uuid,
+                )
+            {
                 exact_target = worker_exact;
                 worker_target
             } else if let Some(target) = crate::settlements::economy::target(

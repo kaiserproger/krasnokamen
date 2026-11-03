@@ -464,3 +464,6 @@ fn recruited_soldier_gear_drops_on_death_and_dismissal_restores_default_chance()
     expected.sort_unstable();
     assert_eq!(items, expected);
 }
+
+#[path = "army_delivery_tests.rs"]
+mod delivery_ownership;

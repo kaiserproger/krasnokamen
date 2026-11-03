@@ -646,6 +646,30 @@ fn plan_unload(
     Some((new_carry, new_destination))
 }
 
+fn carrier_available(
+    world: &TickState,
+    settlement: SettlementId,
+    carrier: Uuid,
+) -> Result<(), Failure> {
+    let slot = world
+        .entities
+        .slot_of_uuid(carrier)
+        .ok_or(Failure::NotFound)?;
+    let row = world.entities.row(slot);
+    if super::economy::production_reserved(world, Some(settlement), carrier)
+        || row.villager.as_ref().is_some_and(|v| {
+            matches!(
+                v.data.profession,
+                crate::villager::VillagerProfession::Builder
+                    | crate::villager::VillagerProfession::Soldier
+            ) || v.soldier.is_some()
+        })
+    {
+        return Err(Failure::Busy);
+    }
+    Ok(())
+}
+
 fn carry_endpoint(carrier: Uuid) -> Endpoint {
     Endpoint::VillagerCarry { uuid: carrier }
 }
@@ -658,6 +682,7 @@ fn try_pickup(
     settlement: SettlementId,
     shipment: &mut Shipment,
 ) -> Result<(), Failure> {
+    carrier_available(world, settlement, shipment.carrier)?;
     let source_endpoint = container_endpoint(&shipment.source);
     let carry_endpoint = carry_endpoint(shipment.carrier);
     let facts = super::economy::building(world, settlement, &shipment.source.building)?;
@@ -730,6 +755,7 @@ fn try_unload(
     settlement: SettlementId,
     shipment: &mut Shipment,
 ) -> Result<(), Failure> {
+    carrier_available(world, settlement, shipment.carrier)?;
     let destination_endpoint = container_endpoint(&shipment.destination);
     let carry_endpoint = carry_endpoint(shipment.carrier);
     let facts = super::economy::building(world, settlement, &shipment.destination.building)?;
@@ -890,6 +916,7 @@ pub(crate) fn execute(
                 max_ticks,
                 paid_mandate,
             } = *open;
+            carrier_available(world, settlement, carrier)?;
             if let Some(existing) = state.shipments.get(&id) {
                 let same = existing.source == source
                     && existing.destination == destination
@@ -1076,7 +1103,11 @@ pub(crate) fn execute(
             if shipment.status == Status::Cancelled {
                 return Ok(false);
             }
-            if terminal(shipment.status) {
+            // Loaded Blocked custody still owns the body. Explicit cancellation
+            // releases that ownership WITHOUT unloading/refunding or rewriting
+            // cargo lots, fences, load receipt, or the original blocked reason.
+            if terminal(shipment.status) && !(shipment.status == Status::Blocked && shipment.loaded)
+            {
                 return Err(Failure::OperationConflict);
             }
             state

@@ -117,6 +117,7 @@ pub(crate) fn recruit(state: &mut TickState, id: SettlementId) -> Result<Uuid, S
         .find(|&s| {
             let row = state.entities.row(s);
             state.entities.body(s).alive
+                && !super::economy::worker_reserved(state, Some(id), row.uuid)
                 && row.villager.as_ref().is_some_and(|v| {
                     v.settlement == Some(id)
                         && v.age >= 0
@@ -210,6 +211,9 @@ pub(crate) fn recruit(state: &mut TickState, id: SettlementId) -> Result<Uuid, S
 
 /// Full-storage refusal is atomic: the resident keeps both role and equipment.
 pub(crate) fn dismiss(state: &mut TickState, id: SettlementId, uuid: Uuid) -> Result<(), String> {
+    if super::economy::worker_reserved(state, Some(id), uuid) {
+        return Err("Resident has a production or caravan reservation".into());
+    }
     let slot = state
         .entities
         .slot_of_uuid(uuid)
@@ -311,7 +315,9 @@ pub(crate) fn order(
         .entities
         .slots()
         .filter(|&s| {
-            member(state, s, id) && target.is_none_or(|uuid| state.entities.row(s).uuid == uuid)
+            member(state, s, id)
+                && !super::economy::worker_reserved(state, Some(id), state.entities.row(s).uuid)
+                && target.is_none_or(|uuid| state.entities.row(s).uuid == uuid)
         })
         .collect();
     if slots.is_empty() {

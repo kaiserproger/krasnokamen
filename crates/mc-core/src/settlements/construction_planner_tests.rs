@@ -64,16 +64,21 @@ fn autonomous_needs_cover_every_authored_kind_and_ignore_natural_zones() {
         .iter()
         .map(|blueprint| blueprint.kind)
         .collect();
-    assert_eq!(authored.len(), 9);
-    assert!(authored.into_iter().all(|kind| {
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .buildings
-            .values()
-            .any(|building| building.kind == kind && !building.natural_zone)
-    }));
+    assert_eq!(authored.len(), 10);
+    assert!(
+        authored
+            .into_iter()
+            .filter(|kind| *kind != BuildingKind::Workshop(Profession::Shepherd))
+            .all(|kind| {
+                state
+                    .settlements
+                    .get(id)
+                    .unwrap()
+                    .buildings
+                    .values()
+                    .any(|building| building.kind == kind && !building.natural_zone)
+            })
+    );
 }
 
 fn plan_until_started(state: &mut TickState, id: SettlementId) {
@@ -769,16 +774,7 @@ fn unfunded_house_skips_to_funded_farm_without_debiting_stock() {
         needed_kinds(state.settlements.get(id).unwrap(), 1).next(),
         Some(BuildingKind::House)
     );
-    // No shepherd on the bound resident and no sheep in the fixture, so wool
-    // has no source here.
-    assert!(
-        state
-            .entities
-            .row(slot)
-            .villager
-            .as_ref()
-            .is_some_and(|villager| villager.data.profession != Profession::Shepherd)
-    );
+    // No sheep in the fixture, so wool has no source here.
     // Fund only the later kind's real materials: no wool, no bed.
     fund(&mut state, "farm", 1);
     let house_materials = blueprints::get(&state.registry, "house")
@@ -1310,3 +1306,6 @@ fn owner_order_does_not_preempt_after_a_completed_clear_stage() {
         project.structure
     );
 }
+
+#[path = "construction_delivery_tests.rs"]
+mod delivery_ownership;

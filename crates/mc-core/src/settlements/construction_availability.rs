@@ -2,7 +2,7 @@
 //!
 //! Answers whether a raw missing material is producible by the settlement's
 //! *current* workers and buildings, so the planner can skip unfundable needs
-//! (e.g. a house needing wool with no shepherd/sheep) instead of stalling on
+//! (e.g. a house needing wool with no capable shearer or sheep) instead of stalling on
 //! them. This is a capability classifier, not a funding guarantee: exact stock
 //! proof stays upstream with `executor::missing_stock` / `can_fund`.
 //!
@@ -18,9 +18,9 @@
 //!   Miner plus a certified Mine;
 //! * `<stem>_log` needs a bound adult Lumberjack plus a certified LumberCamp;
 //! * crops/seeds need a bound adult Farmer plus a certified Farmer workshop;
-//! * `<color>_wool` needs a bound adult Shepherd plus a loaded adult living
-//!   sheep of that color inside the settlement radius. A sheared sheep still
-//!   counts: native grazing regrows the wool, so the sheared bit is ignored.
+//! * `<color>_wool` needs an adult unemployed resident or shepherd, real
+//!   shears (or two iron ingots), and a loaded adult sheep of that color.
+//!   A sheared sheep still counts: native grazing regrows its wool.
 //!
 //! Scans are bounded: one resident pass via the chunk-local
 //! [`residents`](super::residents) index and one settlement-bounded chunk-index
@@ -54,7 +54,9 @@ struct Caps {
     miner: bool,
     lumberjack: bool,
     farmer: bool,
-    shepherd: bool,
+    shearer: bool,
+    shears: bool,
+    iron: i64,
     mine: bool,
     camp: bool,
     farm: bool,
@@ -89,7 +91,7 @@ pub(super) fn missing_source(
     let Some(record) = state.settlements.get(id) else {
         return Some(item);
     };
-    let caps = caps(state, id, record);
+    let caps = caps(state, id, record, images);
     let mut work = 0usize;
     let mut visiting = [0u32; VISIT_LEN];
     resolve(state, &caps, item, images, 0, &mut work, &mut visiting)
@@ -103,7 +105,8 @@ pub(crate) enum SourceReason {
     Lumberjack,
     Farm,
     Farmer,
-    Shepherd,
+    Shearer,
+    Shears,
     Sheep,
     Unknown,
 }
@@ -119,7 +122,7 @@ pub(super) fn missing_explanation(
     let Some(record) = state.settlements.get(id) else {
         return Some((leaf, SourceReason::Unknown));
     };
-    let caps = caps(state, id, record);
+    let caps = caps(state, id, record, images);
     let reason = state
         .registry
         .items
@@ -140,8 +143,10 @@ pub(super) fn missing_explanation(
                 SourceReason::Farm
             } else if farmer_raw(path) && !caps.farmer {
                 SourceReason::Farmer
-            } else if path.ends_with("_wool") && !caps.shepherd {
-                SourceReason::Shepherd
+            } else if path.ends_with("_wool") && !caps.shearer {
+                SourceReason::Shearer
+            } else if path.ends_with("_wool") && !caps.shears && caps.iron < 2 {
+                SourceReason::Shears
             } else if path.ends_with("_wool") {
                 SourceReason::Sheep
             } else {
@@ -152,17 +157,36 @@ pub(super) fn missing_explanation(
     Some((leaf, reason))
 }
 
-fn caps(state: &TickState, id: SettlementId, record: &SettlementRecord) -> Caps {
+fn caps(state: &TickState, id: SettlementId, record: &SettlementRecord, images: &[Image]) -> Caps {
     let mut caps = Caps {
         miner: false,
         lumberjack: false,
         farmer: false,
-        shepherd: false,
+        shearer: false,
+        shears: false,
+        iron: 0,
         mine: false,
         camp: false,
         farm: false,
         sheep_colors: 0,
     };
+    let shears = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:shears").expect("identifier"));
+    let iron = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:iron_ingot").expect("identifier"));
+    for stack in images.iter().flat_map(|image| &image.slots) {
+        if Some(stack.item_id) == shears && stack.count > 0 {
+            caps.shears = true;
+        }
+        if Some(stack.item_id) == iron {
+            caps.iron += i64::from(stack.count.max(0));
+        }
+    }
+    let mut max_carried_iron = 0;
     for slot in residents(state, id) {
         let body = state.entities.body(slot);
         let Some(v) = state.entities.row(slot).villager.as_ref() else {
@@ -175,10 +199,23 @@ fn caps(state: &TickState, id: SettlementId, record: &SettlementRecord) -> Caps 
             VillagerProfession::Miner => caps.miner = true,
             VillagerProfession::Lumberjack => caps.lumberjack = true,
             VillagerProfession::Farmer => caps.farmer = true,
-            VillagerProfession::Shepherd => caps.shepherd = true,
+            VillagerProfession::Shepherd | VillagerProfession::None => {
+                caps.shearer = true;
+                let mut carried_iron = 0;
+                for stack in v.inventory.iter().flatten() {
+                    if Some(stack.item_id) == shears && stack.count > 0 {
+                        caps.shears = true;
+                    }
+                    if Some(stack.item_id) == iron {
+                        carried_iron += i64::from(stack.count.max(0));
+                    }
+                }
+                max_carried_iron = max_carried_iron.max(carried_iron);
+            }
             _ => {}
         }
     }
+    caps.iron += max_carried_iron;
     for building in record.buildings.values() {
         match building.kind {
             BuildingKind::Mine => caps.mine = true,
@@ -308,7 +345,9 @@ fn raw_producible(state: &TickState, caps: &Caps, item: u32) -> Option<bool> {
     }
     let color = path.strip_suffix("_wool")?;
     let index = DYE_COLORS.iter().position(|dyed| *dyed == color)?;
-    Some(caps.shepherd && caps.sheep_colors & (1u16 << index) != 0)
+    Some(
+        caps.shearer && (caps.shears || caps.iron >= 2) && caps.sheep_colors & (1u16 << index) != 0,
+    )
 }
 
 fn stocked(images: &[Image], item: u32) -> bool {

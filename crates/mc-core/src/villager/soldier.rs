@@ -34,6 +34,17 @@ fn hostile(state: &TickState, slot: EntitySlot) -> bool {
 /// Order goal is recomputed without random allocation or unbounded scans. A
 /// missing/offline follow target falls back to the settlement anchor.
 pub(super) fn goal(state: &TickState, slot: EntitySlot, v: &VillagerState) -> Option<[f64; 3]> {
+    if crate::settlements::economy::production_reserved(
+        state,
+        v.settlement,
+        state.entities.row(slot).uuid,
+    ) || crate::settlements::economy::caravan_reserved(
+        state,
+        v.settlement,
+        state.entities.row(slot).uuid,
+    ) {
+        return None;
+    }
     let military = v.soldier.as_ref()?;
     let record = state.settlements.get(v.settlement?)?;
     let anchor = record.anchor.map(f64::from);

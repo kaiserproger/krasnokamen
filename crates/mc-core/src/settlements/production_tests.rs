@@ -301,7 +301,7 @@ fn start(
     )
 }
 
-fn setup() -> (
+type ProductionFixture = (
     TickState,
     SettlementId,
     EntityId,
@@ -309,8 +309,13 @@ fn setup() -> (
     [i32; 3],
     [i32; 3],
     String,
-) {
-    let mut world = state();
+);
+
+fn setup() -> ProductionFixture {
+    setup_in(state())
+}
+
+fn setup_in(mut world: TickState) -> ProductionFixture {
     floor(&mut world);
     let table = [8, 201, 8];
     let door = [6, 201, 8];
@@ -487,15 +492,17 @@ fn cake_inputs_become_cake_after_reach_and_deadline() {
     assert_eq!(job.done, 1);
     assert_eq!(job.receipts.len(), 1);
     assert_eq!(job.receipts[0].sequence, 1);
-    assert!(!active(&policy));
-    assert_eq!(target(&policy, worker), None);
+    assert!(active(&policy));
+    assert!(policy.jobs["bake-one"].delivery_pending());
+    assert!(target(&policy, worker).is_some());
     assert_eq!(stock_total(&world, body, "minecraft:cake"), 1);
     assert_eq!(stock_total(&world, body, "minecraft:bucket"), 3);
     assert_eq!(stock_total(&world, body, "minecraft:milk_bucket"), 0);
     assert_eq!(stock_total(&world, body, "minecraft:wheat"), 0);
     // Caught-up ticks never fabricate a second portion.
     world.tick += 10_000;
-    assert!(!tick(&mut world, id, &mut policy));
+    assert!(tick(&mut world, id, &mut policy));
+    assert!(!policy.jobs["bake-one"].delivery_complete());
     assert_eq!(stock_total(&world, body, "minecraft:cake"), 1);
     assert!(validate(&policy).is_ok());
 }
@@ -1017,8 +1024,9 @@ fn production_fetches_only_next_portion_deficit_at_real_storage_reach() {
     assert_eq!(policy.jobs["supply"].done, 1);
     assert_eq!(policy.jobs["supply"].receipts.len(), 1);
     policy = serde_json::from_slice(&serde_json::to_vec(&policy).unwrap()).unwrap();
-    world.tick += 100;
-    assert!(!tick(&mut world, town, &mut policy));
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    assert!(policy.jobs["supply"].delivery_pending());
     assert_eq!(
         world.block_entities[&(chest[0], chest[1], chest[2])].slots[0].count,
         3
@@ -1105,6 +1113,13 @@ fn production_full_carry_puts_surplus_away_before_debiting_storage() {
     assert_eq!(policy.jobs["supply"].done, 1);
     assert_eq!(stock_total(&world, body, "minecraft:bread"), 1);
     assert_eq!(stored(&world, "minecraft:cobblestone"), 512);
+    assert!(policy.jobs["supply"].delivery_pending());
+    at(&mut world, body, [19.5, 201.0, 8.5]);
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    assert_eq!(stored(&world, "minecraft:bread"), 1);
+    assert_eq!(stored(&world, "minecraft:cobblestone"), 512);
+    assert!(policy.jobs["supply"].delivery_complete());
 }
 
 #[test]
@@ -1238,3 +1253,6 @@ fn production_supply_skips_reserved_stock_and_uses_free_stock_across_sources() {
         3
     );
 }
+
+#[path = "production_delivery_tests.rs"]
+mod delivery_tests;

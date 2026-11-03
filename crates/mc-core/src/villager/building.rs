@@ -89,7 +89,13 @@ pub(crate) fn work(
     v: &mut VillagerState,
     _changes: &mut ChangeSet,
 ) -> Option<WorkTarget> {
-    if !working(state, v) {
+    if !working(state, v)
+        || crate::settlements::economy::worker_reserved(
+            state,
+            v.settlement,
+            state.entities.row(slot).uuid,
+        )
+    {
         return None;
     }
     let id = v.settlement?;
@@ -177,6 +183,11 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
     };
     let Some(slot) = construction::residents(state, id).find(|slot| {
         state.entities.body(*slot).alive
+            && !crate::settlements::economy::worker_reserved(
+                state,
+                Some(id),
+                state.entities.row(*slot).uuid,
+            )
             && state
                 .entities
                 .row(*slot)
