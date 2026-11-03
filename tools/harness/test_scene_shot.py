@@ -66,6 +66,29 @@ class SceneShotTests(unittest.TestCase):
             self.assertIn(("minecraft_send_chat", {"message": "tp @s 1 2 3 90 0", "command": True}), probe.calls)
             self.assertIn(("minecraft_wait_ticks", {"ticks": 5}), probe.calls)
 
+    def test_wait_terrain_fails_closed_on_stale_receipt_and_invalid_input(self):
+        class Probe:
+            report = {}
+            def remaining(self):
+                return 30
+            def call(self, _name, _args):
+                raise AssertionError("invalid input reached the tool")
+        valid = {"wait_terrain": {"name": "terrain", "args": {"sections": [[1, 2, 3]]}}}
+        class Stale(Probe):
+            def call(self, _name, _args):
+                return {"status": "ready", "connection_epoch": "1", "dimension_epoch": "1",
+                        "resource_epoch": "1", "frame_id": "1", "sections": [
+                            {"section": [1, 2, 3], "requested_revision": "8",
+                             "mesh_revision": "7", "selected_for_draw": True}]}
+        with self.assertRaisesRegex(RuntimeError, "invalid minecraft_wait_for_terrain receipt"):
+            scene_shot.execute(Stale(), Path("/tmp"), [valid])
+        for args in ({"sections": []}, {"sections": [[1, 2, 3], [1, 2, 3]]},
+                     {"sections": [[True, 2, 3]]}, {"sections": [[1, 2, 3]], "timeout_seconds": 121}):
+            with self.subTest(args=args), self.assertRaises(ValueError):
+                scene_shot.execute(Probe(), Path("/tmp"), [{"wait_terrain": {"name": "terrain", "args": args}}])
+        with self.assertRaisesRegex(ValueError, "requires --client native"):
+            scene_shot.execute(Probe(), Path("/tmp"), [valid], "java")
+
     def test_unknown_or_unsafe_step_fails(self):
         for step in ({"shot": "../escape"}, {"unknown": True}, {"wait_play": False}, {"tp": [1, 2]}):
             with self.subTest(step=step), self.assertRaises(ValueError):

@@ -26,7 +26,23 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 AGENT_ROOT = Path(os.environ.get("SOLARIS_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")).expanduser().resolve()
 
 USERNAME_RE = re.compile(r"[A-Za-z0-9_]{1,16}\Z")
+CLIENT_PROFILES = ("vanilla", "loader", "svc", "dh")
 PLATFORMS = ("fabric", "neoforge", "forge")
+
+_CLIENT_MAX_HEAP = "-Xmx512M"
+
+PROFILE_MOD_JARS = {
+    "svc": {
+        "artifact": "svc-artifacts.json",
+        "jar_key": "svc_jar",
+        "dirname": "SVCCompat",
+    },
+    "dh": {
+        "artifact": "dh-artifacts.json",
+        "jar_key": "dh_jar",
+        "dirname": "DHCompat",
+    },
+}
 
 _CLIENT_READY_TIMEOUT_SECONDS = 180.0
 _XVFB_READY_TIMEOUT_SECONDS = 20.0

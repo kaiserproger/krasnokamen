@@ -132,7 +132,7 @@ def _advancement_screen(steps: ProbeSteps, name: str) -> dict[str, Any]:
         if required <= labels.keys():
             break
         previous = _advancement_labels(state)
-        _scroll(steps, 12)
+        _scroll(steps, 1)
         state = steps.wait(lambda current: _advancement_labels(current) != previous, name + f"_scroll_{page}")
         current = _advancement_labels(state)
         labels.update(current)

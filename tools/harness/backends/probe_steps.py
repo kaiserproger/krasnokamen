@@ -68,7 +68,8 @@ class ProbeSteps:
                 remaining = self.remaining()
                 if deadline is not None:
                     remaining = min(remaining, deadline - time.monotonic())
-                    if remaining <= 0:
+                    # Below the tool's 0.1 s minimum: re-check until the deadline names the label.
+                    if remaining < 0.1:
                         continue
                 self.call("minecraft_wait_for_state_change", {
                     "observed_version": state["state_version"], "timeout_seconds": remaining,

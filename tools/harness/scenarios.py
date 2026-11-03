@@ -85,6 +85,26 @@ def _entry(**kwargs: object) -> Scenario:
 
 
 SCENARIOS: dict[str, Scenario] = {
+    "native-v2-craft-drag": _entry(
+        id="native-v2-craft-drag", summary="Native graphical inventory press-drag-release and rejected output placement",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-craft-drag",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_craft_drag.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="private fresh world, declared operator clear/fill and one oak log plus one diamond",
+        proves="ordinary physical drag, received grid/cursor and recipe output after ordered echo, rejected output custody and window frames",
+        limits="requires pre-fix negative control and independent screenshot review; no generic in-flight reconciliation or vanilla parity claim",
+    ),
+    "native-v2-settlement-storage": _entry(
+        id="native-v2-settlement-storage", summary="Settlement storage, Assign crafts and building icon menus driven by physical input",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-settlement-storage",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_settlement_storage.py",
+                 "tools/harness/backends/native_craft_drag.py", "tools/harness/backends/client_probes.py"),
+        fixture="private fresh world, declared operator pad/settlement/chest/composter/give/summon/bind/tp/time fixtures and a non-operator windowed StorageGuest peer that holds X focus only for its own legs",
+        proves="owner XTest Shift/left/right/grid/Escape storage moves with 70+5 conservation against physical chests, full-inventory and view-only refusals, menu assignment, refused and accepted upgrade, hire into the new place, vanilla job acquisition at day 2000",
+        limits="guest clicks use the MCP executor; map-cell click runs only with VillageMap dialog link nodes, else listed unsupported; screenshots need independent review; no vanilla Java parity claim",
+    ),
     "loader-v2-settlements-smoke": _entry(
         id="loader-v2-settlements-smoke", summary="Frozen v2 server C-key settlement overview through Fabric Loader",
         owner="core:harness", evidence="graphical", profile="loader-live", scenario_id="loader-v2-settlements-smoke",
@@ -93,6 +113,16 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="explicit --server-bin and --plugins-dir; isolated Loader permission/cache; no settlements package deployed",
         proves="Loader connection, core-owned C binding opens the native settlement dialog, and native settlement create/list/info",
         limits="minimal native settlement smoke, not plugin production/war coverage; visual review required",
+    ),
+    "native-composter-chance": _entry(
+        id="native-composter-chance",
+        summary="Graphical hopper-fed wheat seed compost probability",
+        owner="core:harness", evidence="graphical", profile="composter-chance",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/composter_chance.py",),
+        fixture="seed 81 isolated world; operator builds locked hopper and level-1 composters, grants one seed per sample",
+        proves="16 player menu deposits, independent hopper debits and client-observed resulting levels; rejects sixteen successes",
+        limits="statistical Java 26.3 data and bytecode oracle, 0.3**16 false-rejection probability; screenshot review required",
     ),
     "dh-baseline": _entry(
         id="dh-baseline", summary="Real Java DH baseline: MC 26.1.2 + DH 3.3.3 protocol 16",

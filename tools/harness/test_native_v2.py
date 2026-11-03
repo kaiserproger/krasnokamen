@@ -13,20 +13,22 @@ from .backends.probe_steps import ProbeSteps
 
 
 class NativeV2ProbeTests(unittest.TestCase):
-    def test_lifecycle_difficulty_query_is_ordered_and_fail_closed(self) -> None:
-        from .backends import native_lifecycle
+    def test_lifecycle_difficulty_uses_only_fresh_fenced_responses(self) -> None:
+        from .backends.native_lifecycle import _difficulty_from_interval
 
-        steps = mock.Mock()
-        steps.wait.return_value = {
-            "recent_chat": ["lifecycle difficulty abc", "The difficulty is Easy"]
-        }
-        with mock.patch.object(native_lifecycle.uuid, "uuid4") as identifier:
-            identifier.return_value.hex = "abc"
-            self.assertEqual(native_lifecycle._difficulty(steps), "easy")
-            steps.fixture.assert_called_once_with("difficulty")
-            steps.wait.return_value = {"recent_chat": ["lifecycle difficulty abc", "not authorized"]}
-            with self.assertRaisesRegex(RuntimeError, "difficulty query"):
-                native_lifecycle._difficulty(steps)
+        begin, end = "begin abc", "end abc"
+        cases = [
+            ([end, "The difficulty is Easy", begin], "easy"),
+            (["The difficulty is Easy", end, begin], "easy"),
+            ([end, begin, "The difficulty is Easy"], None),
+            ([end, begin], None),
+            ([end, "You do not have permission", begin], None),
+            (["The difficulty is Easy", begin], None),
+            (["The difficulty is Easy", end], None),
+        ]
+        for lines, expected in cases:
+            with self.subTest(lines=lines):
+                self.assertEqual(_difficulty_from_interval(lines, begin, end), expected)
 
     def test_radius_rejects_missing_or_non_eight_live_render_setting(self) -> None:
         from .backends import native_radius
@@ -105,7 +107,8 @@ class NativeV2ProbeTests(unittest.TestCase):
             self.assertEqual(entry.profile, "entities")
             self.assertEqual(entry.scenario_id, name)
             expected = ("graphical" if name in ("native-v2-p5-humanoid-armor", "native-v2-light-seam",
-                                                "native-v2-radius-full-view")
+                                                "native-v2-radius-full-view", "native-v2-craft-drag",
+                                                "native-v2-settlement-storage")
                         else "tcp")
             self.assertEqual(entry.evidence, expected)
 
@@ -221,6 +224,20 @@ class NativeV2ProbeTests(unittest.TestCase):
                     self.assertTrue(launch.call_args.kwargs["start_new_session"])
                 finally:
                     handle.close()
+
+    def test_java_launcher_validates_platform_before_launch(self) -> None:
+        from . import runtime
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            args = dict(game_dir=root / "game", log_path=root / "client.log",
+                        token="unit-test-only", mcp_port=12345,
+                        username="HarnessUnit", display=":99")
+            with self.assertRaisesRegex(ValueError, "platform"):
+                runtime.start_client(**args, platform="invalid")
+            with mock.patch.object(runtime, "AGENT_ROOT", root):
+                with self.assertRaisesRegex(RuntimeError, "missing executable Gradle wrapper"):
+                    runtime.start_client(**args, platform="fabric")
 
     def test_v2_operator_fixture_uses_observed_offline_uuid(self) -> None:
         from .backends.gameplay import prepare_operator_fixture

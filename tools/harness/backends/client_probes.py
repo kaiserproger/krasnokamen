@@ -50,7 +50,8 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         if ctx.client != "native" or kind != "entities":
             raise ValueError("native-v2 scenarios require --client native and entities")
     if ctx.scenario_id in ("native-v2-p5-humanoid-armor", native_light.SCENARIO_ID,
-                           "native-v2-radius-full-view") and not ctx.windowed:
+                           "native-v2-radius-full-view", "native-v2-craft-drag",
+                           "native-v2-settlement-storage") and not ctx.windowed:
         raise ValueError(f"{ctx.scenario_id} requires --windowed")
     soak_seconds = 1800.0
     check = kind in {"inventory", "core-client"} and ctx.extra_args == ["--check"]
@@ -66,6 +67,7 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     default_timeout = (soak_seconds + 180.0 if kind == "native-lifecycle"
                        else 600.0 if ctx.scenario_id in (native_light.SCENARIO_ID,
                                                         "native-v2-radius-full-view")
+                       else 1200.0 if ctx.scenario_id == "native-v2-settlement-storage"
                        else (180.0 if v2_scenario else 120.0))
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else default_timeout
     if not math.isfinite(timeout) or timeout <= 0:
@@ -77,6 +79,10 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
                 "native-lifecycle": native_lifecycle.REQUIRED_TOOLS}[kind]
     if v2_scenario:
         required = native_v2.REQUIRED_TOOLS
+    if ctx.scenario_id == "native-v2-craft-drag":
+        required = required | {"minecraft_open_inventory", "client_capture"}
+    if ctx.scenario_id == "native-v2-settlement-storage":
+        required = required | {"client_capture"}
     if p5_scenario:
         required = java_p5.REQUIRED_TOOLS
     artifact = ctx.artifact_dir
@@ -110,7 +116,7 @@ online_mode = false
 directory = {json.dumps(str(plugin_dir))}
 [data]
 world_dir = "{(artifact / "world").relative_to(runtime.REPO_ROOT).as_posix()}"
-vanilla_data_dir = "data/vanilla"
+vanilla_data_dir = {json.dumps(os.environ.get("SOLARIS_SERVER_VANILLA_DATA_DIR", "data/vanilla"))}
 seed = 81
 ''')
     prepare_operator_fixture(ctx, operators)
@@ -185,6 +191,24 @@ seed = 81
                 peer_mcp.request_timeout_seconds = 130.0
                 peer_mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
                 mcp.p5_armor_actor = peer_mcp
+            if ctx.scenario_id == "native-v2-settlement-storage":
+                # Deliberately not an operator: the settlement's view-only visitor. Server
+                # dialog buttons need presentation (minecraft_click_screen_button), so the
+                # guest shares the owner's display; the owner window is then raised and
+                # refocused so XTest input and the owner's keys never reach the guest. The
+                # scenario hands X focus to the guest (by pid) only for its own legs.
+                peer_ctx = replace(ctx, artifact_dir=artifact / "guest-client", client_evidence=peer_evidence)
+                evidence["storage_guest_client"] = peer_evidence
+                peer_process, peer_log, peer_mcp = native_client.start(
+                    peer_ctx, native_client.resolve_binary(peer_ctx), client_address, "StorageGuest",
+                    startup_timeout, display=display)
+                peer_mcp.request_timeout_seconds = 130.0
+                peer_mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
+                mcp.storage_guest = (peer_mcp, peer_process.pid)
+                if ctx.windowed:
+                    from . import native_focus
+
+                    evidence["window_focus"] = native_focus.acquire(display, client_process.pid, startup_timeout)
         else:
             xvfb, display, display_log = runtime.start_xvfb(artifact)
             token, mcp_port = secrets.token_urlsafe(32), runtime.reserve_port()

@@ -1594,6 +1594,25 @@ def _listed_buildings(lines: list[str]) -> list[dict[str, Any]]:
     return records
 
 
+# Project status labels (settlements/ui.rs blueprint_label), English and Russian.
+PROJECT_LABELS = {
+    "House": "house", "Дом": "house",
+    "Storage": "storage", "Склад": "storage",
+    "Farm": "farm", "Ферма": "farm",
+    "Mason's workshop": "mason", "Мастерская каменщика": "mason",
+    "Lumber camp": "lumber_camp", "Лесопилка": "lumber_camp",
+    "Mine": "mine", "Шахта": "mine",
+    "Barracks": "barracks", "Казарма": "barracks",
+    "Wall": "wall", "Стена": "wall",
+    "Watchtower": "watch_tower", "Сторожевая башня": "watch_tower",
+    "Road": "road", "Дорога": "road",
+    "Street lamp": "lamp", "Фонарь": "lamp",
+}
+# Street work: structure-ledger projects with no authored blueprint or
+# certificate. A road paves one stretch; a lamp is two fences and a torch.
+STREET_PROJECTS = frozenset({"road", "lamp"})
+
+
 def _project_progress(observed: dict[str, Any]) -> dict[str, Any] | None:
     body = "\n".join(
         node.get("label", "") for node in observed.get("ui_nodes", [])
@@ -1605,20 +1624,10 @@ def _project_progress(observed: dict[str, Any]) -> dict[str, Any] | None:
     )
     if match is None:
         return None
-    names = {
-        "House": "house", "Дом": "house",
-        "Storage": "storage", "Склад": "storage",
-        "Farm": "farm", "Ферма": "farm",
-        "Mason's workshop": "mason", "Мастерская каменщика": "mason",
-        "Lumber camp": "lumber_camp", "Лесопилка": "lumber_camp",
-        "Mine": "mine", "Шахта": "mine",
-        "Barracks": "barracks", "Казарма": "barracks",
-        "Wall": "wall", "Стена": "wall",
-        "Watchtower": "watch_tower", "Сторожевая башня": "watch_tower",
-    }
-    blueprint = names.get(match[1])
+    blueprint = PROJECT_LABELS.get(match[1])
     if blueprint is None:
-        return None
+        # An active project the harness cannot name is not "no project".
+        raise RuntimeError(f"unrecognised active project label {match[1]!r}")
     return {
         "blueprint": blueprint, "level": int(match[2]),
         "done": int(match[3]), "total": int(match[4]),
@@ -1626,74 +1635,187 @@ def _project_progress(observed: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _street_layout(probe: ProbeSteps) -> dict[str, Any] | None:
+    """Paved stretches and next street work from `/settlement layout`."""
+    text = "\n".join(_recent_chat(_send(probe, "settlement layout"), 20))
+    paved = re.search(r"(\d+)/(\d+) reachable stretches paved", text)
+    following = re.search(r"Next street work: (.+?)\.(?:\n|$)", text)
+    if paved is None or following is None:
+        return None
+    return {"paved": int(paved[1]), "stretches": int(paved[2]), "next": following[1]}
+
+
+def _street_work_done(probe: ProbeSteps, detail: dict[str, Any], before: dict[str, Any]) -> bool:
+    """A finished street project, read from the world or the live street plan."""
+    x, y, z = before["origin"]
+    if before["blueprint"] == "lamp":
+        # A lamp project's site is its lower fence: fence, fence, torch.
+        scan = probe.call("minecraft_scan_blocks", {
+            "min_x": x, "min_y": y, "min_z": z, "max_x": x, "max_y": y + 2, "max_z": z,
+        })
+        column = {cell["y"]: _block_id(cell) for cell in scan.get("blocks", [])}
+        detail["restart_street_blocks"] = column
+        return (column.get(y, "").endswith("_fence") and column.get(y + 1, "").endswith("_fence")
+                and column.get(y + 2) == "minecraft:torch")
+    # A road's site is the stretch's minimum corner: the stretch is paved
+    # once the plan counts one more paved stretch and no longer offers it.
+    layout = _street_layout(probe)
+    detail["restart_street_layout"] = layout
+    earlier = before.get("layout_before")
+    return (layout is not None and earlier is not None and layout["paved"] > earlier["paved"]
+            and re.match(rf"pave road x {x}\.\.-?\d+ z {z}\.\.-?\d+$", layout["next"]) is None)
+
+
 def _authored_blueprints() -> list[dict[str, Any]]:
     folder = runtime.REPO_ROOT / "crates/mc-core/assets/blueprints"
     return [json.loads(path.read_text()) for path in sorted(folder.glob("*.json"))]
 
 
+def _rotate_blueprint_xz(x: int, z: int, width: int, depth: int, turns: int) -> tuple[int, int]:
+    """Match settlements/blueprints.rs:rotate_xz in the maximum multi-level frame."""
+    return ((x, z), (depth - 1 - z, x), (width - 1 - x, depth - 1 - z),
+            (z, width - 1 - x))[turns]
+
+
+def _rotate_blueprint_properties(block: str, properties: dict[str, str], turns: int) -> dict[str, str]:
+    directions = ("north", "east", "south", "west")
+
+    def direction(value: str) -> str:
+        return directions[(directions.index(value) + turns) % 4] if value in directions else value
+
+    rotated = {}
+    for key, value in properties.items():
+        if key == "facing":
+            value = direction(value)
+        elif key == "axis" and turns % 2 and value in ("x", "z"):
+            value = "z" if value == "x" else "x"
+        elif key in directions:
+            key = direction(key)
+        elif key == "rotation":
+            value = str((int(value) + 4 * turns) % 16)
+        elif key == "shape" and block.endswith("rail"):
+            value = "_".join(direction(token) for token in value.split("_"))
+            # Canonical rail shapes from required_blocks.json; the native loader
+            # likewise reverses tokens when the rotated spelling is not legal.
+            shapes = {
+                "north_south", "east_west", "ascending_east", "ascending_west",
+                "ascending_north", "ascending_south", "south_east", "south_west",
+                "north_west", "north_east",
+            }
+            if value not in shapes:
+                value = "_".join(reversed(value.split("_")))
+        rotated[key] = value
+    return rotated
+
+
+def _blueprint_placements(
+    record: dict[str, Any], blueprint: dict[str, Any],
+    origin: list[int] | None = None, rotation: int | None = None,
+) -> list[dict[str, Any]]:
+    """Derive legal origins from actual certificate bounds, not placed extents."""
+    levels = blueprint["levels"]
+    level = levels[record["level"] - 1]
+    width = max(len(candidate["layers"][0][0]) for candidate in levels)
+    depth = max(len(candidate["layers"][0]) for candidate in levels)
+    cx, cy, cz = level["cert"]
+    placements = []
+    for turns in range(4) if rotation is None else (rotation,):
+        corners = [_rotate_blueprint_xz(x, z, width, depth, turns)
+                   for x, z in ((0, 0), (cx - 1, cz - 1))]
+        low = [min(at[0] for at in corners), 0, min(at[1] for at in corners)]
+        high = [max(at[0] for at in corners), cy - 1, max(at[1] for at in corners)]
+        if any(record["max"][axis] - record["min"][axis] != high[axis] - low[axis]
+               for axis in range(3)):
+            continue
+        at = [record["min"][axis] - low[axis] for axis in range(3)]
+        if origin is not None and at != origin:
+            continue
+        cells = []
+        for y, layer in enumerate(level["layers"]):
+            for z, row in enumerate(layer):
+                for x, symbol in enumerate(row):
+                    if symbol == ".":
+                        continue
+                    rx, rz = _rotate_blueprint_xz(x, z, width, depth, turns)
+                    state = blueprint["palette"][symbol]
+                    block, _, properties = state.partition("[")
+                    block = block if ":" in block else f"minecraft:{block}"
+                    properties = dict(part.split("=") for part in properties.rstrip("]").split(",")) if properties else {}
+                    cells.append(((at[0] + rx, at[1] + y, at[2] + rz), block,
+                                  _rotate_blueprint_properties(block, properties, turns)))
+        placements.append({"origin": at, "rotation": turns, "cells": cells})
+    return placements
+
+
 def _observe_blueprint(
     probe: ProbeSteps, detail: dict[str, Any], record: dict[str, Any],
-    blueprint: dict[str, Any], label: str,
+    blueprint: dict[str, Any], label: str, *,
+    origin: list[int] | None = None, rotation: int | None = None,
 ) -> bool:
-    level = blueprint["levels"][record["level"] - 1]
-    layers = level["layers"]
-    origin = record["min"]
-    size = [len(layers[0][0]), len(layers), len(layers[0])]
-    scan = probe.call("minecraft_scan_blocks", {
-        "min_x": origin[0], "min_y": origin[1], "min_z": origin[2],
-        "max_x": origin[0] + size[0] - 1,
-        "max_y": origin[1] + size[1] - 1,
-        "max_z": origin[2] + size[2] - 1,
-    })
-    blocks = {
-        (cell["x"], cell["y"], cell["z"]): cell for cell in scan.get("blocks", [])
-    }
-    expected = 0
-    mismatches = []
-    # Builders use the settlement's available wood (construction.rs), so one
-    # species replaces every authored oak_* block of this building.
-    species = None
-    for y, layer in enumerate(layers):
-        for z, row in enumerate(layer):
-            for x, symbol in enumerate(row):
-                if symbol == ".":
-                    continue
-                expected += 1
-                state = blueprint["palette"][symbol]
-                block, _, properties = state.partition("[")
-                block = block if ":" in block else f"minecraft:{block}"
-                wanted = dict(part.split("=") for part in properties.rstrip("]").split(",")) if properties else {}
-                mutable = ()
-                if block in ("minecraft:wheat", "minecraft:carrots", "minecraft:potatoes", "minecraft:beetroots"):
-                    mutable = ("age",)
-                elif block == "minecraft:farmland":
-                    mutable = ("moisture",)
-                elif block == "minecraft:composter":
-                    mutable = ("level",)
-                elif block.endswith(("_door", "_trapdoor", "_fence_gate")):
-                    mutable = ("open", "powered")
-                at = (origin[0] + x, origin[1] + y, origin[2] + z)
-                cell = blocks.get(at, {})
-                got = _block_id(cell)
-                if block.startswith("minecraft:oak_"):
-                    suffix = "_" + block.removeprefix("minecraft:oak_")
-                    if species is None and got.startswith("minecraft:") and got.endswith(suffix):
-                        species = got.removeprefix("minecraft:").removesuffix(suffix)
-                    block = f"minecraft:{species or 'oak'}{suffix}"
-                actual_properties = cell.get("properties") or {}
-                if got != block or any(
-                    key not in mutable and str(actual_properties.get(key)) != value
-                    for key, value in wanted.items()
-                ):
-                    mismatches.append({"at": at, "expected": state, "actual": cell})
-    detail.setdefault("client_blocks", {})[label] = {
-        "building_id": record["id"], "blueprint": blueprint["id"], "level": record["level"],
-        "origin": origin, "expected_non_air": expected, "wood_species": species or "oak",
-        "comparison": "all non-air blocks and stable authored properties; normal gameplay states allowed",
-        "matched": expected - len(mismatches), "mismatch_count": len(mismatches),
-        "mismatches": mismatches[:8],
-    }
-    return expected > 0 and not mismatches
+    placements = _blueprint_placements(record, blueprint, origin, rotation)
+    if not placements:
+        detail.setdefault("client_blocks", {})[label] = {
+            "building_id": record["id"], "blueprint": blueprint["id"], "level": record["level"],
+            "mismatch": "certificate bounds do not match a legal blueprint placement",
+        }
+        return False
+    positions = [at for placement in placements for at, _, _ in placement["cells"]]
+    if not positions:
+        return False
+    bounds = {f"{edge}_{axis}": select(at[index] for at in positions)
+              for edge, select in (("min", min), ("max", max))
+              for index, axis in enumerate(("x", "y", "z"))}
+    blocks = {}
+    offset = 0
+    while True:
+        scan = probe.call("minecraft_scan_blocks", {**bounds, "offset": offset})
+        blocks.update(((cell["x"], cell["y"], cell["z"]), cell) for cell in scan.get("blocks", []))
+        if not scan.get("truncated"):
+            break
+        following = scan.get("next_offset")
+        if not isinstance(following, int) or following <= offset:
+            raise RuntimeError("blueprint scan pagination did not advance")
+        offset = following
+    results = []
+    for placement in placements:
+        mismatches = []
+        # One species must match the whole building, not each oak cell separately.
+        species = None
+        for at, block, wanted in placement["cells"]:
+            mutable = ()
+            if block in ("minecraft:wheat", "minecraft:carrots", "minecraft:potatoes", "minecraft:beetroots"):
+                mutable = ("age",)
+            elif block == "minecraft:farmland":
+                mutable = ("moisture",)
+            elif block == "minecraft:composter":
+                mutable = ("level",)
+            elif block.endswith(("_door", "_trapdoor", "_fence_gate")):
+                mutable = ("open", "powered")
+            cell = blocks.get(at, {})
+            got = _block_id(cell)
+            if block.startswith("minecraft:oak_"):
+                suffix = "_" + block.removeprefix("minecraft:oak_")
+                if species is None and got.startswith("minecraft:") and got.endswith(suffix):
+                    species = got.removeprefix("minecraft:").removesuffix(suffix)
+                block = f"minecraft:{species or 'oak'}{suffix}"
+            actual_properties = cell.get("properties") or {}
+            if got != block or any(
+                key not in mutable and str(actual_properties.get(key)) != value
+                for key, value in wanted.items()
+            ):
+                mismatches.append({"at": at, "expected": block, "properties": wanted, "actual": cell})
+        results.append({
+            "building_id": record["id"], "blueprint": blueprint["id"], "level": record["level"],
+            "origin": placement["origin"], "rotation": placement["rotation"],
+            "expected_non_air": len(placement["cells"]), "wood_species": species or "oak",
+            "comparison": "all non-air blocks and stable rotated authored properties; normal gameplay states allowed",
+            "matched": len(placement["cells"]) - len(mismatches), "mismatch_count": len(mismatches),
+            "mismatches": mismatches[:8],
+        })
+    best = min(results, key=lambda result: result["mismatch_count"])
+    best["matching_rotations"] = [result["rotation"] for result in results if not result["mismatch_count"]]
+    detail.setdefault("client_blocks", {})[label] = best
+    return bool(best["matching_rotations"])
 
 
 def _wait_autonomous_progress(
@@ -1715,10 +1837,6 @@ def _wait_autonomous_progress(
             signature = (record["id"], record["level"])
             blueprint = blueprints.get(record["kind"])
             if record["id"] in original or blueprint is None or signature in checked:
-                continue
-            level = blueprint["levels"][record["level"] - 1]
-            width, depth = len(level["layers"][0][0]), len(level["layers"][0])
-            if record["max"][0] - record["min"][0] + 1 != width or record["max"][2] - record["min"][2] + 1 != depth:
                 continue
             if record["id"] == storage["id"] and record["level"] == 1:
                 continue
@@ -1769,6 +1887,8 @@ def _wait_project_started(probe: ProbeSteps) -> dict[str, Any]:
         state = _project_status(probe)
         project = _project_progress(state)
         if project is not None and 0 < project["done"] < project["total"]:
+            if project["blueprint"] == "road":
+                project["layout_before"] = _street_layout(probe)
             return project
         probe.call("minecraft_wait_ticks", {"ticks": 100})
     raise RuntimeError("no genuinely in-progress project before restart")
@@ -1783,7 +1903,10 @@ def _wait_project_resumed(
     new_owner = next((owner_pattern.search(line)[1] for line in info if owner_pattern.search(line)), None)
     detail["restart_info_chat"] = info
     probe.check("claimed_owner_survives_restart", old_owner is not None and old_owner != "autonomous" and new_owner == old_owner)
-    blueprint = next(blueprint for blueprint in _authored_blueprints() if blueprint["id"] == before["blueprint"])
+    street = before["blueprint"] in STREET_PROJECTS
+    blueprint = None if street else next(
+        blueprint for blueprint in _authored_blueprints() if blueprint["id"] == before["blueprint"]
+    )
     deadline = time.monotonic() + 1300.0
     while time.monotonic() < deadline:
         state = _project_status(probe)
@@ -1793,11 +1916,18 @@ def _wait_project_resumed(
             probe.check("restart_never_rewinds_project", after["done"] >= before["done"])
             if after["done"] > before["done"]:
                 return True
-        lines = _recent_chat(_send(probe, "settlement building list"), 25)
-        for record in _listed_buildings(lines):
-            if record["kind"] == blueprint["kind"] and record["level"] >= before["level"] and record["min"] == before["origin"]:
-                if _observe_blueprint(probe, detail, record, blueprint, "autonomy-restart-completed"):
-                    detail["restart_after"] = {"completed_building": record}
-                    return True
+        if street:
+            still_active = after is not None and after["origin"] == before["origin"]
+            if not still_active and _street_work_done(probe, detail, before):
+                detail["restart_after"] = {"completed_street_work": before}
+                return True
+        else:
+            lines = _recent_chat(_send(probe, "settlement building list"), 25)
+            for record in _listed_buildings(lines):
+                if record["kind"] == blueprint["kind"] and record["level"] >= before["level"]:
+                    if _observe_blueprint(probe, detail, record, blueprint, "autonomy-restart-completed",
+                                          origin=before["origin"]):
+                        detail["restart_after"] = {"completed_building": record}
+                        return True
         probe.call("minecraft_wait_ticks", {"ticks": 100})
     return False

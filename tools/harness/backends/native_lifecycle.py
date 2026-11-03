@@ -26,21 +26,39 @@ def _sample(pid: int, started: float) -> dict[str, Any]:
     return {"elapsed_seconds": time.monotonic() - started,
             "rss_kib": rss, "peak_rss_kib": peak, "cpu_seconds": cpu["cpu_seconds"]}
 
+def _difficulty_from_interval(lines: list[str], begin: str, end: str) -> str | None:
+    # recent_chat is newest-first; ignore responses older than the begin fence.
+    start = next((i for i, line in enumerate(lines) if begin in line), None)
+    if start is None:
+        return None
+    interval = lines[:start]
+    if not any(end in line for line in interval):
+        return None
+    for line in interval:
+        lower = line.lower()
+        if begin in line or end in line or "difficulty" not in lower:
+            continue
+        for difficulty in ("peaceful", "easy", "normal", "hard"):
+            if difficulty in lower:
+                return difficulty
+    return None
+
+
 def _difficulty(steps: ProbeSteps) -> str:
-    marker = f"lifecycle difficulty {uuid.uuid4().hex}"
+    nonce = uuid.uuid4().hex
+    begin = f"lifecycle difficulty begin {nonce}"
+    end = f"lifecycle difficulty end {nonce}"
+    steps.call("minecraft_send_chat", {"message": begin, "command": False})
+    steps.wait(lambda state: any(begin in line for line in state["recent_chat"]),
+               "difficulty_query_begin_echo")
     steps.fixture("difficulty")
-    steps.call("minecraft_send_chat", {"message": marker, "command": False})
-    state = steps.wait(lambda state: any(marker in line for line in state["recent_chat"]),
+    steps.call("minecraft_send_chat", {"message": end, "command": False})
+    state = steps.wait(lambda state: _difficulty_from_interval(state["recent_chat"], begin, end) is not None,
                        "difficulty_query_echo")
-    lines = state["recent_chat"]
-    marker_index = next(i for i, line in enumerate(lines) if marker in line)
-    for line in lines[marker_index + 1:]:
-        if "difficulty" in line.lower():
-            for difficulty in ("peaceful", "easy", "normal", "hard"):
-                if difficulty in line.lower():
-                    return difficulty
-            break
-    raise RuntimeError("difficulty query did not produce a recognizable response")
+    result = _difficulty_from_interval(state["recent_chat"], begin, end)
+    if result is None:
+        raise RuntimeError("difficulty query did not produce a recognizable response")
+    return result
 
 
 def _set_difficulty(steps: ProbeSteps, difficulty: str) -> None:

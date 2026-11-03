@@ -544,7 +544,31 @@ def _radius(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
 
     native_radius.run(steps, origin)
 
+def _craft_drag(steps: ProbeSteps, _origin: tuple[int, int, int]) -> None:
+    from . import native_craft_drag
+
+    if not getattr(steps.client, "p4_window", None):
+        raise RuntimeError("craft drag requires the harness-owned windowed Xvfb client")
+    _give(steps, "minecraft:oak_log", 0)
+    _give(steps, "minecraft:diamond", 1)
+    _echo(steps, "craft_drag_fixture_ordered")
+    steps.call("minecraft_open_inventory")
+    steps.wait(lambda state: state["screen"]["open"]
+               and state["container"]["container_id"] == 0,
+               "craft_drag_real_inventory_open")
+    native_craft_drag.run(steps, steps.artifact_dir.parent, steps.client.p4_window)
+
+
+def _settlement_storage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from . import native_settlement_storage
+
+    native_settlement_storage.run(steps, origin)
+
+
+
 RUNNERS = {
+    "native-v2-craft-drag": _craft_drag,
+    "native-v2-settlement-storage": _settlement_storage,
     "native-v2-redstone": _redstone, "native-v2-stations": _stations,
     "native-v2-brewing": _brewing, "native-v2-jukebox": _jukebox,
     "native-v2-tnt-fire-light": _tnt_fire_light, "native-v2-dimensions": _dimensions,

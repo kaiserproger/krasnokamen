@@ -1289,6 +1289,9 @@ async def run(args: argparse.Namespace) -> int:
     task = asyncio.current_task()
     assert task is not None
     asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, task.cancel)
+    if args.scenario == ["spain-industrial"]:
+        from .catalog_spain import run_spain
+        return await run_spain(args)
     args.out.mkdir(parents=True)
     mapping = json.loads(MAPPING.read_text())
     entries = {s["id"]: s for s in mapping["scenarios"]}
@@ -1377,6 +1380,8 @@ def main() -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--server-bin", type=Path)
     parser.add_argument("--bots-bin", type=Path)
+    parser.add_argument("--spain-fixture", type=Path,
+                        help="Surveyed staged-world and route data for spain-industrial")
     parser.add_argument("--plugins-dir", type=Path,
                         help="Real current-WIT v2 packages for plugin-heavy; never synthesized")
     parser.add_argument("--vanilla-data-dir", type=Path, default=ROOT / "data/vanilla")
@@ -1403,6 +1408,8 @@ def main() -> int:
         parser.error("--out must be a new directory; existing receipts are never overwritten")
     if args.scenario and len(args.scenario) != len(set(args.scenario)):
         parser.error("--scenario IDs must not be repeated")
+    if args.spain_fixture and args.scenario != ["spain-industrial"]:
+        parser.error("--spain-fixture requires only --scenario spain-industrial")
     if not 1 <= args.clients <= 4096 or not 1 <= args.view_distance <= 32:
         parser.error("clients must be 1..4096 and view-distance 1..32")
     if args.ramp_clients and (any(not 1 <= n <= 4096 for n in args.ramp_clients) or args.ramp_clients != sorted(set(args.ramp_clients))):

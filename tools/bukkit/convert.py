@@ -26,7 +26,16 @@ def run(*args, env=None):
 
 def metadata(jar):
     with zipfile.ZipFile(jar) as archive:
-        data = yaml.safe_load(archive.read("plugin.yml"))
+        try:
+            data = yaml.safe_load(archive.read("plugin.yml"))
+        except KeyError as exc:
+            if any(name in archive.namelist() for name in (
+                "fabric.mod.json", "META-INF/mods.toml", "META-INF/neoforge.mods.toml"
+            )):
+                raise ValueError(
+                    "mod JAR detected; use --inspect-mod or --convert-mod for the supported Forge slice"
+                ) from exc
+            raise ValueError("JAR does not contain plugin.yml") from exc
     if not isinstance(data, dict):
         raise ValueError("plugin.yml must be a mapping")
     allowed = {"main", "name", "version", "api-version", "commands", "description", "author", "authors", "website"}
@@ -142,58 +151,120 @@ public final class EntryPoint {
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("java-home", "maven", "binaryen-bin", "jar", "blocks-report", "adapter", "component-encoder", "output"):
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--inspect-mod", action="store_true",
+                      help="inspect a Forge/Fabric mod JAR without executing or converting it")
+    mode.add_argument("--convert-mod", action="store_true",
+                      help="convert a supported Forge mod through the existing TeaVM/WIT pipeline")
+    for name in ("java-home", "maven", "jar", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
+    for name in ("binaryen-bin", "blocks-report", "adapter", "component-encoder"):
+        parser.add_argument("--" + name, type=Path)
     args = parser.parse_args()
-    meta = metadata(args.jar)
+    if not args.inspect_mod:
+        for name in ("binaryen_bin", "blocks_report", "adapter", "component_encoder"):
+            if getattr(args, name) is None:
+                parser.error("--" + name.replace("_", "-") + " is required for conversion")
+    if args.inspect_mod or args.convert_mod:
+        from mod_metadata import inspect_mod
+        meta = inspect_mod(args.jar)
+    else:
+        meta = metadata(args.jar)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     java, javac = args.java_home / "bin/java", args.java_home / "bin/javac"
     env = dict(os.environ, JAVA_HOME=str(args.java_home), MAVEN_OPTS="-Xmx1g")
     classpath_file = output / "classpath.txt"
-    run(args.maven, "-B", "-q", "-f", ROOT / "pom.xml", "compile", "dependency:build-classpath",
+    offline = ["-o"] if args.inspect_mod else []
+    run(args.maven, *offline, "-B", "-q", "-f", ROOT / "pom.xml", "compile", "dependency:build-classpath",
         f"-Dmdep.outputFile={classpath_file}", env=env)
     dependencies = classpath_file.read_text().strip()
     compiler_cp = str(ROOT / "target/classes") + ":" + dependencies
-    handler_file = output / "handlers.tsv"
-    run(java, "-Xmx1g", "-cp", compiler_cp, "org.solaris.bukkit.Inspect", args.jar, handler_file)
-    handlers = [line.split("\t") for line in handler_file.read_text().splitlines()]
-    linked = output / "linked.jar"
-    run(java, "-Xmx1g", "-cp", compiler_cp, "org.solaris.bukkit.RemapLogger", args.jar, linked)
+    if args.inspect_mod or args.convert_mod:
+        inventory = output / "mod-references.tsv"
+        run(java, "-Xmx1g", "-cp", compiler_cp, "org.solaris.bukkit.InspectMods", args.jar, inventory)
+    if args.inspect_mod:
+        entries = []
+        with inventory.open() as source:
+            for line in source:
+                fields = line.rstrip("\n").split("\t")
+                if fields[0] == "entry":
+                    entries.append({"id": fields[1], "class": fields[2]})
+        if meta["loader"] != "fabric":
+            meta["warnings"].remove(
+                "Forge/NeoForge @Mod entrypoints require bytecode inspection and are unresolved here."
+            )
+            found = {entry["id"] for entry in entries}
+            for mod_id in meta["mod_ids"]:
+                if mod_id not in found:
+                    meta["warnings"].append(f"No @Mod entrypoint found for {mod_id}.")
+        meta["bytecode"] = {
+            "entrypoints": entries,
+            "references": inventory.name,
+            "scope": "all class instructions, including client-only and unreachable code; nested dynamic constants, reflection and embedded JARs are not resolved",
+        }
+        with args.jar.open("rb") as source:
+            meta["jar_sha256"] = hashlib.file_digest(source, "sha256").hexdigest()
+        report = output / "mod-inspection.json"
+        report.write_text(json.dumps(meta, indent=2) + "\n")
+        print(report)
+        return
+    api = re.search(r"package solaris:plugin@([^;]+);", (ROOT / "../../crates/mc-script/wit/plugin.wit").read_text()).group(1)
     generated = output / "generated"
     generated.mkdir(exist_ok=True)
-    enum, mapping = material_source(args.blocks_report)
-    sources = {"EntryPoint.java": entry_source(meta, handlers), "Material.java": enum, "Materials.java": mapping}
-    for name, source in sources.items():
-        (generated / name).write_text(source)
+    if args.convert_mod:
+        from forge.frontend import generate
+        conversion = generate(args.jar, inventory, args.blocks_report, generated, api=api)
+        linked = args.jar
+        shim_sources = conversion["shim_sources"]
+        generated_sources = conversion["generated_sources"]
+        main_class = conversion["main_class"]
+    else:
+        handler_file = output / "handlers.tsv"
+        run(java, "-Xmx1g", "-cp", compiler_cp, "org.solaris.bukkit.Inspect", args.jar, handler_file)
+        handlers = [line.split("\t") for line in handler_file.read_text().splitlines()]
+        linked = output / "linked.jar"
+        run(java, "-Xmx1g", "-cp", compiler_cp, "org.solaris.bukkit.RemapLogger", args.jar, linked)
+        enum, mapping = material_source(args.blocks_report)
+        sources = {"EntryPoint.java": entry_source(meta, handlers), "Material.java": enum, "Materials.java": mapping}
+        for name, source in sources.items():
+            (generated / name).write_text(source)
+        shim_sources = sorted((ROOT / "shim").rglob("*.java"))
+        generated_sources = [generated / name for name in sources]
+        main_class = "org.solaris.bukkit.EntryPoint"
     shim_classes = output / "shim-classes"
     run(javac, "--release", "17", "-proc:none", "-cp", dependencies + ":" + str(linked), "-d", shim_classes,
-        *sorted((ROOT / "shim").rglob("*.java")), *[generated / name for name in sources])
+        *shim_sources, *generated_sources)
     compiled = output / "compiled"
     run(java, "-Xmx1g", "-cp", compiler_cp, "org.solaris.bukkit.Compile",
-        "org.solaris.bukkit.EntryPoint", compiled, shim_classes, linked)
+        main_class, compiled, shim_classes, linked)
     narrowed = output / "java-pruned.wasm"
     narrowed.write_bytes(prune((compiled / "bukkit.wasm").read_bytes(),
         {"enable", "disable", "deliver", "break_block", "teavm_catchException", "memory"}))
     java_module = output / "java.wasm"
     run(args.binaryen_bin / "wasm-opt", narrowed, "--enable-bulk-memory", "--remove-unused-module-elements", "--dce", "--vacuum", "-o", java_module)
+    adapter = output / "adapter-stripped.wasm"
+    run(args.binaryen_bin / "wasm-opt", args.adapter, "--strip-debug", "-o", adapter)
     merged = output / "merged.wasm"
-    run(args.binaryen_bin / "wasm-merge", args.adapter, "solaris", java_module, "bukkit", ROOT / "faults.wat", "teavm",
+    run(args.binaryen_bin / "wasm-merge", adapter, "solaris", java_module, "bukkit", ROOT / "faults.wat", "teavm",
         "--enable-multimemory", "--enable-bulk-memory", "--rename-export-conflicts", "-o", merged)
     run(args.component_encoder, merged, output / "plugin.wasm")
-    api = re.search(r"package solaris:plugin@([^;]+);", (ROOT / "../../crates/mc-script/wit/plugin.wit").read_text()).group(1)
-    ident = re.sub(r"[^a-z0-9-]", "-", meta["name"].lower()).strip("-")
-    if not ident:
-        raise ValueError("plugin name does not produce a native package id")
-    manifest = f'id = {json.dumps(ident)}\nname = {json.dumps(meta["name"])}\nversion = {json.dumps(meta["version"])}\napi = {json.dumps(api)}\n'
-    manifest += "player_commands = " + json.dumps(list(meta["commands"])) + "\n"
-    if any(handler[2].endswith("PlayerJoinEvent") for handler in handlers):
-        manifest += 'events = ["player.joined"]\n'
-    if any(handler[2].endswith("BlockBreakEvent") for handler in handlers):
-        manifest += 'hooks = ["before-build"]\n'
-    (output / "plugin.toml").write_text(manifest)
-    (output / "conversion.json").write_text(json.dumps({"jar_sha256": hashlib.sha256(args.jar.read_bytes()).hexdigest(),
-        "blocks_sha256": hashlib.sha256(args.blocks_report.read_bytes()).hexdigest(), "api": api}, indent=2) + "\n")
+    if args.convert_mod:
+        (output / "plugin.toml").write_text(conversion["manifest"])
+        (output / "conversion.json").write_text(json.dumps(conversion["report"], indent=2) + "\n")
+    else:
+        ident = re.sub(r"[^a-z0-9-]", "-", meta["name"].lower()).strip("-")
+        if not ident:
+            raise ValueError("plugin name does not produce a native package id")
+        manifest = f'id = {json.dumps(ident)}\nname = {json.dumps(meta["name"])}\nversion = {json.dumps(meta["version"])}\napi = {json.dumps(api)}\n'
+        manifest += "player_commands = " + json.dumps(list(meta["commands"])) + "\n"
+        if any(handler[2].endswith("PlayerJoinEvent") for handler in handlers):
+            manifest += 'events = ["player.joined"]\n'
+        if any(handler[2].endswith("BlockBreakEvent") for handler in handlers):
+            manifest += 'hooks = ["before-build"]\n'
+        (output / "plugin.toml").write_text(manifest)
+        (output / "conversion.json").write_text(json.dumps({"jar_sha256": hashlib.sha256(args.jar.read_bytes()).hexdigest(),
+            "blocks_sha256": hashlib.sha256(args.blocks_report.read_bytes()).hexdigest(), "api": api}, indent=2) + "\n")
     print(output / "plugin.wasm")
 
 

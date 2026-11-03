@@ -146,7 +146,7 @@ def base_resources(items):
             planks += 2 * n
             sticks += 4 * n
         elif w and part == "door":
-            planks += 2 * n
+            planks += 6 * math.ceil(n / 3)
         elif w and part == "trapdoor":
             planks += 3 * n
         elif w and part == "pressure_plate":

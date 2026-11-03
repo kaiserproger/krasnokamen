@@ -12,6 +12,7 @@ import secrets
 import shutil
 import subprocess
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -247,6 +248,44 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             probe.call("minecraft_use_item_on", value)
         elif kind == "click_screen_button" and isinstance(value, dict):
             probe.call("minecraft_click_screen_button", value)
+        elif kind == "wait_terrain" and isinstance(value, dict):
+            if client != "native":
+                raise ValueError("wait_terrain requires --client native")
+            name, args = value.get("name"), value.get("args")
+            if (set(value) != {"name", "args"} or not isinstance(name, str)
+                    or not re.fullmatch(r"[A-Za-z0-9_-]+", name) or not isinstance(args, dict)
+                    or not {"sections"} <= set(args) <= {"sections", "timeout_seconds"}):
+                raise ValueError(f"invalid wait_terrain step: {value!r}")
+            sections = args["sections"]
+            timeout = args.get("timeout_seconds", 30)
+            if (not isinstance(sections, list) or not 1 <= len(sections) <= 64
+                    or any(not isinstance(section, list) or len(section) != 3
+                           or any(type(n) is not int or not -(2**31) <= n < 2**31 for n in section)
+                           for section in sections)
+                    or len({tuple(section) for section in sections}) != len(sections)
+                    or type(timeout) not in (int, float) or not math.isfinite(timeout)
+                    or not 0.1 <= timeout <= 120):
+                raise ValueError(f"invalid wait_terrain arguments: {args!r}")
+            result = probe.call("minecraft_wait_for_terrain", {
+                "sections": sections, "timeout_seconds": min(timeout, probe.remaining()),
+            })
+            if result.get("status") != "ready":
+                raise RuntimeError(f"minecraft_wait_for_terrain did not report ready: {result!r}")
+            rows = result.get("sections")
+            if (any(not isinstance(result.get(key), str) or not result[key]
+                    for key in ("connection_epoch", "dimension_epoch", "resource_epoch", "frame_id"))
+                    or not isinstance(rows, list) or len(rows) != len(sections)
+                    or any(not isinstance(row, dict) or row.get("section") != section
+                           or not isinstance(row.get("requested_revision"), str)
+                           or not row["requested_revision"].isascii()
+                           or not row["requested_revision"].isdigit()
+                           or row.get("mesh_revision") != row["requested_revision"]
+                           or type(row.get("selected_for_draw")) is not bool
+                           for row, section in zip(rows, sections))):
+                raise RuntimeError(f"invalid minecraft_wait_for_terrain receipt: {result!r}")
+            receipt = artifact / f"{name}.json"
+            receipt.write_text(json.dumps(result, indent=2) + "\n")
+            probe.report.setdefault("terrain_waits", []).append({"receipt": str(receipt), "result": result})
         elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities") and isinstance(value, dict):
             name, args = value.get("name"), value.get("args")
             if (set(value) != {"name", "args"} or not isinstance(name, str)
@@ -291,18 +330,25 @@ def start_java(ctx: ProfileContext, artifact: Path, address: str, username: str,
     return process, log, mcp
 
 
-def run(ctx: ProfileContext) -> dict[str, Any]:
+def run(
+    ctx: ProfileContext,
+    scenario: dict[str, Any] | None = None,
+    script: Callable[[ProbeSteps, Path, list[dict[str, Any]], str], list[str]] = execute,
+) -> dict[str, Any]:
+    """Run one scene. Another real-client profile may pass its own `scenario`
+    (settings) and a Python `script` body in place of the JSON steps."""
     if ctx.client not in ("native", "java") or not ctx.windowed or ctx.platform is not None:
         raise ValueError("scene-shot requires --client native|java --windowed")
-    args = ctx.extra_args
-    if args and args[0] == "--":
-        args = args[1:]
-    if len(args) > 1:
-        raise ValueError("scene-shot accepts one scenario JSON path")
-    scenario_path = args[0] if args else os.environ.get("SCENE_SHOT_SCENARIO")
-    if not scenario_path:
-        raise ValueError("set SCENE_SHOT_SCENARIO or pass a scenario JSON path")
-    scenario = json.loads(Path(scenario_path).read_text())
+    if scenario is None:
+        args = ctx.extra_args
+        if args and args[0] == "--":
+            args = args[1:]
+        if len(args) > 1:
+            raise ValueError("scene-shot accepts one scenario JSON path")
+        scenario_path = args[0] if args else os.environ.get("SCENE_SHOT_SCENARIO")
+        if not scenario_path:
+            raise ValueError("set SCENE_SHOT_SCENARIO or pass a scenario JSON path")
+        scenario = json.loads(Path(scenario_path).read_text())
     if not isinstance(scenario, dict) or not isinstance(scenario.get("steps"), list):
         raise ValueError("scenario must contain a steps array")
     seed = scenario.get("seed", 100)
@@ -439,7 +485,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             probe.call("minecraft_wait_for_state_change", {
                 "observed_version": before["state_version"], "timeout_seconds": probe.remaining(),
             })
-            shots = execute(probe, artifact, scenario["steps"], ctx.client)
+            shots = script(probe, artifact, scenario["steps"], ctx.client)
         result = {"screenshots": shots, "scenario": probe.report, "seed": seed, "settings": settings, "client_latency_ms": client_latency_ms}
     finally:
         if mcp is not None:

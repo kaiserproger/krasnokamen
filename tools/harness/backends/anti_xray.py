@@ -246,6 +246,9 @@ def _scenario(probe: ProbeSteps, ctx: ProfileContext, artifact: Path, address: s
     probe.call("minecraft_select_hotbar_item", {
         "item_id": "minecraft:diamond_pickaxe", "count": 1, "timeout_seconds": probe.remaining()})
     probe.fixture("gamemode survival @s")
+    probe.fixture("say anti-xray-survival-ready")
+    probe.wait(lambda state: any("anti-xray-survival-ready" in line for line in state.get("recent_chat", [])),
+               "survival_mode_receipt")
 
     def mine(name: str, face: str) -> None:
         probe.call("minecraft_look_at_block", {**at(name), "face": face})
@@ -304,6 +307,17 @@ def _light_pass(probe: ProbeSteps, plan: dict[str, Any], at: Any, loaded: Any, w
             probe.call("minecraft_wait_for_state_change", {
                 "observed_version": state["state_version"], "timeout_seconds": probe.remaining()})
 
+    def teleport_arrived(x: int, y: int, z: int) -> None:
+        while True:
+            state = probe.call("minecraft_observe")
+            player = state.get("player") or {}
+            position = player.get("server_position") or []
+            if state.get("in_play") and len(position) == 3 and all(
+                    abs(actual - expected) < 1 for actual, expected in zip(position, (x, y, z))):
+                return
+            probe.call("minecraft_wait_for_state_change", {
+                "observed_version": state["state_version"], "timeout_seconds": probe.remaining()})
+
     # a) The viewer stands still (creative: no fall damage in the far teleport) while the lamp
     # appears and is removed; the chunk delta/light update reaches the client each time.
     sx, sy, sz = plan["stand_b"]
@@ -323,10 +337,12 @@ def _light_pass(probe: ProbeSteps, plan: dict[str, Any], at: Any, loaded: Any, w
     # b) Leave the view window without reconnecting; the client forgets the chunk; the lamp's
     # block changes server-side meanwhile; on return the new block and its light arrive.
     probe.fixture(f"tp @s {sx + AWAY_BLOCKS} {sy + 64} {sz}")
+    teleport_arrived(sx + AWAY_BLOCKS, sy + 64, sz)
     chunk_unloaded()
     probe.check("lamp_chunk_forgotten_by_client", True)
     probe.fixture(f"setblock {lamp['x']} {lamp['y']} {lamp['z']} {CRYING_OBSIDIAN}")
     probe.fixture(f"tp @s {sx} {sy} {sz}")
+    teleport_arrived(sx, sy, sz)
     loaded("lamp")
     wait_block("lamp", CRYING_OBSIDIAN)
     returned = probe_light(lambda light: light == 9, "returned_block_light")

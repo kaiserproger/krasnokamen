@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from .backends import village_autonomy_qa as qa
 from .backends import probe_steps
@@ -51,7 +51,8 @@ class VillageAutonomyQaTests(unittest.TestCase):
     def test_blueprint_observation_requires_every_non_air_cell(self) -> None:
         probe = Mock()
         record = {"id": 123, "kind": "storage", "level": 1, "min": [2, 70, 3], "max": [2, 70, 3]}
-        blueprint = {"id": "test", "palette": {"p": "cobblestone"}, "levels": [{"layers": [["p"]]}]}
+        blueprint = {"id": "test", "palette": {"p": "cobblestone"},
+                     "levels": [{"cert": [1, 1, 1], "layers": [["p"]]}]}
         probe.call.return_value = {"blocks": [{"x": 2, "y": 70, "z": 3, "block_id": "minecraft:cobblestone"}]}
         self.assertTrue(qa._observe_blueprint(probe, {}, record, blueprint, "complete"))
         probe.call.return_value = {"blocks": []}
@@ -71,13 +72,14 @@ class VillageAutonomyQaTests(unittest.TestCase):
         ]
         for authored, block, properties in cases:
             with self.subTest(block=block):
-                blueprint = {"id": "test", "palette": {"p": authored}, "levels": [{"layers": [["p"]]}]}
+                blueprint = {"id": "test", "palette": {"p": authored},
+                             "levels": [{"cert": [1, 1, 1], "layers": [["p"]]}]}
                 probe.call.return_value = {"blocks": [{
                     "x": 0, "y": 70, "z": 0, "block_id": f"minecraft:{block}", "properties": properties,
                 }]}
-                self.assertTrue(qa._observe_blueprint(probe, {}, record, blueprint, "live"))
+                self.assertTrue(qa._observe_blueprint(probe, {}, record, blueprint, "live", rotation=0))
         properties["facing"] = "south"
-        self.assertFalse(qa._observe_blueprint(probe, {}, record, blueprint, "wrong-facing"))
+        self.assertFalse(qa._observe_blueprint(probe, {}, record, blueprint, "wrong-facing", rotation=0))
 
     def test_chest_waits_for_server_menu_and_excludes_player_inventory(self) -> None:
         probe = Mock()
@@ -146,6 +148,82 @@ class VillageAutonomyQaTests(unittest.TestCase):
         self.assertIsNone(qa._project_progress({
             "ui_nodes": [{"id": "dialog/body/0", "label": "No active project: no residents."}],
         }))
+
+    def test_project_progress_names_street_work_and_refuses_unknown_projects(self) -> None:
+        for label, kind, level, site in (
+            ("Road", "road", "level", "Site"), ("Дорога", "road", "уровень", "Место"),
+            ("Street lamp", "lamp", "level", "Site"), ("Фонарь", "lamp", "уровень", "Место"),
+        ):
+            observed = {"ui_nodes": [{
+                "id": "dialog/body/0", "label": f"{label} · {level} 1 · 7/42\n{site}: 7, 200, 10",
+            }]}
+            with self.subTest(label=label):
+                self.assertEqual(qa._project_progress(observed), {
+                    "blueprint": kind, "level": 1, "done": 7, "total": 42, "origin": [7, 200, 10],
+                })
+        # The dialog's fallback label for a blueprint the harness cannot name.
+        with self.assertRaisesRegex(RuntimeError, "'Building'"):
+            qa._project_progress({"ui_nodes": [{
+                "id": "dialog/body/0", "label": "Building · level 1 · 1/9\nSite: 1, 2, 3",
+            }]})
+
+    def test_road_restart_subject_records_the_street_plan_before_restart(self) -> None:
+        status = {"ui_nodes": [{"id": "dialog/body/0", "label": "Road · level 1 · 5/42\nSite: 7, 200, 10"}]}
+        layout = ("Roads: 40/120 columns reachable on foot from the bell; 0/3 reachable stretches paved."
+                  "\nNext street work: pave road x 7..9 z 10..23.")
+        with patch.object(qa, "_project_status", return_value=status), patch.object(
+            qa, "_send", return_value={"recent_chat": [layout]},
+        ) as send, patch.object(qa.time, "monotonic", side_effect=[0.0, 0.0]):
+            before = qa._wait_project_started(Mock())
+        send.assert_called_once_with(ANY, "settlement layout")
+        self.assertEqual(before["layout_before"], {
+            "paved": 0, "stretches": 3, "next": "pave road x 7..9 z 10..23",
+        })
+
+    def test_restart_accepts_a_lamp_post_finished_while_down(self) -> None:
+        before = {"blueprint": "lamp", "level": 1, "done": 1, "total": 3, "origin": [10, 201, 19]}
+        info = "village_7 | owner=abc anchor=[8, 201, 8] radius=48"
+        probe = Mock()
+        probe.call.return_value = {"blocks": [
+            {"x": 10, "y": 201, "z": 19, "block_id": "minecraft:spruce_fence"},
+            {"x": 10, "y": 202, "z": 19, "block_id": "minecraft:spruce_fence"},
+            {"x": 10, "y": 203, "z": 19, "block_id": "minecraft:torch"},
+        ]}
+        detail = {"settlement_name": "village_7", "final_info_chat": [info]}
+        with patch.object(qa, "_send", return_value={"recent_chat": [info]}), patch.object(
+            qa, "_project_status", return_value={"ui_nodes": []},
+        ), patch.object(qa.time, "monotonic", side_effect=[0.0, 0.0]):
+            self.assertTrue(qa._wait_project_resumed(probe, detail, before))
+        self.assertEqual(detail["restart_after"], {"completed_street_work": before})
+        probe.call.assert_called_once_with("minecraft_scan_blocks", {
+            "min_x": 10, "min_y": 201, "min_z": 19, "max_x": 10, "max_y": 203, "max_z": 19,
+        })
+
+    def test_restart_road_needs_one_more_paved_stretch_no_longer_offered(self) -> None:
+        before = {
+            "blueprint": "road", "level": 1, "done": 5, "total": 42, "origin": [7, 200, 10],
+            "layout_before": {"paved": 0, "stretches": 3, "next": "pave road x 7..9 z 10..23"},
+        }
+        info = "village_7 | owner=abc anchor=[8, 201, 8] radius=48"
+        roads = "Roads: 40/120 columns reachable on foot from the bell; {}/3 reachable stretches paved."
+        layouts = iter([
+            roads.format(0) + "\nNext street work: pave road x 7..9 z 10..23.",
+            roads.format(1) + "\nNext street work: lamp post at 10 201 19 (2 fences + 1 torch from storage).",
+        ])
+
+        def send(_probe, command, settle_ticks=40):
+            return {"recent_chat": [next(layouts) if command == "settlement layout" else info]}
+
+        probe = Mock()
+        detail = {"settlement_name": "village_7", "final_info_chat": [info]}
+        with patch.object(qa, "_send", side_effect=send), patch.object(
+            qa, "_project_status", return_value={"ui_nodes": []},
+        ), patch.object(qa.time, "monotonic", side_effect=[0.0, 0.0, 1.0]):
+            self.assertTrue(qa._wait_project_resumed(probe, detail, before))
+        # The first look still offers the stretch: the harness waits once.
+        probe.call.assert_called_once_with("minecraft_wait_ticks", {"ticks": 100})
+        self.assertEqual(detail["restart_street_layout"]["paved"], 1)
+        self.assertEqual(detail["restart_after"], {"completed_street_work": before})
 
     def test_planner_diagnostic_reads_status_instead_of_stale_chat(self) -> None:
         observed = {"ui_nodes": [{
@@ -370,6 +448,178 @@ class VillageAutonomyQaTests(unittest.TestCase):
             ("storage", 1, 3, 25),
         )
         probe.call.assert_any_call("minecraft_close_screen", {})
+
+
+class RotatedBlueprintObservationTests(unittest.TestCase):
+    """Independent coordinates: L1 is 3x2, but the shared rotation frame is 5x4."""
+
+    @staticmethod
+    def blueprint():
+        return {
+            "id": "asymmetric", "kind": "wall",
+            "palette": {
+                "A": "cobblestone", "B": "cobblestone_stairs[facing=north,half=bottom]",
+                "C": "oak_log[axis=x]", "R": "rail[shape=north_east]",
+                "D": "vine[north=true,east=false,south=false,west=false,up=true]",
+                "E": "oak_sign[rotation=3]",
+            },
+            "levels": [
+                {"cert": [2, 2, 1], "layers": [["A.B", "CR."], ["D..", "..E"]]},
+                {"cert": [4, 3, 3], "layers": [
+                    ["A....", ".....", ".....", "....."],
+                    [".....", ".....", ".....", "....."],
+                    [".....", ".....", ".....", "....."],
+                ]},
+            ],
+        }
+
+    @staticmethod
+    def fixture(turns):
+        bounds = [
+            ([10, 70, 20], [11, 71, 20]),
+            ([13, 70, 20], [13, 71, 21]),
+            ([13, 70, 23], [14, 71, 23]),
+            ([10, 70, 23], [10, 71, 24]),
+        ]
+        positions = [
+            [(10, 70, 20), (12, 70, 20), (10, 70, 21), (11, 70, 21), (10, 71, 20), (12, 71, 21)],
+            [(13, 70, 20), (13, 70, 22), (12, 70, 20), (12, 70, 21), (13, 71, 20), (12, 71, 22)],
+            [(14, 70, 23), (12, 70, 23), (14, 70, 22), (13, 70, 22), (14, 71, 23), (12, 71, 22)],
+            [(10, 70, 24), (10, 70, 22), (11, 70, 24), (11, 70, 23), (10, 71, 24), (11, 71, 22)],
+        ]
+        directions = ("north", "east", "south", "west")
+        properties = [
+            {}, {"facing": directions[turns], "half": "bottom"},
+            {"axis": ("x", "z", "x", "z")[turns]},
+            {"shape": ("north_east", "south_east", "south_west", "north_west")[turns]},
+            {**{direction: "true" if index == turns else "false"
+                for index, direction in enumerate(directions)}, "up": "true"},
+            {"rotation": ("3", "7", "11", "15")[turns]},
+        ]
+        names = ("cobblestone", "cobblestone_stairs", "acacia_log", "rail", "vine", "acacia_sign")
+        cells = [
+            {"x": at[0], "y": at[1], "z": at[2], "block_id": f"minecraft:{name}", "properties": props}
+            for at, name, props in zip(positions[turns], names, properties)
+        ]
+        low, high = bounds[turns]
+        return {"id": 2, "kind": "wall", "level": 1, "min": low, "max": high}, cells
+
+    def test_all_rotations_use_maximum_frame_and_rotated_authored_properties(self):
+        for turns in range(4):
+            with self.subTest(rotation=turns):
+                record, cells = self.fixture(turns)
+                probe = Mock()
+                probe.call.return_value = {"blocks": cells}
+                detail = {}
+                self.assertTrue(qa._observe_blueprint(probe, detail, record, self.blueprint(), "built"))
+                result = detail["client_blocks"]["built"]
+                self.assertEqual(result["origin"], [10, 70, 20])
+                self.assertEqual(result["matching_rotations"], [turns])
+                self.assertEqual(result["expected_non_air"], 6)
+                self.assertEqual(result["matched"], 6)
+                self.assertEqual(result["wood_species"], "acacia")
+
+    def test_every_rotation_rejects_a_missing_block_or_wrong_stair_orientation(self):
+        for turns in range(4):
+            for defect in ("missing", "facing", "half", "axis", "shape", "rotation", "connections", "species"):
+                with self.subTest(rotation=turns, defect=defect):
+                    record, cells = self.fixture(turns)
+                    if defect == "missing":
+                        cells.pop(0)
+                    elif defect == "facing":
+                        cells[1]["properties"]["facing"] = ("east", "south", "west", "north")[turns]
+                    elif defect == "half":
+                        cells[1]["properties"]["half"] = "top"
+                    elif defect == "axis":
+                        cells[2]["properties"]["axis"] = "y"
+                    elif defect == "shape":
+                        cells[3]["properties"]["shape"] = "north_south"
+                    elif defect == "rotation":
+                        cells[5]["properties"]["rotation"] = "0"
+                    elif defect == "connections":
+                        cells[4]["properties"]["up"] = "false"
+                    else:
+                        cells[5]["block_id"] = "minecraft:birch_sign"
+                    probe = Mock()
+                    probe.call.return_value = {"blocks": cells}
+                    self.assertFalse(qa._observe_blueprint(probe, {}, record, self.blueprint(), "damaged"))
+
+    def test_certificate_extents_are_required_and_not_treated_as_placed_extents(self):
+        record, cells = self.fixture(0)
+        record["max"] = [12, 71, 21]  # Placed 3x2 is not the authored 2x1 certificate.
+        probe = Mock()
+        probe.call.return_value = {"blocks": cells}
+        self.assertFalse(qa._observe_blueprint(probe, {}, record, self.blueprint(), "wrong-bounds"))
+        probe.call.assert_not_called()
+
+    def test_rotated_scan_pages_and_rejects_nonadvancing_pagination(self):
+        record, cells = self.fixture(1)
+        probe = Mock()
+        probe.call.side_effect = [
+            {"blocks": cells[:3], "truncated": True, "next_offset": 3},
+            {"blocks": cells[3:]},
+        ]
+        self.assertTrue(qa._observe_blueprint(probe, {}, record, self.blueprint(), "paged"))
+        self.assertEqual(probe.call.call_args_list[1].args[1]["offset"], 3)
+        probe.call.side_effect = None
+        probe.call.return_value = {"blocks": [], "truncated": True, "next_offset": 0}
+        with self.assertRaisesRegex(RuntimeError, "pagination did not advance"):
+            qa._observe_blueprint(probe, {}, record, self.blueprint(), "stalled")
+
+    def test_rotated_completion_after_restart_uses_project_origin_not_certificate_min(self):
+        for turns in range(4):
+            with self.subTest(rotation=turns):
+                record, cells = self.fixture(turns)
+                lines = [f"Buildings: #2 wall level 1 {record['min']}-{record['max']}."]
+                probe = Mock()
+                probe.call.return_value = {"blocks": cells}
+                detail = {"settlement_name": "town", "final_info_chat": ["town | owner=owner"]}
+                before = {"blueprint": "asymmetric", "level": 1, "origin": [10, 70, 20],
+                          "done": 2, "total": 6}
+                def send(_probe, text):
+                    return {"recent_chat": ["town | owner=owner"] if text.startswith("settlement info") else lines}
+                with patch.object(qa, "_authored_blueprints", return_value=[self.blueprint()]), patch.object(
+                    qa, "_project_status", return_value={},
+                ), patch.object(qa, "_send", side_effect=send), patch.object(
+                    qa.time, "monotonic", side_effect=[0.0, 0.0, 1301.0],
+                ):
+                    self.assertTrue(qa._wait_project_resumed(probe, detail, before))
+                self.assertEqual(detail["restart_after"]["completed_building"]["id"], 2)
+
+    def test_resume_refuses_a_completed_building_at_another_project_origin(self):
+        record, cells = self.fixture(2)
+        probe = Mock()
+        probe.call.return_value = {"blocks": cells}
+        detail = {"settlement_name": "town", "final_info_chat": ["town | owner=owner"]}
+        before = {"blueprint": "asymmetric", "level": 1, "origin": [11, 70, 20], "done": 2, "total": 6}
+        def send(_probe, text):
+            return {"recent_chat": ["town | owner=owner"] if text.startswith("settlement info")
+                    else [f"Buildings: #2 wall level 1 {record['min']}-{record['max']}."]}
+        with patch.object(qa, "_authored_blueprints", return_value=[self.blueprint()]), patch.object(
+            qa, "_project_status", return_value={},
+        ), patch.object(qa, "_send", side_effect=send), patch.object(
+            qa.time, "monotonic", side_effect=[0.0, 0.0, 1301.0],
+        ):
+            self.assertFalse(qa._wait_project_resumed(probe, detail, before))
+
+    def test_autonomous_upgrade_accepts_rotated_certificate_smaller_than_placed_grid(self):
+        # L2 turns east in the 5x4 frame; certificate 4x3 becomes 3x4.
+        record = {"id": 2, "kind": "wall", "level": 2, "min": [11, 70, 20], "max": [13, 72, 23]}
+        probe = Mock()
+        probe.call.return_value = {"blocks": [
+            {"x": 13, "y": 70, "z": 20, "block_id": "minecraft:cobblestone"},
+        ]}
+        detail = {"building_list_chat": [], "completed_storage": {"id": 1}}
+        with patch.object(qa, "_authored_blueprints", return_value=[self.blueprint()]), patch.object(
+            qa, "_send", return_value={"recent_chat": [
+                f"Buildings: #2 wall level 2 {record['min']}-{record['max']}.",
+            ]},
+        ), patch.object(qa.time, "monotonic", side_effect=[0.0, 0.0, 2.0]):
+            self.assertEqual(qa._wait_autonomous_progress(
+                probe, detail, SimpleNamespace(windowed=False), Path("unused"), 1.0,
+            ), (True, True))
+        self.assertEqual(detail["further_building"]["id"], 2)
+        self.assertEqual(detail["autonomous_upgrade"]["level"], 2)
 
 
 class OwnerOrderScenarioTests(unittest.TestCase):

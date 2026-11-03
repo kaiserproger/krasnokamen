@@ -15,6 +15,8 @@ import zlib
 from pathlib import Path
 from typing import Any
 
+from .. import runtime
+
 from . import native_client
 from .native_v2 import _block, _echo, _give, _point, _set, _use
 from .probe_steps import ProbeSteps, item_count
@@ -47,6 +49,11 @@ class SignWireTrace:
         self.server_port = server_port
         self.path = artifact / ("fishing-wire-trace.json" if fishing else "sign-wire-trace.json")
         self.fishing = fishing
+        report = json.loads((runtime.REPO_ROOT / "data/vanilla/reports/packets.json").read_text())
+        self.equipment_packet_id = report["play"]["clientbound"]["minecraft:set_equipment"]["protocol_id"]
+        self.fishing_metadata_id = (
+            report["play"]["clientbound"]["minecraft:set_entity_data"]["protocol_id"] if fishing else None
+        )
         self.biting: dict[int, dict[str, Any]] = {}
         self.equipment: list[dict[str, Any]] = []
         self.players: dict[int, dict[str, str]] = {}
@@ -109,7 +116,7 @@ class SignWireTrace:
                                                     signed((packed >> 12) & 0x3FFFFFF, 26)],
                                        "payload_hex": body[payload_start:].hex()}
                                 self.rows.append(row)
-                            if phase == "play" and self.fishing and packet_id == 0x63:
+                            if phase == "play" and self.fishing and packet_id == self.fishing_metadata_id:
                                 payload = body[payload_start:]
                                 entity_id, _ = _varint(payload)
                                 row = {"connection": connection, "sequence": sequence, "packet_id": packet_id,
@@ -119,7 +126,7 @@ class SignWireTrace:
                                     row["hook_biting"] = bite[1]
                                     self.biting[bite[0]] = row
                                 self.rows.append(row)
-                            if phase == "play" and packet_id == 0x66:
+                            if phase == "play" and packet_id == self.equipment_packet_id:
                                 payload = body[payload_start:]
                                 entity_id, slot_start = _varint(payload)
                                 stack_count, _ = _varint(payload, slot_start + 1)
@@ -485,6 +492,9 @@ def _slime(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _aim(steps, children[0])
     _capture(steps, "p2-slime-small-children")
     # Adjacent death rule: a size-one child must not recursively split again.
+    # Empty-hand strike cannot sweep an adjacent sibling as the sword can.
+    steps.call("minecraft_set_hotbar_slot", {"slot": 8})
+    steps.check("small_child_attack_hand_empty", steps.observe()["selected_item"]["count"] == 0)
     child = {key: children[0][key] for key in ("entity_id", "entity_uuid", "entity_type")}
     steps.call("minecraft_approach_entity", {"entity_id": child["entity_id"], "timeout_seconds": steps.remaining()})
     steps.call("minecraft_attack_entity_once", {**child, "timeout_seconds": steps.remaining()})
@@ -501,6 +511,8 @@ def _enderman(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
     steps.fixture(f"fill {x - 24} {y - 1} {z - 24} {x + 24} {y - 1} {z + 24} minecraft:obsidian")
     steps.fixture(f"fill {x - 24} {y} {z - 24} {x + 24} {y + 4} {z + 24} minecraft:air")
+    # Let the deflected arrow stay airborne past the 20-tick tracking interval.
+    steps.fixture(f"fill {x - 2} {y - 20} {z + 1} {x + 2} {y - 1} {z + 7} minecraft:air")
     steps.fixture(f"summon minecraft:enderman {x + .5} {y} {z + 8.5} {{NoAI:1b}}")
     target = steps.call("minecraft_wait_for_visible_entity", {"entity_type": "minecraft:enderman", "radius": 64, "timeout_seconds": steps.remaining()})
     identity = {key: target[key] for key in ("entity_id", "entity_uuid", "entity_type")}
@@ -607,6 +619,8 @@ def _fishing(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     early = steps.call("minecraft_wait_for_visible_entity", {"entity_type": "minecraft:fishing_bobber", "radius": 32, "timeout_seconds": steps.remaining()})
     early_identity = {key: early[key] for key in ("entity_id", "entity_uuid", "entity_type")}
     steps.check("adversarial_new_hook_uuid", early_identity["entity_uuid"] != identity["entity_uuid"])
+    # The native client enforces a four-client-tick delay between uses.
+    steps.call("minecraft_wait_ticks", {"ticks": 4})
     steps.check("adversarial_early_hook_not_biting", not trace.biting.get(early_identity["entity_id"], {}).get("hook_biting", False))
     steps.call("minecraft_press_inputs", {"keys": ["use"], "ticks": 1})
     steps.call("minecraft_wait_for_entity_removed", {**early_identity, "timeout_seconds": steps.remaining()})

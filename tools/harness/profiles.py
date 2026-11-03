@@ -48,6 +48,7 @@ class ProfileContext:
     logs: list[str] = field(default_factory=list)
     cwds: list[str] = field(default_factory=list)
     client: str = "java"
+    include_regression_client: bool = False
     client_evidence: dict[str, Any] = field(default_factory=dict)
     plugins_dir: Path | None = None
     windowed: bool = False
@@ -247,9 +248,16 @@ def run_test(ctx: ProfileContext, *, full: bool = False) -> dict[str, Any]:
     return details
 
 
+def run_regressions(ctx: ProfileContext) -> dict[str, Any]:
+    from . import regressions
+
+    return regressions.run(ctx)
+
+
 def run_correctness(ctx: ProfileContext) -> dict[str, Any]:
     """The four L2 gates: fmt, clippy, code-health, then the test suite."""
     details: dict[str, Any] = {}
+    _merge_details(details, run_regressions(ctx))
     _merge_details(details, run_fmt(ctx))
     _merge_details(details, run_clippy(ctx))
     _merge_details(details, run_code_health(ctx))
@@ -360,6 +368,13 @@ def run_anti_xray(ctx: ProfileContext) -> dict[str, Any]:
     return anti_xray.run(ctx)
 
 
+def run_composter_chance(ctx: ProfileContext) -> dict[str, Any]:
+    """Graphical hopper-fed wheat-seed composter probability gate."""
+    from .backends import composter_chance
+
+    return composter_chance.run(ctx)
+
+
 def run_block_log(ctx: ProfileContext) -> dict[str, Any]:
     """Block-log gate: grief, /co rollback, restart and /co restore on the native client."""
     from .backends import block_log
@@ -398,6 +413,13 @@ def run_scene_shot(ctx: ProfileContext) -> dict[str, Any]:
     return scene_shot.run(ctx)
 
 
+def run_settlement_map_qa(ctx: ProfileContext) -> dict[str, Any]:
+    """Settlement map dialog judged from a real native or vanilla-Java client's screenshots."""
+    from .backends import settlement_map_qa
+
+    return settlement_map_qa.run(ctx)
+
+
 def run_claim_only_qa(ctx: ProfileContext) -> dict[str, Any]:
     """Claim/fencing/restart checklist on a settled autonomous world (native)."""
     from .backends import claim_only_qa
@@ -416,6 +438,12 @@ def run_army_qa(ctx: ProfileContext) -> dict[str, Any]:
     from .backends import army_qa
 
     return army_qa.run(ctx)
+
+def run_autocraft_qa(ctx: ProfileContext) -> dict[str, Any]:
+    """Settlement autocraft: dialog-ordered dependency chain, refusals, restart, exact stock (native)."""
+    from .backends import autocraft_qa
+
+    return autocraft_qa.run(ctx)
 
 def run_core_client(ctx: ProfileContext) -> dict[str, Any]:
     from .backends import client_probes
@@ -710,7 +738,7 @@ def run_bucket_resync(ctx: ProfileContext) -> dict[str, Any]:
 
 def run_harness_check(ctx: ProfileContext) -> dict[str, Any]:
     _run_command(
-        [sys.executable, "-m", "unittest", "tools.harness.test_harness"],
+        [sys.executable, "-m", "unittest", "tools.harness.test_harness", "tools.harness.test_regressions"],
         ctx,
         "harness-tests.log",
     )
@@ -729,6 +757,16 @@ def run_dh_gate(ctx: ProfileContext) -> dict[str, Any]:
 Profile = Callable[[ProfileContext], dict[str, Any]]
 
 PROFILES: dict[str, dict[str, Any]] = {
+    "regressions": {
+        "scope": "harness",
+        "description": "Run all executable Cargo checks in the bug ledger",
+        "run": run_regressions,
+    },
+    "regressions-client": {
+        "scope": "harness",
+        "description": "Run bug ledger Cargo and real-client checks",
+        "run": run_regressions,
+    },
     "harness-check": {
         "scope": "harness",
         "description": "Real process/receipt regression tests and private shell-engine syntax",
@@ -814,6 +852,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Scripted windowed native or vanilla-Java (--client java, rendering oracle) scene captures on an isolated world",
         "run": run_scene_shot,
     },
+    "settlement-map-qa": {
+        "scope": "real-client",
+        "description": "Settlement map dialog: territory and viewer on an empty town, a certified Storage after Refresh, Back to main; judged from client screenshots (--client native|java --windowed)",
+        "run": run_settlement_map_qa,
+    },
     "claim-only-qa": {
         "scope": "real-client",
         "description": "Claim/fencing/restart checklist on a settled autonomous world (native --client, windowed)",
@@ -829,6 +872,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Millenaire army: barracks L1/L2 recruit slots, dialog-only orders, combat, adversarial, restart (native --client, windowed for screenshots)",
         "run": run_army_qa,
     },
+    "autocraft-qa": {
+        "scope": "real-client",
+        "description": "Settlement autocraft: New order with missing ingredients plans and runs a real dependency chain; raw-material and cycle refusals; restart mid-chain; exact stock (native --client, windowed for screenshots)",
+        "run": run_autocraft_qa,
+    },
     "dialogs": {
         "scope": "real-client",
         "description": "Native server-driven dialog: show_dialog with text/slider/checkbox inputs, submit, exact payload at the server (--client native, windowed for screenshots)",
@@ -843,6 +891,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "scope": "real-client",
         "description": "Anti-xray gate: an enclosed diamond ore is absent from the client's world data until survival mining beside it reveals it (native --client, windowed for screenshots)",
         "run": run_anti_xray,
+    },
+    "composter-chance": {
+        "scope": "real-client",
+        "description": "Native player loads wheat seeds into a hopper; observe individual debits and composter levels",
+        "run": run_composter_chance,
     },
     "block-log": {
         "scope": "real-client",
