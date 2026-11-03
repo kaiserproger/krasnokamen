@@ -1777,28 +1777,7 @@ pub(super) fn collect_pickup_intents(state: &TickState, intents: &mut Vec<Intent
             .player_slots()
             .filter(|slot| !state.entity_session_locked(state.entities.body(*slot).id)),
         state.entities.item_slots(),
-        |player, item| {
-            let Some(player) = state.players.get(&player) else {
-                return false;
-            };
-            let Some(row) = state
-                .entities
-                .slot_of(item)
-                .and_then(|slot| state.entities.row(slot).item.as_ref())
-            else {
-                return false;
-            };
-            let plain;
-            let stack = if let Some(stack) = &row.stack {
-                stack
-            } else {
-                plain = mc_data::ItemStack::new(row.item_id, row.count);
-                &plain
-            };
-            player
-                .inventory
-                .can_add(&state.registry.item_rules(), stack)
-        },
+        |player, item| state.can_pickup_item(player, item),
         &state.seq_counter,
         intents,
     );

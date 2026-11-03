@@ -3245,6 +3245,46 @@ fn full_player_does_not_reserve_pickup_from_nearby_player() {
     )));
 }
 
+#[test]
+fn pickup_losing_capacity_before_merge_does_not_block_another_player() {
+    use crate::intent::{Footprint, Intent, IntentKind};
+    let (mut state, first, pos) = flat_player_fixture();
+    let second = join(&mut state, 2, "other");
+    let dirt = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:dirt").unwrap())
+        .unwrap();
+    let item = crate::tick::spawn_item_entity(&mut state, pos, mc_data::ItemStack::new(dirt, 1));
+    let mut intents: Vec<_> = [first, second]
+        .into_iter()
+        .map(|actor| Intent {
+            actor,
+            seq: 0,
+            kind: IntentKind::PickupItem {
+                item,
+                count: i32::MAX,
+            },
+            footprint: Footprint {
+                entity_reads: vec![actor],
+                item_take: Some(item),
+                ..Default::default()
+            },
+        })
+        .collect();
+    for slot in &mut state.players.get_mut(&first).unwrap().inventory.slots {
+        *slot = mc_data::ItemStack::new(dirt, 64);
+    }
+    state.merge(&mut intents);
+    let (_, events, _, removed) = state.commit_merge_effects();
+    assert!(removed.contains(&item));
+    assert!(events.iter().any(
+        |event| matches!(event, crate::boundary::EntityEvent::Pickup {
+        item: collected, collector, count: 1
+    } if *collected == item && *collector == second)
+    ));
+}
+
 /// Partial pickup keeps the remainder on the ground: a full inventory takes
 /// nothing and the entity survives; space for half takes half.
 #[test]

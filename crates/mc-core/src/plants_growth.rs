@@ -77,27 +77,9 @@ fn extend(
     };
     let target = BlockPos { y: at.y + dy, ..at };
     if name == "kelp" {
-        // Vanilla kelp grows into a source or downward-flowing water cell
-        // (falling column with water above), turning flow into a source.
-        // A lone surface-flow cell with air above is still downward water
-        // when the column below is water, so it grows too.
+        // KelpBlock.canGrowInto accepts every WATER block state.
         if path(read, target)? != "water" {
             return None;
-        }
-        if prop(blocks, get(read, target)?, "level") != Some("0") {
-            let roof = BlockPos {
-                y: target.y + 1,
-                ..target
-            };
-            let column = BlockPos {
-                y: target.y - 1,
-                ..target
-            };
-            let roof_water = path(read, roof)? == "water";
-            let column_water = path(read, column)? == "water";
-            if !roof_water && !(column_water && air(read, roof)) {
-                return None;
-            }
         }
     } else if !air(read, target) {
         return None;

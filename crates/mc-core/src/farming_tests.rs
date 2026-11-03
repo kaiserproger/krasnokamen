@@ -530,48 +530,33 @@ fn bone_meal_reaches_column_tips_beyond_twenty_five_blocks() {
 }
 
 #[test]
-fn kelp_grows_into_falling_water_and_turns_it_into_a_source() {
-    let (mut state, player) = setup();
-    // A top-poured column: source over falling water over a kelp tip.
-    let source = state.registry.states.water_levels[0];
-    let falling = block(&state, "water", &[("level", "1")]);
-    put(&mut state, -3, Y + 3, 1, source);
-    put(&mut state, -3, Y + 2, 1, falling);
-    let tip = block(&state, "kelp", &[("age", "0")]);
-    put(&mut state, -3, Y + 1, 1, tip);
-    near(&mut state, player, -3, Y + 1, 1);
-    give(&mut state, player, "bone_meal", 2);
-    use_on(&mut state, -3, Y + 1, 1, 1);
-    assert_eq!(at(&state, -3, Y + 1, 1), block(&state, "kelp_plant", &[]));
-    assert_eq!(
-        at(&state, -3, Y + 2, 1),
-        block(&state, "kelp", &[("age", "1")])
-    );
-    assert_eq!(held(&state, player).count, 1);
-    // A single downward-flow cell over the kelp column with air above
-    // still grows: the flow becomes a source and the tip extends into it.
-    let air = state.registry.states.air;
-    put(&mut state, -3, Y + 3, 1, air);
-    give(&mut state, player, "bone_meal", 1);
-    use_on(&mut state, -3, Y + 2, 1, 1);
-    assert_eq!(at(&state, -3, Y + 1, 1), block(&state, "kelp_plant", &[]));
-    assert_eq!(
-        at(&state, -3, Y + 2, 1),
-        block(&state, "kelp", &[("age", "1")])
-    );
-    // Sideways flow (horizontal current, no water column) still refuses.
-    let kelp0 = block(&state, "kelp", &[("age", "0")]);
-    let flow1 = block(&state, "water", &[("level", "1")]);
-    let air0 = state.registry.states.air;
-    put(&mut state, 6, Y + 1, 6, kelp0);
-    put(&mut state, 6, Y + 2, 6, flow1);
-    put(&mut state, 7, Y + 2, 6, air0);
-    give(&mut state, player, "bone_meal", 1);
-    use_on(&mut state, 6, Y + 1, 6, 1);
-    assert_eq!(
-        at(&state, 6, Y + 2, 6),
-        block(&state, "water", &[("level", "1")])
-    );
+fn kelp_bonemeal_grows_into_flowing_and_falling_water_under_air() {
+    for level in ["1", "8"] {
+        let (mut state, player) = setup();
+        let tip = block(&state, "kelp", &[("age", "0")]);
+        let water = block(&state, "water", &[("level", level)]);
+        let air = state.registry.states.air;
+        put(&mut state, -3, Y + 1, 1, tip);
+        put(&mut state, -3, Y + 2, 1, water);
+        put(&mut state, -3, Y + 3, 1, air);
+        near(&mut state, player, -3, Y + 1, 1);
+        give(&mut state, player, "bone_meal", 1);
+        use_on(&mut state, -3, Y + 1, 1, 1);
+        assert_eq!(
+            at(&state, -3, Y + 1, 1),
+            block(&state, "kelp_plant", &[]),
+            "water level {level}"
+        );
+        assert_eq!(
+            at(&state, -3, Y + 2, 1),
+            block(&state, "kelp", &[("age", "1")]),
+            "water level {level}"
+        );
+        assert!(
+            held(&state, player).is_empty(),
+            "bone meal consumed for water level {level}"
+        );
+    }
 }
 
 #[test]

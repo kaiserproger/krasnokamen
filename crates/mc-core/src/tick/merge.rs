@@ -4,6 +4,27 @@
 use super::*;
 
 impl TickState {
+    pub(super) fn can_pickup_item(&self, player: EntityId, item: EntityId) -> bool {
+        let Some(player) = self.players.get(&player) else {
+            return false;
+        };
+        let Some(row) = self
+            .entities
+            .slot_of(item)
+            .and_then(|slot| self.entities.row(slot).item.as_ref())
+        else {
+            return false;
+        };
+        let plain;
+        let stack = if let Some(stack) = &row.stack {
+            stack
+        } else {
+            plain = mc_data::ItemStack::new(row.item_id, row.count);
+            &plain
+        };
+        player.inventory.can_add(&self.registry.item_rules(), stack)
+    }
+
     /// Kind-specific preconditions against merge state: a second feed of
     /// the same animal, or a second breed with the same partner, in one tick
     /// is rejected whole (pays nothing).
@@ -175,10 +196,11 @@ impl TickState {
                 }
             }
             IntentKind::PickupItem { item, count } => {
-                // Reservation-free: the pickup reserves nothing at intent
-                // time (capacity is known only at commit). Staging the
-                // intent is enough; commit removes exactly the slots whose
-                // remainder is empty.
+                // Capacity can change after the entity phase and before merge.
+                // A claimant that no longer fits must not reserve this item.
+                if !self.can_pickup_item(intent.actor, *item) {
+                    return false;
+                }
                 let (Some(item_slot), Some(actor_slot)) = (
                     self.entities.slot_of(*item),
                     self.entities.slot_of(intent.actor),
