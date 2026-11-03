@@ -1527,6 +1527,123 @@ fn simultaneous_anchor_charges_claim_one_glowstone_once() {
 }
 
 #[test]
+fn anchor_offhand_glowstone_charges_instead_of_exploding() {
+    let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
+    for dimension in [Dimension::Overworld, Dimension::Nether, Dimension::End] {
+        let mut state = dimension_state(dimension, Arc::clone(&registry), None);
+        let actor = join_one(&mut state);
+        let main = held(&mut state, actor, "stick", 1);
+        let glowstone = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:glowstone").unwrap())
+            .unwrap();
+        let player = state.players.get_mut(&actor).unwrap();
+        let off = crate::tick::held_slot_index(player, crate::boundary::Hand::Off);
+        player.inventory.slots[off] = mc_data::ItemStack::new(glowstone, 2);
+        let anchor = rules::anchor_state(&state, block(&state, "respawn_anchor"), 1).unwrap();
+        state.world.set_block(8, 150, 8, anchor);
+        let slot = state.entities.slot_of(actor).unwrap();
+        state.entities.set_pos(slot, [7.5, 150.0, 8.5]);
+        crate::tick::run_tick(
+            &mut state,
+            &[PlayerInput::UseItemOn {
+                connection: ConnectionId(1),
+                hand: crate::boundary::Hand::Main,
+                position: crate::boundary::BlockPos { x: 8, y: 150, z: 8 },
+                face: 1,
+                cursor: [0.5; 3],
+                sequence: 1,
+            }],
+        );
+        assert_eq!(
+            rules::anchor_charge(&state, state.world.block_at(8, 150, 8).unwrap()),
+            Some(2)
+        );
+        assert_eq!(state.players[&actor].inventory.slots[off].count, 1);
+        assert_eq!(state.players[&actor].inventory.slots[main].count, 1);
+        assert_eq!(state.players[&actor].respawn_point, None);
+    }
+}
+
+#[test]
+fn anchor_respawn_can_stand_on_top_when_surrounded() {
+    let (mut state, _, bob) = worlds();
+    let nether = state.other_dimensions.get_mut(&Dimension::Nether).unwrap();
+    load_spawn_area(nether);
+    let anchor = rules::anchor_state(nether, block(nether, "respawn_anchor"), 2).unwrap();
+    let stone = nether.registry.states.stone;
+    let air = nether.registry.states.air;
+    for x in 7..=9 {
+        for z in 7..=9 {
+            for y in 149..=153 {
+                nether
+                    .world
+                    .set_block(x, y, z, if x == 8 && z == 8 { air } else { stone });
+            }
+        }
+    }
+    nether.world.set_block(8, 150, 8, anchor);
+    let player = nether.players.get_mut(&bob).unwrap();
+    player.respawn_point = Some([8, 150, 8]);
+    player.respawn_dimension = Dimension::Nether;
+    player.respawn_forced = false;
+    command(&mut state, 2, "kill");
+    let nether = state.other_dimensions.get_mut(&Dimension::Nether).unwrap();
+    let mut changes = crate::boundary::ChangeSet::default();
+    assert!(crate::tick::respawn_player(
+        nether,
+        ConnectionId(2),
+        &mut changes
+    ));
+    let slot = nether.entities.slot_of(bob).unwrap();
+    assert_eq!(nether.entities.pos(slot), [8.5, 151.0, 8.5]);
+    assert_eq!(
+        rules::anchor_charge(nether, nether.world.block_at(8, 150, 8).unwrap()),
+        Some(1)
+    );
+}
+
+#[test]
+fn anchor_respawn_uses_carpet_collision_height() {
+    let (mut state, _, bob) = worlds();
+    let nether = state.other_dimensions.get_mut(&Dimension::Nether).unwrap();
+    load_spawn_area(nether);
+    let anchor = rules::anchor_state(nether, block(nether, "respawn_anchor"), 2).unwrap();
+    let stone = nether.registry.states.stone;
+    let carpet = block(nether, "white_carpet");
+    for x in 7..=9 {
+        for z in 7..=9 {
+            nether.world.set_block(x, 149, z, stone);
+            nether.world.set_block(x, 150, z, carpet);
+            nether
+                .world
+                .set_block(x, 151, z, nether.registry.states.air);
+            nether.world.set_block(x, 152, z, stone);
+        }
+    }
+    nether.world.set_block(8, 150, 8, anchor);
+    let player = nether.players.get_mut(&bob).unwrap();
+    player.respawn_point = Some([8, 150, 8]);
+    player.respawn_dimension = Dimension::Nether;
+    player.respawn_forced = false;
+    command(&mut state, 2, "kill");
+    let nether = state.other_dimensions.get_mut(&Dimension::Nether).unwrap();
+    let mut changes = crate::boundary::ChangeSet::default();
+    assert!(crate::tick::respawn_player(
+        nether,
+        ConnectionId(2),
+        &mut changes
+    ));
+    let at = nether.entities.pos(nether.entities.slot_of(bob).unwrap());
+    assert_eq!(at[1], 150.0625, "{at:?}");
+    assert_eq!(
+        rules::anchor_charge(nether, nether.world.block_at(8, 150, 8).unwrap()),
+        Some(1)
+    );
+}
+
+#[test]
 fn anchor_respawn_waits_for_loaded_area_and_consumes_one_charge() {
     let (mut state, _, bob) = worlds();
     let nether = state.other_dimensions.get_mut(&Dimension::Nether).unwrap();

@@ -370,6 +370,76 @@ pub(crate) fn respawn_position_for(
     bed_exit(state, BlockPos { x, y, z }, player.respawn_yaw)
 }
 
+/// Fit a standing player above the collision surface in a candidate column.
+pub(crate) fn stand_up_position(state: &TickState, cell: BlockPos) -> Option<[f64; 3]> {
+    let shapes = mc_data::collision_shapes::vanilla_collision_shapes();
+    let surface = |pos: BlockPos| {
+        let id = state.world.block_at(pos.x, pos.y, pos.z)?;
+        let block = state.registry.blocks.by_id(mc_world::BlockStateId(id))?;
+        if block.has_fluid() || state.registry.hazard_flags.get(id as usize) != Some(&0) {
+            return None;
+        }
+        let shape = shapes.get_for_state(id, &block.block.id, &block.properties)?;
+        Some(
+            shape
+                .iter()
+                .map(|bounds| bounds.as_blocks()[4])
+                .fold(0.0_f64, f64::max),
+        )
+    };
+    let height = surface(cell)?;
+    let height = if height == 0.0 {
+        surface(BlockPos {
+            y: cell.y - 1,
+            ..cell
+        })? - 1.0
+    } else {
+        height
+    };
+    if height <= -1.0 {
+        return None;
+    }
+    let position = [
+        f64::from(cell.x) + 0.5,
+        f64::from(cell.y) + height,
+        f64::from(cell.z) + 0.5,
+    ];
+    stand_up_clear(state, position).then_some(position)
+}
+
+fn stand_up_clear(state: &TickState, [x, y, z]: [f64; 3]) -> bool {
+    let shapes = mc_data::collision_shapes::vanilla_collision_shapes();
+    for by in y.floor() as i32..=(y + 1.8 - 1.0e-6).floor() as i32 {
+        let bx = x.floor() as i32;
+        let bz = z.floor() as i32;
+        let Some(id) = state.world.block_at(bx, by, bz) else {
+            return false;
+        };
+        let Some(block) = state.registry.blocks.by_id(mc_world::BlockStateId(id)) else {
+            return false;
+        };
+        if block.has_fluid() || state.registry.hazard_flags.get(id as usize) != Some(&0) {
+            return false;
+        }
+        let Some(shape) = shapes.get_for_state(id, &block.block.id, &block.properties) else {
+            return false;
+        };
+        for bounds in shape.iter() {
+            let [min_x, min_y, min_z, max_x, max_y, max_z] = bounds.as_blocks();
+            if x + 0.3 > f64::from(bx) + min_x
+                && x - 0.3 < f64::from(bx) + max_x
+                && y + 1.8 > f64::from(by) + min_y
+                && y < f64::from(by) + max_y
+                && z + 0.3 > f64::from(bz) + min_z
+                && z - 0.3 < f64::from(bz) + max_z
+            {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 /// Both bed halves, all perimeter cells and the lower floor tier. The search is
 /// bounded to 36 cells and ordered toward the player's saved facing.
 fn bed_exit(state: &TickState, head: BlockPos, yaw: f32) -> Option<[f64; 3]> {
@@ -390,64 +460,26 @@ fn bed_exit(state: &TickState, head: BlockPos, yaw: f32) -> Option<[f64; 3]> {
         / std::f64::consts::FRAC_PI_4)
         .round() as i32)
         .rem_euclid(8) as usize;
-    // Vanilla fits the player AABB in the exit cells (DismountHelper):
-    // partial blocks like carpet do not obstruct; only intersecting solid
-    // shapes and hazards block the exit.
-    let free = |x, y, z| {
-        let Some(id) = state.world.block_at(x, y, z) else {
-            return false;
-        };
-        if state.registry.hazard_flags.get(id as usize) != Some(&0) {
-            return false;
-        }
-        if state.registry.materials.classify(id) == mc_physics::BlockMaterial::Air {
-            return true;
-        }
-        if state.registry.materials.classify(id) == mc_physics::BlockMaterial::Solid {
-            return false;
-        }
-        let Some(block) = state.registry.blocks.by_id(mc_world::BlockStateId(id)) else {
-            return false;
-        };
-        !mc_data::collision_shapes::vanilla_collision_shapes()
-            .get_for_state(id, &block.block.id, &block.properties)
-            .is_some_and(|shape| {
-                shape.iter().any(|collision_box| {
-                    let units = mc_data::collision_shapes::COLLISION_UNITS_PER_BLOCK as f64;
-                    let [_, min_y, _, _, max_y, _] = collision_box.coordinates();
-                    // Carpet-thin shapes (<=1/16) never intersect the player
-                    // AABB standing at this cell's floor.
-                    f64::from(max_y) / units > 0.0625 && f64::from(min_y) / units < 1.8
-                })
-            })
-    };
+    // Bed and anchor respawns share the same player-shaped collision check.
     for dy in [0, -1] {
         for anchor in [head, foot] {
             for index in 0..8 {
                 let [dx, dz] = offsets[(first + index) % 8];
                 let (x, y, z) = (anchor.x + dx, head.y + dy, anchor.z + dz);
-                if free(x, y, z)
-                    && free(x, y + 1, z)
-                    && state.world.block_at(x, y - 1, z).is_some_and(|id| {
-                        state.registry.materials.classify(id) == mc_physics::BlockMaterial::Solid
-                            && state.registry.hazard_flags.get(id as usize) == Some(&0)
-                    })
-                {
-                    return Some([f64::from(x) + 0.5, f64::from(y), f64::from(z) + 0.5]);
+                if let Some(position) = stand_up_position(state, BlockPos { x, y, z }) {
+                    return Some(position);
                 }
             }
         }
     }
-    [head, foot]
-        .into_iter()
-        .find(|pos| free(pos.x, pos.y + 1, pos.z) && free(pos.x, pos.y + 2, pos.z))
-        .map(|pos| {
-            [
-                f64::from(pos.x) + 0.5,
-                f64::from(pos.y) + BED_TOP,
-                f64::from(pos.z) + 0.5,
-            ]
-        })
+    [head, foot].into_iter().find_map(|pos| {
+        let position = [
+            f64::from(pos.x) + 0.5,
+            f64::from(pos.y) + BED_TOP,
+            f64::from(pos.z) + 0.5,
+        ];
+        stand_up_clear(state, position).then_some(position)
+    })
 }
 
 pub(crate) fn respawn_rotation(state: &TickState, entity: EntityId) -> [f32; 2] {

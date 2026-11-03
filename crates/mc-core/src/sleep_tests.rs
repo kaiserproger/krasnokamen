@@ -364,6 +364,66 @@ fn sleeping_is_refused_with_a_monster_near() {
 }
 
 #[test]
+fn peaceful_zombified_piglin_does_not_prevent_sleep() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    let piglin = rig
+        .state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:zombified_piglin").unwrap())
+        .unwrap();
+    let near = [
+        f64::from(rig.head.x) + 0.5,
+        f64::from(rig.head.y),
+        f64::from(rig.head.z) + 2.5,
+    ];
+    rig.state.spawn_mob(piglin, near, 20.0);
+    let drains = rig.use_bed(1);
+    assert!(!said(
+        &drains,
+        "You may not rest now; there are monsters nearby"
+    ));
+    assert!(rig.state.sleepers.contains_key(&rig.player));
+}
+
+#[test]
+fn respawn_on_carpet_uses_its_collision_height() {
+    let mut rig = Rig::new();
+    rig.state.day_time = DAY;
+    rig.use_bed(1);
+    let carpet = block(&rig.state, "minecraft:white_carpet", &[]);
+    let stone = rig.state.registry.states.stone;
+    for x in rig.foot.x - 1..=rig.head.x + 1 {
+        for z in rig.foot.z - 1..=rig.foot.z + 1 {
+            if (x, z) != (rig.foot.x, rig.foot.z) && (x, z) != (rig.head.x, rig.head.z) {
+                rig.state.world.set_block(x, Y + 1, z, carpet);
+            }
+            rig.state.world.set_block(x, Y + 3, z, stone);
+        }
+    }
+    let slot = rig.state.entities.slot_of(rig.player).unwrap();
+    rig.state.entities.body_mut(slot).alive = false;
+    rig.state.entities.row_mut(slot).health = 0.0;
+    rig.state
+        .players
+        .get_mut(&rig.player)
+        .unwrap()
+        .vitals
+        .health = 0.0;
+    run_tick(
+        &mut rig.state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(1),
+        }],
+    );
+    let slot = rig.state.entities.slot_of(rig.player).unwrap();
+    let at = rig.state.entities.pos(slot);
+    assert_eq!(at[1], f64::from(Y + 1) + 1.0 / 16.0, "{at:?}");
+    assert!((at[0] - (f64::from(rig.head.x) + 0.5)).abs() <= 2.0);
+}
+
+#[test]
 fn small_slime_does_not_block_sleep() {
     // BED-MONSTER-ELIGIBILITY: harmless small slimes never block sleep.
     let mut rig = Rig::new();

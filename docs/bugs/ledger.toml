@@ -492,9 +492,9 @@ title = "A carpeted two-block-high bedroom loses a valid bed respawn and sends t
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#RESPAWN-PARTIAL-COLLISION"
-regression = []
+regression = ["cargo:mc-core:sleep::tests::respawn_on_carpet_uses_its_collision_height", "cargo:mc-core:dimensions::tests::anchor_respawn_uses_carpet_collision_height"]
 
 [[bug]]
 id = "ANCHOR-TOP-RESPAWN"
@@ -504,7 +504,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ANCHOR-TOP-RESPAWN"
-regression = []
+regression = ["cargo:mc-core:dimensions::tests::anchor_respawn_can_stand_on_top_when_surrounded"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "ANCHOR-OFFHAND-CHARGE"
@@ -514,7 +515,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ANCHOR-OFFHAND-CHARGE"
-regression = []
+regression = ["cargo:mc-core:dimensions::tests::anchor_offhand_glowstone_charges_instead_of_exploding"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "DISPENSER-ANCHOR-CHARGE"
@@ -565,7 +567,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-MONSTER-ELIGIBILITY"
-regression = []
+regression = ["cargo:mc-core:sleep::tests::peaceful_zombified_piglin_does_not_prevent_sleep"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "BED-OBSTRUCTED-ENTRY"

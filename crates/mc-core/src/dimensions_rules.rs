@@ -179,40 +179,7 @@ pub(crate) fn anchor_spawn(state: &TickState, pos: BlockPos) -> Option<[f64; 3]>
     {
         return None;
     }
-    // Vanilla fits the 1.8-high player AABB above a solid floor instead of
-    // requiring whole feet/head cells to classify Air: carpet/snow layers
-    // do not invalidate the spawn; only an intersecting solid shape does.
-    // The center-top column (vanilla RESPAWN_OFFSETS final (0,1,0)) is the
-    // last fallback, not omitted.
-    let clear = |cell: BlockPos| {
-        let Some(id) = state.world.block_at(cell.x, cell.y, cell.z) else {
-            return false;
-        };
-        if state.registry.materials.classify(id) == mc_physics::BlockMaterial::Air {
-            return true;
-        }
-        if state.registry.materials.classify(id) == mc_physics::BlockMaterial::Solid {
-            return false;
-        }
-        // Non-air, non-solid (carpets, snow layers, fluids): blocked only
-        // when the actual collision shape intersects the player AABB.
-        let Some(block) = state.registry.blocks.by_id(mc_world::BlockStateId(id)) else {
-            return false;
-        };
-        !mc_data::collision_shapes::vanilla_collision_shapes()
-            .get_for_state(id, &block.block.id, &block.properties)
-            .is_some_and(|shape| {
-                shape.iter().any(|collision_box| {
-                    let [min_x, min_y, min_z, max_x, max_y, max_z] = collision_box.coordinates();
-                    let units = mc_data::collision_shapes::COLLISION_UNITS_PER_BLOCK as f64;
-                    // Player AABB at feet (cell.x+0.1..0.9, cell.y..+1.8).
-                    let feet = f64::from(cell.y);
-                    let top = f64::from(max_y) / units;
-                    let _ = (min_x, min_z, max_x, max_z);
-                    top > 0.0625 && f64::from(min_y) / units < feet + 1.8 - f64::from(cell.y)
-                })
-            })
-    };
+    // The same shape-aware stand-up test is used for beds and anchors.
     for dy in [0, 1, -1] {
         // All eight neighbors first, then the center-top column (vanilla
         // RESPAWN_OFFSETS final (0,1,0) fallback).
@@ -232,23 +199,8 @@ pub(crate) fn anchor_spawn(state: &TickState, pos: BlockPos) -> Option<[f64; 3]>
                 y: pos.y + dy,
                 z: pos.z + dz,
             };
-            if clear(feet)
-                && clear(BlockPos {
-                    y: feet.y + 1,
-                    ..feet
-                })
-                && state
-                    .world
-                    .block_at(feet.x, feet.y - 1, feet.z)
-                    .is_some_and(|id| {
-                        state.registry.materials.classify(id) == mc_physics::BlockMaterial::Solid
-                    })
-            {
-                return Some([
-                    f64::from(feet.x) + 0.5,
-                    f64::from(feet.y),
-                    f64::from(feet.z) + 0.5,
-                ]);
+            if let Some(position) = crate::sleep::stand_up_position(state, feet) {
+                return Some(position);
             }
         }
     }
