@@ -68,12 +68,15 @@ impl SingleplayerPause {
             if allowed {
                 self.owner = requested.then_some(*connection);
             } else {
-                let _ = outbox.send((state.tick, vec![(
-                    *connection,
-                    vec![PlayerChange::Chat {
-                        message: "Cannot pause: one online operator is required.".into(),
-                    }],
-                )]));
+                let _ = outbox.send((
+                    state.tick,
+                    vec![(
+                        *connection,
+                        vec![PlayerChange::Chat {
+                            message: "Cannot pause: one online operator is required.".into(),
+                        }],
+                    )],
+                ));
             }
             false
         });

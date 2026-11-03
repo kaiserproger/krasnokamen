@@ -87,7 +87,8 @@ pub(crate) fn load(state: &mut TickState, chunks: &[ChunkPos], changes: &mut Cha
                 state.entities.set_uuid(slot, uuid);
                 if wool {
                     let roll = uuid.as_u128();
-                    let color = crate::blueprint::natural_wool_color(roll as u64, (roll >> 64) as u64);
+                    let color =
+                        crate::blueprint::natural_wool_color(roll as u64, (roll >> 64) as u64);
                     crate::tick::set_wool(
                         std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance),
                         color,

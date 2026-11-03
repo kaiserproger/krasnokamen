@@ -271,7 +271,10 @@ pub(super) fn route_changes(
     for planned in crate::plan::plan_routed_player_changes(changes, viewer) {
         if handles.reliable_tx.try_send(planned.data).is_err() {
             server.connections.remove(viewer.connection);
-            server.net_counters.reliable_drops.fetch_add(1, Ordering::Relaxed);
+            server
+                .net_counters
+                .reliable_drops
+                .fetch_add(1, Ordering::Relaxed);
             return false;
         }
     }

@@ -268,7 +268,9 @@ fn client_block_entities_single_projection_handles_furnaces_and_absence() {
     let registry = air_chest_registry();
     let mut chunk = empty_chunk();
     let pos = BlockPos { x: 2, y: 64, z: 3 };
-    chunk.furnaces.insert(pos, crate::chunk::FurnaceBlockEntity::default());
+    chunk
+        .furnaces
+        .insert(pos, crate::chunk::FurnaceBlockEntity::default());
     assert_single_entity_projection_matches(&chunk, &registry);
     assert!(client_block_entity(&chunk, &registry, BlockPos { x: 3, y: 64, z: 3 }).is_none());
 }

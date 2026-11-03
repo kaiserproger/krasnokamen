@@ -1022,7 +1022,9 @@ fn plan_viewer_inner(
     if !viewer.pending_block_entities.is_empty() {
         scratch.blocks.clear();
         scratch.blocks.extend(viewer.pending_block_entities.drain());
-        scratch.blocks.sort_unstable_by_key(|pos| (pos.x, pos.y, pos.z));
+        scratch
+            .blocks
+            .sort_unstable_by_key(|pos| (pos.x, pos.y, pos.z));
         for &pos in &scratch.blocks {
             let chunk = (pos.x.div_euclid(16), pos.z.div_euclid(16));
             if !viewer.loaded_chunks.contains_key(&chunk) || viewer.chunk_repairs.contains(&chunk) {
@@ -1052,7 +1054,9 @@ fn plan_viewer_inner(
                 block_entity_type: type_id,
                 nbt: record.nbt,
             };
-            if !try_push(&mut out, &mut credit, |out| push_best_effort(out, conn, &packet)) {
+            if !try_push(&mut out, &mut credit, |out| {
+                push_best_effort(out, conn, &packet)
+            }) {
                 viewer.pending_block_entities.insert(pos);
             }
         }

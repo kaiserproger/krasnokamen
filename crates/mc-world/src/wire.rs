@@ -151,9 +151,8 @@ fn project_opaque_block_entity(
                 return None;
             };
             // Unlike vanilla, do not disclose pot contents or unopened loot to clients.
-            fields.retain(|(key, _)| {
-                !matches!(key.as_str(), "item" | "LootTable" | "LootTableSeed")
-            });
+            fields
+                .retain(|(key, _)| !matches!(key.as_str(), "item" | "LootTable" | "LootTableSeed"));
             Tag::Compound(fields)
         }
         "minecraft:brushable_block" => {
@@ -197,11 +196,15 @@ fn project_opaque_block_entity(
                         .iter()
                         .any(|(key, value)| key == "trial_spawner_state" && value == "active")
                 });
-            let Tag::Compound(fields) = tag else { return None };
+            let Tag::Compound(fields) = tag else {
+                return None;
+            };
             trial_spawner_update_tag(&fields, active)
         }
         "minecraft:vault" => {
-            let Tag::Compound(fields) = tag else { return None };
+            let Tag::Compound(fields) = tag else {
+                return None;
+            };
             let shared = fields
                 .into_iter()
                 .find(|(key, _)| key == "shared_data")
@@ -210,7 +213,11 @@ fn project_opaque_block_entity(
         }
         _ => strip_persistent_block_entity_fields(tag),
     };
-    Some(BlockEntityWireRecord { pos, type_name, nbt })
+    Some(BlockEntityWireRecord {
+        pos,
+        type_name,
+        nbt,
+    })
 }
 
 /// Project only the block entity at `pos`, using the same policy as chunk packets.
@@ -234,13 +241,21 @@ pub fn client_block_entity(
             nbt: Tag::Compound(Vec::new()),
         });
     }
-    if let Some(record) = chunk.block_entities.get(&pos)
+    if let Some(record) = chunk
+        .block_entities
+        .get(&pos)
         .and_then(|bytes| project_opaque_block_entity(chunk, registry, pos, bytes))
     {
         return Some(record);
     }
-    let state = chunk.get_block(pos.x.rem_euclid(16) as u8, pos.y, pos.z.rem_euclid(16) as u8)?;
-    registry.by_id(state).filter(|state| state.block.id.path().ends_with("_bed"))?;
+    let state = chunk.get_block(
+        pos.x.rem_euclid(16) as u8,
+        pos.y,
+        pos.z.rem_euclid(16) as u8,
+    )?;
+    registry
+        .by_id(state)
+        .filter(|state| state.block.id.path().ends_with("_bed"))?;
     Some(BlockEntityWireRecord {
         pos,
         type_name: Identifier::parse("minecraft:bed").expect("static bed identifier"),

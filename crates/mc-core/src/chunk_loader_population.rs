@@ -20,24 +20,38 @@ impl Population {
             rules: registry.biome_spawns.clone(),
             blocks: Arc::clone(&registry.blocks),
             materials: registry.materials.clone(),
-            dimensions: registry.blueprints.iter().map(|(_, blueprint)| {
-                (blueprint.name.clone(), (blueprint.half_width, blueprint.height))
-            }).collect(),
+            dimensions: registry
+                .blueprints
+                .iter()
+                .map(|(_, blueprint)| {
+                    (
+                        blueprint.name.clone(),
+                        (blueprint.half_width, blueprint.height),
+                    )
+                })
+                .collect(),
         }
     }
 
     pub(super) fn populate(&self, chunk: &mut Chunk) {
         let pos = chunk.pos;
-        let mut random = Random((self.seed as u64)
-            ^ (pos.x as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
-            ^ (pos.z as u64).wrapping_mul(0xbf58_476d_1ce4_e5b9)
-            ^ 0xa076_1d64_78bd_642f);
+        let mut random = Random(
+            (self.seed as u64)
+                ^ (pos.x as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+                ^ (pos.z as u64).wrapping_mul(0xbf58_476d_1ce4_e5b9)
+                ^ 0xa076_1d64_78bd_642f,
+        );
         // Chunk-generation spawning uses the north-west biome at world top,
         // not the cave or the surface biome at an individual placement.
-        let Some(section) = chunk.biomes.last() else { return };
+        let Some(section) = chunk.biomes.last() else {
+            return;
+        };
         let biome = section.get(0, 3, 0);
         let entries = self.rules.exact_entries(biome, "creature");
-        let probability = self.rules.creature_spawn_probability(biome).clamp(0.0, 0.999);
+        let probability = self
+            .rules
+            .creature_spawn_probability(biome)
+            .clamp(0.0, 0.999);
         let total: u64 = entries.iter().map(|entry| u64::from(entry.weight)).sum();
         if total == 0 || random.unit() >= probability {
             return;
@@ -54,7 +68,9 @@ impl Population {
                     roll -= u64::from(entry.weight);
                     false
                 }
-            }) else { break };
+            }) else {
+                break;
+            };
             if let Some(&(half_width, height)) = self.dimensions.get(entry.entity_type.as_str())
                 && entry.max_count >= entry.min_count
             {
@@ -64,9 +80,20 @@ impl Population {
                 let origin_z = random.below(16) as i32;
                 for member in 0..count {
                     for _ in 0..4 {
-                        let x = (origin_x + random.below(5) as i32 - random.below(5) as i32).clamp(1, 14) as u8;
-                        let z = (origin_z + random.below(5) as i32 - random.below(5) as i32).clamp(1, 14) as u8;
-                        let Some(y) = self.surface(chunk, x, z, entry.entity_type.as_str(), half_width, height) else { continue };
+                        let x = (origin_x + random.below(5) as i32 - random.below(5) as i32)
+                            .clamp(1, 14) as u8;
+                        let z = (origin_z + random.below(5) as i32 - random.below(5) as i32)
+                            .clamp(1, 14) as u8;
+                        let Some(y) = self.surface(
+                            chunk,
+                            x,
+                            z,
+                            entry.entity_type.as_str(),
+                            half_width,
+                            height,
+                        ) else {
+                            continue;
+                        };
                         let position = [
                             f64::from(pos.x) * 16.0 + f64::from(x) + 0.5,
                             f64::from(y),
@@ -80,7 +107,10 @@ impl Population {
                             continue;
                         }
                         markers.push(GeneratedEntityMarker {
-                            claim: format!("creature:{}:{}:{}:{}:{}", self.seed, pos.x, pos.z, group, member),
+                            claim: format!(
+                                "creature:{}:{}:{}:{}:{}",
+                                self.seed, pos.x, pos.z, group, member
+                            ),
                             entity_type: entry.entity_type.as_str().to_owned(),
                             position,
                             persistent: false,
@@ -105,7 +135,15 @@ impl Population {
         }
     }
 
-    fn surface(&self, chunk: &Chunk, x: u8, z: u8, entity: &str, half_width: f64, height: f64) -> Option<i32> {
+    fn surface(
+        &self,
+        chunk: &Chunk,
+        x: u8,
+        z: u8,
+        entity: &str,
+        half_width: f64,
+        height: f64,
+    ) -> Option<i32> {
         let geometry = chunk.geometry();
         let top = geometry.min_y() + chunk.heightmaps.get("MOTION_BLOCKING")?.get(x, z) as i32;
         for y in (geometry.min_y() + 1..=top.min(geometry.max_y() - 2)).rev() {
@@ -129,7 +167,8 @@ impl Population {
                         return None;
                     }
                     for h in y..y + height.ceil() as i32 {
-                        if chunk.get_block(dx as u8, h, dz as u8)
+                        if chunk
+                            .get_block(dx as u8, h, dz as u8)
                             .is_none_or(|id| self.materials.classify(id.0) != BlockMaterial::Air)
                         {
                             return None;
@@ -148,12 +187,52 @@ fn valid_ground(entity: &str, ground: &str) -> bool {
         "minecraft:camel" | "minecraft:turtle" => ground == "minecraft:sand",
         "minecraft:mooshroom" => ground == "minecraft:mycelium",
         "minecraft:polar_bear" => ground == "minecraft:ice",
-        "minecraft:rabbit" => matches!(ground, "minecraft:grass_block" | "minecraft:sand" | "minecraft:snow" | "minecraft:snow_block"),
-        "minecraft:fox" => matches!(ground, "minecraft:grass_block" | "minecraft:snow" | "minecraft:snow_block" | "minecraft:podzol" | "minecraft:coarse_dirt"),
-        "minecraft:goat" => matches!(ground, "minecraft:grass_block" | "minecraft:stone" | "minecraft:snow" | "minecraft:snow_block" | "minecraft:packed_ice" | "minecraft:gravel"),
-        "minecraft:frog" => matches!(ground, "minecraft:grass_block" | "minecraft:mud" | "minecraft:mangrove_roots" | "minecraft:muddy_mangrove_roots"),
-        "minecraft:armadillo" => matches!(ground, "minecraft:grass_block" | "minecraft:coarse_dirt" | "minecraft:red_sand" | "minecraft:terracotta" | "minecraft:orange_terracotta" | "minecraft:yellow_terracotta" | "minecraft:brown_terracotta" | "minecraft:red_terracotta" | "minecraft:white_terracotta" | "minecraft:light_gray_terracotta"),
-        "minecraft:parrot" => ground == "minecraft:grass_block" || ground.ends_with("_leaves") || ground.ends_with("_log"),
+        "minecraft:rabbit" => matches!(
+            ground,
+            "minecraft:grass_block" | "minecraft:sand" | "minecraft:snow" | "minecraft:snow_block"
+        ),
+        "minecraft:fox" => matches!(
+            ground,
+            "minecraft:grass_block"
+                | "minecraft:snow"
+                | "minecraft:snow_block"
+                | "minecraft:podzol"
+                | "minecraft:coarse_dirt"
+        ),
+        "minecraft:goat" => matches!(
+            ground,
+            "minecraft:grass_block"
+                | "minecraft:stone"
+                | "minecraft:snow"
+                | "minecraft:snow_block"
+                | "minecraft:packed_ice"
+                | "minecraft:gravel"
+        ),
+        "minecraft:frog" => matches!(
+            ground,
+            "minecraft:grass_block"
+                | "minecraft:mud"
+                | "minecraft:mangrove_roots"
+                | "minecraft:muddy_mangrove_roots"
+        ),
+        "minecraft:armadillo" => matches!(
+            ground,
+            "minecraft:grass_block"
+                | "minecraft:coarse_dirt"
+                | "minecraft:red_sand"
+                | "minecraft:terracotta"
+                | "minecraft:orange_terracotta"
+                | "minecraft:yellow_terracotta"
+                | "minecraft:brown_terracotta"
+                | "minecraft:red_terracotta"
+                | "minecraft:white_terracotta"
+                | "minecraft:light_gray_terracotta"
+        ),
+        "minecraft:parrot" => {
+            ground == "minecraft:grass_block"
+                || ground.ends_with("_leaves")
+                || ground.ends_with("_log")
+        }
         _ => ground == "minecraft:grass_block",
     }
 }
@@ -193,15 +272,34 @@ mod tests {
         );
         let mut height = mc_world::chunk::Heightmap::zeroed();
         height.set(8, 8, 129);
-        chunk.heightmaps.insert("MOTION_BLOCKING".into(), height.clone());
+        chunk
+            .heightmaps
+            .insert("MOTION_BLOCKING".into(), height.clone());
         chunk.highest_opaque = height;
-        chunk.set_block(8, 64, 8, mc_world::BlockStateId(registry.states.grass_block));
-        assert_eq!(population.surface(&chunk, 8, 8, "minecraft:sheep", 0.45, 1.3), Some(65));
-        assert_eq!(population.surface(&chunk, 8, 8, "minecraft:camel", 0.45, 1.3), None);
+        chunk.set_block(
+            8,
+            64,
+            8,
+            mc_world::BlockStateId(registry.states.grass_block),
+        );
+        assert_eq!(
+            population.surface(&chunk, 8, 8, "minecraft:sheep", 0.45, 1.3),
+            Some(65)
+        );
+        assert_eq!(
+            population.surface(&chunk, 8, 8, "minecraft:camel", 0.45, 1.3),
+            None
+        );
         chunk.highest_opaque.set(8, 8, 131);
-        assert_eq!(population.surface(&chunk, 8, 8, "minecraft:sheep", 0.45, 1.3), None);
+        assert_eq!(
+            population.surface(&chunk, 8, 8, "minecraft:sheep", 0.45, 1.3),
+            None
+        );
         chunk.highest_opaque.set(8, 8, 129);
         chunk.set_block(8, 66, 8, mc_world::BlockStateId(registry.states.stone));
-        assert_eq!(population.surface(&chunk, 8, 8, "minecraft:sheep", 0.45, 1.3), None);
+        assert_eq!(
+            population.surface(&chunk, 8, 8, "minecraft:sheep", 0.45, 1.3),
+            None
+        );
     }
 }

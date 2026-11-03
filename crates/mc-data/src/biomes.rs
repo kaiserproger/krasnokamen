@@ -174,7 +174,10 @@ impl BiomeSpawnRules {
     /// Generation-time creature group probability for this biome.
     #[must_use]
     pub fn creature_spawn_probability(&self, biome: &Identifier) -> f64 {
-        self.creature_spawn_probability.get(biome).copied().unwrap_or(0.1)
+        self.creature_spawn_probability
+            .get(biome)
+            .copied()
+            .unwrap_or(0.1)
     }
 
     pub fn placement(&self) -> SpawnPlacement {

@@ -69,7 +69,11 @@ impl ReliableOutbox {
     fn drain(&self, through: u64) -> OutboxBatch {
         let mut receiver = self.0.lock();
         let mut store: HashMap<ConnectionId, Vec<PlayerChange>> = HashMap::new();
-        while let Some((tick, batch)) = receiver.pending.take().or_else(|| receiver.receiver.try_recv().ok()) {
+        while let Some((tick, batch)) = receiver
+            .pending
+            .take()
+            .or_else(|| receiver.receiver.try_recv().ok())
+        {
             if tick > through {
                 receiver.pending = Some((tick, batch));
                 break;
@@ -769,7 +773,10 @@ impl Core {
                 input_dropped: AtomicU64::new(0),
                 tick_tx: tick_tx.downgrade(),
                 timing_tx: timing_tx.downgrade(),
-                outbox: ReliableOutbox(parking_lot::Mutex::new(OutboxReceiver { receiver: outbox_rx, pending: None })),
+                outbox: ReliableOutbox(parking_lot::Mutex::new(OutboxReceiver {
+                    receiver: outbox_rx,
+                    pending: None,
+                })),
                 shutdown_tx: std::sync::Mutex::new(Some(shutdown_tx)),
                 tick_handle: std::sync::Mutex::new(Some(tick_handle)),
                 journal_handle: std::sync::Mutex::new(Some(journal_handle)),

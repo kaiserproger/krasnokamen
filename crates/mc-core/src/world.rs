@@ -443,7 +443,8 @@ impl ChunkWorld {
                 items: Arc::clone(&registry.items),
                 chest_loot: Arc::clone(&registry.chest_loot),
                 light: Arc::clone(&registry.light),
-                population: (dimension == 0).then(|| crate::chunk_loader::Population::new(seed, registry)),
+                population: (dimension == 0)
+                    .then(|| crate::chunk_loader::Population::new(seed, registry)),
                 geometry,
             }),
             air,

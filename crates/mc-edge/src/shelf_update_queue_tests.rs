@@ -59,7 +59,12 @@ fn item_count(tag: &Tag) -> usize {
 /// light allocation with the one before.
 fn shelf_base(server: &EdgeServer) -> Chunk {
     let id = |name: &str| mc_data::Identifier::parse(name).unwrap();
-    let air = server.wire.blocks.block(&id("minecraft:air")).unwrap().default;
+    let air = server
+        .wire
+        .blocks
+        .block(&id("minecraft:air"))
+        .unwrap()
+        .default;
     let shelf = server
         .wire
         .blocks
@@ -123,7 +128,8 @@ impl ClientShelf {
                 .iter()
                 .find(|record| record.packed_xz == 0x23 && record.y == 64)
                 .map(|record| item_count(&record.nbt));
-            self.arrivals.push(format!("chunk{{items: {:?}}}", self.items));
+            self.arrivals
+                .push(format!("chunk{{items: {:?}}}", self.items));
         } else if id == BlockUpdate::ID {
             let update = BlockUpdate::decode(&mut &body[..]).unwrap();
             assert_eq!(update.position, pack_block_pos(SHELF.x, SHELF.y, SHELF.z));
@@ -355,29 +361,53 @@ async fn shelf_update_waits_for_block_credit_and_uses_the_newest_snapshot() {
     }
 
     let mut body = Vec::new();
-    ForgetLevelChunk { chunk_x: 100, chunk_z: 100 }.encode(&mut body).unwrap();
+    ForgetLevelChunk {
+        chunk_x: 100,
+        chunk_z: 100,
+    }
+    .encode(&mut body)
+    .unwrap();
     let mut dummy = bytes::BytesMut::new();
-    mc_protocol::frame::append_frame(&mut dummy, ForgetLevelChunk::ID, &body,
-        mc_protocol::frame::Compression::Threshold(256)).unwrap();
+    mc_protocol::frame::append_frame(
+        &mut dummy,
+        ForgetLevelChunk::ID,
+        &body,
+        mc_protocol::frame::Compression::Threshold(256),
+    )
+    .unwrap();
     let sender = &wire.connections[&wire.id].world_tx;
     while sender.capacity() > 1 {
         sender.try_send(dummy.clone().freeze()).unwrap();
     }
     wire.route_shelf_update(1);
     let mut output = shelf_output(&wire.base, 2, 2, 1);
-    Arc::get_mut(&mut output.changes).unwrap().blocks.push(mc_core::boundary::BlockChange {
-        position: SHELF,
-        state: wire.base.get_block(2, 64, 3).unwrap().0,
-    });
-    publish_and_route(&wire.server, &wire.pool, &mut wire.viewers, &output,
-        &mut wire.cache, &mut wire.connections).await;
+    Arc::get_mut(&mut output.changes)
+        .unwrap()
+        .blocks
+        .push(mc_core::boundary::BlockChange {
+            position: SHELF,
+            state: wire.base.get_block(2, 64, 3).unwrap().0,
+        });
+    publish_and_route(
+        &wire.server,
+        &wire.pool,
+        &mut wire.viewers,
+        &output,
+        &mut wire.cache,
+        &mut wire.connections,
+    )
+    .await;
     while let Ok(frame) = wire.reliable_rx.try_recv() {
         client.receive_framed(&frame);
     }
     while let Ok(frame) = wire.world_rx.try_recv() {
         client.receive_framed(&frame);
     }
-    assert_eq!(client.items, Some(0), "one credit sends the block, not its entity");
+    assert_eq!(
+        client.items,
+        Some(0),
+        "one credit sends the block, not its entity"
+    );
 
     // A newer event and snapshot supersede the still-owed first entity update.
     wire.route_shelf_update(1);
@@ -390,9 +420,17 @@ async fn shelf_update_waits_for_block_credit_and_uses_the_newest_snapshot() {
     }
     wire.finish();
     assert_eq!(client.items, Some(2), "{:?}", client.arrivals);
-    let update = client.arrivals.iter().position(|s| s == "update{items: 2}").unwrap();
+    let update = client
+        .arrivals
+        .iter()
+        .position(|s| s == "update{items: 2}")
+        .unwrap();
     let block = client.arrivals.iter().rposition(|s| s == "block").unwrap();
-    assert!(block < update, "block must precede its entity: {:?}", client.arrivals);
+    assert!(
+        block < update,
+        "block must precede its entity: {:?}",
+        client.arrivals
+    );
     assert!(!client.arrivals.iter().any(|s| s == "update{items: 1}"));
 }
 
@@ -408,10 +446,20 @@ async fn shelf_update_does_not_starve_during_continuous_single_credit_events() {
         client.receive_framed(&frame);
     }
     let mut body = Vec::new();
-    ForgetLevelChunk { chunk_x: 100, chunk_z: 100 }.encode(&mut body).unwrap();
+    ForgetLevelChunk {
+        chunk_x: 100,
+        chunk_z: 100,
+    }
+    .encode(&mut body)
+    .unwrap();
     let mut dummy = bytes::BytesMut::new();
-    mc_protocol::frame::append_frame(&mut dummy, ForgetLevelChunk::ID, &body,
-        mc_protocol::frame::Compression::Threshold(256)).unwrap();
+    mc_protocol::frame::append_frame(
+        &mut dummy,
+        ForgetLevelChunk::ID,
+        &body,
+        mc_protocol::frame::Compression::Threshold(256),
+    )
+    .unwrap();
     for tick in 2..=4 {
         let sender = &wire.connections[&wire.id].world_tx;
         while sender.capacity() > 1 {
@@ -426,7 +474,12 @@ async fn shelf_update_does_not_starve_during_continuous_single_credit_events() {
         while let Ok(frame) = wire.world_rx.try_recv() {
             client.receive_framed(&frame);
         }
-        assert_eq!(client.items, Some(items), "tick {tick}: {:?}", client.arrivals);
+        assert_eq!(
+            client.items,
+            Some(items),
+            "tick {tick}: {:?}",
+            client.arrivals
+        );
     }
     wire.finish();
 }
@@ -443,10 +496,20 @@ async fn shelf_update_pending_during_skip_is_covered_by_latest_chunk_repair() {
         client.receive_framed(&frame);
     }
     let mut body = Vec::new();
-    ForgetLevelChunk { chunk_x: 100, chunk_z: 100 }.encode(&mut body).unwrap();
+    ForgetLevelChunk {
+        chunk_x: 100,
+        chunk_z: 100,
+    }
+    .encode(&mut body)
+    .unwrap();
     let mut dummy = bytes::BytesMut::new();
-    mc_protocol::frame::append_frame(&mut dummy, ForgetLevelChunk::ID, &body,
-        mc_protocol::frame::Compression::Threshold(256)).unwrap();
+    mc_protocol::frame::append_frame(
+        &mut dummy,
+        ForgetLevelChunk::ID,
+        &body,
+        mc_protocol::frame::Compression::Threshold(256),
+    )
+    .unwrap();
     let sender = &wire.connections[&wire.id].world_tx;
     while sender.capacity() > 0 {
         sender.try_send(dummy.clone().freeze()).unwrap();
@@ -478,23 +541,40 @@ async fn full_world_queue_does_not_disconnect_or_starve_shelf_updates() {
     let mut wire = Wire::new();
     wire.publish_shelf(1, 0).await;
     let mut body = Vec::new();
-    ForgetLevelChunk { chunk_x: 100, chunk_z: 100 }.encode(&mut body).unwrap();
+    ForgetLevelChunk {
+        chunk_x: 100,
+        chunk_z: 100,
+    }
+    .encode(&mut body)
+    .unwrap();
     let mut dummy = bytes::BytesMut::new();
-    mc_protocol::frame::append_frame(&mut dummy, ForgetLevelChunk::ID, &body,
-        mc_protocol::frame::Compression::Threshold(256)).unwrap();
+    mc_protocol::frame::append_frame(
+        &mut dummy,
+        ForgetLevelChunk::ID,
+        &body,
+        mc_protocol::frame::Compression::Threshold(256),
+    )
+    .unwrap();
     let sender = &wire.connections[&wire.id].world_tx;
     while sender.capacity() > 0 {
         sender.try_send(dummy.clone().freeze()).unwrap();
     }
     // Two old FIFO updates are drained against the latest tick-3 snapshot.
     // Neither may overwrite that snapshot with its stale item count.
-    let changes: Vec<_> = [1, 2].into_iter().map(|items| PlayerChange::BlockEntityData {
-        position: SHELF,
-        block_entity_type: BlockEntityKind::Shelf.protocol_id(),
-        nbt: shelf_tag(items),
-    }).collect();
-    assert!(crate::server::pump::route_changes(&changes, wire.viewers.get_mut(&wire.id).unwrap(),
-        &wire.connections[&wire.id], &wire.server));
+    let changes: Vec<_> = [1, 2]
+        .into_iter()
+        .map(|items| PlayerChange::BlockEntityData {
+            position: SHELF,
+            block_entity_type: BlockEntityKind::Shelf.protocol_id(),
+            nbt: shelf_tag(items),
+        })
+        .collect();
+    assert!(crate::server::pump::route_changes(
+        &changes,
+        wire.viewers.get_mut(&wire.id).unwrap(),
+        &wire.connections[&wire.id],
+        &wire.server
+    ));
     wire.publish_shelf(3, 2).await;
     let mut client = ClientShelf::default();
     while let Ok(frame) = wire.reliable_rx.try_recv() {
@@ -506,7 +586,9 @@ async fn full_world_queue_does_not_disconnect_or_starve_shelf_updates() {
     wire.publish_shelf(3, 2).await;
     let queued = wire.reliable_rx.len() + wire.world_rx.len();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let client_socket = TcpStream::connect(listener.local_addr().unwrap()).await.unwrap();
+    let client_socket = TcpStream::connect(listener.local_addr().unwrap())
+        .await
+        .unwrap();
     let (server_socket, _) = listener.accept().await.unwrap();
     let mut server_connection = crate::connection::Connection::new(server_socket);
     server_connection.set_compression(mc_protocol::frame::Compression::Threshold(256));
@@ -527,13 +609,31 @@ async fn full_world_queue_does_not_disconnect_or_starve_shelf_updates() {
     let mut client_connection = crate::connection::Connection::new(client_socket);
     client_connection.set_compression(mc_protocol::frame::Compression::Threshold(256));
     for _ in 0..queued {
-        let frame = tokio::time::timeout(std::time::Duration::from_secs(5), client_connection.read_frame_play()).await.unwrap().unwrap();
+        let frame = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            client_connection.read_frame_play(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
         client.receive(frame.id, &frame.body);
     }
     writer_task.abort();
     assert!(writer_task.await.unwrap_err().is_cancelled());
     wire.finish();
-    assert_eq!(client.items, Some(2), "latest update must arrive despite full world queue: {:?}", client.arrivals);
+    assert_eq!(
+        client.items,
+        Some(2),
+        "latest update must arrive despite full world queue: {:?}",
+        client.arrivals
+    );
     assert_eq!(client.updates_dropped, 0);
-    assert!(!client.arrivals.iter().any(|arrival| arrival == "update{items: 1}"), "stale event must not replace the newer snapshot: {:?}", client.arrivals);
+    assert!(
+        !client
+            .arrivals
+            .iter()
+            .any(|arrival| arrival == "update{items: 1}"),
+        "stale event must not replace the newer snapshot: {:?}",
+        client.arrivals
+    );
 }
