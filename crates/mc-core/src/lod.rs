@@ -254,6 +254,7 @@ mod tests {
             items: Arc::clone(&registry.items),
             chest_loot: Arc::clone(&registry.chest_loot),
             light: Arc::clone(&registry.light),
+            population: Some(crate::chunk_loader::Population::new(42, &registry)),
             geometry: crate::dimensions::Dimension::Overworld.geometry(),
         });
         let source = LodSource::new(Arc::clone(&chunks));

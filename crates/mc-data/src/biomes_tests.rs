@@ -262,6 +262,16 @@ fn real_sidecar_sheep_color_climates_match_resolved_variant_tags_when_present() 
 }
 
 #[test]
+fn creature_generation_probability_loads_biome_override_and_default() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("plains.json"), r#"{"spawners":{}}"#).unwrap();
+    std::fs::write(tmp.path().join("badlands.json"), r#"{"creature_spawn_probability":0.03,"spawners":{}}"#).unwrap();
+    let rules = load_biome_spawn_rules(tmp.path()).unwrap();
+    assert_eq!(rules.creature_spawn_probability(&Identifier::parse("minecraft:plains").unwrap()), 0.1);
+    assert_eq!(rules.creature_spawn_probability(&Identifier::parse("minecraft:badlands").unwrap()), 0.03);
+}
+
+#[test]
 fn loads_biome_features_and_identifier_tags() {
     let tmp = tempfile::tempdir().unwrap();
     let biome_dir = tmp.path().join("worldgen/biome");

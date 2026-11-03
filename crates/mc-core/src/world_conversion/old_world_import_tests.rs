@@ -2034,6 +2034,7 @@ fn non_full_empty_import_regenerates_but_non_air_import_keeps_terrain() {
             items: std::sync::Arc::clone(&registry.items),
             chest_loot: std::sync::Arc::clone(&registry.chest_loot),
             light: std::sync::Arc::clone(&registry.light),
+            population: Some(crate::chunk_loader::Population::new(config.seed, &registry)),
             geometry: mc_world::OVERWORLD_GEOMETRY,
         };
         let (loaded, generated) = loader_source.load_or_generate(chunk.pos).unwrap();

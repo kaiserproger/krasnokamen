@@ -593,6 +593,7 @@ fn probe_source(
         items: Arc::clone(&registry.items),
         chest_loot: Arc::clone(&registry.chest_loot),
         light: Arc::clone(&registry.light),
+        population: (dimension == 0).then(|| crate::chunk_loader::Population::new(42, registry)),
         geometry: mc_world::OVERWORLD_GEOMETRY,
     })
 }

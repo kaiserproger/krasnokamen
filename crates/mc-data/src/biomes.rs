@@ -161,6 +161,7 @@ pub enum SheepColorClimate {
 #[derive(Debug, Clone, Default)]
 pub struct BiomeSpawnRules {
     by_biome: BTreeMap<Identifier, BTreeMap<String, Vec<BiomeSpawnEntry>>>,
+    creature_spawn_probability: BTreeMap<Identifier, f64>,
     default_land_biome: Option<Identifier>,
     default_water_biome: Option<Identifier>,
     warm_sheep_color_biomes: BTreeSet<Identifier>,
@@ -170,6 +171,12 @@ pub struct BiomeSpawnRules {
 }
 
 impl BiomeSpawnRules {
+    /// Generation-time creature group probability for this biome.
+    #[must_use]
+    pub fn creature_spawn_probability(&self, biome: &Identifier) -> f64 {
+        self.creature_spawn_probability.get(biome).copied().unwrap_or(0.1)
+    }
+
     pub fn placement(&self) -> SpawnPlacement {
         self.placement
     }
@@ -207,6 +214,7 @@ impl BiomeSpawnRules {
     ) -> Self {
         Self {
             by_biome: entries,
+            creature_spawn_probability: BTreeMap::new(),
             default_land_biome: None,
             default_water_biome: None,
             warm_sheep_color_biomes,
@@ -347,6 +355,7 @@ pub fn load_biome_spawn_rules(path: impl AsRef<Path>) -> Result<BiomeSpawnRules,
         return Err(BiomeDataError::Missing(path.to_path_buf()));
     }
     let mut entries = BTreeMap::new();
+    let mut probabilities = BTreeMap::new();
     let mut costs = BTreeMap::new();
     for file_path in sorted_json_files(path, &|path, source| BiomeDataError::Io { path, source })? {
         let stem = file_path
@@ -360,6 +369,7 @@ pub fn load_biome_spawn_rules(path: impl AsRef<Path>) -> Result<BiomeSpawnRules,
             &|path, source| BiomeDataError::Io { path, source },
             &|path, source| BiomeDataError::Parse { path, source },
         )?;
+        probabilities.insert(biome.clone(), raw.creature_spawn_probability.unwrap_or(0.1));
         costs.insert(biome.clone(), spawn_costs::parse(&biome, raw.spawn_costs)?);
         let groups = raw
             .spawners
@@ -400,6 +410,7 @@ pub fn load_biome_spawn_rules(path: impl AsRef<Path>) -> Result<BiomeSpawnRules,
     let warm = tags.get(&warm_tag).into_iter().flatten().cloned().collect();
     let cold = tags.get(&cold_tag).into_iter().flatten().cloned().collect();
     let mut rules = BiomeSpawnRules::from_entries_with_sheep_color_climates(entries, warm, cold);
+    rules.creature_spawn_probability = probabilities;
     rules.spawn_costs = costs;
     Ok(rules)
 }
@@ -445,6 +456,8 @@ pub fn load_biome_worldgen_data(
 
 #[derive(Deserialize)]
 struct RawBiome {
+    #[serde(default)]
+    creature_spawn_probability: Option<f64>,
     #[serde(default)]
     spawners: BTreeMap<String, Vec<RawSpawnEntry>>,
     #[serde(default)]

@@ -201,6 +201,7 @@ pub fn pregenerate(
         items: Arc::clone(&registry.items),
         chest_loot: Arc::clone(&registry.chest_loot),
         light: Arc::clone(&registry.light),
+        population: (dimension == 0).then(|| crate::chunk_loader::Population::new(config.seed, &registry)),
         geometry: Dimension::Overworld.geometry(),
     });
     // Same pool sizing as the live world: half the cores, at least one.

@@ -41,6 +41,7 @@ fn source(
         items: Arc::clone(&registry.items),
         chest_loot: Arc::clone(&registry.chest_loot),
         light: Arc::clone(&registry.light),
+        population: (dimension == 0).then(|| Population::new(42, registry)),
         geometry,
     })
 }

@@ -61,6 +61,216 @@ fn fixture_for(entity_type: &'static str, persistent: bool) -> crate::tick::Tick
 }
 
 #[test]
+fn fresh_overworld_admission_populates_passive_creatures_without_players() {
+    let registry = Arc::new(crate::registry::CoreRegistry::load(Some(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+    )).unwrap());
+    let mut state = state();
+    state.registry = registry;
+    state.world = crate::world::ChunkWorld::new(
+        42,
+        Arc::new(mc_worldgen::TerrainGenerator::new(42, Arc::clone(&state.registry.blocks))),
+        &state.registry,
+        mc_world::BlockStateId(state.registry.states.air),
+        [0, 80, 0],
+        mc_world::OVERWORLD_GEOMETRY,
+    );
+    let wanted = (-4..4)
+        .flat_map(|x| (-4..4).map(move |z| (ChunkPos { x, z }, 0)))
+        .collect();
+    let loaded = state.world.ensure_blocking(&wanted);
+    assert_eq!(loaded.len(), 64);
+    let mut changes = ChangeSet::default();
+    generated::load(&mut state, &loaded, &mut changes);
+    let animals = changes.entities_spawned.iter().filter(|id| {
+        let slot = state.entities.slot_of(**id).unwrap();
+        let crate::entities::EntityKind::Mob { type_id } = state.entities.body(slot).kind else { return false };
+        let sheep = state.registry.entity_types.id_of(&mc_data::Identifier::parse("minecraft:sheep").unwrap()).unwrap();
+        [state.registry.cow_type_id, sheep].contains(&type_id)
+    }).count();
+    assert!(animals > 0, "fresh playerless overworld admission produced no cows or sheep");
+}
+
+struct FlatCreatureBiome {
+    biome: mc_data::Identifier,
+    air: mc_world::BlockStateId,
+    floor: mc_world::BlockStateId,
+}
+
+impl mc_world::ChunkGenerator for FlatCreatureBiome {
+    fn generate(&self, pos: ChunkPos) -> mc_world::Chunk {
+        let mut chunk = mc_world::Chunk::empty(pos, self.air, self.biome.clone());
+        let mut height = mc_world::chunk::Heightmap::zeroed();
+        for x in 0..16 {
+            for z in 0..16 {
+                chunk.set_block(x, 64, z, self.floor);
+                height.set(x, z, 129);
+            }
+        }
+        chunk.highest_opaque = height.clone();
+        chunk.heightmaps.insert("MOTION_BLOCKING".into(), height);
+        chunk
+    }
+}
+
+#[test]
+fn generation_creature_groups_follow_biomes_and_are_claimed_once() {
+    let registry = Arc::new(crate::registry::CoreRegistry::load(Some(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+    )).unwrap());
+    for biome_name in ["plains", "savanna", "desert", "ocean"] {
+        let biome = mc_data::Identifier::parse(format!("minecraft:{biome_name}")).unwrap();
+        let floor_name = if biome_name == "desert" { "minecraft:sand" } else { "minecraft:grass_block" };
+        let floor = registry.blocks.block(&mc_data::Identifier::parse(floor_name).unwrap()).unwrap().default;
+        let mut state = state();
+        state.registry = Arc::clone(&registry);
+        state.world = crate::world::ChunkWorld::new(
+            42,
+            Arc::new(FlatCreatureBiome { biome: biome.clone(), air: mc_world::BlockStateId(registry.states.air), floor }),
+            &registry,
+            mc_world::BlockStateId(registry.states.air),
+            [0, 80, 0],
+            mc_world::OVERWORLD_GEOMETRY,
+        );
+        let wanted = (0..8).flat_map(|x| (0..8).map(move |z| (ChunkPos { x, z }, 0))).collect();
+        let loaded = state.world.ensure_blocking(&wanted);
+        assert_eq!(loaded.len(), 64);
+        let entries = registry.biome_spawns.exact_entries(&biome, "creature");
+        let mut populated = 0;
+        let mut checked_determinism = false;
+        for pos in &loaded {
+            let chunk = state.world.chunk(*pos).unwrap();
+            let markers = chunk.generated_entities();
+            if !markers.is_empty() {
+                populated += 1;
+                if !checked_determinism {
+                    let (again, fresh) = state.world.chunk_source().load_or_generate(*pos).unwrap();
+                    assert!(fresh);
+                    assert_eq!(markers, again.generated_entities(), "{biome_name} determinism");
+                    checked_determinism = true;
+                }
+            }
+            let mut groups = std::collections::BTreeMap::new();
+            for marker in &markers {
+                let entry = entries.iter().find(|entry| entry.entity_type.as_str() == marker.entity_type).expect("authored creature entry");
+                let group = marker.claim.rsplit_once(':').unwrap().0;
+                let (kind, count, maximum) = groups.entry(group).or_insert((&marker.entity_type, 0, entry.max_count));
+                assert_eq!(*kind, &marker.entity_type);
+                assert_eq!(*maximum, entry.max_count);
+                *count += 1;
+                assert!(*count <= *maximum);
+                assert_eq!(marker.position[1], 65.0);
+            }
+        }
+        if entries.is_empty() {
+            assert_eq!(populated, 0, "{biome_name}");
+        } else {
+            assert!((1..=20).contains(&populated), "{biome_name}: {populated} populated chunks");
+        }
+        let mut changes = ChangeSet::default();
+        generated::load(&mut state, &loaded, &mut changes);
+        if !entries.is_empty() { assert!(!changes.entities_spawned.is_empty(), "{biome_name}"); }
+        if biome_name == "plains" {
+            generated_creatures_survive_restart(&state, &loaded);
+            let (mut output, _, _) = crate::tick::run_tick(&mut state, &[]);
+            let ids = changes.entities_spawned.clone();
+            output.changes = Arc::new(std::mem::take(&mut changes));
+            let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+            let replay = crate::journal::replay_batches(
+                crate::journal::Replay::default(),
+                &[(output.tick, output.tick, entries)],
+            );
+            assert_eq!(replay.generated_entity_claims, state.generated_entity_claims);
+            assert!(ids.iter().all(|id| replay.entities.contains_key(&id.0)));
+        }
+        changes.entities_spawned.clear();
+        generated::load(&mut state, &loaded, &mut changes);
+        assert!(changes.entities_spawned.is_empty(), "{biome_name} spawned twice");
+    }
+}
+
+fn generated_creatures_survive_restart(source: &crate::tick::TickState, loaded: &[ChunkPos]) {
+    let dir = tempfile::tempdir().unwrap();
+    let config = crate::CoreConfig::new(dir.path().to_path_buf(), 42);
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let chunks: Vec<_> = loaded.iter().map(|pos| source.world.chunk(*pos).unwrap().clone()).collect();
+    store.fill_generated(0, &chunks, &source.registry.blocks, &source.registry.items).unwrap();
+    let (_, regions, _) = crate::core::checkpoint_data_for(source, source.tick);
+    let tick = source.tick.max(1);
+    let entities = crate::native_checkpoint::encode_entities(
+        crate::dimensions::Dimension::Overworld, &regions, &source.registry.items, tick,
+    ).unwrap();
+    let mut checkpoint = store.read_checkpoint().unwrap();
+    let mut manifest: crate::journal::CheckpointManifest =
+        serde_json::from_slice(&checkpoint.globals["checkpoint"].payload).unwrap();
+    manifest.tick = tick;
+    manifest.generated_entity_claims = source.generated_entity_claims.clone();
+    for child in manifest.dimensions.values_mut() { child.tick = tick; }
+    for record in checkpoint.globals.values_mut() { record.captured_tick = tick; }
+    checkpoint.globals.get_mut("checkpoint").unwrap().payload = serde_json::to_vec(&manifest).unwrap();
+    store.commit_checkpoint(
+        mc_world::native::NativeCheckpoint {
+            tick, previous_tick: checkpoint.tick, chunks: &[], entities: &entities,
+            players: &[], globals: &checkpoint.globals,
+        },
+        &source.registry.blocks, &source.registry.items,
+    ).unwrap();
+    drop(store);
+    let mut recovered = crate::native_checkpoint::recover_offline(&config).unwrap();
+    let replay = recovered.dimensions.remove(&crate::dimensions::Dimension::Overworld).unwrap();
+    drop(recovered);
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let mut restored = state();
+    restored.registry = Arc::clone(&source.registry);
+    restored.world = crate::world::ChunkWorld::new_native(
+        42, Arc::clone(&store), 0, source.world.generator(), &source.registry,
+        mc_world::BlockStateId(source.registry.states.air), [0, 80, 0], mc_world::OVERWORLD_GEOMETRY,
+    );
+    restored.generated_entity_claims = replay.generated_entity_claims.clone();
+    for (&id, record) in &replay.entities {
+        crate::core::restore_entity(&mut restored, id, record).unwrap();
+    }
+    let before = restored.entities.len();
+    assert_eq!(before, source.entities.len());
+    let want = loaded.iter().map(|pos| (*pos, 0)).collect();
+    let reloaded = restored.world.ensure_blocking(&want);
+    assert_eq!(reloaded.len(), loaded.len());
+    let mut changes = ChangeSet::default();
+    generated::load(&mut restored, &reloaded, &mut changes);
+    assert!(changes.entities_spawned.is_empty());
+    assert_eq!(restored.entities.len(), before);
+}
+
+#[test]
+fn disabled_mob_spawning_consumes_generation_groups_permanently() {
+    let mut state = state();
+    let biome = mc_data::Identifier::parse("minecraft:plains").unwrap();
+    state.world = crate::world::ChunkWorld::new(
+        42,
+        Arc::new(FlatCreatureBiome {
+            biome,
+            air: mc_world::BlockStateId(state.registry.states.air),
+            floor: mc_world::BlockStateId(state.registry.states.grass_block),
+        }),
+        &state.registry,
+        mc_world::BlockStateId(state.registry.states.air),
+        [0, 80, 0],
+        mc_world::OVERWORLD_GEOMETRY,
+    );
+    let want = (0..8).flat_map(|x| (0..8).map(move |z| (ChunkPos { x, z }, 0))).collect();
+    let loaded = state.world.ensure_blocking(&want);
+    assert!(loaded.iter().any(|pos| !state.world.chunk(*pos).unwrap().generated_entities().is_empty()));
+    state.gamerules.insert("spawn_mobs".into(), "false".into());
+    let mut changes = ChangeSet::default();
+    generated::load(&mut state, &loaded, &mut changes);
+    assert!(changes.entities_spawned.is_empty());
+    assert!(!state.new_generated_entity_claims.is_empty());
+    state.gamerules.insert("spawn_mobs".into(), "true".into());
+    generated::load(&mut state, &loaded, &mut changes);
+    assert!(changes.entities_spawned.is_empty());
+}
+
+#[test]
 fn preloaded_village_resident_spawns_once_and_claim_survives_death() {
     let mut state = fixture();
     let chunk = ChunkPos { x: 0, z: 0 };

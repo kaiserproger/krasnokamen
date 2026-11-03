@@ -16,6 +16,10 @@ use std::thread::JoinHandle;
 use mc_world::native::{NativeError, NativeStore};
 use mc_world::{BlockRegistry, Chunk, ChunkGenerator, ChunkPos};
 
+#[path = "chunk_loader_population.rs"]
+mod population;
+pub(crate) use population::Population;
+
 /// A stored chunk that cannot be loaded. It must never be replaced by worldgen.
 #[derive(Debug, Clone)]
 pub struct ChunkLoadError {
@@ -46,6 +50,7 @@ pub(crate) struct ChunkSource {
     pub(crate) chest_loot: Arc<mc_data::loot::chest_26_1_2::ChestLootCatalog>,
     pub(crate) light: Arc<mc_data::block_light::BlockLightTable>,
     pub(crate) geometry: mc_world::ChunkGeometry,
+    pub(crate) population: Option<Population>,
 }
 
 impl ChunkSource {
@@ -54,7 +59,7 @@ impl ChunkSource {
     pub(crate) fn load_or_generate(&self, pos: ChunkPos) -> Result<Produced, ChunkLoadError> {
         let (mut chunk, generated) = match self.load_native(pos)? {
             Some(chunk) => (chunk, false),
-            None => (self.generator.generate(pos), true),
+            None => (self.generate(pos), true),
         };
         if chunk.pos != pos || chunk.geometry() != self.geometry {
             return Err(self.load_error(
@@ -64,6 +69,14 @@ impl ChunkSource {
         }
         crate::light::bake_missing(&mut chunk, &self.light);
         Ok((chunk, generated))
+    }
+
+    fn generate(&self, pos: ChunkPos) -> Chunk {
+        let mut chunk = self.generator.generate(pos);
+        if let Some(population) = &self.population {
+            population.populate(&mut chunk);
+        }
+        chunk
     }
 
     pub(crate) fn load_native(&self, pos: ChunkPos) -> Result<Option<Chunk>, ChunkLoadError> {
@@ -86,7 +99,7 @@ impl ChunkSource {
     /// Checkpoints persist new bases, so later captures do not regenerate them.
     pub(crate) fn resolve_base(&self, pos: ChunkPos) -> Result<Chunk, ChunkLoadError> {
         let Some(store) = &self.native else {
-            return Ok(self.generator.generate(pos));
+            return Ok(self.generate(pos));
         };
         store
             .resolve_base(
@@ -95,7 +108,7 @@ impl ChunkSource {
                 &self.registry,
                 &self.items,
                 &self.chest_loot,
-                || Ok(Some(self.generator.generate(pos))),
+                || Ok(Some(self.generate(pos))),
             )
             .and_then(|base| base.ok_or(NativeError::Invalid("missing checkpoint baseline")))
             .map_err(|error| self.load_error(pos, error))

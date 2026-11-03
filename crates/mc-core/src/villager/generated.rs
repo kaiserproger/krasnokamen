@@ -24,6 +24,15 @@ pub(crate) fn load(state: &mut TickState, chunks: &[ChunkPos], changes: &mut Cha
             if state.generated_entity_claims.contains(&marker.claim) {
                 continue;
             }
+            // Generation groups are consumed even when mob spawning is
+            // disabled; enabling the rule later must not populate old chunks.
+            if marker.claim.starts_with("creature:")
+                && !crate::command_rules::boolean(state, crate::command_rules::BoolRule::SPAWN_MOBS)
+            {
+                state.generated_entity_claims.insert(marker.claim.clone());
+                state.new_generated_entity_claims.push(marker.claim);
+                continue;
+            }
             if marker.entity_type == "minecraft:item_frame"
                 && marker.claim.starts_with("minecraft:end_city/ship@")
                 && marker.claim.ends_with("#elytra")
@@ -71,9 +80,19 @@ pub(crate) fn load(state: &mut TickState, chunks: &[ChunkPos], changes: &mut Cha
                 "minecraft:villager" | "minecraft:zombie_villager"
             ) {
                 let health = blueprint.params.max_health;
+                let wool = blueprint.wool && marker.claim.starts_with("creature:");
                 let id = state.spawn_mob(type_id, marker.position, health);
                 let slot = state.entities.slot_of(id).expect("new entity");
-                state.entities.set_uuid(slot, generated_uuid(&marker.claim));
+                let uuid = generated_uuid(&marker.claim);
+                state.entities.set_uuid(slot, uuid);
+                if wool {
+                    let roll = uuid.as_u128();
+                    let color = crate::blueprint::natural_wool_color(roll as u64, (roll >> 64) as u64);
+                    crate::tick::set_wool(
+                        std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance),
+                        color,
+                    );
+                }
                 state
                     .entities
                     .set_rot(slot, marker.yaw, marker.pitch.clamp(-90.0, 90.0));
