@@ -128,9 +128,10 @@ title = "Renewable lava farms never fill their cauldrons; water dripstone fillin
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DRIPSTONE-RANDOM-TICK"
-regression = ["cargo:mc-core:farming_tests::dripstone_with_lava_source_fills_the_cauldron_below"]
+regression = ["cargo:mc-core:farming_tests::dripstone_with_lava_source_fills_the_cauldron_below", "cargo:mc-core:farming_tests::dripstone_grows_without_cauldron_below", "cargo:mc-core:farming_tests::dripstone_fills_water_and_grows_stalagmite"]
+failing_first = "reported"
 
 [[bug]]
 id = "AMETHYST-GROWTH"
@@ -138,9 +139,10 @@ title = "Budding amethyst never creates buds or advances them to harvestable clu
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AMETHYST-GROWTH"
-regression = []
+regression = ["cargo:mc-core:farming_tests::budding_amethyst_sprouts_buds_that_advance_to_clusters", "cargo:mc-core:farming_tests::amethyst_picks_only_one_random_face_per_tick", "cargo:mc-core:farming_tests::amethyst_advances_waterlogged_buds_to_cluster"]
+failing_first = "reported"
 
 [[bug]]
 id = "CAMPFIRE-UNLIT-FOOD"
@@ -639,9 +641,10 @@ title = "Bone meal cannot increase a waterlogged sea-pickle colony or reproduce 
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SEA-PICKLE-BONEMEAL"
-regression = ["cargo:mc-core:farming_tests::bone_meal_grows_waterlogged_sea_pickle_colonies"]
+regression = ["cargo:mc-core:farming_tests::pickle_bonemeal_requires_coral_and_fills_colony", "cargo:mc-core:farming_tests::bone_meal_spreads_full_sea_pickle_colony_over_live_coral"]
+failing_first = "reported"
 
 [[bug]]
 id = "TALL-PLANT-BONEMEAL"
@@ -649,9 +652,10 @@ title = "Bone meal applied near the base of an ordinarily cultivated kelp/weepin
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TALL-PLANT-BONEMEAL"
-regression = []
+regression = ["cargo:mc-core:farming_tests::bone_meal_reaches_column_tips_beyond_twenty_five_blocks", "cargo:mc-core:farming_tests::bone_meal_reaches_head_of_long_kelp_column"]
+failing_first = "reported"
 
 [[bug]]
 id = "KELP-FLOWING-GROWTH"
@@ -690,9 +694,10 @@ title = "Bone meal does nothing on sunflower, lilac, rose bush or peony, removin
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TALL-FLOWER-DUPLICATION"
-regression = ["cargo:mc-core:farming_tests::bone_meal_duplicates_tall_flowers_without_removing_them"]
+regression = ["cargo:mc-core:farming_tests::bone_meal_duplicates_each_tall_flower_from_either_half"]
+failing_first = "reported"
 
 [[bug]]
 id = "BREEDING-EGG-LIFECYCLE"

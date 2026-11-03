@@ -752,61 +752,46 @@ fn sea_pickle_growth(
     seed: u64,
 ) -> Option<Vec<PlantBlockEdit>> {
     let blocks = &read.state.registry.blocks;
-    if prop(blocks, id, "waterlogged") != Some("true") {
-        return None;
-    }
-    let mut roll = Roll::new(seed);
-    let pickles = prop(blocks, id, "pickles")
-        .and_then(|value| value.parse::<u8>().ok())
-        .unwrap_or(1);
-    if pickles < 4 && roll.below(3) != 0 {
-        let next = with_prop(blocks, id, "pickles", &(pickles + 1).to_string())?;
-        return Some(vec![edit(at, next)]);
-    }
-    // Spread onto adjacent live coral blocks with water above.
-    let mut offsets = Vec::new();
-    for dx in -2..=2 {
-        for dz in -2..=2 {
-            if dx == 0 && dz == 0 {
-                continue;
-            }
-            offsets.push((dx, dz));
-        }
-    }
-    // Deterministic rotation of the search order by seed.
-    let len = offsets.len() as u64;
-    offsets.rotate_left((seed % len) as usize);
-    for (dx, dz) in offsets {
-        let soil = BlockPos {
-            x: at.x + dx,
-            y: at.y - 1,
-            z: at.z + dz,
-        };
-        let found = path(read, soil)?;
-        if !matches!(
-            found,
+    let coral = |name| {
+        matches!(
+            name,
             "tube_coral_block"
                 | "brain_coral_block"
                 | "bubble_coral_block"
                 | "fire_coral_block"
                 | "horn_coral_block"
-        ) {
-            continue;
-        }
-        let cell = BlockPos { y: at.y, ..soil };
-        let water = path(read, cell)?;
-        if water != "water" {
-            continue;
-        }
-        let mut single = with_prop(blocks, id, "pickles", "1")?;
-        single = with_prop(blocks, single, "waterlogged", "true")?;
-        return Some(vec![edit(cell, single)]);
+        )
+    };
+    if prop(blocks, id, "waterlogged") != Some("true")
+        || !coral(path(read, BlockPos { y: at.y - 1, ..at })?)
+    {
+        return None;
     }
-    // Colony already full with nowhere to spread: still a valid target.
-    (pickles < 4).then(|| {
-        with_prop(blocks, id, "pickles", &(pickles + 1).to_string())
-            .map(|next| vec![edit(at, next)])
-    })?
+    let mut roll = Roll::new(seed);
+    let mut edits = vec![edit(at, with_prop(blocks, id, "pickles", "4")?)];
+    for dx in -2_i32..=2 {
+        for dz in -2_i32..=2 {
+            if dx.abs() + dz.abs() > 2 || (dx == 0 && dz == 0) {
+                continue;
+            }
+            for dy in -1..=0 {
+                let cell = BlockPos {
+                    x: at.x + dx,
+                    y: at.y + dy,
+                    z: at.z + dz,
+                };
+                let soil = BlockPos {
+                    y: cell.y - 1,
+                    ..cell
+                };
+                if coral(path(read, soil)?) && path(read, cell)? == "water" && roll.below(6) == 0 {
+                    let count = (roll.below(3) + 1).to_string();
+                    edits.push(edit(cell, with_prop(blocks, id, "pickles", &count)?));
+                }
+            }
+        }
+    }
+    Some(edits)
 }
 
 /// Pointed dripstone renewal: a down-tipped stalactite with a fluid source
@@ -828,19 +813,16 @@ pub(super) fn dripstone(
     }
     let mut roll = Roll::new(seed);
     let cap = BlockPos { y: at.y + 1, ..at };
-    let fluid = match path(read, cap)? {
-        "dripstone_block" => {
-            let source = BlockPos { y: cap.y + 1, ..at };
-            match path(read, source)? {
-                "water" => Some(false),
-                "lava" => Some(true),
-                _ => None,
-            }
-        }
-        "water" => Some(false),
-        "lava" => Some(true),
-        _ => None,
-    }?;
+    let cap_name = path(read, cap)?;
+    let source = BlockPos { y: cap.y + 1, ..at };
+    let source_id = get(read, source)?;
+    let source_name = path(read, source)?;
+    let water = (source_name == "water" && prop(blocks, source_id, "level") == Some("0"))
+        || prop(blocks, source_id, "waterlogged") == Some("true");
+    let lava = source_name == "lava" && prop(blocks, source_id, "level") == Some("0");
+    if !water && !lava {
+        return None;
+    }
     // findTip: follow the down column (at most 11 cells) to its tip.
     let is_tip = |state| matches!(prop(blocks, state, "thickness"), Some("tip" | "tip_merge"));
     let (mut tip, mut tip_id) = (at, id);
@@ -860,45 +842,37 @@ pub(super) fn dripstone(
     if !is_tip(tip_id) {
         return None;
     }
-    // The cauldron below the tip, across a clear gap.
-    let mut cell = BlockPos {
-        y: tip.y - 1,
-        ..tip
-    };
-    loop {
+    if prop(blocks, tip_id, "waterlogged") == Some("true") {
+        return None;
+    }
+    if water
+        && cap_name == "dripstone_block"
+        && at.y - tip.y < 8
+        && let Some(growth) = grow_dripstone(read, tip, tip_id, &mut roll)
+    {
+        return Some(growth);
+    }
+    if roll.below(256) >= if lava { 15 } else { 45 } {
+        return None;
+    }
+    for distance in 1..=10 {
+        let cell = BlockPos {
+            y: tip.y - distance,
+            ..tip
+        };
         match path(read, cell)? {
-            "air" | "water" => {
-                cell.y -= 1;
-                if tip.y - cell.y > 8 {
-                    return None;
-                }
+            "air" => {}
+            "cauldron" | "water_cauldron" | "lava_cauldron" => {
+                return fill_cauldron(read, cell, if lava { "lava" } else { "water" });
             }
-            "cauldron" | "water_cauldron" | "lava_cauldron" => break,
             _ => return None,
         }
     }
-    if fluid {
-        // Vanilla lava drip: 15/256 per tick fills an empty cauldron full.
-        if roll.below(256) >= 15 {
-            return grow_dripstone(read, tip, tip_id, false, &mut roll);
-        }
-        return fill_cauldron(read, cell, "lava", &mut roll);
-    }
-    // Vanilla water drip: 45/256 per tick raises one level.
-    if roll.below(256) < 45 {
-        return fill_cauldron(read, cell, "water", &mut roll);
-    }
-    grow_dripstone(read, tip, tip_id, true, &mut roll)
+    None
 }
 
 /// Raise the cauldron at `cell` one level toward `fluid`.
-fn fill_cauldron(
-    read: &Read<'_>,
-    cell: BlockPos,
-    fluid: &str,
-    roll: &mut Roll,
-) -> Option<Vec<PlantBlockEdit>> {
-    let _ = roll;
+fn fill_cauldron(read: &Read<'_>, cell: BlockPos, fluid: &str) -> Option<Vec<PlantBlockEdit>> {
     let blocks = &read.state.registry.blocks;
     let current = get(read, cell)?;
     let entry = blocks.by_id(BlockStateId(current))?;
@@ -917,10 +891,15 @@ fn fill_cauldron(
     if name == "cauldron" {
         // Vanilla lava drips fill an empty cauldron completely; water drips
         // add one level per success.
-        let fill = if fluid == "lava" { "3" } else { "1" };
-        let id = mc_data::Identifier::parse(format!("minecraft:{target}")).ok()?;
-        let one = blocks.by_name_and_props(&id, &[("level".into(), fill.into())])?;
-        return Some(vec![edit(cell, one.0)]);
+        let filled = named(read, target)?;
+        return Some(vec![edit(
+            cell,
+            if fluid == "lava" {
+                filled
+            } else {
+                with_prop(blocks, filled, "level", "1")?
+            },
+        )]);
     }
     if name != target || level >= 3 {
         return None;
@@ -936,50 +915,60 @@ fn grow_dripstone(
     read: &Read<'_>,
     at: BlockPos,
     id: u32,
-    water: bool,
     roll: &mut Roll,
 ) -> Option<Vec<PlantBlockEdit>> {
     // Pinned 26.1.2 PointedDripstoneBlock.randomTick: nextFloat < 0.011377778f.
     // nextFloat is 24 random bits over 2^24; 0.011377778f * 2^24 =
     // 190887.4375, so the float compare is exactly top-24-bits < 190888.
-    if !water || roll.below(1 << 24) >= 190888 {
+    if roll.below(1 << 24) >= 190888 {
         return None;
     }
     let blocks = &read.state.registry.blocks;
     let below = BlockPos { y: at.y - 1, ..at };
-    if air(read, below) {
-        let middle = with_prop(blocks, id, "thickness", "middle")?;
+    if roll.below(2) == 0 {
+        if !air(read, below) {
+            return None;
+        }
+        let middle = with_prop(blocks, id, "thickness", "frustum")?;
         let tip = with_prop(blocks, id, "thickness", "tip")?;
         return Some(vec![edit(at, middle), edit(below, tip)]);
     }
-    // A stalagmite tip-up below a short gap grows upward toward the tip.
-    for gap in 1..=4 {
+    for gap in 1..=10 {
         let cell = BlockPos {
             y: at.y - gap,
             ..at
         };
-        let found = path(read, cell)?;
-        if found != "pointed_dripstone" {
-            return None;
+        if air(read, cell) {
+            continue;
         }
         let state = get(read, cell)?;
-        if prop(blocks, state, "vertical_direction") == Some("up")
-            && matches!(
-                prop(blocks, state, "thickness"),
-                Some("tip") | Some("tip_merge")
-            )
-        {
-            let middle = with_prop(blocks, state, "thickness", "middle")?;
-            let tip = with_prop(blocks, state, "thickness", "tip")?;
-            let above = BlockPos {
-                y: cell.y + 1,
-                ..cell
-            };
-            if !air(read, above) {
+        let above = BlockPos {
+            y: cell.y + 1,
+            ..cell
+        };
+        if !air(read, above) {
+            return None;
+        }
+        if path(read, cell)? == "pointed_dripstone" {
+            if prop(blocks, state, "vertical_direction") != Some("up")
+                || prop(blocks, state, "thickness") != Some("tip")
+                || prop(blocks, state, "waterlogged") == Some("true")
+            {
                 return None;
             }
-            return Some(vec![edit(cell, middle), edit(above, tip)]);
+            return Some(vec![
+                edit(cell, with_prop(blocks, state, "thickness", "frustum")?),
+                edit(above, state),
+            ]);
         }
+        if sturdy(read.state, above, cell) {
+            let up = with_prop(blocks, id, "vertical_direction", "up")?;
+            return Some(vec![edit(
+                above,
+                with_prop(blocks, up, "thickness", "tip")?,
+            )]);
+        }
+        return None;
     }
     None
 }
@@ -997,52 +986,33 @@ pub(super) fn amethyst(read: &Read<'_>, at: BlockPos, seed: u64) -> Option<Vec<P
         ("west", BlockPos { x: at.x - 1, ..at }),
         ("east", BlockPos { x: at.x + 1, ..at }),
     ];
-    // Advance one existing bud first (vanilla picks a random direction).
-    let start = roll.below(6) as usize;
-    for step in 0..6 {
-        let (facing, cell) = faces[(start + step) % 6];
-        let found = path(read, cell)?;
-        let next = match found {
-            "small_amethyst_bud" => Some("medium_amethyst_bud"),
-            "medium_amethyst_bud" => Some("large_amethyst_bud"),
-            "large_amethyst_bud" => Some("amethyst_cluster"),
-            _ => None,
-        };
-        if let Some(stage) = next {
-            if roll.below(5) != 0 {
-                continue;
-            }
-            let current = get(read, cell)?;
-            if prop(blocks, current, "facing") != Some(facing) {
-                continue;
-            }
-            let mut grown = named(read, stage)?;
-            grown = with_prop(blocks, grown, "facing", facing)?;
-            let wet = prop(blocks, current, "waterlogged").unwrap_or("false");
-            grown = with_prop(blocks, grown, "waterlogged", wet)?;
-            return Some(vec![edit(cell, grown)]);
-        }
-        // An exposed air or source-water face can sprout a new small bud.
-        if found != "air" && found != "water" {
-            continue;
-        }
-        if found == "water" && prop(blocks, get(read, cell)?, "level") != Some("0") {
-            continue;
-        }
-        if roll.below(5) != 0 {
-            continue;
-        }
-        let mut bud = named(read, "small_amethyst_bud")?;
-        bud = with_prop(blocks, bud, "facing", facing)?;
-        bud = with_prop(
-            blocks,
-            bud,
-            "waterlogged",
-            if found == "water" { "true" } else { "false" },
-        )?;
-        return Some(vec![edit(cell, bud)]);
+    if roll.below(5) != 0 {
+        return None;
     }
-    None
+    let (facing, cell) = faces[roll.below(6) as usize];
+    let found = path(read, cell)?;
+    let next = match found {
+        "small_amethyst_bud" => "medium_amethyst_bud",
+        "medium_amethyst_bud" => "large_amethyst_bud",
+        "large_amethyst_bud" => "amethyst_cluster",
+        "air" => "small_amethyst_bud",
+        "water" if prop(blocks, get(read, cell)?, "level") == Some("0") => "small_amethyst_bud",
+        _ => return None,
+    };
+    let current = get(read, cell)?;
+    if next != "small_amethyst_bud" && prop(blocks, current, "facing") != Some(facing) {
+        return None;
+    }
+    let grown = with_prop(blocks, named(read, next)?, "facing", facing)?;
+    let wet = if found == "water" {
+        "true"
+    } else {
+        prop(blocks, current, "waterlogged").unwrap_or("false")
+    };
+    Some(vec![edit(
+        cell,
+        with_prop(blocks, grown, "waterlogged", wet)?,
+    )])
 }
 
 /// Vanilla turtle-egg random tick: crack staging at night on sand.
