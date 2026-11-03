@@ -1323,6 +1323,35 @@ pub(crate) fn smoke(state: &TickState, p: BlockPos) -> bool {
     }
     false
 }
+
+/// Dispensing honey releases eligible occupants without targeting a player.
+pub(crate) fn release_for_dispenser(
+    state: &mut TickState,
+    pos: BlockPos,
+    spawned: &mut Vec<EntityId>,
+) {
+    if state.day_time % 24000 >= 12000 || state.weather.0 != crate::commands::Weather::Clear {
+        return;
+    }
+    let front = exit_cell(state, pos);
+    if !block(state, front)
+        .is_some_and(|b| state.registry.collision_boxes[b.id.0 as usize].is_empty())
+    {
+        return;
+    }
+    let Some(mut hive) = state.hives.remove(&key(pos)) else {
+        return;
+    };
+    if !hive.bees.is_empty() {
+        let mut changes = ChangeSet::default();
+        for occupant in hive.bees.drain(..) {
+            release(state, pos, occupant, None, false, &mut changes);
+        }
+        persist(state, pos, &hive);
+        spawned.extend(changes.entities_spawned);
+    }
+    state.hives.insert(key(pos), hive);
+}
 fn anger(state: &mut TickState, p: [f64; 3], target: uuid::Uuid) {
     let until = state.tick.saturating_add(600) as i64;
     for slot in 0..state.entities.len() {
@@ -1335,12 +1364,6 @@ fn anger(state: &mut TickState, p: [f64; 3], target: uuid::Uuid) {
             bee.anger_end = until;
         }
     }
-}
-/// Dispenser/automated harvest anger: nearby loose bees turn hostile absent
-/// smoke, without attributing the harvest to any player. Retained hive
-/// occupants keep their normal exit schedule.
-pub(crate) fn anger_nearby(state: &mut TickState, p: [f64; 3]) {
-    anger(state, p, uuid::Uuid::nil());
 }
 pub(crate) fn accepted_hit(
     state: &mut TickState,

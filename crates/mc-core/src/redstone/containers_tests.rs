@@ -594,6 +594,267 @@ fn dispenser_bucket_actions_commit_block_and_remainder_together() {
 }
 
 #[test]
+fn automation_regression_hopper_composter() {
+    let mut state = state();
+    let composter = super::super::offset(HOPPER, (0, 1, 0)).unwrap();
+    let upper = super::super::offset(composter, (0, 1, 0)).unwrap();
+    place(
+        &mut state,
+        HOPPER,
+        "hopper",
+        &[("facing", "down"), ("enabled", "true")],
+    );
+    place(
+        &mut state,
+        upper,
+        "hopper",
+        &[("facing", "down"), ("enabled", "true")],
+    );
+    place(&mut state, composter, "composter", &[("level", "0")]);
+    let pie = item(&state, "pumpkin_pie", 7);
+    set_slot(&mut state, upper, 0, pie);
+    for _ in 0..56 {
+        step(&mut state);
+    }
+    assert_eq!(crate::composter::output_level(&state, composter), Some(7));
+    assert!(state.block_entities[&key(upper)].slots[0].is_empty());
+    assert!(crate::composter::mature(
+        &mut state,
+        composter,
+        &mut Vec::new()
+    ));
+    step(&mut state);
+    assert_eq!(crate::composter::output_level(&state, composter), Some(0));
+    assert_eq!(
+        state.block_entities[&key(HOPPER)].slots[0],
+        item(&state, "bone_meal", 1)
+    );
+    let side = super::super::offset(composter, (-1, 0, 0)).unwrap();
+    place(
+        &mut state,
+        side,
+        "hopper",
+        &[("facing", "east"), ("enabled", "true")],
+    );
+    let pie = item(&state, "pumpkin_pie", 1);
+    set_slot(&mut state, side, 0, pie.clone());
+    step(&mut state);
+    assert_eq!(crate::composter::output_level(&state, composter), Some(0));
+    assert_eq!(state.block_entities[&key(side)].slots[0], pie);
+    place(
+        &mut state,
+        upper,
+        "hopper",
+        &[("facing", "down"), ("enabled", "false")],
+    );
+    let pie = item(&state, "pumpkin_pie", 1);
+    set_slot(&mut state, upper, 0, pie.clone());
+    for _ in 0..9 {
+        step(&mut state);
+    }
+    assert_eq!(crate::composter::output_level(&state, composter), Some(0));
+    assert_eq!(state.block_entities[&key(upper)].slots[0], pie);
+}
+
+#[test]
+fn automation_regression_special_buckets() {
+    let mut state = state();
+    let target = super::super::offset(HOPPER, (1, 0, 0)).unwrap();
+    place(&mut state, HOPPER, "dispenser", &[("facing", "east")]);
+    let bucket = item(&state, "powder_snow_bucket", 1);
+    set_slot(&mut state, HOPPER, 0, bucket);
+    let mut spawned = Vec::new();
+    trigger(&mut state, HOPPER, &mut Vec::new(), &mut spawned);
+    assert_eq!(kind(&state, target), Some("powder_snow"));
+    assert_eq!(
+        state.block_entities[&key(HOPPER)].slots[0],
+        item(&state, "bucket", 1)
+    );
+    trigger(&mut state, HOPPER, &mut Vec::new(), &mut spawned);
+    assert_eq!(kind(&state, target), Some("air"));
+    assert_eq!(
+        state.block_entities[&key(HOPPER)].slots[0],
+        item(&state, "powder_snow_bucket", 1)
+    );
+    let bucket = item(&state, "cod_bucket", 1);
+    set_slot(&mut state, HOPPER, 0, bucket);
+    trigger(&mut state, HOPPER, &mut Vec::new(), &mut spawned);
+    assert_eq!(kind(&state, target), Some("water"));
+    assert_eq!(
+        state.block_entities[&key(HOPPER)].slots[0],
+        item(&state, "bucket", 1)
+    );
+    assert_eq!(spawned.len(), 1);
+    let slot = state.entities.slot_of(spawned[0]).unwrap();
+    assert!(state.entities.row(slot).item.is_none());
+    let bucket = item(&state, "axolotl_bucket", 1).with_custom_name("Axel");
+    set_slot(&mut state, HOPPER, 0, bucket);
+    trigger(&mut state, HOPPER, &mut Vec::new(), &mut spawned);
+    let slot = state.entities.slot_of(spawned[1]).unwrap();
+    assert_eq!(state.entities.row(slot).health, 14.0);
+    assert_eq!(
+        state.entities.row(slot).appearance.custom_name.as_deref(),
+        Some("Axel")
+    );
+    let mut nether = state_with_dir(None, true);
+    nether.dimension = crate::dimensions::Dimension::Nether;
+    place(&mut nether, HOPPER, "dispenser", &[("facing", "east")]);
+    let bucket = item(&nether, "cod_bucket", 1);
+    set_slot(&mut nether, HOPPER, 0, bucket);
+    let mut fish = Vec::new();
+    trigger(&mut nether, HOPPER, &mut Vec::new(), &mut fish);
+    assert_eq!(kind(&nether, target), Some("air"));
+    assert_eq!(
+        nether.block_entities[&key(HOPPER)].slots[0],
+        item(&nether, "bucket", 1)
+    );
+    assert_eq!(fish.len(), 1);
+}
+
+#[test]
+fn automation_regression_anchor_charge() {
+    let mut state = state();
+    let target = super::super::offset(HOPPER, (1, 0, 0)).unwrap();
+    place(&mut state, HOPPER, "dispenser", &[("facing", "east")]);
+    place(&mut state, target, "respawn_anchor", &[("charges", "2")]);
+    let glowstone = item(&state, "glowstone", 1);
+    set_slot(&mut state, HOPPER, 0, glowstone);
+    trigger(&mut state, HOPPER, &mut Vec::new(), &mut Vec::new());
+    let block = state.world.block_at(target.x, target.y, target.z).unwrap();
+    assert_eq!(
+        crate::dimensions::rules::anchor_charge(&state, block),
+        Some(3)
+    );
+    assert!(state.block_entities[&key(HOPPER)].slots[0].is_empty());
+}
+
+#[test]
+fn automation_regression_hive_harvest() {
+    for (tool, product) in [("glass_bottle", "honey_bottle"), ("shears", "honeycomb")] {
+        let mut state = state();
+        let target = super::super::offset(HOPPER, (1, 0, 0)).unwrap();
+        place(&mut state, HOPPER, "dispenser", &[("facing", "east")]);
+        place(&mut state, target, "beehive", &[("honey_level", "5")]);
+        let bee_type = state
+            .registry
+            .entity_types
+            .id_of(&Identifier::parse("minecraft:bee").unwrap())
+            .unwrap();
+        let bee = state.spawn_mob(bee_type, [5.5, 201.0, 3.5], 10.0);
+        let bee_slot = state.entities.slot_of(bee).unwrap();
+        let held = item(&state, tool, 1);
+        set_slot(&mut state, HOPPER, 0, held);
+        let mut spawned = Vec::new();
+        trigger(&mut state, HOPPER, &mut Vec::new(), &mut spawned);
+        let block = super::super::at(&state, target).unwrap();
+        assert_eq!(super::super::prop(block, "honey_level"), Some("0"));
+        assert!(
+            state
+                .entities
+                .row(bee_slot)
+                .bee
+                .as_ref()
+                .unwrap()
+                .angry_at
+                .is_none()
+        );
+        if tool == "glass_bottle" {
+            assert_eq!(
+                state.block_entities[&key(HOPPER)].slots[0],
+                item(&state, product, 1)
+            );
+        } else {
+            assert_eq!(state.block_entities[&key(HOPPER)].slots[0].damage, Some(1));
+            assert_eq!(spawned.len(), 3);
+            for entity in spawned {
+                let slot = state.entities.slot_of(entity).unwrap();
+                assert_eq!(
+                    state.entities.row(slot).item.as_ref().unwrap().full_stack(),
+                    item(&state, product, 1)
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn automation_regression_hive_releases_occupants() {
+    use mc_nbt::{ListTag, Tag};
+    let mut state = state();
+    let target = super::super::offset(HOPPER, (1, 0, 0)).unwrap();
+    place(&mut state, HOPPER, "dispenser", &[("facing", "east")]);
+    place(
+        &mut state,
+        target,
+        "beehive",
+        &[("honey_level", "5"), ("facing", "north")],
+    );
+    let occupant = Tag::Compound(vec![
+        (
+            "entity_data".into(),
+            Tag::Compound(vec![("id".into(), Tag::String("minecraft:bee".into()))]),
+        ),
+        ("ticks_in_hive".into(), Tag::Int(0)),
+        ("min_ticks_in_hive".into(), Tag::Int(2400)),
+    ]);
+    let image = Tag::Compound(vec![(
+        "bees".into(),
+        Tag::List(ListTag {
+            element_type: 10,
+            elements: vec![occupant],
+        }),
+    )]);
+    let mut bytes = Vec::new();
+    mc_nbt::write_network(&mut bytes, &image).unwrap();
+    state
+        .hives
+        .insert(key(target), crate::bees::Hive::decode(&bytes).unwrap());
+    let shears = item(&state, "shears", 1);
+    set_slot(&mut state, HOPPER, 0, shears);
+    let mut spawned = Vec::new();
+    trigger(&mut state, HOPPER, &mut Vec::new(), &mut spawned);
+    assert_eq!(
+        crate::bees::inhabited_bees(&state, target).unwrap(),
+        Some(0)
+    );
+    assert!(spawned.iter().any(|id| {
+        let slot = state.entities.slot_of(*id).unwrap();
+        state.entities.row(slot).bee.is_some()
+    }));
+}
+
+#[test]
+fn automation_regression_vehicle_placement() {
+    for (vehicle, ground, below) in [
+        ("oak_boat", "water", false),
+        ("oak_boat", "water", true),
+        ("minecart", "rail", false),
+        ("minecart", "rail", true),
+    ] {
+        let mut state = state();
+        let target = super::super::offset(HOPPER, (1, 0, 0)).unwrap();
+        place(&mut state, HOPPER, "dispenser", &[("facing", "east")]);
+        let surface = if below {
+            super::super::offset(target, (0, -1, 0)).unwrap()
+        } else {
+            target
+        };
+        place(&mut state, surface, ground, &[]);
+        let stack = item(&state, vehicle, 1);
+        set_slot(&mut state, HOPPER, 0, stack);
+        let mut spawned = Vec::new();
+        trigger(&mut state, HOPPER, &mut Vec::new(), &mut spawned);
+        assert_eq!(spawned.len(), 1, "{vehicle}");
+        let slot = state.entities.slot_of(spawned[0]).unwrap();
+        assert_eq!(
+            crate::vehicles::name(&state, slot),
+            Some(format!("minecraft:{vehicle}").as_str())
+        );
+        assert!(state.block_entities[&key(HOPPER)].slots[0].is_empty());
+    }
+}
+
+#[test]
 fn hopper_nbt_roundtrip_keeps_remaining_cooldown_and_item_components() {
     let mut state = state();
     place(&mut state, HOPPER, "hopper", &[]);

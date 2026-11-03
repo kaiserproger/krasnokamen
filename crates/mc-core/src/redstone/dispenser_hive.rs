@@ -99,16 +99,12 @@ pub(super) fn harvest(
             ));
         }
     }
-    // Reset honey level; bees inside emerge angered absent campfire smoke
+    // Automated harvesting does not target nearby bees.
     if let Some(next) = crate::bees::property(state, target, "honey_level", "0") {
         state.world.set_block(target.x, target.y, target.z, next);
         writes.push((target, next));
     }
-    if !crate::bees::smoke(state, target) {
-        // Vanilla dispenser harvest angers nearby bees absent smoke. The
-        // hive's retained occupants keep their normal exit schedule.
-        crate::bees::anger_nearby(state, crate::bees::centre(target));
-    }
+    crate::bees::release_for_dispenser(state, target, spawned);
     true
 }
 

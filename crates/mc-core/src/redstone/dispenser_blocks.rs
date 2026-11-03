@@ -61,11 +61,9 @@ pub(super) struct Bucket {
 
 /// A successful bucket action may evaporate without writing a fluid block.
 pub(super) fn bucket(state: &TickState, target: BlockPos, name: &str) -> Option<Bucket> {
-    // Mob buckets (fish/axolotl/tadpole) and powder snow empty like water:
-    // place water plus the captured entity, or placed snow, and keep an
-    // empty bucket. Powder-snow pickup inverts the same path.
-    if let Some(plan) = mob_bucket_empty(state, target, name) {
-        return Some(plan);
+    // Mob buckets use the same water placement and evaporation rules.
+    if mob_bucket_mob(name).is_some() {
+        return bucket(state, target, "water_bucket");
     }
     if let Some(plan) = powder_snow_bucket(state, target, name) {
         return Some(plan);
@@ -138,30 +136,6 @@ pub(super) fn mob_bucket_mob(name: &str) -> Option<&'static str> {
         "tadpole_bucket" => Some("minecraft:tadpole"),
         _ => None,
     }
-}
-
-/// Mob buckets empty like water (plus the captured entity, spawned by the
-/// container owner after this plan commits).
-fn mob_bucket_empty(state: &TickState, target: BlockPos, name: &str) -> Option<Bucket> {
-    mob_bucket_mob(name)?;
-    // Reuse the water placement path: flow water into the target cell.
-    let current = state.world.block_at(target.x, target.y, target.z)?;
-    let wet = crate::fluids::waterlogged(state, current, true);
-    let washed =
-        if wet.is_some() || crate::fluids::fluid_at(&state.registry.states, current).is_some() {
-            None
-        } else {
-            match crate::fluids::flow_into(state, target, crate::fluids::Fluid::Water)? {
-                crate::fluids::Flow::Open => None,
-                crate::fluids::Flow::Wash(block) => Some(block),
-            }
-        };
-    let new = wet.unwrap_or(state.registry.states.water_levels[0]);
-    Some(Bucket {
-        new: Some(new),
-        remainder: "bucket",
-        washed,
-    })
 }
 
 /// Powder-snow bucket pair: empty into placed snow, or collect placed snow.

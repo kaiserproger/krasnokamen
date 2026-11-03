@@ -182,9 +182,10 @@ title = "The composter assigns mushroom stems an 85% chance instead of the vanil
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COMPOSTER-INPUT-TABLE"
-regression = []
+regression = ["cargo:mc-core:composter::tests::automation_regression_compost_table"]
+failing_first = "reported"
 
 [[bug]]
 id = "COMPOSTER-HOPPER-AUTOMATION"
@@ -192,9 +193,10 @@ title = "Automatic composting cannot feed ingredients from a hopper above or ext
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COMPOSTER-HOPPER-AUTOMATION"
-regression = []
+regression = ["cargo:mc-core:redstone::containers::tests::automation_regression_hopper_composter"]
+failing_first = "reported"
 
 [[bug]]
 id = "SIGN-EDITOR-DISCONNECT"
@@ -458,9 +460,10 @@ title = "Automatic boat/minecart stations eject vehicle items instead of placing
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-VEHICLE-PLACEMENT"
-regression = []
+regression = ["cargo:mc-core:redstone::containers::tests::automation_regression_vehicle_placement"]
+failing_first = "reported"
 
 [[bug]]
 id = "DISPENSER-SPECIAL-BUCKETS"
@@ -468,9 +471,10 @@ title = "Dispensers eject mob buckets and powder-snow buckets rather than emptyi
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-SPECIAL-BUCKETS"
-regression = []
+regression = ["cargo:mc-core:redstone::containers::tests::automation_regression_special_buckets"]
+failing_first = "reported"
 
 [[bug]]
 id = "DISPENSER-CONSTRUCT-SUMMON"
@@ -530,9 +534,10 @@ title = "A dispenser facing a non-full respawn anchor ejects its glowstone as an
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-ANCHOR-CHARGE"
-regression = []
+regression = ["cargo:mc-core:redstone::containers::tests::automation_regression_anchor_charge"]
+failing_first = "reported"
 
 [[bug]]
 id = "DISPENSER-HIVE-HARVEST"
@@ -540,9 +545,10 @@ title = "Dispensers cannot harvest full beehives/bee nests: glass bottles and sh
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-HIVE-HARVEST"
-regression = []
+regression = ["cargo:mc-core:redstone::containers::tests::automation_regression_hive_harvest", "cargo:mc-core:redstone::containers::tests::automation_regression_hive_releases_occupants"]
+failing_first = "reported"
 
 [[bug]]
 id = "FISHING-ITEM-HOOK"

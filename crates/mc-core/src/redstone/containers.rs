@@ -1450,6 +1450,12 @@ fn nonprojectile(
                 .entity_types
                 .id_of(&mc_data::Identifier::parse(mob).expect("bucket mob id"))
         {
+            let health = state
+                .registry
+                .blueprint(type_id)
+                .expect("bucket mob blueprint")
+                .params
+                .max_health;
             let id = state.spawn_mob(
                 type_id,
                 [
@@ -1457,8 +1463,12 @@ fn nonprojectile(
                     f64::from(target.y) + 0.5,
                     f64::from(target.z) + 0.5,
                 ],
-                3.0,
+                health,
             );
+            if let Some(slot) = state.entities.slot_of(id) {
+                Arc::make_mut(&mut state.entities.row_mut(slot).appearance).custom_name =
+                    held.custom_name.as_deref().map(str::to_owned);
+            }
             spawned.push(id);
         }
         let slot = &mut state

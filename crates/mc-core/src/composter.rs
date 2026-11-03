@@ -40,14 +40,14 @@ fn chance(item: &Identifier) -> Option<u8> {
         | "vine"
         | "weeping_vines" => 50,
         "allium" | "apple" | "azalea" | "azure_bluet" | "beetroot" | "big_dripleaf"
-        | "blue_orchid" | "brown_mushroom" | "carrot" | "carved_pumpkin" | "cocoa_beans"
-        | "cornflower" | "crimson_fungus" | "crimson_roots" | "dandelion" | "fern"
-        | "large_fern" | "lilac" | "lily_of_the_valley" | "lily_pad" | "melon" | "moss_block"
-        | "mushroom_stem" | "nether_wart" | "orange_tulip" | "oxeye_daisy" | "pale_moss_block"
-        | "peony" | "pink_tulip" | "poppy" | "potato" | "pumpkin" | "red_mushroom"
-        | "red_tulip" | "rose_bush" | "sea_pickle" | "shroomlight" | "spore_blossom"
-        | "sunflower" | "warped_fungus" | "warped_roots" | "wheat" | "white_tulip"
-        | "wither_rose" => 65,
+        | "blue_orchid" | "brown_mushroom" | "carrot" | "carved_pumpkin" | "closed_eyeblossom"
+        | "cocoa_beans" | "cornflower" | "crimson_fungus" | "crimson_roots" | "dandelion"
+        | "fern" | "large_fern" | "lilac" | "lily_of_the_valley" | "lily_pad" | "melon"
+        | "moss_block" | "mushroom_stem" | "nether_wart" | "open_eyeblossom" | "orange_tulip"
+        | "oxeye_daisy" | "pale_moss_block" | "peony" | "pink_tulip" | "poppy" | "potato"
+        | "pumpkin" | "red_mushroom" | "red_tulip" | "rose_bush" | "sea_pickle" | "shroomlight"
+        | "spore_blossom" | "sunflower" | "warped_fungus" | "warped_roots" | "wheat"
+        | "white_tulip" | "wither_rose" => 65,
         "baked_potato"
         | "bread"
         | "brown_mushroom_block"
@@ -278,6 +278,7 @@ pub(crate) fn use_on(
 /// the canonical block phase so neighbors, comparators and WAL see one write.
 fn stage_level(state: &mut TickState, pos: BlockPos, next: u32) {
     state.world.set_block(pos.x, pos.y, pos.z, next);
+    crate::redstone::containers::inventory_changed(&mut state.redstone_containers, pos);
     if let Some((_, value)) = state
         .merge_block_writes
         .iter_mut()
@@ -303,6 +304,7 @@ pub(crate) fn mature(
         return false;
     };
     state.world.set_block(pos.x, pos.y, pos.z, ready);
+    crate::redstone::containers::inventory_changed(&mut state.redstone_containers, pos);
     writes.push((pos, ready));
     true
 }

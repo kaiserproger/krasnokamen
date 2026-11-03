@@ -113,6 +113,28 @@ pub(crate) fn snapshot_block(output: &crate::boundary::TickOutput) -> Option<u32
 }
 
 #[test]
+fn automation_regression_compost_table() {
+    assert_eq!(
+        chance(&Identifier::parse("minecraft:mushroom_stem").unwrap()),
+        Some(65)
+    );
+    assert_eq!(
+        chance(&Identifier::parse("minecraft:grass_block").unwrap()),
+        None
+    );
+    for name in ["open_eyeblossom", "closed_eyeblossom"] {
+        let (mut state, entity) = fixture(0);
+        give(&mut state, entity, name, 1, Hand::Main);
+        run_tick(&mut state, &[use_input(0, Hand::Main)]);
+        assert_eq!(level(&state, POS), Some(1), "{name}");
+        assert!(
+            state.players[&entity].inventory.slots[0].is_empty(),
+            "{name}"
+        );
+    }
+}
+
+#[test]
 fn fill_debits_once_matures_after_twenty_ticks_and_collects_one_bone_meal() {
     let (mut state, entity) = fixture(0);
     give(&mut state, entity, "pumpkin_pie", 9, Hand::Main);
