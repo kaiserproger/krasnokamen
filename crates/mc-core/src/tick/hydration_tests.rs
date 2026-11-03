@@ -38,3 +38,34 @@ fn corrupt_block_entity_rejects_its_chunk_instead_of_panicking() {
         assert!(state.world.load_error(chunk).is_some(), "{block}");
     }
 }
+
+#[test]
+fn corrupt_target_block_entities_are_rejected_before_ticks() {
+    for block in [
+        "jukebox",
+        "oak_shelf",
+        "chiseled_bookshelf",
+        "crafter",
+        "conduit",
+        "beacon",
+        "sculk_shrieker",
+    ] {
+        let mut state = state(None);
+        place(&mut state, POS, &format!("minecraft:{block}"));
+        let chunk = ChunkPos {
+            x: POS.x.div_euclid(16),
+            z: POS.z.div_euclid(16),
+        };
+        state
+            .world
+            .set_opaque_block_entity(POS, Some(vec![mc_nbt::tag_type::COMPOUND]));
+        crate::tick::run_tick(&mut state, &[]);
+        assert!(!state.world.has_chunk(chunk.x, chunk.z), "{block}");
+        assert!(state.world.load_error(chunk).is_some(), "{block}");
+        for _ in 0..80 {
+            crate::tick::run_tick(&mut state, &[]);
+        }
+        assert!(!state.world.has_chunk(chunk.x, chunk.z), "{block}");
+        assert!(state.world.load_error(chunk).is_some(), "{block}");
+    }
+}

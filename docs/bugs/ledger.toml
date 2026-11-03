@@ -1775,7 +1775,8 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#JUKEBOX-HYDRATE-PANIC"
-regression = []
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks"]
+failing_first = "reported"
 
 [[bug]]
 id = "DISPENSER-MINECART-VARIANTS"
@@ -1795,7 +1796,8 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHELF-HYDRATE-PANIC"
-regression = []
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks"]
+failing_first = "reported"
 
 [[bug]]
 id = "CRAFTER-HYDRATE-PANIC"
@@ -1805,7 +1807,8 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CRAFTER-HYDRATE-PANIC"
-regression = []
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks"]
+failing_first = "reported"
 
 [[bug]]
 id = "VILLAGER-CURE-SPEEDUP"
@@ -1875,7 +1878,8 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONDUIT-RUNTIME-PANIC"
-regression = []
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks"]
+failing_first = "reported"
 
 [[bug]]
 id = "BEACON-RUNTIME-PANIC"
@@ -1885,7 +1889,8 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BEACON-RUNTIME-PANIC"
-regression = []
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks"]
+failing_first = "reported"
 
 [[bug]]
 id = "SHRIEKER-HYDRATE-PANIC"
@@ -1895,7 +1900,8 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHRIEKER-HYDRATE-PANIC"
-regression = []
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks"]
+failing_first = "reported"
 
 [[bug]]
 id = "GOAT-RAM-ABSENT"

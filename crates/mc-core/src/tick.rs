@@ -1266,6 +1266,9 @@ fn run_dimension_tick_inner<'a>(
     TickTimes,
 ) {
     let input_start = std::time::Instant::now();
+    // Chunks already resident on entry must be validated before vibration and
+    // input systems can hydrate or otherwise inspect their block entities.
+    sync_chunk_block_entities(state);
     refresh_player_attributes(state, false);
     // False while `/tick freeze` holds the world: only players, input, chunk
     // loading and merge/commit run; see `tick_control`.
