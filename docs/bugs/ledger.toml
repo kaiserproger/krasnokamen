@@ -1232,7 +1232,7 @@ repro = "source"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P2"
-regression = []
+regression = ["cargo:mc-edge:configuration::tests::optional_pack_decline_completes_configuration"]
 
 [[bug]]
 id = "P3"
@@ -1421,9 +1421,10 @@ title = "Parked B16 WIP honors max_command_sequence_length=0 literally, then rej
 area = "gameplay"
 repro = "source"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COMMAND-ZERO-BUDGET-LOCKOUT"
 regression = ["cargo:mc-core:command_context::tests::command_parity_zero_sequence_budget_still_admits_one_root_command"]
+failing_first = "reported"
 
 [[bug]]
 id = "DATAPACK-ENABLE"

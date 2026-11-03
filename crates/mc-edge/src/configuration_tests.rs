@@ -501,3 +501,64 @@ async fn serverops_required_pack_is_loaded_before_finish_configuration() {
         .unwrap();
     assert!(task.await.unwrap().is_ok());
 }
+
+#[tokio::test]
+async fn optional_pack_decline_completes_configuration() {
+    use mc_protocol::packets::configuration::ServerboundResourcePack;
+    use mc_protocol::packets::resource_pack::ResourcePackPush;
+    use mc_protocol::packets::{ResourcePackAction, ResourcePackStatus};
+
+    let (mut client, mut server) = loopback_pair().await;
+    let task = tokio::spawn(async move {
+        let pack = crate::config::ResourcePackSection {
+            url: "https://example.org/pack.zip".into(),
+            required: false,
+            ..Default::default()
+        };
+        super::handle_configuration(&mut server, &test_data(), &test_tags(), None, false, &pack)
+            .await
+    });
+    client
+        .read_frame_in(mc_protocol::State::Configuration)
+        .await
+        .unwrap();
+    let frame = client
+        .read_frame_in(mc_protocol::State::Configuration)
+        .await
+        .unwrap();
+    let packs = ClientboundKnownPacks::decode(&mut frame.body.clone()).unwrap();
+    client
+        .send_packet(&ServerboundKnownPacks { packs: packs.packs })
+        .await
+        .unwrap();
+    let pack = loop {
+        let frame = client
+            .read_frame_in(mc_protocol::State::Configuration)
+            .await
+            .unwrap();
+        assert_ne!(frame.id, FinishConfiguration::ID);
+        if frame.id == ResourcePackPush::ID {
+            break ResourcePackPush::decode(&mut frame.body.clone()).unwrap();
+        }
+    };
+    assert!(!pack.required);
+    client
+        .send_packet(&ServerboundResourcePack {
+            status: ResourcePackStatus {
+                id: pack.id,
+                action: ResourcePackAction::Declined,
+            },
+        })
+        .await
+        .unwrap();
+    let frame = client
+        .read_frame_in(mc_protocol::State::Configuration)
+        .await
+        .unwrap();
+    assert_eq!(frame.id, FinishConfiguration::ID);
+    client
+        .send_packet(&AcknowledgeFinishConfiguration)
+        .await
+        .unwrap();
+    assert!(task.await.unwrap().is_ok());
+}
