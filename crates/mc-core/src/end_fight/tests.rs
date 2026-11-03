@@ -437,6 +437,39 @@ fn peaceful_end_checkpoint_reopens_with_the_same_dragon() {
     let core = crate::Core::open(config(directory.path())).unwrap();
     core.shutdown();
 }
+#[test]
+fn checkpoint_reopens_live_and_dead_dragon_fights() {
+    for killed in [false, true] {
+        let mut state = running();
+        let uuid = state.end_fight.dragon_uuid.unwrap();
+        if killed {
+            let slot = dragon_slot(&state).unwrap();
+            begin_death(&mut state, slot);
+            for _ in 0..200 {
+                death_tick(&mut state, &mut ChangeSet::default(), slot);
+            }
+        } else {
+            state.difficulty = crate::survival::Difficulty::Peaceful;
+            run_tick(&mut state, &[]);
+        }
+        let directory = tempfile::tempdir().unwrap();
+        native_fixture(&state, directory.path());
+        drop(state);
+        let config = config(directory.path());
+        let core = crate::Core::open(config.clone()).unwrap();
+        assert!(core.checkpoint());
+        core.shutdown();
+        let restored = crate::core::recover_dimension_state(&config, Dimension::End).unwrap();
+        assert_eq!(restored.end_fight.dragon_killed, killed);
+        if killed {
+            assert_eq!(restored.end_fight.dragon_uuid, None);
+            assert!(restored.entities.slot_of_uuid(uuid).is_none());
+        } else {
+            assert_eq!(restored.end_fight.dragon_uuid, Some(uuid));
+            assert!(restored.entities.slot_of_uuid(uuid).is_some());
+        }
+    }
+}
 
 #[test]
 fn native_metadata_uses_measured_26_1_keys_and_rejects_malformed_phase_beam() {

@@ -476,6 +476,7 @@ fn death_tick(state: &mut TickState, changes: &mut ChangeSet, slot: EntitySlot) 
         crate::end_portals::create_gateway(state, changes, index);
     }
     state.end_fight.dragon_killed = true;
+    state.end_fight.dragon_uuid = None;
     state.end_fight.previously_killed = true;
     state.end_fight.healing_crystal = None;
 }

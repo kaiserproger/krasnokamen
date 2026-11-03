@@ -790,7 +790,8 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#END-RESTART"
-regression = []
+regression = ["cargo:mc-core:end_fight::tests::checkpoint_reopens_live_and_dead_dragon_fights"]
+failing_first = "reported"
 
 [[bug]]
 id = "ENTITY-BODY-PANIC"

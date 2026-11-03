@@ -3938,6 +3938,8 @@ images and the all-world native checkpoint. The converter emits the measured
 namespaced extension on offline export. Native records preserve exact tick
 authority; corrupt fields, contradictory projections, missing crystal/dragon
 records and multipart ID collisions fail startup closed.
+The completed dragon death transition clears its UUID when removing the body;
+the killed fight checkpoints without a dangling dragon identity.
 
 Player NBT records canonical `Dimension` and `respawn.dimension`; child captures
 and dimension-enveloped journal entries share one tick and one all-world native
