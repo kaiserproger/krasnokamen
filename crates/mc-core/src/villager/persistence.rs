@@ -372,6 +372,7 @@ pub(crate) fn journal_eq(left: &VillagerState, right: &VillagerState) -> bool {
         household,
         birth_origin,
         birth_sequence,
+        trade_seed,
         courtship_started_tick,
         wandering,
         despawn_at,
@@ -418,6 +419,7 @@ pub(crate) fn journal_image(state: &VillagerState) -> VillagerState {
         household: state.household.clone(),
         birth_origin: state.birth_origin.clone(),
         birth_sequence: state.birth_sequence,
+        trade_seed: state.trade_seed,
         courtship_started_tick: state.courtship_started_tick,
         wandering: state.wandering,
         despawn_at: state.despawn_at,
@@ -743,6 +745,9 @@ pub(crate) fn villager_to_fields(
     if let Some(sequence) = state.birth_sequence {
         // NBT Long is a signed carrier; preserve all u64 identity bits.
         runtime.push(("birth_sequence".into(), Tag::Long(sequence as i64)));
+    }
+    if let Some(seed) = state.trade_seed {
+        runtime.push(("trade_seed".into(), Tag::Long(seed as i64)));
     }
     if let Some(tag) = progress_to_tag(&state.mining_progress, "SolarisMiningProgress")? {
         runtime.push(("SolarisMiningProgress".into(), tag));
@@ -1129,6 +1134,9 @@ pub(crate) fn villager_from_fields(
     }
     if field(runtime, "birth_sequence")?.is_some() {
         state.birth_sequence = Some(long(runtime, "birth_sequence", 0)? as u64);
+    }
+    if field(runtime, "trade_seed")?.is_some() {
+        state.trade_seed = Some(long(runtime, "trade_seed", 0)? as u64);
     }
     if field(runtime, "partner")?.is_some() {
         state.partner = Some(EntityId(integer(runtime, "partner", 0)?));

@@ -145,16 +145,20 @@ pub fn reputation(state: &VillagerState, customer: Uuid) -> i32 {
         })
 }
 
-/// Deterministic per-villager seed: stable across reopen (offers persist),
-//  distinct across villagers (birth key + profession + level).
-fn villager_seed(state: &VillagerState) -> u64 {
-    let mut seed = state
-        .birth_sequence
-        .unwrap_or(0)
-        .wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    seed ^= state.xp as u64;
-    seed ^= state.gossips.len() as u64 * 0xBF58_476D_1CE4_E5B9;
-    seed ^ (state.data.level as u64).wrapping_mul(0x94D0_49BB_1331_11EB)
+/// Derive and retain the offer seed from the villager's durable entity UUID.
+pub(crate) fn ensure_seed(state: &mut VillagerState, uuid: Uuid) {
+    let bits = uuid.as_u128();
+    state
+        .trade_seed
+        .get_or_insert(bits as u64 ^ (bits >> 64) as u64);
+}
+
+fn villager_seed(state: &VillagerState, level: u8) -> u64 {
+    let mut seed = state.trade_seed.or(state.birth_sequence).unwrap_or(0)
+        ^ u64::from(level).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    seed = (seed ^ (seed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    seed = (seed ^ (seed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    seed ^ (seed >> 31)
 }
 
 fn unlock(state: &mut VillagerState, registry: &CoreRegistry, level: u8) {
@@ -171,23 +175,27 @@ fn unlock(state: &mut VillagerState, registry: &CoreRegistry, level: u8) {
     // Vanilla selects up to two offers sampled from the level pool, not the
     // first two catalog rows. Deterministic per-villager seed keeps reopen
     // stability (rolled offers persist on the entity).
-    let mut order: Vec<usize> = (0..pool.len()).collect();
-    let mut seed = villager_seed(state);
+    let librarian_book = profession.name() == "librarian" && level < 5;
+    let mut order: Vec<usize> = (0..pool.len() + usize::from(librarian_book)).collect();
+    let mut seed = villager_seed(state, level);
     for i in (1..order.len()).rev() {
         seed = seed
             .wrapping_mul(0x5851_f42d_4c95_7f2d)
             .wrapping_add(0x1405_7eb5_4dff_3b2b);
         order.swap(i, (seed >> 33) as usize % (i + 1));
     }
-    // Two offers per career level; a librarian's seeded book is one of them.
-    let librarian = profession.name() == "librarian";
-    let budget = if librarian { 1 } else { 2 };
     let mut added = 0;
     for index in order {
-        let spec = &pool[index];
-        if added == budget || state.offers.len() >= 10 {
+        if added == 2 || state.offers.len() >= 10 {
             break;
         }
+        if index == pool.len() {
+            let before = state.offers.len();
+            add_librarian_book(state, registry, level);
+            added += usize::from(state.offers.len() != before);
+            continue;
+        }
+        let spec = &pool[index];
         let (Some(a), Some(result)) = (
             registry.items.id_of(&spec.cost_a.item),
             registry.items.id_of(&spec.result_item),
@@ -224,13 +232,6 @@ fn unlock(state: &mut VillagerState, registry: &CoreRegistry, level: u8) {
         }
         state.offers.push(candidate);
         added += 1;
-    }
-    // Librarian enchanted books (vanilla book trade family): one seeded book
-    // offer per career level with a valid stored enchantment, emerald +
-    // ordinary-book payment and tiered pricing. Excludes Soul Speed, Swift
-    // Sneak and Wind Burst per the trade contract.
-    if librarian {
-        add_librarian_book(state, registry, level);
     }
 }
 
@@ -272,15 +273,26 @@ fn add_librarian_book(state: &mut VillagerState, registry: &CoreRegistry, level:
         ("luck_of_the_sea", 3, 3),
         ("lure", 3, 3),
         ("frost_walker", 2, 2),
+        ("binding_curse", 1, 1),
+        ("vanishing_curse", 1, 1),
+        ("density", 5, 5),
+        ("breach", 4, 4),
+        ("lunge", 3, 3),
     ];
-    let seed =
-        villager_seed(state).wrapping_add(u64::from(level).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+    let seed = villager_seed(state, level).wrapping_add(0x9E37_79B9_7F4A_7C15);
     let (name, _weight, max) = POOL[(seed >> 17) as usize % POOL.len()];
     let book_level = 1 + (seed >> 41) as i32 % max.max(1);
     let book_level = book_level.clamp(1, max);
-    // Tiered emerald price by enchantment level (vanilla 2-64 range shape):
-    // base 2 + level-scaled cost, capped like the wiki tables.
-    let price = (5 + 3 * book_level + (level as i32 - 1) * 2).clamp(2, 64);
+    // Java EnchantBookForEmeralds: random bound 5 + 10 * level, plus
+    // 2 + 3 * level, doubled for the treasure enchantment tag, capped at 64.
+    let mut price = 2 + ((seed >> 29) % (5 + 10 * book_level) as u64) as i32 + 3 * book_level;
+    if matches!(
+        name,
+        "mending" | "frost_walker" | "binding_curse" | "vanishing_curse"
+    ) {
+        price *= 2;
+    }
+    price = price.min(64);
     let (Some(emerald), Some(book), Some(enchanted)) = (
         registry
             .items
@@ -313,7 +325,7 @@ fn add_librarian_book(state: &mut VillagerState, registry: &CoreRegistry, level:
         uses: 0,
         max_uses: 12,
         reward_exp: true,
-        xp: 10,
+        xp: [1, 5, 10, 15, 30][usize::from(level.saturating_sub(1).min(4))],
         special_price: 0,
         demand: 0,
         price_multiplier: 0.2,

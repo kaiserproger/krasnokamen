@@ -1087,6 +1087,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                     distance(state.entities.pos(slot), centre(p)) <= JOB_SITE_REACH_SQUARED
                 })
             {
+                super::trades::ensure_seed(&mut v, state.entities.row(slot).uuid);
                 decision_phase!(
                     cache,
                     6,

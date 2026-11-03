@@ -134,6 +134,35 @@ fn offer_sampling_reaches_beyond_first_two_catalog_rows() {
 }
 
 #[test]
+fn mending_book_uses_treasure_trade_price() {
+    let registry = registry();
+    let mut found = false;
+    for birth in 0..1000 {
+        let mut villager = VillagerState::default();
+        villager.data.profession = VillagerProfession::Librarian;
+        villager.birth_sequence = Some(birth);
+        unlock(&mut villager, &registry, 1);
+        for offer in &villager.offers {
+            if offer
+                .result
+                .extended()
+                .stored_enchantments
+                .iter()
+                .any(|enchantment| enchantment.id.as_str() == "minecraft:mending")
+            {
+                found = true;
+                assert!(
+                    (10..=38).contains(&offer.cost_a.count),
+                    "mending price: {}",
+                    offer.cost_a.count
+                );
+            }
+        }
+    }
+    assert!(found, "mending must be reachable");
+}
+
+#[test]
 fn librarian_unlock_adds_enchanted_book_offer() {
     // LIBRARIAN-ENCHANTED-BOOKS: generated librarians sell enchanted books.
     let registry = registry();

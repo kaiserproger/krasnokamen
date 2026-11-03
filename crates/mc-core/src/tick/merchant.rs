@@ -175,7 +175,9 @@ pub(super) fn open(
         return true;
     }
     let registry = Arc::clone(&state.registry);
+    let uuid = state.entities.row(slot).uuid;
     if let Some(villager) = state.entities.row_mut(slot).villager.as_mut() {
+        trades::ensure_seed(villager, uuid);
         trades::generate(villager, &registry);
     }
     if crate::maps::trades::before_open(state, merchant, connection, hand) {
@@ -567,11 +569,8 @@ fn close(
     apply_player_effects(state, connection, player, effects, changes);
 }
 
-/// Close every open customer menu on `merchant` (damage response). Queues
-/// the close through a synthetic ChangeSet merge: implemented by marking the
-/// merchant unavailable for one maintenance pass is wrong (health unchanged),
-/// so close directly here.
-pub(crate) fn close_for(state: &mut TickState, merchant: EntityId) {
+/// Close customers of a damaged merchant and retain any spawned refund drops.
+pub(crate) fn close_for(state: &mut TickState, merchant: EntityId, spawned: &mut Vec<EntityId>) {
     let customers: Vec<_> = state
         .players
         .iter()
@@ -586,16 +585,12 @@ pub(crate) fn close_for(state: &mut TickState, merchant: EntityId) {
     if customers.is_empty() {
         return;
     }
-    // Direct menu close without a ChangeSet: reuse the ordinary close path
-    // through a throwaway ChangeSet, then publish its player changes.
+    // The damage merge owns spawned-entity publication.
     let mut changes = crate::boundary::ChangeSet::default();
     for (player, connection) in customers {
         close(state, player, connection, &mut changes);
     }
-    // Publish spawned/dropped custody from the closes is unnecessary (close
-    // returns inputs); entity removals never occur here. Player changes were
-    // already pushed inside close().
-    let _ = changes;
+    spawned.extend(changes.entities_spawned);
 }
 
 /// Called after villager AI. Close invalid customers and refresh result/offers

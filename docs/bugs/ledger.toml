@@ -393,9 +393,10 @@ title = "An inflated trade's demand cannot recover when the player stops using t
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#VILLAGER-DEMAND-RECOVERY"
 regression = ["cargo:mc-core:villager::trades::tests::unused_offer_demand_recovers_on_work_restock"]
+failing_first = "reported"
 
 [[bug]]
 id = "VILLAGER-LEVEL-REGENERATION"
@@ -414,9 +415,10 @@ title = "A nonlethal hit leaves a living, in-reach merchant menu open and usable
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MERCHANT-HURT-CLOSE"
-regression = []
+regression = ["cargo:mc-core:tick::merchant::tests::nonlethal_environmental_damage_closes_merchant_menu"]
+failing_first = "reported"
 
 [[bug]]
 id = "VILLAGER-OFFER-SELECTION"
@@ -424,9 +426,10 @@ title = "Fresh villagers always receive the first two catalog entries at each le
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#VILLAGER-OFFER-SELECTION"
-regression = ["cargo:mc-core:villager::trades::tests::offer_sampling_reaches_beyond_first_two_catalog_rows"]
+regression = ["cargo:mc-core:tick::merchant::tests::spawned_farmers_sample_distinct_novice_offers", "cargo:mc-core:villager::trades::tests::offer_sampling_reaches_beyond_first_two_catalog_rows"]
+failing_first = "reported"
 
 [[bug]]
 id = "LIBRARIAN-ENCHANTED-BOOKS"
@@ -434,9 +437,10 @@ title = "Naturally generated librarians cannot sell any enchanted book at any ca
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LIBRARIAN-ENCHANTED-BOOKS"
-regression = ["cargo:mc-core:villager::trades::tests::librarian_unlock_adds_enchanted_book_offer"]
+regression = ["cargo:mc-core:villager::trades::tests::librarian_unlock_adds_enchanted_book_offer", "cargo:mc-core:villager::trades::tests::mending_book_uses_treasure_trade_price"]
+failing_first = "reported"
 
 [[bug]]
 id = "CUSTOM-FOOD-CONSUME-EFFECTS"

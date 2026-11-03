@@ -105,6 +105,72 @@ fn offer_uses(state: &TickState, merchant: EntityId) -> i32 {
 }
 
 #[test]
+fn spawned_farmers_sample_distinct_novice_offers() {
+    let (mut state, player, merchant) = fixture();
+    let first = state.entities.slot_of(merchant).unwrap();
+    let position = state.entities.pos(first);
+    let type_id = state
+        .registry
+        .entity_types
+        .id_of(&Identifier::parse("minecraft:villager").unwrap())
+        .unwrap();
+    let mut seen = std::collections::BTreeSet::new();
+    for _ in 0..24 {
+        let id = state.spawn_mob(type_id, position, 20.0);
+        let slot = state.entities.slot_of(id).unwrap();
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .data
+            .profession = VillagerProfession::Farmer;
+        let mut changes = ChangeSet::default();
+        assert!(open(
+            &mut state,
+            player,
+            id,
+            ConnectionId(1),
+            Hand::Main,
+            &mut changes
+        ));
+        let offers = &state.entities.row(slot).villager.as_ref().unwrap().offers;
+        assert_eq!(offers.len(), 2);
+        for offer in offers {
+            seen.insert((offer.cost_a.item_id, offer.result.item_id));
+        }
+        close(&mut state, player, ConnectionId(1), &mut changes);
+    }
+    assert!(
+        seen.len() > 2,
+        "spawned farmers always received the same offers: {seen:?}"
+    );
+}
+
+#[test]
+fn nonlethal_environmental_damage_closes_merchant_menu() {
+    let (mut state, player, merchant) = fixture();
+    interact(&mut state, merchant);
+    assert!(state.players[&player].open.is_some());
+    let slot = state.entities.slot_of(merchant).unwrap();
+    state.entities.row_mut(slot).protected_until = 0;
+    state.merge_damage.push((
+        slot,
+        crate::tick::DamagePiece {
+            amount: 1.0,
+            kind: crate::survival::DamageKind::Lava,
+            source: None,
+            physical: None,
+            custom_armor: false,
+        },
+    ));
+    state.commit_merge_effects();
+    assert!(state.entities.row(slot).health > 0.0);
+    assert!(state.players[&player].open.is_none());
+}
+
+#[test]
 fn leveling_trade_grants_merchant_regeneration() {
     // VILLAGER-LEVEL-REGENERATION through the existing menu click path: a
     // level-up trade must leave Regeneration on the merchant entity row.

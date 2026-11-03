@@ -659,6 +659,9 @@ impl TickState {
                 if !killed {
                     crate::entity_loot::restore(self, slot);
                 }
+                if self.entities.row(slot).villager.is_some() {
+                    crate::tick::merchant::close_for(self, id, &mut spawned);
+                }
                 if villager {
                     crate::villager::brain::harmed(self, id, player_hit, killed);
                 }

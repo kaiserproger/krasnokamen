@@ -47,6 +47,7 @@ fn fixture(items: &ItemRegistry) -> VillagerState {
             40,
         )),
         birth_sequence: Some(40 * 65_536 + 1),
+        trade_seed: Some(0xfedc_ba98_7654_3210),
         courtship_started_tick: Some(100),
         data: VillagerData {
             kind: VillagerKind::Snow,

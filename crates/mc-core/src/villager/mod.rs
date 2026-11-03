@@ -356,6 +356,8 @@ pub struct VillagerState {
     /// Stable monotonic birth key `birth_tick * 65536 + same-tick ordinal`;
     /// None for spawned/converted villagers. Survives removals and restarts.
     pub birth_sequence: Option<u64>,
+    /// Stable per-entity seed for career offer selection.
+    pub(crate) trade_seed: Option<u64>,
     pub courtship_started_tick: Option<u64>,
     pub wandering: bool,
     pub despawn_at: Option<u64>,
@@ -448,6 +450,7 @@ impl Default for VillagerState {
             household: None,
             birth_origin: None,
             birth_sequence: None,
+            trade_seed: None,
             courtship_started_tick: None,
             wandering: false,
             despawn_at: None,

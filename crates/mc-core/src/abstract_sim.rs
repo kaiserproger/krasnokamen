@@ -194,12 +194,14 @@ fn restock(state: &mut TickState, slot: EntitySlot, chunk: ChunkPos, elapsed: u6
     let first_day = start_day.saturating_add(first_offset as i64);
     let last_offset =
         (elapsed - 1).min(first_offset + (8999 - first_day.rem_euclid(24_000)) as u64);
+    let uuid = state.entities.row(slot).uuid;
     let v = state
         .entities
         .row_mut(slot)
         .villager
         .as_mut()
         .expect("resident villager");
+    crate::villager::trades::ensure_seed(v, uuid);
     crate::villager::trades::work(
         v,
         &state.registry,

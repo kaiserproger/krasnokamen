@@ -132,12 +132,14 @@ pub(crate) fn load(state: &mut TickState, chunks: &[ChunkPos], changes: &mut Cha
             state
                 .entities
                 .set_rot(slot, marker.yaw, marker.pitch.clamp(-90.0, 90.0));
+            let uuid = state.entities.row(slot).uuid;
             let villager = state
                 .entities
                 .row_mut(slot)
                 .villager
                 .as_mut()
                 .expect("villager blueprint");
+            super::trades::ensure_seed(villager, uuid);
             villager.data.kind = kind;
             villager.data.profession = profession;
             villager.data.level = marker.level.clamp(1, 5);
