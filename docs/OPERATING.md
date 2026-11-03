@@ -2,8 +2,8 @@
 
 The current binary is `solaris-v2` (`mc-edge` + `mc-core`). Start from
 [`example.toml`](../example.toml). This guide covers the native runtime after
-[ADR 0014](decisions/0014-v1-core-retirement.md), not the published historical
-v0.0.7 preliminary binary.
+[ADR 0014](decisions/0014-v1-core-retirement.md), not a published historical
+v0.0.7 preliminary binary (archived in [ARCHIVE.md](archive/ARCHIVE.md)).
 
 ```sh
 cargo run -p mc-edge --bin solaris-v2 -- --config example.toml
@@ -222,6 +222,11 @@ a join or the operator's disconnect resumes the world. Network keepalives,
 checkpoints and shutdown remain serviced while paused. This is distinct from
 `/tick freeze`: world tick numbers and tick-based deadlines do not advance.
 
+`/tick freeze` continues processing player inputs and commits while holding
+world simulation. Dropped items do not merge until simulation runs again.
+An allowed `/tick step` runs simulation and can merge items when the existing
+world-tick cadence is due.
+
 `input_log = true` writes, per executed tick, the inputs that tick consumed to
 `<world_dir>/input-log/<start_tick>-<unix_ms>.jsonl` (one file per start): player
 inputs after the drain, synthetic leaves, debug spawns and remote chunk
@@ -398,7 +403,9 @@ sibling `solaris-loader` (`SOLARIS_LOADER_ROOT` selects the owned checkout).
 The driver uses a private copy at `.analysis/prism-26.1.2/minecraft` inside
 that checkout, never the owner's Prism instance. It mints fresh local MCP
 bearer tokens per client; no external credential file is required.
-Fabric is pinned to loader 0.18.5/API 0.149.1+26.1.2; NeoForge to 26.1.2.76.
+Loader pins live in [`tools/harness/dh-artifacts.json`](../tools/harness/dh-artifacts.json)
+(`baseline_loader`: Fabric loader 0.19.3 / API 0.155.2+26.1.2, NeoForge 26.1.2.76);
+that file is the pin owner and this guide does not restate the numbers.
 Client/loader dependency manifests and hashes remain part of the evidence.
 Missing prerequisites and unsuccessful scenario commands fail closed.
 The scenario must compare independently clean DH caches with server DH
@@ -649,6 +656,10 @@ and native spam policy. Command text keeps its 32,767-unit wire bound rather
 than chat's 256-unit bound. `/msg`, `/tell` and `/w` support named recipients in
 other dimensions; `/teammsg` (`/tm`) delivers only to authenticated members of
 the sender's scoreboard team, including other dimensions.
+Where command permissions allow selector expansion in `/say`, `/me`, private
+messages and team messages, selected mobs display their custom names or
+client-translated entity names; selected players display their player names.
+An unmatched selector expands to an empty message fragment.
 
 Chat remains **unsigned system chat** (`enforces_secure_chat = false`).
 Signed-command metadata and chat-session updates are bounded and decoded, but
@@ -958,6 +969,10 @@ and provide page-dependent comparator output plus a two-tick page-turn pulse.
 `/setblock` and fill placement accept block-entity SNBT, including container `Items`;
 supplied data replaces the target's native storage, including when the block state
 itself is unchanged. Position and block-entity identity come from the placement.
+For placement with supplied block-entity data, connected viewers receive the
+block state before its block-entity update.
+Command-installed opaque block-entity data survives the block replacement
+boundary instead of being cleared by stale sign cleanup.
 `/clone` supports replace, masked and block-predicate filtered copies, with normal,
 force and move overlap modes. Region comparisons use `execute if|unless blocks`
 with `all` or `masked`. Regions must be loaded and obey the block-modification limit.

@@ -7,6 +7,23 @@ run on this machine, in the serialized `mem-run.sh -p` lane (CPUs 8-11 = 2 physi
 The failure is a checkpoint-driven tick stall that sheds connections, not CPU saturation.
 Numbers are single runs per cell; there is no variance estimate. Not a VPS or 16-core claim.
 
+## Current bot accounting
+
+This section describes the current harness, not a remeasurement of the historical
+results below. Assisted bots select landings only on received walkable full-height
+support and check their received ground again before Ready. Missing ground fails
+readiness. For an edit offer, the bot inspects four candidate directions; it does
+not replay missed slots or count packet writes as completed world edits.
+
+Final open-loop reports include per-bot `edit_windows` with offered, admitted,
+`writes_completed`, observed `completed`, and dropped counts. The accompanying
+`edit_unavailable` distinguishes dead/respawning, edits disabled, not creative,
+no eligible candidate, and an already pending cell; capacity and late drops are
+separate. Edit completion means a matching received block update, not exclusive
+attribution or a full-chunk readback. Movement has no completion oracle. Analyze
+each bot as well as totals: aggregate throughput can hide a starved client.
+
+
 ## Environment
 
 - AMD Ryzen 5 7535HS (6 cores / 12 threads, L2 3 MiB, L3 16 MiB), 30 GiB RAM + 8 GiB swap,

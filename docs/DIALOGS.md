@@ -41,6 +41,15 @@ button's `.with(..)` additions plus one entry per input, typed exactly as vanill
 (text and single_option → String, boolean → Byte, number_range → Float). Read it with
 `ClickPayload(payload).string/bool/float(key)`.
 
+`.text(..)` takes any text component, not only a string. Vanilla renders `plain_message` with a
+`FocusableTextWidget` that shows `show_text` hovers and runs click events (26.1.2
+`DialogBodyHandlers.PlainMessageHandler`); a `custom` click event (`id` + optional `payload`)
+arrives as the same `custom_click_action` as a button, with the payload compound as written.
+The settlement map (`settlements/ui_map.rs`) uses this: a grid of coloured `█` runs (8×8 glyph,
+9-pixel advance and line height, so square cells) with a hover per run and a click on buildings.
+The native Solaris client follows the same handler: centered lines, `hover_event` tooltips, and a
+run's `custom` (typed payload) or `run_command` click followed by the dialog's `after_action`.
+
 ## Where a click arrives
 
 `PlayerInput::DialogClick` is applied in the native tick (`tick::apply_inputs`, behind the

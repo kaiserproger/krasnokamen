@@ -146,6 +146,9 @@ Negative:
   when possible; disk and wire repack to their minimum four-bit representation
   without changing state values. The 256-to-257-state direct-wire boundary and
   projected palette encoding have independent decoder regressions.
+  Direct block palettes use the supplied registry's state-count width: 15 bits
+  for 26.1.2 and 16 for the local 26.3 registry. An encoder regression covers
+  projected IDs above 32767; this is not an actual-client compatibility gate.
   The same 1,811 stored chunks measured 100,825,603→42,859,987 requested live
   bytes (57.5% less) with the frozen versus compact builds. Both released to
   244 bytes after world drop while RSS retained its high-water allocation.

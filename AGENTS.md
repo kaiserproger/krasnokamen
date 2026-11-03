@@ -59,13 +59,16 @@ python3 -m tools.harness list
 python3 -m tools.harness run test -p mc-core --lib <filter>  # L0: affected scope
 python3 -m tools.harness run fmt                          # L1, plus focused tests
 python3 -m tools.harness run code-health                  # L1
+python3 -m tools.harness run regressions                  # every integration
 python3 -m tools.harness run correctness                  # L2: major phase/code commit/release
 ```
 
 - On the shared owner machine, wrap heavy Cargo/harness/Gradle commands in
-  `.analysis/tools/mem-run.sh -m 6G <command> ...` for focused work (three shared slots, ≤8G each).
-  Full `test`/`correctness` use `-x -m 12G` per tooling. `-p` is serialized timing/profiling, never builds;
-  `-x` takes all slots for full gates or exclusive acceptance.
+  `.analysis/tools/mem-run.sh -m 6G env RUSTC_WRAPPER= <command> ...` for focused work
+  (no slots or queue: every command starts at once; heavy-watchdog pauses plain cargo builds under real
+  memory pressure and resumes them later, never tests/servers/harness runs; ≤12G each; the global sccache
+  wrapper otherwise compiles outside the cap). Full `test`/`correctness` use `-m 12G`. `-p` is serialized
+  timing/profiling, never builds; `-x` is only a quiet measurement window (pauses builds, waits for running tests/servers).
   Measurement windows require Main's GO on a frozen integrated tree; compare only matching lanes.
   Replace shared runner scripts atomically, never in place; cancel the parent job, not only its children.
 - L0: focused tests plus targeted diff/syntax checks. L1: focused tests, fmt and code-health;
@@ -75,10 +78,13 @@ python3 -m tools.harness run correctness                  # L2: major phase/code
 - Validation identity is command + tree fingerprint + environment + scope: never repeat unchanged green checks.
   After a failure, rerun only the affected gate after a relevant fix. Bug/perf work first records the exact
   command/seed repro in `.analysis/codex-logs/<slug>/`, then fixes and reruns it; cursor links receipts, not raw facts.
+  A failing-first test fails through the existing gameplay path; a compile error in brand-new code is not failing-first.
 - Harness runs own isolated artifacts and server/client/Xvfb lifecycle. Read
   `.analysis/validation/<UTC>-<profile>-<unique>/result.json` (`status`, `commands`, `exits`, `logs`, `details`, `error`).
   `prepared`/`--check`/`--prepare` is not a pass; unknown/unlaunchable/failing commands and timeouts fail closed.
   `code-health` is an architecture tripwire, not behavior/parity/performance proof; structural checks must not compare Rust statement text/order.
+- Bug status and regression checks follow the [bug regression contract](docs/bugs/README.md); a unit test cannot
+  close a known client failure.
 - Actual-client surfaces need actual-client gates (graphical Minecraft under Xvfb, exact scenario + evidence) and a
   separate breaker under the [break-it QA protocol](docs/QA_AGENT_PROTOCOL.md): an attack-matrix pass with repro'd,
   severity-ranked findings before push to `main` or a release tag. A happy-path gate alone is not acceptance; new or
@@ -92,13 +98,14 @@ python3 -m tools.harness run correctness                  # L2: major phase/code
 
 ## Execution and subagents
 
+- **[Agent Constitution](docs/AGENT_CONSTITUTION.md) is binding for every agent and overrides task prompts.**
 - Choose one navigation path: targeted CodeGraph for indexed code; bounded search/read for docs/config/logs or stale/unindexed files.
   Do not reconfirm graph answers with broad searches. Bound paths/output; project JSON and narrow truncated queries.
   Verbose output belongs in ignored `.analysis/codex-logs/`; report status, failures and receipt paths.
 - Long work is event-driven: launch once, continue independent work, consume completion once. Never poll process/status/agent
   lists or use repeated waits. Never add wall-clock sleeps in production, tests, harnesses or tools: wait for the exact
   message, packet, notification, process/world/simulation state; producers wake consumers (push, not pull).
-- Delegate only when owner/runtime authorizes; `quaka-whaka-zaka-du` explicitly authorizes parallel work.
+- No ad-hoc subagents: delegate only when owner/runtime authorizes (`quaka-whaka-zaka-du` authorizes parallel work).
   Larger pipelines require explicit owner permission. Give disjoint responsibilities/write sets; never delegate the immediate blocker then idle.
   No full conversation/history forks: pass bounded task, base commit, paths and evidence contract; close completed agents.
 - Use canonical harness lifecycle/receipts for delegated validation/QA, not hand-rolled tmux/PID/log plumbing or polling.
@@ -122,12 +129,12 @@ python3 -m tools.harness run correctness                  # L2: major phase/code
   Compatibility targets are vanilla protocol and Anvil, not old Solaris storage. Architecture/authority/threading/waiting/
   persistence-order/module-policy changes update the owning ADR; desired migration is not runtime truth.
 - Debug builds by default; `--release` only for an explicitly required performance/release gate.
-  Measured narrow optimization hacks must document bottleneck, boundary, correctness fence, effect and fallback/removal path.
-  Never restore operator worker-thread percentages; derive capacity once and let measured autoscaling move bounded budgets.
-
   Real-client gates run the server from a release build (owner, 2026-10-27): build
   `cargo build --release -p mc-edge --bin solaris-v2` and pass it as `SOLARIS_SERVER_BINARY`;
   a debug server drops to ~10 TPS while a joining player's chunks generate.
+  Measured narrow optimization hacks must document bottleneck, boundary, correctness fence, effect and fallback/removal path.
+  Never restore operator worker-thread percentages; derive capacity once and let measured autoscaling move bounded budgets.
+
 ## Git, local state and sibling repositories
 
 - Never commit/push/publish/merge to main/tag without explicit authorization; preserve hooks/signing.
@@ -144,3 +151,7 @@ python3 -m tools.harness run correctness                  # L2: major phase/code
   no compiled-in package list or `plugins.bundled` compatibility path. Core production builds require neither sibling;
   integration gates require the sibling they exercise. Each sibling owns its README/AGENTS/Git metadata;
   creating it locally never authorizes staging, commits, remotes, pushes or publication.
+
+- New worktrees live under `/run/media/kaiserroman/games/solaris-work/wt/` and heavy outputs under
+  `.../targets/` — nothing new on the root disk. Always use absolute paths in worktrees
+  (a relative path once corrupted the main checkout); never assume cwd.

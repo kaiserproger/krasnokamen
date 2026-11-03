@@ -11,9 +11,11 @@ operator, current dimension, loaded carrier and proximity against published nati
 state. No custom block registry, inventory alias or second world store is needed.
 When disabled, iron blocks retain normal behavior.
 
-A Wasmtime plugin is preferable for gameplay, but the current `solaris:plugin@0.7.0`
-WIT has neither arbitrary Play payload/process spawning nor a block-use callback
-(`world-events.wit` exposes entity interaction). Do not extend guest authority to
+A Wasmtime plugin is preferable for gameplay, but `solaris:plugin@0.8.0`
+(`crates/mc-script/wit/`, `plugin.wit`: `package solaris:plugin@0.8.0`)
+has neither arbitrary Play payload/process spawning nor a block-use callback
+(`world-events.wit` exposes `player-entity-interacted`; block interaction arrives
+only through the `before-build` precommit question). Do not extend guest authority to
 host process execution for this feature. Use a small off-by-default edge service
 and a separate `solaris:computer` Play channel. Existing Loader wire 3 is unchanged.
 

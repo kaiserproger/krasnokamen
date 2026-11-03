@@ -1,0 +1,3100 @@
+# Historical reports require current-tree revalidation before promotion.
+
+[[bug]]
+id = "POTION-CUSTOM-PAYLOAD"
+title = "Lingering potions ignore custom effects and potion impact color ignores its override."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-CUSTOM-PAYLOAD"
+regression = []
+
+[[bug]]
+id = "LINGERING-FRIENDLY-PVP"
+title = "Disabling PvP also disables beneficial lingering potion effects on other players: player A cannot heal or buff player B with a cloud, although self-use and ordinary splash healing remain allowed. A generic pre-effect PvP gate rejects the entire target, not merely harmful damage."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LINGERING-FRIENDLY-PVP"
+regression = ["cargo:mc-core:projectiles::payloads::tests::lingering_healing_cloud_heals_other_player_with_pvp_off"]
+
+[[bug]]
+id = "POTION-TARGET-GEOMETRY"
+title = "Splash and lingering potions miss bodies whose hitboxes overlap their areas while feet lie outside."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-TARGET-GEOMETRY"
+regression = []
+
+[[bug]]
+id = "POTION-MOB-EFFECT-IMMUNITY"
+title = "Species-specific duration-effect immunity is absent: splash Regeneration heals injured undead and Poison can be inserted/ticked on undead or spiders. Effects are added to any living mob without eligibility checks; the generic mob tick executes regeneration/poison without a species input."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-MOB-EFFECT-IMMUNITY"
+regression = ["cargo:mc-core:projectiles::payloads::tests::splash_regeneration_does_not_apply_to_undead"]
+
+[[bug]]
+id = "PEARL-ENDERMITE-SPAWN"
+title = "Player-thrown pearls never spawn endermites, removing the ordinary survival source used to build enderman farms. The complete pearl impact handler only teleports/resets state/damages its owner."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PEARL-ENDERMITE-SPAWN"
+regression = ["cargo:mc-core:projectiles::payloads::tests::pearl_landing_spawns_endermite_on_winning_roll"]
+
+[[bug]]
+id = "EGG-VARIANT-THROW"
+title = "Blue and brown eggs cannot be thrown by players: item-use projectile dispatch recognizes only the ordinary egg and returns false for both newer variants."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#EGG-VARIANT-THROW"
+regression = ["cargo:mc-core:projectiles::weapons::tests::blue_egg_throws_as_ordinary_egg_projectile_and_debits"]
+
+[[bug]]
+id = "THROWABLE-LAUNCH-GEOMETRY"
+title = "Hand-thrown projectiles always originate1.52 blocks above feet regardless of pose, ignore shooter movement, and throw potions directly along aim without their upward bias. Crawling throws originate above the player; sprint-jumping pearls lose their extra range; horizontal splash/lingering throws have the wrong arc. These share one deficient launch-geometry owner."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#THROWABLE-LAUNCH-GEOMETRY"
+regression = ["cargo:mc-core:projectiles::weapons::tests::thrown_snowball_inherits_shooter_motion_and_pose_eye_height"]
+
+[[bug]]
+id = "THROWABLE-ZERO-DAMAGE-HITS"
+title = "Snowballs directly knock Survival players back despite Java26.1.2 immunity; ordinary snowball/egg hits bypass zero-damage target reactions, so they cannot destroy end crystals or provoke neutral mobs by the vanilla hit path. Snowball has a bespoke impulse-only branch; egg only hatches."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#THROWABLE-ZERO-DAMAGE-HITS"
+regression = ["cargo:mc-core:projectiles::payloads::tests::snowball_breaks_end_crystal_through_zero_damage_path"]
+
+[[bug]]
+id = "WATER-BOTTLE-IMPACT"
+title = "Water-bottle impacts omit environmental extinguishing, water-sensitive damage and axolotl rehydration, and lingering water creates an empty cloud."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#WATER-BOTTLE-IMPACT"
+regression = []
+
+[[bug]]
+id = "CAULDRON-POWDER-SNOW-BUCKET"
+title = "Players cannot collect a full powder-snow cauldron into an empty bucket; a powder-snow bucket also has no cauldron fill interaction. Snow collected naturally in a cauldron cannot be harvested."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAULDRON-POWDER-SNOW-BUCKET"
+regression = ["cargo:mc-core:fluids_tests::empty_bucket_collects_full_powder_snow_cauldron_and_refills_it"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "CAULDRON-ITEM-WASHING"
+title = "Water cauldrons cannot remove dye from armor/shulkers or the last banner pattern. Ordinary held-item routing has bottle/bucket exchanges but no washing interaction, so customization cannot be undone by the vanilla method."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAULDRON-ITEM-WASHING"
+regression = ["cargo:mc-core:cauldron_wash_tests::dyed_chestplate_loses_its_color_for_one_water_level", "cargo:mc-core:cauldron_wash_tests::banner_loses_only_its_last_layer_per_use", "cargo:mc-core:cauldron_wash_tests::colored_shulker_washes_to_plain_with_contents_kept"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "CAULDRON-CONTACT-EFFECTS"
+title = "Powder-snow cauldrons fail to extinguish a burning player and become water one level lower."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAULDRON-CONTACT-EFFECTS"
+regression = []
+
+[[bug]]
+id = "DRIPSTONE-RANDOM-TICK"
+title = "Renewable lava farms never fill their cauldrons; water dripstone filling and stalactite/stalagmite growth are likewise absent. Pointed dripstone is classified inert and has only falling-block behavior, not its random-tick resource renewal."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DRIPSTONE-RANDOM-TICK"
+regression = ["cargo:mc-core:farming_tests::dripstone_with_lava_source_fills_the_cauldron_below"]
+
+[[bug]]
+id = "AMETHYST-GROWTH"
+title = "Budding amethyst never creates buds or advances them to harvestable clusters, so cleared geodes cannot renew amethyst shards."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AMETHYST-GROWTH"
+regression = []
+
+[[bug]]
+id = "CAMPFIRE-UNLIT-FOOD"
+title = "Players cannot preload raw food onto an extinguished campfire; every recognized food interaction returns without inserting or consuming anything until the fire is already lit. Vanilla permits food placement while unlit."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAMPFIRE-UNLIT-FOOD"
+regression = ["cargo:mc-core:campfire::tests::unlit_campfires_preload_without_cooking_until_relit"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "CAMPFIRE-PROJECTILE-IGNITION"
+title = "Shooting a dry extinguished campfire with a Flame-bow arrow leaves it unlit instead of relighting it. The burning-arrow impact path handles TNT only, then sticks the arrow without changing the campfire."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAMPFIRE-PROJECTILE-IGNITION"
+regression = []
+
+[[bug]]
+id = "CAMPFIRE-CONTACT-DAMAGE"
+title = "Sneaking incorrectly prevents campfire damage, Frost Walker boots fail to prevent it, and soul campfires inflict the ordinary1 HP instead of2 HP. These are grouped contact-policy defects, not three separate product counts."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAMPFIRE-CONTACT-DAMAGE"
+regression = ["cargo:mc-core:tick_tests::contact_hazards_tests::lit_campfires_hurt_even_while_sneaking_and_unlit_ones_stay_cold", "cargo:mc-core:tick_tests::contact_hazards_tests::frost_walker_boots_prevent_campfire_damage", "cargo:mc-core:tick_tests::contact_hazards_tests::soul_campfires_deal_two_damage_per_hit"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "COMPOSTER-INPUT-TABLE"
+title = "The composter assigns mushroom stems an 85% chance instead of the vanilla 65%."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COMPOSTER-INPUT-TABLE"
+regression = []
+
+[[bug]]
+id = "COMPOSTER-HOPPER-AUTOMATION"
+title = "Automatic composting cannot feed ingredients from a hopper above or extract ready bone meal below; composters never enter the hopper container authority. Manual use working does not cover this path."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COMPOSTER-HOPPER-AUTOMATION"
+regression = []
+
+[[bug]]
+id = "SIGN-EDITOR-DISCONNECT"
+title = "If a player loses connection while the sign editor is open, the unwaxed sign stays owned by their dead connection and other players cannot edit or decorate it without replacing the block/restarting the world."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SIGN-EDITOR-DISCONNECT"
+regression = []
+
+[[bug]]
+id = "SIGN-ADVENTURE-EDIT"
+title = "Adventure players can open and rewrite ordinary unwaxed signs, bypassing vanilla's mayBuild restriction; dye/glow mutation likewise lacks a game-mode gate."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SIGN-ADVENTURE-EDIT"
+regression = []
+
+[[bug]]
+id = "SIGN-BLANK-DECORATION"
+title = "Using dye or a glow ink sac on a blank sign face consumes the item and changes that face's style, although vanilla only applies these items when that face has a nonempty visible message. A written opposite face incorrectly makes no difference to native admission."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SIGN-BLANK-DECORATION"
+regression = []
+
+[[bug]]
+id = "MAP-FRAME-WAYPOINT-PERSISTENCE"
+title = "A framed home-map waypoint disappears from the traveler's held clone once every player moves beyond the frame-view radius, although the frame remains inside the map's represented area. It therefore cannot serve as a distant home waypoint."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-FRAME-WAYPOINT-PERSISTENCE"
+regression = ["cargo:mc-core:tick_tests::maps_tests::framed_waypoints_survive_nbt_roundtrip"]
+
+[[bug]]
+id = "MAP-BANNER-REMOVAL"
+title = "Destroying a marked banner leaves its waypoint on an unlocked map permanently, even after the player revisits with the map and the terrain updates."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-BANNER-REMOVAL"
+regression = []
+
+[[bug]]
+id = "MAP-LOCKED-BANNERS"
+title = "A locked map cannot add/remove banner waypoints at all, although locking freezes terrain pixels rather than disabling vanilla's explicit banner interaction."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-LOCKED-BANNERS"
+regression = []
+
+[[bug]]
+id = "MAP-PUMPKIN-HIDING"
+title = "Wearing a carved pumpkin does not hide the player's marker from other players' cloned maps; all held-map player markers are broadcast without equipment-aware recipient filtering."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-PUMPKIN-HIDING"
+regression = []
+
+[[bug]]
+id = "MAP-TERRAIN-SHADING"
+title = "Maps render every visible base color at one constant brightness, losing height contours and water-depth shading. Stair-stepped map art and shallow/deep water with the same base color become indistinguishable."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-TERRAIN-SHADING"
+regression = []
+
+[[bug]]
+id = "MAP-NETHER-TERRAIN"
+title = "Nether maps use the ordinary top-block sampler, so they map the physical bedrock roof/roof builds instead of vanilla's ceiling-dimension noise pattern."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-NETHER-TERRAIN"
+regression = []
+
+[[bug]]
+id = "MAP-INVENTORY-PLAYER-MARKERS"
+title = "A teammate carrying a cloned map in an ordinary inventory slot disappears from the observer's map until they actively hold it, breaking vanilla multiplayer map tracking while the teammate uses tools."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-INVENTORY-PLAYER-MARKERS"
+regression = []
+
+[[bug]]
+id = "MAP-FRAME-AUTO-EXPLORE"
+title = "A framed, unlocked map refreshes terrain without any player holding that map or a clone. Merely standing near a wall map can overwrite its captured terrain or reveal unexplored pixels, unlike vanilla's held-map exploration requirement."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-FRAME-AUTO-EXPLORE"
+regression = []
+
+[[bug]]
+id = "ITEM-FRAME-PROJECTILE-CONTENTS"
+title = "Shooting an occupied item frame with an ordinary arrow destroys both the frame and its display, whereas vanilla ejects only the displayed item on the first non-explosive hit and leaves the frame attached."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-PROJECTILE-CONTENTS"
+regression = []
+
+[[bug]]
+id = "ITEM-FRAME-CELL-COEXISTENCE"
+title = "A valid wall-mounted frame cannot share its block cell with floor redstone dust; placing dust after a frame also invalidates it. Destination admission uses block-replacement eligibility instead of geometric coexistence, preventing ordinary redstone/display layouts even with full stone support."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-CELL-COEXISTENCE"
+regression = []
+
+[[bug]]
+id = "ITEM-FRAME-ADVENTURE-BREAK"
+title = "Adventure players cannot punch an item out of a frame or break the empty frame, blocking map interactions that vanilla permits. The frame-specific handler explicitly returns before either action for Adventure."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-ADVENTURE-BREAK"
+regression = []
+
+[[bug]]
+id = "ARMOR-STAND-PROJECTILE-BREAK"
+title = "A low-damage ordinary arrow or unenchanted thrown trident subtracts generic health from an armor stand instead of immediately breaking it, so a fresh stand can survive a projectile that vanilla always destroys it with."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMOR-STAND-PROJECTILE-BREAK"
+regression = ["cargo:mc-core:armor_stand::tests::weak_arrow_breaks_stand_outright"]
+
+[[bug]]
+id = "ARMOR-STAND-POTION-IMMUNITY"
+title = "Ordinary splash potions incorrectly affect armor stands: direct Harming produces magic damage and duration potions are inserted into the stand's active-effect set, although Java stands ignore ordinary potion sources."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMOR-STAND-POTION-IMMUNITY"
+regression = ["cargo:mc-core:armor_stand::tests::splash_potion_ignores_stand_but_hits_cow"]
+
+[[bug]]
+id = "ARMOR-STAND-TOOL-WEAR"
+title = "Breaking armor stands with an ordinary tool costs no tool durability: the stand-specific melee handler exits before the ordinary held-item attack pipeline and performs no held-stack mutation of its own."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMOR-STAND-TOOL-WEAR"
+regression = []
+
+[[bug]]
+id = "ITEM-FRAME-SUPPORT"
+title = "Normal/glow item frames reject valid partial-block supports because attachment requires an entirely covered collision face; ordinary storage-label/decorative placement on chest/slab/fence sides is unavailable. The same over-strict rule also governs support invalidation."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-SUPPORT"
+regression = []
+
+[[bug]]
+id = "ITEM-FRAME-ROTATION-MEMORY"
+title = "Punching an item out of its surviving frame resets rotation to zero, so the next inserted item loses the frame's previous orientation and comparator setting. Vanilla retains that orientation while the frame remains placed."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-ROTATION-MEMORY"
+regression = ["cargo:mc-core:item_frame::tests::frame_punch_keeps_rotation_for_next_item"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "VILLAGER-DEMAND-RECOVERY"
+title = "An inflated trade's demand cannot recover when the player stops using that offer and buys another: restock changes demand only for offers whose uses are positive. Unused offers retain their inflated prices indefinitely across otherwise successful work restocks."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#VILLAGER-DEMAND-RECOVERY"
+regression = ["cargo:mc-core:villager::trades::tests::unused_offer_demand_recovers_on_work_restock"]
+
+[[bug]]
+id = "VILLAGER-LEVEL-REGENERATION"
+title = "An injured villager gains a career level and new offers but receives no level-up Regeneration, losing the vanilla trading-based healing route."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#VILLAGER-LEVEL-REGENERATION"
+regression = ["cargo:mc-core:tick::merchant::tests::leveling_trade_grants_merchant_regeneration"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "MERCHANT-HURT-CLOSE"
+title = "A nonlethal hit leaves a living, in-reach merchant menu open and usable; the merchant remains treated as busy rather than ending the transaction as vanilla requires."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MERCHANT-HURT-CLOSE"
+regression = []
+
+[[bug]]
+id = "VILLAGER-OFFER-SELECTION"
+title = "Fresh villagers always receive the first two catalog entries at each level instead of choosing from the offer pool; fresh novice farmers can never offer carrots, beetroot or bread despite those entries existing."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#VILLAGER-OFFER-SELECTION"
+regression = ["cargo:mc-core:villager::trades::tests::offer_sampling_reaches_beyond_first_two_catalog_rows"]
+
+[[bug]]
+id = "LIBRARIAN-ENCHANTED-BOOKS"
+title = "Naturally generated librarians cannot sell any enchanted book at any career level, removing ordinary librarian acquisition of Mending and other book enchantments. Randomizing the existing catalog alone cannot repair this absent trade family."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LIBRARIAN-ENCHANTED-BOOKS"
+regression = ["cargo:mc-core:villager::trades::tests::librarian_unlock_adds_enchanted_book_offer"]
+
+[[bug]]
+id = "CUSTOM-FOOD-CONSUME-EFFECTS"
+title = "Registered custom foods consume/nourish using their selected ItemFacts but silently ignore their declared consume_effects; effects are instead hard-coded by vanilla carrier item name. A bread-carrier food configured to grant Speed yields no effect."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CUSTOM-FOOD-CONSUME-EFFECTS"
+regression = []
+
+[[bug]]
+id = "DISPENSER-VEHICLE-PLACEMENT"
+title = "Automatic boat/minecart stations eject vehicle items instead of placing usable vehicle entities even with valid water/rail targets. Boat and minecart variants share the missing vehicle dispatch."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-VEHICLE-PLACEMENT"
+regression = []
+
+[[bug]]
+id = "DISPENSER-SPECIAL-BUCKETS"
+title = "Dispensers eject mob buckets and powder-snow buckets rather than emptying them; empty buckets cannot collect powder snow. The planner supports only water/lava source buckets and water/lava pickup."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-SPECIAL-BUCKETS"
+regression = []
+
+[[bug]]
+id = "DISPENSER-CONSTRUCT-SUMMON"
+title = "Dispensers cannot complete snow/iron golems or withers with a carved pumpkin/skull; absent a wearable target, the item is ejected and the structure remains unactivated."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-CONSTRUCT-SUMMON"
+regression = []
+
+[[bug]]
+id = "DISPENSER-PROJECTILE-KINDS"
+title = "Dispenser projectile classification is wrong: wind charges fall through to ordinary item ejection, while ender pearls are launched as ownerless projectiles even though vanilla dispenses them as items."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-PROJECTILE-KINDS"
+regression = []
+
+[[bug]]
+id = "RESPAWN-PARTIAL-COLLISION"
+title = "A carpeted two-block-high bedroom loses a valid bed respawn and sends the player to world spawn; charged-anchor rooms share the coarse collision rejection. Both require entire feet/head cells to classify Air rather than fitting the player's AABB above the partial surface."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#RESPAWN-PARTIAL-COLLISION"
+regression = []
+
+[[bug]]
+id = "ANCHOR-TOP-RESPAWN"
+title = "A charged anchor is falsely rejected when the only valid spawn position is directly on top of it; the candidate only searches eight neighboring columns, omitting the center-top fallback."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ANCHOR-TOP-RESPAWN"
+regression = []
+
+[[bug]]
+id = "ANCHOR-OFFHAND-CHARGE"
+title = "Using a partially charged anchor with a non-glowstone main hand and glowstone offhand produces a main-hand SetRespawn or explosion intent instead of deferring to the offhand charge. In the Overworld/End this can explode an anchor the player is trying to recharge."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ANCHOR-OFFHAND-CHARGE"
+regression = []
+
+[[bug]]
+id = "DISPENSER-ANCHOR-CHARGE"
+title = "A dispenser facing a non-full respawn anchor ejects its glowstone as an item instead of charging the anchor, breaking automatic refueling."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-ANCHOR-CHARGE"
+regression = []
+
+[[bug]]
+id = "DISPENSER-HIVE-HARVEST"
+title = "Dispensers cannot harvest full beehives/bee nests: glass bottles and shears are ejected unchanged instead of yielding honey bottles/honeycomb and resetting honey level."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-HIVE-HARVEST"
+regression = []
+
+[[bug]]
+id = "FISHING-ITEM-HOOK"
+title = "Fishing rods cannot hook/retrieve a dropped item: the shared projectile candidate list excludes every Item entity before the fishing-specific impact handler."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FISHING-ITEM-HOOK"
+regression = ["cargo:mc-core:projectiles::fishing::tests::hooked_item_reels_with_impulse_and_costs_three_durability"]
+
+[[bug]]
+id = "FISHING-BOBBER-BUOYANCY"
+title = "A hook cast while the player is underwater stays at its submerged cast position instead of rising to the unobstructed water surface."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FISHING-BOBBER-BUOYANCY"
+regression = ["cargo:mc-core:projectiles::fishing::tests::submerged_hook_rises_toward_the_surface"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "BED-MONSTER-ELIGIBILITY"
+title = "A non-hostile zombified piglin near a bed incorrectly prevents sleeping."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-MONSTER-ELIGIBILITY"
+regression = []
+
+[[bug]]
+id = "BED-OBSTRUCTED-ENTRY"
+title = "A bed with no valid wake-up space is accepted; leaving it clears sleeping pose but leaves the player's position inside the sealed bed area when exit resolution returns None. Vanilla refuses entry as obstructed."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-OBSTRUCTED-ENTRY"
+regression = ["cargo:mc-core:sleep::tests::sealed_bed_refuses_entry_as_obstructed"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "BED-SLEEP-REACH"
+title = "A player can enter a bed from ordinary interaction range beyond Java's stricter sleeping-distance limit, instead of receiving bed-too-far refusal."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-SLEEP-REACH"
+regression = ["cargo:mc-core:sleep::tests::distant_bed_use_is_too_far"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "SNIFFER-SEED-PLACEMENT"
+title = "Torchflower seeds and pitcher pods cannot be planted on farmland: neither item has a planting alias, and neither item name identifies a block. Grouped as one missing seed-to-crop mapping defect."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SNIFFER-SEED-PLACEMENT"
+regression = []
+
+[[bug]]
+id = "VINE-PLACEMENT-FACES"
+title = "Placing collected vines onto a wall creates a vine state with every attachment face false; these player-planted vines consequently cannot spread through the existing vine-growth routine. This is an authoritative state/growth bug; no unobserved rendering claim is made."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#VINE-PLACEMENT-FACES"
+regression = ["cargo:mc-core:farming_tests::placed_vines_attach_to_the_clicked_wall_and_can_spread"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "SPECIAL-TREE-BONEMEAL"
+title = "Bone meal never grows planted azalea/flowering azalea, mangrove propagules, or crimson/warped fungi into their vanilla tree/huge-fungus forms, even with correct substrate and unobstructed space. Grouped as missing specialized tree-growth dispatch, not one count per species."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPECIAL-TREE-BONEMEAL"
+regression = ["cargo:mc-core:farming_tests::bone_meal_grows_azalea_and_fungi_but_rejects_wrong_soil"]
+
+[[bug]]
+id = "GROUND-COVER-BONEMEAL"
+title = "Ordinary moss spreading and Nether ground-cover propagation do nothing: moss cannot convert neighboring stone/dirt, nylium produces no roots/fungi, and netherrack beside nylium cannot convert. These absent ground-cover fertilizer outcomes share the same grass-only fallback."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GROUND-COVER-BONEMEAL"
+regression = ["cargo:mc-core:farming_tests::bone_meal_spreads_moss_and_nylium_and_converts_netherrack"]
+
+[[bug]]
+id = "SEA-PICKLE-BONEMEAL"
+title = "Bone meal cannot increase a waterlogged sea-pickle colony or reproduce it across live coral, breaking the normal renewable sea-pickle/lime-dye farm."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SEA-PICKLE-BONEMEAL"
+regression = ["cargo:mc-core:farming_tests::bone_meal_grows_waterlogged_sea_pickle_colonies"]
+
+[[bug]]
+id = "TALL-PLANT-BONEMEAL"
+title = "Bone meal applied near the base of an ordinarily cultivated kelp/weeping-vine/twisting-vine column stops working once its head is more than25 blocks from the clicked segment. The code confuses the natural age limit with a maximum legal column length."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TALL-PLANT-BONEMEAL"
+regression = []
+
+[[bug]]
+id = "KELP-FLOWING-GROWTH"
+title = "Kelp cannot grow into downward-flowing water: extension requires water level0, preventing the ordinary top-poured water-column/bubble-elevator cultivation workflow. Existing test oracle conflicts with the reported vanilla water behavior and needs javap verification."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#KELP-FLOWING-GROWTH"
+regression = []
+
+[[bug]]
+id = "CROP-DARK-PLACEMENT"
+title = "Wheat seeds are accepted onto farmland in a completely dark roofed room, despite Java requiring sufficient light to plant; the server only checks farmland support."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CROP-DARK-PLACEMENT"
+regression = []
+
+[[bug]]
+id = "FLOWER-SOIL-PLACEMENT"
+title = "A poppy/dandelion can be planted directly onto stone: generic flower placement substitutes a sturdy-face check for vanilla's allowed soil types."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FLOWER-SOIL-PLACEMENT"
+regression = []
+
+[[bug]]
+id = "TALL-FLOWER-DUPLICATION"
+title = "Bone meal does nothing on sunflower, lilac, rose bush or peony, removing their ordinary renewable flower/dye source."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TALL-FLOWER-DUPLICATION"
+regression = ["cargo:mc-core:farming_tests::bone_meal_duplicates_tall_flowers_without_removing_them"]
+
+[[bug]]
+id = "BREEDING-EGG-LIFECYCLE"
+title = "Feed two adult sniffers torchflower seeds, turtles seagrass, or frogs slimeballs in survival. The common breeding commit creates a baby of the parent's entity type immediately, bypassing the respective sniffer-egg item, turtle nesting/eggs, and frogspawn/tadpole lifecycle. Grouped as one shared birth-path defect, not three inflated counts."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BREEDING-EGG-LIFECYCLE"
+regression = ["cargo:mc-core:entity_life_tests::sniffer_breeding_stages_an_egg_item_instead_of_a_live_child", "cargo:mc-core:entity_life_tests::turtle_breeding_lays_egg_blocks_on_home_sand", "cargo:mc-core:entity_life_tests::frog_breeding_places_frogspawn_on_nearby_water"]
+
+[[bug]]
+id = "AXOLOTL-FEED-BUCKET"
+title = "Survival-feeding an adult axolotl a bucket of tropical fish destroys the bucket as well as consuming the fish; vanilla returns a water bucket."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AXOLOTL-FEED-BUCKET"
+regression = ["cargo:mc-core:entity_life_tests::axolotl_tropical_fish_bucket_returns_a_water_bucket"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "PANDA-BAMBOO-GATE"
+title = "Feed two adult pandas bamboo in a stone/grass pen with no placed bamboo nearby: current breeding accepts the pair and creates offspring despite Java's required nearby bamboo plant."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PANDA-BAMBOO-GATE"
+regression = ["cargo:mc-core:entity_life_tests::pandas_without_nearby_bamboo_cannot_breed"]
+
+[[bug]]
+id = "TRADER-LLAMA-BREED"
+title = "Tamed trader llamas cannot produce offspring with another trader llama or an ordinary llama, despite vanilla hay-bale breeding."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TRADER-LLAMA-BREED"
+regression = ["cargo:mc-core:entity_life_tests::trader_llamas_breed_hay_with_llamas_into_llamas"]
+
+[[bug]]
+id = "CAT-SITTING-BREED"
+title = "A healthy tamed sitting cat rejects breeding fish even when a standing tamed partner is adjacent; current rule requires both cats standing, whereas vanilla permits a mobile cat to breed with a sitting one."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAT-SITTING-BREED"
+regression = []
+
+[[bug]]
+id = "LOADER-SOUND-MIXIN"
+title = "Real Fabric26.1.2/API0.155.2 startup crashed before join: Solaris ScreenSoundEngineMixin redirected getStream first, causing Fabric's required0/1 injection failure."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LOADER-SOUND-MIXIN"
+regression = []
+
+[[bug]]
+id = "SERVER-FABRIC-SCREEN-ADMISSION"
+title = "Combined server-fixes runtime4bcd34fc started screen service only for native clients; actual Fabric viewer got Share-own dialog/no ACTIVE or audio while native was active."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SERVER-FABRIC-SCREEN-ADMISSION"
+regression = []
+
+[[bug]]
+id = "NATIVE-SCREEN-AUDIO-CONSENT"
+title = "Native5a91f70 permission dialog promised Pictures only, while looking. No remote input., but Allow granted screen-audio capture/transmission too; user was not accurately told what is shared."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#NATIVE-SCREEN-AUDIO-CONSENT"
+regression = []
+
+[[bug]]
+id = "HS-1"
+title = "Destroy an open single chest, then click before ordinary commit: extraction duplicates the staged drop; insertion is discarded."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-1"
+regression = []
+
+[[bug]]
+id = "END-RESTART"
+title = "Clean shutdown checkpoint tick2479; same End world cannot reopen: DragonFight UUID has no retained entity."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#END-RESTART"
+regression = []
+
+[[bug]]
+id = "ENTITY-BODY-PANIC"
+title = "Mixed entity gallery after unfreeze crashes core: entities.rs:1000 len171/index171, edge pump stops."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ENTITY-BODY-PANIC"
+regression = []
+
+[[bug]]
+id = "AUTH-BUDGET"
+title = "Native join/load retires solaris-auth after wall-clock epoch deadline; player never completes auth. Not the intentional 60-second unregistered-player timeout."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUTH-BUDGET"
+regression = []
+
+[[bug]]
+id = "DUPLICATE-LOGIN"
+title = "Second same-account connection times out in Join instead of replacing incumbent; no data-loss claim."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DUPLICATE-LOGIN"
+regression = []
+
+[[bug]]
+id = "HS-2"
+title = "Vehicle-to-hopper transfer leaves an already-open hopper menu stale."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-2"
+regression = []
+
+[[bug]]
+id = "HS-3"
+title = "Imported unsupported sand/gravel with a saved due gravity tick stays suspended without new edits; distinct from native rendering and setblock observation."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-3"
+regression = []
+
+[[bug]]
+id = "GOLEM-GOSSIP"
+title = "Five eligible recently slept gossiping villagers cannot summon; owner only admits Panic route."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-GOSSIP"
+regression = []
+
+[[bug]]
+id = "GOLEM-AABB"
+title = "Live golem at diagonal15.5/15.5 is rejected by spherical detection despite each axis being within16."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-AABB"
+regression = []
+
+[[bug]]
+id = "GOLEM-REPAIR"
+title = "Original interaction with a60-health iron golem using an iron ingot left health60 instead of healing25. Both hands/creative/no-overheal are required by the retained failing test."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-REPAIR"
+regression = []
+
+[[bug]]
+id = "GOLEM-DIFFICULTY"
+title = "Original natural iron golem player hit remained15 on Easy/Normal/Hard after correcting test health; melee generation exempted golem sources from scaling."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-DIFFICULTY"
+regression = []
+
+[[bug]]
+id = "P4"
+title = "F8 Leave does not delete pending server request; later Allow still grants. Client mitigation a64c80f exists; server fix still required."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P4"
+regression = []
+
+[[bug]]
+id = "INTERACT-001"
+title = "Axe strip/scrape/unwax failed."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#INTERACT-001"
+regression = []
+
+[[bug]]
+id = "PLACE-001"
+title = "No spawn protection."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PLACE-001"
+regression = []
+
+[[bug]]
+id = "FALL-001"
+title = "Dragon egg no teleport."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FALL-001"
+regression = []
+
+[[bug]]
+id = "FALL-002"
+title = "Brush never reaches handler."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FALL-002"
+regression = []
+
+[[bug]]
+id = "FIRE-001"
+title = "Age15 fire expires on infiniburn."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FIRE-001"
+regression = []
+
+[[bug]]
+id = "SPECIAL-001"
+title = "Pot/shelf no storage."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPECIAL-001"
+regression = []
+
+[[bug]]
+id = "SPONGE"
+title = "Sponge no absorb."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPONGE"
+regression = []
+
+[[bug]]
+id = "PAINTINGS"
+title = "Painting no lifecycle."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PAINTINGS"
+regression = []
+
+[[bug]]
+id = "SPAWN-PEACEFUL-REMOVAL"
+title = "After Peaceful ACK, fresh zombie-presence queries remain true until timeout."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-PEACEFUL-REMOVAL"
+regression = []
+
+[[bug]]
+id = "SPAWN-SPAWNER-EGG"
+title = "Using spawn egg on spawner spawns adjacent mob rather than configuring SpawnData."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-SPAWNER-EGG"
+regression = []
+
+[[bug]]
+id = "SPAWN-SPAWNER-CATEGORIES"
+title = "Cow/passive spawner rejected by Monster-only category admission. Custom rules/potentials rejection also documented, not separately runtime-proven."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-SPAWNER-CATEGORIES"
+regression = []
+
+[[bug]]
+id = "TOTEM"
+title = "Ordinary lethal damage with held totem originally committed death without consume/recovery interception; kill/void are not the repro."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TOTEM"
+regression = []
+
+[[bug]]
+id = "KILL-TYPE"
+title = "Player /kill used out_of_world instead of generic_kill."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#KILL-TYPE"
+regression = []
+
+[[bug]]
+id = "DAMAGE-IDENTITIES"
+title = "Freeze/wall/cramming/sonic/stalagmite/dragon cloud identities could not be emitted correctly; warden concretely used magic. Not a claim every physical mechanism is implemented."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DAMAGE-IDENTITIES"
+regression = []
+
+[[bug]]
+id = "DEATH-COMPONENT"
+title = "Death event contained English text rather than vanilla death translation component."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-COMPONENT"
+regression = []
+
+[[bug]]
+id = "DEATH-NOTIFY"
+title = "show_death_messages=false suppressed dying player Died notification, not just observer broadcast."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-NOTIFY"
+regression = []
+
+[[bug]]
+id = "SCORE-FOOD"
+title = "scoreboard objectives add hunger food was rejected and hunger could not auto-update."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-FOOD"
+regression = []
+
+[[bug]]
+id = "SCORE-CRITERIA-WRITABLE"
+title = "Create deaths deathCount then scoreboard players set Alice deaths 2 was rejected as read-only; non-dummy/trigger swap targets were also rejected. Vanilla death/player/total kill counters permit writes."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-CRITERIA-WRITABLE"
+regression = []
+
+[[bug]]
+id = "SCORE-TOTAL-KILLS"
+title = "totalKillCount was unsupported; native mob kill credit updated statistics but not this scoreboard objective."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-TOTAL-KILLS"
+regression = []
+
+[[bug]]
+id = "TEAM-DEATH-VISIBILITY"
+title = "team modify deathMessageVisibility never was rejected before broadcast filtering."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEAM-DEATH-VISIBILITY"
+regression = []
+
+[[bug]]
+id = "CONTAINERS-001"
+title = "Chest-equipped donkey/mule cargo menu is absent."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-001"
+regression = []
+
+[[bug]]
+id = "CONTAINERS-002"
+title = "Lectern hold/open/page/take-book menu is absent."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-002"
+regression = []
+
+[[bug]]
+id = "CONTAINERS-003"
+title = "Crafting table closes on first inventory pickup before disconnect; backing10 versus container_size0 guard."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-003"
+regression = []
+
+[[bug]]
+id = "CUSTODY-ENTITY-MENU-FLOOR"
+title = "A player stack reserved by a plugin can be moved into entity cargo below its reservation floor: mount and vehicle handlers directly mutate player/container, bypassing generic planned-transition floor refusal. Same contract gap, not two bugs."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CUSTODY-ENTITY-MENU-FLOOR"
+regression = []
+
+[[bug]]
+id = "CUSTODY-MOUNT-EXPORT"
+title = "Imported chested donkey/mule/llama cargo was decoded into native slots but remained opaque and was not exported authoritatively. Withdrawal followed by export/reimport resurrected original Items; new deposits were omitted."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CUSTODY-MOUNT-EXPORT"
+regression = []
+
+[[bug]]
+id = "SETBLOCK-SNBT"
+title = "setblock chest{Items:...} rejects block-entity SNBT."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SETBLOCK-SNBT"
+regression = []
+
+[[bug]]
+id = "FORCELOAD-RING"
+title = "Forceload outer level32 ring ticks entities, rather than blocks only."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FORCELOAD-RING"
+regression = []
+
+[[bug]]
+id = "DATA-QUERY"
+title = "Generic entity/block data get paths/scales were unavailable; query errors must not be interpreted as empty custody. Merge aliases DATA-ENTITY, QUERY-ENTITY-DATA, QUERY-BLOCK-DATA."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-QUERY"
+regression = []
+
+[[bug]]
+id = "EXECUTE-STORE"
+title = "execute store result/success score originally rejected; inherited query-only implementation also rejected already-supported mutators such as `execute store result score x q run give @s stone`."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#EXECUTE-STORE"
+regression = []
+
+[[bug]]
+id = "P1"
+title = "Falling entity had no render path or local gravity prediction; sparse vanilla20-tick tracking made stale pose. Native repair727a4e0; saved-tick HS-3 and QA setblock symptom remain separate."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P1"
+regression = []
+
+[[bug]]
+id = "HC-1"
+title = "Reconnect retains old voice capability/registration/listening and may reopen microphone on non-voice server."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-1"
+regression = []
+
+[[bug]]
+id = "HC-2"
+title = "Physical container1-9/Q/Ctrl+Q/F bypass intended hovered-slot actions. Creative QA5 residual remains separate."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-2"
+regression = []
+
+[[bug]]
+id = "HC-3"
+title = "Physical gameplay F/middle-click unbound. Client dispatch fixed; server pick handler tracked PICK-SERVER separately."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-3"
+regression = []
+
+[[bug]]
+id = "P2"
+title = "Optional server resource-pack offer unconditionally disconnects native join; repaired to decline optional offers."
+area = "client"
+repro = "source"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P2"
+regression = []
+
+[[bug]]
+id = "P3"
+title = "Same-dimension death/respawn clears active-screen catalog; server does not resend it."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P3"
+regression = []
+
+[[bug]]
+id = "PICK-SERVER"
+title = "Native middle-click sends play36/37 but original server lacked the authoritative pick handler."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PICK-SERVER"
+regression = []
+
+[[bug]]
+id = "QA5-CREATIVE"
+title = "Original winfix3 creative slot move reverted on close; carried stack was not drawn; hovered Q ineffective."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-CREATIVE"
+regression = []
+
+[[bug]]
+id = "QA5-SETBLOCK-SAND"
+title = "QAWin5 setblock sand over air remained visually floating on winfix3; authoritative server/client cause not isolated."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-SETBLOCK-SAND"
+regression = []
+
+[[bug]]
+id = "QA5-FAST-CLICK"
+title = "Historical fast VNC press/release lost clicks unless the user held mouse down/up as a workaround."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-FAST-CLICK"
+regression = []
+
+[[bug]]
+id = "QA5-STARTUP-GREY"
+title = "Cold startup still shows a blank grey client window before the title: original winfix3 approximately60s report, latest Windows8796727 approximately25s report. Sane window dimensions do not resolve first-frame latency."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-STARTUP-GREY"
+regression = []
+
+[[bug]]
+id = "INPUTLOG-AUTHORIZED"
+title = "Consumed AuthorizedBuild records contain only kind/connection, so a fresh placement/dig/use cannot be distinguished from stale queued authorization by sequence/payload/tick. Strict concurrency evidence must block rather than match this ambiguous marker."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#INPUTLOG-AUTHORIZED"
+regression = []
+
+[[bug]]
+id = "SELECTOR-AABB"
+title = "dx/dy/dz selector tests entity position, excluding pig whose body intersects box while center is outside."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-AABB"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_selector_box_intersects_body_and_defaults_missing_axes"]
+
+[[bug]]
+id = "SELECTOR-NEAREST-ENTITY"
+title = "Java @n is rejected as an unknown selector, so commands/functions cannot select the nearest alive entity using the vanilla variable."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-NEAREST-ENTITY"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_nearest_entity_selects_closest_alive"]
+
+[[bug]]
+id = "SELECTOR-OPTION-COVERAGE"
+title = "Java scores, tag, team, level, gamemode, x_rotation, y_rotation, nbt, advancements and predicate arguments are all rejected as unknown options; functions using vanilla filtered targets cannot run. One explicit missing option-family row, not ten unproven runtime failures."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-OPTION-COVERAGE"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_sort_limit_options_and_typed_filters"]
+
+[[bug]]
+id = "SELECTOR-DEAD-PLAYERS"
+title = "@a and @s omit retained dead players, so commands directed at players on the death screen incorrectly get no matching target. Shared selector admission also imposes alive-only behavior on other player selectors."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-DEAD-PLAYERS"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_dead_players_stay_selectable_by_name_and_all"]
+
+[[bug]]
+id = "SELECTOR-TYPE-NAME-FILTERS"
+title = "Implemented type/name filters reject valid repeated negative clauses, e.g. @e[type=!creeper,type=!pig] or [name=!Alice,name=!Bob]; type filtering also has no entity-tag expansion. A single optional identifier/string stores the whole filter."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-TYPE-NAME-FILTERS"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_repeated_negative_type_name_clauses", "cargo:mc-core:command_execution::tests::command_parity_unnamed_mob_plain_name_and_player_type_rejection"]
+
+[[bug]]
+id = "SELECTOR-DIMENSION-SCOPE"
+title = "Unqualified @e and @p are resolved only in the request dimension, so `/kill @e[type=minecraft:pig]` omits a loaded Nether pig when run from Overworld, and nearest-player commands cannot select a nearer player in another dimension. Existing @a/@r global routing does not cover these variables."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-DIMENSION-SCOPE"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_unqualified_entity_selector_reaches_loaded_remote_dimensions"]
+
+[[bug]]
+id = "SELECTOR-TYPED-ADMISSION"
+title = "Java-invalid selector types are accepted and can mutate state: `/give @e stone` grants to the player subset rather than rejecting a non-player-type selector; `/tp @s @a` is accepted whenever only one player happens to match, instead of rejecting a selector whose declared maximum exceeds one."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-TYPED-ADMISSION"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_give_rejects_entity_selector_shape", "cargo:mc-core:command_execution::tests::command_parity_teleport_rejects_multi_target_destination"]
+
+[[bug]]
+id = "SELECTOR-RANDOM-REPEAT"
+title = "Repeated @r or sort=random evaluations by the same executor within one tick always reuse the same ordering, rather than drawing again. A function repeatedly giving an item to @r with an unchanged player set always awards the same player throughout that tick."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-RANDOM-REPEAT"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_repeated_random_evaluation_redraws_within_one_tick"]
+
+[[bug]]
+id = "BORDER-LERP"
+title = "Timed set/add rejected; no interpolation state to persist. Merge BORDER-PERSIST; instant center/size persistence is not a separate defect. Pinned TimeArgument uses ticks without suffix; ScenarioMatrix and DomCommands corrected the200tick oracle to explicit10s/200t, not bare10seconds."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BORDER-LERP"
+regression = ["cargo:mc-core:command_border::tests::timed_set_interpolates_linearly_and_settles_exact"]
+
+[[bug]]
+id = "BORDER-OPTIONS"
+title = "Border damage buffer/amount and warning distance/time commands and fields absent."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BORDER-OPTIONS"
+regression = ["cargo:mc-core:command_border::tests::damage_and_warning_options_mutate_named_fields"]
+
+[[bug]]
+id = "RULE-COMMAND-BUDGET"
+title = "max_command_sequence_length1 does not stop a3-command function; runtime charges constant65536."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#RULE-COMMAND-BUDGET"
+regression = ["cargo:mc-core:datapacks::tests::command_parity_configured_sequence_budget_is_per_invocation"]
+failing_first = "reported"
+
+[[bug]]
+id = "COMMAND-ZERO-BUDGET-LOCKOUT"
+title = "Parked B16 WIP honors max_command_sequence_length=0 literally, then rejects every native root command before execution, including the gamerule command needed to restore a positive limit. Both ordinary player and trusted console native-command paths share this admission. This is command-administration lockout in an unaccepted candidate, not a deployed or login failure."
+area = "gameplay"
+repro = "source"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COMMAND-ZERO-BUDGET-LOCKOUT"
+regression = ["cargo:mc-core:command_context::tests::command_parity_zero_sequence_budget_still_admits_one_root_command"]
+
+[[bug]]
+id = "DATAPACK-ENABLE"
+title = "datapack disable file/matrix and enable rejected; list-only dispatch."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-ENABLE"
+regression = []
+
+[[bug]]
+id = "DEBUG-PROFILER"
+title = "debug start/stop rejected in favor of Solaris debug give fixture grammar."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-PROFILER"
+regression = []
+
+[[bug]]
+id = "DEBUG-FUNCTION-TRACE"
+title = "`/debug function <id>` and function-tag tracing are rejected because debug parsing only accepts Solaris debug give; operators cannot obtain vanilla command/message/result/function traces."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-FUNCTION-TRACE"
+regression = []
+
+[[bug]]
+id = "DATAPACK-LIST-LIVE-DISCOVERY"
+title = "After packs are added/removed on disk, a cached-only `/datapack list` cannot immediately discover the repository change without a separate reload. This remains the explicit residual of Main-approved snapshot listing, not an assumed full vanilla list implementation."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-LIVE-DISCOVERY"
+regression = []
+
+[[bug]]
+id = "DAMAGE-COMMAND"
+title = "Vanilla /damage command was absent; magic potion is not generic damage coverage."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DAMAGE-COMMAND"
+regression = []
+
+[[bug]]
+id = "HC-4"
+title = "Native app does not enable/consume IME; CJK composition cannot commit in chat/editors. Main sets minor priority."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-4"
+regression = []
+
+[[bug]]
+id = "HC-5"
+title = "Launcher Cancel cannot interrupt headers-stalled HTTP send and may retry20-minute requests."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-5"
+regression = []
+
+[[bug]]
+id = "SVC-BRIDGE"
+title = "Frozen release lacks requested Fabric SVC bridge; implementation now exists on voice-server. Real Fabric+SVC proximity/group verification remains absent; not vanilla parity."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SVC-BRIDGE"
+regression = []
+
+[[bug]]
+id = "NATIVE-FREEZE-CAMERA"
+title = "Under server tick freeze, tp updates observed position while native camera frames remain stale; minecraft_wait_ticks times out30s. Original source returned before player.tick when server_frozen and no step budget."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#NATIVE-FREEZE-CAMERA"
+regression = []
+
+[[bug]]
+id = "SUMMON-AGE"
+title = "Gallery summon with Age:-24000 rejects squid, glow_squid, skeleton_horse and zombie_horse with explicit unsupported-field error; baby fixtures cannot be authored."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-AGE"
+regression = []
+
+[[bug]]
+id = "SUMMON-ISBABY"
+title = "summon IsBaby accepted only for zombie_villager, rejecting Zombie subclasses, Piglin and Zoglin baby forms."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-ISBABY"
+regression = []
+
+[[bug]]
+id = "DEATH-PROTECTION-COMPONENT"
+title = "Custom held items with minecraft:death_protection, e.g. stick[death_protection={death_effects:[]}], originally could not protect from lethal damage because interception recognized only totem item ID. Vanilla checks the held component independent of item ID."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-PROTECTION-COMPONENT"
+regression = []
+
+[[bug]]
+id = "SHUTDOWN-ERROR-LOG"
+title = "Ordinary console stop emits ERROR for tick owner, journal owner, checkpoint writer, broadcast closure and server loop, forcing intentional-stop health-oracle exceptions. Checkpoint commit is present; no crash/data-loss inferred."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHUTDOWN-ERROR-LOG"
+regression = []
+
+[[bug]]
+id = "DEATH-PROTECTION-ACTIONS"
+title = "Valid nonempty custom death_protection consume actions are rejected at admission, so custom protection cannot apply its specified effects when saving the holder. This is the explicit residual of the approved B07 empty/omitted-action subset, not a second count for item-independent protection."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-PROTECTION-ACTIONS"
+regression = []
+
+[[bug]]
+id = "DATAPACK-HOT-RELOAD-RECIPES-LOOT"
+title = "Runtime recipe/loot changes are rejected instead of installed, leaving the old recipes and loot active; client recipe resynchronization is part of the missing outcome. Explicit residual of approved functions/tags-only live enable/disable scope."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-HOT-RELOAD-RECIPES-LOOT"
+regression = []
+
+[[bug]]
+id = "DATAPACK-WORLDGEN-ZIP"
+title = "ZIP datapacks and worldgen/dimension resources are rejected, preventing valid archive/world-generation packs from loading. They remain explicit gaps rather than hidden under functions/tags-only enable/disable support."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-WORLDGEN-ZIP"
+regression = []
+
+[[bug]]
+id = "DATAPACK-CREATE"
+title = "`/datapack create <id> <description>` always falls through to unsupported syntax, preventing creation of the vanilla empty directory pack from the command interface."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-CREATE"
+regression = []
+
+[[bug]]
+id = "DATAPACK-FEATURE-ADMISSION"
+title = "Directory-pack loading accepts metadata that requires a world-disabled feature flag: pack.mcmeta is checked only for an object-valued pack field, so the declared feature requirement is ignored and its functions/resources are loaded."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-FEATURE-ADMISSION"
+regression = []
+
+[[bug]]
+id = "DATAPACK-LIST-HOVER"
+title = "Datapack listing emits joined plain names and discards pack descriptions, so users cannot inspect pack.mcmeta descriptions by hovering the listed packs in chat."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-HOVER"
+regression = []
+
+[[bug]]
+id = "BEE-FLOWER-TABLE"
+title = "Bees omitted 5 bee_attractive members + waterlogged/tall-half rules."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BEE-FLOWER-TABLE"
+regression = ["cargo:mc-core:bees::tests::flowerless_bee_finds_wither_rose_and_rejects_waterlogged"]
+
+[[bug]]
+id = "ARMADILLO-THREAT-ROLL"
+title = "Armadillo threat response lacks defensive rolling, damage reduction or spider deterrence (also reported as ARMADILLO-ROLL-ABSENT)."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMADILLO-THREAT-ROLL,ARMADILLO-ROLL-ABSENT"
+regression = []
+repro_check = "cargo:mc-core:mounts::tests::armadillo_curls_against_undead_and_halves_melee_damage"
+
+[[bug]]
+id = "ARMADILLO-SCUTE-SHED"
+title = "No scuteTime timer/brushing."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMADILLO-SCUTE-SHED"
+regression = ["cargo:mc-core:mounts::tests::armadillo_brush_sheds_scute"]
+
+[[bug]]
+id = "WOLF-ARMOR-ABSORB"
+title = "Body armor never absorbed."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#WOLF-ARMOR-ABSORB"
+regression = ["cargo:mc-core:mounts::tests::wolf_body_armor_absorbs_melee_damage_and_wears"]
+
+[[bug]]
+id = "DOLPHIN-TREASURE"
+title = "GotFish never triggered search."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DOLPHIN-TREASURE"
+regression = ["cargo:mc-core:dolphin::tests::fed_dolphin_swims_toward_treasure_chest"]
+
+[[bug]]
+id = "TARGET-PROJECTILE-POWER"
+title = "An arrow striking a target block produces no redstone output."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TARGET-PROJECTILE-POWER"
+regression = ["cargo:mc-core:projectiles::flight_tests::target_block_emits_power_when_shot"]
+
+[[bug]]
+id = "ELYTRA-FIREWORK-BOOST"
+title = "Using a firework while gliding fails to boost flight speed."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ELYTRA-FIREWORK-BOOST"
+regression = ["cargo:mc-core:tick_tests::movement_tests::gliding_firework_use_boosts_flight_speed"]
+failing_first = "reported"
+
+[[bug]]
+id = "CHISELED-BOOKSHELF"
+title = "Chiseled bookshelves cannot store and return books."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CHISELED-BOOKSHELF"
+regression = ["cargo:mc-core:shelf::tests::chiseled_bookshelf_stores_and_returns_books"]
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-TEST-SIGSEGV"
+title = "Native solaris-client lib test binary SIGSEGVs (signal 11) about every 2nd–3rd full-parallel run on clean winfix eeac43a (stash-verified; clean tree still repros): lifecycle_waits_for_listening / crashed_server_ends_session / crash_while_playing flake run-to-run; single-threaded 651/651 and --test-threads=4 651/651 green; reruns of flaky scopes pass in isolation. Suspect server-process lifecycle race under load (port/tmpdir/signal timing), not client logic — no protocol/content in failing tests."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CLIENT-TEST-SIGSEGV"
+regression = []
+
+[[bug]]
+id = "REDSTONE-DAYLIGHT"
+title = "gap_daylight_detector failed bare (thunder step power 15 vs 10)."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#REDSTONE-DAYLIGHT"
+regression = []
+
+[[bug]]
+id = "GOLEM-SNOW-SHEAR"
+title = "Shears on a snow golem do nothing: vanilla `SnowGolem` implements `Shearable` (`hasPumpkin`/`shear` via `DATA_PUMPKIN_ID`, pinned 26.1.2 bytecode) — shearing removes the pumpkin, drops a carved pumpkin item, and reveals the face. The candidate `entity_life.rs:harvest()` handles bowl/milk, mooshroom stew/flower/shear, sheep shear/dye, but has no snow-golem arm (no `Harvest` variant, no pumpkin flag storage), so the vanilla pumpkin-removal interaction is absent."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-SNOW-SHEAR"
+regression = []
+
+[[bug]]
+id = "REDSTONE-WIRE-HOPPER-SUPPORT"
+title = "Redstone dust pops when the hopper below is broken: wire support requires a full-sturdy UP face, but vanilla `RedStoneWireBlock.canSurviveOn` survives on any upward-sturdy face OR a hopper below (`isFaceSturdy(UP)` \\"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#REDSTONE-WIRE-HOPPER-SUPPORT"
+regression = []
+
+[[bug]]
+id = "DRIPSTONE-MID-COLUMN-GROWTH"
+title = "A down-pointed dripstone tip mid-column wrongly grows: candidate requires `thickness=tip/tip_merge` but omits vanilla's `isStalactiteStartPos` gate (tip must have NO dripstone directly above, pinned bytecode). Without it every mid-column tip is eligible."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DRIPSTONE-MID-COLUMN-GROWTH"
+regression = []
+
+[[bug]]
+id = "LIBRARIAN-BOOK-POOL-PRICING"
+title = "Librarian book offers draw from a 35-entry hardcoded pool with flat pricing: vanilla `emerald_and_book_enchanted_book` rolls `enchant_randomly` over `#minecraft:tradeable` (= `#non_treasure` + binding/vanishing/frost_walker/mending) and DOUBLES the emerald price for `#double_trade_price` (= `#treasure`) enchantments. The candidate pool omits soul_speed/swift_sneak/wind_burst/binding_curse/vanishing_curse handling, never doubles treasure prices (mending/frost_walker cost the flat formula), and uses a fixed per-level pick instead of the loot-function roll."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LIBRARIAN-BOOK-POOL-PRICING"
+regression = []
+
+[[bug]]
+id = "JUKEBOX-HYDRATE-PANIC"
+title = "A corrupt jukebox block entity in a loaded chunk crashes the tick thread: `tick.rs:4513` `hydrate_chunk(..).unwrap_or_else(panic!(\"resident jukebox rejected\"))`. Same hydration span (`tick.rs:4454-4524`, duplicated in `redstone/mod.rs:487`) mixes three error policies (reject+retain / ignore / panic) with partial rollback. Verified by Main on 7fe49052."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#JUKEBOX-HYDRATE-PANIC"
+regression = []
+
+[[bug]]
+id = "DISPENSER-MINECART-VARIANTS"
+title = "Dispensers eject command-block minecarts as items: the vehicle matcher admits only `minecart/chest/hopper/furnace/tnt` (`dispenser_vehicle.rs:24-28`), omitting `command_block_minecart` which vanilla places onto rails ([wiki](https://minecraft.wiki/w/Dispenser)). `spawner_minecart` is correctly excluded (command-only summon, not dispensable). Entity registry confirms both types exist locally (`registries.json` lists all 7 minecart entities)."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-MINECART-VARIANTS"
+regression = []
+
+[[bug]]
+id = "SHELF-HYDRATE-PANIC"
+title = "A corrupt chiseled-shelf block entity in a loaded chunk crashes the tick thread the same way as the jukebox: `shelf.rs:205` `read_network(..).expect(\"validated shelf NBT\")` + `:208` `decode_shelf(..).expect(\"validated shelf fields\")` inside the infallible `hydrate_chunk` called from the tick hydration span. Same G-SERVER-BLOCKER hydration root as JUKEBOX-HYDRATE-PANIC (one error policy for the span)."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHELF-HYDRATE-PANIC"
+regression = []
+
+[[bug]]
+id = "CRAFTER-HYDRATE-PANIC"
+title = "A corrupt crafter block entity in a loaded chunk crashes the tick thread the same way as the jukebox/shelf: `crafter.rs:49` `read_network(..).expect(\"validated crafter NBT\")` + `:52` `decode_crafter(..).expect(\"validated crafter fields\")` inside the infallible `hydrate_chunk` called from the tick hydration span. Same G-SERVER-BLOCKER hydration root (one error policy for the span). Brewing/lectern/campfire/container hydrates audited clean (skip-on-corrupt, no panics)."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CRAFTER-HYDRATE-PANIC"
+regression = []
+
+[[bug]]
+id = "VILLAGER-CURE-SPEEDUP"
+title = "Zombie-villager curing ignores nearby iron bars and beds: vanilla shortens the 3-5 minute cure when iron bars/beds surround the curing villager (~4% average reduction at cap). The candidate sets a fixed `3600 + hash % 2401` duration at apple-use (`conversion.rs:160`) and counts down in `tick()` with no surroundings check, so cure time is identical in an empty room and a prepared chamber."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#VILLAGER-CURE-SPEEDUP"
+regression = []
+
+[[bug]]
+id = "AXOLOTL-PLAY-DEAD"
+title = "Hurt axolotls never play dead: vanilla grants a chance to drop and take Regeneration I for ~10s while mobs stop targeting it. The candidate has no play-dead state, no hurt-triggered roll, and no targeting exemption — axolotl damage handling is absent from `tick/damage.rs` and no `PlayingDead` flag exists in core. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AXOLOTL-PLAY-DEAD"
+regression = []
+
+[[bug]]
+id = "PATROL-SPAWN-ABSENT"
+title = "Pillager patrols never spawn: the `spawn_patrols` gamerule is registered (`command_rules.rs:158`) but no consumer reads it — no patrol clock, attempt roll, village-distance skip, or 24-48-block captain placement exists anywhere in core. Vanilla runs attempts after 5 in-game days every 10-11 min at 20% chance, skipping players near villages, spawning the captain 24-48 blocks out (light <= 8, non-Peaceful, non-spectator). Raids themselves are implemented (`raids.rs`); only the patrol spawner is absent."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PATROL-SPAWN-ABSENT"
+regression = []
+
+[[bug]]
+id = "PHANTOM-SPAWN-ABSENT"
+title = "Phantoms never spawn from insomnia: the `spawn_phantoms` gamerule is registered (`command_rules.rs:159`) but no consumer reads it — no sleepless-night clock, sky-access/sea-level check, or growing-chance roll exists in core. `TimeSinceRest` is tracked (reset on sleep/bed-enter) but nothing reads it for spawning. Vanilla spawns after 3+ sleepless days at night/thunderstorm above sea level with sky access, chance scaling with insomnia."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PHANTOM-SPAWN-ABSENT"
+regression = []
+
+[[bug]]
+id = "PIGLIN-OVERWORLD-ZOMBIFY"
+title = "Piglins and hoglins never zombify outside the Nether: vanilla tracks `timeInOverworld` and converts after 15s (`AbstractPiglin.CONVERSION_TIME`, pinned bytecode). The candidate has no overworld timer, no conversion path, and no converted-sound hook — piglins persist indefinitely in the Overworld/End. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PIGLIN-OVERWORLD-ZOMBIFY"
+regression = []
+
+[[bug]]
+id = "WITHER-MANUAL-BUILD"
+title = "Placing the final wither skull by hand never summons the wither: `golems.rs:pattern()` matches only snow (pumpkin + 2 snow) and iron (pumpkin + T) patterns — no soul-sand/soul-soil T + 3-skull arm exists. The dispenser path (`dispenser_construct.rs`) completes wither constructs, so only the manual placement route is missing. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#WITHER-MANUAL-BUILD"
+regression = []
+
+[[bug]]
+id = "CONDUIT-RUNTIME-PANIC"
+title = "A corrupt conduit block entity crashes the tick thread at runtime (not load): `conduit.rs:242` `image(state, pos).unwrap_or_else(panic!)` inside `run()`, which executes every 40 ticks over all active conduit positions. Same one-policy hydration root as the jukebox/shelf/crafter rows, but on the per-tick path — `validate_loaded` already fails closed at load, yet a mid-game corrupt write still panics the tick."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONDUIT-RUNTIME-PANIC"
+regression = []
+
+[[bug]]
+id = "BEACON-RUNTIME-PANIC"
+title = "A corrupt beacon block entity crashes the tick thread at runtime: `beacon.rs:83` `read_network(..).expect(\"loaded beacon NBT\")` + `:85` `panic!(\"beacon BE must be a compound\")` inside `image()`, called from the per-tick `run()` path. Same one-policy hydration root as the conduit row (per-tick, not load-time)."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BEACON-RUNTIME-PANIC"
+regression = []
+
+[[bug]]
+id = "SHRIEKER-HYDRATE-PANIC"
+title = "A corrupt sculk-shrieker block entity crashes the tick thread at hydration: `shrieker.rs:282` `decode(..).unwrap_or_else(panic!(\"sculk_shrieker at ...\"))` inside `changed()`/hydrate path over resident chunks. Same one-policy hydration root (load/hydrate path, not per-tick effect)."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHRIEKER-HYDRATE-PANIC"
+regression = []
+
+[[bug]]
+id = "GOAT-RAM-ABSENT"
+title = "Goats never ram: no `Ram` goal kind exists in `blueprint.rs` GoalKind, no goat module exists in core, and goat appears only as flags (ageable/leashable/milkable) with generic breed/wander goals. Vanilla goats periodically charge and knock back entities, damaging shields and losing a horn. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOAT-RAM-ABSENT"
+regression = []
+
+[[bug]]
+id = "TURTLE-LAY-EGG-ABSENT"
+title = "Turtles never lay eggs or navigate home: no `lay_egg/LayEgg/home-beach` logic exists anywhere in core — only generic breed goals. Vanilla turtles return to their home beach and lay 1-4 eggs that hatch in stages. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TURTLE-LAY-EGG-ABSENT"
+regression = []
+
+[[bug]]
+id = "SNIFFER-DIG-ABSENT"
+title = "Sniffers never dig up seeds: no sniffer dig/sniff/explore logic exists in core (the only `sniff_at` is warden init; sniffer appears only in flag lists and golden-dandelion growth). Vanilla sniffers sniff the ground and dig up torchflower/pitcher seeds. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SNIFFER-DIG-ABSENT"
+regression = []
+
+[[bug]]
+id = "CAMEL-DASH-ABSENT"
+title = "Camels never dash: no `dash/Dash` logic exists in core; camel appears only in flag lists (ageable/leashable). Vanilla camels sprint-dash with a cooldown, and two players can ride. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAMEL-DASH-ABSENT"
+regression = []
+
+[[bug]]
+id = "FROG-TONGUE-ABSENT"
+title = "Frogs never eat with their tongue: no `tongue/croak` logic exists in core; frog appears only in flag lists and XP tables. Vanilla frogs snap small mobs/slimes with a tongue lash and lay frogspawn in water. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FROG-TONGUE-ABSENT"
+regression = []
+
+[[bug]]
+id = "LLAMA-SPIT-ABSENT"
+title = "Llamas never spit at attackers: no `spit/Spit` logic exists in core. Vanilla llamas spit projectiles dealing 1 damage when provoked, and trader llamas defend the wandering trader. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LLAMA-SPIT-ABSENT"
+regression = []
+
+[[bug]]
+id = "CAT-GIFT-ABSENT"
+title = "Cats never bring morning gifts: no `morning_gift/MorningGift` logic exists in core. Vanilla tamed cats give the player items (rabbit foot, string, phantom membrane, etc.) after sleeping. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAT-GIFT-ABSENT"
+regression = []
+
+[[bug]]
+id = "STRIDER-COLD-ABSENT"
+title = "Striders never shiver outside lava: no `shiver/cold` strider logic exists in core. Vanilla striders slow and shiver with a purple tint when out of lava, taking damage in rain/snow. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#STRIDER-COLD-ABSENT"
+regression = []
+
+[[bug]]
+id = "PARROT-DANCE-ABSENT"
+title = "Parrots never dance to music: no `dance/Dance` logic exists in core. Vanilla parrots dance when a jukebox plays nearby, and imitate hostile mob sounds. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PARROT-DANCE-ABSENT"
+regression = []
+
+[[bug]]
+id = "DATA-MUTATION-STORAGE"
+title = "Generic entity/storage data operations absent; existing command-block-only merge/get is not general data. Prior DataCommands get+store-score scope did not include merge/modify/storage expansion."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-MUTATION-STORAGE"
+regression = []
+
+[[bug]]
+id = "HAPPY-GHAST-HARNESS"
+title = "No harness equipment or four-rider admission; current mount owner has single rider. Species itself exists."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HAPPY-GHAST-HARNESS"
+regression = []
+
+[[bug]]
+id = "P5"
+title = "Native LOD server advertises service but client ignores its hello/program and never requests tiles."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P5"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-01"
+title = "Villager leg model translucent and malformed"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-02"
+title = "Held tool floats rather than sitting in hand"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-03"
+title = "F3 indices unexpectedly rises"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-04"
+title = "Settlement UI absent or inconvenient"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-05"
+title = "Villagers stuck or stop pathfinding early"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-06"
+title = "Production order creation unclear"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-07"
+title = "Miner and lumberjack professions missing"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-08"
+title = "Villagers leave doors open at night"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-09"
+title = "Individual buildings and upgrades missing"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-10"
+title = "Villagers fail to acquire available jobs"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-11"
+title = "Villagers lose job after sleeping"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-12"
+title = "Village radius does not expand"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-13"
+title = "Villager breeding absent"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-14"
+title = "Inventory crafting drag makes item disappear"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-15"
+title = "Village territory and building map missing"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-16"
+title = "Wall building missing"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-17"
+title = "Automatic settlement layout and infrastructure missing"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-18"
+title = "Sheep and goat models wrong"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-19"
+title = "Spider and zombie movement animation and speed wrong"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-20"
+title = "Storage and assignment UI lacks inventory and icons"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-21"
+title = "First-person tool clips through block"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-22"
+title = "Recursive automatic crafting missing"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-23"
+title = "Villager and witch held items not rendered"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-24"
+title = "Settlement UI fails to open by bell"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-25"
+title = "Settlement UI is not localized"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-26"
+title = "Housing certification wrongly requires baby clearance"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-27"
+title = "Surface mine does not start digging"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "ISSUE-1-28"
+title = "NPC block mutations do not reach client"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+
+[[bug]]
+id = "HUNT-REJOIN-LOCALE"
+title = "Rejoining a non-root dimension loses negotiated UI locale"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-multiplayer-sync-next/REPORT.yaml"
+regression = []
+
+[[bug]]
+id = "HUNT-CURSOR-CLOSE"
+title = "Closing inventory with occupied cursor leaves phantom client cursor"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-craft-custody-next/REPORT.yaml"
+regression = []
+
+[[bug]]
+id = "HUNT-LEVITATION-REST"
+title = "Resting active mob delays levitation during non-decision ticks"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-player-survival-next/REPORT.yaml"
+regression = []
+
+[[bug]]
+id = "HUNT-BUCKET-WASH"
+title = "Direct bucket wash may incorrectly attribute block mining"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-block-interactions-next/REPORT.yaml"
+regression = []
+
+[[bug]]
+id = "MODEL-ZOMBIE-ARMS"
+title = "Zombie-family arms hang down rather than raised"
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoIssueSonnet/REPORT.md"
+regression = []
+
+[[bug]]
+id = "MODEL-CHICKEN-WINGS"
+title = "Grounded chickens and other wings flap constantly"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoIssueSonnet/REPORT.md"
+regression = []
+
+[[bug]]
+id = "MODEL-USE-POSE"
+title = "Third-person item-use poses collapse to one"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoIssueSonnet/REPORT.md"
+regression = []
+
+[[bug]]
+id = "MODEL-CROSSBOW-CAST"
+title = "Crossbow and spell casting poses are missing"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoIssueSonnet/REPORT.md"
+regression = []
+
+[[bug]]
+id = "MODEL-ROLELESS-MOTION"
+title = "Role-less rigs have no procedural motion"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoIssueSonnet/REPORT.md"
+regression = []
+
+[[bug]]
+id = "TEST-BASELINE-RANDOM-SAMPLER"
+title = "Baseline gate: plants_tests::native_random_sampler fails on clean base 7fe49052 (VanillaA stash-verified base-only receipt). Pre-existing red; blocks acceptance growth of touching crates until separately green."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-BASELINE-RANDOM-SAMPLER"
+regression = []
+
+repro_check = ["cargo:mc-core:plants_tests::native_random_sampler_reaches_extra_plants_and_support_cascade", "cargo:mc-core:plants_tests::native_random_sampler_grows_chorus_flowers"]
+
+[[bug]]
+id = "TEST-BASELINE-WATER-DESCENT"
+title = "Baseline gate: fluids parity::physics_water_selects_nearest_descent fails on clean base 7fe49052 (VanillaA base-only receipt). Pre-existing red; blocks acceptance growth until separately green."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-BASELINE-WATER-DESCENT"
+regression = []
+
+repro_check = "cargo:mc-core:fluid_parity_tests::physics_water_selects_nearest_descent"
+
+[[bug]]
+id = "GAP-EGG-HATCH-CLOCKS"
+title = "Accepted residual, FIXED @533076b8: sniffer thirds of 24000/12000-moss + frogspawn 3600..12000 scheduled clock (sipush verified here), turtle keeps night random-tick; new eggs.rs scheduled_tick hooked into block-tick clock."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-EGG-HATCH-CLOCKS"
+regression = []
+
+[[bug]]
+id = "GAP-SIMPLIFIED-CHANCES"
+title = "Accepted residual, FIXED @e45ec5cc+@a2675f6a: azalea/propagule 0.45, fungus 0.4, dripstone lava 15/256 + water 45/256, growth gate top-24-bits < 190888 == nextFloat < 0.011377778f (0.011377778*2^24=190887.44 verified here; commit math 190887.4375 matches float precision)."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-SIMPLIFIED-CHANCES"
+regression = ["cargo:mc-core:farming_tests::bone_meal_cadence_gates_azalea_fungus_and_mangrove"]
+
+[[bug]]
+id = "GAP-VINE-TOP-BOTTOM"
+title = "Accepted residual, FIXED @9dd0ee29: ceiling click sets up=true (getStateForPlacement skips DOWN; ceiling via looking direction — CITATIONS.md VineBlock section)."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-VINE-TOP-BOTTOM"
+regression = []
+
+[[bug]]
+id = "GAP-SCHEMATIC-TREES"
+title = "Accepted residual, FIXED @382da246: wiki-level bending/shape; fungus height nextInt(4..13)+double-on-nextInt(12)==0 per HugeFungusFeature citation."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-SCHEMATIC-TREES"
+regression = []
+
+[[bug]]
+id = "GAP-KELP-SINGLE-FLOW"
+title = "Accepted residual, FIXED @23cdf697: lone downward-flow over column extends tip + turns to source (canGrowInto any water per KelpBlock citation); sideways flow still refuses (control)."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-KELP-SINGLE-FLOW"
+regression = []
+
+[[bug]]
+id = "TEST-MATRIX-CONSOLE-FENCE-CHAT"
+title = "Low-severity harness defect, not product: `winqa-8796727.yaml:63-68` reports internal console acknowledgments rendered as player chat; inspected `winqa/shots/218-face-platform.png` visibly shows [Server] MatrixConsoleFence0000023–26."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-MATRIX-CONSOLE-FENCE-CHAT"
+regression = []
+
+[[bug]]
+id = "TEST-WINQA-OBSERVATION-TRIGGERS"
+title = "`winqa-8796727.yaml:37-61` could not frame falling sand or discover the screen-share trigger; neither acceptance action was observed. Earlier Loading resources retry claim was second-hand and final join passed."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-WINQA-OBSERVATION-TRIGGERS"
+regression = []
+
+[[bug]]
+id = "TEST-NATIVE-FACTS"
+title = "All 113 stale `scenarios/runs/RunNative/bugs.md` sections belong to `20261024T041330-native-matrix-87e0kytf`. Representative `ac0095c8f169e8bb/client-0/native-client.log:1` says missing block_collision_shapes fact under private XDG home. No action/dupe oracle reached. Latest `fail` misleadingly counts these as executed in matrix status."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-FACTS"
+regression = []
+
+[[bug]]
+id = "TEST-NATIVE-IMPORT"
+title = "RunNative reports midrun `entity_health` ImportError caused by module merge in041330, not product runtime."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-IMPORT"
+regression = []
+
+[[bug]]
+id = "TEST-INVENTORY-FRESHNESS"
+title = "Arrow-consumption probe043124-bc41wx1w preferred old menu1 arrow4 over newer window0 arrow3+bowdamage1."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-INVENTORY-FRESHNESS"
+regression = []
+
+[[bug]]
+id = "AUDIT-CHAT-VISIBILITY"
+title = "Public StyledChat fanout lacks visible policy; `scenarios/domains/chat-bugs.md:5-7` explicitly requires hidden/commands-only recipient live confirmation."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUDIT-CHAT-VISIBILITY"
+regression = []
+
+[[bug]]
+id = "AUDIT-SCULK"
+title = "DomWorld corrected downward latch043238-4_gyxzcu:74 expected-lit failures,86 passes; root cause unisolated. Earlier horizontal latchzh3y8i9s invalid fixture."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUDIT-SCULK"
+regression = []
+
+[[bug]]
+id = "DOC-CHISEL"
+title = "ScenarioMatrix reports README says vanilla refused while optional manifest allows join."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DOC-CHISEL"
+regression = []
+
+[[bug]]
+id = "CODE-CLIENT-CLIPPY"
+title = "Existing strict lint gate fails: `refactor/SplitClientLoader-client-final-1.log:6580,6701` reports436 library/459 lib-test errors. Combined native strict `artifact://64976:6915,7005` now reports435 library/458 lib-test errors; concrete:ui_hotfix_tests.rs:967 uses an always-true fov assertion. No runtime conclusion inferred."
+area = "harness"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CODE-CLIENT-CLIPPY"
+regression = []
+
+[[bug]]
+id = "TEST-JAVA-CAPABILITIES"
+title = "Exact submitted prediction tokens/ACK sequence and cumulative chat unavailable; raw GUI recent_chat is bounded/newest-first. Final transformer pickup/shield/tick/QA receipt corrections9bdf33d unbuilt/unretested; old47unit passes do not prove a client. Fabric SVC/DH profiles include SolarisLoader, not pure target-mod lanes."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-JAVA-CAPABILITIES"
+regression = []
+
+[[bug]]
+id = "TEST-NATIVE-HEALTH"
+title = "Current native full wave does not execute every scenario always_oracle (server alive/noERRORpanic/MSPT<50); old captures lack complete metrics. Subject/domain passes therefore are not complete matrix acceptance."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-HEALTH"
+regression = []
+
+[[bug]]
+id = "TEST-NATIVE-F1"
+title = "Automation press_inputs key.keyboard.f1 rejects a supported physical window key; `wt/model-gallery/.analysis/validation/20261024T035502-model-gallery-_bufguv2/model-gallery/transcript.json:855-860` records unsupported ordinary key."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-F1"
+regression = []
+
+[[bug]]
+id = "TEST-DIMENSION-BIOME"
+title = "`dimensions_tests.rs:1679` hardcodes nether_wastes although fixture `:260-275` uses the real seed42 NetherGenerator; actual crimson_forest alone does not violate dimension-local spawn tables. Failure retained in `wt/server-fixes/.analysis/codex-logs/server-fixes/after/core-fixer.log:174-179`."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-DIMENSION-BIOME"
+regression = []
+
+[[bug]]
+id = "TEST-FALLING-TORCH"
+title = "`falling_tests.rs:346-353` explicitly expects OLD torch replacement and no item. Current `falling.rs:370-382` checks replaceability, drops sand and removes falling entity when torch is not replaceable; pinned FallingBlockEntity `artifact://64820:1114-1176,1316-1335` has the same replacement-gated drop path. Failure receipt `core-fixer.log:182-187` is retained."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-FALLING-TORCH"
+regression = []
+
+[[bug]]
+id = "TEST-END-RESTART-OBSERVER"
+title = "First B02 causal replay remains failed: `scenarios/runs/Fixer-B02/20261024T060412-protocol-matrix-70prt4j8/protocol-result.json:3-13,24-38,153` binds SHA87dd4540 and the pre-restart dragon UUID; `server.log:63-78` shows orderly checkpoint2609 then successful reopen. `Proto0-2.wire.jsonl:48,808` contains that exact UUID in the spawn packet, followed by RemoveEntities for entity42 before the final missing-dragon assertion. Therefore that late census alone does not establish failed persistence."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-END-RESTART-OBSERVER"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-1"
+title = "Zombie, husk and giant have invisible left arm and left leg."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:66"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-2"
+title = "The pig is drawn as a tall dog-like animal."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:73"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-3"
+title = "Animal equipment is never drawn."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:78"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-4"
+title = "Double chests show the lid underside on top."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:87"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-5"
+title = "Slime has no face."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:96"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-6"
+title = "Renderer and layer scale is lost."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:100"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-7"
+title = "Creeper has no pre-explosion swell or white flash, and no charged aura."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:117"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-8"
+title = "Vanilla keyframe animations are not applied."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:121"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-9"
+title = "Aquatic identity is lost."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:129"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-10"
+title = "Several mobs lose their signature parts."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:135"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-11"
+title = "These mobs have the wrong shape or size."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:142"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-12"
+title = "Vindicator samples the wrong texture regions."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:156"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-13"
+title = "Banner flags are too short."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:159"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-14"
+title = "Ceiling hanging sign (Sonnet lead, independently confirmed)."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:163"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-15"
+title = "Elytra and capes are never drawn."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:170"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-16"
+title = "Happy ghast baby renders mostly pink"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:174"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-N1"
+title = "Baby chestplates have see-through shoulders. This affects every family and every material, and is confirmed at runtime."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:90"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-N2"
+title = "Magma cube eyes are split and sit too low. Confirmed at runtime."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:99"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-N3"
+title = "Player heads have no outer (hat) layer."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:107"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-N4"
+title = "`camel_husk` is the camel rig and inherits every camel finding."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:115"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-N5"
+title = "With boots on, baby leggings are hidden or nearly hidden."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:124"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-N6"
+title = "Baby armour shells resample the texture at non-1:1 texel density on almost every face."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:129"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-N7"
+title = "The generic `armor_baby_{head,chest,legs,feet}` are unreachable."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:136"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-N8"
+title = "Left/right mirror flags are inconsistent."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:143"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-N9"
+title = "The shulker box base reuses the lid's UV origin."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:150"
+regression = []
+
+[[bug]]
+id = "MODEL-OPUS-N10"
+title = "Small items:"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:156"
+regression = []
+
+[[bug]]
+id = "MODEL-PLAYER-HEAD-PROFILE"
+title = "`player_head` items ignore the `profile` component (GUI, hand, ground, frame, worn): always Steve"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-20261102.md:24"
+regression = []
+
+[[bug]]
+id = "MODEL-ELEMENT-EMISSION"
+title = "Element-level `light_emission` is ignored by the model baker: `open_eyeblossom`, `potted_open_eyeblossom`, `firefly_bush` emissive overlays are not full-bright"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-20261102.md:25"
+regression = []
+
+[[bug]]
+id = "MODEL-ITEM-POSE"
+title = "Copper-golem statue item ignores its `pose` (always standing rig); `swap_animation_scale` (7 spear items) unimplemented"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-20261102.md:26"
+regression = []
+
+[[bug]]
+id = "MODEL-SIGN-UV"
+title = "Standing and wall signs: board UV v=2 instead of 0 → bottom 2 of 12 front rows are transparent holes; post is 4×12×4 at uv(2,14) → half transparent"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:28"
+regression = []
+
+[[bug]]
+id = "MODEL-BANNER-PLACEMENT"
+title = "A banner placed from an item with `banner_patterns` is unpatterned in the world: server writes only `{id,x,y,z}` block-entity defaults; no item-component → block-entity transfer (same hole for head `profile`, pot sherds, custom name)"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:29"
+regression = []
+
+[[bug]]
+id = "MODEL-DYNAMIC-CONTEXT"
+title = "Clock/compass: item frames, dropped items, shelves, mob/other-player hands never receive the new world context → still frozen"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:32"
+regression = []
+
+[[bug]]
+id = "MODEL-BLOCK-ENTITY-DRAW"
+title = "The production native scene draws only 22 of the 27 block-entity types that have a factory. `shelf`, `brushable_block`, `structure_block`, `test_instance_block` (and the dynamic path that handles them) are never drawn"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-block-item-completion-20261103.md:56"
+regression = []
+
+[[bug]]
+id = "MODEL-ENTITY-FIRE"
+title = "Burning entities have no fire overlay. The server sends the on-fire flag; the client never reads it"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:86"
+regression = []
+
+[[bug]]
+id = "MODEL-ENTITY-TNT-FALLING-LIGHTNING"
+title = "TNT, falling blocks and lightning bolts have simulation state but no draw call"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:87"
+regression = []
+
+[[bug]]
+id = "MODEL-ENTITY-LEASH"
+title = "Leash rope is never drawn (leash holder tracked; material has no producer)"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:88"
+regression = []
+
+[[bug]]
+id = "MODEL-PANE-ALPHA"
+title = "15 stained-glass-pane GUI icons ≈1.5× too opaque (0.70 vs 0.46); cause unproven"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-model-remainder-20261103.md:125"
+regression = []
+
+[[bug]]
+id = "MODEL-SHADE-OVERRIDE"
+title = "26.3 `shade_direction_override` is not implemented. 190/1,288 blockstates (all cross plants incl. short/tall grass, ferns, flowers, saplings, crops, sugar cane, vines, kelp, seagrass, corals; torches, lanterns, chains, fire, campfire, redstone wire, repeater/comparator, tripwire, cobweb, snow layer 2, flowerbeds, poplar sapling) get directional face shading that vanilla 26.3 does not apply"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:84"
+regression = []
+
+[[bug]]
+id = "MODEL-ENTITY-263-RIGS"
+title = "4 entity types new in 26.3 have no rig family: `cushion`, `sulfur_cube`, `poplar_boat`, `poplar_chest_boat` → `material()` errs `no activated rig family` → entity is unrendered (invisible)"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:85"
+regression = []
+
+[[bug]]
+id = "MODEL-ITEM-BARS"
+title = "No item bar (durability or bundle fullness) anywhere in the GUI"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:86"
+regression = []
+
+[[bug]]
+id = "MODEL-SHIELD-GUI"
+title = "Shield GUI cell narrow: runtime corroboration of Opus S3 (10×16) on rig bytes = W `273a83141a8f`"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:92"
+regression = []
+
+[[bug]]
+id = "COPPER-WEATHERING"
+title = "Weathering did not cover the vanilla copper families"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COPPER-WEATHERING"
+regression = ["cargo:mc-core:copper::tests::all_weathering_families_oxidize_wax_and_scrape"]
+
+[[bug]]
+id = "CUSTOM-POTION-SPLASH"
+title = "Custom-only and base-plus-custom splash potions fail to apply custom effects."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-CUSTOM-PAYLOAD"
+regression = ["cargo:mc-core:projectiles::payloads::tests::custom_only_splash_applies_custom_effect", "cargo:mc-core:projectiles::payloads::tests::base_plus_custom_splash_applies_both_effects"]
+
+[[bug]]
+id = "POTION-SPLASH-VERTICAL"
+title = "Splash potions affect entities wholly above the permitted vertical volume."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-TARGET-GEOMETRY"
+regression = ["cargo:mc-core:projectiles::payloads::tests::splash_rejects_targets_above_the_vertical_band"]
+
+[[bug]]
+id = "WATER-SPLASH-ENTITY"
+title = "Splash water bottles do not extinguish burning entities."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#WATER-BOTTLE-IMPACT"
+regression = ["cargo:mc-core:projectiles::payloads::tests::splash_water_douses_burning_entity"]
+
+[[bug]]
+id = "CAULDRON-WATER-LAVA-CONTACT"
+title = "Water and lava cauldrons fail to extinguish or burn a player inside their contents."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAULDRON-CONTACT-EFFECTS"
+regression = ["cargo:mc-core:tick_tests::contact_hazards_tests::burning_player_inside_water_cauldron_is_extinguished_for_one_level", "cargo:mc-core:tick_tests::contact_hazards_tests::lava_cauldron_burns_the_entity_standing_inside"]
+
+[[bug]]
+id = "COMPOSTER-FLOWER-GRASS"
+title = "Common flowers cannot be composted and grass blocks are incorrectly admitted."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COMPOSTER-INPUT-TABLE"
+regression = ["cargo:mc-core:composter::tests::omitted_java_flowers_compost_and_grass_block_does_not"]
+
+[[bug]]
+id = "BED-SMALL-SLIME"
+title = "A harmless small slime near a bed incorrectly prevents sleeping."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-MONSTER-ELIGIBILITY"
+regression = ["cargo:mc-core:sleep::tests::small_slime_does_not_block_sleep"]
+
+[[bug]]
+id = "BED-OBSTRUCTED-TOP-ONLY"
+title = "A bed with an obstructing ceiling over a bed half may incorrectly admit sleep."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "ReviewAcceptanceOpus first-promotion-batch; verify vanilla javap"
+regression = []
+
+[[bug]]
+id = "COMMAND-FORK-LIMIT"
+title = "Command forks may not obey vanilla strict admission and fork-counting semantics."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#RULE-COMMAND-BUDGET; ReviewAcceptanceOpus first-promotion-batch"
+regression = []

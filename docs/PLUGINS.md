@@ -532,6 +532,58 @@ fuel/memory limits and invalid output use the existing host failure path.
 The transport caps a string at 8192 bytes and a returned batch at 256 messages;
 ordinary host/native validation may impose tighter bounds.
 
+### Inspecting Forge and Fabric input
+
+The same converter can inspect a mod JAR before conversion:
+
+```sh
+python3 tools/bukkit/convert.py --inspect-mod \
+  --java-home /path/to/jdk17 --maven /path/to/mvn \
+  --jar /path/to/mod.jar --output /path/to/inspection
+```
+
+This offline command writes `mod-inspection.json` and `mod-references.tsv`. The
+report identifies loader metadata, declared dependencies, entrypoints, access
+transformers and Mixin configurations; the TSV inventories direct method and
+field instructions, dynamic call sites and their direct bootstrap method handles,
+Forge/NeoForge `@Mod` entrypoints and annotated event handlers. A handler
+annotation does not prove registration. The inventory includes client and
+unreachable classes; it does not resolve nested dynamic constants, reflection,
+dynamic class loading or embedded JARs. No mod classes are run.
+
+For `call` and `field` TSV rows the columns are record type, target owner,
+target name and descriptor, caller class, caller method and descriptor, JVM
+opcode, method interface-target flag (false for fields), and count within that
+caller. Dynamic and handler rows identify their caller directly; they are static
+evidence, not a runtime trace.
+
+Inspection **does not convert mods** or apply Mixins and does not establish
+compatibility, source-version support or equivalent behavior. Declared Mixins
+are reported, not silently treated as supported. Inspection requires Python 3.11+
+and the existing Maven/ASM dependencies cached locally; it does not download them.
+
+### Converting a supported Forge handler
+
+`--convert-mod` uses the same offline TeaVM compiler, Rust adapter, WIT component
+encoder and normal plugin host as the Bukkit path; it does not install Forge or
+start a JVM in the server. Supply the same build inputs and target blocks report
+as below, replacing the plugin JAR and adding `--convert-mod`.
+
+The currently supported Forge slice is one statically registered, public static
+`NORMAL` `BlockEvent.BreakEvent` subscriber. The callback may read block position
+coordinates and inspect or set event cancellation, plus use supported primitive
+or string state and static helpers. Only player-authored non-air-to-air changes
+are mapped; cancellation rejects the native build batch. This is not a general
+Forge API or cross-version compatibility claim. Unproven registration, additional
+server handlers, world/player access, unsupported reachable bytecode, access
+transformers and missing server dependencies are rejected. Fabric and NeoForge
+conversion are not yet implemented.
+
+Declared Mixins and client-only subscribers are omitted, not executed, and are
+listed in `conversion.json`; inspect these omissions before deployment. A
+successful conversion does not imply that a mod remains useful without them.
+
+
 ### Offline build and receipt
 
 Required local tools: JDK **17**, Python 3 with PyYAML, Maven 3.9, Binaryen **123**
@@ -555,6 +607,8 @@ python3 tools/bukkit/convert.py \
 
 On shared agent machines, run Cargo through the repository's memory slot runner
 and point `--adapter`/`--component-encoder` at that runner's target directory.
+The converter strips debug sections from the adapter before linking; otherwise
+a debug-built adapter can exceed the normal host component-size limit.
 The converted manifest declares join subscriptions, command roots and the
 build hook; no compiled-in plugin list is added.
 

@@ -57,7 +57,7 @@ creeper and flies.
 | `poison_melee`, `poison_arrows`, `hurt_by_snowballs`, `ignores_wind_charges` | melee/ranged/projectile payloads | cave spider, bogged, blaze, breeze |
 | `size_profile`, `splits_on_death` | entity loot | slime and magma cube; size metadata requires their presentation layout |
 | `slime_spawn_rules`, `ignores_nether_spawn_light` | natural spawning | slime; magma cube and ghast |
-| `hunts_villagers`, `hunts_monsters`, `hunts_living`, `ignored_by_monster_hunters`, `ignored_by_living_hunters`, `guard_hostile` | target tables and villager defense | zombie family, golem, zoglin and original guards' hostile list |
+| `hunts_villagers`, `hunts_monsters`, `hunts_living`, `ignored_by_monster_hunters`, `ignored_by_living_hunters`, `guard_hostile` | target tables and villager defense | villager hunters: zombie, zombie villager and husk; golem, zoglin and original guards' hostile list |
 
 The original layer-1 capabilities reused working code. No capability was invented
 without one: there is no `fire_immune`, because `mc-core` never consumed the data

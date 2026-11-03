@@ -72,5 +72,5 @@ A domain-specific route must name provenance, bounded admission, live fences,
 full resource footprint, authoritative writer, commit/unknown-outcome boundary,
 publication, recovery source and exact test scope. Do not copy historical
 multi-journal warehouse/inventory cards into the native tick model or relabel an
-old receipt as current verification. The [warehouse pilot](pilot-warehouse-binding.md)
-is retained only as an explicitly superseded historical extraction record.
+old receipt as current verification. The CP-REFACTOR-030 warehouse-pilot record
+is archived in [ARCHIVE.md](../archive/ARCHIVE.md).

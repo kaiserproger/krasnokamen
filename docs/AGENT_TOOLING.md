@@ -47,7 +47,7 @@ never success.
 `SOLARIS_CLIENT_BINARY`, the native resource environment and `SCENE_SHOT_SCENARIO`
 to a JSON file, then run `python3 -m tools.harness run scene-shot --client native
 --windowed`. The JSON contains `steps` with one of `cmd`, `tp` (five coordinates),
-`wait_ticks`, `wait_play`, `shot`, `observe`, `use_item_on`,
+`wait_ticks`, `wait_play`, `wait_terrain`, `shot`, `observe`, `use_item_on`,
 `click_screen_button`, `scan_blocks`, `read_block`, `navigate_to_block`,
 `list_entities`, or `key` (`keys` and `ticks` MCP arguments; released when
 the step finishes). Optional `seed` defaults to 100, `world` copies an existing
@@ -56,12 +56,31 @@ world, `server_view_distance` defaults to 4, and `client_settings` accepts
 inherited). PNG paths are recorded in `result.json`; settings and world are isolated per run.
 With a client supporting held MCP input, `{"shot":"tab","hold_keys":["key.keyboard.tab"]}`
 captures the visible player list and releases the key even if capture fails (native only).
+Native-only terrain fencing: after observing the relevant block states and before the
+screenshot, use `{"wait_terrain":{"name":"terrain-ready","args":{"sections":[[62,10,62],[62,9,62]],"timeout_seconds":30}}}`.
+Sections are unique section-coordinate integer triples (1–64); the timeout is 0.1–120
+seconds, default 30, also bounded by the scenario deadline. A missing tool, timeout or
+non-ready response fails the scenario. The full receipt is saved as
+`<artifact>/terrain-ready.json` and in `scenario.terrain_waits`; requested and mesh
+revisions must match. The completed frame is a terrain readiness fence, not proof
+of visible pixels, and capture is not atomic with the fence: later changes may invalidate it.
 
 `--client java --windowed` runs the same scenario against the vanilla Java client
 (Loader `:fabric-agent:runClientMcp`) as a rendering oracle: `shot` uses
 `minecraft_screenshot`, and the client gets the same 1280x720 window, fov, GUI scale 3 and render
 distance through its `options.txt`. Run the same scenario with both clients and compare the
 PNGs; Mojang's client is a test-time reference only, never a source for Solaris models.
+
+`settlement-map-qa` reuses that lifecycle with a scripted body (`scene_shot.run(ctx, scenario, script)`)
+and judges the client's own screenshots: it founds an empty town, opens its map from the main page,
+certifies a real Storage while the map stays open (stale shot: unchanged), refreshes, and returns
+to the main page; palette pixel deltas between shots of the same scene prove territory, viewer and
+storage cells. `python3 -m tools.harness run settlement-map-qa --client native --windowed` presses
+the dialog buttons, then reopens the map and drives the native pointer (`client_pointer`): a
+territory cell and a storage cell must show their tooltips, and clicking the storage must bring
+the server's building page. `--client java --windowed` uses the same pages' `/settlement menu`
+commands (Loader MCP cannot press buttons inside a dialog's scroll body) and has no pointer tool,
+so hovers and cell clicks are native-only.
 
 ## Profiles
 
@@ -81,11 +100,12 @@ PNGs; Mojang's client is a test-time reference only, never a source for Solaris 
 | `survival` | real-client | One shared Python MCP mine/pickup/place scenario, Java (default) or windowless native. `python3 -m tools.harness run survival --client native` |
 | `dialogs` | real-client | Native server-driven dialog (`--client native`; `--windowed` adds screenshots): the server runs with `SOLARIS_DIALOG_PROBE=1`, the client types the text input, steps the slider, flips the checkbox, presses Submit, and the server log must show the exact typed payload. Requires `SOLARIS_SERVER_BINARY`. |
 | `title-connect` | real-client | Native Title screen type-address+name, Connect, disconnect-back-to-Title (`--client native`; `--windowed` adds screenshots). Requires `SOLARIS_SERVER_BINARY` (reuses the survival-built server). |
+| `settlement-map-qa` | real-client | Settlement map dialog: empty-town territory and viewer, a certified Storage after Refresh (stale shot first), Back; pixel deltas of the map palette in the client's screenshots (`--client native --windowed` presses buttons and also hovers/clicks map cells through `client_pointer`, `--client java --windowed` sends the pages' commands). Requires `SOLARIS_SERVER_BINARY`. |
 | `army-qa` | real-client | Settlement army dialogs, equipment, movement, combat and restart (`--client native --windowed`). The guard-return fixture waits for every live guard within 2.5 blocks of its post before spawning a zombie 11 blocks away, inside the 12-block tether; the same guard must leave by more than 4 blocks and return within 2.5. Before combat, the command-order check requires an `Ordered` reply newer than its chat fence and a dialog roster showing Patrol for every soldier; Return deliberately does not engage. Requires `SOLARIS_SERVER_BINARY`; its canonical plugin directory is empty. |
 | `core-client` | real-client | Server/own-chat continuity subset only (Java default, native subset). The receipt explicitly excludes Wasm, economy, and Loader-required rejection evidence. |
 | `inventory` | real-client | Shared crafting/cursor/selection probe (Java default, native, or named `run scenario inventory-client --client java`). Ordinary slot clicks, no `minecraft_run_scenario` in the probe. |
 | `entities` | real-client | One shared bounded pig feeding/damage/death/drop probe with declared operator fixture and UUID/type fencing (`--client native` or `java`) |
-| `native-lifecycle` | real-client | Reconnect, received death/respawn, and 30-minute stationary RSS soak; the isolated world uses peaceful difficulty during the soak and restores its original difficulty (`--client native|java`; `--soak-seconds 0` is smoke-only) |
+| `native-lifecycle` | real-client | Reconnect, received death/respawn, and 30-minute stationary RSS soak; the isolated world uses peaceful difficulty during the soak and restores its original difficulty. Difficulty query replies are checked within unique chat fences in newest-first history (`--client native|java`; `--soak-seconds 0` is smoke-only). |
 | `logical-native` | functional-native | Cheap headless movement/look plus rejected-use stable-state subset. Explicitly not `playable`/`regression`/`replay`; `--windowed` is rejected. |
 | `native-scale` | functional-native | Headless native CPU/RSS canaries beside real Rust protocol bots; non-exclusive diagnostic only |
 | `loader-live` | real-client | Loader gate via `loader.run`; requires `--platform fabric|neoforge|forge`, an immutable `--server-bin`, and a matching `--plugins-dir`. `python3 -m tools.harness run loader-live --platform neoforge --server-bin /absolute/solaris-v2 --plugins-dir /absolute/packages` |
@@ -169,16 +189,19 @@ SOLARIS_HARNESS_CPU_QUOTA=off  python3 -m tools.harness run test  # unbounded, o
 A cap only protects the session if the run fits in free machine memory:
 `run`/`client` refuse admission when `MemAvailable` is below the selected
 `MemoryMax` + 1 GiB, naming the knob to change. That refusal is not
-acceptance evidence. Full `run test` / `run correctness` take every mem-run
-slot exclusively:
+acceptance evidence. Prefix heavy Cargo with `env RUSTC_WRAPPER=`: the global
+`~/.cargo` sccache wrapper otherwise compiles outside the mem-run scope.
+Full `run test` / `run correctness` run beside other work with a 12G cap; the
+runner's watchdog freezes build-only commands while memory is short and thaws
+them later, and `-x` is reserved for quiet measurement windows:
 
 ```sh
-# Full workspace gate: exclusive, all slots.
-.analysis/tools/mem-run.sh -x -m 12G env CARGO_BUILD_JOBS=6 \
+# Full workspace gate.
+.analysis/tools/mem-run.sh -m 12G env RUSTC_WRAPPER= CARGO_BUILD_JOBS=6 \
   CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
   python3 -m tools.harness run test
 # Focused/per-crate work retains the smaller shared scope.
-.analysis/tools/mem-run.sh -m 8G env CARGO_BUILD_JOBS=6 \
+.analysis/tools/mem-run.sh -m 8G env RUSTC_WRAPPER= CARGO_BUILD_JOBS=6 \
   CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
   cargo test -p mc-core --lib entity_state_persistence_tests
 ```
@@ -200,6 +223,19 @@ entries are refresh, admission, evaluation, social, acquisition, full and
 skipped. These counters overlap and must not be summed as disjoint phases.
 The flat scene has no authored village buildings or workstations, so its
 villager timings do not establish inhabited-settlement workload coverage.
+
+## Optional CRAP measurement
+
+`cargo-llvm-cov` and `cargo-crap` can measure line coverage and cyclomatic
+complexity per function on the same source tree. Retain the test command,
+revision, raw LCOV, analyzer output and exact test scope; a partial suite is
+not workspace coverage, and line coverage is not branch or path coverage.
+Missing or ambiguous function coverage is unknown, not zero or 100%.
+For `mc-domain`, the Java-facing contract test checks every game mode,
+direction and hand plus invalid direction/hand ordinals. This is unit-level
+behavior evidence, not a real-client or entire-core acceptance gate.
+The owner's `CRAP < 10` rule for new or changed functions applies only after
+1.0 ships; it is not a pre-release gate.
 
 ## Receipts and failure diagnosis
 
@@ -376,12 +412,29 @@ and `ProbeSteps` receipts; per-scenario `scenario.json` and
   block/menu/input actions. Rendered name/text/color/glow, piglin admiration,
   and merchant offers need screenshot review; inventory debit or menu
   admission alone is not visual acceptance. Action/renderer gaps fail closed.
+  The slime small-child check uses a verified empty hand so sword sweep cannot
+  kill a sibling and falsely fail the survivor/no-new-descendants assertion.
+  The enderman fixture clears a trench below the projectile path so the
+  deflected arrow remains airborne long enough for a received movement update;
+  the same-arrow reversal and same-enderman teleport assertions remain required.
+  Fishing and observer equipment traces read packet IDs from the selected
+  vanilla report; early reel waits out the native client's four-tick use delay.
 - `native-v2-p4-{nameplates,advancements,damage,hopper,statistics}`: stop and
   restart the owned server on the same binary/world, reconnect the same
   player, and capture the recovered state. Statistics re-requests after
   restart must not double-count absolute mining/pickup counters.
+  The advancement traversal moves one wheel notch at a time so narrow
+  viewports cannot skip required story nodes.
 - `native-v2-p5-humanoid-armor`: one windowed observer plus one headless
   actor; dyes and summon-equipment are required and fail closed.
+- `anti-xray`: checks enclosed ore concealment, survival mining reveals, and
+  light updates across chunk unload and return. It fences survival mode with an
+  ordered chat receipt and waits for server-confirmed teleport position and
+  playable-world readiness before checking chunk state.
+- `native-composter-chance` (`composter-chance` profile): a windowed native
+  player deposits sixteen single wheat seeds via a hopper and observes each
+  debit and resulting composter level. It rejects sixteen successful rolls;
+  this statistical check does not establish the full probability distribution.
 - `native-v2-light-seam`: chunk-admission lighting gate comparing client
   `minecraft_scan_blocks`, the server's `LevelChunkWithLight`/`LightUpdate`
   stream (loopback-decoded), and a vanilla-propagation oracle across a
@@ -436,6 +489,30 @@ python3 -m tools.harness run catalog-load -- \
   --bots-bin /absolute/prebuilt/player-scale-bots \
   --clients 10 --smoke --out /absolute/new/catalog-load-smoke
 ```
+
+`--scenario spain-industrial --spain-fixture /absolute/fixture.json` selects
+an assisted chain diagnostic in one live world, admitting bot cohorts of 2,
+then 2, then 4. The last cohort attempts two concurrent actor chains with
+distinct pursuit targets and independently attributed collectors. The fixture
+identifies the staged world, unverified waypoint inputs, source/destination
+containers and two observed villagers,
+certified building, workstation and matching embedded item registry. Provisioned
+stock and workstation are not earned extraction. Each completed cycle requires
+independent received arrival, conserved chest/player images, matching item
+pickup and native carry and production receipts. Visible villager carry
+baselines are recorded before the drop; the actual item collector must have
+one, show the exact carry increase and perform the production job. A pursuit
+target's last received pose is not fresh authoritative state; actor arrival,
+actual pickup and carry remain separate evidence.
+Completed custody and subsequent job/carry stage evidence is also retained in
+`bread-<stage>-<actor>-evidence.json` even when production validation fails.
+After all four chains complete, the diagnostic records each collector's native
+carry, cleanly restarts the same world, then requires identical completed-job
+identities/receipts and collector carry slots/revision/hash across the restart.
+`ASSISTED_CHAIN_ONLY` is deliberately not a Spain-industrial or capacity PASS;
+runs emit no performance claim. The private-world inotify guard aborts below
+60 GiB on observed world writes; unrelated writers can consume disk between
+those events.
 
 Use a new output directory; repeat `--scenario` for explicit selections.
 The `JOIN-01` public-command path uses one declared operator setup client to
@@ -515,8 +592,8 @@ are a separate fixture comparison, not catalog closure evidence.
 Deterministic imported-city functional fixture (no throughput or performance
 verdict). Keep all third-party archives, worlds, census/plan payloads, and
 receipts in ignored `.analysis/`; never commit map or Mojang bytes. Large
-scans take the same memory slot and Main's GO as the import itself; heavy
-ones run inside an ordinary `.analysis/tools/mem-run.sh -m 6G` slot.
+scans take Main's GO like the import itself; heavy ones run inside an ordinary
+`.analysis/tools/mem-run.sh -m 6G` scope.
 
 ```sh
 python3 -m tools.coreperf.constantinople census --world CANONICAL_ANVIL_EXPORT \
@@ -560,6 +637,9 @@ python3 -m tools.harness run constantinople -- --plan DIR --world NATIVE_WORLD \
   player. Each stopped phase verifies every authored villager UUID and exact
   settlement assignment; reopen census must match the stopped run
   (`--reopen-only` re-checks without repeating create/bind).
+  Native snapshot decoding treats `command_storage` as its named NBT compound;
+  rebuild the probe after changing native global encodings rather than using an
+  older binary that interprets this domain as JSON.
 
 ## Prerequisites
 

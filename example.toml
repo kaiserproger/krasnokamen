@@ -148,7 +148,7 @@ directory = "plugins"
 # do not point this directory at an existing Anvil world.
 world_dir = "world"
 # Discover an existing licensed vanilla content cache, or derive one explicitly:
-#   solaris-v2 content import --version 26.1.2 --download
+#   solaris-v2 content import --version 26.3 --download
 # Content is never redistributed. Verify a cache with `content verify`.
 # vanilla_data_dir = "data/vanilla"
 # Console `backup` copies the running world here (see docs/OPERATING.md).

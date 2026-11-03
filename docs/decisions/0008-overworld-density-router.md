@@ -1,7 +1,7 @@
 # ADR 0008 - Overworld generation pipeline
 
 **Date:** 2026-07-22
-**Status:** Accepted, worldgen revision 20
+**Status:** Accepted. Worldgen authority and the revision-fence/upgrade semantics below are current; the pinned revision number is historical — the code owner is `WORLDGEN_REVISION` in `crates/mc-worldgen/src/lib.rs` (currently 29). Never cite "revision 20" as current.
 
 ## Context
 

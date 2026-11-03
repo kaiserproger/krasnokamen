@@ -96,6 +96,11 @@ to water down individual claims. If a closeout says "sign editing
 parity", sign editing itself needs evidence; it cannot borrow coverage
 from unrelated mechanics.
 
+### Bug fixes
+
+Follow the [bug regression contract](bugs/README.md). Tests must assert
+vanilla or owner-accepted behavior, not merely the current implementation.
+
 ## Draft Implementation Rules
 
 Fast breadth-first work is allowed, but must stay honest:

@@ -11,7 +11,7 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
   SOLARIS_LOADER_REVISION: a409ce101fd53895a4cff401956d72dffbdac15b
-  SOLARIS_PLUGINS_REVISION: 7c0520f1bb0fa015aacce8887b176d09901ce7c1
+  SOLARIS_PLUGINS_REVISION: 63540715138d5e74d5a00a595992d5ebe9056371
 
 permissions:
   contents: read
@@ -105,6 +105,9 @@ jobs:
           rm -rf data/vanilla
           mkdir -p data
           cp -a "$RUNNER_TEMP/xdg/solaris/content/26.3" data/vanilla
+      - name: Run bug regressions
+        if: matrix.shard == 1
+        run: python3 -m tools.harness run regressions
       - run: python3 -m tools.harness run test --workspace --all-targets --partition count:${{ matrix.shard }}/4
       - name: Retain failed test receipts
         if: failure()

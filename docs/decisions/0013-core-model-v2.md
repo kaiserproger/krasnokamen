@@ -372,9 +372,16 @@ double-container alias checks and revision fences. Policy and physical stock
 are captured by the same tick WAL/checkpoint boundary.
 
 Production uses the admitted native recipe catalog, real certified work points,
-the original worker body's route, and simulation-clock deadlines. Tool wear,
-ingredients, authored remainders and outputs commit together; missing inputs,
-space or a reachable station pause without partial consumption. Caravan work
+the original worker body's route, and simulation-clock deadlines. Missing
+next-portion inputs route that body to current same-settlement bootstrap or
+certified storage; only physical reach permits an atomic container-to-carry
+transfer through the existing fenced, reservation-preserving inventory bridge.
+Supply targets are derived navigation, not serialized stock or fulfillment
+authority, and are recalculated after recovery. Held next-portion inputs retain
+the production carry protection while walking back to the workstation.
+Tool wear, ingredients, authored remainders and outputs commit together at the
+station; missing inputs, space or a reachable station pause without partial
+recipe consumption. Caravan work
 likewise moves the original bound body through the native collision-aware
 brain. Only actual pickup and unload create their receipts; elapsed calls,
 unloaded stock or a policy label cannot manufacture delivery.
@@ -2294,15 +2301,20 @@ it disappears, so `/forceload remove` cannot be resurrected by a stale image.
   cache, and corrupt entries are recompiled. This cache is disposable host
   acceleration, not world/plugin authority or part of a backup. Unavailable or
   malformed cache configuration warns and retains normal compilation, rather
-  than refusing an otherwise valid deployment. Guest validation, fuel/epoch
-  budgets and Cranelift's `Speed` optimization remain unchanged. The copied
+  than refusing an otherwise valid deployment. Guest validation and fuel/epoch
+  budgets remain unchanged. The copied
   owner-world startup profile attributed 47.79% self cycle overhead to
   regalloc2's main allocator alone, versus 0.04% to WAL batch decoding;
   unchanged plugin recompilation, not replay of covered history, was the
-  observed startup bottleneck.
+  observed startup bottleneck. Superseded 2026-10-23: the 0.8 `on_events`
+  canonical-ABI lift is a single ~1.2 MB wasm function per plugin, which
+  Cranelift (`Speed`) could not compile inside 3 GB, so cold-cache startup was
+  OOM-killed on the 4 GB test VPS. Components now compile with Winch (baseline
+  compiler); the same nine plugins load cold at ~0.4 GB peak RSS in seconds.
 - **Plugin native authority (2026-10-14).** `solaris-v2` discovers the complete
-  `[plugins].directory` and runs the production `solaris:plugin@0.7.0` component
-  host, not the v1 simulation runtime. Invalid packages, duplicate ids/commands,
+  `[plugins].directory` and runs the production component host (current contract
+  `solaris:plugin@0.8.0`, `crates/mc-script/wit/plugin.wit`; this entry's `0.7.0`
+  is the historical number at acceptance), not the v1 simulation runtime. Invalid packages, duplicate ids/commands,
   failed guest startup and unsupported startup declarations refuse startup.
   Manifest-declared `before-build` hooks register automatically in deterministic
   package-id order with Deny failure policy. Unsupported kinds (including

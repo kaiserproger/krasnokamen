@@ -13,6 +13,11 @@ These failures required different checks, not more repetitions of the same
 happy path. The protocol below makes those attacks part of acceptance; a green
 receipt remains evidence only for the exact path and artifact it exercised.
 
+The reviewer is independent of the implementing agent. The owner chooses the
+model; no vendor or model names belong in repo docs. Every agent-launched
+Java/Minecraft client uses `ALSOFT_DRIVERS=null` (or `ALSOFT_DRIVERS=wave`
+writing to a file on the games disk when audio must be recorded).
+
 ## Roles
 
 - **Builder** implements the change and its focused/failing-first tests and gates.
@@ -29,6 +34,8 @@ the owner's accepted behaviour is the contract; implementation and green tests
 are not the oracle. The earlier protocol already required bounded adversarial
 exploration: this revision strengthens its execution and coverage evidence.
 "Found nothing" is valid only with the attacks actually tried.
+
+Follow the [bug regression contract](bugs/README.md).
 
 ## Attack matrix
 
@@ -177,3 +184,13 @@ findings:
 ```
 
 Final line: `QA_RESULT=PASS`, `QA_RESULT=CHANGES`, or `QA_RESULT=BLOCKED`.
+
+`changes` is the FAIL verdict (defects found, rework required). The `QA_RESULT=CHANGES`
+token is machine-consumed by the CodexPro overlay; never report a noted defect as `PASS`.
+
+## Windows-guest driver
+
+Windows-guest QA (noVNC) uses the single persistent headless-page driver described in
+`/run/media/kaiserroman/games/solaris-work/winqa/RECIPE.md`: `waitconn` until the page
+shows the `noVNC_connected` class, send one JSON request line per `id` over `proc://`,
+match each reply by `id` with `read`, and never `wait` on the forever-running daemon.

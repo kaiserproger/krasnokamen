@@ -2,21 +2,21 @@
 
 **Date:** 2026-05-12
 **Status:** Accepted
-**Extends:** [ADR 0001](0001-vanilla-data-as-runtime-input.md), PROJECT_SPEC §8.1
-**Supersedes:** the part of §8.1's source-level prohibition that, taken
+**Extends:** [ADR 0001](0001-vanilla-data-as-runtime-input.md); amends the original PROJECT_SPEC §8-era source-level prohibition (current legal/data posture lives in ADR 0001, not a PROJECT_SPEC §8).
+**Supersedes:** the part of that original prohibition that, taken
 literally, also banned reading the bytecode-level **metadata** (class
 names, field names, packet ID constants, record layouts) of the official
 26.1+ vanilla server.
 
 ## Context
 
-PROJECT_SPEC §2.1 locks Solaris to vanilla 26.1.x, which Mojang
+Context (historical section numbers; current posture: ADR 0001). PROJECT_SPEC §2.1 (historical numbering) locks Solaris to vanilla 26.1.x, which Mojang
 explicitly released "fully unobfuscated" — the class and field names in
 the official server jar **are** the canonical public names for those
 constructs. There is no longer a separate "mojmap" mapping layer; the
 production jar is itself the reference.
 
-PROJECT_SPEC §8.1's original prohibition was written against the
+PROJECT_SPEC §8.1 (historical numbering; amended by this ADR, current posture in ADR 0001)'s original prohibition was written against the
 historical pre-26.1 reality where reading mappings was a deliberate
 de-obfuscation step that required external knowledge (Mojang's
 mappings.txt). With 26.1+ that distinction has collapsed: reading the
@@ -58,8 +58,8 @@ Still **disallowed**:
 
 - Translating decompiled Java source code to Rust.
 - Copying algorithmic logic (e.g., light-propagation, RNG, worldgen
-  formulas) out of decompiled vanilla classes — those are M4+
-  concerns and stay subject to the original §8.1 rule.
+  formulas) out of decompiled vanilla classes — those stay subject to the
+  original source-prohibition rule (current posture: ADR 0001).
 - Using Mojang's class names verbatim as our Rust type names. Our
   enum/struct naming is independent — for example, vanilla's
   `ClientboundLoginPacket` corresponds to our `LoginPlay` (located in
@@ -87,7 +87,7 @@ Positive:
 
 Negative:
 
-- A nontrivial change to the legal posture set in PROJECT_SPEC §8.1.
+- A nontrivial change to the legal posture formerly set in PROJECT_SPEC §8.1 (now owned by ADR 0001).
   Mitigations:
   - The prohibition on translating *source code* and *algorithms* is
     intact. Only structural metadata (the same information available
@@ -109,7 +109,7 @@ Negative:
   over the `net.minecraft.network.protocol` package and writes a
   human-readable summary to `.analysis/protocol-dump.txt`. The
   dump is not committed.
-- PROJECT_SPEC §8.1 is amended to point at this ADR.
+- That original PROJECT_SPEC section (current posture: ADR 0001) is amended to point at this ADR.
 - Solaris commits that change packet IDs/field orderings as a
   result of this reference should cite `javap` output (and the
   vanilla class name) in the commit message, so future maintainers
