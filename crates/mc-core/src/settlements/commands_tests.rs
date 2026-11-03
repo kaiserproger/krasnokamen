@@ -46,6 +46,8 @@ fn reads_parse_without_arguments_beyond_optional_name() {
         }
     );
     assert!(parse(&["info", "a", "b"]).is_err());
+    assert_eq!(parse(&["layout"]).unwrap(), SettlementCommand::Layout);
+    assert!(parse(&["layout", "town"]).is_err());
 }
 
 #[test]

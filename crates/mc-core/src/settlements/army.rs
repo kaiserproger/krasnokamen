@@ -33,31 +33,10 @@ fn member(state: &TickState, slot: EntitySlot, id: SettlementId) -> bool {
         })
 }
 fn storage(state: &TickState, id: SettlementId) -> Vec<inventory::Image> {
-    let mut images = Vec::new();
-    let mut physical = std::collections::BTreeSet::new();
-    for position in buildings::storage_points(state, id) {
-        let endpoint = inventory::Endpoint::Container {
-            dimension: state.dimension.name().into(),
-            position,
-        };
-        let Ok(cells) = crate::plugin_inventories::container_cells(
-            state,
-            &mc_script::ScriptBlockPosition::new(position[0], position[1], position[2]),
-        ) else {
-            continue;
-        };
-        if cells
-            .iter()
-            .any(|cell| physical.contains(&[cell.x, cell.y, cell.z]))
-        {
-            continue;
-        }
-        if let Ok(image) = inventory::load(state, &endpoint) {
-            physical.extend(cells.iter().map(|cell| [cell.x, cell.y, cell.z]));
-            images.push(image);
-        }
-    }
-    images
+    inventory::town_storage(state, id)
+        .into_iter()
+        .map(|(_, image)| image)
+        .collect()
 }
 
 fn swing() -> crate::combat::Swing {

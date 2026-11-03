@@ -87,6 +87,8 @@ pub enum SettlementCommand {
     Army {
         command: ArmyCommand,
     },
+    /// Read the street plan of the executor's enclosing settlement.
+    Layout,
     /// Open the settlement dialogs (optionally on a named page).
     Menu {
         page: Option<String>,
@@ -119,7 +121,7 @@ pub enum ArmyOrderKind {
 }
 
 pub fn parse(args: &[&str]) -> Result<SettlementCommand, CommandError> {
-    let usage: &'static str = "settlement <guide|create|claim|list|info|rename|remove|bind|unbind|relocate|production|commerce|payroll|caravan|building|build|army>";
+    let usage: &'static str = "settlement <guide|create|claim|list|info|rename|remove|bind|unbind|relocate|production|commerce|payroll|caravan|building|build|layout|army>";
     let [sub, rest @ ..] = args else {
         return Ok(SettlementCommand::Menu { page: None });
     };
@@ -156,6 +158,7 @@ pub fn parse(args: &[&str]) -> Result<SettlementCommand, CommandError> {
                 Err(CommandError::Usage(usage))
             }
         }
+        "layout" if rest.is_empty() => Ok(SettlementCommand::Layout),
         "info" => match rest {
             [] => Ok(SettlementCommand::Info { name: None }),
             [name] => Ok(SettlementCommand::Info {

@@ -11,7 +11,9 @@ use std::collections::BTreeMap;
 
 use mc_data::recipes::work::{WorkRecipe, WorkRecipeAlternative};
 use mc_data::{Identifier, ItemStack};
-use mc_script::{ScriptOperationFailure as Failure, ScriptSettlementBuildingRef};
+use mc_script::{
+    ScriptOperationFailure as Failure, ScriptSettlementBuildingRef, ScriptWorldBounds,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -24,6 +26,8 @@ use crate::tick::TickState;
 const MANUAL: &str = "paused";
 /// Retry delay for paused jobs: causal, never backfills missed portions.
 const RETRY_TICKS: u64 = 20;
+/// Largest autocraft chain one order may admit.
+pub(super) const MAX_ORDER_STEPS: usize = 32;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -65,6 +69,26 @@ pub(crate) struct Job {
     pub paused: Option<String>,
     pub cancelled: bool,
     pub receipts: Vec<Receipt>,
+    /// Autocraft order identity: the final step's job id, shared by every step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order: Option<String>,
+    /// Previous order step. While set this step neither ticks nor routes;
+    /// the tick that completes the previous step clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<String>,
+    /// Derived navigation only; stock and job progress remain the authorities.
+    #[serde(skip)]
+    fetch_at: Option<[i32; 3]>,
+}
+
+/// One planned autocraft step: a recipe run `count` times at a live station.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Step {
+    pub recipe: String,
+    pub count: u32,
+    pub station: [i32; 3],
+    pub stand_at: [i32; 3],
+    pub building: ScriptSettlementBuildingRef,
 }
 
 /// Policy only: named job map plus admission/completion counters for the
@@ -111,9 +135,16 @@ pub(crate) enum Request {
     Cancel {
         job: String,
     },
+    /// Planned dependency chain, executed in order by one worker. The final
+    /// step's id is `order`; earlier steps are `order-1`, `order-2`, ...
+    Order {
+        order: String,
+        worker: Uuid,
+        steps: Vec<Step>,
+    },
 }
 
-fn valid_id(id: &str) -> bool {
+pub(super) fn valid_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
         && id
@@ -121,7 +152,7 @@ fn valid_id(id: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
-fn recipe_of<'a>(world: &'a TickState, name: &str) -> Result<&'a WorkRecipe, Failure> {
+pub(super) fn recipe_of<'a>(world: &'a TickState, name: &str) -> Result<&'a WorkRecipe, Failure> {
     let id = Identifier::parse(name).map_err(|_| Failure::NotFound)?;
     world
         .registry
@@ -142,7 +173,11 @@ struct PortionPlan {
 }
 
 /// Live worker membership: exact native body, alive, bound to this town.
-fn worker_slot(world: &TickState, settlement: SettlementId, worker: Uuid) -> Result<(), Failure> {
+pub(super) fn worker_slot(
+    world: &TickState,
+    settlement: SettlementId,
+    worker: Uuid,
+) -> Result<(), Failure> {
     let slot = world
         .entities
         .slot_of_uuid(worker)
@@ -254,6 +289,15 @@ fn station_live(
     if near > 64 {
         return Err(Failure::InvalidRequest);
     }
+    station_block(world, recipe, station)
+}
+
+/// The live block at `station` is this recipe's station (a lit campfire).
+pub(super) fn station_block(
+    world: &TickState,
+    recipe: &WorkRecipe,
+    station: [i32; 3],
+) -> Result<(), Failure> {
     let native = world
         .world
         .block_at(station[0], station[1], station[2])
@@ -275,7 +319,40 @@ fn station_live(
     Ok(())
 }
 
-fn resource<'a>(world: &'a TickState, stack: &ItemStack) -> Option<&'a str> {
+/// A free cell beside `station` to stand on: air at feet and head, support below.
+/// Cells inside the building win; order is fixed for determinism.
+pub(super) fn stand_at(
+    state: &TickState,
+    station: [i32; 3],
+    bounds: ScriptWorldBounds,
+) -> Option<[i32; 3]> {
+    let air = state.registry.states.air;
+    let is_air = |at: [i32; 3]| state.world.block_at(at[0], at[1], at[2]) == Some(air);
+    let solid_below = |at: [i32; 3]| {
+        state
+            .world
+            .block_at(at[0], at[1] - 1, at[2])
+            .is_some_and(|block| block != air)
+    };
+    let inside = |at: [i32; 3]| (0..3).all(|i| bounds.min[i] <= at[i] && at[i] <= bounds.max[i]);
+    let mut candidates = Vec::new();
+    for dz in -1..=1 {
+        for dx in -1..=1 {
+            if (dx, dz) != (0, 0) {
+                candidates.push([station[0] + dx, station[1], station[2] + dz]);
+            }
+        }
+    }
+    let usable =
+        |at: &[i32; 3]| is_air(*at) && is_air([at[0], at[1] + 1, at[2]]) && solid_below(*at);
+    candidates
+        .iter()
+        .copied()
+        .find(|at| inside(*at) && usable(at))
+        .or_else(|| candidates.iter().copied().find(usable))
+}
+
+pub(super) fn resource<'a>(world: &'a TickState, stack: &ItemStack) -> Option<&'a str> {
     world
         .registry
         .items
@@ -283,7 +360,7 @@ fn resource<'a>(world: &'a TickState, stack: &ItemStack) -> Option<&'a str> {
         .map(Identifier::as_str)
 }
 
-fn accepts(
+pub(super) fn accepts(
     world: &TickState,
     stack: &ItemStack,
     input: &mc_data::recipes::work::WorkRecipeInput,
@@ -319,6 +396,67 @@ fn accepts(
                     stack.item_id as i32,
                 ),
             })
+}
+
+/// Quantities already present in detached carry that the next active portion
+/// will select. This is derived from the job, not persisted inventory policy.
+pub(super) fn protected_carry(
+    world: &TickState,
+    settlement: SettlementId,
+    slot: crate::entities::EntitySlot,
+    carry: &[Option<ItemStack>; 8],
+) -> [u32; 8] {
+    let mut protected = [0_u32; 8];
+    let row = world.entities.row(slot);
+    let Some(job) = world.settlements.get(settlement).and_then(|record| {
+        record
+            .economy
+            .production
+            .jobs
+            .values()
+            .find(|job| job.worker == row.uuid && target_for_job(job).is_some())
+    }) else {
+        return protected;
+    };
+    let Some(recipe) = world
+        .registry
+        .item_facts
+        .work_recipes()
+        .find(|recipe| recipe.id.as_str() == job.recipe)
+    else {
+        return protected;
+    };
+    let mut equipment_used = [0_u32; 6];
+    for input in &recipe.inputs {
+        let mut remaining = input.count;
+        for (index, stack) in carry.iter().enumerate() {
+            let Some(stack) = stack else { continue };
+            if remaining == 0 {
+                break;
+            }
+            if accepts(world, stack, input) {
+                let available = (stack.count.max(0) as u32).saturating_sub(protected[index]);
+                let take = remaining.min(available);
+                protected[index] += take;
+                remaining -= take;
+            }
+        }
+        for (index, equipment_slot) in [0, 1, 5, 4, 3, 2].into_iter().enumerate() {
+            let Some(stack) = &row.appearance.equipment[equipment_slot] else {
+                continue;
+            };
+            if remaining == 0 {
+                break;
+            }
+            if accepts(world, stack, input) {
+                let available = (stack.count.max(0) as u32).saturating_sub(equipment_used[index]);
+                let take = remaining.min(available);
+                equipment_used[index] += take;
+                remaining -= take;
+            }
+        }
+    }
+    protected
 }
 
 fn maximum_damage(world: &TickState, stack: &ItemStack, name: &str) -> Option<u32> {
@@ -468,6 +606,363 @@ fn plan_portion(
     })
 }
 
+fn select_available(
+    world: &TickState,
+    input: &mc_data::recipes::work::WorkRecipeInput,
+    stacks: &[ItemStack],
+    used: &mut [u32],
+    mut remaining: u32,
+) -> u32 {
+    for (stack, used) in stacks.iter().zip(used) {
+        if remaining == 0 {
+            break;
+        }
+        if accepts(world, stack, input) {
+            let take = remaining.min((stack.count.max(0) as u32).saturating_sub(*used));
+            *used += take;
+            remaining -= take;
+        }
+    }
+    remaining
+}
+
+type SupplyPlan = (Vec<ItemStack>, Vec<ItemStack>);
+
+/// One source's answer to the next-portion deficit.
+enum Supply {
+    /// The source holds none of the missing inputs (or none unreserved).
+    Empty,
+    /// The source holds them but the carry has no room for them.
+    Crowded,
+    Plan(SupplyPlan),
+}
+
+/// Plan this source's share of the next-portion deficit, in recipe input order.
+/// Selected overlapping tags/components cannot be selected a second time.
+fn plan_supply(
+    world: &TickState,
+    recipe: &WorkRecipe,
+    carry: &inventory::Image,
+    equipment: &inventory::Image,
+    source: &inventory::Image,
+) -> Result<Supply, Failure> {
+    let mut carry_used = [0; 8];
+    let mut equipment_used = [0; 6];
+    let mut source_after = source.slots.clone();
+    let mut available = inventory::unreserved_stock(world, source)?;
+    for input in &recipe.inputs {
+        let remaining = select_available(world, input, &carry.slots, &mut carry_used, input.count);
+        let mut remaining = select_available(
+            world,
+            input,
+            &equipment.slots,
+            &mut equipment_used,
+            remaining,
+        );
+        for stack in &mut source_after {
+            if remaining == 0 {
+                break;
+            }
+            if accepts(world, stack, input) {
+                let free = available
+                    .get_mut(&stack.item_id)
+                    .ok_or(Failure::InvalidRequest)?;
+                let take = u64::from(remaining)
+                    .min(stack.count.max(0) as u64)
+                    .min(*free) as u32;
+                *free -= u64::from(take);
+                stack.count -= take as i32;
+                remaining -= take;
+                if stack.is_empty() {
+                    *stack = ItemStack::EMPTY;
+                }
+            }
+        }
+    }
+    if source_after == source.slots {
+        return Ok(Supply::Empty);
+    }
+    let mut carry_after = carry.slots.clone();
+    for (before, after) in source.slots.iter().zip(&source_after) {
+        let count = before.count - after.count;
+        if count <= 0 {
+            continue;
+        }
+        let mut moving = before.clone();
+        moving.count = count;
+        let maximum = world.registry.item_rules().max_stack(&moving).min(99);
+        for empty in [false, true] {
+            for stored in &mut carry_after {
+                if moving.is_empty() {
+                    break;
+                }
+                if stored.is_empty() != empty
+                    || (!empty && !mc_data::inventory_semantics_26_1_2::can_stack(stored, &moving))
+                {
+                    continue;
+                }
+                let take = moving.count.min((maximum - stored.count).max(0));
+                if take > 0 {
+                    if empty {
+                        *stored = moving.clone();
+                        stored.count = 0;
+                    }
+                    stored.count += take;
+                    moving.count -= take;
+                }
+            }
+        }
+        if !moving.is_empty() {
+            return Ok(Supply::Crowded);
+        }
+    }
+    Ok(Supply::Plan((source_after, carry_after)))
+}
+
+fn supply_stand(world: &TickState, worker: Uuid, chest: [i32; 3]) -> Option<[i32; 3]> {
+    let slot = world.entities.slot_of_uuid(worker)?;
+    let body = world.entities.body(slot);
+    let pos = world.entities.pos(slot);
+    let mut best = None;
+    for dy in [0, 1, -1] {
+        for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let cell = BlockPos {
+                x: chest[0] + dx,
+                y: chest[1] + dy,
+                z: chest[2] + dz,
+            };
+            let Some(stand) = super::allocator::standing(
+                &world.world,
+                &world.registry,
+                cell,
+                body.half_width,
+                body.height,
+            ) else {
+                continue;
+            };
+            let distance: f64 = stand.iter().zip(pos).map(|(a, b)| (a - b).powi(2)).sum();
+            if best.is_none_or(|(_, nearest)| distance < nearest) {
+                best = Some(([cell.x, cell.y, cell.z], distance));
+            }
+        }
+    }
+    best.map(|(at, _)| at)
+}
+
+/// Squared distance from `pos` to the centre of block `at`; reach is 2.5.
+fn reach(pos: [f64; 3], at: [i32; 3]) -> f64 {
+    pos.into_iter()
+        .zip([
+            f64::from(at[0]) + 0.5,
+            f64::from(at[1]),
+            f64::from(at[2]) + 0.5,
+        ])
+        .map(|(a, b)| (a - b).powi(2))
+        .sum()
+}
+
+/// Native production tick owns the attached carry. Enumerate current native
+/// town storage again at every attempt, then use the existing fenced bridge;
+/// cached navigation never grants authority or bypasses reservation floors.
+/// Stock that a full carry cannot take sends the worker to put surplus away.
+fn fetch_inputs(
+    world: &mut TickState,
+    settlement: SettlementId,
+    job: &mut Job,
+) -> Result<bool, Failure> {
+    let recipe = recipe_of(world, &job.recipe)?;
+    let carry = inventory::load(
+        world,
+        &inventory::Endpoint::VillagerCarry { uuid: job.worker },
+    )?;
+    let equipment = inventory::load(
+        world,
+        &inventory::Endpoint::VillagerEquipment { uuid: job.worker },
+    )?;
+    let retry = world.tick.saturating_add(RETRY_TICKS);
+    let mut crowded = false;
+    for (position, source) in inventory::town_storage(world, settlement) {
+        let (source_after, carry_after) =
+            match plan_supply(world, recipe, &carry, &equipment, &source)? {
+                Supply::Plan(plan) => plan,
+                Supply::Crowded => {
+                    crowded = true;
+                    continue;
+                }
+                Supply::Empty => continue,
+            };
+        let pos = worker_pos(world, job.worker).ok_or(Failure::NotFound)?;
+        if reach(pos, position) > 6.25 {
+            let Some(stand) = supply_stand(world, job.worker, position) else {
+                continue;
+            };
+            job.fetch_at = Some(stand);
+            return Ok(park(job, "awaiting input reach", retry));
+        }
+        inventory::commit(
+            world,
+            vec![
+                inventory::Change {
+                    before: source,
+                    after: source_after,
+                },
+                inventory::Change {
+                    before: carry,
+                    after: carry_after,
+                },
+            ],
+        )?;
+        job.fetch_at = None;
+        park(job, "awaiting reach", retry);
+        return Ok(true);
+    }
+    if crowded {
+        return store_surplus(world, settlement, job);
+    }
+    Ok(park(job, "missing input", retry))
+}
+
+/// Carry units the next portion of `recipe` uses: its inputs, selected like
+/// [`plan_portion`] (carry before equipment), and a carried tool the
+/// equipment does not already provide.
+fn kept_carry(
+    world: &TickState,
+    recipe: &WorkRecipe,
+    carry: &[ItemStack],
+    equipment: &[ItemStack],
+) -> Vec<u32> {
+    let mut kept = vec![0_u32; carry.len()];
+    let mut worn = vec![0_u32; equipment.len()];
+    for input in &recipe.inputs {
+        let remaining = select_available(world, input, carry, &mut kept, input.count);
+        select_available(world, input, equipment, &mut worn, remaining);
+    }
+    for tool in &recipe.tools {
+        let fits = |stack: &ItemStack| {
+            !stack.is_empty()
+                && resource(world, stack) == Some(tool.item.as_str())
+                && tool
+                    .components
+                    .as_ref()
+                    .is_none_or(|components| components.matches(stack))
+        };
+        if !equipment.iter().any(&fits)
+            && let Some(index) = carry.iter().position(&fits)
+        {
+            kept[index] = carry[index].count.max(0) as u32;
+        }
+    }
+    kept
+}
+
+/// Move every unkept carry unit into `target`, merging into matching stacks
+/// before using empty slots. `None` when nothing fits there.
+fn plan_store(
+    world: &TickState,
+    carry: &[ItemStack],
+    kept: &[u32],
+    target: &[ItemStack],
+) -> Option<SupplyPlan> {
+    let mut target_after = target.to_vec();
+    let mut carry_after = carry.to_vec();
+    let mut moved = false;
+    for (moving, kept) in carry_after.iter_mut().zip(kept) {
+        let keep = i32::try_from(*kept).unwrap_or(i32::MAX);
+        if moving.is_empty() || moving.count <= keep {
+            continue;
+        }
+        let maximum = world.registry.item_rules().max_stack(moving);
+        for empty in [false, true] {
+            for stored in &mut target_after {
+                let spare = moving.count - keep;
+                if spare <= 0 {
+                    break;
+                }
+                if stored.is_empty() != empty
+                    || (!empty && !mc_data::inventory_semantics_26_1_2::can_stack(stored, moving))
+                {
+                    continue;
+                }
+                let take = spare.min((maximum - stored.count).max(0));
+                if take > 0 {
+                    if empty {
+                        *stored = moving.clone();
+                        stored.count = 0;
+                    }
+                    stored.count += take;
+                    moving.count -= take;
+                    moved = true;
+                }
+            }
+        }
+        if moving.count == 0 {
+            *moving = ItemStack::EMPTY;
+        }
+    }
+    moved.then_some((target_after, carry_after))
+}
+
+/// The carry has no room for the next portion's inputs or outputs. Put away
+/// everything that portion does not use (products, by-products, other cargo)
+/// in town storage: walk to the nearest physical container with room, then
+/// move it through the same fenced bridge as a fetch. Nothing is dropped;
+/// with no room anywhere the job parks on "no storage" until there is.
+fn store_surplus(
+    world: &mut TickState,
+    settlement: SettlementId,
+    job: &mut Job,
+) -> Result<bool, Failure> {
+    let recipe = recipe_of(world, &job.recipe)?;
+    let carry = inventory::load(
+        world,
+        &inventory::Endpoint::VillagerCarry { uuid: job.worker },
+    )?;
+    let equipment = inventory::load(
+        world,
+        &inventory::Endpoint::VillagerEquipment { uuid: job.worker },
+    )?;
+    let kept = kept_carry(world, recipe, &carry.slots, &equipment.slots);
+    let pos = worker_pos(world, job.worker).ok_or(Failure::NotFound)?;
+    let retry = world.tick.saturating_add(RETRY_TICKS);
+    let mut walk: Option<([i32; 3], f64)> = None;
+    for (position, target) in inventory::town_storage(world, settlement) {
+        let Some((target_after, carry_after)) =
+            plan_store(world, &carry.slots, &kept, &target.slots)
+        else {
+            continue;
+        };
+        let distance = reach(pos, position);
+        if distance <= 6.25 {
+            inventory::commit(
+                world,
+                vec![
+                    inventory::Change {
+                        before: target,
+                        after: target_after,
+                    },
+                    inventory::Change {
+                        before: carry,
+                        after: carry_after,
+                    },
+                ],
+            )?;
+            job.fetch_at = None;
+            park(job, "awaiting reach", retry);
+            return Ok(true);
+        }
+        if walk.is_none_or(|(_, nearest)| distance < nearest)
+            && let Some(stand) = supply_stand(world, job.worker, position)
+        {
+            walk = Some((stand, distance));
+        }
+    }
+    let Some((stand, _)) = walk else {
+        return Ok(park(job, "no storage", retry));
+    };
+    job.fetch_at = Some(stand);
+    Ok(park(job, "awaiting storage reach", retry))
+}
+
 fn pause_reason(failure: Failure) -> &'static str {
     match failure {
         Failure::Unloaded => "unloaded",
@@ -550,9 +1045,104 @@ fn admit(
             paused: None,
             cancelled: false,
             receipts: Vec::new(),
+            order: None,
+            after: None,
+            fetch_at: None,
         },
     );
     state.sequence = state.sequence.saturating_add(1);
+    Ok(true)
+}
+
+/// Admit a planned chain atomically: every step passes the [`admit`] checks
+/// before any insert, and step `n` waits for step `n - 1`. The final step's
+/// id is the order id, so a retried order is idempotent, never a duplicate.
+fn admit_order(
+    world: &mut TickState,
+    settlement: SettlementId,
+    owner: &str,
+    state: &mut State,
+    order: String,
+    worker: Uuid,
+    steps: Vec<Step>,
+) -> Result<bool, Failure> {
+    let Some(last) = steps.last() else {
+        return Err(Failure::InvalidRequest);
+    };
+    // Leave room for the `-NN` suffix of earlier steps inside `valid_id`.
+    if !valid_id(&order)
+        || order.len() > 60
+        || steps.len() > MAX_ORDER_STEPS
+        || worker.is_nil()
+        || steps.iter().any(|step| step.count == 0)
+    {
+        return Err(Failure::InvalidRequest);
+    }
+    let record = world.settlements.get(settlement).ok_or(Failure::NotFound)?;
+    if record.owner.as_deref() != Some(owner) {
+        return Err(Failure::Forbidden);
+    }
+    worker_slot(world, settlement, worker)?;
+    if let Some(existing) = state.jobs.get(&order) {
+        let same = existing.order.as_deref() == Some(order.as_str())
+            && existing.worker == worker
+            && existing.recipe == last.recipe
+            && existing.count == last.count;
+        return if same {
+            Ok(false)
+        } else {
+            Err(Failure::OperationConflict)
+        };
+    }
+    let ids: Vec<String> = (1..steps.len())
+        .map(|n| format!("{order}-{n}"))
+        .chain(std::iter::once(order.clone()))
+        .collect();
+    if ids.iter().any(|id| state.jobs.contains_key(id)) {
+        return Err(Failure::OperationConflict);
+    }
+    if state
+        .jobs
+        .values()
+        .any(|other| !other.cancelled && other.done < other.count && other.worker == worker)
+    {
+        return Err(Failure::Busy);
+    }
+    let tick = world.tick;
+    let mut admitted: Vec<Job> = Vec::with_capacity(steps.len());
+    for (id, step) in ids.into_iter().zip(steps) {
+        let facts = building_facts(world, settlement, &step.building)?;
+        let recipe = recipe_of(world, &step.recipe)?;
+        station_live(world, recipe, &facts, step.station, step.stand_at)?;
+        let duration = recipe.duration_ticks.max(1);
+        let after = admitted.last().map(|previous| previous.id.clone());
+        admitted.push(Job {
+            id,
+            owner: owner.to_owned(),
+            worker,
+            recipe: step.recipe,
+            recipe_revision: recipe.revision.clone(),
+            duration,
+            count: step.count,
+            done: 0,
+            station: step.station,
+            stand_at: step.stand_at,
+            building: step.building,
+            dimension: facts.dimension,
+            accepted_tick: tick,
+            next_due: tick.saturating_add(duration),
+            paused: None,
+            cancelled: false,
+            receipts: Vec::new(),
+            order: Some(order.clone()),
+            after,
+            fetch_at: None,
+        });
+    }
+    state.sequence = state.sequence.saturating_add(admitted.len() as u64);
+    for job in admitted {
+        state.jobs.insert(job.id.clone(), job);
+    }
     Ok(true)
 }
 
@@ -598,6 +1188,7 @@ pub(crate) fn execute(
                 return Ok(false);
             }
             entry.paused = Some(MANUAL.to_owned());
+            entry.fetch_at = None;
             Ok(true)
         }
         Request::Resume { job } => {
@@ -612,21 +1203,41 @@ pub(crate) fn execute(
                 return Ok(false);
             }
             entry.paused = None;
+            entry.fetch_at = None;
             entry.next_due = tick;
             Ok(true)
         }
         Request::Cancel { job } => {
-            let Some(entry) = state.jobs.get_mut(&job) else {
+            let Some(entry) = state.jobs.get(&job) else {
                 return Err(Failure::NotFound);
             };
-            if entry.cancelled || entry.done >= entry.count {
-                return Ok(false);
+            // An order stops as a whole, whichever step is named (a finished
+            // dependency included): later steps could never start, and
+            // earlier ones would only produce for a cancelled target.
+            // Finished steps keep their receipts; only open steps cancel.
+            let order = entry.order.clone();
+            let mut cancelled = 0_u64;
+            for entry in state
+                .jobs
+                .values_mut()
+                .filter(|entry| entry.id == job || (order.is_some() && entry.order == order))
+            {
+                if entry.cancelled || entry.done >= entry.count {
+                    continue;
+                }
+                entry.cancelled = true;
+                entry.paused = None;
+                entry.fetch_at = None;
+                cancelled += 1;
             }
-            entry.cancelled = true;
-            entry.paused = None;
-            state.cancelled = state.cancelled.saturating_add(1);
-            Ok(true)
+            state.cancelled = state.cancelled.saturating_add(cancelled);
+            Ok(cancelled > 0)
         }
+        Request::Order {
+            order,
+            worker,
+            steps,
+        } => admit_order(world, settlement, owner, state, order, worker, steps),
     }
 }
 
@@ -660,11 +1271,13 @@ fn tick_job(
     settlement: SettlementId,
     job: &mut Job,
 ) -> Result<bool, Failure> {
+    let route_changed = job.fetch_at.take().is_some();
     // Resolve mutable physical evidence before borrowing the native recipe.
     let facts = building_facts(world, settlement, &job.building)?;
     let recipe = recipe_of(world, &job.recipe)?;
-    let metadata_changed =
-        job.recipe_revision != recipe.revision || job.duration != recipe.duration_ticks.max(1);
+    let metadata_changed = route_changed
+        || job.recipe_revision != recipe.revision
+        || job.duration != recipe.duration_ticks.max(1);
     if job.recipe_revision != recipe.revision {
         job.recipe_revision.clone_from(&recipe.revision);
     }
@@ -673,20 +1286,17 @@ fn tick_job(
     if let Err(reason) = station_live(world, recipe, &facts, job.station, job.stand_at) {
         return Ok(park(job, pause_reason(reason), retry) | metadata_changed);
     }
+    let plan = match plan_portion(world, job.worker, recipe) {
+        Ok(plan) => plan,
+        Err(Shortage::Input) => return Ok(fetch_inputs(world, settlement, job)? | metadata_changed),
+        Err(Shortage::Tool) => return Ok(park(job, "missing tool", retry) | metadata_changed),
+        Err(Shortage::Storage) => {
+            return Ok(store_surplus(world, settlement, job)? | metadata_changed);
+        }
+    };
     if !reached(world, job) {
         return Ok(park(job, "awaiting reach", retry) | metadata_changed);
     }
-    let plan = match plan_portion(world, job.worker, recipe) {
-        Ok(plan) => plan,
-        Err(shortage) => {
-            let reason = match shortage {
-                Shortage::Input => "missing input",
-                Shortage::Tool => "missing tool",
-                Shortage::Storage => "no storage",
-            };
-            return Ok(park(job, reason, retry) | metadata_changed);
-        }
-    };
     let changes = vec![
         inventory::Change {
             before: plan.carry_before,
@@ -717,12 +1327,13 @@ fn tick_job(
 
 pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut State) -> bool {
     let tick_now = world.tick;
-    let mut completed = 0_u64;
+    let mut finished = Vec::new();
     let changed = state.cursor.run(
         &mut state.jobs,
         |job| {
             !job.cancelled
                 && job.done < job.count
+                && job.after.is_none()
                 && job.paused.as_deref() != Some(MANUAL)
                 && job.next_due <= tick_now
         },
@@ -733,7 +1344,7 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut 
             match tick_job(world, settlement, job) {
                 Ok(changed) => {
                     if job.done >= job.count {
-                        completed += 1;
+                        finished.push(job.id.clone());
                     }
                     changed
                 }
@@ -746,17 +1357,33 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut 
             .into()
         },
     );
-    state.completed = state.completed.saturating_add(completed);
-    changed || completed > 0
+    // Release the next order step in the same tick (and policy image) that
+    // completed its predecessor, so a restart never sees a stale gate.
+    if !finished.is_empty() {
+        for job in state.jobs.values_mut() {
+            if job
+                .after
+                .as_ref()
+                .is_some_and(|after| finished.contains(after))
+            {
+                job.after = None;
+                job.next_due = tick_now.saturating_add(job.duration);
+            }
+        }
+    }
+    state.completed = state.completed.saturating_add(finished.len() as u64);
+    changed || !finished.is_empty()
 }
 
-/// Any nonterminal, noncancelled job needing tick. Auto-paused jobs that can
-/// resume are included; only the manual hold is parked.
+/// Any nonterminal, noncancelled, ungated job needing tick. Auto-paused jobs
+/// that can resume are included; only the manual hold is parked.
 pub(crate) fn active(state: &State) -> bool {
-    state
-        .jobs
-        .values()
-        .any(|job| !job.cancelled && job.done < job.count && job.paused.as_deref() != Some(MANUAL))
+    state.jobs.values().any(|job| {
+        !job.cancelled
+            && job.done < job.count
+            && job.after.is_none()
+            && job.paused.as_deref() != Some(MANUAL)
+    })
 }
 
 /// Native brain routing target for one worker: its live stand post, hidden
@@ -771,13 +1398,16 @@ pub(crate) fn target(state: &State, worker: Uuid) -> Option<BlockPos> {
 }
 
 pub(super) fn target_for_job(job: &Job) -> Option<BlockPos> {
-    (!job.cancelled && job.done < job.count && job.paused.as_deref() != Some(MANUAL)).then_some(
-        BlockPos {
-            x: job.stand_at[0],
-            y: job.stand_at[1],
-            z: job.stand_at[2],
-        },
-    )
+    let at = job.fetch_at.unwrap_or(job.stand_at);
+    (!job.cancelled
+        && job.done < job.count
+        && job.after.is_none()
+        && job.paused.as_deref() != Some(MANUAL))
+    .then_some(BlockPos {
+        x: at[0],
+        y: at[1],
+        z: at[2],
+    })
 }
 
 pub(crate) fn validate(state: &State) -> Result<(), &'static str> {
@@ -817,6 +1447,25 @@ pub(crate) fn validate(state: &State) -> Result<(), &'static str> {
         job.building
             .validate()
             .map_err(|_| "invalid production certificate")?;
+        if let Some(order) = &job.order
+            && state
+                .jobs
+                .get(order)
+                .is_none_or(|last| last.order.as_ref() != Some(order))
+        {
+            return Err("invalid production order");
+        }
+        if let Some(after) = &job.after
+            && (job.order.is_none()
+                || job.done != 0
+                || after == id
+                || state
+                    .jobs
+                    .get(after)
+                    .is_none_or(|previous| previous.order != job.order))
+        {
+            return Err("invalid production order step");
+        }
     }
     Ok(())
 }

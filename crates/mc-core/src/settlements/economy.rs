@@ -190,9 +190,9 @@ pub(crate) fn execute(
     let revision = next_revision(world, id)?;
     let record = world.settlements.get(id).expect("validated settlement");
     let worker_busy = match &request {
-        Request::Production(production::Request::Start { worker, .. }) => {
-            record.economy.assigned(*worker, RouteKind::Caravan)
-        }
+        Request::Production(
+            production::Request::Start { worker, .. } | production::Request::Order { worker, .. },
+        ) => record.economy.assigned(*worker, RouteKind::Caravan),
         Request::Production(production::Request::Resume { job }) => record
             .economy
             .production
@@ -268,6 +268,26 @@ pub(crate) fn target(
     })
 }
 
+/// Derive the next production portion's carry inputs for a detached villager.
+pub(crate) fn protected_carry(
+    world: &TickState,
+    slot: crate::entities::EntitySlot,
+    villager: &crate::villager::VillagerState,
+) -> [u32; 8] {
+    villager.settlement.map_or([0; 8], |settlement| {
+        let Some(record) = world.settlements.get(settlement) else {
+            return [0; 8];
+        };
+        if !record
+            .economy
+            .assigned(world.entities.row(slot).uuid, RouteKind::Production)
+        {
+            return [0; 8];
+        }
+        production::protected_carry(world, settlement, slot, &villager.inventory)
+    })
+}
+
 /// Certificate identity comes from the live district, not a caller-supplied
 /// plugin owner or a saved readiness/stock projection.
 fn certificate(
@@ -316,7 +336,7 @@ pub(super) fn building(
 /// Native authorization boundary shared by payroll, quotes and shipments.
 /// Operators do not acquire arbitrary foreign players' inventories merely by
 /// owning a settlement; player consent here is the native owner's exact UUID.
-pub(super) fn authorize_endpoint(
+pub(crate) fn authorize_endpoint(
     world: &mut TickState,
     id: SettlementId,
     endpoint: &inventory::Endpoint,

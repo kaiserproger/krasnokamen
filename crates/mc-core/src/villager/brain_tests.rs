@@ -3873,7 +3873,7 @@ fn numeric_food_totals_and_birth_keep_inventory_order_and_unknown_items() {
     v.inventory[3] = Some(ItemStack::new(potato, -2));
     assert_eq!(total_food(&food, &v), 12);
     assert!(willing(&food, &v));
-    eat_for_birth(&food, &mut v);
+    eat_for_birth(&food, &mut v, &[0; 8]);
     assert_eq!(v.food_level, 0);
     assert_eq!(v.inventory[0], Some(ItemStack::new(u32::MAX, 5)));
     assert!(v.inventory[1].is_none());
@@ -3936,6 +3936,85 @@ fn numeric_food_pickup_and_sharing_preserve_unknown_items_and_farmer_seeds() {
     let shared = state.entities.slot_of(changes.entities_spawned[0]).unwrap();
     let stack = state.entities.row(shared).item.as_ref().unwrap();
     assert_eq!((stack.item_id, stack.count), (bread, 32));
+}
+
+#[test]
+fn production_food_hold_preserves_inputs_during_social_actions_and_pause_releases() {
+    use crate::settlements::{buildings::BuildingKind, commands::EconomyDomain, economy_commands};
+    let (mut state, slot, mut v) =
+        crate::villager::mining_tests::fixture(BuildingKind::Workshop(Profession::Farmer));
+    crate::plugin_startup::apply(
+        std::sync::Arc::make_mut(&mut state.registry),
+        &mc_plugin_host::DeploymentContribution::default(),
+        None,
+        &[],
+    )
+    .unwrap();
+    let bread_id = mc_data::Identifier::parse("minecraft:bread").unwrap();
+    let mut recipe = state
+        .registry
+        .item_facts
+        .work_recipes()
+        .find(|recipe| recipe.id.as_str() == "solaris-settlements:bread")
+        .unwrap()
+        .clone();
+    recipe.id = mc_data::Identifier::parse("test:reserved_food").unwrap();
+    recipe.inputs[0].item = Some(bread_id.clone());
+    recipe.inputs[0].count = 40;
+    let registry = std::sync::Arc::make_mut(&mut state.registry);
+    registry.item_facts = registry
+        .item_facts
+        .clone()
+        .with_work_recipes([recipe], &registry.items)
+        .unwrap();
+    let settlement = v.settlement.unwrap();
+    let worker = state.entities.row(slot).uuid;
+    let bread = state.registry.items.id_of(&bread_id).unwrap();
+    v.inventory[0] = Some(ItemStack::new(bread, 64));
+    state.entities.row_mut(slot).villager = Some(v);
+    economy_commands::execute(
+        &mut state,
+        settlement,
+        EconomyDomain::Production,
+        &[
+            "start".into(),
+            "food-order".into(),
+            worker.to_string(),
+            "test:reserved_food".into(),
+            "1".into(),
+            ((settlement.0 << 32) | 1).to_string(),
+            "3,201,3".into(),
+            "3,201,4".into(),
+        ],
+    )
+    .unwrap();
+    let recipient = villager(&mut state, [4.0, 201.0, 3.0]);
+    let mut food = FoodTable::default();
+    food.refresh(&state.registry.items);
+    let mut changes = ChangeSet::default();
+    state.tick = 20;
+    let mut v = state.entities.row_mut(slot).villager.take().unwrap();
+    share_food(&mut state, &food, slot, &mut v, &mut changes);
+    assert_eq!(v.inventory[0].as_ref().unwrap().count, 40);
+    assert_eq!(changes.entities_spawned.len(), 1);
+    let shared = state.entities.slot_of(changes.entities_spawned[0]).unwrap();
+    assert_eq!(state.entities.row(shared).item.as_ref().unwrap().count, 24);
+    assert_eq!(food_count(&state, recipient, bread), 0);
+    v.inventory[0].as_mut().unwrap().count = 43;
+    let protected = crate::settlements::economy::protected_carry(&state, slot, &v);
+    eat_for_birth(&food, &mut v, &protected);
+    assert_eq!(v.inventory[0].as_ref().unwrap().count, 40);
+    state.entities.row_mut(slot).villager = Some(v);
+    economy_commands::execute(
+        &mut state,
+        settlement,
+        EconomyDomain::Production,
+        &["pause".into(), "food-order".into()],
+    )
+    .unwrap();
+    let mut v = state.entities.row_mut(slot).villager.take().unwrap();
+    share_food(&mut state, &food, slot, &mut v, &mut changes);
+    assert_eq!(v.inventory[0].as_ref().unwrap().count, 20);
 }
 
 #[test]

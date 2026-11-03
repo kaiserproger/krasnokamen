@@ -170,3 +170,35 @@ fn whole_storage_funding_accepts_real_raw_stock_across_many_cell_crafts() {
         "funding remains read-only"
     );
 }
+
+#[test]
+fn house_l1_raw_materials_account_for_whole_recipe_batches() {
+    let state = state();
+    let log = item(&state, "minecraft:oak_log");
+    let coal = item(&state, "minecraft:coal");
+    let cobble = item(&state, "minecraft:cobblestone");
+    let wool = item(&state, "minecraft:white_wool");
+    let dirt = item(&state, "minecraft:dirt");
+    let materials = &crate::settlements::blueprints::get(&state.registry, "house")
+        .unwrap()
+        .level(1)
+        .unwrap()
+        .materials;
+    let mut images = chest(vec![
+        stock(coal, 1),
+        stock(cobble, 51),
+        stock(dirt, 64),
+        stock(log, 64),
+        stock(log, 24),
+        stock(wool, 3),
+    ]);
+    assert!(
+        !can_fund(&state, materials, &images),
+        "88 logs cannot cover whole batches"
+    );
+    images[0].slots[4].count += 1;
+    assert!(
+        can_fund(&state, materials, &images),
+        "89 logs must fund the real house bill"
+    );
+}

@@ -46,6 +46,46 @@ pub(crate) fn fixture() -> (TickState, SettlementId, EntitySlot) {
     (state, id, slot)
 }
 
+/// Load the three-by-three chunks around the fixture as flat stone at y=200
+/// with air above, keeping the storage chest: one chunk is smaller than a
+/// street block, so the street plan's first lots lie in the neighbours. The
+/// extra chunks stay unticketed (loaded, not simulated).
+pub(crate) fn open_plan(state: &mut TickState) {
+    state
+        .world
+        .ensure_blocking(&rustc_hash::FxHashMap::from_iter((-1..=1).flat_map(|x| {
+            (-1..=1).map(move |z| (crate::boundary::ChunkPos { x, z }, 0))
+        })));
+    for x in -16i32..32 {
+        for z in -16i32..32 {
+            state
+                .world
+                .set_block(x, 200, z, state.registry.states.stone);
+            for y in 201..224 {
+                if (x, y, z) != (1, 201, 1) {
+                    state.world.set_block(x, y, z, state.registry.states.air);
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+}
+
+/// World position of the first oak log the project's rotated level places.
+pub(crate) fn first_log(state: &TickState, project: &Project) -> [i32; 3] {
+    let level = blueprints::get(&state.registry, &project.blueprint)
+        .unwrap()
+        .level(project.level)
+        .unwrap()
+        .rotated(Rotation::from_quarter_turns(project.rotation));
+    let (offset, _) = level
+        .blocks
+        .iter()
+        .find(|(_, id)| state.registry.blocks.by_id(*id).unwrap().block.id.path() == "oak_log")
+        .expect("blueprint places an oak log");
+    level.world(project.origin, *offset)
+}
+
 pub(crate) fn start(
     state: &mut TickState,
     id: SettlementId,
@@ -149,6 +189,7 @@ pub(crate) fn complete(state: &mut TickState, id: SettlementId, slot: EntitySlot
 #[test]
 fn storage_uses_available_acacia_logs_for_real_acacia_blocks() {
     let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
     let item = |name| {
         state
             .registry
@@ -171,12 +212,9 @@ fn storage_uses_available_acacia_logs_for_real_acacia_blocks() {
         .as_ref()
         .expect("acacia stock funds storage");
     assert_eq!(project.blueprint, "storage");
-    let origin = project.origin;
+    let log = first_log(&state, project);
     complete(&mut state, id, slot);
-    let placed = state
-        .world
-        .block_at(origin[0], origin[1] + 1, origin[2])
-        .unwrap();
+    let placed = state.world.block_at(log[0], log[1], log[2]).unwrap();
     assert_eq!(
         state
             .registry
@@ -194,6 +232,7 @@ fn storage_uses_available_acacia_logs_for_real_acacia_blocks() {
 fn funded_oak_storage_survives_larger_acacia_stack_and_stock_changes() {
     for ordered in [false, true] {
         let (mut state, id, slot) = fixture();
+        open_plan(&mut state);
         fund(&mut state, "storage", 1);
         let acacia_planks = state
             .registry
@@ -222,14 +261,11 @@ fn funded_oak_storage_survives_larger_acacia_stack_and_stock_changes() {
             .as_ref()
             .expect("oak bill funds storage despite acacia stock");
         assert_eq!(project.blueprint, "storage");
-        let origin = project.origin;
+        let log = first_log(&state, project);
         state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[25] =
             ItemStack::new(acacia_log, 64);
         complete(&mut state, id, slot);
-        let placed = state
-            .world
-            .block_at(origin[0], origin[1] + 1, origin[2])
-            .unwrap();
+        let placed = state.world.block_at(log[0], log[1], log[2]).unwrap();
         assert_eq!(
             state
                 .registry
@@ -247,24 +283,7 @@ fn funded_oak_storage_survives_larger_acacia_stack_and_stock_changes() {
 #[test]
 fn planner_prioritizes_storage_then_housing() {
     let (mut state, id, slot) = fixture();
-    let extra = crate::boundary::ChunkPos { x: 1, z: 0 };
-    state
-        .world
-        .ensure_blocking(&rustc_hash::FxHashMap::from_iter([(extra, 0)]));
-    state
-        .tickets
-        .insert("construction-extra".into(), (extra, 0));
-    state.refresh_active_chunks(0);
-    for x in 16..32 {
-        for z in 0..16 {
-            state
-                .world
-                .set_block(x, 200, z, state.registry.states.stone);
-            for y in 201..224 {
-                state.world.set_block(x, y, z, state.registry.states.air);
-            }
-        }
-    }
+    open_plan(&mut state);
     assert_eq!(
         needed_kinds(state.settlements.get(id).unwrap(), 1).next(),
         Some(BuildingKind::Storage)

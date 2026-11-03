@@ -311,6 +311,70 @@ fn settlement_command_opens_the_main_screen_with_live_numbers_for_a_player_insid
 }
 
 #[test]
+fn main_screen_storage_counts_a_double_chest_once() {
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    let (left, right) = ([1, 201, 1], [2, 201, 1]);
+    let stack = |state: &TickState, name: &str, count: i32| {
+        let item = state
+            .registry
+            .items
+            .id_of(&Identifier::parse(name).unwrap())
+            .unwrap();
+        mc_data::ItemStack::new(item, count)
+    };
+    let halves = [
+        (left, "left", stack(&state, "minecraft:wheat", 3)),
+        (right, "right", stack(&state, "minecraft:hay_block", 1)),
+    ];
+    for (at, kind, stored) in halves {
+        let chest = block(
+            &state,
+            "minecraft:chest",
+            &[("facing", "north"), ("type", kind)],
+        );
+        state.world.set_block(at[0], at[1], at[2], chest);
+        let mut slots = vec![mc_data::ItemStack::EMPTY; 27];
+        slots[0] = stored;
+        state.block_entities.insert(
+            (at[0], at[1], at[2]),
+            crate::tick::BlockEntityState {
+                slots,
+                furnace: None,
+            },
+        );
+    }
+    state.world.fold_overlay();
+    // Both halves are storage points: the founding chest and a storage hut's.
+    let record = state.settlements.get_mut(id).unwrap();
+    record.bootstrap_storage = Some(left);
+    record.building_sequence += 1;
+    let hut = BuildingId((id.0 << 32) | record.building_sequence);
+    record.buildings.insert(
+        hut,
+        crate::settlements::buildings::Building {
+            id: hut,
+            settlement: id,
+            kind: BuildingKind::Storage,
+            level: 1,
+            bounds: mc_script::ScriptWorldBounds::new(right, right).unwrap(),
+            work_points: vec![right],
+            revision: 1,
+            natural_zone: false,
+        },
+    );
+    let dialog = last_dialog(&command(&mut state, "settlement"));
+    // Counting each half's merged view said "2 containers; wheat x6, hay_block x2".
+    assert!(
+        dialog
+            .body
+            .contains("Storage: 1 containers; wheat x3, hay_block x1"),
+        "{}",
+        dialog.body
+    );
+}
+
+#[test]
 fn command_without_any_settlement_explains_how_to_found_one() {
     let mut state = joined(0);
     let changes = command(&mut state, "settlement");
@@ -596,7 +660,7 @@ fn production_order_flow_creates_pauses_and_cancels_a_real_job() {
     let worker = bound_resident(&mut state, id);
     let form = last_dialog(&click(&mut state, id, "order_start", &[]));
     assert_eq!(form.title, "New production order");
-    assert_eq!(form.inputs, ["count", "worker"]);
+    assert_eq!(form.inputs, ["count", "worker", "auto"]);
     assert!(form.has("order_create"));
 
     let recipe = state
@@ -699,6 +763,103 @@ fn production_order_flow_creates_pauses_and_cancels_a_real_job() {
         &[("j", string("nope"))],
     ));
     assert!(gone.body.contains("no longer exists"));
+}
+
+#[test]
+fn production_autocraft_order_plans_missing_ingredients_or_says_why_not() {
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    station(&mut state, [4, 201, 4], "minecraft:composter");
+    station(&mut state, [5, 201, 5], "minecraft:crafting_table");
+    click(&mut state, id, "certify_do", &certify_form("farmer"));
+    let building = BuildingId(id.0 << 32 | 1);
+    let worker = bound_resident(&mut state, id);
+    let chest = [10, 201, 12];
+    station(&mut state, chest, "minecraft:chest");
+    let hay = state
+        .registry
+        .items
+        .id_of(&Identifier::parse("minecraft:hay_block").unwrap())
+        .unwrap();
+    let mut slots = vec![mc_data::ItemStack::EMPTY; 27];
+    slots[0] = mc_data::ItemStack::new(hay, 1);
+    state.block_entities.insert(
+        (chest[0], chest[1], chest[2]),
+        crate::tick::BlockEntityState {
+            slots,
+            furnace: None,
+        },
+    );
+    state.settlements.get_mut(id).unwrap().bootstrap_storage = Some(chest);
+    let create = |recipe: &str| {
+        vec![
+            ("b", string(&building.0.to_string())),
+            ("p", string("5 201 5")),
+            ("r", string(recipe)),
+            ("worker", string(&worker.to_string())),
+            ("count", Tag::Float(3.0)),
+            ("auto", Tag::Byte(1)),
+        ]
+    };
+    let jobs = |state: &TickState| {
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .economy
+            .production
+            .jobs
+            .len()
+    };
+
+    let missing = last_dialog(&click(
+        &mut state,
+        id,
+        "order_create",
+        &create("solaris-settlements:sugar"),
+    ));
+    assert!(
+        missing.body.contains(
+            "Refused: missing 3 minecraft:sugar_cane: not in storage and no recipe makes it."
+        ),
+        "{}",
+        missing.body
+    );
+    let cycle = last_dialog(&click(
+        &mut state,
+        id,
+        "order_create",
+        &create("solaris-settlements:hay_block"),
+    ));
+    assert!(
+        cycle
+            .body
+            .contains("its recipes form a cycle (hay_block -> open_hay -> hay_block)"),
+        "{}",
+        cycle.body
+    );
+    assert_eq!(jobs(&state), 0);
+
+    let planned = last_dialog(&click(
+        &mut state,
+        id,
+        "order_create",
+        &create("solaris-settlements:bread"),
+    ));
+    assert!(
+        planned
+            .body
+            .contains("Order ui-1 planned: open_hay x1 -> bread x3."),
+        "{}",
+        planned.body
+    );
+    assert_eq!(jobs(&state), 2);
+    let listing = last_dialog(&click(&mut state, id, "orders", &[]));
+    assert!(
+        listing.body.contains("waiting for ui-1-1"),
+        "{}",
+        listing.body
+    );
 }
 
 #[test]
@@ -863,21 +1024,13 @@ fn blueprint_build(state: &mut TickState, id: SettlementId, blueprint: &str) -> 
         .next()
         .unwrap()
 }
-/// Cleared site plus an empty bootstrap chest and a bound resident, so an
-/// owner click runs the same admission shape as the planner RED fixture.
-/// Funding stays explicit at the call site: only the click may start the
-/// single project, and the click itself must debit nothing.
+/// The flat street-plan area of the construction tests plus an empty
+/// bootstrap chest and a bound resident, so an owner click runs the same
+/// admission shape as the planner RED fixture. Funding stays explicit at the
+/// call site: only the click may start the single project, and the click
+/// itself must debit nothing.
 fn prep_projects_site(state: &mut TickState, id: SettlementId) {
-    for x in 0..16 {
-        for z in 0..16 {
-            for y in 201..224 {
-                if (x, y, z) == (1, 201, 1) {
-                    continue;
-                }
-                state.world.set_block(x, y, z, state.registry.states.air);
-            }
-        }
-    }
+    crate::settlements::construction::tests::open_plan(state);
     if let std::collections::btree_map::Entry::Vacant(entry) =
         state.block_entities.entry((1, 201, 1))
     {

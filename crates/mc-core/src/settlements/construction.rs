@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::blueprints::{self, Rotation};
 use super::buildings::{self, BuildingId, BuildingKind};
-use super::{SettlementId, SettlementRecord};
+use super::{SettlementId, SettlementRecord, layout};
 use crate::plugin_structures::settlement_builds as executor;
 use crate::tick::TickState;
 use crate::villager::VillagerProfession as Profession;
@@ -89,7 +89,7 @@ pub(crate) fn request_upgrade(
         .buildings
         .get(&building)
         .ok_or("Building not found.")?;
-    let blueprint = upgrade_blueprint(state, id, target)
+    let (blueprint, ..) = upgrade_blueprint(state, id, target)
         .ok_or("No blueprint upgrade available for this building.")?;
     let level = owner_upgrade_level(state, id, building)
         .ok_or("No blueprint upgrade available for this building.")?;
@@ -112,7 +112,7 @@ pub(crate) fn owner_upgrade_level(
 ) -> Option<u8> {
     let record = state.settlements.get(id)?;
     let target = record.buildings.get(&building)?;
-    let blueprint = upgrade_blueprint(state, id, target)?;
+    let (blueprint, ..) = upgrade_blueprint(state, id, target)?;
     let current = if claim_slot(state, id).is_err() {
         record
             .project
@@ -511,7 +511,7 @@ fn start_upgrade(
         .buildings
         .get(&building)
         .ok_or("Building not found.")?;
-    let blueprint = upgrade_blueprint(state, id, building)
+    let (blueprint, origin, rotation) = upgrade_blueprint(state, id, building)
         .ok_or("No blueprint upgrade available for this building.")?;
     let level = building.level + 1;
     if let Some(error) = funding_error(
@@ -533,8 +533,8 @@ fn start_upgrade(
         settlement: id,
         blueprint: blueprint.id.clone(),
         level,
-        origin: building.bounds.min,
-        rotation: 0,
+        origin,
+        rotation,
         building: Some(building.id),
         structure: String::new(),
         ordered: true,
@@ -629,7 +629,7 @@ pub(crate) fn sources(state: &TickState, id: SettlementId) -> Vec<[i32; 3]> {
     buildings::storage_points(state, id)
 }
 
-fn clearable(state: &TickState, block: u32) -> bool {
+pub(super) fn clearable(state: &TickState, block: u32) -> bool {
     // Clearing is a native-flora veneer only: air plus the vanilla placement-
     // replaceable surface plants below. Fluids, paths, buildings, torches,
     // flowers and paid farm crops stay blocking so a wider clear can never
@@ -978,25 +978,42 @@ fn begin_cells(
     true
 }
 
-fn upgrade_blueprint<'a>(
+/// Blueprint, origin and quarter turns of a blueprint-built building's
+/// current level. Natural zones and player-authored certificates are not
+/// blueprint builds: the certificate must be exactly a rotated level box at a
+/// committed site.
+pub(super) fn placement<'a>(
     state: &'a TickState,
     id: SettlementId,
     building: &buildings::Building,
-) -> Option<&'a blueprints::Blueprint> {
+) -> Option<(&'a blueprints::Blueprint, [i32; 3], u8)> {
     if building.natural_zone {
         return None;
     }
     let blueprint = blueprints::all(&state.registry)
         .iter()
         .find(|blueprint| blueprint.kind == building.kind)?;
-    blueprint.level(building.level.checked_add(1)?)?;
-    let previous = blueprint
-        .level(building.level)?
-        .rotated(Rotation::from_quarter_turns(0));
-    // Natural zones and player-authored certificates are not blueprint L1.
-    (previous.bounds(building.bounds.min) == building.bounds
-        && executor::built_at(state, id, &blueprint.id, building.bounds.min))
-    .then_some(blueprint)
+    let current = blueprint.level(building.level)?;
+    Rotation::ALL.into_iter().find_map(|rotation| {
+        let rotated = current.rotated(rotation);
+        let corner = rotated.bounds([0, 0, 0]).min;
+        let origin: [i32; 3] = std::array::from_fn(|axis| building.bounds.min[axis] - corner[axis]);
+        (rotated.bounds(origin) == building.bounds
+            && executor::built_at(state, id, &blueprint.id, origin))
+        .then_some((blueprint, origin, rotation.0))
+    })
+}
+
+/// The next-level blueprint of a blueprint-built building, with the placement
+/// origin and quarter turns its committed level-one structure used.
+fn upgrade_blueprint<'a>(
+    state: &'a TickState,
+    id: SettlementId,
+    building: &buildings::Building,
+) -> Option<(&'a blueprints::Blueprint, [i32; 3], u8)> {
+    let placed = placement(state, id, building)?;
+    placed.0.level(building.level.checked_add(1)?)?;
+    Some(placed)
 }
 
 #[cfg(test)]
@@ -1014,7 +1031,7 @@ fn upgrade_project(
     images: &[super::inventory::Image],
 ) -> Option<(Project, String)> {
     record.buildings.values().find_map(|building| {
-        let blueprint = upgrade_blueprint(state, record.id, building)?;
+        let (blueprint, origin, rotation) = upgrade_blueprint(state, record.id, building)?;
         let level = building.level + 1;
         let species = funded_species(state, &blueprint.level(level)?.materials, images)?.to_owned();
         Some((
@@ -1022,8 +1039,8 @@ fn upgrade_project(
                 settlement: record.id,
                 blueprint: blueprint.id.clone(),
                 level,
-                origin: building.bounds.min,
-                rotation: 0,
+                origin,
+                rotation,
                 building: Some(building.id),
                 structure: String::new(),
                 ordered: false,
@@ -1033,16 +1050,16 @@ fn upgrade_project(
     })
 }
 
-/// Candidate columns examined per autonomous planning pass; an owner order
-/// searches the whole settlement sphere.
+/// Lot candidates examined per autonomous planning pass; an owner order
+/// examines every candidate of the street plan once.
 const SITE_ATTEMPTS: u32 = 64;
 /// Ground may differ this much from the bell's elevation and still be a site.
-const SITE_BAND: i32 = 8;
+pub(super) const SITE_BAND: i32 = 8;
 
 /// Highest standing surface in the band around the bell for one column: a solid
 /// block with clearable space directly above it. Hillside villages have no
 /// flat ground at the bell's own elevation, so sites follow the terrain.
-fn surface_y(state: &TickState, anchor_y: i32, x: i32, z: i32) -> Option<i32> {
+pub(super) fn surface_y(state: &TickState, anchor_y: i32, x: i32, z: i32) -> Option<i32> {
     (anchor_y - SITE_BAND..=anchor_y + SITE_BAND)
         .rev()
         .find(|&y| {
@@ -1059,34 +1076,17 @@ fn surface_y(state: &TickState, anchor_y: i32, x: i32, z: i32) -> Option<i32> {
         })
 }
 
-/// Column offset of the `n`-th cell in ring order: ring `d` holds the `8d`
-/// cells at Chebyshev distance `d` from the anchor, so a scan in index order
-/// visits columns nearest the anchor first.
-fn ring_offset(n: u32) -> (i32, i32) {
-    if n == 0 {
-        return (0, 0);
-    }
-    let d = (n.isqrt() as i32 + 1) / 2;
-    let k = (n - (2 * d - 1).pow(2) as u32) as i32;
-    let (side, t) = (k / (2 * d), k % (2 * d));
-    match side {
-        0 => (d, -d + t),
-        1 => (d - t, d),
-        2 => (-d, d - t),
-        _ => (-d + t, -d),
-    }
-}
-
 struct FundedSite {
     project: Project,
     bounds: ScriptWorldBounds,
     cells: Vec<executor::PlannedCell>,
 }
 
-/// Shared site search, outward in rings from `start`, examining at most
-/// `attempts` columns. Autonomous and pending-owner planning use SITE_ATTEMPTS
-/// and retain the returned cursor on failure. A direct owner command searches
-/// once from the anchor for immediate admission. Success resets the cursor.
+/// Shared site search over the street plan's road-fronting lots in walking
+/// order from the plaza, examining at most `attempts` candidates from `start`.
+/// Autonomous and pending-owner planning use SITE_ATTEMPTS and retain the
+/// returned cursor on failure. A direct owner command examines every
+/// candidate once for immediate admission. Success resets the cursor.
 fn site_project(
     state: &TickState,
     record: &SettlementRecord,
@@ -1095,57 +1095,97 @@ fn site_project(
     attempts: u32,
     images: &[super::inventory::Image],
 ) -> (Option<FundedSite>, u32) {
-    let size = blueprint.footprint(Rotation::from_quarter_turns(0));
-    let radius = record.radius.min(256) as i32;
-    let cells = ((radius * 2 + 1) as u32).pow(2);
-    let mut index = start % cells;
-    let (mut examined, mut visited) = (0, 0);
-    while examined < attempts && visited < cells {
-        let (dx, dz) = ring_offset(index);
-        index = (index + 1) % cells;
-        visited += 1;
-        if dx * dx + dz * dz > radius * radius {
-            continue;
-        }
-        examined += 1;
-        // Centre the footprint on the ring cell so the building, not its
-        // corner, is as near the anchor as the cell is.
-        let (x, z) = (
-            record.anchor[0] + dx - i32::from(size[0] / 2),
-            record.anchor[2] + dz - i32::from(size[2] / 2),
-        );
-        let Some(ground) = surface_y(state, record.anchor[1], x, z) else {
+    let mut network = layout::Network::walk(state, record);
+    let fronts = network.frontage();
+    let count = u32::try_from(fronts.len()).unwrap_or(u32::MAX);
+    if count == 0 {
+        return (None, 0);
+    }
+    let mut index = start % count;
+    for _ in 0..attempts.min(count) {
+        let (front, normal) = fronts[index as usize];
+        index = (index + 1) % count;
+        let Some(lot) = network.lot(blueprint, front, normal) else {
             continue;
         };
-        let origin = [x, ground, z];
-        if site_free(state, record, origin, size) {
-            let project = Project {
-                settlement: record.id,
-                blueprint: blueprint.id.clone(),
-                level: 1,
-                origin,
-                rotation: 0,
-                building: None,
-                structure: String::new(),
-                ordered: false,
-            };
-            if let Some((bounds, mut cells)) = planned_cells(state, &project, "oak")
-                && let Some(bill) = cell_bill(state, &cells)
-                && let Some(species) = funded_species(state, &bill, images)
-                && apply_species(state, &mut cells, species).is_some()
-            {
-                return (
-                    Some(FundedSite {
-                        project,
-                        bounds,
-                        cells,
-                    }),
-                    0,
-                );
-            }
+        let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+        if !site_free(state, record, lot.origin, size) {
+            continue;
+        }
+        let project = Project {
+            settlement: record.id,
+            blueprint: blueprint.id.clone(),
+            level: 1,
+            origin: lot.origin,
+            rotation: lot.rotation,
+            building: None,
+            structure: String::new(),
+            ordered: false,
+        };
+        if let Some((bounds, mut cells)) = planned_cells(state, &project, "oak")
+            && let Some(bill) = cell_bill(state, &cells)
+            && let Some(species) = funded_species(state, &bill, images)
+            && apply_species(state, &mut cells, species).is_some()
+        {
+            return (
+                Some(FundedSite {
+                    project,
+                    bounds,
+                    cells,
+                }),
+                0,
+            );
         }
     }
     (None, index)
+}
+
+/// Street work for the buildings already standing: the first unpaved road
+/// stretch on a walk from the plaza to a door, then a funded lamp post along
+/// those walks. Roads cost no materials; a lamp is two fences and a torch.
+fn street_site(
+    state: &TickState,
+    record: &SettlementRecord,
+    images: &[super::inventory::Image],
+) -> Option<FundedSite> {
+    let mut network = layout::Network::walk(state, record);
+    let served = network.served();
+    let project = |kind: &str, bounds: ScriptWorldBounds, axis: u8| Project {
+        settlement: record.id,
+        blueprint: kind.to_owned(),
+        level: 1,
+        origin: bounds.min,
+        rotation: axis,
+        building: None,
+        structure: String::new(),
+        ordered: false,
+    };
+    for tile in &served {
+        if let Some(work) = network.road_work(tile)
+            && !executor::area_reserved(state, work.bounds)
+        {
+            return Some(FundedSite {
+                project: project(layout::ROAD, work.bounds, tile.axis),
+                bounds: work.bounds,
+                cells: work.cells,
+            });
+        }
+    }
+    for tile in &served {
+        if let Some(mut work) = network.lamp_work(tile)
+            && !executor::area_reserved(state, work.bounds)
+            && let Some(bill) = cell_bill(state, &work.cells)
+            && let Some(species) = funded_species(state, &bill, images)
+            && apply_species(state, &mut work.cells, species).is_some()
+        {
+            return Some(FundedSite {
+                project: project(layout::LAMP, work.bounds, 0),
+                bounds: work.bounds,
+                cells: work.cells,
+            });
+        }
+    }
+    None
 }
 
 fn plan(state: &mut TickState, id: SettlementId) {
@@ -1171,24 +1211,32 @@ fn plan(state: &mut TickState, id: SettlementId) {
         let level = blueprint.level(1)?;
         funded_species(state, &level.materials, &images).map(|_| blueprint)
     });
-    let Some(blueprint) = blueprint else {
-        if let Some((project, species)) = upgrade_project(state, record, &images) {
-            begin(state, project, &species);
+    if let Some(blueprint) = blueprint {
+        let (site, cursor) = site_project(
+            state,
+            record,
+            blueprint,
+            record.construction_cursor,
+            SITE_ATTEMPTS,
+            &images,
+        );
+        let record = state.settlements.get_mut(id).expect("planned settlement");
+        record.construction_cursor = cursor;
+        record.revision = record.revision.saturating_add(1);
+        if let Some(site) = site {
+            begin_cells(state, site.project, site.bounds, site.cells);
+            return;
         }
+    } else if let Some((project, species)) = upgrade_project(state, record, &images)
+        && begin(state, project, &species)
+    {
+        return;
+    }
+    // Free street work fills every pass that starts no building or upgrade.
+    let Some(record) = state.settlements.get(id) else {
         return;
     };
-    let (site, cursor) = site_project(
-        state,
-        record,
-        blueprint,
-        record.construction_cursor,
-        SITE_ATTEMPTS,
-        &images,
-    );
-    let record = state.settlements.get_mut(id).expect("planned settlement");
-    record.construction_cursor = cursor;
-    record.revision = record.revision.saturating_add(1);
-    if let Some(site) = site {
+    if let Some(site) = street_site(state, record, &images) {
         begin_cells(state, site.project, site.bounds, site.cells);
     }
 }
@@ -1444,6 +1492,14 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
         .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
     {
         return false;
+    }
+    // A committed road or lamp is street work, not a certified building: the
+    // world and the committed ledger record are its whole state.
+    if layout::infra(&project.blueprint) {
+        let record = state.settlements.get_mut(id).expect("finished settlement");
+        record.project = None;
+        record.revision = record.revision.saturating_add(1);
+        return true;
     }
     let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
         return false;

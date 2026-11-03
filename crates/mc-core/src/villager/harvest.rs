@@ -167,12 +167,15 @@ fn count_of(v: &VillagerState, item: u32) -> i32 {
         .sum()
 }
 
-fn take(v: &mut VillagerState, item: u32, mut count: i32) {
-    for slot in &mut v.inventory {
+fn take(v: &mut VillagerState, item: u32, mut count: i32, protected: &[u32; 8]) {
+    for (index, slot) in v.inventory.iter_mut().enumerate() {
         if let Some(stack) = slot
             && stack.item_id == item
         {
-            let used = stack.count.min(count);
+            let used = stack
+                .count
+                .saturating_sub(protected[index] as i32)
+                .min(count);
             stack.count -= used;
             count -= used;
             if stack.count == 0 {
@@ -240,10 +243,10 @@ fn local(state: &mut TickState, slot: EntitySlot, v: &mut VillagerState, changes
             z: feet.z + dz,
         })
         .find_map(|pos| mature_crop(state, pos).map(|crop| (pos, crop)));
-    let Some((pos, (item, count, replanted))) = found else {
+    let Some((pos, crop)) = found else {
         return;
     };
-    harvest(state, v, changes, pos, item, count, replanted);
+    harvest(state, slot, v, changes, pos, crop);
 }
 
 /// Certified farm: sweep the certificate volume with a bounded cursor, walk to
@@ -298,12 +301,12 @@ fn certified(
     let target = v.harvest_progress.target?;
     if state.tick >= v.harvest_at && super::mining::near(state, slot, target, FARM_REACH) {
         v.harvest_at = state.tick + PERIOD;
-        let Some((item, count, replanted)) = mature_crop(state, target) else {
+        let Some(crop) = mature_crop(state, target) else {
             v.harvest_progress.target = None;
             v.harvest_progress.cursor = 0;
             return None;
         };
-        if harvest(state, v, changes, target, item, count, replanted) {
+        if harvest(state, slot, v, changes, target, crop) {
             v.harvest_progress.target = None;
             v.harvest_progress.cursor = 0;
         }
@@ -315,12 +318,11 @@ fn certified(
 /// Returns whether the block changed.
 fn harvest(
     state: &mut TickState,
+    slot: EntitySlot,
     v: &mut VillagerState,
     changes: &mut ChangeSet,
     pos: BlockPos,
-    item: u32,
-    count: i32,
-    replanted: u32,
+    (item, count, replanted): (u32, i32, u32),
 ) -> bool {
     let mut produce = ItemStack::new(item, count);
     let maximum = state.registry.item_rules().max_stack(&produce);
@@ -370,7 +372,19 @@ fn harvest(
     let (Some(wheat), Some(bread)) = (item_id(state, "wheat"), item_id(state, "bread")) else {
         return false;
     };
-    let loaves = count_of(v, wheat) / WHEAT_PER_BREAD;
+    let protected = crate::settlements::economy::protected_carry(state, slot, v);
+    let available_wheat: i32 = v
+        .inventory
+        .iter()
+        .enumerate()
+        .filter_map(|(index, stack)| {
+            stack
+                .as_ref()
+                .filter(|stack| stack.item_id == wheat)
+                .map(|stack| stack.count.saturating_sub(protected[index] as i32))
+        })
+        .sum();
+    let loaves = available_wheat / WHEAT_PER_BREAD;
     let loaves = if v.settlement.is_some() {
         loaves.min((3 - count_of(v, bread)).max(0))
     } else {
@@ -380,7 +394,7 @@ fn harvest(
         let mut baked = ItemStack::new(bread, loaves);
         let maximum = state.registry.item_rules().max_stack(&baked);
         let stored = super::brain::add_inventory(v, &mut baked, maximum);
-        take(v, wheat, stored * WHEAT_PER_BREAD);
+        take(v, wheat, stored * WHEAT_PER_BREAD, &protected);
     }
     true
 }
@@ -401,6 +415,7 @@ pub(super) fn deposit(
         return None;
     }
     let bread = item_id(state, "bread")?;
+    let mut protected = crate::settlements::economy::protected_carry(state, slot, v);
     let mut needed = 3;
     let mut reserved: [Option<ItemStack>; 8] = std::array::from_fn(|_| None);
     for (index, stack) in v.inventory.iter_mut().enumerate() {
@@ -413,6 +428,7 @@ pub(super) fn deposit(
             ration.count = count;
             reserved[index] = Some(ration);
             stack.count -= count;
+            protected[index] = protected[index].saturating_sub(count as u32);
             needed -= count;
         }
     }
@@ -421,7 +437,7 @@ pub(super) fn deposit(
             *stack = None;
         }
     }
-    let target = super::mining::deposit(state, slot, v);
+    let target = super::mining::deposit_with_protected(state, slot, v, protected);
     for mut ration in reserved.into_iter().flatten() {
         let maximum = state.registry.item_rules().max_stack(&ration);
         super::brain::add_inventory(v, &mut ration, maximum);

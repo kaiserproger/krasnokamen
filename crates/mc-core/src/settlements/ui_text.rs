@@ -150,6 +150,16 @@ pub(crate) enum Key {
     OrderStarted,
     OrderGone,
     OrderUpdated,
+    AutoCraft,
+    OrderPlanned,
+    JobAwaitingStep,
+    AutoUnknownRecipe,
+    AutoMissing,
+    AutoCycle,
+    AutoTool,
+    AutoStation,
+    AutoTooLarge,
+    AutoExists,
 
     NoSoldiers,
     Recruit,
@@ -190,6 +200,26 @@ pub(crate) enum Key {
     NewName,
     EnterName,
     Renamed,
+
+    Map,
+    TitleMap,
+    Refresh,
+    MapTerritory,
+    MapOutside,
+    MapYou,
+    MapYouAt,
+    MapSite,
+    MapSiteAt,
+    MapBuilding,
+    MapWorkshops,
+    MapUnpavedRoad,
+    MapUnpavedRoads,
+    MapPavedRoad,
+    MapPavedRoads,
+    MapLampSite,
+    MapLampSites,
+    MapScale,
+    MapEmpty,
 }
 
 /// English and Russian text for one key.
@@ -212,8 +242,8 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Приём команд поселения недоступен.",
         ),
         Key::Pages => (
-            "Pages: main, buildings, certify, residents, production, army, projects, settings.",
-            "Страницы: main, buildings, certify, residents, production, army, projects, settings.",
+            "Pages: main, buildings, map, storage, certify, residents, production, army, projects, settings.",
+            "Страницы: main, buildings, map, storage, certify, residents, production, army, projects, settings.",
         ),
         Key::SettlementGone => (
             "That settlement no longer exists.",
@@ -367,8 +397,8 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Заказов производства пока нет.",
         ),
         Key::NewOrderHelp => (
-            "A new order sends one resident to a crafting table inside a certified workshop; the resident crafts from the ingredients in their own inventory.",
-            "Новый заказ отправляет жителя к верстаку в сертифицированной мастерской; житель крафтит из ингредиентов своего инвентаря.",
+            "A new order sends one resident to a workstation inside a certified workshop. With \"craft missing ingredients\" on, the resident first crafts every missing intermediate from town storage, then the product; raw materials must already be in storage.",
+            "Новый заказ отправляет жителя к рабочему месту в сертифицированной мастерской. С флажком «крафтить недостающее» житель сначала крафтит из склада все недостающие промежуточные ингредиенты, затем сам продукт; сырьё должно уже лежать на складе.",
         ),
         Key::NewOrder => ("New order", "Новый заказ"),
         Key::TitleOrders => ("Production orders - {name}", "Заказы производства — {name}"),
@@ -444,6 +474,34 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Этот заказ больше не существует.",
         ),
         Key::OrderUpdated => ("Order {job} updated.", "Заказ {job} обновлён."),
+        Key::AutoCraft => ("Craft missing ingredients", "Крафтить недостающее"),
+        Key::OrderPlanned => (
+            "Order {job} planned: {steps}.",
+            "Заказ {job} запланирован: {steps}.",
+        ),
+        Key::JobAwaitingStep => ("waiting for {job}", "ждёт {job}"),
+        Key::AutoUnknownRecipe => ("unknown recipe {recipe}", "неизвестный рецепт {recipe}"),
+        Key::AutoMissing => (
+            "missing {count} {item}: not in storage and no recipe makes it",
+            "не хватает {count} {item}: нет на складе и нет рецепта",
+        ),
+        Key::AutoCycle => (
+            "missing {count} {item}: its recipes form a cycle ({recipes})",
+            "не хватает {count} {item}: рецепты образуют цикл ({recipes})",
+        ),
+        Key::AutoTool => (
+            "{recipe} needs the resident to carry {tool}",
+            "для {recipe} житель должен нести {tool}",
+        ),
+        Key::AutoStation => (
+            "{recipe} needs {station} inside a certified workshop",
+            "для {recipe} нужен {station} в сертифицированной мастерской",
+        ),
+        Key::AutoTooLarge => (
+            "the order needs more than {steps} steps or {portions} crafts per step",
+            "заказу нужно больше {steps} шагов или {portions} крафтов на шаг",
+        ),
+        Key::AutoExists => ("order {job} already exists", "заказ {job} уже существует"),
 
         Key::NoSoldiers => (
             "No soldiers. Recruit an idle adult; equipment comes from settlement storage.",
@@ -508,6 +566,44 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         ),
         Key::EnterName => ("Enter a name.", "Введите имя."),
         Key::Renamed => ("Renamed to {name}.", "Переименовано в {name}."),
+
+        Key::Map => ("Map", "Карта"),
+        Key::TitleMap => ("Map - {name}", "Карта — {name}"),
+        Key::Refresh => ("Refresh", "Обновить"),
+        Key::MapTerritory => ("Territory, radius {radius}", "Территория, радиус {radius}"),
+        Key::MapOutside => ("Outside the settlement", "За пределами поселения"),
+        Key::MapYou => ("You", "Вы"),
+        Key::MapYouAt => ("You are here: {x} {z}", "Вы здесь: {x} {z}"),
+        Key::MapSite => ("Construction", "Стройка"),
+        Key::MapSiteAt => (
+            "Construction: {blueprint} L{level}\n{from} .. {to}",
+            "Стройка: {blueprint} L{level}\n{from} .. {to}",
+        ),
+        Key::MapBuilding => (
+            "{kind} #{seq} L{level}\n{from} .. {to}",
+            "{kind} #{seq} L{level}\n{from} .. {to}",
+        ),
+        Key::MapWorkshops => ("Workshops", "Мастерские"),
+        Key::MapUnpavedRoad => (
+            "Street plan: unpaved road\n{from} .. {to}",
+            "План улиц: дорога без покрытия\n{from} .. {to}",
+        ),
+        Key::MapUnpavedRoads => ("Road (planned)", "Дорога (план)"),
+        Key::MapPavedRoad => (
+            "Paved road\n{from} .. {to}",
+            "Дорога (замощена)\n{from} .. {to}",
+        ),
+        Key::MapPavedRoads => ("Road (paved)", "Дорога (замощена)"),
+        Key::MapLampSite => (
+            "Street plan: lamp post site\n{at}",
+            "План улиц: место фонаря\n{at}",
+        ),
+        Key::MapLampSites => ("Lamp (planned)", "Фонарь (план)"),
+        Key::MapScale => (
+            "1 cell = {scale}×{scale} blocks, north up",
+            "1 клетка = {scale}×{scale} блоков, север сверху",
+        ),
+        Key::MapEmpty => ("No buildings yet.", "Построек пока нет."),
     }
 }
 

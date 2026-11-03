@@ -127,8 +127,10 @@ pub(crate) fn open_menu(state: &mut TickState, connection: ConnectionId, page: O
     let action = match page.unwrap_or("main") {
         "main" => "main",
         "buildings" => "buildings",
+        "map" => "map",
         "certify" => "certify",
         "residents" | "jobs" => "residents",
+        "storage" => "storage",
         "production" | "orders" => "orders",
         "army" => "army",
         "projects" => "projects",
@@ -203,8 +205,16 @@ fn dispatch(
                 main_screen(state, connection, &ctx, &note);
             }
         }
-        "buildings" => buildings_screen(state, connection, ctx, ""),
+        // A building id (map cells, icon pages) opens that building's icon page.
+        "buildings" => match building_of(state, ctx, payload) {
+            Some(building) => menus::building(state, connection, ctx, building),
+            None => buildings_screen(state, connection, ctx, ""),
+        },
+        "buildings_icons" => menus::buildings(state, connection, ctx),
+        "map" => map::screen(state, connection, ctx),
         "residents" => residents_screen(state, connection, ctx),
+        "residents_icons" => menus::residents(state, connection, ctx),
+        "storage" => menus::storage(state, connection, ctx),
         "orders" => orders_screen(state, connection, ctx, ""),
         "army" => army_screen(state, connection, ctx, ""),
         "projects" => projects_screen(state, connection, ctx, ""),
@@ -479,20 +489,13 @@ fn busy_workers(state: &TickState, id: SettlementId) -> BTreeSet<Uuid> {
 // ------------------------------------------------------------------------ main
 
 fn storage_summary(ctx: &Ctx, state: &TickState, id: SettlementId) -> String {
-    let points = buildings::storage_points(state, id);
-    if points.is_empty() {
+    if buildings::storage_points(state, id).is_empty() {
         return ctx.t(Key::StorageNone).to_owned();
     }
-    let dimension = state.dimension.name();
+    // One entry per physical container: a double chest is one inventory.
+    let containers = inventory::town_storage(state, id);
     let mut totals = std::collections::BTreeMap::<&str, i64>::new();
-    for at in points.iter().take(64) {
-        let endpoint = inventory::Endpoint::Container {
-            dimension: dimension.to_owned(),
-            position: *at,
-        };
-        let Ok(image) = inventory::load(state, &endpoint) else {
-            continue;
-        };
+    for (_, image) in containers.iter().take(64) {
         for stack in image.slots.iter().filter(|stack| !stack.is_empty()) {
             if let Some(name) = state.registry.items.name_of(stack.item_id) {
                 *totals.entry(name.path()).or_default() += i64::from(stack.count);
@@ -517,7 +520,10 @@ fn storage_summary(ctx: &Ctx, state: &TickState, id: SettlementId) -> String {
     };
     ctx.f(
         Key::StorageCount,
-        &[("containers", &points.len().to_string()), ("items", &items)],
+        &[
+            ("containers", &containers.len().to_string()),
+            ("items", &items),
+        ],
     )
 }
 
@@ -610,10 +616,13 @@ fn main_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, note:
     let buttons = vec![
         button(ctx.t(Key::Buildings), "buildings", ctx.id),
         button(ctx.t(Key::ResidentsJobs), "residents", ctx.id),
+        button(menus::storage_label(ctx), "storage", ctx.id),
+        button(menus::assign_label(ctx), "residents_icons", ctx.id),
         button(ctx.t(Key::ProductionOrders), "orders", ctx.id),
         button(ctx.t(Key::Army), "army", ctx.id),
         button(ctx.t(Key::Projects), "projects", ctx.id),
         button(ctx.t(Key::Settings), "settings", ctx.id),
+        button(ctx.t(Key::Map), "map", ctx.id),
     ];
     present(state, connection, frame(ctx, title, note, text, buttons));
 }
@@ -700,6 +709,8 @@ fn buildings_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, 
     if ctx.manage {
         buttons.push(button(ctx.t(Key::CertifyNew), "certify", ctx.id));
     }
+    buttons.push(button(ctx.t(Key::Map), "map", ctx.id));
+    buttons.push(button(menus::icons_label(ctx), "buildings_icons", ctx.id));
     buttons.push(button(ctx.t(Key::Back), "main", ctx.id));
     let title = ctx.f(Key::TitleBuildings, &[("name", &record.name)]);
     present(state, connection, frame(ctx, title, note, text, buttons));
@@ -1001,7 +1012,10 @@ fn residents_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) 
         ));
     }
     let title = ctx.f(Key::TitleResidents, &[("name", &record.name)]);
-    let buttons = vec![button(ctx.t(Key::Back), "main", ctx.id)];
+    let buttons = vec![
+        button(menus::assign_label(ctx), "residents_icons", ctx.id),
+        button(ctx.t(Key::Back), "main", ctx.id),
+    ];
     present(
         state,
         connection,
@@ -1017,10 +1031,11 @@ fn job_status(ctx: &Ctx, job: &super::production::Job) -> String {
     } else if job.done >= job.count {
         ctx.t(Key::JobDone).to_owned()
     } else {
-        match job.paused.as_deref() {
-            Some("paused") => ctx.t(Key::JobPaused).to_owned(),
-            Some(reason) => ctx.f(Key::JobWaiting, &[("reason", reason)]),
-            None => ctx.t(Key::JobWorking).to_owned(),
+        match (job.paused.as_deref(), job.after.as_deref()) {
+            (Some("paused"), _) => ctx.t(Key::JobPaused).to_owned(),
+            (_, Some(after)) => ctx.f(Key::JobAwaitingStep, &[("job", after)]),
+            (Some(reason), None) => ctx.f(Key::JobWaiting, &[("reason", reason)]),
+            (None, None) => ctx.t(Key::JobWorking).to_owned(),
         }
     }
 }
@@ -1263,37 +1278,9 @@ fn recipes_screen(
         "worker",
         ctx.t(Key::Resident),
         workers,
-    ));
+    ))
+    .input(Input::boolean("auto", ctx.t(Key::AutoCraft)).initial_bool(true));
     present(state, connection, dialog);
-}
-
-/// A free cell beside `station` to stand on: air at feet and head, support below.
-/// Cells inside the building win; order is fixed for determinism.
-fn stand_at(state: &TickState, station: [i32; 3], bounds: ScriptWorldBounds) -> Option<[i32; 3]> {
-    let air = state.registry.states.air;
-    let is_air = |at: [i32; 3]| state.world.block_at(at[0], at[1], at[2]) == Some(air);
-    let solid_below = |at: [i32; 3]| {
-        state
-            .world
-            .block_at(at[0], at[1] - 1, at[2])
-            .is_some_and(|block| block != air)
-    };
-    let inside = |at: [i32; 3]| (0..3).all(|i| bounds.min[i] <= at[i] && at[i] <= bounds.max[i]);
-    let mut candidates = Vec::new();
-    for dz in -1..=1 {
-        for dx in -1..=1 {
-            if (dx, dz) != (0, 0) {
-                candidates.push([station[0] + dx, station[1], station[2] + dz]);
-            }
-        }
-    }
-    let usable =
-        |at: &[i32; 3]| is_air(*at) && is_air([at[0], at[1] + 1, at[2]]) && solid_below(*at);
-    candidates
-        .iter()
-        .copied()
-        .find(|at| inside(*at) && usable(at))
-        .or_else(|| candidates.iter().copied().find(usable))
 }
 
 fn failure_text(ctx: &Ctx, failure: Failure) -> String {
@@ -1344,7 +1331,7 @@ fn order_create(
     if !valid {
         return orders_screen(state, connection, ctx, ctx.t(Key::WrongStation));
     }
-    let Some(stand) = stand_at(state, at, found.bounds) else {
+    let Some(stand) = super::production::stand_at(state, at, found.bounds) else {
         return orders_screen(state, connection, ctx, ctx.t(Key::NoStand));
     };
     let production = &record.economy.production;
@@ -1356,16 +1343,41 @@ fn order_create(
         }
         sequence += 1;
     };
+    let building = ScriptSettlementBuildingRef::new(
+        "building".to_owned(),
+        building.0.to_string(),
+        format!("solaris:{}", found.kind.name()),
+    );
+    // Checked "craft missing ingredients": plan and admit the whole chain.
+    if payload.bool("auto") == Some(true) {
+        let order = super::autocraft::Order {
+            job: job.clone(),
+            worker,
+            recipe: recipe.as_str().to_owned(),
+            count,
+            building,
+            station: at,
+            stand_at: stand,
+        };
+        let note = match super::autocraft::order(state, ctx.id, order) {
+            Ok(steps) => ctx.f(
+                Key::OrderPlanned,
+                &[
+                    ("job", &job),
+                    ("steps", &super::autocraft::describe(&steps)),
+                ],
+            ),
+            Err(super::autocraft::Refusal::Admission(failure)) => failure_text(ctx, failure),
+            Err(refusal) => ctx.f(Key::FailureOther, &[("reason", &refusal.text(ctx.lang))]),
+        };
+        return orders_screen(state, connection, ctx, &note);
+    }
     let action = Action::ProductionStart {
         job: job.clone(),
         worker: worker.to_string(),
         recipe: recipe.as_str().to_owned(),
         count,
-        building: ScriptSettlementBuildingRef::new(
-            "building".to_owned(),
-            building.0.to_string(),
-            format!("solaris:{}", found.kind.name()),
-        ),
+        building,
         station: at,
         stand_at: stand,
     };
@@ -1981,6 +1993,10 @@ fn blueprint_label(ctx: &Ctx, blueprint: &str) -> &'static str {
         (Lang::Ru, "wall") => "Стена",
         (Lang::En, "watch_tower") => "Watchtower",
         (Lang::Ru, "watch_tower") => "Сторожевая башня",
+        (Lang::En, "road") => "Road",
+        (Lang::Ru, "road") => "Дорога",
+        (Lang::En, "lamp") => "Street lamp",
+        (Lang::Ru, "lamp") => "Фонарь",
         (Lang::En, _) => "Building",
         (Lang::Ru, _) => "Здание",
     }
@@ -2079,6 +2095,12 @@ fn rename(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: C
     };
     settings_screen(state, connection, ctx, &note);
 }
+
+#[path = "ui_map.rs"]
+mod map;
+
+#[path = "ui_menus.rs"]
+pub(crate) mod menus;
 
 #[cfg(test)]
 #[path = "ui_tests.rs"]

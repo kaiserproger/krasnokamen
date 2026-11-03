@@ -4,7 +4,7 @@ use super::{Activity, VillagerProfession, VillagerState};
 use crate::boundary::{BlockPos, ChangeSet};
 use crate::entities::EntitySlot;
 use crate::plugin_structures::settlement_builds as executor;
-use crate::settlements::{SettlementId, blueprints, construction};
+use crate::settlements::{SettlementId, blueprints, construction, layout};
 use crate::tick::TickState;
 
 /// Perimeter goals sit this many cells outside the future footprint. The
@@ -59,6 +59,9 @@ fn site_target(
     project: &construction::Project,
     next: [i32; 3],
 ) -> Option<BlockPos> {
+    if layout::infra(&project.blueprint) {
+        return layout::stand(state, project, next).map(block_pos);
+    }
     let blueprint = blueprints::get(&state.registry, &project.blueprint)?;
     let size = blueprint.footprint(blueprints::Rotation::from_quarter_turns(project.rotation));
     let min = project.origin;
@@ -124,12 +127,22 @@ fn in_reach(
     project: &construction::Project,
     next: [i32; 3],
 ) -> bool {
+    let pos = state.entities.pos(slot);
+    let width = state.entities.body(slot).half_width;
+    if layout::infra(&project.blueprint) {
+        // Roads are walked on while they are paved; only a lamp post's own
+        // column must stay clear of the builder's body.
+        let clear = project.blueprint != layout::LAMP
+            || [0, 2].into_iter().any(|axis| {
+                let min = f64::from(next[axis]);
+                pos[axis] + width <= min || pos[axis] - width >= min + 1.0
+            });
+        return clear && super::mining::near(state, slot, block_pos(next), REACH);
+    }
     let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
         return false;
     };
     let size = blueprint.footprint(blueprints::Rotation::from_quarter_turns(project.rotation));
-    let pos = state.entities.pos(slot);
-    let width = state.entities.body(slot).half_width;
     // Choosing a perimeter goal does not mean the builder has reached it.
     // Keep the full body outside every future cell, not just the next one:
     // placing a wall around a builder can otherwise strand it inside the site.

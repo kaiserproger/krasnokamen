@@ -1,147 +1,191 @@
-use super::tests::{fixture, fund};
+use super::tests::{fixture, fund, open_plan};
 use super::*;
 
-/// Three-by-three chunks around the fixture's own chunk: stone floor at
-/// y=200, then solid stone through the whole terrain-following band except
-/// the fixture chest, so a site exists only where a test carves one.
-fn solid_plateau(state: &mut TickState) {
-    state
-        .world
-        .ensure_blocking(&rustc_hash::FxHashMap::from_iter((-1..=1).flat_map(|x| {
-            (-1..=1).map(move |z| (crate::boundary::ChunkPos { x, z }, 0))
-        })));
+/// A storage lot of the street plan and its index in the frontage list the
+/// planner's cursor walks.
+#[derive(Debug, Clone, Copy)]
+struct Site {
+    front: u32,
+    lot: layout::Lot,
+    size: [u8; 3],
+}
+
+impl Site {
+    fn within(&self, x: i32, z: i32) -> bool {
+        let [ox, _, oz] = self.lot.origin;
+        (ox..ox + i32::from(self.size[0])).contains(&x)
+            && (oz..oz + i32::from(self.size[2])).contains(&z)
+    }
+
+    /// Footprints at least one block apart.
+    fn apart(&self, other: &Self) -> bool {
+        [0, 2].into_iter().any(|axis| {
+            let span = |site: &Self| {
+                let min = site.lot.origin[axis];
+                (min, min + i32::from(site.size[axis]) - 1)
+            };
+            let ((a0, a1), (b0, b1)) = (span(self), span(other));
+            a1 + 1 < b0 || b1 + 1 < a0
+        })
+    }
+
+    /// Wholly inside the three-by-three chunks `open_plan` loads.
+    fn loaded(&self) -> bool {
+        let [ox, _, oz] = self.lot.origin;
+        ox >= -16
+            && oz >= -16
+            && ox + i32::from(self.size[0]) <= 32
+            && oz + i32::from(self.size[2]) <= 32
+    }
+}
+
+/// Storage lots of the live street plan, in walking order from the plaza.
+fn storage_lots(state: &TickState, id: SettlementId) -> Vec<Site> {
+    let record = state.settlements.get(id).unwrap();
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let mut network = layout::Network::walk(state, record);
+    network
+        .frontage()
+        .into_iter()
+        .enumerate()
+        .filter_map(|(front, (at, normal))| {
+            let lot = network.lot(blueprint, at, normal)?;
+            Some(Site {
+                front: u32::try_from(front).unwrap(),
+                lot,
+                size: blueprint.footprint(Rotation::from_quarter_turns(lot.rotation)),
+            })
+        })
+        .collect()
+}
+
+/// Solid stone through the terrain-following band on every lot column except
+/// the fixture chest and the given sites: roads, verges and the plaza stay
+/// walkable, so a site exists only where a test leaves one.
+fn street_plateau(state: &mut TickState, id: SettlementId, open: &[Site]) {
+    let anchor = state.settlements.get(id).unwrap().anchor;
     for x in -16i32..32 {
-        for z in -16..32 {
-            state
-                .world
-                .set_block(x, 200, z, state.registry.states.stone);
-            for y in 201..=216 {
-                if (x, y, z) != (1, 201, 1) {
+        for z in -16i32..32 {
+            if layout::cell(anchor, x, z) == layout::Cell::Lot
+                && (x, z) != (1, 1)
+                && !open.iter().any(|site| site.within(x, z))
+            {
+                for y in 201..=216 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }
         }
     }
+    state.world.fold_overlay();
 }
 
-fn clear(state: &mut TickState, origin: [i32; 3], size: [u8; 3]) {
-    for x in origin[0]..origin[0] + i32::from(size[0]) {
-        for z in origin[2]..origin[2] + i32::from(size[2]) {
-            for y in 201..=216 {
-                state.world.set_block(x, y, z, state.registry.states.air);
-            }
-        }
-    }
-}
-
-fn storage_size(state: &TickState) -> [u8; 3] {
-    blueprints::get(&state.registry, "storage")
-        .unwrap()
-        .footprint(Rotation::from_quarter_turns(0))
-}
-
-/// Origin whose footprint centre sits at `(dx, dz)` from the bell.
-fn centred(anchor: [i32; 3], size: [u8; 3], dx: i32, dz: i32) -> [i32; 3] {
-    [
-        anchor[0] + dx - i32::from(size[0] / 2),
-        200,
-        anchor[2] + dz - i32::from(size[2] / 2),
-    ]
-}
-
-/// Chebyshev distance of the footprint centre from the anchor.
-fn distance(anchor: [i32; 3], size: [u8; 3], origin: [i32; 3]) -> i32 {
-    (origin[0] + i32::from(size[0] / 2) - anchor[0])
-        .abs()
-        .max((origin[2] + i32::from(size[2] / 2) - anchor[2]).abs())
-}
-
-/// The truth `site_project` must match: the free site with the smallest
-/// distance, over every loaded column of the settlement sphere.
-fn nearest_free_distance(state: &TickState, id: SettlementId, size: [u8; 3]) -> Option<i32> {
-    let record = state.settlements.get(id).unwrap();
-    let mut best = None;
-    for x in -16i32..32 {
-        for z in -16..32 {
-            let Some(ground) = surface_y(state, record.anchor[1], x, z) else {
-                continue;
-            };
-            let origin = [x, ground, z];
-            if site_free(state, record, origin, size) {
-                let found = distance(record.anchor, size, origin);
-                best = Some(best.map_or(found, |current: i32| current.min(found)));
-            }
-        }
-    }
-    best
-}
-
-#[test]
-fn ring_order_visits_every_cell_once_nearest_ring_first() {
-    let radius = 6;
-    let mut seen = std::collections::BTreeSet::new();
-    let mut previous = 0;
-    for n in 0..(2 * radius + 1u32).pow(2) {
-        let (dx, dz) = ring_offset(n);
-        let ring = dx.abs().max(dz.abs());
-        assert!(ring >= previous, "ring {ring} after {previous} at {n}");
-        previous = ring;
-        assert!(seen.insert((dx, dz)), "cell ({dx}, {dz}) repeated at {n}");
-    }
-    assert_eq!(seen.len(), 13 * 13);
+/// On the flat open plan: the first lot in walking order clear of the
+/// fixture chest, and the last loaded lot apart from it.
+fn near_and_far(state: &TickState, id: SettlementId) -> (Site, Site) {
+    let lots: Vec<Site> = storage_lots(state, id)
+        .into_iter()
+        .filter(|site| !site.within(1, 1))
+        .collect();
+    let near = lots[0];
+    let far = *lots
+        .iter()
+        .rev()
+        .find(|site| site.loaded() && site.apart(&near))
+        .expect("the open plan holds a second lot");
+    assert!(near.front < far.front);
+    (near, far)
 }
 
 /// Seed 87122 claim QA: a storage ordered at the anchor was sited 110 blocks
-/// away, and 21 earlier orders were refused. Two free pockets exist; the order
-/// takes the one nearer the bell, though both lie off the bell's own row.
+/// away, and 21 earlier orders were refused. Two free lots exist; the order
+/// takes the one first in walking order from the plaza.
 #[test]
-fn owner_order_takes_the_free_site_nearest_the_anchor() {
+fn owner_order_takes_the_first_free_lot_in_walking_order() {
     let (mut state, id, _) = fixture();
+    open_plan(&mut state);
     fund(&mut state, "storage", 1);
-    solid_plateau(&mut state);
-    let size = storage_size(&state);
-    let anchor = state.settlements.get(id).unwrap().anchor;
-    let far = centred(anchor, size, 12, -14);
-    let near = centred(anchor, size, -6, 7);
-    clear(&mut state, far, size);
-    clear(&mut state, near, size);
-    state.world.fold_overlay();
+    let (near, far) = near_and_far(&state, id);
+    street_plateau(&mut state, id, &[near, far]);
     request_build(&mut state, id, "storage").unwrap();
     let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
-    assert_eq!(project.origin, near, "not the pocket at {far:?}");
+    assert_eq!(
+        (project.origin, project.rotation),
+        (near.lot.origin, near.lot.rotation),
+        "not the lot at {far:?}"
+    );
 }
 
-/// A cluttered village: a pillar every third column leaves no footprint-sized
-/// gap near the bell, and the only clearing lies off the bell's row. One owner
-/// order must find it, and it must be the nearest free site there is.
+/// Every planned lot lies wholly on lot columns, outside roads, verges and
+/// the plaza, with the entrance facing the road it fronts across the verge;
+/// all four road sides carry lots.
 #[test]
-fn owner_order_in_a_cluttered_village_finds_the_nearest_site_at_once() {
+fn planned_lots_front_reachable_roads_and_never_cover_streets() {
     let (mut state, id, _) = fixture();
-    fund(&mut state, "storage", 1);
-    solid_plateau(&mut state);
-    let size = storage_size(&state);
+    open_plan(&mut state);
     let anchor = state.settlements.get(id).unwrap().anchor;
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let lots = storage_lots(&state, id);
+    let sides: std::collections::BTreeSet<u8> = lots.iter().map(|site| site.lot.rotation).collect();
+    assert_eq!(sides.len(), 4, "{lots:?}");
+    for site in &lots {
+        let [ox, _, oz] = site.lot.origin;
+        for x in ox..ox + i32::from(site.size[0]) {
+            for z in oz..oz + i32::from(site.size[2]) {
+                assert_eq!(layout::cell(anchor, x, z), layout::Cell::Lot, "{site:?}");
+            }
+        }
+        let entrance = blueprint
+            .level(1)
+            .unwrap()
+            .rotated(Rotation::from_quarter_turns(site.lot.rotation))
+            .entrance;
+        let door = [ox + i32::from(entrance[0]), oz + i32::from(entrance[2])];
+        // Two steps out of the entrance edge reach a road column.
+        assert!(
+            [[2, 0], [-2, 0], [0, 2], [0, -2]]
+                .into_iter()
+                .any(|[dx, dz]| layout::cell(anchor, door[0] + dx, door[1] + dz)
+                    == layout::Cell::Road),
+            "{site:?} entrance {door:?} faces no road"
+        );
+    }
+}
+
+/// A cluttered village: a pillar every third lot column leaves no
+/// footprint-sized gap except one clearing on the avenue south of the plaza.
+/// One owner order finds it at once and faces the avenue.
+#[test]
+fn owner_order_in_a_cluttered_village_finds_the_clearing_at_once() {
+    let (mut state, id, _) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "storage", 1);
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    let clearing = |x: i32, z: i32| (11..=22).contains(&x) && (13..=24).contains(&z);
     for x in -16i32..32 {
         for z in -16i32..32 {
-            if x.rem_euclid(3) != 0 && z.rem_euclid(3) != 0 && (x, z) != (1, 1) {
+            if layout::cell(anchor, x, z) == layout::Cell::Lot
+                && (x, z) != (1, 1)
+                && !clearing(x, z)
+                && (x.rem_euclid(3) == 0 || z.rem_euclid(3) == 0)
+            {
                 for y in 201..=216 {
-                    state.world.set_block(x, y, z, state.registry.states.air);
+                    state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }
         }
     }
-    let clearing = centred(anchor, size, 14, 13);
-    clear(&mut state, clearing, size);
     state.world.fold_overlay();
-    let nearest = nearest_free_distance(&state, id, size).expect("fixture has a free site");
     request_build(&mut state, id, "storage").unwrap();
     let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
-    assert_eq!(distance(anchor, size, project.origin), nearest);
-    assert!(
-        distance(anchor, size, project.origin) <= 14,
-        "{:?}",
-        project.origin
-    );
+    let size = blueprints::get(&state.registry, "storage")
+        .unwrap()
+        .footprint(Rotation::from_quarter_turns(project.rotation));
+    for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
+        for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
+            assert!(clearing(x, z), "{:?} leaves the clearing", project.origin);
+        }
+    }
+    assert_eq!(project.rotation, 1, "front faces the avenue to the west");
 }
 
 fn profession(state: &TickState, slot: crate::entities::EntitySlot) -> Profession {
@@ -214,25 +258,54 @@ fn reachable_or_off_shift_builder_keeps_the_slot() {
     assert_eq!(profession(&state, builder), Profession::Builder);
 }
 
-/// Deterministic terrain, not an operator-built pad: every building-sized
-/// footprint crosses both low and high columns.
+/// Deterministic terrain, not an operator-built pad: behind a level front
+/// lip, every lot east of the avenue is a 198..=201 diagonal ramp, so each
+/// footprint there crosses both low and high columns. Roads, verges, the
+/// plaza and the western blocks stay level stone and dirt at 200.
 #[test]
 fn hillside_village_prepares_and_builds_first_storage() {
     use super::tests::complete;
     use mc_data::ItemStack;
     let (mut state, id, builder) = fixture();
-    state.settlements.get_mut(id).unwrap().anchor[0] = 10;
+    open_plan(&mut state);
+    // The lot's east and south work sides lie in the neighbouring chunks, as
+    // a player near the bell keeps them simulated. A builder that walks into
+    // an unsimulated chunk freezes there and loses the builder slot.
+    for x in -1..=1 {
+        for z in -1..=1 {
+            state.tickets.insert(
+                format!("hillside-{x}-{z}"),
+                (crate::boundary::ChunkPos { x, z }, 0),
+            );
+        }
+    }
+    state.refresh_active_chunks(0);
     fund(&mut state, "storage", 1);
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    let lot = |x: i32, z: i32| layout::cell(anchor, x, z) == layout::Cell::Lot;
+    let lip = |x: i32, z: i32| {
+        [(1, 0), (-1, 0), (0, 1), (0, -1)]
+            .into_iter()
+            .any(|(dx, dz)| layout::cell(anchor, x + dx, z + dz) == layout::Cell::Verge)
+    };
+    let height = |x: i32, z: i32| {
+        if lot(x, z) && x > anchor[0] && !lip(x, z) {
+            198 + (x + z).rem_euclid(4)
+        } else {
+            200
+        }
+    };
     let dirt = crate::settlements::allocator::tests::block(&state, "minecraft:dirt", &[]);
-    for x in 0..16 {
-        for z in 0..16 {
-            let height = if (x, z) == (1, 1) { 200 } else { 198 + x % 4 };
+    for x in -16i32..32 {
+        for z in -16i32..32 {
             for y in 197..=201 {
                 if (x, y, z) != (1, 201, 1) {
-                    let block = if y <= height {
+                    let block = if y > height(x, z) {
+                        state.registry.states.air
+                    } else if lot(x, z) {
                         dirt
                     } else {
-                        state.registry.states.air
+                        state.registry.states.stone
                     };
                     state.world.set_block(x, y, z, block);
                 }
@@ -274,7 +347,20 @@ fn hillside_village_prepares_and_builds_first_storage() {
     );
     assert!(bill > 0);
     let floor = project.origin[1];
-    let size = storage_size(&state);
+    let size = blueprints::get(&state.registry, "storage")
+        .unwrap()
+        .footprint(Rotation::from_quarter_turns(project.rotation));
+    assert!(
+        (project.origin[0]..project.origin[0] + i32::from(size[0])).any(|x| {
+            (project.origin[2]..project.origin[2] + i32::from(size[2]))
+                .any(|z| height(x, z) < floor - 1)
+        }) && (project.origin[0]..project.origin[0] + i32::from(size[0])).any(|x| {
+            (project.origin[2]..project.origin[2] + i32::from(size[2]))
+                .any(|z| height(x, z) > floor)
+        }),
+        "the first lot crosses the ramp: {:?}",
+        project.origin
+    );
     // Real brain/navigation, no teleports, operator commands or terrain edits.
     for now in 0..20_000 {
         state.tick = now;
@@ -321,7 +407,7 @@ fn hillside_village_prepares_and_builds_first_storage() {
                     "terrain above the floor must be excavated"
                 );
             }
-            for y in (198 + x % 4 + 1)..floor {
+            for y in height(x, z) + 1..floor {
                 assert_eq!(state.world.physics_block_at(x, y, z), Some(dirt));
             }
             assert!(
@@ -447,19 +533,16 @@ fn terrain_preparation_rejects_four_block_variance_and_protected_cells() {
     }
 }
 
-fn unfunded_near_foundation() -> (TickState, SettlementId, [i32; 3]) {
+/// Two free lots: the first in walking order needs one dirt below its
+/// authored floor, away from its door column; the stock funds the complete
+/// building but contains no foundation dirt. The later lot is level.
+fn unfunded_near_foundation() -> (TickState, SettlementId, Site, Site) {
     let (mut state, id, _) = fixture();
+    open_plan(&mut state);
     fund(&mut state, "storage", 1);
-    solid_plateau(&mut state);
-    let size = storage_size(&state);
-    let anchor = state.settlements.get(id).unwrap().anchor;
-    let near = centred(anchor, size, 0, 0);
-    let far = centred(anchor, size, -12, 0);
-    clear(&mut state, near, size);
-    clear(&mut state, far, size);
-    // The near pocket needs one dirt below its authored floor. The stock
-    // funds the complete building, but contains no foundation dirt.
-    let (x, z) = (near[0] + 1, near[2] + 1);
+    let (near, far) = near_and_far(&state, id);
+    street_plateau(&mut state, id, &[near, far]);
+    let (x, z) = (near.lot.origin[0] + 1, near.lot.origin[2] + 1);
     state
         .world
         .set_block(x, 198, z, state.registry.states.stone);
@@ -467,33 +550,39 @@ fn unfunded_near_foundation() -> (TickState, SettlementId, [i32; 3]) {
         state.world.set_block(x, y, z, state.registry.states.air);
     }
     state.world.fold_overlay();
-    assert!(site_free(
-        &state,
-        state.settlements.get(id).unwrap(),
-        near,
-        size
-    ));
-    assert!(site_free(
-        &state,
-        state.settlements.get(id).unwrap(),
-        far,
-        size
-    ));
-    (state, id, far)
+    for site in [near, far] {
+        assert!(site_free(
+            &state,
+            state.settlements.get(id).unwrap(),
+            site.lot.origin,
+            site.size
+        ));
+    }
+    (state, id, near, far)
 }
 
 #[test]
 fn hillside_review_autonomous_search_skips_unfunded_foundation_within_budget() {
-    let (mut state, id, far) = unfunded_near_foundation();
-    plan(&mut state, id);
-    let record = state.settlements.get(id).unwrap();
+    let (mut state, id, near, far) = unfunded_near_foundation();
+    // Each pass examines SITE_ATTEMPTS frontage candidates from the cursor;
+    // skipping the unfunded near lot never resets it.
+    let mut cursor = 0;
+    while cursor <= near.front {
+        plan(&mut state, id);
+        cursor += SITE_ATTEMPTS;
+        let record = state.settlements.get(id).unwrap();
+        assert!(
+            record.project.is_none(),
+            "no free funded lot before {cursor}"
+        );
+        assert_eq!(
+            record.construction_cursor, cursor,
+            "unfunded site cannot reset the cursor"
+        );
+    }
     assert!(
-        record.project.is_none(),
-        "far site is outside the first pass"
-    );
-    assert_eq!(
-        record.construction_cursor, SITE_ATTEMPTS,
-        "unfunded site cannot reset the cursor"
+        far.front >= cursor,
+        "far lot lies beyond the skipping passes"
     );
     for _ in 0..32 {
         plan(&mut state, id);
@@ -508,15 +597,21 @@ fn hillside_review_autonomous_search_skips_unfunded_foundation_within_budget() {
         .project
         .as_ref()
         .expect("far funded site");
-    assert_eq!(project.origin, far);
+    assert_eq!(
+        (project.origin, project.rotation),
+        (far.lot.origin, far.lot.rotation)
+    );
 }
 
 #[test]
 fn hillside_review_owner_search_skips_unfunded_foundation() {
-    let (mut state, id, far) = unfunded_near_foundation();
+    let (mut state, id, _, far) = unfunded_near_foundation();
     request_build(&mut state, id, "storage").expect("far funded site");
     let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
-    assert_eq!(project.origin, far);
+    assert_eq!(
+        (project.origin, project.rotation),
+        (far.lot.origin, far.lot.rotation)
+    );
     assert!(project.ordered);
 }
 
@@ -547,4 +642,115 @@ fn hillside_review_floor_under_overhang_preserves_fluids_and_protected_blocks() 
             "protected floor under overhang: {name}"
         );
     }
+}
+
+fn block_name(state: &TickState, x: i32, y: i32, z: i32) -> &str {
+    state
+        .world
+        .block_at(x, y, z)
+        .and_then(|block| state.registry.blocks.by_id(mc_world::BlockStateId(block)))
+        .map_or("unloaded", |definition| definition.block.id.path())
+}
+
+/// A standing building gets its street: the planner paves, for free, the
+/// stretch on the walk from the plaza to the road its door faces, then funds
+/// that stretch's verge lamp post from storage. Streets nobody uses stay as
+/// they are, and nothing is planned before a building stands.
+#[test]
+fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
+    use super::tests::complete;
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    let grass = crate::settlements::allocator::tests::block(&state, "minecraft:grass_block", &[]);
+    for x in -16i32..32 {
+        for z in -16i32..32 {
+            if layout::cell(anchor, x, z) == layout::Cell::Road {
+                state.world.set_block(x, 200, z, grass);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    plan(&mut state, id);
+    assert!(state.settlements.get(id).unwrap().project.is_none());
+
+    fund(&mut state, "storage", 1);
+    request_build(&mut state, id, "storage").unwrap();
+    let storage = state.settlements.get(id).unwrap().project.clone().unwrap();
+    complete(&mut state, id, slot);
+    // The first free lot fronts the avenue south of the plaza across its
+    // west verge; the door's road is the avenue column two blocks west.
+    assert_eq!((storage.origin, storage.rotation), ([11, 200, 13], 1));
+    let mut stretches = 0;
+    loop {
+        plan(&mut state, id);
+        let Some(project) = state.settlements.get(id).unwrap().project.clone() else {
+            break;
+        };
+        assert_eq!(project.blueprint, layout::ROAD, "free paving comes first");
+        assert!(!project.ordered && project.building.is_none());
+        complete(&mut state, id, slot);
+        stretches += 1;
+        assert!(stretches <= 4, "only the walk to the door is paved");
+    }
+    assert_eq!(
+        stretches, 1,
+        "the avenue stretch from the plaza to the door"
+    );
+    for z in 10..=23 {
+        for x in 7..=9 {
+            assert_eq!(block_name(&state, x, 200, z), "dirt_path", "{x} {z}");
+        }
+    }
+    for (x, z) in [(8, -10), (-10, 8), (20, 8), (8, 28)] {
+        assert_eq!(
+            block_name(&state, x, 200, z),
+            "grass_block",
+            "unused street {x} {z}"
+        );
+    }
+    // A paved road reopens: the restored ledger accepts free paving.
+    crate::plugin_structures::validate(&state).expect("committed road reopens");
+
+    // The stretch's lamp post waits for its two fences and torch.
+    assert!(state.settlements.get(id).unwrap().project.is_none());
+    let item = |name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap()
+    };
+    let (fence, torch) = (item("minecraft:oak_fence"), item("minecraft:torch"));
+    let chest = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    chest[25] = mc_data::ItemStack::new(fence, 2);
+    chest[26] = mc_data::ItemStack::new(torch, 1);
+    plan(&mut state, id);
+    let lamp = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .project
+        .clone()
+        .expect("funded lamp post");
+    assert_eq!(lamp.blueprint, layout::LAMP);
+    assert_eq!(
+        lamp.origin,
+        [10, 201, 19],
+        "the stretch's verge lamp column"
+    );
+    complete(&mut state, id, slot);
+    assert_eq!(block_name(&state, 10, 201, 19), "oak_fence");
+    assert_eq!(block_name(&state, 10, 202, 19), "oak_fence");
+    assert_eq!(block_name(&state, 10, 203, 19), "torch");
+    crate::plugin_structures::validate(&state).expect("committed lamp post reopens");
+    plan(&mut state, id);
+    assert!(state.settlements.get(id).unwrap().project.is_none());
+    let report = layout::report(&state, state.settlements.get(id).unwrap());
+    assert!(report.contains("Lamps: 1 standing"), "{report}");
+    assert!(
+        report.contains("Buildings: 1/1 face a reachable road."),
+        "{report}"
+    );
+    assert!(report.contains("Next street work: none."), "{report}");
 }

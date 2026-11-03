@@ -19,14 +19,36 @@ pub(super) fn total_food(food: &FoodTable, v: &VillagerState) -> i32 {
 pub(super) fn willing(food: &FoodTable, v: &VillagerState) -> bool {
     v.age == 0 && !v.sleeping && v.activity != Activity::Panic && total_food(food, v) >= 12
 }
-pub(super) fn eat_for_birth(food: &FoodTable, v: &mut VillagerState) {
-    for slot in &mut v.inventory {
+fn willing_with_production(
+    state: &TickState,
+    slot: EntitySlot,
+    food: &FoodTable,
+    v: &VillagerState,
+) -> bool {
+    if !willing(food, v) {
+        return false;
+    }
+    let protected = crate::settlements::economy::protected_carry(state, slot, v);
+    let reserved_food: i32 = v
+        .inventory
+        .iter()
+        .zip(protected)
+        .filter_map(|(stack, count)| {
+            stack
+                .as_ref()
+                .map(|stack| count as i32 * food_points(food, stack.item_id))
+        })
+        .sum();
+    total_food(food, v) - reserved_food >= 12
+}
+pub(super) fn eat_for_birth(food: &FoodTable, v: &mut VillagerState, protected: &[u32; 8]) {
+    for (index, slot) in v.inventory.iter_mut().enumerate() {
         if v.food_level >= 12 {
             break;
         }
         if let Some(stack) = slot {
             let points = food_points(food, stack.item_id);
-            while points > 0 && stack.count > 0 && v.food_level < 12 {
+            while points > 0 && stack.count > protected[index] as i32 && v.food_level < 12 {
                 stack.count -= 1;
                 v.food_level += points;
             }
@@ -175,7 +197,8 @@ pub(super) fn share_food(
     let Some(recipient) = recipient else {
         return;
     };
-    for inventory in &mut v.inventory {
+    let protected = crate::settlements::economy::protected_carry(state, slot, v);
+    for (index, inventory) in v.inventory.iter_mut().enumerate() {
         let Some(stack) = inventory else {
             continue;
         };
@@ -187,7 +210,8 @@ pub(super) fn share_food(
             stack.count / 2
         } else {
             (stack.count - 24).max(0)
-        };
+        }
+        .min(stack.count.saturating_sub(protected[index] as i32));
         if count <= 0 {
             continue;
         }
@@ -448,9 +472,9 @@ pub(super) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
                         b.partner == Some(first_id)
                             && b.courtship_until == a.courtship_until
                             && b.courtship_started_tick == a.courtship_started_tick
-                            && willing(&cache.food, b)
+                            && willing_with_production(state, second, &cache.food, b)
                     })
-                && willing(&cache.food, a)
+                && willing_with_production(state, first, &cache.food, a)
                 && a.courtship_started_tick.is_some()
                 && crate::settlements::households::can_breed(state, [first_id, partner])
                 && distance(state.entities.pos(first), state.entities.pos(second)) <= 8.0 * 8.0;
@@ -523,15 +547,25 @@ pub(super) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
             } else {
                 None
             };
+            let protected_a = crate::settlements::economy::protected_carry(
+                state,
+                first,
+                state.entities.row(first).villager.as_ref().unwrap(),
+            );
+            let protected_b = crate::settlements::economy::protected_carry(
+                state,
+                second,
+                state.entities.row(second).villager.as_ref().unwrap(),
+            );
             let mut a = state.entities.row_mut(first).villager.take().unwrap();
             a.navigation_path = path;
             let kind = a.data.kind;
             let pos = state.entities.pos(first);
             let started_tick = a.courtship_started_tick.expect("validated courtship clock");
-            eat_for_birth(&cache.food, &mut a);
+            eat_for_birth(&cache.food, &mut a, &protected_a);
             abort_courtship(&mut a);
             let b = state.entities.row_mut(second).villager.as_mut().unwrap();
-            eat_for_birth(&cache.food, b);
+            eat_for_birth(&cache.food, b, &protected_b);
             abort_courtship(b);
             if bed.is_some() {
                 a.age = 6_000;
@@ -574,18 +608,17 @@ pub(super) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
                 }
                 changes.entities_spawned.push(id);
             }
-        } else if state.tick.is_multiple_of(20) && willing(&cache.food, a) {
+        } else if state.tick.is_multiple_of(20)
+            && willing_with_production(state, first, &cache.food, a)
+        {
             let pos = state.entities.pos(first);
             let second = bodies_near(state, pos, 8.0, true).find(|&s| {
                 s.0 > first.0
                     && active(state, s)
                     && distance(pos, state.entities.pos(s)) <= 8.0 * 8.0
-                    && state
-                        .entities
-                        .row(s)
-                        .villager
-                        .as_ref()
-                        .is_some_and(|b| b.partner.is_none() && willing(&cache.food, b))
+                    && state.entities.row(s).villager.as_ref().is_some_and(|b| {
+                        b.partner.is_none() && willing_with_production(state, s, &cache.food, b)
+                    })
                     && crate::settlements::households::can_breed(
                         state,
                         [first_id, state.entities.body(s).id],

@@ -44,6 +44,63 @@ fn emeralds(state: &TickState, count: i32) -> ItemStack {
 }
 
 #[test]
+fn carry_observation_reads_only_live_town_members_and_fences_native_changes() {
+    let mut state = state();
+    let town = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "town".into(),
+            "owner".into(),
+            [8, 201, 8],
+            48,
+        )
+        .unwrap();
+    let Endpoint::VillagerCarry { uuid } = body(&mut state) else {
+        unreachable!()
+    };
+    assert_eq!(
+        observe_carry(&mut state, town, uuid),
+        Err(Failure::Forbidden)
+    );
+    let slot = state.entities.slot_of_uuid(uuid).unwrap();
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .settlement = Some(town);
+    let first: serde_json::Value =
+        serde_json::from_str(&observe_carry(&mut state, town, uuid).unwrap()).unwrap();
+    assert_eq!(first["worker"], uuid.to_string());
+    assert_eq!(first["slots"].as_array().unwrap().len(), 8);
+    let mut stack = emeralds(&state, 3);
+    stack.custom_name = Some("physical".into());
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(stack);
+    let second: serde_json::Value =
+        serde_json::from_str(&observe_carry(&mut state, town, uuid).unwrap()).unwrap();
+    assert_eq!(second["slots"][0]["item"], "minecraft:emerald");
+    assert_eq!(second["slots"][0]["stack"]["count"], 3);
+    assert_eq!(second["slots"][0]["stack"]["custom_name"], "physical");
+    assert_ne!(
+        first["fence"]["snapshot_hash"],
+        second["fence"]["snapshot_hash"]
+    );
+    state.entities.body_mut(slot).alive = false;
+    assert_eq!(
+        observe_carry(&mut state, town, uuid),
+        Err(Failure::NotFound)
+    );
+}
+
+#[test]
 fn native_uuid_carry_preserves_components_and_uses_canonical_fences() {
     let mut state = state();
     let source = body(&mut state);

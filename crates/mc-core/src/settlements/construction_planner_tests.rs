@@ -1,4 +1,4 @@
-use super::tests::{attempt, complete, fixture, fund, start};
+use super::tests::{attempt, complete, fixture, fund, open_plan, start};
 use super::*;
 use mc_script::ScriptWorldBounds;
 
@@ -93,12 +93,13 @@ fn plan_until_started(state: &mut TickState, id: SettlementId) {
 #[test]
 fn funded_planner_follows_terrain_to_a_free_site_off_the_bell_plane() {
     let (mut state, id, _) = fixture();
+    open_plan(&mut state);
     fund(&mut state, "storage", 1);
-    // Raise the chunk five blocks everywhere but the chest corner: the bell
-    // plane (y=200) has no clearable headroom in any footprint.
-    for x in 0..16 {
-        for z in 0..16 {
-            if x < 4 && z < 4 {
+    // Raise the plan area five blocks everywhere but the chest corner: the
+    // bell plane (y=200) has no clearable headroom in any footprint.
+    for x in -16..32 {
+        for z in -16..32 {
+            if (0..4).contains(&x) && (0..4).contains(&z) {
                 continue;
             }
             for y in 201..=205 {
@@ -281,6 +282,7 @@ fn inactive_incumbent_yields_to_an_active_builder_and_construction_advances() {
 #[test]
 fn funded_owner_order_starts_the_single_project_without_world_or_stock_debit() {
     let (mut state, id, _) = fixture();
+    open_plan(&mut state);
     fund(&mut state, "watch_tower", 1);
     let before_stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let before_block = state.world.block_at(8, 201, 8);
@@ -308,6 +310,7 @@ fn funded_owner_order_starts_the_single_project_without_world_or_stock_debit() {
 #[test]
 fn pending_owner_order_blocks_autonomy_then_starts_after_funding() {
     let (mut state, id, _) = fixture();
+    open_plan(&mut state);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     assert!(
         request_build(&mut state, id, "house").is_ok(),
@@ -333,15 +336,20 @@ fn pending_owner_order_blocks_autonomy_then_starts_after_funding() {
 #[test]
 fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
     let (mut state, id, _) = fixture();
+    open_plan(&mut state);
     assert!(matches!(
         request_build(&mut state, id, "farm").unwrap(),
         OrderOutcome::Queued { .. }
     ));
-    // Block every site in the initially loaded chunk throughout the terrain
-    // search band; leave the storage chest accessible for the funding check.
-    for x in 0..16 {
-        for z in 0..16 {
-            if (x, z) != (1, 1) {
+    // Fill every lot of the plan area through the terrain search band; roads,
+    // verges and the plaza stay open, and the storage chest stays reachable
+    // for the funding check.
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    let lots =
+        move |x: i32, z: i32| layout::cell(anchor, x, z) == layout::Cell::Lot && (x, z) != (1, 1);
+    for x in -16..32 {
+        for z in -16..32 {
+            if lots(x, z) {
                 for y in 201..=216 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
@@ -366,9 +374,18 @@ fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
     assert_eq!(record.pending_order, before.pending_order);
     assert!(record.project.is_none(), "autonomy must not take the slot");
 
-    // The newly loaded area is beyond the first bounded search. Reporting a
-    // reason is observational, even when a suitable site now exists.
-    extend_planning_site(&mut state);
+    // Lots open beyond the first bounded search. Reporting a reason is
+    // observational, even when a suitable site now exists.
+    for x in -16..32 {
+        for z in 16..32 {
+            if lots(x, z) {
+                for y in 201..=216 {
+                    state.world.set_block(x, y, z, state.registry.states.air);
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
     let before_reason = state.settlements.get(id).unwrap().clone();
     assert_eq!(
         pending_reason(&state, id).as_deref(),
@@ -386,7 +403,7 @@ fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
     assert!(project.ordered);
     assert!(
         project.origin[2] >= 16,
-        "site must be in the newly loaded area"
+        "site must be on the newly opened lots"
     );
 }
 
@@ -544,7 +561,7 @@ fn queued_upgrade_targets_next_level_after_active_upgrade_finishes() {
 fn stale_pending_upgrade_is_dropped_and_autonomous_planning_resumes() {
     for remove_building in [true, false] {
         let (mut state, id, slot) = fixture();
-        extend_planning_site(&mut state);
+        open_plan(&mut state);
         start(&mut state, id, "house", 1, None);
         fund(&mut state, "house", 1);
         complete(&mut state, id, slot);
@@ -668,6 +685,7 @@ fn partial_delivery_funds_a_blueprint_proven_upgrade_without_mutating_stock() {
 #[test]
 fn invalid_or_stale_owner_targets_leave_no_request_to_obstruct_planning() {
     let (mut state, id, _) = fixture();
+    open_plan(&mut state);
     let record = state.settlements.get_mut(id).unwrap();
     certificate(record, BuildingKind::Mine, 1, true);
     let mine = *record.buildings.keys().next().unwrap();
@@ -699,8 +717,8 @@ fn invalid_or_stale_owner_targets_leave_no_request_to_obstruct_planning() {
 fn funded_owner_order_without_a_free_site_leaves_no_saved_request_or_cursor() {
     let (mut state, id, _) = fixture();
     fund(&mut state, "watch_tower", 1);
-    // Terrain-following sites reach ±SITE_BAND around the bell, so the
-    // plateau must be solid through the whole band.
+    // No lot fits the fixture's one loaded chunk, and the plaza and roads are
+    // solid through the whole terrain band.
     for x in 0..16 {
         for z in 0..16 {
             if (x, z) != (1, 1) {
@@ -729,32 +747,10 @@ fn funded_owner_order_without_a_free_site_leaves_no_saved_request_or_cursor() {
     assert!(state.settlements.take_images().is_empty());
 }
 
-fn extend_planning_site(state: &mut TickState) {
-    // Leave actual loaded room for the farm's full seven-by-ten footprint
-    // beside the storage executor's reserved footprint.
-    state
-        .world
-        .ensure_blocking(&rustc_hash::FxHashMap::from_iter([(
-            crate::boundary::ChunkPos { x: 0, z: 1 },
-            0,
-        )]));
-    for x in 0..16 {
-        for z in 16..32 {
-            state
-                .world
-                .set_block(x, 200, z, state.registry.states.stone);
-            for y in 201..224 {
-                state.world.set_block(x, y, z, state.registry.states.air);
-            }
-        }
-    }
-    state.world.fold_overlay();
-}
-
 #[test]
 fn unfunded_house_skips_to_funded_farm_without_debiting_stock() {
     let (mut state, id, slot) = fixture();
-    extend_planning_site(&mut state);
+    open_plan(&mut state);
     start(&mut state, id, "storage", 1, None);
     fund(&mut state, "storage", 1);
     complete(&mut state, id, slot);
@@ -833,7 +829,7 @@ fn unfunded_house_skips_to_funded_farm_without_debiting_stock() {
 #[test]
 fn funded_house_retains_priority_over_later_needs() {
     let (mut state, id, slot) = fixture();
-    extend_planning_site(&mut state);
+    open_plan(&mut state);
     start(&mut state, id, "storage", 1, None);
     fund(&mut state, "storage", 1);
     complete(&mut state, id, slot);
@@ -897,7 +893,7 @@ fn fund_all(state: &mut TickState, blueprints_: &[&str]) {
 }
 
 fn autonomous_storage(state: &mut TickState, id: SettlementId) {
-    extend_planning_site(state);
+    open_plan(state);
     fund_all(state, &["storage", "house"]);
     plan_until_started(state, id);
     let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
@@ -999,7 +995,7 @@ fn owner_order_is_busy_once_an_autonomous_project_placed_a_block() {
 #[test]
 fn ordered_project_finishes_before_replacement_order_starts() {
     let (mut state, id, slot) = fixture();
-    extend_planning_site(&mut state);
+    open_plan(&mut state);
     fund_all(&mut state, &["storage", "house"]);
     assert_eq!(
         request_build(&mut state, id, "storage").unwrap(),
@@ -1133,11 +1129,21 @@ fn upgrade_is_offered_for_an_ordered_house_that_replaced_an_autonomous_site() {
         .find(|(_, b)| b.kind == BuildingKind::House)
         .map(|(id, b)| (*id, b.clone()))
         .expect("house certified");
+    let house = blueprints::get(&state.registry, "house").unwrap();
+    let turn = Rotation::from_quarter_turns(project.rotation);
+    let placed = |level: u8| {
+        house
+            .level(level)
+            .unwrap()
+            .rotated(turn)
+            .bounds(project.origin)
+    };
     assert_eq!(
-        building.bounds.min, project.origin,
-        "certificate follows the executor origin"
+        building.bounds,
+        placed(1),
+        "certificate follows the executor origin and street-facing rotation"
     );
-    assert!(executor::built_at(&state, id, "house", building.bounds.min));
+    assert!(executor::built_at(&state, id, "house", project.origin));
     assert!(upgrade_available(&state, id, bid), "L2 upgrade row exists");
     // The row is orderable and the upgraded house offers L3 the same way.
     for level in [2, 3] {
@@ -1146,7 +1152,7 @@ fn upgrade_is_offered_for_an_ordered_house_that_replaced_an_autonomous_site() {
         complete(&mut state, id, slot);
         let upgraded = &state.settlements.get(id).unwrap().buildings[&bid];
         assert_eq!(upgraded.level, level);
-        assert_eq!(upgraded.bounds.min, project.origin);
+        assert_eq!(upgraded.bounds, placed(level));
         assert_eq!(upgrade_available(&state, id, bid), level < 3);
     }
 }

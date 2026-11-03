@@ -61,6 +61,28 @@ fn building(
         .ok_or(Failure::NotFound)
 }
 
+fn production_building(
+    world: &TickState,
+    id: SettlementId,
+    token: &str,
+) -> Result<ScriptSettlementBuildingRef, Failure> {
+    if let Ok(reference) = building(world, id, token) {
+        return Ok(reference);
+    }
+    let building_id = super::buildings::BuildingId(token.parse().map_err(|_| Failure::NotFound)?);
+    let found = world
+        .settlements
+        .get(id)
+        .and_then(|record| record.buildings.get(&building_id))
+        .filter(|building| building.kind.profession().is_some())
+        .ok_or(Failure::NotFound)?;
+    Ok(ScriptSettlementBuildingRef::new(
+        "building".to_owned(),
+        building_id.0.to_string(),
+        format!("solaris:{}", found.kind.name()),
+    ))
+}
+
 fn route(value: &str) -> Result<Vec<[i32; 3]>, Failure> {
     let mut route = Vec::new();
     for waypoint in value.split(';') {
@@ -105,16 +127,70 @@ pub(crate) fn execute(
     }
     let action = match domain {
         EconomyDomain::Production => match (verb.as_str(), rest) {
+            ("carry", [worker]) => {
+                return super::inventory::observe_carry(
+                    world,
+                    id,
+                    worker.parse().map_err(|_| Failure::InvalidRequest)?,
+                );
+            }
+            ("job", [job]) => {
+                let job = world
+                    .settlements
+                    .get(id)
+                    .and_then(|record| record.economy.production.jobs.get(job))
+                    .ok_or(Failure::NotFound)?;
+                return Ok(serde_json::json!({
+                    "id": job.id,
+                    "worker": job.worker.to_string(),
+                    "recipe": job.recipe,
+                    "recipe_revision": job.recipe_revision,
+                    "count": job.count,
+                    "done": job.done,
+                    "paused": job.paused,
+                    "cancelled": job.cancelled,
+                    "next_due": job.next_due,
+                    "order": job.order,
+                    "after": job.after,
+                    "receipts": job.receipts,
+                })
+                .to_string());
+            }
             ("start", [job, worker, recipe, count, certificate, station, stand_at]) => {
                 Action::ProductionStart {
                     job: job.clone(),
                     worker: worker.clone(),
                     recipe: recipe.clone(),
                     count: number(count)?,
-                    building: building(world, id, certificate)?,
+                    building: production_building(world, id, certificate)?,
                     station: position(station)?,
                     stand_at: position(stand_at)?,
                 }
+            }
+            // Autocraft: plan missing ingredients from live stock, then admit
+            // the whole chain. A planning refusal is an answer, not an error.
+            ("order", [job, worker, recipe, count, certificate, station, stand_at]) => {
+                use super::autocraft::{self, Refusal};
+                let order = autocraft::Order {
+                    job: job.clone(),
+                    worker: worker.parse().map_err(|_| Failure::InvalidRequest)?,
+                    recipe: recipe.clone(),
+                    count: number(count)?,
+                    building: production_building(world, id, certificate)?,
+                    station: position(station)?,
+                    stand_at: position(stand_at)?,
+                };
+                return match autocraft::order(world, id, order) {
+                    Ok(steps) => Ok(format!(
+                        "Autocraft order {job} planned: {}",
+                        autocraft::describe(&steps)
+                    )),
+                    Err(Refusal::Admission(failure)) => Err(failure),
+                    Err(refusal) => Ok(format!(
+                        "Autocraft refused: {}",
+                        refusal.text(super::ui_text::Lang::En)
+                    )),
+                };
             }
             ("pause", [job]) => Action::ProductionPause { job: job.clone() },
             ("resume", [job]) => Action::ProductionResume { job: job.clone() },

@@ -154,6 +154,103 @@ pub(crate) fn load(state: &TickState, endpoint: &Endpoint) -> Result<Image, Fail
     })
 }
 
+/// Read the live member's physical carry, not a settlement-policy mirror.
+/// The command caller must first authorize the settlement manager.
+pub(crate) fn observe_carry(
+    world: &mut TickState,
+    settlement: crate::settlements::SettlementId,
+    worker: Uuid,
+) -> Result<String, Failure> {
+    let endpoint = Endpoint::VillagerCarry { uuid: worker };
+    crate::settlements::economy::authorize_endpoint(world, settlement, &endpoint)?;
+    let image = load(world, &endpoint)?;
+    let slots = image
+        .slots
+        .iter()
+        .map(|stack| {
+            if stack.is_empty() {
+                return Ok(serde_json::Value::Null);
+            }
+            let name = world
+                .registry
+                .items
+                .name_of(stack.item_id)
+                .ok_or(Failure::InvalidRequest)?;
+            Ok(serde_json::json!({ "item": name.as_str(), "stack": stack }))
+        })
+        .collect::<Result<Vec<_>, Failure>>()?;
+    Ok(serde_json::json!({
+        "worker": worker.to_string(),
+        "tick": world.tick,
+        "fence": image.fence,
+        "slots": slots,
+    })
+    .to_string())
+}
+
+/// One image per physical town storage container, with the storage point it
+/// was loaded from, in storage-point order. Both halves of a double chest load
+/// the same merged inventory, so the second half is skipped and stock is never
+/// counted twice. Vanished or unloadable containers are skipped.
+pub(crate) fn town_storage(
+    state: &TickState,
+    settlement: crate::settlements::SettlementId,
+) -> Vec<([i32; 3], Image)> {
+    let mut images = Vec::new();
+    let mut physical = BTreeSet::new();
+    for position in crate::settlements::buildings::storage_points(state, settlement) {
+        let Ok(cells) = crate::plugin_inventories::container_cells(
+            state,
+            &mc_script::ScriptBlockPosition::new(position[0], position[1], position[2]),
+        ) else {
+            continue;
+        };
+        if cells
+            .iter()
+            .any(|cell| physical.contains(&[cell.x, cell.y, cell.z]))
+        {
+            continue;
+        }
+        let endpoint = Endpoint::Container {
+            dimension: state.dimension.name().into(),
+            position,
+        };
+        if let Ok(image) = load(state, &endpoint) {
+            physical.extend(cells.iter().map(|cell| [cell.x, cell.y, cell.z]));
+            images.push((position, image));
+        }
+    }
+    images
+}
+
+/// Free item quantities in a canonical native source, sharing the reservation
+/// floor authority (including both halves of a double container) with commit.
+pub(crate) fn unreserved_stock(
+    state: &TickState,
+    image: &Image,
+) -> Result<BTreeMap<u32, u64>, Failure> {
+    let endpoint = canonical(state, &image.endpoint)?.ok_or(Failure::InvalidRequest)?;
+    let mut stock = BTreeMap::new();
+    for stack in &image.slots {
+        if !stack.is_empty() {
+            *stock.entry(stack.item_id).or_insert(0_u64) += stack.count.max(0) as u64;
+        }
+    }
+    for (name, held) in super::floor(state, &endpoint, None)? {
+        let name = mc_data::Identifier::parse(name).map_err(|_| Failure::InvalidRequest)?;
+        let item = state
+            .registry
+            .items
+            .id_of(&name)
+            .ok_or(Failure::InvalidRequest)?;
+        let available = stock.entry(item).or_default();
+        *available = available
+            .checked_sub(held)
+            .ok_or(Failure::InsufficientItems)?;
+    }
+    Ok(stock)
+}
+
 fn check_stack(
     state: &TickState,
     endpoint: &Endpoint,

@@ -7,6 +7,7 @@ pub use registry::{
 
 pub(crate) mod allocator;
 pub(crate) mod army;
+mod autocraft;
 pub(crate) mod autonomy;
 pub mod blueprints;
 pub(crate) mod building_commands;
@@ -19,6 +20,7 @@ pub(crate) mod construction_crafting;
 pub(crate) mod economy;
 pub(crate) mod economy_commands;
 pub(crate) mod economy_customization;
+pub(crate) mod layout;
 pub mod presentation;
 mod production;
 pub(crate) use crate::plugin_inventories::native as inventory;

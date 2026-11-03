@@ -110,6 +110,16 @@ pub(super) fn deposit(
     slot: EntitySlot,
     v: &mut VillagerState,
 ) -> Option<BlockPos> {
+    let protected = crate::settlements::economy::protected_carry(state, slot, v);
+    deposit_with_protected(state, slot, v, protected)
+}
+
+pub(super) fn deposit_with_protected(
+    state: &mut TickState,
+    slot: EntitySlot,
+    v: &mut VillagerState,
+    protected: [u32; 8],
+) -> Option<BlockPos> {
     if v.inventory.iter().all(Option::is_none) {
         return None;
     }
@@ -127,7 +137,7 @@ pub(super) fn deposit(
         let mut after = before.slots.clone();
         let mut carried = v.inventory.clone();
         let mut moved = false;
-        for stack in &mut carried {
+        for (index, stack) in carried.iter_mut().enumerate() {
             let Some(moving) = stack else {
                 continue;
             };
@@ -135,7 +145,7 @@ pub(super) fn deposit(
             // Merge first, then use empty slots: never overwrite unrelated stock.
             for empty in [false, true] {
                 for stored in &mut after {
-                    if moving.count == 0 {
+                    if moving.count <= protected[index] as i32 {
                         break;
                     }
                     if stored.is_empty() != empty {
@@ -148,6 +158,7 @@ pub(super) fn deposit(
                     }
                     let count = moving
                         .count
+                        .saturating_sub(protected[index] as i32)
                         .min((maximum - if stored.is_empty() { 0 } else { stored.count }).max(0));
                     if count == 0 {
                         continue;

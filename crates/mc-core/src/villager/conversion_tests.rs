@@ -31,7 +31,13 @@ fn entity_type(state: &TickState, name: &str) -> u32 {
         .unwrap()
 }
 #[test]
-fn zombie_infection_preserves_identity_trade_data_and_prevents_death_drops() {
+fn zombie_and_husk_infection_preserve_identity_trade_data_and_prevent_death_drops() {
+    for attacker_type in ["minecraft:zombie", "minecraft:husk"] {
+        assert_infection_preserves_villager(attacker_type);
+    }
+}
+
+fn assert_infection_preserves_villager(attacker_type: &str) {
     let mut state = state();
     state.difficulty = crate::survival::Difficulty::Hard;
     state.world.ensure_blocking(
@@ -46,7 +52,7 @@ fn zombie_infection_preserves_identity_trade_data_and_prevents_death_drops() {
     }
     state.world.fold_overlay();
     let villager_type = entity_type(&state, "minecraft:villager");
-    let zombie_type = entity_type(&state, "minecraft:zombie");
+    let zombie_type = entity_type(&state, attacker_type);
     let villager = state.spawn_mob(villager_type, [0.0, 80.0, 0.0], 20.0);
     let zombie = state.spawn_mob(zombie_type, [1.0, 80.0, 0.0], 20.0);
     let slot = state.entities.slot_of(villager).unwrap();
@@ -85,6 +91,83 @@ fn zombie_infection_preserves_identity_trade_data_and_prevents_death_drops() {
     assert_eq!(row.health, 20.0);
     assert_eq!(row.villager.as_ref().unwrap().xp, 73);
     assert_eq!(row.villager.as_ref().unwrap().conversion_time, Some(-1));
+}
+
+#[test]
+fn villager_infection_uses_lethal_hit_not_other_damage_in_batch() {
+    for (first_amount, second_kind, second_attacker, should_infect) in [
+        (1.0, crate::survival::DamageKind::Void, None, false),
+        (
+            100.0,
+            crate::survival::DamageKind::Melee,
+            Some("minecraft:skeleton"),
+            true,
+        ),
+    ] {
+        let mut state = state();
+        state.difficulty = crate::survival::Difficulty::Hard;
+        state.world.ensure_blocking(
+            &[(mc_world::ChunkPos { x: 0, z: 0 }, 0)]
+                .into_iter()
+                .collect(),
+        );
+        for x in 0..=1 {
+            for y in 80..=83 {
+                state.world.set_block(x, y, 0, state.registry.states.air);
+            }
+        }
+        state.world.fold_overlay();
+        let villager = state.spawn_mob(
+            entity_type(&state, "minecraft:villager"),
+            [0.0, 80.0, 0.0],
+            20.0,
+        );
+        let husk = state.spawn_mob(
+            entity_type(&state, "minecraft:husk"),
+            [1.0, 80.0, 0.0],
+            20.0,
+        );
+        let other = second_attacker
+            .map(|name| state.spawn_mob(entity_type(&state, name), [1.0, 80.0, 0.0], 20.0));
+        let slot = state.entities.slot_of(villager).unwrap();
+        let melee = |attacker| crate::intent::DamageSource::Melee {
+            attacker,
+            position: [1.0, 80.0, 0.0],
+            yaw: 0.0,
+            bonus_knockback: 0.0,
+            sweep: false,
+            fire_ticks: 0,
+            bane_ticks: 0,
+        };
+        for (amount, kind, source) in [
+            (
+                first_amount,
+                crate::survival::DamageKind::Melee,
+                Some(melee(husk)),
+            ),
+            (200.0, second_kind, other.map(melee)),
+        ] {
+            state.merge_damage.push((
+                slot,
+                crate::tick::DamagePiece {
+                    physical: None,
+                    custom_armor: false,
+                    amount,
+                    kind,
+                    source,
+                },
+            ));
+        }
+        let (deaths, _, _, _) = state.commit_merge_effects();
+        assert_eq!(deaths.contains(&villager), !should_infect);
+        assert_eq!(
+            state
+                .entities
+                .slot_of(villager)
+                .is_some_and(|slot| state.entities.body(slot).alive),
+            should_infect
+        );
+    }
 }
 #[test]
 fn cure_requires_weakness_consumes_one_apple_once_and_restores_villager() {

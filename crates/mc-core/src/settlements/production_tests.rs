@@ -331,6 +331,118 @@ fn setup() -> (
 }
 
 #[test]
+fn production_command_accepts_only_own_native_workshop_without_district() {
+    use crate::settlements::buildings::{Building, BuildingId, BuildingKind};
+    use crate::settlements::commands::EconomyDomain;
+    use crate::villager::VillagerProfession;
+
+    let (mut world, id, body, worker, table, _, _) = setup();
+    let building_id = BuildingId(42);
+    let record = world.settlements.get_mut(id).unwrap();
+    record.district = None;
+    record.buildings.insert(
+        building_id,
+        Building {
+            id: building_id,
+            settlement: id,
+            kind: BuildingKind::Workshop(VillagerProfession::Builder),
+            level: 1,
+            bounds: ScriptWorldBounds::new([6, 201, 8], [8, 201, 8]).unwrap(),
+            work_points: vec![table],
+            revision: 1,
+            natural_zone: false,
+        },
+    );
+    give(cake_inputs(&world), &mut world, body);
+    let args = |certificate: &str| {
+        [
+            "start".to_owned(),
+            "bake-command".to_owned(),
+            worker.to_string(),
+            "solaris-settlements:cake".to_owned(),
+            "1".to_owned(),
+            certificate.to_owned(),
+            "8,201,8".to_owned(),
+            "7,201,8".to_owned(),
+        ]
+    };
+    assert_eq!(
+        crate::settlements::economy_commands::execute(
+            &mut world,
+            id,
+            EconomyDomain::Production,
+            &args("43")
+        ),
+        Err(Failure::NotFound)
+    );
+    crate::settlements::economy_commands::execute(
+        &mut world,
+        id,
+        EconomyDomain::Production,
+        &args("42"),
+    )
+    .unwrap();
+    let read = |world: &mut TickState, verb: &str, arg: &str| {
+        crate::settlements::economy_commands::execute(
+            world,
+            id,
+            EconomyDomain::Production,
+            &[verb.to_owned(), arg.to_owned()],
+        )
+    };
+    let carry: serde_json::Value =
+        serde_json::from_str(&read(&mut world, "carry", &worker.to_string()).unwrap()).unwrap();
+    assert_eq!(carry["worker"], worker.to_string());
+    assert!(
+        carry["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|slot| slot["item"] == "minecraft:wheat")
+    );
+    let job: serde_json::Value =
+        serde_json::from_str(&read(&mut world, "job", "bake-command").unwrap()).unwrap();
+    assert_eq!(job["done"], 0);
+    assert_eq!(read(&mut world, "job", "missing"), Err(Failure::NotFound));
+    assert_eq!(
+        read(&mut world, "carry", "not-a-uuid"),
+        Err(Failure::InvalidRequest)
+    );
+    assert_eq!(
+        world
+            .settlements
+            .get(id)
+            .unwrap()
+            .economy
+            .production
+            .jobs
+            .len(),
+        1
+    );
+    world.tick =
+        world.settlements.get(id).unwrap().economy.production.jobs["bake-command"].next_due;
+    let mut policy = std::mem::take(&mut world.settlements.economy_for_tick(id).production);
+    assert!(tick(&mut world, id, &mut policy));
+    assert_eq!(policy.jobs["bake-command"].done, 1);
+    assert_eq!(stock_total(&world, body, "minecraft:cake"), 1);
+    assert_eq!(stock_total(&world, body, "minecraft:wheat"), 0);
+    world.settlements.economy_for_tick(id).production = policy;
+    let job: serde_json::Value =
+        serde_json::from_str(&read(&mut world, "job", "bake-command").unwrap()).unwrap();
+    assert_eq!(job["done"], 1);
+    assert_eq!(job["receipts"].as_array().unwrap().len(), 1);
+    let carry: serde_json::Value =
+        serde_json::from_str(&read(&mut world, "carry", &worker.to_string()).unwrap()).unwrap();
+    assert!(
+        carry["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|slot| slot["item"] == "minecraft:cake")
+    );
+}
+
+#[test]
 fn cake_inputs_become_cake_after_reach_and_deadline() {
     let (mut world, id, body, worker, table, stand_at, worksite) = setup();
     give(cake_inputs(&world), &mut world, body);
@@ -785,4 +897,344 @@ fn due_portion_budget_rotates_instead_of_starving_the_seventeenth_worker() {
     world.tick += policy.jobs["rotated-00"].duration;
     assert!(tick(&mut world, id, &mut policy));
     assert_eq!(policy.jobs["rotated-16"].done, 1);
+}
+
+fn supply_chest(world: &mut TickState, town: SettlementId, count: i32) -> [i32; 3] {
+    let position = [20, 201, 8];
+    let chest = block(world, "minecraft:chest", &[("type", "single")]);
+    world
+        .world
+        .set_block(position[0], position[1], position[2], chest);
+    let mut slots = vec![ItemStack::EMPTY; 27];
+    slots[0] = item(world, "minecraft:wheat", count);
+    world.block_entities.insert(
+        (position[0], position[1], position[2]),
+        crate::tick::BlockEntityState {
+            slots,
+            furnace: None,
+        },
+    );
+    world.world.fold_overlay();
+    world.settlements.get_mut(town).unwrap().bootstrap_storage = Some(position);
+    position
+}
+
+fn bread_order(
+    world: &mut TickState,
+    town: SettlementId,
+    worker: Uuid,
+    table: [i32; 3],
+    stand_at: [i32; 3],
+    worksite: &str,
+) -> State {
+    let mut policy = State::default();
+    start(
+        world,
+        town,
+        &mut policy,
+        Start {
+            job: "supply".into(),
+            worker,
+            recipe_name: "solaris-settlements:bread".into(),
+            count: 1,
+            station: table,
+            stand_at,
+            building: worksite_ref(worksite),
+        },
+    )
+    .unwrap();
+    policy
+}
+
+#[test]
+fn production_fetches_only_next_portion_deficit_at_real_storage_reach() {
+    let (mut world, town, body, worker, table, stand_at, worksite) = setup();
+    let chest = supply_chest(&mut world, town, 5);
+    give(vec![item(&world, "minecraft:wheat", 1)], &mut world, body);
+    let mut policy = bread_order(&mut world, town, worker, table, stand_at, &worksite);
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    let destination = target(&policy, worker).unwrap();
+    assert_ne!(
+        destination,
+        BlockPos {
+            x: stand_at[0],
+            y: stand_at[1],
+            z: stand_at[2]
+        }
+    );
+    assert_eq!(
+        world.block_entities[&(chest[0], chest[1], chest[2])].slots[0].count,
+        5
+    );
+    assert_eq!(stock_total(&world, body, "minecraft:wheat"), 1);
+    assert_eq!(policy.jobs["supply"].done, 0);
+
+    // Routing is derived, not a second persisted stock authority. Reload and
+    // revalidate the same source before any actual debit.
+    policy = serde_json::from_slice(&serde_json::to_vec(&policy).unwrap()).unwrap();
+    at(
+        &mut world,
+        body,
+        [
+            f64::from(destination.x) + 0.5,
+            f64::from(destination.y),
+            f64::from(destination.z) + 0.5,
+        ],
+    );
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    assert_eq!(
+        world.block_entities[&(chest[0], chest[1], chest[2])].slots[0].count,
+        3
+    );
+    assert_eq!(stock_total(&world, body, "minecraft:wheat"), 3);
+    assert_eq!(stock_total(&world, body, "minecraft:bread"), 0);
+    assert_eq!(policy.jobs["supply"].done, 0);
+    assert_eq!(
+        target(&policy, worker),
+        Some(BlockPos {
+            x: stand_at[0],
+            y: stand_at[1],
+            z: stand_at[2],
+        })
+    );
+    world.settlements.economy_for_tick(town).production = policy.clone();
+    world.settlements.economy_for_tick(town).refresh_routes();
+    let slot = world.entities.slot_of(body).unwrap();
+    let protected = crate::settlements::economy::protected_carry(
+        &world,
+        slot,
+        world.entities.row(slot).villager.as_ref().unwrap(),
+    );
+    assert_eq!(protected.into_iter().sum::<u32>(), 3);
+
+    at(&mut world, body, [7.5, 201.0, 8.5]);
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    assert_eq!(stock_total(&world, body, "minecraft:wheat"), 0);
+    assert_eq!(stock_total(&world, body, "minecraft:bread"), 1);
+    assert_eq!(policy.jobs["supply"].done, 1);
+    assert_eq!(policy.jobs["supply"].receipts.len(), 1);
+    policy = serde_json::from_slice(&serde_json::to_vec(&policy).unwrap()).unwrap();
+    world.tick += 100;
+    assert!(!tick(&mut world, town, &mut policy));
+    assert_eq!(
+        world.block_entities[&(chest[0], chest[1], chest[2])].slots[0].count,
+        3
+    );
+    assert_eq!(stock_total(&world, body, "minecraft:bread"), 1);
+}
+
+#[test]
+fn production_revalidates_storage_membership_before_withdrawal() {
+    let (mut world, town, body, worker, table, stand_at, worksite) = setup();
+    let chest = supply_chest(&mut world, town, 3);
+    let mut policy = bread_order(&mut world, town, worker, table, stand_at, &worksite);
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    let destination = target(&policy, worker).unwrap();
+    world.settlements.get_mut(town).unwrap().bootstrap_storage = None;
+    at(
+        &mut world,
+        body,
+        [
+            f64::from(destination.x) + 0.5,
+            f64::from(destination.y),
+            f64::from(destination.z) + 0.5,
+        ],
+    );
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    assert_eq!(
+        world.block_entities[&(chest[0], chest[1], chest[2])].slots[0].count,
+        3
+    );
+    assert_eq!(stock_total(&world, body, "minecraft:wheat"), 0);
+    assert_eq!(
+        policy.jobs["supply"].paused.as_deref(),
+        Some("missing input")
+    );
+}
+
+#[test]
+fn production_full_carry_puts_surplus_away_before_debiting_storage() {
+    let (mut world, town, body, worker, table, stand_at, worksite) = setup();
+    let chest = supply_chest(&mut world, town, 3);
+    give(
+        vec![item(&world, "minecraft:cobblestone", 64); 8],
+        &mut world,
+        body,
+    );
+    let mut policy = bread_order(&mut world, town, worker, table, stand_at, &worksite);
+    at(&mut world, body, [19.5, 201.0, 8.5]);
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    // The wheat cannot fit, so nothing is debited: the cargo bread never
+    // uses goes into the chest first, every unit accounted for.
+    let stored = |world: &TickState, name: &str| -> i32 {
+        world.block_entities[&(chest[0], chest[1], chest[2])]
+            .slots
+            .iter()
+            .filter(|stack| resource(world, stack) == Some(name))
+            .map(|stack| stack.count)
+            .sum()
+    };
+    assert_eq!(stored(&world, "minecraft:wheat"), 3);
+    assert_eq!(stored(&world, "minecraft:cobblestone"), 512);
+    assert_eq!(stock_total(&world, body, "minecraft:cobblestone"), 0);
+    assert_eq!(stock_total(&world, body, "minecraft:wheat"), 0);
+    assert_eq!(policy.jobs["supply"].done, 0);
+
+    // Then the ordinary next-portion fetch and craft.
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    assert_eq!(stored(&world, "minecraft:wheat"), 0);
+    assert_eq!(stock_total(&world, body, "minecraft:wheat"), 3);
+    at(
+        &mut world,
+        body,
+        [
+            f64::from(stand_at[0]) + 0.5,
+            f64::from(stand_at[1]),
+            f64::from(stand_at[2]) + 0.5,
+        ],
+    );
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    assert_eq!(policy.jobs["supply"].done, 1);
+    assert_eq!(stock_total(&world, body, "minecraft:bread"), 1);
+    assert_eq!(stored(&world, "minecraft:cobblestone"), 512);
+}
+
+#[test]
+fn production_full_carry_with_full_storage_parks_without_loss() {
+    let (mut world, town, body, worker, table, stand_at, worksite) = setup();
+    let chest = supply_chest(&mut world, town, 3);
+    let stone = item(&world, "minecraft:stone", 64);
+    for cell in world
+        .block_entities
+        .get_mut(&(chest[0], chest[1], chest[2]))
+        .unwrap()
+        .slots
+        .iter_mut()
+        .skip(1)
+    {
+        *cell = stone.clone();
+    }
+    give(
+        vec![item(&world, "minecraft:cobblestone", 64); 8],
+        &mut world,
+        body,
+    );
+    let mut policy = bread_order(&mut world, town, worker, table, stand_at, &worksite);
+    at(&mut world, body, [19.5, 201.0, 8.5]);
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    assert_eq!(policy.jobs["supply"].paused.as_deref(), Some("no storage"));
+    assert_eq!(stock_total(&world, body, "minecraft:cobblestone"), 512);
+    assert_eq!(
+        world.block_entities[&(chest[0], chest[1], chest[2])].slots[0].count,
+        3
+    );
+    assert_eq!(policy.jobs["supply"].done, 0);
+}
+
+#[test]
+fn production_supply_skips_reserved_stock_and_uses_free_stock_across_sources() {
+    use crate::settlements::buildings::{Building, BuildingId, BuildingKind};
+    use mc_script::{
+        ScriptBlockPosition, ScriptInventoryEndpoint, ScriptInventoryMaterial,
+        ScriptInventoryResourcePlan, ScriptInventoryWorkPortion, ScriptOwnedInventoryOperation,
+    };
+
+    let (mut world, town, body, worker, table, stand_at, worksite) = setup();
+    let first = supply_chest(&mut world, town, 4);
+    let second = [24, 201, 8];
+    let chest_block = block(&world, "minecraft:chest", &[("type", "single")]);
+    world
+        .world
+        .set_block(second[0], second[1], second[2], chest_block);
+    let mut slots = vec![ItemStack::EMPTY; 27];
+    slots[0] = item(&world, "minecraft:wheat", 2);
+    world.block_entities.insert(
+        (second[0], second[1], second[2]),
+        crate::tick::BlockEntityState {
+            slots,
+            furnace: None,
+        },
+    );
+    world.world.fold_overlay();
+    let building_id = BuildingId(77);
+    world.settlements.get_mut(town).unwrap().buildings.insert(
+        building_id,
+        Building {
+            id: building_id,
+            settlement: town,
+            kind: BuildingKind::Storage,
+            level: 1,
+            bounds: ScriptWorldBounds::new(second, second).unwrap(),
+            work_points: vec![second],
+            revision: 1,
+            natural_zone: false,
+        },
+    );
+    let endpoint = ScriptInventoryEndpoint::Container {
+        dimension: world.dimension.name().into(),
+        position: ScriptBlockPosition::new(first[0], first[1], first[2]),
+    };
+    let fence = crate::plugin_inventories::load(&world, "owner", &endpoint)
+        .unwrap()
+        .fence;
+    let reservation = ScriptOperationRequest::try_new(
+        "supply-reserve",
+        ScriptOperation::Inventory {
+            operation: ScriptOwnedInventoryOperation::Reserve {
+                operation_id: "supply-reserve".into(),
+                endpoint,
+                resource_plan: ScriptInventoryResourcePlan::new(vec![
+                    ScriptInventoryWorkPortion::new(
+                        1,
+                        vec![ScriptInventoryMaterial::new("minecraft:wheat".into(), 3)],
+                    ),
+                ]),
+                expected_revision: fence,
+            },
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        crate::plugin_inventories::execute(&mut world, "owner", &reservation).failure(),
+        None
+    );
+    let mut policy = bread_order(&mut world, town, worker, table, stand_at, &worksite);
+    at(&mut world, body, [19.5, 201.0, 8.5]);
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    assert_eq!(stock_total(&world, body, "minecraft:wheat"), 1);
+    assert_eq!(
+        world.block_entities[&(first[0], first[1], first[2])].slots[0].count,
+        3
+    );
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    let destination = target(&policy, worker).unwrap();
+    assert!((destination.x - second[0]).abs() <= 1);
+    at(
+        &mut world,
+        body,
+        [
+            f64::from(destination.x) + 0.5,
+            f64::from(destination.y),
+            f64::from(destination.z) + 0.5,
+        ],
+    );
+    world.tick = policy.jobs["supply"].next_due;
+    assert!(tick(&mut world, town, &mut policy));
+    assert_eq!(stock_total(&world, body, "minecraft:wheat"), 3);
+    assert!(world.block_entities[&(second[0], second[1], second[2])].slots[0].is_empty());
+    assert_eq!(
+        world.block_entities[&(first[0], first[1], first[2])].slots[0].count,
+        3
+    );
 }
