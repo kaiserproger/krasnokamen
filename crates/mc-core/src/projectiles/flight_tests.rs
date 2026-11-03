@@ -564,6 +564,59 @@ fn armor_stand_moved_by_an_earlier_projectile_removal_stays_hittable() {
 }
 
 #[test]
+fn mixed_gallery_unfreeze_survives_projectile_compaction() {
+    let (mut state, _, centre) = setup();
+    state.tick_control.set_frozen(true);
+    let cow_type = state
+        .registry
+        .entity_types
+        .id_of(&Identifier::parse("minecraft:cow").unwrap())
+        .unwrap();
+    let cow = state.spawn_mob(cow_type, [centre[0] + 5.0, centre[1], centre[2]], 20.0);
+    let mut expiring = ProjectileState::new(ProjectileKind::Arrow, None, arrow_stack(&state));
+    expiring.age = 1200;
+    let expiring = launch(
+        &mut state,
+        expiring,
+        [centre[0] + 3.0, centre[1] + 2.0, centre[2]],
+        [0.0; 3],
+    )
+    .unwrap();
+    let flying = ProjectileState::new(ProjectileKind::Arrow, None, arrow_stack(&state));
+    let flying = launch(
+        &mut state,
+        flying,
+        [centre[0] - 3.0, centre[1] + 2.0, centre[2]],
+        [0.0; 3],
+    )
+    .unwrap();
+    let stand_type = state
+        .registry
+        .entity_types
+        .id_of(&Identifier::parse("minecraft:armor_stand").unwrap())
+        .unwrap();
+    let stand = state.spawn_mob(stand_type, [centre[0], centre[1], centre[2] + 4.0], 20.0);
+    assert_eq!(
+        state.entities.slot_of(stand).unwrap().0 as usize,
+        state.entities.len() - 1
+    );
+
+    run_tick(&mut state, &[]);
+    assert!(
+        state.entities.slot_of(expiring).is_some(),
+        "frozen arrow remains"
+    );
+    state.tick_control.set_frozen(false);
+    let (output, _, _) = run_tick(&mut state, &[]);
+    assert!(output.changes.entities_removed.contains(&expiring));
+    assert!(state.entities.slot_of(expiring).is_none());
+    for id in [cow, flying, stand] {
+        let slot = state.entities.slot_of(id).expect("gallery entity survives");
+        assert_eq!(state.entities.body(slot).id, id);
+    }
+}
+
+#[test]
 fn target_block_emits_power_when_shot() {
     // TARGET-PROJECTILE-POWER through the arrow flight path: an arrow
     // sticking in a target block must power it.

@@ -801,7 +801,8 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ENTITY-BODY-PANIC"
-regression = []
+regression = ["cargo:mc-core:projectiles::flight_tests::mixed_gallery_unfreeze_survives_projectile_compaction"]
+failing_first = "reported"
 
 [[bug]]
 id = "AUTH-BUDGET"
