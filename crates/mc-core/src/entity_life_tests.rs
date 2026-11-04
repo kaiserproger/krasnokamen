@@ -837,6 +837,70 @@ fn sniffer_breeding_accepts_a_carpet_in_the_midpoint_cell() {
 }
 
 #[test]
+fn turtle_carries_eggs_home_before_laying_on_sand() {
+    let (mut state, _, home) = fixture();
+    let sand = state
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:sand").unwrap())
+        .unwrap()
+        .default
+        .0;
+    state
+        .world
+        .set_block(home[0] as i32, home[1] as i32 - 1, home[2] as i32, sand);
+    state.world.fold_overlay();
+    let first = spawn(&mut state, "turtle", home);
+    let second = spawn(&mut state, "turtle", home);
+    let away = [home[0] + 6.0, home[1], home[2]];
+    for id in [first, second] {
+        let slot = state.entities.slot_of(id).unwrap();
+        state.entities.set_pos(slot, away);
+        state.entities.row_mut(slot).love = 540;
+    }
+    let type_id = match body(&state, first).kind {
+        EntityKind::Mob { type_id } => type_id,
+        _ => unreachable!(),
+    };
+    let mut intents = vec![Intent {
+        actor: first,
+        seq: 0,
+        kind: IntentKind::Breed {
+            partner: second,
+            child_pos: away,
+            child_type: type_id,
+        },
+        footprint: Footprint {
+            entity_reads: vec![first, second],
+            entity_writes: vec![first, second],
+            ..Default::default()
+        },
+    }];
+    assert_eq!(state.merge(&mut intents), 1);
+    let egg = item(&state, "turtle_egg");
+    assert!(
+        !state
+            .merge_life_drops
+            .iter()
+            .any(|(_, stack)| stack.item_id == egg),
+        "egg must remain with the turtle, not drop away from home"
+    );
+    for _ in 0..1_000 {
+        run_tick(&mut state, &[]);
+        let cell = state
+            .world
+            .block_at(home[0] as i32, home[1] as i32, home[2] as i32);
+        if cell
+            .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
+            .is_some_and(|block| block.block.id.path() == "turtle_egg")
+        {
+            return;
+        }
+    }
+    panic!("turtle did not return home and lay eggs");
+}
+
+#[test]
 fn turtle_breeding_lays_egg_blocks_on_home_sand() {
     let (mut state, _, pos) = fixture();
     let cell = [
@@ -864,19 +928,16 @@ fn turtle_breeding_lays_egg_blocks_on_home_sand() {
         _ => unreachable!(),
     };
     entity_life::breed(&mut state, a, b, pos, type_id);
+    for _ in 0..400 {
+        run_tick(&mut state, &[]);
+    }
     assert!(
         state
-            .merge_block_writes
-            .iter()
-            .any(|(at, id)| at.x == cell[0]
-                && at.y == cell[1] + 1
-                && at.z == cell[2]
-                && state
-                    .registry
-                    .blocks
-                    .by_id(mc_world::BlockStateId(*id))
-                    .is_some_and(|block| block.block.id.path() == "turtle_egg")),
-        "turtle birth places egg blocks on sand"
+            .world
+            .block_at(cell[0], cell[1] + 1, cell[2])
+            .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
+            .is_some_and(|block| block.block.id.path() == "turtle_egg"),
+        "turtle lays egg blocks on sand after nesting"
     );
     assert_eq!(
         state
@@ -889,11 +950,66 @@ fn turtle_breeding_lays_egg_blocks_on_home_sand() {
 }
 
 #[test]
+fn frog_pair_breeds_then_lays_frogspawn_at_water() {
+    let (mut state, _, pos) = fixture();
+    let water_pos = [pos[0] as i32 + 2, pos[1] as i32 - 1, pos[2] as i32];
+    state.world.set_block(
+        water_pos[0],
+        water_pos[1],
+        water_pos[2],
+        state.registry.states.water_levels[0],
+    );
+    state.world.fold_overlay();
+    let first = spawn(&mut state, "frog", pos);
+    let second = spawn(&mut state, "frog", pos);
+    for id in [first, second] {
+        let slot = state.entities.slot_of(id).unwrap();
+        state.entities.row_mut(slot).love = 540;
+    }
+    let type_id = match body(&state, first).kind {
+        EntityKind::Mob { type_id } => type_id,
+        _ => unreachable!(),
+    };
+    let mut intents = vec![Intent {
+        actor: first,
+        seq: 0,
+        kind: IntentKind::Breed {
+            partner: second,
+            child_pos: pos,
+            child_type: type_id,
+        },
+        footprint: Footprint {
+            entity_reads: vec![first, second],
+            entity_writes: vec![first, second],
+            ..Default::default()
+        },
+    }];
+    assert_eq!(
+        state.merge(&mut intents),
+        1,
+        "frog courtship must be admitted"
+    );
+    for _ in 0..600 {
+        run_tick(&mut state, &[]);
+        let cell = state
+            .world
+            .block_at(water_pos[0], water_pos[1] + 1, water_pos[2]);
+        if cell
+            .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
+            .is_some_and(|block| block.block.id.path() == "frogspawn")
+        {
+            return;
+        }
+    }
+    panic!("frog did not lay frogspawn on water");
+}
+
+#[test]
 fn frog_breeding_places_frogspawn_on_nearby_water() {
     let (mut state, _, pos) = fixture();
     let water = state.registry.states.water_levels[0];
     let cell = [
-        pos[0].floor() as i32,
+        pos[0].floor() as i32 + 1,
         pos[1].floor() as i32 - 1,
         pos[2].floor() as i32,
     ];
@@ -910,13 +1026,16 @@ fn frog_breeding_places_frogspawn_on_nearby_water() {
         _ => unreachable!(),
     };
     entity_life::breed(&mut state, a, b, pos, type_id);
+    for _ in 0..100 {
+        run_tick(&mut state, &[]);
+    }
     assert!(
-        state.merge_block_writes.iter().any(|(_, id)| state
-            .registry
-            .blocks
-            .by_id(mc_world::BlockStateId(*id))
-            .is_some_and(|block| block.block.id.path() == "frogspawn")),
-        "frog birth places frogspawn"
+        state
+            .world
+            .block_at(cell[0], cell[1] + 1, cell[2])
+            .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
+            .is_some_and(|block| block.block.id.path() == "frogspawn"),
+        "pregnant frog places frogspawn beside land"
     );
     assert_eq!(
         state

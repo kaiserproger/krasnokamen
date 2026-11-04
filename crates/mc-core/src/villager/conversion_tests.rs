@@ -30,6 +30,56 @@ fn entity_type(state: &TickState, name: &str) -> u32 {
         .id_of(&mc_data::Identifier::parse(name).unwrap())
         .unwrap()
 }
+
+#[test]
+fn nearby_iron_bars_and_beds_accelerate_zombie_villager_curing() {
+    for material in ["minecraft:iron_bars", "minecraft:red_bed"] {
+        let mut state = state();
+        state.world.ensure_blocking(
+            &[(mc_world::ChunkPos { x: 0, z: 0 }, 0)]
+                .into_iter()
+                .collect(),
+        );
+        let id = entity_type(&state, "minecraft:zombie_villager");
+        let zombie = state.spawn_mob(id, [8.5, 80.0, 8.5], 20.0);
+        let slot = state.entities.slot_of(zombie).unwrap();
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .conversion_time = Some(100_000);
+        let block = state
+            .registry
+            .blocks
+            .block(&mc_data::Identifier::parse(material).unwrap())
+            .unwrap()
+            .default
+            .0;
+        for x in 4..=10 {
+            for z in 4..=5 {
+                state.world.set_block(x, 80, z, block);
+            }
+        }
+        for tick in 0..2_000 {
+            state.tick = tick;
+            conversion::tick(&mut state);
+        }
+        let remaining = state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .conversion_time
+            .unwrap();
+        assert!(
+            remaining < 98_000,
+            "{material} failed to accelerate curing: {remaining}"
+        );
+    }
+}
 #[test]
 fn zombie_and_husk_infection_preserve_identity_trade_data_and_prevent_death_drops() {
     for attacker_type in ["minecraft:zombie", "minecraft:husk"] {

@@ -31,6 +31,19 @@ pub(crate) fn homing_velocity(from: [f64; 3], to: [f64; 3]) -> [f64; 3] {
 pub(crate) fn restore(state: &mut TickState, slot: EntitySlot) {
     crate::copper_golem::restore(state, slot);
     crate::piglin::restore(state, slot);
+    crate::turtle::restore(state, slot);
+    if matches!(
+        state.entities.row(slot).special_mob.as_deref(),
+        Some(Retained::Axolotl(_))
+    ) {
+        metadata(state, slot, 19, EntityDataValue::Boolean(true));
+    }
+    if let Some(Retained::Goat(goat)) = state.entities.row(slot).special_mob.as_deref() {
+        let (screaming, left, right) = (goat.screaming, goat.left, goat.right);
+        metadata(state, slot, 18, EntityDataValue::Boolean(screaming));
+        metadata(state, slot, 19, EntityDataValue::Boolean(left));
+        metadata(state, slot, 20, EntityDataValue::Boolean(right));
+    }
     let kind = match state.entities.body(slot).kind {
         crate::entities::EntityKind::Mob { type_id } => {
             state.registry.blueprint(type_id).and_then(goal)
@@ -196,6 +209,8 @@ impl Potion {
 pub enum Retained {
     Copper(crate::copper_golem::CopperState),
     Piglin(crate::piglin::Barter),
+    Goat(crate::goat::Goat),
+    Axolotl(u16),
     Enderman {
         target: Uuid,
         until: u64,

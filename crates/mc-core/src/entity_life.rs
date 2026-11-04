@@ -26,6 +26,8 @@ pub struct EntityLifeState {
     pub age_lock: crate::golden_dandelion::AgeLock,
     /// Zero seeds a timer without producing an item.
     pub harvest_ticks: u32,
+    pub time_in_overworld: u32,
+    pub immune_to_zombification: bool,
     pub tamed: bool,
     pub sitting: bool,
     #[serde(skip)]
@@ -40,6 +42,10 @@ pub struct EntityLifeState {
     pub portal: crate::portals::PortalState,
     pub dolphin: Option<crate::dolphin::DolphinState>,
     pub armadillo: Option<crate::armadillo::ArmadilloState>,
+    pub turtle: Option<crate::turtle::TurtleState>,
+    pub frog_pregnant: bool,
+    #[serde(skip)]
+    pub frog_spawn_target: Option<[i32; 3]>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -112,13 +118,27 @@ pub fn adult(row: &ColdRow) -> bool {
 pub fn can_feed(body: &crate::entities::Body, row: &ColdRow) -> bool {
     body.alive
         && (row.entity_life.child_ticks > 0
-            || (adult(row) && row.love == 0 && row.breed_cooldown == 0))
+            || (adult(row)
+                && row.love == 0
+                && row.breed_cooldown == 0
+                && !row
+                    .entity_life
+                    .turtle
+                    .as_ref()
+                    .is_some_and(|turtle| turtle.has_egg)
+                && !row.entity_life.frog_pregnant))
 }
 
 pub fn breed_ready(body: &crate::entities::Body, row: &ColdRow) -> bool {
     body.alive
         && adult(row)
         && row.breed_cooldown == 0
+        && !row
+            .entity_life
+            .turtle
+            .as_ref()
+            .is_some_and(|turtle| turtle.has_egg)
+        && !row.entity_life.frog_pregnant
         && row.love > 0
         && row.love <= LOVE_TICKS - 60
 }
@@ -403,7 +423,7 @@ fn stage_egg_birth(
     birth: breeding::EggBirth,
     advancement_breeding: Option<(EntityId, serde_json::Value)>,
 ) {
-    let _ = (actor, partner, advancement_breeding);
+    let _ = (partner, advancement_breeding);
     match birth {
         breeding::EggBirth::SnifferEgg => {
             if let Some(id) = item(state, "minecraft:sniffer_egg") {
@@ -411,170 +431,13 @@ fn stage_egg_birth(
             }
         }
         breeding::EggBirth::TurtleEgg => {
-            stage_turtle_eggs(state, pos);
+            crate::turtle::set_egg(state, actor);
         }
         breeding::EggBirth::Frogspawn => {
-            stage_frogspawn(state, pos);
-        }
-    }
-}
-
-/// Turtle home-sand nesting: accumulate `turtle_egg` blocks (up to 4 eggs)
-/// on the sand below the birth midpoint; otherwise drop one egg item.
-fn stage_turtle_eggs(state: &mut TickState, pos: [f64; 3]) {
-    let cell = crate::boundary::BlockPos {
-        x: pos[0].floor() as i32,
-        y: pos[1].floor() as i32,
-        z: pos[2].floor() as i32,
-    };
-    for y in [cell.y, cell.y - 1, cell.y - 2] {
-        let at = crate::boundary::BlockPos { y, ..cell };
-        let Some(current) = state.world.block_at(at.x, at.y, at.z) else {
-            continue;
-        };
-        let path = state
-            .registry
-            .blocks
-            .by_id(mc_world::BlockStateId(current))
-            .map(|block| block.block.id.path().to_owned());
-        match path.as_deref() {
-            Some("turtle_egg") => {
-                let eggs = state
-                    .registry
-                    .blocks
-                    .by_id(mc_world::BlockStateId(current))
-                    .and_then(|block| {
-                        block
-                            .properties
-                            .iter()
-                            .find(|(key, _)| key == "eggs")
-                            .and_then(|(_, value)| value.parse::<u8>().ok())
-                    })
-                    .unwrap_or(1);
-                if eggs >= 4 {
-                    return;
-                }
-                let next = state
-                    .registry
-                    .blocks
-                    .by_id(mc_world::BlockStateId(current))
-                    .and_then(|block| {
-                        let mut props: Vec<(String, String)> = block
-                            .properties
-                            .iter()
-                            .map(|(key, value)| {
-                                if key == "eggs" {
-                                    (key.clone(), (eggs + 1).to_string())
-                                } else {
-                                    (key.clone(), value.clone())
-                                }
-                            })
-                            .collect();
-                        props.sort();
-                        state
-                            .registry
-                            .blocks
-                            .by_name_and_props(&block.block.id, &props)
-                            .map(|id| id.0)
-                    });
-                if let Some(next) = next {
-                    state.merge_block_writes.push((at, next));
-                }
-                return;
-            }
-            Some("sand" | "red_sand" | "suspicious_sand") => {
-                let above = crate::boundary::BlockPos { y: y + 1, ..at };
-                if state.world.block_at(above.x, above.y, above.z)
-                    != Some(state.registry.states.air)
-                {
-                    return;
-                }
-                if let Some(name) = Identifier::parse("minecraft:turtle_egg").ok()
-                    && let Some(block) = state.registry.blocks.block(&name)
-                {
-                    state.merge_block_writes.push((above, block.default.0));
-                }
-                return;
-            }
-            _ => continue,
-        }
-    }
-    // No home sand in reach: vanilla still lays; drop one egg item.
-    if let Some(id) = Identifier::parse("minecraft:turtle_egg")
-        .ok()
-        .and_then(|name| state.registry.items.id_of(&name))
-    {
-        state.merge_life_drops.push((pos, ItemStack::new(id, 1)));
-    }
-}
-
-/// Frogspawn floats on the water surface nearest the birth midpoint.
-fn stage_frogspawn(state: &mut TickState, pos: [f64; 3]) {
-    let cell = crate::boundary::BlockPos {
-        x: pos[0].floor() as i32,
-        y: pos[1].floor() as i32,
-        z: pos[2].floor() as i32,
-    };
-    for radius in 0i32..=4 {
-        for dx in -radius..=radius {
-            for dz in -radius..=radius {
-                if dx.abs().max(dz.abs()) != radius {
-                    continue;
-                }
-                for dy in [-1, 0, 1, -2, 2] {
-                    let at = crate::boundary::BlockPos {
-                        x: cell.x + dx,
-                        y: cell.y + dy,
-                        z: cell.z + dz,
-                    };
-                    let Some(current) = state.world.block_at(at.x, at.y, at.z) else {
-                        continue;
-                    };
-                    let is_water = state
-                        .registry
-                        .blocks
-                        .by_id(mc_world::BlockStateId(current))
-                        .is_some_and(|block| block.block.id.path() == "water");
-                    if !is_water {
-                        continue;
-                    }
-                    let above = crate::boundary::BlockPos { y: at.y + 1, ..at };
-                    if state.world.block_at(above.x, above.y, above.z)
-                        != Some(state.registry.states.air)
-                    {
-                        continue;
-                    }
-                    if let Some(name) = Identifier::parse("minecraft:frogspawn").ok()
-                        && let Some(block) = state.registry.blocks.block(&name)
-                    {
-                        state.merge_block_writes.push((above, block.default.0));
-                        return;
-                    }
-                }
+            if let Some(slot) = state.entities.slot_of(actor) {
+                state.entities.row_mut(slot).entity_life.frog_pregnant = true;
             }
         }
-    }
-    // No water in reach: keep the birth visible as an egg item, else a tadpole.
-    if let Some(id) = Identifier::parse("minecraft:frogspawn")
-        .ok()
-        .and_then(|name| state.registry.items.id_of(&name))
-    {
-        state.merge_life_drops.push((pos, ItemStack::new(id, 1)));
-    } else if let Some(name) = Identifier::parse("minecraft:tadpole").ok()
-        && let Some(tadpole) = state.registry.entity_types.id_of(&name)
-    {
-        let health = state
-            .registry
-            .blueprint(tadpole)
-            .map_or(3.0, |blueprint| blueprint.params.max_health);
-        state.merge_spawns.push(crate::tick::MergeSpawn {
-            pos,
-            type_id: tadpole,
-            health,
-            taming: None,
-            wool: None,
-            advancement_breeding: None,
-        });
     }
 }
 
@@ -1155,6 +1018,23 @@ pub fn to_fields(life: &EntityLifeState, love: u32) -> Vec<(String, mc_nbt::Tag)
             Tag::Long(life.age_lock.cooldown_until.min(i64::MAX as u64) as i64),
         ),
     ];
+    if let Some(turtle) = &life.turtle {
+        fields.push(("home_pos".into(), Tag::IntArray(turtle.home.to_vec())));
+        fields.push(("has_egg".into(), Tag::Byte(i8::from(turtle.has_egg))));
+    }
+    if life.frog_pregnant {
+        fields.push(("solaris:FrogPregnant".into(), Tag::Byte(1)));
+    }
+    if life.time_in_overworld != 0 || life.immune_to_zombification {
+        fields.push((
+            "TimeInOverworld".into(),
+            Tag::Int(life.time_in_overworld.min(i32::MAX as u32) as i32),
+        ));
+        fields.push((
+            "IsImmuneToZombification".into(),
+            Tag::Byte(i8::from(life.immune_to_zombification)),
+        ));
+    }
     if life.charged_lightning {
         fields.push(("powered".into(), Tag::Byte(1)));
     }
@@ -1254,11 +1134,31 @@ pub fn from_record(
     if ageable && record.age < 0 {
         life.child_ticks = record.age.unsigned_abs();
     }
+    if record.id == "minecraft:turtle" {
+        life.turtle = Some(crate::turtle::TurtleState::new(record.pos));
+    }
     let mut love = 0;
     for (key, tag) in &record.extra_fields {
         match (key.as_str(), tag) {
             ("InLove", Tag::Int(ticks)) => love = (*ticks).max(0) as u32,
             ("EggLayTime", Tag::Int(ticks)) => life.harvest_ticks = (*ticks).max(0) as u32,
+            ("TimeInOverworld", Tag::Int(ticks)) => life.time_in_overworld = (*ticks).max(0) as u32,
+            ("IsImmuneToZombification", Tag::Byte(value)) => {
+                life.immune_to_zombification = *value != 0
+            }
+            ("home_pos", Tag::IntArray(pos)) if pos.len() == 3 => {
+                if let Some(turtle) = &mut life.turtle {
+                    turtle.home.copy_from_slice(pos);
+                }
+            }
+            ("has_egg", Tag::Byte(has_egg)) => {
+                if let Some(turtle) = &mut life.turtle {
+                    turtle.has_egg = *has_egg != 0;
+                }
+            }
+            ("solaris:FrogPregnant", Tag::Byte(value)) if record.id == "minecraft:frog" => {
+                life.frog_pregnant = *value != 0;
+            }
             ("Type", Tag::String(kind)) => life.brown_mooshroom = kind == "brown",
             ("powered", Tag::Byte(value)) => life.charged_lightning = *value != 0,
             ("Tame", Tag::Byte(tamed)) => life.tamed = *tamed != 0,

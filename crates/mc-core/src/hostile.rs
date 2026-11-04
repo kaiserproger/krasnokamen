@@ -97,7 +97,11 @@ pub(crate) fn retains_target(blueprint: &MobBlueprint) -> bool {
         && blueprint.name != "minecraft:enderman"
         && (blueprint.has_goal(GoalKind::MeleeChase)
             || blueprint.has_goal(GoalKind::RangedAttack)
-            || blueprint.has_goal(GoalKind::Swell))
+            || blueprint.has_goal(GoalKind::Swell)
+            || matches!(
+                blueprint.name.as_str(),
+                "minecraft:llama" | "minecraft:trader_llama"
+            ))
 }
 
 /// Exact one-target validation, including eligibility changes that must not
@@ -146,7 +150,10 @@ pub(crate) fn refresh_targets(state: &mut TickState) {
         let Some(victim) = state.entities.slot_of(*target) else {
             return false;
         };
-        if actor == *target || state.entities.row(victim).health <= 0.0 {
+        if actor == *target
+            || state.entities.row(victim).health <= 0.0
+            || crate::axolotl::playing_dead(state.entities.row(victim))
+        {
             return false;
         }
         if matches!(state.entities.body(victim).kind, EntityKind::Player { .. }) {
@@ -202,6 +209,9 @@ pub(crate) fn retaliate(state: &mut TickState, victim: EntitySlot, attacker: Ent
             .hostile
             .targets
             .insert(body.id, ((attacker, state.entities.pos(target)), 0.0));
+        if crate::llama::is_llama(type_id) {
+            state.entities.body_mut(victim).attack_cooldown = 40;
+        }
     }
 }
 

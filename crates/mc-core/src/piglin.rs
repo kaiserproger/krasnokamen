@@ -228,14 +228,100 @@ pub(crate) fn gold_target(state: &TickState, slot: EntitySlot) -> Option<(Entity
         .map(|(id, pos, _)| (id, pos))
 }
 
+fn zombify(state: &mut TickState) {
+    let slots = state.entities.mob_slots_matching(|id| {
+        matches!(
+            name(id),
+            "minecraft:piglin" | "minecraft:piglin_brute" | "minecraft:hoglin"
+        )
+    });
+    for slot in slots {
+        let body = state.entities.body(slot);
+        let row = state.entities.row(slot);
+        let pos = state.entities.pos(slot);
+        if !body.alive
+            || row.controls.no_ai
+            || !state.world.is_active(
+                (pos[0].floor() as i32).div_euclid(16),
+                (pos[2].floor() as i32).div_euclid(16),
+            )
+        {
+            continue;
+        }
+        if state.dimension == crate::dimensions::Dimension::Nether
+            || row.entity_life.immune_to_zombification
+        {
+            if row.entity_life.time_in_overworld != 0 {
+                state.entities.row_mut(slot).entity_life.time_in_overworld = 0;
+            }
+            continue;
+        }
+        let EntityKind::Mob { type_id } = body.kind else {
+            continue;
+        };
+        let original = name(type_id);
+        let hoglin = original == "minecraft:hoglin";
+        let life = &mut state.entities.row_mut(slot).entity_life;
+        life.time_in_overworld = life.time_in_overworld.saturating_add(1);
+        if life.time_in_overworld <= 300 {
+            continue;
+        }
+        let target = if hoglin {
+            "minecraft:zoglin"
+        } else {
+            "minecraft:zombified_piglin"
+        };
+        let type_id = state
+            .registry
+            .entity_types
+            .id_of(&Identifier::parse(target).unwrap())
+            .expect("conversion target");
+        let row = state.entities.row_mut(slot);
+        row.entity_life.time_in_overworld = 0;
+        row.special_mob = None;
+        Arc::make_mut(&mut row.appearance).extra.clear();
+        row.active_effects.add(crate::effects::ActiveEffect::new(
+            crate::effects::EffectId::Nausea,
+            200,
+            0,
+        ));
+        crate::villager::conversion::replace_type(state, slot, type_id);
+        let sound = Identifier::parse(match original {
+            "minecraft:hoglin" => "minecraft:entity.hoglin.converted_to_zombified",
+            "minecraft:piglin_brute" => "minecraft:entity.piglin_brute.converted_to_zombified",
+            _ => "minecraft:entity.piglin.converted_to_zombified",
+        })
+        .unwrap();
+        let listeners: Vec<_> = state
+            .players
+            .iter()
+            .filter_map(|(id, player)| {
+                let slot = state.entities.slot_of(*id)?;
+                let listener = state.entities.pos(slot);
+                (distance(pos, listener) <= 256.0).then_some(player.connection)
+            })
+            .collect();
+        for connection in listeners {
+            state.push_player(
+                connection,
+                crate::boundary::PlayerChange::CommandSound {
+                    sound: sound.clone(),
+                    source: 5,
+                    position: pos.map(|v| (v * 8.0).floor() as i32),
+                    volume: 1.0,
+                    pitch: 1.0,
+                },
+            );
+        }
+    }
+}
+
 pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
+    zombify(state);
     // Consumed item rows use merge's existing reservation/tombstone path.
     // No dense slots move until commit, and newly thrown items are not visited.
     // Only the piglin type lane is visited (slot order, as the old full scan).
-    // Retained::Piglin exists on piglins alone: `begin` runs for eligible
-    // piglins, persistence rejects the variant on any other entity id, and
-    // `set_kind` is never applied to a piglin. NoAI and inactive semantics and
-    // the payout order are unchanged.
+    // Conversion above clears retained barter state before changing type.
     let piglins: Vec<_> = PIGLIN_TYPE
         .iter()
         .flat_map(|&type_id| state.entities.mob_slots(type_id))

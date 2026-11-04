@@ -321,6 +321,8 @@ handles!(BoolRule, false:
     SHOW_DEATH_MESSAGES = "show_death_messages",
     SPAWN_MOBS = "spawn_mobs",
     SPAWN_MONSTERS = "spawn_monsters",
+    SPAWN_PATROLS = "spawn_patrols",
+    SPAWN_PHANTOMS = "spawn_phantoms",
     SPAWN_WANDERING_TRADERS = "spawn_wandering_traders",
     SPAWN_WARDENS = "spawn_wardens",
     TNT_EXPLODES = "tnt_explodes",

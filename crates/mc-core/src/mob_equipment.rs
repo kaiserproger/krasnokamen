@@ -14,9 +14,13 @@ fn stack(state: &TickState, name: &str) -> Option<ItemStack> {
         .map(|id| ItemStack::new(id, 1))
 }
 
-/// Vanilla DifficultyInstance special multiplier (the 0..1 equipment factor).
-/// InhabitedTime is read from the retained chunk, including imported worlds.
-fn difficulty_factor(difficulty: Difficulty, game_time: u64, day_time: i64, inhabited: i64) -> f64 {
+/// Vanilla DifficultyInstance effective difficulty, before the equipment multiplier.
+fn effective_difficulty(
+    difficulty: Difficulty,
+    game_time: u64,
+    day_time: i64,
+    inhabited: i64,
+) -> f64 {
     if difficulty == Difficulty::Peaceful {
         return 0.0;
     }
@@ -33,8 +37,25 @@ fn difficulty_factor(difficulty: Difficulty, game_time: u64, day_time: i64, inha
     if difficulty == Difficulty::Easy {
         local *= 0.5;
     }
-    let effective = f64::from(difficulty.id()) * (0.75 + day + local);
-    ((effective - 2.0) / 2.0).clamp(0.0, 1.0)
+    f64::from(difficulty.id()) * (0.75 + day + local)
+}
+
+/// Vanilla DifficultyInstance special multiplier (the 0..1 equipment factor).
+fn difficulty_factor(difficulty: Difficulty, game_time: u64, day_time: i64, inhabited: i64) -> f64 {
+    ((effective_difficulty(difficulty, game_time, day_time, inhabited) - 2.0) / 2.0).clamp(0.0, 1.0)
+}
+
+pub(crate) fn effective_at(state: &TickState, pos: [f64; 3]) -> f64 {
+    let chunk = mc_world::ChunkPos {
+        x: (pos[0].floor() as i32).div_euclid(16),
+        z: (pos[2].floor() as i32).div_euclid(16),
+    };
+    effective_difficulty(
+        state.difficulty,
+        state.tick,
+        state.day_time,
+        state.world.inhabited_time(chunk),
+    )
 }
 
 fn factor(state: &TickState, slot: EntitySlot) -> f64 {

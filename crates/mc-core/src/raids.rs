@@ -72,7 +72,7 @@ fn distance(pos: [f64; 3], center: [i32; 3]) -> f64 {
         .map(|(a, b)| (a - f64::from(b)).powi(2))
         .sum()
 }
-fn village_center(state: &TickState, pos: [f64; 3]) -> Option<[i32; 3]> {
+pub(crate) fn village_center(state: &TickState, pos: [f64; 3]) -> Option<[i32; 3]> {
     // Claimed home/meeting memories are the existing occupied village POIs.
     state
         .entities

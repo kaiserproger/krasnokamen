@@ -739,9 +739,10 @@ title = "Feed two adult sniffers torchflower seeds, turtles seagrass, or frogs s
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BREEDING-EGG-LIFECYCLE"
-regression = ["cargo:mc-core:entity_life_tests::sniffer_breeding_stages_an_egg_item_instead_of_a_live_child", "cargo:mc-core:entity_life_tests::sniffer_pair_drops_egg_through_gameplay", "cargo:mc-core:entity_life_tests::sniffer_breeding_accepts_a_carpet_in_the_midpoint_cell", "cargo:mc-core:entity_life_tests::turtle_breeding_lays_egg_blocks_on_home_sand", "cargo:mc-core:entity_life_tests::frog_breeding_places_frogspawn_on_nearby_water"]
+regression = ["cargo:mc-core:entity_life_tests::sniffer_breeding_stages_an_egg_item_instead_of_a_live_child", "cargo:mc-core:entity_life_tests::sniffer_pair_drops_egg_through_gameplay", "cargo:mc-core:entity_life_tests::sniffer_breeding_accepts_a_carpet_in_the_midpoint_cell", "cargo:mc-core:entity_life_tests::turtle_carries_eggs_home_before_laying_on_sand", "cargo:mc-core:entity_life_tests::frog_pair_breeds_then_lays_frogspawn_at_water"]
+failing_first = "reported"
 
 [[bug]]
 id = "AXOLOTL-FEED-BUCKET"
@@ -1668,9 +1669,10 @@ title = "Bees omitted 5 bee_attractive members + waterlogged/tall-half rules."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BEE-FLOWER-TABLE"
 regression = ["cargo:mc-core:bees::tests::flowerless_bee_finds_wither_rose_and_rejects_waterlogged"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "ARMADILLO-THREAT-ROLL"
@@ -1684,7 +1686,7 @@ regression = ["cargo:mc-core:mounts::tests::armadillo_curls_against_undead_and_h
 
 [[bug]]
 id = "ARMADILLO-SPIDER-DETERRENCE"
-title = "Armadillo defensive rolling may not deter spiders."
+title = "Spiders and cave spiders avoid unrolled armadillos, not scared/rolled armadillos."
 area = "gameplay"
 repro = "source"
 severity = "major"
@@ -1698,9 +1700,10 @@ title = "No scuteTime timer/brushing."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMADILLO-SCUTE-SHED"
-regression = ["cargo:mc-core:mounts::tests::armadillo_brush_sheds_scute"]
+regression = ["cargo:mc-core:mounts::tests::armadillo_brush_sheds_scute", "cargo:mc-core:mounts::tests::armadillo_scute_timer_drops_scute"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "WOLF-ARMOR-ABSORB"
@@ -1708,9 +1711,10 @@ title = "Body armor never absorbed."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#WOLF-ARMOR-ABSORB"
 regression = ["cargo:mc-core:mounts::tests::wolf_body_armor_absorbs_melee_damage_and_wears"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "DOLPHIN-TREASURE"
@@ -1781,9 +1785,10 @@ title = "Shears on a snow golem do nothing: vanilla `SnowGolem` implements `Shea
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-SNOW-SHEAR"
-regression = []
+regression = ["cargo:mc-core:tick_tests::snow_golem_shearing_is_once_and_survives_checkpoint_and_disk_wal"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "REDSTONE-WIRE-HOPPER-SUPPORT"
@@ -1813,9 +1818,10 @@ title = "Librarian book offers draw from a 35-entry hardcoded pool with flat pri
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LIBRARIAN-BOOK-POOL-PRICING"
-regression = []
+regression = ["cargo:mc-core:villager::trades::tests::mending_book_uses_treasure_trade_price", "cargo:mc-core:villager::trades::tests::librarian_unlock_adds_enchanted_book_offer"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "JUKEBOX-HYDRATE-PANIC"
@@ -1867,9 +1873,10 @@ title = "Zombie-villager curing ignores nearby iron bars and beds: vanilla short
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#VILLAGER-CURE-SPEEDUP"
-regression = []
+regression = ["cargo:mc-core:villager::conversion_tests::nearby_iron_bars_and_beds_accelerate_zombie_villager_curing"]
+failing_first = "reported"
 
 [[bug]]
 id = "AXOLOTL-PLAY-DEAD"
@@ -1877,9 +1884,10 @@ title = "Hurt axolotls never play dead: vanilla grants a chance to drop and take
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AXOLOTL-PLAY-DEAD"
-regression = []
+regression = ["cargo:mc-core:mob_lanes::tests::hurt_axolotl_in_water_plays_dead_and_regenerates", "cargo:mc-core:mob_lanes::tests::playing_dead_axolotl_releases_attackers_and_wakes_after_200_active_ticks"]
+failing_first = "reported"
 
 [[bug]]
 id = "PATROL-SPAWN-ABSENT"
@@ -1887,9 +1895,10 @@ title = "Pillager patrols never spawn: the `spawn_patrols` gamerule is registere
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PATROL-SPAWN-ABSENT"
-regression = []
+regression = ["cargo:mc-core:natural_spawn_tests::patrols_spawn_pillagers_near_an_exposed_player_after_five_days"]
+failing_first = "reported"
 
 [[bug]]
 id = "PHANTOM-SPAWN-ABSENT"
@@ -1897,9 +1906,10 @@ title = "Phantoms never spawn from insomnia: the `spawn_phantoms` gamerule is re
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PHANTOM-SPAWN-ABSENT"
-regression = []
+regression = ["cargo:mc-core:natural_spawn_tests::insomnia_spawns_phantoms_above_an_awake_player", "cargo:mc-core:natural_spawn_tests::insomnia_spawn_respects_rest_sky_gamerule_and_peaceful"]
+failing_first = "reported"
 
 [[bug]]
 id = "PIGLIN-OVERWORLD-ZOMBIFY"
@@ -1907,9 +1917,10 @@ title = "Piglins and hoglins never zombify outside the Nether: vanilla tracks `t
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PIGLIN-OVERWORLD-ZOMBIFY"
-regression = []
+regression = ["cargo:mc-core:piglin::tests::overworld_piglin_family_zombifies_after_fifteen_seconds"]
+failing_first = "reported"
 
 [[bug]]
 id = "WITHER-MANUAL-BUILD"
@@ -1971,9 +1982,10 @@ title = "Turtles never lay eggs or navigate home: no `lay_egg/LayEgg/home-beach`
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TURTLE-LAY-EGG-ABSENT"
-regression = []
+regression = ["cargo:mc-core:entity_life_tests::turtle_carries_eggs_home_before_laying_on_sand", "cargo:mc-core:farming_tests::turtle_eggs_crack_at_night_into_baby_turtles"]
+failing_first = "reported"
 
 [[bug]]
 id = "SNIFFER-DIG-ABSENT"
@@ -2011,9 +2023,10 @@ title = "Llamas never spit at attackers: no `spit/Spit` logic exists in core. Va
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LLAMA-SPIT-ABSENT"
-regression = []
+regression = ["cargo:mc-core:mob_lanes::tests::llamas_spit_at_attackers_and_defend_their_trader", "cargo:mc-core:projectiles::payloads::tests::shulker_fireball_skull_wind_and_spit_deliver_native_special_payloads"]
+failing_first = "reported"
 
 [[bug]]
 id = "CAT-GIFT-ABSENT"

@@ -1342,3 +1342,151 @@ fn fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled() {
         "passive control survives"
     );
 }
+
+#[test]
+fn insomnia_spawns_phantoms_above_an_awake_player() {
+    let mut state = grass_state("minecraft:plains", "minecraft:plains");
+    join(&mut state);
+    let player = state.connections.entity_of(ConnectionId(1)).unwrap();
+    state
+        .players
+        .get_mut(&player)
+        .unwrap()
+        .statistics
+        .set_custom(mc_data::statistics::CustomStat::TimeSinceRest, 240_000);
+    state.day_time = 18_000;
+    let phantom = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:phantom").unwrap())
+        .unwrap();
+    let mut changes = crate::boundary::ChangeSet::default();
+    for tick in (2_400..=240_000).step_by(2_400) {
+        state.tick = tick;
+        crate::natural_spawn::run(&mut state, &mut changes);
+        if changes.entities_spawned.iter().any(|id| {
+            state.entities.slot_of(*id).is_some_and(|slot| {
+                matches!(state.entities.body(slot).kind, EntityKind::Mob { type_id } if type_id == phantom)
+            })
+        }) {
+            return;
+        }
+    }
+    panic!("an awake exposed player never attracted a phantom");
+}
+
+#[test]
+fn insomnia_spawn_respects_rest_sky_gamerule_and_peaceful() {
+    let mut state = grass_state("minecraft:plains", "minecraft:plains");
+    let pos = join(&mut state);
+    let player = state.connections.entity_of(ConnectionId(1)).unwrap();
+    let phantom = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:phantom").unwrap())
+        .unwrap();
+    state.day_time = 18_000;
+    for case in ["rested", "roof", "disabled", "peaceful", "day"] {
+        state
+            .players
+            .get_mut(&player)
+            .unwrap()
+            .statistics
+            .set_custom(
+                mc_data::statistics::CustomStat::TimeSinceRest,
+                if case == "rested" { 72_000 } else { 240_000 },
+            );
+        state
+            .gamerules
+            .insert("spawn_phantoms".into(), (case != "disabled").to_string());
+        state.difficulty = if case == "peaceful" {
+            crate::survival::Difficulty::Peaceful
+        } else {
+            crate::survival::Difficulty::Hard
+        };
+        state.day_time = if case == "day" { 6_000 } else { 18_000 };
+        let [x, y, z] = pos.map(|v| v.floor() as i32);
+        let roof = if case == "roof" {
+            state.registry.states.grass_block
+        } else {
+            state.registry.states.air
+        };
+        state.world.set_block(x, y + 3, z, roof);
+        let mut changes = crate::boundary::ChangeSet::default();
+        for _ in 0..20 {
+            state.tick += 2_400;
+            crate::natural_spawn::run(&mut state, &mut changes);
+            assert!(!changes.entities_spawned.iter().any(|id| {
+                state.entities.slot_of(*id).is_some_and(|slot| {
+                    matches!(state.entities.body(slot).kind, EntityKind::Mob { type_id } if type_id == phantom)
+                })
+            }), "phantom spawned in {case}");
+        }
+    }
+}
+
+#[test]
+fn patrols_spawn_pillagers_near_an_exposed_player_after_five_days() {
+    let mut state = grass_state("minecraft:plains", "minecraft:plains");
+    join(&mut state);
+    state.difficulty = crate::survival::Difficulty::Hard;
+    state.day_time = 126_000;
+    let pillager = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:pillager").unwrap())
+        .unwrap();
+    let mut changes = crate::boundary::ChangeSet::default();
+    for tick in (120_000..=1_320_000).step_by(13_200) {
+        state.tick = tick;
+        crate::natural_spawn::run(&mut state, &mut changes);
+        if changes.entities_spawned.iter().any(|id| {
+            state.entities.slot_of(*id).is_some_and(|slot| {
+                matches!(state.entities.body(slot).kind, EntityKind::Mob { type_id } if type_id == pillager)
+                    && state.entities.row(slot).loot.patrol_leader
+                    && state.entities.row(slot).appearance.equipment[5].as_ref().is_some_and(|stack| {
+                        state.registry.items.name_of(stack.item_id).is_some_and(|name| name.as_str() == "minecraft:white_banner")
+                    })
+            })
+        }) {
+            return;
+        }
+    }
+    panic!("no pillager patrol spawned after five days");
+}
+
+#[test]
+fn patrol_spawning_obeys_age_gamerule_and_difficulty() {
+    let mut state = grass_state("minecraft:plains", "minecraft:plains");
+    join(&mut state);
+    let pillager = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:pillager").unwrap())
+        .unwrap();
+    for case in ["early", "disabled", "peaceful", "night"] {
+        state.day_time = match case {
+            "early" => 6_000,
+            "night" => 138_000,
+            _ => 126_000,
+        };
+        state.difficulty = if case == "peaceful" {
+            crate::survival::Difficulty::Peaceful
+        } else {
+            crate::survival::Difficulty::Hard
+        };
+        state
+            .gamerules
+            .insert("spawn_patrols".into(), (case != "disabled").to_string());
+        let mut changes = crate::boundary::ChangeSet::default();
+        for _ in 0..30 {
+            state.tick += 13_200;
+            crate::natural_spawn::run(&mut state, &mut changes);
+            assert!(!changes.entities_spawned.iter().any(|id| {
+                state.entities.slot_of(*id).is_some_and(|slot| {
+                    matches!(state.entities.body(slot).kind, EntityKind::Mob { type_id } if type_id == pillager)
+                })
+            }), "patrol spawned in {case}");
+        }
+    }
+}

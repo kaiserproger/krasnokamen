@@ -10,6 +10,9 @@ pub(crate) fn validate(value: &Retained) -> Result<(), &'static str> {
     match value {
         Retained::Copper(value) => crate::copper_golem::validate(value),
         Retained::Warden(value) => crate::warden::validate(value),
+        Retained::Axolotl(ticks) if !(1..=200).contains(ticks) => {
+            Err("Axolotl: play-dead ticks expected 1..=200")
+        }
         Retained::Fangs { warmup, life, .. }
             if !(-1..=1200).contains(warmup) || !(1..=22).contains(life) =>
         {
@@ -112,6 +115,18 @@ pub(crate) fn from_record(
         Some(Retained::Warden(crate::warden::read_anger(field(
             "anger",
         )?)?))
+    } else if record.id == "minecraft:goat" {
+        let read_bool = |key, default| match field(key)? {
+            None => Ok(default),
+            Some(Tag::Byte(value @ (0 | 1))) => Ok(*value != 0),
+            Some(_) => Err(fail(&format!("{key}: expected boolean byte"))),
+        };
+        Some(Retained::Goat(crate::goat::Goat {
+            phase: crate::goat::Phase::Idle(0),
+            screaming: read_bool("IsScreamingGoat", false)?,
+            left: read_bool("HasLeftHorn", true)?,
+            right: read_bool("HasRightHorn", true)?,
+        }))
     } else {
         None
     };
@@ -147,6 +162,8 @@ pub(crate) fn from_record(
         let name = match value {
             Retained::Crossbow(_) => "minecraft:pillager",
             Retained::Piglin(_) => "minecraft:piglin",
+            Retained::Goat(_) => "minecraft:goat",
+            Retained::Axolotl(_) => "minecraft:axolotl",
             Retained::Enderman { .. } => "minecraft:enderman",
             Retained::Witch(_) => "minecraft:witch",
             Retained::Fangs { .. } => "minecraft:evoker_fangs",
@@ -212,6 +229,7 @@ pub(crate) fn to_fields(value: &Retained) -> Vec<(String, Tag)> {
     )];
     match value {
         Retained::Copper(value) => fields.extend(crate::copper_golem::to_fields(value)),
+        Retained::Goat(value) => fields.extend(crate::goat::to_fields(value)),
         Retained::PlayerIronGolem => fields.push(("PlayerCreated".into(), Tag::Byte(1))),
         Retained::Warden(value) => fields.push(("anger".into(), crate::warden::anger_tag(value))),
         Retained::Wither { invulnerable } => {

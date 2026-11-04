@@ -257,6 +257,27 @@ const INCORRECT_FOR_STONE_OR_COPPER_TOOL: &[&str] = &[
 
 const REQUIRED_BLOCK_TAGS: &[(&str, &[&str])] = &[
     (
+        "minecraft:snaps_goat_horn",
+        &[
+            "minecraft:acacia_log",
+            "minecraft:birch_log",
+            "minecraft:oak_log",
+            "minecraft:jungle_log",
+            "minecraft:spruce_log",
+            "minecraft:dark_oak_log",
+            "minecraft:pale_oak_log",
+            "minecraft:mangrove_log",
+            "minecraft:cherry_log",
+            "minecraft:poplar_log",
+            "minecraft:stone",
+            "minecraft:packed_ice",
+            "minecraft:iron_ore",
+            "minecraft:coal_ore",
+            "minecraft:copper_ore",
+            "minecraft:emerald_ore",
+        ],
+    ),
+    (
         "minecraft:climbable",
         &[
             "minecraft:ladder",

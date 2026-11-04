@@ -753,3 +753,76 @@ fn no_ai_and_inactive_piglins_do_not_take_dropped_gold() {
     assert!(!admiring(row(&state, idle)));
     assert_eq!(row(&state, payment).item.as_ref().unwrap().count, 2);
 }
+
+#[test]
+fn overworld_piglin_family_zombifies_after_fifteen_seconds() {
+    for (original, transformed) in [
+        ("piglin", "zombified_piglin"),
+        ("piglin_brute", "zombified_piglin"),
+        ("hoglin", "zoglin"),
+    ] {
+        let (mut state, player) = fixture(None);
+        state.gamerules.insert("spawn_mobs".into(), "false".into());
+        state.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
+        let mob = spawn(&mut state, original, [5.5, 201.0, 5.5]);
+        for _ in 0..300 {
+            run_tick(&mut state, &[]);
+        }
+        let slot = state
+            .entities
+            .slot_of(mob)
+            .expect("original entity remains present");
+        assert!(
+            matches!(state.entities.body(slot).kind, EntityKind::Mob { type_id } if name(type_id) == format!("minecraft:{original}"))
+        );
+        run_tick(&mut state, &[]);
+        let slot = state
+            .entities
+            .slot_of(mob)
+            .expect("converted entity remains present");
+        let EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
+            panic!("not a mob")
+        };
+        assert_eq!(
+            name(type_id),
+            format!("minecraft:{transformed}"),
+            "{original}"
+        );
+        assert!(
+            state
+                .entities
+                .row(slot)
+                .active_effects
+                .has(crate::effects::EffectId::Nausea)
+        );
+    }
+}
+
+#[test]
+fn zombification_respects_nether_immunity_and_ai() {
+    for case in ["nether", "immune", "no_ai"] {
+        let (mut state, _) = fixture(None);
+        let mob = spawn(&mut state, "piglin", [5.5, 201.0, 5.5]);
+        let slot = state.entities.slot_of(mob).unwrap();
+        state.entities.row_mut(slot).entity_life.time_in_overworld = 300;
+        if case == "nether" {
+            state.dimension = crate::dimensions::Dimension::Nether;
+        } else if case == "immune" {
+            state
+                .entities
+                .row_mut(slot)
+                .entity_life
+                .immune_to_zombification = true;
+        } else {
+            state.entities.row_mut(slot).controls.no_ai = true;
+        }
+        run(&mut state, &mut ChangeSet::default());
+        assert!(
+            matches!(state.entities.body(slot).kind, EntityKind::Mob { type_id } if name(type_id) == "minecraft:piglin"),
+            "{case}"
+        );
+        if case != "no_ai" {
+            assert_eq!(state.entities.row(slot).entity_life.time_in_overworld, 0);
+        }
+    }
+}

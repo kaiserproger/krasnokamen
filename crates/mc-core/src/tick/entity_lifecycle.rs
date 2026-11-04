@@ -172,6 +172,7 @@ impl TickState {
             crate::leash::initialize(self, slot);
             crate::end_fight::initialize_entity(self, slot);
             crate::dolphin::initialize(self, slot, type_id);
+            crate::turtle::initialize(self, slot, type_id);
             crate::mob_equipment::initialize(self, slot, type_id);
         }
         id

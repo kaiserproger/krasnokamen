@@ -1388,7 +1388,12 @@ fn run_dimension_tick_inner<'a>(
     if sim {
         crate::entity_life::advance(state);
         crate::brushing::run(state);
+        crate::axolotl::run(state);
+        crate::turtle::run(state);
+        crate::frog::run(state);
+        crate::goat::run(state, &mut intents, &mut changes);
         crate::piglin::run(state, &mut changes);
+        crate::llama::run(state);
         crate::tnt::run(state, &mut intents);
         crate::mob_lanes::snowballs(state);
     }

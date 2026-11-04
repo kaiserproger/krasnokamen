@@ -506,3 +506,268 @@ fn due_trader_candidates_match_the_dense_scan_in_a_large_population() {
         "not due stays"
     );
 }
+
+#[test]
+fn goat_rams_a_nearby_living_target() {
+    let mut state = fixture("minecraft:plains");
+    let player = join(&mut state);
+    state.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
+    let goat = spawn(&mut state, "minecraft:goat", [5.5, 80.0, 8.5]);
+    let target = spawn(&mut state, "minecraft:armor_stand", [10.5, 80.0, 8.5]);
+    let target_slot = state.entities.slot_of(target).unwrap();
+    state.entities.row_mut(target_slot).controls.no_ai = true;
+    let health = state.entities.row(target_slot).health;
+    let stone = state.registry.states.stone;
+    for offset in 1..=15 {
+        for y in 80..=82 {
+            for (x, z) in [(0, offset), (16, offset), (offset, 0), (offset, 16)] {
+                state.world.set_block(x, y, z, stone);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    for _ in 0..8_000 {
+        run_tick(&mut state, &[]);
+        let Some(slot) = state.entities.slot_of(target) else {
+            return;
+        };
+        if state.entities.row(slot).health < health {
+            return;
+        }
+        assert!(state.entities.slot_of(goat).is_some(), "goat disappeared");
+    }
+    panic!("goat never rammed its stationary target");
+}
+
+#[test]
+fn goat_ram_into_stone_drops_one_horn_with_instrument_and_updates_metadata() {
+    let mut state = fixture("minecraft:plains");
+    let goat = spawn(&mut state, "minecraft:goat", [8.5, 80.0, 8.5]);
+    let target = spawn(&mut state, "minecraft:armor_stand", [12.5, 80.0, 8.5]);
+    let slot = state.entities.slot_of(goat).unwrap();
+    let target_uuid = state
+        .entities
+        .row(state.entities.slot_of(target).unwrap())
+        .uuid;
+    state.entities.row_mut(slot).special_mob = Some(Box::new(crate::special_mobs::Retained::Goat(
+        crate::goat::Goat {
+            phase: crate::goat::Phase::Charge {
+                target: target_uuid,
+                destination: [12, 80, 8],
+                deadline: state.tick + 100,
+            },
+            screaming: false,
+            left: true,
+            right: true,
+        },
+    )));
+    state.world.set_block(9, 80, 8, state.registry.states.stone);
+    let mut changes = ChangeSet::default();
+    crate::goat::run(&mut state, &mut Vec::new(), &mut changes);
+    let Some(crate::special_mobs::Retained::Goat(goat)) =
+        state.entities.row(slot).special_mob.as_deref()
+    else {
+        panic!("goat state")
+    };
+    assert_ne!(goat.left, goat.right);
+    let horn = changes
+        .entities_spawned
+        .iter()
+        .filter_map(|id| {
+            let slot = state.entities.slot_of(*id)?;
+            state.entities.row(slot).appearance.item.as_ref()
+        })
+        .find(|stack| {
+            state
+                .registry
+                .items
+                .name_of(stack.item_id)
+                .is_some_and(|id| id.as_str() == "minecraft:goat_horn")
+        })
+        .expect("horn item");
+    assert!(
+        horn.extended()
+            .preserved_components
+            .iter()
+            .any(|component| component.name == "minecraft:instrument")
+    );
+    assert!(
+        state
+            .entities
+            .row(slot)
+            .appearance
+            .extra
+            .iter()
+            .any(|(index, value)| {
+                (*index == 19 || *index == 20)
+                    && *value == crate::boundary::EntityDataValue::Boolean(false)
+            })
+    );
+}
+
+#[test]
+fn llamas_spit_at_attackers_and_defend_their_trader() {
+    for protect_trader in [false, true] {
+        let mut state = fixture("minecraft:plains");
+        let player = join(&mut state);
+        let llama = spawn(
+            &mut state,
+            if protect_trader {
+                "minecraft:trader_llama"
+            } else {
+                "minecraft:llama"
+            },
+            [10.5, 80.0, 8.5],
+        );
+        let target = if protect_trader {
+            let trader = spawn(&mut state, "minecraft:wandering_trader", [10.5, 80.0, 9.5]);
+            let owner = state
+                .entities
+                .row(state.entities.slot_of(trader).unwrap())
+                .uuid;
+            state.entities.set_leash(
+                state.entities.slot_of(llama).unwrap(),
+                Some(crate::leash::Holder::Entity(owner)),
+            );
+            trader
+        } else {
+            llama
+        };
+        let before = state
+            .entities
+            .row(state.entities.slot_of(target).unwrap())
+            .health;
+        run_tick(
+            &mut state,
+            &[PlayerInput::Attack {
+                connection: ConnectionId(1),
+                target,
+            }],
+        );
+        assert!(
+            state
+                .entities
+                .row(state.entities.slot_of(target).unwrap())
+                .health
+                < before,
+            "attack fixture did not hit"
+        );
+        for _ in 0..80 {
+            run_tick(&mut state, &[]);
+            if state.entities.slots().any(|slot| {
+                state
+                    .entities
+                    .row(slot)
+                    .projectile
+                    .as_ref()
+                    .is_some_and(|p| p.kind == crate::projectiles::ProjectileKind::LlamaSpit)
+            }) || state.players[&player].vitals.health < 20.0
+            {
+                break;
+            }
+        }
+        assert!(
+            state.players[&player].vitals.health < 20.0
+                || state.entities.slots().any(|slot| state
+                    .entities
+                    .row(slot)
+                    .projectile
+                    .as_ref()
+                    .is_some_and(|p| p.kind == crate::projectiles::ProjectileKind::LlamaSpit)),
+            "llama never spat (protect_trader={protect_trader})"
+        );
+    }
+}
+
+#[test]
+fn hurt_axolotl_in_water_plays_dead_and_regenerates() {
+    let mut state = fixture("minecraft:plains");
+    let player = join(&mut state);
+    let axolotl = spawn(&mut state, "minecraft:axolotl", [10.5, 80.0, 8.5]);
+    let slot = state.entities.slot_of(axolotl).unwrap();
+    let water = state
+        .registry
+        .blocks
+        .block(&Identifier::parse("minecraft:water").unwrap())
+        .unwrap()
+        .default
+        .0;
+    state.world.set_block(10, 80, 8, water);
+    for _ in 0..30 {
+        state.tick += 20;
+        state.entities.body_mut(slot).hurt_at = None;
+        state.entities.row_mut(slot).health = 5.0;
+        state.merge_damage.push((
+            slot,
+            crate::tick::DamagePiece {
+                physical: None,
+                custom_armor: false,
+                amount: 1.0,
+                kind: crate::survival::DamageKind::Melee,
+                source: Some(crate::intent::DamageSource::Melee {
+                    attacker: player,
+                    position: [8.5, 80.0, 8.5],
+                    yaw: 0.0,
+                    bonus_knockback: 0.0,
+                    sweep: false,
+                    fire_ticks: 0,
+                    bane_ticks: 0,
+                }),
+            },
+        ));
+        state.commit_merge_effects();
+        if state
+            .entities
+            .row(slot)
+            .appearance
+            .extra
+            .iter()
+            .any(|(index, value)| {
+                *index == 19 && *value == crate::boundary::EntityDataValue::Boolean(true)
+            })
+        {
+            assert!(
+                state
+                    .entities
+                    .row(slot)
+                    .active_effects
+                    .has(crate::effects::EffectId::Regeneration)
+            );
+            return;
+        }
+    }
+    panic!("hurt axolotl never played dead");
+}
+
+#[test]
+fn playing_dead_axolotl_releases_attackers_and_wakes_after_200_active_ticks() {
+    let mut state = fixture("minecraft:plains");
+    let axolotl = spawn(&mut state, "minecraft:axolotl", [10.5, 80.0, 8.5]);
+    let attacker = spawn(&mut state, "minecraft:zoglin", [12.5, 80.0, 8.5]);
+    let slot = state.entities.slot_of(axolotl).unwrap();
+    state.entities.row_mut(slot).special_mob =
+        Some(Box::new(crate::special_mobs::Retained::Axolotl(200)));
+    state
+        .hostile
+        .targets
+        .insert(attacker, ((axolotl, [10.5, 80.0, 8.5]), 4.0));
+    crate::hostile::refresh_targets(&mut state);
+    assert!(!state.hostile.targets.contains_key(&attacker));
+    for _ in 0..199 {
+        crate::axolotl::run(&mut state);
+    }
+    assert!(crate::axolotl::playing_dead(state.entities.row(slot)));
+    crate::axolotl::run(&mut state);
+    assert!(!crate::axolotl::playing_dead(state.entities.row(slot)));
+    assert!(
+        state
+            .entities
+            .row(slot)
+            .appearance
+            .extra
+            .iter()
+            .any(|(index, value)| {
+                *index == 19 && *value == crate::boundary::EntityDataValue::Boolean(false)
+            })
+    );
+}

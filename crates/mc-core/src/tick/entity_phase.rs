@@ -136,6 +136,12 @@ pub(super) fn early_entity_rest(
 ) -> bool {
     let flags = view.entities.motion_flags(slot);
     if flags & MOTION_REST == 0
+        || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::goat::is_goat(type_id))
+            && crate::goat::drive(view.entities.row(slot)).is_some()
+        || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::turtle::is_turtle(type_id))
+            && crate::turtle::drive(view.entities.row(slot)).is_some()
+        || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::frog::is_frog(type_id))
+            && crate::frog::drive(view.entities.row(slot)).is_some()
         || !special_idle
         || (motion_thinks(view.tick, flags, period)
             && flags & crate::entities::MOTION_WANDER_REST == 0
@@ -756,6 +762,7 @@ pub(super) fn read_row(
                 .get(&body.id)
                 .is_some_and(|attack| attack.stage > 0))
             || row.controls.no_ai
+            || crate::axolotl::playing_dead(row)
             || observed
             || blueprint.is_some_and(|blueprint| blueprint.goals.is_empty())
             || crate::taming::suppress_ai(row)
@@ -982,6 +989,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
                 };
                 (body.alive
                     && state.entities.row(slot).health > 0.0
+                    && !crate::axolotl::playing_dead(state.entities.row(slot))
                     && mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(
                         crate::blueprint::wire_type_id(type_id),
                     )
@@ -1397,6 +1405,21 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
             row.pos,
             panic_source,
         );
+    } else if crate::goat::is_goat(row.type_id)
+        && let Some((target, speed)) = crate::goat::drive(ctx.entities.row(row.slot))
+    {
+        vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
+        look_target = Some(target);
+    } else if crate::turtle::is_turtle(row.type_id)
+        && let Some((target, speed)) = crate::turtle::drive(ctx.entities.row(row.slot))
+    {
+        vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
+        look_target = Some(target);
+    } else if crate::frog::is_frog(row.type_id)
+        && let Some((target, speed)) = crate::frog::drive(ctx.entities.row(row.slot))
+    {
+        vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
+        look_target = Some(target);
     } else if !think {
         // A mob standing on the ground with no standing decision has nothing
         // to integrate while every chunk under its footprint is unchanged

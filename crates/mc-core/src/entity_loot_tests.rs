@@ -547,6 +547,7 @@ fn native_nbt_keeps_size_attributes_equipment_credit_and_death_marker() {
         held: ItemStack::new(sword, 1),
     }));
     row.loot.death_handled = true;
+    row.loot.patrol_leader = true;
     row.loot.drop_chances[0] = 2.0;
     row.loot.body_armor = Some(Box::new(ItemStack::new(sword, 1)));
     row.loot.saddle = Some(Box::new(ItemStack::new(sword, 1)));
@@ -583,6 +584,7 @@ fn native_nbt_keeps_size_attributes_equipment_credit_and_death_marker() {
         .collect();
     let vanilla = from_fields(&fields).unwrap();
     assert_eq!(vanilla.slime_size, Some(4));
+    assert!(vanilla.patrol_leader);
     assert_eq!(vanilla.attributes, expected.attributes);
     assert_eq!(vanilla.drop_chances, expected.drop_chances);
 }

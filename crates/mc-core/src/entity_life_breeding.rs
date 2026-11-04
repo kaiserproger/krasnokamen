@@ -10,9 +10,9 @@ use crate::tick::TickState;
 pub(crate) enum EggBirth {
     /// A sniffer egg item drops at the parents' midpoint.
     SnifferEgg,
-    /// Turtle egg blocks accumulate on the sand below the midpoint.
+    /// One turtle carries eggs back to its home beach.
     TurtleEgg,
-    /// Frogspawn places on the water surface nearest the midpoint.
+    /// One frog carries spawn until it finds water by land.
     Frogspawn,
 }
 
@@ -70,13 +70,6 @@ pub(crate) fn valid(state: &TickState, actor: EntityId, partner: EntityId, child
     else {
         return false;
     };
-    // Turtle nesting and frog pregnancy are not yet admitted by this path.
-    if matches!(
-        egg_birth(&state.registry, first, second),
-        Some(EggBirth::TurtleEgg | EggBirth::Frogspawn)
-    ) {
-        return false;
-    }
     // Vanilla refuses only a both-sitting cat/wolf pair; mobile + sitting breeds.
     if state.registry.blueprint(first).is_some_and(|blueprint| {
         matches!(

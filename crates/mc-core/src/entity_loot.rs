@@ -38,6 +38,7 @@ pub struct EntityLootState {
     /// Equipment itself has one owner: ColdRow.appearance.equipment.
     pub attributes: Vec<EntityAttribute>,
     pub slime_size: Option<u8>,
+    pub patrol_leader: bool,
     pub player_credit: Option<Box<PlayerLootCredit>>,
     pub death_handled: bool,
     pub can_pick_up_loot: bool,
@@ -56,6 +57,7 @@ impl Default for EntityLootState {
         Self {
             attributes: Vec::new(),
             slime_size: None,
+            patrol_leader: false,
             player_credit: None,
             death_handled: false,
             can_pick_up_loot: false,
@@ -99,6 +101,7 @@ pub(crate) fn loot_entity(state: &TickState, entity: EntityId) -> Option<EntityL
     result.flags.is_baby = row.appearance.baby;
     result.flags.is_on_fire = row.appearance.shared_flags & 1 != 0;
     result.slime_size = row.loot.slime_size.map(i32::from);
+    result.raider_is_captain = Some(row.loot.patrol_leader);
     let held = state
         .players
         .get(&entity)
@@ -700,6 +703,7 @@ pub(crate) fn commit_death(
     entity.flags.is_baby = row.appearance.baby;
     entity.flags.is_on_fire = row.appearance.shared_flags & 1 != 0;
     entity.slime_size = row.loot.slime_size.map(i32::from);
+    entity.raider_is_captain = Some(row.loot.patrol_leader);
     let mut equipment = equipment(row);
     if row.allay.is_some() {
         equipment[0] = None;
@@ -905,6 +909,9 @@ pub(crate) fn to_fields(state: &EntityLootState) -> Vec<(String, mc_nbt::Tag)> {
             ),
         ),
     ];
+    if state.patrol_leader {
+        fields.push(("PatrolLeader".into(), Tag::Byte(1)));
+    }
     if let Some(size) = state.slime_size {
         fields.push(("Size".into(), Tag::Int(i32::from(size) - 1)));
     }
@@ -927,6 +934,14 @@ pub(crate) fn from_fields(
     } else {
         EntityLootState::default()
     };
+    if let Some(tag) = find("PatrolLeader") {
+        let Tag::Byte(value @ (0 | 1)) = tag else {
+            return Err(crate::config::CoreError::Storage(
+                "PatrolLeader: expected boolean byte".into(),
+            ));
+        };
+        state.patrol_leader = *value != 0;
+    }
     if let Some(tag) = find("CanPickUpLoot") {
         let Tag::Byte(value @ (0 | 1)) = tag else {
             return Err(crate::config::CoreError::Storage(

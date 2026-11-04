@@ -192,6 +192,44 @@ pub(crate) fn interact(
     true
 }
 
+/// Vanilla samples at most fourteen beds or iron bars on one percent of ticks.
+fn cure_progress(state: &TickState, slot: EntitySlot) -> i32 {
+    let id = state.entities.body(slot).id;
+    let mut rng = crate::natural_spawn::Rng(
+        state.world.seed() as u64 ^ state.tick.rotate_left(17) ^ id.0 as u64,
+    );
+    if rng.below(100) != 0 {
+        return 1;
+    }
+    let [x, y, z] = state.entities.pos(slot).map(|coordinate| coordinate as i32);
+    let mut found = 0;
+    let mut progress = 1;
+    'scan: for x in x - 4..x + 4 {
+        for y in y - 4..y + 4 {
+            for z in z - 4..z + 4 {
+                let special = state
+                    .world
+                    .block_at(x, y, z)
+                    .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
+                    .is_some_and(|block| {
+                        let name = block.block.id.path();
+                        name == "iron_bars" || name.ends_with("_bed")
+                    });
+                if special {
+                    found += 1;
+                    if rng.below(10) < 3 {
+                        progress += 1;
+                    }
+                    if found == 14 {
+                        break 'scan;
+                    }
+                }
+            }
+        }
+    }
+    progress
+}
+
 pub(crate) fn tick(state: &mut TickState) {
     let Some(villager_type) = type_id(state, "minecraft:villager") else {
         return;
@@ -231,8 +269,9 @@ pub(crate) fn tick(state: &mut TickState) {
         else {
             continue;
         };
+        let progress = cure_progress(state, slot);
         let villager = state.entities.row_mut(slot).villager.as_mut().unwrap();
-        let remaining = remaining - 1;
+        let remaining = remaining - progress;
         villager.conversion_time = Some(remaining);
         if remaining > 0 {
             continue;

@@ -12,6 +12,10 @@ use crate::tick::TickState;
 
 #[path = "natural_spawn_hostile.rs"]
 mod hostile;
+#[path = "natural_spawn_patrols.rs"]
+mod patrols;
+#[path = "natural_spawn_phantoms.rs"]
+mod phantoms;
 
 /// Ticks between non-hostile spawn and grazing/daylight passes.
 pub(crate) const CYCLE: u64 = 20;
@@ -61,6 +65,8 @@ pub(crate) struct SpawnCensus {
     pub(crate) observer_positions: Vec<[f64; 3]>,
     max_half_width: f64,
     tick: Option<u64>,
+    phantom_next_tick: u64,
+    patrol_next_tick: u64,
     pub(crate) dimension_charges: crate::dimensions::spawning::Charges,
 }
 
@@ -352,6 +358,8 @@ fn run_with(
         crate::command_rules::boolean(state, crate::command_rules::BoolRule::SPAWN_MONSTERS);
     census(state, &positions);
     if spawn_monsters && state.difficulty != crate::survival::Difficulty::Peaceful {
+        phantoms::run(state, &observers, &mut rng, changes);
+        patrols::run(state, &observers, &mut rng, changes);
         hostile::run(state, &positions, &mut rng, changes);
     }
     if !cycle {
