@@ -535,3 +535,64 @@ fn sign_decorations_admit_only_actual_free_source_debits() {
         crate::plugin_inventories::invalidate_player(&mut state, actor);
     }
 }
+
+#[test]
+fn disconnected_editor_releases_sign_for_another_player() {
+    let (mut state, player) = setup();
+    plant(
+        &mut state,
+        POS.x,
+        POS.y,
+        POS.z,
+        "oak_sign",
+        &[("rotation", "8"), ("waterlogged", "false")],
+    );
+    inscribe(&mut state);
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(2),
+            uuid: uuid::Uuid::new_v4(),
+            name: "editor".into(),
+            permission_level: 0,
+        }],
+    );
+    let editor = state.connections.entity_of(ConnectionId(2)).unwrap();
+    assert!(crate::signs::use_on(&mut state, editor, Hand::Main, POS));
+    assert!(!crate::signs::use_on(&mut state, player, Hand::Main, POS));
+    run_tick(
+        &mut state,
+        &[PlayerInput::Leave {
+            connection: ConnectionId(2),
+        }],
+    );
+    assert!(crate::signs::use_on(&mut state, player, Hand::Main, POS));
+    assert_eq!(state.sign_editors[&ConnectionId(1)].position, POS);
+}
+
+#[test]
+fn adventure_cannot_edit_or_decorate_signs() {
+    let (mut state, player) = setup();
+    plant(
+        &mut state,
+        POS.x,
+        POS.y,
+        POS.z,
+        "oak_sign",
+        &[("rotation", "8"), ("waterlogged", "false")],
+    );
+    inscribe(&mut state);
+    let before = image(&state);
+    state.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Adventure;
+    for item in ["red_dye", "glow_ink_sac"] {
+        use_item(&mut state, player, item);
+        assert_eq!(held(&state, player).count, 3);
+        assert_eq!(image(&state), before);
+        assert!(state.sign_editors.is_empty());
+    }
+    give(&mut state, player, "air", 0);
+    super::use_on(&mut state, POS.x, POS.y, POS.z, 2);
+    assert!(state.sign_editors.is_empty());
+    edit(&mut state, true, "unauthorized");
+    assert_eq!(image(&state), before);
+}

@@ -8,7 +8,7 @@ use crate::tick::TickState;
 /// Vanilla egg-laying birth staged instead of an immediate live child.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EggBirth {
-    /// A sniffer egg item drops at the parents' midpoint.
+    /// A sniffer egg block is placed at the parents' midpoint.
     SnifferEgg,
     /// Turtle egg blocks accumulate on the sand below the midpoint.
     TurtleEgg,
@@ -70,10 +70,22 @@ pub(crate) fn valid(state: &TickState, actor: EntityId, partner: EntityId, child
     else {
         return false;
     };
-    // Egg-laying pairs never commit a live child: their Breed intent stages
-    // the egg birth instead (see `entity_life::breed`).
-    if egg_birth(&state.registry, first, second).is_some() {
+    // Turtle nesting and frog pregnancy are not yet admitted by this path.
+    if matches!(
+        egg_birth(&state.registry, first, second),
+        Some(EggBirth::TurtleEgg | EggBirth::Frogspawn)
+    ) {
         return false;
+    }
+    if egg_birth(&state.registry, first, second) == Some(EggBirth::SnifferEgg) {
+        let pa = state.entities.pos(a);
+        let pb = state.entities.pos(b);
+        let x = ((pa[0] + pb[0]) * 0.5).floor() as i32;
+        let y = ((pa[1] + pb[1]) * 0.5).floor() as i32;
+        let z = ((pa[2] + pb[2]) * 0.5).floor() as i32;
+        if state.world.block_at(x, y, z) != Some(state.registry.states.air) {
+            return false;
+        }
     }
     // Vanilla refuses only a both-sitting cat/wolf pair; mobile + sitting breeds.
     if state.registry.blueprint(first).is_some_and(|blueprint| {

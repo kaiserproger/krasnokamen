@@ -208,9 +208,10 @@ title = "If a player loses connection while the sign editor is open, the unwaxed
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SIGN-EDITOR-DISCONNECT"
-regression = []
+regression = ["cargo:mc-core:farming_tests::signs_tests::disconnected_editor_releases_sign_for_another_player"]
+failing_first = "reported"
 
 [[bug]]
 id = "SIGN-ADVENTURE-EDIT"
@@ -218,9 +219,10 @@ title = "Adventure players can open and rewrite ordinary unwaxed signs, bypassin
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SIGN-ADVENTURE-EDIT"
-regression = []
+regression = ["cargo:mc-core:farming_tests::signs_tests::adventure_cannot_edit_or_decorate_signs"]
+failing_first = "reported"
 
 [[bug]]
 id = "SIGN-BLANK-DECORATION"
@@ -722,7 +724,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BREEDING-EGG-LIFECYCLE"
-regression = ["cargo:mc-core:entity_life_tests::sniffer_breeding_stages_an_egg_item_instead_of_a_live_child", "cargo:mc-core:entity_life_tests::turtle_breeding_lays_egg_blocks_on_home_sand", "cargo:mc-core:entity_life_tests::frog_breeding_places_frogspawn_on_nearby_water"]
+regression = ["cargo:mc-core:entity_life_tests::sniffer_breeding_stages_an_egg_block_instead_of_a_live_child", "cargo:mc-core:entity_life_tests::sniffer_pair_places_egg_through_gameplay", "cargo:mc-core:entity_life_tests::turtle_breeding_lays_egg_blocks_on_home_sand", "cargo:mc-core:entity_life_tests::frog_breeding_places_frogspawn_on_nearby_water"]
 
 [[bug]]
 id = "AXOLOTL-FEED-BUCKET"
@@ -741,9 +743,10 @@ title = "Feed two adult pandas bamboo in a stone/grass pen with no placed bamboo
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PANDA-BAMBOO-GATE"
-regression = ["cargo:mc-core:entity_life_tests::pandas_without_nearby_bamboo_cannot_breed"]
+regression = ["cargo:mc-core:entity_life_tests::pandas_without_nearby_bamboo_cannot_breed", "cargo:mc-core:entity_life_tests::fed_pandas_need_eight_bamboo_blocks_to_produce_a_cub"]
+failing_first = "reported"
 
 [[bug]]
 id = "TRADER-LLAMA-BREED"
@@ -751,9 +754,10 @@ title = "Tamed trader llamas cannot produce offspring with another trader llama 
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TRADER-LLAMA-BREED"
 regression = ["cargo:mc-core:entity_life_tests::trader_llamas_breed_hay_with_llamas_into_llamas"]
+failing_first = "reported"
 
 [[bug]]
 id = "CAT-SITTING-BREED"
@@ -761,9 +765,10 @@ title = "A healthy tamed sitting cat rejects breeding fish even when a standing 
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAT-SITTING-BREED"
-regression = []
+regression = ["cargo:mc-core:entity_life_tests::sitting_cat_breeds_with_a_standing_partner_but_not_two_sitting"]
+failing_first = "reported"
 
 [[bug]]
 id = "LOADER-SOUND-MIXIN"

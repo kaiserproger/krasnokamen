@@ -128,8 +128,7 @@ pub fn can_breed(state: &TickState, body: &crate::entities::Body, row: &ColdRow)
     if !can_breed_in(&state.registry, body, row) {
         return false;
     }
-    // Vanilla panda births require a non-shoot bamboo plant within 7x7x3.
-    // Love still applies without it; only the birth is gated.
+    // Panda courtship requires at least eight bamboo blocks nearby.
     let EntityKind::Mob { type_id } = body.kind else {
         return false;
     };
@@ -138,25 +137,23 @@ pub fn can_breed(state: &TickState, body: &crate::entities::Body, row: &ColdRow)
         .blueprint(type_id)
         .is_some_and(|blueprint| blueprint.name == "minecraft:panda")
     {
-        // Locate the mob's own position via its entity id scan.
-        let pos = state.entities.slots().find_map(|slot| {
-            (state.entities.body(slot).id == body.id).then(|| state.entities.pos(slot))
-        });
-        if let Some(pos) = pos {
-            return panda_bamboo_nearby(state, pos);
-        }
+        return state
+            .entities
+            .slot_of(body.id)
+            .is_some_and(|slot| panda_bamboo_nearby(state, state.entities.pos(slot)));
     }
     true
 }
 
-/// True when a non-shoot bamboo plant grows within 7x7x3 of `pos`.
+/// True when at least eight bamboo blocks grow within five blocks.
 fn panda_bamboo_nearby(state: &TickState, pos: [f64; 3]) -> bool {
     let cx = pos[0].floor() as i32;
     let cy = pos[1].floor() as i32;
     let cz = pos[2].floor() as i32;
-    for dx in -3..=3 {
-        for dy in -1..=1 {
-            for dz in -3..=3 {
+    let mut count = 0;
+    for dx in -5..=5 {
+        for dy in -5..=5 {
+            for dz in -5..=5 {
                 let Some(current) = state.world.block_at(cx + dx, cy + dy, cz + dz) else {
                     continue;
                 };
@@ -164,10 +161,11 @@ fn panda_bamboo_nearby(state: &TickState, pos: [f64; 3]) -> bool {
                 else {
                     continue;
                 };
-                // Shoots are the separate `bamboo_sapling` block; any grown
-                // bamboo plant counts.
                 if block.block.id.path() == "bamboo" {
-                    return true;
+                    count += 1;
+                    if count == 8 {
+                        return true;
+                    }
                 }
             }
         }
@@ -356,8 +354,7 @@ pub fn breed(
             row.breed_cooldown = PARENT_COOLDOWN;
         }
     }
-    // Egg-laying species never spawn a live child: vanilla stages a sniffer
-    // egg item, turtle egg blocks, or frogspawn instead.
+    // Egg-laying species never spawn a live child.
     let (Some(a), Some(b)) = (
         state.entities.slot_of(actor),
         state.entities.slot_of(partner),
@@ -397,8 +394,7 @@ pub fn breed(
     }
 }
 
-/// Stage a vanilla egg-laying birth at merge: sniffer egg item, turtle egg
-/// blocks on sand, or frogspawn on water. Parents already paid love/cooldown.
+/// Stage an egg-laying birth at merge. Parents already paid love/cooldown.
 fn stage_egg_birth(
     state: &mut TickState,
     actor: EntityId,
@@ -410,11 +406,16 @@ fn stage_egg_birth(
     let _ = (actor, partner, advancement_breeding);
     match birth {
         breeding::EggBirth::SnifferEgg => {
-            if let Some(id) = Identifier::parse("minecraft:sniffer_egg")
-                .ok()
-                .and_then(|name| state.registry.items.id_of(&name))
+            let at = crate::boundary::BlockPos {
+                x: pos[0].floor() as i32,
+                y: pos[1].floor() as i32,
+                z: pos[2].floor() as i32,
+            };
+            if state.world.block_at(at.x, at.y, at.z) == Some(state.registry.states.air)
+                && let Some(name) = Identifier::parse("minecraft:sniffer_egg").ok()
+                && let Some(block) = state.registry.blocks.block(&name)
             {
-                state.merge_life_drops.push((pos, ItemStack::new(id, 1)));
+                state.merge_block_writes.push((at, block.default.0));
             }
         }
         breeding::EggBirth::TurtleEgg => {

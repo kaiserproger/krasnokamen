@@ -1649,7 +1649,7 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
             ];
             bred = true;
             if distance < 3.0
-                && row.id < other.id
+                && (row.id < other.id || other.standing)
                 && row.love <= crate::entity_life::LOVE_TICKS - 60
                 && other.love <= crate::entity_life::LOVE_TICKS - 60
                 && let Some(child_type) =
