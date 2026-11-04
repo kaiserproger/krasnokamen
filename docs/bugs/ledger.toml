@@ -3395,3 +3395,23 @@ severity = "major"
 status = "open"
 source = "Promote gate 20261104T213104-native-v2-map-frame-waypoint-lhku9sjo (promotion-wire-receipts.json, screenshots/map-distant-held-clone.png)"
 regression = []
+
+[[bug]]
+id = "NATIVE-FRAMED-MAP"
+title = "The native client never draws a map inside an item frame: src/entities/render_special/item_frame.rs:84-91 draws only the baked item model, and the frame render path has no map state."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/MapMarkers (agent finding, client 815c708)"
+regression = []
+
+[[bug]]
+id = "NATIVE-POTION-IMPACT-EFFECT"
+title = "The native client ignores splash/lingering potion impact level events (2002/2007): src/session/packets.rs:518 routes LevelEvent to present_block_break and block_effects.rs:10 accepts only 2001, so impact particles and custom colors never appear."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Promote agent finding on client e1b22a5"
+regression = []
