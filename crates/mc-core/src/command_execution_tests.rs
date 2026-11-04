@@ -2517,12 +2517,13 @@ fn settlement_layout_follows_a_flooded_then_open_avenue_without_changes() {
     let id = state.settlements.find("town").unwrap().id;
     crate::settlements::construction::tests::open_plan(&mut state);
     // Grass on the avenue south of the plaza, a player-certified house beside
-    // it, and a water channel across the avenue between the two.
+    // it, and a water channel across the whole street, verges included (a
+    // verge carries a detour around a road-only obstacle), between the two.
     let (grass, water) = (
         block(&state, "minecraft:grass_block", &[]),
         block(&state, "minecraft:water", &[]),
     );
-    for x in 7..=9 {
+    for x in 6..=10 {
         for z in 13..=23 {
             state.world.set_block(x, 200, z, grass);
         }
@@ -2555,7 +2556,7 @@ fn settlement_layout_follows_a_flooded_then_open_avenue_without_changes() {
         Some(water),
         "nothing bulldozed"
     );
-    for x in 7..=9 {
+    for x in 6..=10 {
         state.world.set_block(x, 200, 16, grass);
     }
     state.world.fold_overlay();
