@@ -243,3 +243,45 @@ fn item_frame_generation_support_and_wal_recovery() {
     assert_eq!(drops.len(), 2);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn adventure_player_pops_then_breaks_frame() {
+    let (mut state, actor) = fixture();
+    let frame = place(&mut state, actor, "minecraft:item_frame");
+    let slot = state.entities.slot_of(frame).unwrap();
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] =
+        item(&state, "minecraft:diamond", 1);
+    click(&mut state, frame);
+    state.players.get_mut(&actor).unwrap().game_mode = crate::commands::GameMode::Adventure;
+    let attack = PlayerInput::Attack {
+        connection: ConnectionId(1),
+        target: frame,
+    };
+    run_tick(&mut state, std::slice::from_ref(&attack));
+    assert!(state.entities.slot_of(frame).is_some());
+    assert!(displayed(&state, slot).is_none());
+    run_tick(&mut state, &[attack]);
+    assert!(state.entities.slot_of(frame).is_none());
+}
+
+#[test]
+fn arrow_ejects_display_without_destroying_frame() {
+    let (mut state, actor) = fixture();
+    let frame = place(&mut state, actor, "minecraft:item_frame");
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] =
+        item(&state, "minecraft:diamond", 1);
+    click(&mut state, frame);
+    let owner = state
+        .entities
+        .row(state.entities.slot_of(actor).unwrap())
+        .uuid;
+    let arrow = crate::projectiles::ProjectileState::new(
+        crate::projectiles::ProjectileKind::Arrow,
+        Some(owner),
+        item(&state, "minecraft:arrow", 1),
+    );
+    crate::projectiles::launch(&mut state, arrow, [6.6, 65.8, 8.5], [2.0, 0.0, 0.0]).unwrap();
+    run_tick(&mut state, &[]);
+    let slot = state.entities.slot_of(frame).expect("frame survives");
+    assert!(displayed(&state, slot).is_none());
+}

@@ -1889,7 +1889,7 @@ fn custom_only_splash_applies_custom_effect() {
 fn lingering_healing_cloud_heals_other_player_with_pvp_off() {
     // LINGERING-FRIENDLY-PVP through the cloud path: a healing lingering
     // cloud still heals another player while PvP is disabled.
-    let (mut state, _) = fixture();
+    let (mut state, owner) = fixture();
     run_tick(
         &mut state,
         &[PlayerInput::Join {
@@ -1905,10 +1905,28 @@ fn lingering_healing_cloud_heals_other_player_with_pvp_off() {
     state.players.get_mut(&friend).unwrap().vitals.health = 10.0;
     state.entities.row_mut(friend_slot).health = 10.0;
     state.gamerules.insert("pvp".into(), "false".into());
+    let mut stack = potion(&state, "minecraft:lingering_potion", "minecraft:healing");
+    stack
+        .extended_mut()
+        .potion_custom_effects
+        .push(mc_data::item_stack::PotionEffect {
+            id: mc_data::Identifier::parse("minecraft:poison").unwrap(),
+            amplifier: 0,
+            duration: 600,
+            ambient: false,
+            show_particles: true,
+            show_icon: true,
+            hidden: None,
+        });
     let record = ProjectileState::new(
         ProjectileKind::LingeringPotion,
-        None,
-        potion(&state, "minecraft:lingering_potion", "minecraft:healing"),
+        Some(
+            state
+                .entities
+                .row(state.entities.slot_of(owner).unwrap())
+                .uuid,
+        ),
+        stack,
     );
     let (bottle, mut record) = launch_record(&mut state, record, [0.0, 201.0, 0.0]);
     assert!(impact(
@@ -1953,6 +1971,12 @@ fn lingering_healing_cloud_heals_other_player_with_pvp_off() {
             break;
         }
         if friend_health(&state) > before {
+            assert!(
+                state.players[&friend]
+                    .active_effects
+                    .get(EffectId::Poison)
+                    .is_none()
+            );
             return;
         }
     }
@@ -2066,4 +2090,268 @@ fn base_plus_custom_splash_applies_both_effects() {
             && active.get(crate::effects::EffectId::Strength).is_some(),
         "base+custom splash must apply both swiftness and custom strength"
     );
+}
+
+#[test]
+fn lingering_cloud_hits_body_overlapping_from_below() {
+    let (mut state, _) = fixture();
+    state.tick = 100;
+    let target = mob(&mut state, "minecraft:cow", [1.0, 200.0, 0.0]);
+    let record = ProjectileState::new(
+        ProjectileKind::LingeringPotion,
+        None,
+        potion(&state, "minecraft:lingering_potion", "minecraft:harming"),
+    );
+    let (bottle, mut record) = launch_record(&mut state, record, [0.0, 201.0, 0.0]);
+    assert!(impact(
+        &mut state,
+        &mut Vec::new(),
+        bottle,
+        &mut record,
+        None,
+        [0.0, 201.0, 0.0]
+    ));
+    remove(&mut state, bottle);
+    let cloud_id = state
+        .projectiles
+        .spawned
+        .iter()
+        .copied()
+        .find(|id| {
+            state.entities.slot_of(*id).is_some_and(|slot| {
+                state
+                    .entities
+                    .row(slot)
+                    .projectile
+                    .as_ref()
+                    .is_some_and(|record| record.kind == ProjectileKind::AreaEffectCloud)
+            })
+        })
+        .unwrap();
+    let slot = state.entities.slot_of(cloud_id).unwrap();
+    let mut cloud = *state.entities.row_mut(slot).projectile.take().unwrap();
+    cloud.age = 10;
+    state.tick = 110;
+    let mut intents = Vec::new();
+    assert!(step(&mut state, &mut intents, cloud_id, &mut cloud));
+    assert_eq!(
+        damage_to(&intents, target),
+        [(3.0, DamageKind::IndirectMagic)]
+    );
+}
+
+#[test]
+fn lingering_custom_payload_and_impact_color_are_preserved() {
+    let (mut state, _) = fixture();
+    state.tick = 100;
+    let target = mob(&mut state, "minecraft:cow", [1.0, 201.0, 0.0]);
+    let mut stack = item(&state, "minecraft:lingering_potion");
+    stack.extended_mut().potion_custom_color = Some(0x123456);
+    stack
+        .extended_mut()
+        .potion_custom_effects
+        .push(mc_data::item_stack::PotionEffect {
+            id: mc_data::Identifier::parse("minecraft:speed").unwrap(),
+            amplifier: 0,
+            duration: 600,
+            ambient: false,
+            show_particles: true,
+            show_icon: true,
+            hidden: None,
+        });
+    let record = ProjectileState::new(ProjectileKind::LingeringPotion, None, stack);
+    let (bottle, mut record) = launch_record(&mut state, record, [0.0, 201.0, 0.0]);
+    assert!(impact(
+        &mut state,
+        &mut Vec::new(),
+        bottle,
+        &mut record,
+        None,
+        [0.0, 201.0, 0.0]
+    ));
+    assert!(state.outbox[&ConnectionId(1)].iter().any(|change| matches!(
+        change,
+        PlayerChange::ProjectileLevelEvent {
+            event: 2002,
+            data: 0x123456,
+            ..
+        }
+    )));
+    remove(&mut state, bottle);
+    let cloud_id = state
+        .projectiles
+        .spawned
+        .iter()
+        .copied()
+        .find(|id| {
+            state.entities.slot_of(*id).is_some_and(|slot| {
+                state
+                    .entities
+                    .row(slot)
+                    .projectile
+                    .as_ref()
+                    .is_some_and(|record| record.kind == ProjectileKind::AreaEffectCloud)
+            })
+        })
+        .unwrap();
+    let slot = state.entities.slot_of(cloud_id).unwrap();
+    let mut cloud = *state.entities.row_mut(slot).projectile.take().unwrap();
+    cloud.age = 10;
+    state.tick = 110;
+    assert!(step(&mut state, &mut Vec::new(), cloud_id, &mut cloud));
+    let slot = state.entities.slot_of(target).unwrap();
+    assert!(
+        state
+            .entities
+            .row(slot)
+            .active_effects
+            .get(EffectId::Speed)
+            .is_some()
+    );
+}
+
+#[test]
+fn water_bottles_damage_endermen_rehydrate_axolotls_and_leave_no_cloud() {
+    for kind in [ProjectileKind::Potion, ProjectileKind::LingeringPotion] {
+        let (mut state, _) = fixture();
+        let enderman = mob(&mut state, "minecraft:enderman", [1.0, 201.0, 0.0]);
+        let axolotl = mob(&mut state, "minecraft:axolotl", [2.0, 201.0, 0.0]);
+        let slot = state.entities.slot_of(axolotl).unwrap();
+        state.entities.body_mut(slot).air_supply = 1;
+        let item_name = if kind == ProjectileKind::Potion {
+            "minecraft:splash_potion"
+        } else {
+            "minecraft:lingering_potion"
+        };
+        let record = ProjectileState::new(kind, None, potion(&state, item_name, "minecraft:water"));
+        let (bottle, mut record) = launch_record(&mut state, record, [0.0, 201.0, 0.0]);
+        let mut intents = Vec::new();
+        assert!(impact(
+            &mut state,
+            &mut intents,
+            bottle,
+            &mut record,
+            None,
+            [0.0, 201.0, 0.0]
+        ));
+        assert!(!damage_to(&intents, enderman).is_empty());
+        assert_eq!(
+            state
+                .entities
+                .body(state.entities.slot_of(axolotl).unwrap())
+                .air_supply,
+            6000
+        );
+        assert!(!state.projectiles.spawned.iter().any(|id| {
+            state.entities.slot_of(*id).is_some_and(|slot| {
+                state
+                    .entities
+                    .row(slot)
+                    .projectile
+                    .as_ref()
+                    .is_some_and(|record| record.kind == ProjectileKind::AreaEffectCloud)
+            })
+        }));
+    }
+}
+
+#[test]
+fn splash_poison_skips_undead_and_spiders_but_affects_cow() {
+    let (mut state, _) = fixture();
+    let zombie = mob(&mut state, "minecraft:zombie", [1.0, 201.0, 0.0]);
+    let spider = mob(&mut state, "minecraft:spider", [2.0, 201.0, 0.0]);
+    let cow = mob(&mut state, "minecraft:cow", [3.0, 201.0, 0.0]);
+    let record = ProjectileState::new(
+        ProjectileKind::Potion,
+        None,
+        potion(&state, "minecraft:splash_potion", "minecraft:poison"),
+    );
+    let (bottle, mut record) = launch_record(&mut state, record, [0.0, 201.0, 0.0]);
+    assert!(impact(
+        &mut state,
+        &mut Vec::new(),
+        bottle,
+        &mut record,
+        None,
+        [0.0, 201.0, 0.0]
+    ));
+    for (target, expected) in [(zombie, false), (spider, false), (cow, true)] {
+        let slot = state.entities.slot_of(target).unwrap();
+        assert_eq!(
+            state
+                .entities
+                .row(slot)
+                .active_effects
+                .get(EffectId::Poison)
+                .is_some(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn splash_hits_body_intersecting_below_inflated_impact_box() {
+    let (mut state, _) = fixture();
+    let cow = mob(&mut state, "minecraft:cow", [0.0, 198.9, 0.0]);
+    let record = ProjectileState::new(
+        ProjectileKind::Potion,
+        None,
+        potion(&state, "minecraft:splash_potion", "minecraft:harming"),
+    );
+    let (bottle, mut record) = launch_record(&mut state, record, [0.0, 201.0, 0.0]);
+    let mut intents = Vec::new();
+    assert!(impact(
+        &mut state,
+        &mut intents,
+        bottle,
+        &mut record,
+        None,
+        [0.0, 201.0, 0.0]
+    ));
+    assert!(!damage_to(&intents, cow).is_empty());
+}
+
+#[test]
+fn splash_harming_and_swiftness_ignore_armor_stand_but_hit_cow() {
+    let (mut state, _) = fixture();
+    let stand = mob(&mut state, "minecraft:armor_stand", [1.0, 201.0, 0.0]);
+    let cow = mob(&mut state, "minecraft:cow", [2.0, 201.0, 0.0]);
+    let mut stack = potion(&state, "minecraft:splash_potion", "minecraft:harming");
+    stack
+        .extended_mut()
+        .potion_custom_effects
+        .push(mc_data::item_stack::PotionEffect {
+            id: mc_data::Identifier::parse("minecraft:speed").unwrap(),
+            amplifier: 0,
+            duration: 600,
+            ambient: false,
+            show_particles: true,
+            show_icon: true,
+            hidden: None,
+        });
+    let record = ProjectileState::new(ProjectileKind::Potion, None, stack);
+    let (bottle, mut record) = launch_record(&mut state, record, [0.0, 201.0, 0.0]);
+    let mut intents = Vec::new();
+    assert!(impact(
+        &mut state,
+        &mut intents,
+        bottle,
+        &mut record,
+        None,
+        [0.0, 201.0, 0.0]
+    ));
+    assert!(damage_to(&intents, stand).is_empty());
+    assert!(!damage_to(&intents, cow).is_empty());
+    for (target, expected) in [(stand, false), (cow, true)] {
+        let slot = state.entities.slot_of(target).unwrap();
+        assert_eq!(
+            state
+                .entities
+                .row(slot)
+                .active_effects
+                .get(EffectId::Speed)
+                .is_some(),
+            expected
+        );
+    }
 }

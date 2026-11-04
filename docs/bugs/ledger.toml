@@ -8,7 +8,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-CUSTOM-PAYLOAD"
-regression = []
+regression = ["cargo:mc-core:projectiles::payloads::tests::lingering_custom_payload_and_impact_color_are_preserved"]
 
 [[bug]]
 id = "LINGERING-FRIENDLY-PVP"
@@ -16,9 +16,10 @@ title = "Disabling PvP also disables beneficial lingering potion effects on othe
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LINGERING-FRIENDLY-PVP"
 regression = ["cargo:mc-core:projectiles::payloads::tests::lingering_healing_cloud_heals_other_player_with_pvp_off"]
+failing_first = "reported"
 
 [[bug]]
 id = "POTION-TARGET-GEOMETRY"
@@ -26,9 +27,10 @@ title = "Splash and lingering potions miss bodies whose hitboxes overlap their a
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-TARGET-GEOMETRY"
-regression = []
+regression = ["cargo:mc-core:projectiles::payloads::tests::lingering_cloud_hits_body_overlapping_from_below", "cargo:mc-core:projectiles::payloads::tests::splash_hits_body_intersecting_below_inflated_impact_box"]
+failing_first = "reported"
 
 [[bug]]
 id = "POTION-MOB-EFFECT-IMMUNITY"
@@ -38,7 +40,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-MOB-EFFECT-IMMUNITY"
-regression = ["cargo:mc-core:projectiles::payloads::tests::splash_regeneration_does_not_apply_to_undead"]
+regression = ["cargo:mc-core:projectiles::payloads::tests::splash_regeneration_does_not_apply_to_undead", "cargo:mc-core:projectiles::payloads::tests::splash_poison_skips_undead_and_spiders_but_affects_cow"]
 
 [[bug]]
 id = "PEARL-ENDERMITE-SPAWN"
@@ -92,7 +94,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#WATER-BOTTLE-IMPACT"
-regression = []
+regression = ["cargo:mc-core:projectiles::payloads::tests::splash_water_douses_burning_entity", "cargo:mc-core:projectiles::payloads::tests::water_bottles_damage_endermen_rehydrate_axolotls_and_leave_no_cloud"]
 
 [[bug]]
 id = "CAULDRON-POWDER-SNOW-BUCKET"
@@ -322,7 +324,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-PROJECTILE-CONTENTS"
-regression = []
+regression = ["cargo:mc-core:item_frame::tests::arrow_ejects_display_without_destroying_frame"]
 
 [[bug]]
 id = "ITEM-FRAME-CELL-COEXISTENCE"
@@ -342,7 +344,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-ADVENTURE-BREAK"
-regression = []
+regression = ["cargo:mc-core:item_frame::tests::adventure_player_pops_then_breaks_frame"]
 
 [[bug]]
 id = "ARMOR-STAND-PROJECTILE-BREAK"
@@ -352,7 +354,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMOR-STAND-PROJECTILE-BREAK"
-regression = ["cargo:mc-core:armor_stand::tests::weak_arrow_breaks_stand_outright"]
+regression = ["cargo:mc-core:armor_stand::tests::weak_arrow_breaks_stand_outright", "cargo:mc-core:projectiles::flight_tests::weak_arrow_removes_fresh_armor_stand"]
 
 [[bug]]
 id = "ARMOR-STAND-POTION-IMMUNITY"
@@ -362,7 +364,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMOR-STAND-POTION-IMMUNITY"
-regression = ["cargo:mc-core:armor_stand::tests::splash_potion_ignores_stand_but_hits_cow"]
+regression = ["cargo:mc-core:armor_stand::tests::splash_potion_ignores_stand_but_hits_cow", "cargo:mc-core:projectiles::payloads::tests::splash_harming_and_swiftness_ignore_armor_stand_but_hit_cow"]
 
 [[bug]]
 id = "ARMOR-STAND-TOOL-WEAR"

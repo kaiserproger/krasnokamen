@@ -437,6 +437,12 @@ pub(crate) fn apply_potion(
         .into_iter()
         .chain(custom_effects(&record.stack))
     {
+        if cloud
+            && !pvp_permitted(state, owner_id(state, record), target)
+            && cloud_harmful(state, target, effect.id)
+        {
+            continue;
+        }
         if !matches!(effect.id, EffectId::InstantHealth | EffectId::InstantDamage) {
             effect.duration = if cloud {
                 effect.duration / 4
@@ -1600,24 +1606,23 @@ pub(crate) fn impact(
     true
 }
 
-/// Whether the cloud would harm this target: instant damage, damage-dealing
-/// splash semantics, or the dragon's breath. Pure buff/heal clouds are
-/// beneficial and ignore the PvP gate.
-fn cloud_harmful(state: &TickState, record: &ProjectileState, target: EntityId) -> bool {
-    potion_effects(&record.stack)
-        .into_iter()
-        .chain(custom_effects(&record.stack))
-        .any(|effect| {
-            matches!(
-                effect.id,
-                EffectId::InstantDamage
-                    | EffectId::Poison
-                    | EffectId::Wither
-                    | EffectId::Hunger
-                    | EffectId::Slowness
-                    | EffectId::Weakness
-            ) || (matches!(effect.id, EffectId::InstantHealth) && inverted(state, target))
-        })
+/// Harmful cloud effects are individually blocked by the PvP rule.
+fn cloud_harmful(state: &TickState, target: EntityId, effect: EffectId) -> bool {
+    match effect {
+        EffectId::InstantDamage => !inverted(state, target),
+        EffectId::InstantHealth => inverted(state, target),
+        EffectId::Poison
+        | EffectId::Wither
+        | EffectId::Hunger
+        | EffectId::Slowness
+        | EffectId::Weakness
+        | EffectId::MiningFatigue
+        | EffectId::Nausea
+        | EffectId::Blindness
+        | EffectId::Unluck
+        | EffectId::Darkness => true,
+        _ => false,
+    }
 }
 /// Returns true when this payload owns the tick (stationary cloud/lightning or
 /// a rocket that detonated), and flight must not move it again.
@@ -1667,21 +1672,15 @@ pub(crate) fn step(
                     let slot = state.entities.slot_of(target).expect("target");
                     let at = state.entities.pos(slot);
                     let uuid = state.entities.row(slot).uuid;
-                    let overlaps = if cloud.dragon {
-                        at[1] <= position[1] + 0.5
-                            && at[1] + state.entities.body(slot).height >= position[1]
-                    } else {
-                        (at[1] - position[1]).abs() <= 0.5
-                    };
-                    // PvP-off blocks harmful cloud contact, but beneficial
-                    // lingering effects (heal/buff) still apply to other
-                    // players (vanilla AreaEffectCloud has no blanket
-                    // player-owner refusal for status effects).
-                    let harmful = cloud_harmful(state, record, target);
+                    let overlaps = at[1] <= position[1] + 0.5
+                        && at[1] + state.entities.body(slot).height >= position[1];
+                    let horizontal_distance_sq =
+                        (at[0] - position[0]).powi(2) + (at[2] - position[2]).powi(2);
                     if !overlaps
+                        || horizontal_distance_sq > f64::from(cloud.radius).powi(2)
                         || cloud.affected_until.contains_key(&uuid)
-                        || (harmful && !pvp_permitted(state, owner, target))
-                        || cloud.dragon && owner == Some(target)
+                        || cloud.dragon
+                            && (owner == Some(target) || !pvp_permitted(state, owner, target))
                     {
                         continue;
                     }
