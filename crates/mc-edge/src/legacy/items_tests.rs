@@ -76,6 +76,34 @@ fn every_emitted_component_has_a_walker() {
 }
 
 #[test]
+fn chicken_variant_component_remaps_registry_ids_in_both_directions() {
+    let mut t = tables(&["chicken/variant", "max_stack_size"]);
+    t.registry_ids.insert(
+        "chicken_variant".into(),
+        IdMap::by_name(
+            [("cold", 0), ("warm", 2)],
+            [("cold", 2), ("warm", 0)],
+            |_| None,
+        ),
+    );
+    // ChickenVariant.STREAM_CODEC -> ByteBufCodecs.holderRegistry -> direct
+    // registry VarInt (26.1.2 javap, ChickenVariant and ByteBufCodecs$29).
+    let source = [1, 10, 2, 0, 0, 0, 1, 32];
+    let mut input = source.as_slice();
+    let mut legacy = Vec::new();
+    stack(&t, To::Legacy, &mut input, &mut legacy).unwrap();
+    assert!(input.is_empty());
+    assert_eq!(legacy, [1, 3, 2, 0, 0, 2, 1, 32]);
+    let mut back = Vec::new();
+    let mut input = legacy.as_slice();
+    stack(&t, To::Canonical, &mut input, &mut back).unwrap();
+    assert!(input.is_empty());
+    assert_eq!(back, source);
+    let mut unknown = [1, 10, 1, 0, 0, 1].as_slice();
+    assert!(stack(&t, To::Legacy, &mut unknown, &mut Vec::new()).is_err());
+}
+
+#[test]
 fn native_only_components_are_consumed_before_legacy_omission() {
     // These 14 names are absent from the local 26.1.2 component registry.
     // Payload bytes follow the 26.3 component-codec fixtures.

@@ -45,6 +45,7 @@ pub enum Payload {
     Fireworks,
     Profile,
     Bees,
+    ChickenVariant,
     NativeOnly(i32),
 }
 
@@ -85,6 +86,7 @@ pub fn payload(name: &str) -> Option<Payload> {
         "fireworks" => Fireworks,
         "profile" => Profile,
         "bees" => Bees,
+        "chicken/variant" => ChickenVariant,
         // None of these components has a 26.1.2 registry entry. Consume the
         // complete native payload before patch() omits the unmapped component.
         "attack_animation" => NativeOnly(ids::ATTACK_ANIMATION),
@@ -226,6 +228,8 @@ fn copy_payload(
         }
         Payload::Empty => {}
         Payload::VarInt => w.write_varint(r.read_varint()?),
+        // ChickenVariant.STREAM_CODEC uses holderRegistry: a direct registry VarInt.
+        Payload::ChickenVariant => registry(t, to, "chicken_variant", r, w, false)?,
         Payload::Bool => w.write_bool(r.read_bool()?),
         Payload::I32 => w.write_i32(r.read_i32()?),
         Payload::Nbt => copy_nbt(r, w)?,

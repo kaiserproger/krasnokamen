@@ -61,7 +61,7 @@ repro = "source"
 severity = "major"
 status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#EGG-VARIANT-THROW"
-regression = ["cargo:mc-core:projectiles::weapons::tests::blue_egg_throws_as_ordinary_egg_projectile_and_debits", "cargo:mc-core:projectiles::payloads::tests::variant_eggs_hatch_chicken_with_variant_metadata"]
+regression = ["cargo:mc-core:projectiles::weapons::tests::blue_egg_throws_as_ordinary_egg_projectile_and_debits", "cargo:mc-core:projectiles::payloads::tests::variant_eggs_hatch_chicken_with_variant_metadata", "cargo:mc-edge:legacy::items::tests::chicken_variant_component_remaps_registry_ids_in_both_directions"]
 failing_first = "reported"
 
 [[bug]]
