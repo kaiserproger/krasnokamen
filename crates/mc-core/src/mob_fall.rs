@@ -27,7 +27,13 @@ pub(crate) fn after_move(
     // Vanilla LivingEntity.handleOnClimbable resets fall distance. A clipped
     // climb still counts: otherwise tiny ceiling drops accumulate across rises.
     if wall_climbing {
-        state.entities.row_mut_unmarked(slot).controls.fall_distance = 0.0;
+        if state.entities.row(slot).controls.fall_distance != 0.0 {
+            state
+                .entities
+                .row_mut_projected(slot)
+                .controls
+                .fall_distance = 0.0;
+        }
         return 0.0;
     }
     let dy = new[1] - old[1];
@@ -64,7 +70,7 @@ pub(crate) fn after_move(
                     .by_id(mc_world::BlockStateId(id))
                     .is_some_and(|block| crate::statistics::climbable(state, block.block.raw_id))
         });
-    let row = state.entities.row_mut_unmarked(slot);
+    let row = state.entities.row_mut_projected(slot);
     if cushioned
         || row.active_effects.has(EffectId::SlowFalling)
         || row.active_effects.has(EffectId::Levitation)

@@ -171,10 +171,10 @@ pub(crate) fn hydrate_entity(
         ));
     }
     let projectile = if crate::projectiles::ProjectileKind::from_name(&record.id).is_some() {
-        Some(
+        Some(Box::new(
             crate::projectiles::persistence::from_entity(&record, &registry.items)
                 .map_err(invalid)?,
-        )
+        ))
     } else {
         None
     };
@@ -237,7 +237,7 @@ pub(crate) fn hydrate_entity(
                 {
                     state.conversion_time = Some(-1);
                 }
-                Some(state)
+                Some(Box::new(state))
             } else {
                 None
             },

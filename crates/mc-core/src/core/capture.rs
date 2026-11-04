@@ -59,11 +59,38 @@ pub(crate) fn appearance_from_vanilla_entity(
 }
 
 /// Collect one checkpoint's full domain data from live tick state: player
-/// records (same fold-back as the journal post-images), entity base (full
-/// records WITH motion), and block-entity storage.
+/// records (same fold-back as the journal post-images), the complete entity
+/// image (records WITH motion), and block-entity storage. Offline conversion,
+/// Anvil export and tests read this materialized image; the live checkpoint
+/// writes only changed entity rows ([`changed_checkpoint_data_for`]).
 pub(crate) fn checkpoint_data_for(
     state: &TickState,
     tick: u64,
+) -> (
+    Vec<CheckpointPlayerData>,
+    std::collections::BTreeMap<(i32, i32), mc_world::anvil::EntityChunk>,
+    crate::core::CheckpointBlockEntities,
+) {
+    checkpoint_data(state, tick, checkpoint_entities(state, tick))
+}
+
+/// Live checkpoint data: [`checkpoint_data_for`] with only the entity rows
+/// whose stored record may be stale ([`changed_checkpoint_entities`]).
+pub(crate) fn changed_checkpoint_data_for(
+    state: &TickState,
+    tick: u64,
+) -> (
+    Vec<CheckpointPlayerData>,
+    std::collections::BTreeMap<(i32, i32), mc_world::anvil::EntityChunk>,
+    crate::core::CheckpointBlockEntities,
+) {
+    checkpoint_data(state, tick, changed_checkpoint_entities(state, tick))
+}
+
+fn checkpoint_data(
+    state: &TickState,
+    tick: u64,
+    entities: std::collections::BTreeMap<(i32, i32), mc_world::anvil::EntityChunk>,
 ) -> (
     Vec<CheckpointPlayerData>,
     std::collections::BTreeMap<(i32, i32), mc_world::anvil::EntityChunk>,
@@ -90,7 +117,6 @@ pub(crate) fn checkpoint_data_for(
             record,
         });
     }
-    let entities = checkpoint_entities(state, tick);
     let block_entities = state
         .block_entities
         .iter()
@@ -128,18 +154,75 @@ pub(super) struct EntityCaptureExtras {
     pub(super) end_fight: Vec<(String, mc_nbt::Tag)>,
 }
 
-/// Entity base as vanilla records grouped by chunk. The Solaris wire id rides
-/// as `solaris:WireId` so journal tail entries (keyed by wire id) still match
-/// after recovery. Records are built in parallel (about 10 us each: 110-137 ms
-/// serial at 11.5k entities, on the tick thread) and grouped serially in slot
-/// order, so the output is identical to a serial slot-order capture.
+/// Complete entity image as vanilla records grouped by chunk. The Solaris wire
+/// id rides as `solaris:WireId` so journal tail entries (keyed by wire id) still
+/// match after recovery.
 pub(super) fn checkpoint_entities(
     state: &TickState,
     tick: u64,
 ) -> std::collections::BTreeMap<(i32, i32), mc_world::anvil::EntityChunk> {
-    use rayon::prelude::*;
     let slots: Vec<crate::entities::EntitySlot> = state.entities.slots().collect();
-    let extras = entity_capture_extras(state, &slots);
+    capture_entities(state, tick, &slots)
+}
+
+/// ADR 0020: the rows whose stored record may differ from a capture at `tick`.
+/// 1. Any store write since the durable checkpoint.
+/// 2. A villager golem deadline pending at the durable checkpoint: its ttl is
+///    relative to the capture tick (the only encoder that reads it), so the row
+///    is rewritten every checkpoint until one stores it as expired.
+/// 3. Types with fields owned outside the store (raid membership, the ominous
+///    item spawner's item, End fight bodies), so a field that leaves is rewritten.
+pub(super) fn changed_checkpoint_entities(
+    state: &TickState,
+    tick: u64,
+) -> std::collections::BTreeMap<(i32, i32), mc_world::anvil::EntityChunk> {
+    let entities = &state.entities;
+    let durable = entities.durable_tick();
+    let mut slots: Vec<crate::entities::EntitySlot> = entities.checkpoint_changed_slots().collect();
+    let mut residents = Vec::new();
+    entities.resident_slots_sorted(&mut residents);
+    slots.extend(residents.into_iter().filter(|&slot| {
+        entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .and_then(|villager| villager.golem_detected_until)
+            .is_some_and(|until| until != u64::MAX && until >= durable)
+    }));
+    slots.extend(entities.mob_slots_matching(|type_id| outside_owned(state, type_id)));
+    slots.sort_unstable();
+    slots.dedup();
+    capture_entities(state, tick, &slots)
+}
+
+/// Entity types whose checkpoint record has fields owned outside `EntityStore`
+/// ([`entity_capture_extras`]).
+fn outside_owned(state: &TickState, type_id: u32) -> bool {
+    crate::special_mobs::raiders::owns(crate::entities::EntityKind::Mob { type_id })
+        || state
+            .registry
+            .entity_type_name(type_id)
+            .is_some_and(|name| {
+                matches!(
+                    name,
+                    "minecraft:ominous_item_spawner"
+                        | "minecraft:ender_dragon"
+                        | "minecraft:end_crystal"
+                )
+            })
+}
+
+/// Records of `slots` (ascending) grouped by chunk. Records are built in
+/// parallel (about 10 us each: 110-137 ms serial at 11.5k entities, on the tick
+/// thread) and grouped serially in slot order, so the output is identical to a
+/// serial slot-order capture.
+fn capture_entities(
+    state: &TickState,
+    tick: u64,
+    slots: &[crate::entities::EntitySlot],
+) -> std::collections::BTreeMap<(i32, i32), mc_world::anvil::EntityChunk> {
+    use rayon::prelude::*;
+    let extras = entity_capture_extras(state, slots);
     let view = EntityCaptureView {
         entities: &state.entities,
         registry: &state.registry,
@@ -156,6 +239,21 @@ pub(super) fn checkpoint_entities(
         })
         .collect_into_vec(&mut records);
     group_entity_records(records)
+}
+
+/// Explicit entity tombstones of one capture over every dimension: identities
+/// removed since the durable checkpoint that are live in no dimension now, so a
+/// transfer or rebirth stays an upsert (ADR 0020).
+pub(crate) fn checkpoint_tombstones(state: &TickState) -> Vec<uuid::Uuid> {
+    let worlds =
+        || std::iter::once(state).chain(state.other_dimensions.values().map(|world| &**world));
+    let mut tombstones: Vec<uuid::Uuid> = worlds()
+        .flat_map(|world| world.entities.checkpoint_removals())
+        .filter(|&uuid| worlds().all(|world| world.entities.slot_of_uuid_any(uuid).is_none()))
+        .collect();
+    tombstones.sort_unstable();
+    tombstones.dedup();
+    tombstones
 }
 
 /// Serial gather of the state-dependent fields, keyed by slot index.

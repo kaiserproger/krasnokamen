@@ -66,7 +66,7 @@ pub struct NativeCheckpointIo {
     pub section_records_written: u64,
     pub rewritten_entities: usize,
     pub entity_payload_bytes: u64,
-    /// Entity records presented by the owner image (the O(all) part of the pass).
+    /// Entity upserts and tombstones presented by the owner.
     pub entities_visited: usize,
     /// Wall time inside the transaction: world (chunk) stream, entity stream
     /// including its lazy encode, and the final redb commit.
@@ -495,6 +495,9 @@ fn entities_equal_ignoring_lsn(
         && stored.payload == incoming.payload
 }
 
+/// Apply one checkpoint's entity changes: upserts (a payload) and explicit
+/// tombstones (no payload). Rows the owner did not present stay as stored; the
+/// owner presents every row whose image may have changed (ADR 0020).
 fn write_entities<E: std::borrow::Borrow<NativeEntitySnapshot>>(
     tx: &redb::WriteTransaction,
     snapshots: impl IntoIterator<Item = Result<E, NativeError>>,
@@ -515,6 +518,10 @@ fn write_entities<E: std::borrow::Borrow<NativeEntitySnapshot>>(
                 "entities",
                 "duplicate identity, unknown dimension or future tick",
             ));
+        }
+        if entity.payload.is_none() {
+            write_tombstone(&mut entities, &mut applied, entity.identity, tick, io)?;
+            continue;
         }
         if let Some(Tag::Compound(fields)) = &entity.payload
             && let Some((_, Tag::Int(wire))) = fields.iter().find(|(k, _)| k == "solaris:WireId")
@@ -559,35 +566,36 @@ fn write_entities<E: std::borrow::Borrow<NativeEntitySnapshot>>(
         io.rewritten_entities += 1;
         io.entity_payload_bytes += bytes.len() as u64;
     }
-    let mut omitted = Vec::new();
-    for row in db(entities.iter())? {
-        let (key, bytes) = db(row)?;
-        let id = key
-            .value()
-            .try_into()
-            .map_err(|_| failure("entities", "invalid UUID"))?;
-        if seen.contains(&id) {
-            continue;
-        }
-        let mut previous = state::decode(id, bytes.value())?;
-        if previous.journal_lsn > tick {
-            return Err(failure("entities", "future stored entity"));
-        }
-        if !seen.contains(&id) && previous.payload.is_some() {
-            previous.payload = None;
-            previous.journal_lsn = tick;
-            omitted.push(previous);
-        }
+    Ok(())
+}
+/// Delete a stored live row: keep its dimension, chunk and generated slot (slots
+/// never reset) and stamp the tick. With no stored live row there is nothing to
+/// delete, so an entity born and removed between checkpoints never reaches disk.
+fn write_tombstone(
+    entities: &mut redb::Table<'_, &'static [u8], &'static [u8]>,
+    applied: &mut redb::Table<'_, &'static [u8], u64>,
+    identity: [u8; 16],
+    tick: u64,
+    io: &mut NativeCheckpointIo,
+) -> Result<(), NativeError> {
+    let Some(stored) = db(entities.get(identity.as_slice()))? else {
+        return Ok(());
+    };
+    let mut previous = state::decode(identity, stored.value())?;
+    drop(stored);
+    if previous.journal_lsn > tick {
+        return Err(failure("entities", "future stored entity"));
     }
-    // Omitted live entities become durable tombstones; slots never reset.
-    // Tombstone writes are real membership deletes and always stamp the tick.
-    for entity in omitted {
-        let bytes = state::encode(&entity)?;
-        db(entities.insert(entity.identity.as_slice(), bytes.as_slice()))?;
-        db(applied.insert(entity.identity.as_slice(), tick))?;
-        io.rewritten_entities += 1;
-        io.entity_payload_bytes += bytes.len() as u64;
+    if previous.payload.is_none() {
+        return Ok(());
     }
+    previous.payload = None;
+    previous.journal_lsn = tick;
+    let bytes = state::encode(&previous)?;
+    db(entities.insert(identity.as_slice(), bytes.as_slice()))?;
+    db(applied.insert(identity.as_slice(), tick))?;
+    io.rewritten_entities += 1;
+    io.entity_payload_bytes += bytes.len() as u64;
     Ok(())
 }
 /// Header identity and the two immutable generation payloads of a native world.
@@ -746,7 +754,8 @@ impl NativeStore {
     }
 
     /// Commit lazily encoded entity after-images in the same atomic transaction.
-    /// `image.entities` must be empty; `entities` is the complete owner image.
+    /// `image.entities` must be empty; `entities` holds the owner's upserts and
+    /// explicit tombstones (no payload); unlisted stored rows are unchanged.
     /// An encoding or validation error aborts every domain, just as for a slice.
     pub fn commit_checkpoint_iter<E: std::borrow::Borrow<NativeEntitySnapshot>>(
         &self,

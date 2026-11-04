@@ -72,7 +72,7 @@ fn replay_image(
         active_effects: Default::default(),
         villager: None,
         state: Default::default(),
-        projectile: Some(projectile),
+        projectile: Some(Box::new(projectile)),
         tick: 10,
     }
 }
@@ -151,7 +151,7 @@ fn in_flight_checkpoint_and_journal_reopen_preserve_motion_and_single_custody() 
     let recovered = &recovered.entities[&7];
     assert_eq!(recovered.pos, pos);
     assert_eq!(recovered.vel, vel);
-    assert_eq!(recovered.projectile.as_ref(), Some(&projectile));
+    assert_eq!(recovered.projectile.as_deref(), Some(&projectile));
     assert_eq!(recovered.projectile.as_ref().unwrap().stack.count, 1);
     let mut live = live_state();
     live.tick = recovered.tick;

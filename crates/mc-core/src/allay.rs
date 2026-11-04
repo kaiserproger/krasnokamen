@@ -51,12 +51,12 @@ impl AllayState {
 }
 pub(crate) fn deserialize<'de, D: serde::Deserializer<'de>>(
     d: D,
-) -> Result<Option<AllayState>, D::Error> {
+) -> Result<Option<Box<AllayState>>, D::Error> {
     let value = Option::<AllayState>::deserialize(d)?;
     if let Some(v) = &value {
         v.validate().map_err(serde::de::Error::custom)?;
     }
-    Ok(value)
+    Ok(value.map(Box::new))
 }
 fn stack(items: &ItemRegistry, tag: &Tag, key: &str) -> Result<ItemStack, CoreError> {
     let Tag::Compound(fields) = tag else {

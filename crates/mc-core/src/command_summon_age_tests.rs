@@ -198,7 +198,7 @@ fn boolean_baby_family(kinds: &[&str]) {
                 item: None,
                 appearance: crate::core::appearance_from_vanilla_entity(native),
                 active_effects: Default::default(),
-                villager: row.villager.as_deref().cloned(),
+                villager: row.villager.clone(),
                 projectile: None,
                 state: image,
                 tick: state.tick,

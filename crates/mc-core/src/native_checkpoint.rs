@@ -747,6 +747,22 @@ pub(crate) fn entity_snapshots<'a>(
         })
 }
 
+/// Explicit tombstone of a stored entity row; the writer keeps the stored
+/// dimension and chunk and skips identities with no stored live row.
+pub(crate) fn entity_tombstone(
+    uuid: uuid::Uuid,
+    tick: u64,
+) -> mc_world::native::NativeEntitySnapshot {
+    mc_world::native::NativeEntitySnapshot {
+        identity: *uuid.as_bytes(),
+        dimension: 0,
+        position: mc_world::ChunkPos { x: 0, z: 0 },
+        generated_slot: None,
+        journal_lsn: tick,
+        payload: None,
+    }
+}
+
 /// Build the immutable configured generator without reading or publishing world metadata.
 pub(crate) fn generator(
     config: &CoreConfig,

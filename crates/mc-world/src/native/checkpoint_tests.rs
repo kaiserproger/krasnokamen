@@ -445,7 +445,19 @@ fn native_checkpoint_unbounded_membership_same_tick_and_stale_replay() {
         store.entity(entities[0].identity).unwrap().unwrap().payload,
         changed[0].payload
     );
-    commit(&store, 2, 1, &globals(2), &changed[..1], &[]).unwrap();
+    // Only an explicit tombstone deletes; unlisted rows stay as stored.
+    let mut tombstone = entities[1].clone();
+    tombstone.payload = None;
+    tombstone.journal_lsn = 2;
+    commit(
+        &store,
+        2,
+        1,
+        &globals(2),
+        &[changed[0].clone(), tombstone],
+        &[],
+    )
+    .unwrap();
     assert!(
         store
             .entity(entities[1].identity)
@@ -453,6 +465,11 @@ fn native_checkpoint_unbounded_membership_same_tick_and_stale_replay() {
             .unwrap()
             .payload
             .is_none()
+    );
+    let kept = store.entity(entities[2].identity).unwrap().unwrap();
+    assert_eq!(
+        (kept.payload, kept.journal_lsn),
+        (entities[2].payload.clone(), 1)
     );
     assert!(commit(&store, 3, 2, &globals(3), &entities, &[]).is_err());
 }
@@ -947,7 +964,7 @@ fn native_noop_checkpoint_keeps_stored_chunk_and_entity_bytes() {
         store.entity([7; 16]).unwrap().unwrap().payload,
         changed_entity.payload
     );
-    // Omitted entity still tombstones; stale replay cannot undo the checkpoint.
+    // An unlisted row stays as stored; only an explicit tombstone deletes it.
     store
         .commit_checkpoint(
             NativeCheckpoint {
@@ -962,15 +979,51 @@ fn native_noop_checkpoint_keeps_stored_chunk_and_entity_bytes() {
             &items,
         )
         .unwrap();
-    assert!(store.entity([7; 16]).unwrap().unwrap().payload.is_none());
-    assert!(commit(&store, 12, 11, &globals(12), &[entity], &[]).is_err());
+    assert_eq!(
+        store.entity([7; 16]).unwrap().unwrap().payload,
+        changed_entity.payload
+    );
+    let tombstone = NativeEntitySnapshot {
+        dimension: 2,
+        position: ChunkPos { x: 99, z: 99 },
+        payload: None,
+        ..entity.clone()
+    };
+    commit(
+        &store,
+        12,
+        11,
+        &globals(12),
+        std::slice::from_ref(&tombstone),
+        &[],
+    )
+    .unwrap();
+    let stored = store.entity([7; 16]).unwrap().unwrap();
+    assert!(stored.payload.is_none());
+    assert_eq!(
+        (stored.dimension, stored.position, stored.journal_lsn),
+        (entity.dimension, entity.position, 12),
+        "a tombstone keeps the stored dimension and chunk"
+    );
+    // Tombstoning a deleted or never-stored identity writes nothing.
+    let counts = store.record_counts().unwrap();
+    let unknown = NativeEntitySnapshot {
+        identity: [8; 16],
+        ..tombstone.clone()
+    };
+    commit(&store, 13, 12, &globals(13), &[tombstone, unknown], &[]).unwrap();
+    assert_eq!(store.record_counts().unwrap(), counts);
+    assert!(store.entity([8; 16]).unwrap().is_none());
+    assert_eq!(store.entity([7; 16]).unwrap().unwrap().journal_lsn, 12);
+    // Stale replay cannot undo the checkpoint.
+    assert!(commit(&store, 14, 13, &globals(14), &[entity], &[]).is_err());
     let mut offline = changed.clone();
     offline.set_block(4, 64, 4, stone).unwrap();
     assert_eq!(
         store
             .apply_offline_snapshot(0, &base, &mut offline, &blocks, &items)
             .unwrap(),
-        12,
+        14,
         "offline edits advance past the global floor, not a retained row stamp"
     );
 }

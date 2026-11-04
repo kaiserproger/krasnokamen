@@ -740,7 +740,7 @@ fn rain_wait_is_journaled_after_native_checkpoint_and_survives_anvil_export() {
     assert!(fishing.delay < 398);
     let recovered = crate::native_checkpoint::recover_offline(&config).unwrap();
     let native = &recovered.dimensions[&Dimension::Overworld].entities[&id.0];
-    assert_eq!(native.projectile.as_ref(), Some(&expected));
+    assert_eq!(native.projectile.as_deref(), Some(&expected));
     let (_, exported, _) = crate::core::checkpoint_data_for(&state, state.tick);
     let anvil = directory.path().join("anvil-entities");
     mc_world::anvil::write_entity_regions(

@@ -1058,7 +1058,7 @@ pub fn advance(state: &mut TickState) {
         // state. Only events that differ from that projection need custody.
         if row.appearance.arrow_count > 0 || row.appearance.stinger_count > 0 {
             let id = state.entities.body(slot).id;
-            let row = state.entities.row_mut_unmarked(slot);
+            let row = state.entities.row_mut_projected(slot);
             if crate::projectiles::embedded_projectiles::advance(row) {
                 state.appearance_changed.push(id);
                 let _ = state.entities.row_mut(slot);
@@ -1079,7 +1079,7 @@ pub fn advance(state: &mut TickState) {
             || (row.entity_life.child_ticks > 0 && !row.entity_life.age_lock.locked)
             || tadpole_clock
         {
-            let row = state.entities.row_mut_unmarked(slot);
+            let row = state.entities.row_mut_projected(slot);
             if tadpole_clock {
                 row.entity_life.age_lock.tadpole_age =
                     row.entity_life.age_lock.tadpole_age.saturating_add(1);

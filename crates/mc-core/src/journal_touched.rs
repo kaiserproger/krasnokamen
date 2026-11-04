@@ -361,18 +361,20 @@ fn chunk_position(state: &TickState, slot: EntitySlot) -> crate::boundary::Chunk
 /// Refresh the derived `brain_clock` flag, compare the villager with its
 /// projected image and queue a full image when they differ.
 fn villager_image(state: &mut TickState, slot: EntitySlot, tick: u64, full: &mut Vec<EntityId>) {
-    if state.entities.row(slot).villager.is_none() {
-        return;
-    }
-    let chunk = chunk_position(state, slot);
-    let body = *state.entities.body(slot);
-    // Derived flag, not an owner mutation: must not list the row as touched.
-    let row = state.entities.row_mut_unmarked(slot);
-    let clock = brain_clock(&body, row, state.world.is_active(chunk.x, chunk.z));
-    let Some(villager) = &mut row.villager else {
+    let Some(villager) = &state.entities.row(slot).villager else {
         return;
     };
-    villager.brain_clock = clock;
+    let chunk = chunk_position(state, slot);
+    let body = *state.entities.body(slot);
+    let row = state.entities.row(slot);
+    let clock = brain_clock(&body, row, state.world.is_active(chunk.x, chunk.z));
+    // Derived flag, not an owner mutation: must not list the row as touched.
+    // It is persisted, so only a changed value marks checkpoint custody.
+    if villager.brain_clock != clock {
+        let row = state.entities.row_mut_projected(slot);
+        row.villager.as_mut().unwrap().brain_clock = clock;
+    }
+    let villager = state.entities.row(slot).villager.as_deref().unwrap();
     if let Some((from, old)) = state.journaled_villagers.get_mut(&body.id) {
         if let Some((start, end)) = state.world.simulation_interval(chunk, *from, tick) {
             crate::villager::persistence::advance_clocks(old, start, end);

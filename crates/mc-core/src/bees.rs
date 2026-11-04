@@ -50,12 +50,12 @@ impl BeeState {
 }
 pub(crate) fn deserialize<'de, D: serde::Deserializer<'de>>(
     d: D,
-) -> Result<Option<BeeState>, D::Error> {
+) -> Result<Option<Box<BeeState>>, D::Error> {
     let value = Option::<BeeState>::deserialize(d)?;
     if let Some(v) = &value {
         v.validate().map_err(serde::de::Error::custom)?;
     }
-    Ok(value)
+    Ok(value.map(Box::new))
 }
 
 pub(crate) mod position_serde {

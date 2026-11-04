@@ -182,6 +182,16 @@ pub struct EntityStore {
     touched_flag: Vec<bool>,
     touched: Vec<EntityId>,
     removed: Vec<EntityId>,
+    /// Checkpoint custody (ADR 0020): stamp of each slot's last write to state a
+    /// checkpoint record reads. Moves with the dense slot; never cleared.
+    changed_tick: Vec<u64>,
+    /// Tick of the latest checkpoint capture; writes stamp one above it.
+    captured_tick: u64,
+    /// Latest acknowledged (durable) checkpoint; stamps above it are dirty.
+    durable_tick: u64,
+    /// Non-player UUIDs that left this store, stamped like writes, until a
+    /// durable checkpoint covers them.
+    removal_log: Vec<(Uuid, u64)>,
     /// Non-authoritative per-slot motion flags for the entity phase.
     /// Refreshed sparsely from the dirty queue in `prepare_motion_hints`;
     /// every column compacts with the dense slot on remove/transfer.
@@ -422,6 +432,7 @@ impl EntityStore {
         if !self.bodies[index].alive {
             return None;
         }
+        self.mark_changed(index);
         let row = &mut self.cold[index];
         row.age = row.age.wrapping_add(1);
         Some(row.age)
@@ -442,27 +453,32 @@ impl EntityStore {
             index: usize,
             body: &Body,
             row: &mut ColdRow,
+            changed: &mut u64,
             admitted: u8,
+            stamp: u64,
             item_limit: u32,
         ) -> Option<EntitySlot> {
             if admitted == 0 || !body.alive {
                 return None;
             }
             row.age = row.age.wrapping_add(1);
+            *changed = stamp;
             (row.age >= item_limit && matches!(body.kind, EntityKind::Item { .. }))
                 .then_some(EntitySlot(index as u32))
         }
         debug_assert_eq!(admitted.len(), self.cold.len());
         debug_assert_eq!(self.bodies.len(), self.cold.len());
+        let stamp = self.captured_tick + 1;
         if self.cold.len() < min_parallel {
             return self
                 .cold
                 .iter_mut()
                 .zip(&self.bodies)
+                .zip(&mut self.changed_tick)
                 .zip(admitted)
                 .enumerate()
-                .filter_map(|(index, ((row, body), &admitted))| {
-                    step(index, body, row, admitted, item_limit)
+                .filter_map(|(index, (((row, body), changed), &admitted))| {
+                    step(index, body, row, changed, admitted, stamp, item_limit)
                 })
                 .collect();
         }
@@ -470,11 +486,12 @@ impl EntityStore {
         self.cold
             .par_iter_mut()
             .zip(self.bodies.par_iter())
+            .zip(self.changed_tick.par_iter_mut())
             .zip(admitted.par_iter())
             .with_min_len(2048)
             .enumerate()
-            .filter_map(|(index, ((row, body), &admitted))| {
-                step(index, body, row, admitted, item_limit)
+            .filter_map(|(index, (((row, body), changed), &admitted))| {
+                step(index, body, row, changed, admitted, stamp, item_limit)
             })
             .collect()
     }
@@ -491,6 +508,7 @@ impl EntityStore {
         if !self.bodies[index].alive {
             return None;
         }
+        let stamp = self.captured_tick + 1;
         let row = &mut self.cold[index];
         if row.controls.no_ai {
             return None;
@@ -499,12 +517,16 @@ impl EntityStore {
         if v.wandering || v.conversion_time.is_some() {
             return None;
         }
+        let before = (v.age, v.last_work, v.last_slept, v.panic_until);
         // Admission, not the last journal image, decides whether time runs.
         // Preserve the image flag so this does not create a gameplay mutation.
         let brain_clock = v.brain_clock;
         v.brain_clock = true;
         crate::villager::persistence::advance_clocks(v, from, to);
         v.brain_clock = brain_clock;
+        if (v.age, v.last_work, v.last_slept, v.panic_until) != before {
+            self.changed_tick[index] = stamp;
+        }
         Some(v.panic_until)
     }
 
@@ -631,6 +653,7 @@ impl EntityStore {
             last_player_hit: None,
         });
         self.touched_flag.push(true);
+        self.changed_tick.push(self.captured_tick + 1);
         debug_assert!(
             !self.wire_removed.contains(&id)
                 || self.wire_pending.iter().any(|(pending, _)| *pending == id),
@@ -671,6 +694,7 @@ impl EntityStore {
         debug_assert_eq!(self.impulse.len(), self.cold.len());
         let last = self.bodies.len() - 1;
         let removed_id = self.bodies[idx].id;
+        let kind = self.bodies[idx].kind;
         let removed_uuid = self.cold[idx].uuid;
         self.unindex_tick_members(slot, self.bodies[idx].kind);
         if idx != last {
@@ -705,6 +729,8 @@ impl EntityStore {
         self.flags.swap_remove(idx);
         self.hints.swap_remove(idx);
         self.dirty_flag.swap_remove(idx);
+        self.changed_tick.swap_remove(idx);
+        self.log_removal(kind, removed_uuid);
         self.removed.push(removed_id);
         self.id_index.remove(&removed_id);
         self.uuid_index.remove(&removed_uuid);
@@ -762,6 +788,8 @@ impl EntityStore {
         self.flags.swap_remove(index);
         self.hints.swap_remove(index);
         self.dirty_flag.swap_remove(index);
+        self.changed_tick.swap_remove(index);
+        self.log_removal(kind, uuid);
         self.removed.push(id);
         self.id_index.remove(&id);
         self.uuid_index.remove(&uuid);
@@ -792,6 +820,7 @@ impl EntityStore {
         destination.impulse.push(impulse);
         destination.cold.push(row);
         destination.touched_flag.push(true);
+        destination.changed_tick.push(destination.captured_tick + 1);
         destination
             .wire_marked
             .push(destination.wire_removed.contains(&id));
@@ -868,9 +897,13 @@ impl EntityStore {
             return;
         }
         let old = std::mem::replace(&mut row.uuid, uuid);
-        let id = self.bodies[slot.0 as usize].id;
+        let body = &self.bodies[slot.0 as usize];
+        let (id, kind) = (body.id, body.kind);
         self.uuid_index.remove(&old);
         self.uuid_index.insert(uuid, slot);
+        // The old identity leaves this store exactly like a removal.
+        self.log_removal(kind, old);
+        self.mark_changed(slot.0 as usize);
         self.entity_changed(id, false, slot);
     }
 
@@ -1009,6 +1042,7 @@ impl EntityStore {
         let index = slot.0 as usize;
         self.mark_motion_dirty(index);
         self.mark_touched(index);
+        self.mark_changed(index);
         let body = &self.bodies[index];
         self.entity_changed(body.id, self.cold[index].villager.is_some(), slot);
         &mut self.bodies[index]
@@ -1020,6 +1054,7 @@ impl EntityStore {
         let index = slot.0 as usize;
         self.mark_motion_dirty(index);
         self.mark_touched(index);
+        self.mark_changed(index);
         let body = &self.bodies[index];
         self.entity_changed(body.id, self.cold[index].villager.is_some(), slot);
         (&mut self.bodies[index], &mut self.cold[index])
@@ -1119,6 +1154,7 @@ impl EntityStore {
             return;
         }
         self.mark_touched(index);
+        self.mark_changed(index);
         let id = self.bodies[index].id;
         let row = &mut self.cold[index];
         row.no_action_time = no_action_time;
@@ -1130,7 +1166,12 @@ impl EntityStore {
     /// Egg countdowns are deterministic replay projections, not hint or wire
     /// inputs. The lifecycle owner separately marks initialization/reset events.
     pub(crate) fn set_harvest_ticks(&mut self, slot: EntitySlot, ticks: u32) {
-        self.cold[slot.0 as usize].entity_life.harvest_ticks = ticks;
+        let index = slot.0 as usize;
+        let life = &mut self.cold[index].entity_life;
+        if life.harvest_ticks != ticks {
+            life.harvest_ticks = ticks;
+            self.mark_changed(index);
+        }
     }
 
     /// Mutable row custody. Taking it marks the row touched for the journal:
@@ -1157,6 +1198,7 @@ impl EntityStore {
         }
         self.mark_motion_dirty(index);
         self.mark_touched(index);
+        self.mark_changed(index);
         let body = &self.bodies[index];
         self.entity_changed(body.id, self.cold[index].villager.is_some(), slot);
         &mut self.cold[index]
@@ -1174,11 +1216,115 @@ impl EntityStore {
         }
     }
 
+    /// Checkpoint custody only: the next capture rewrites this row.
+    #[inline]
+    fn mark_changed(&mut self, index: usize) {
+        self.changed_tick[index] = self.captured_tick + 1;
+    }
+
+    fn log_removal(&mut self, kind: EntityKind, uuid: Uuid) {
+        if !matches!(kind, EntityKind::Player { .. }) {
+            self.removal_log.push((uuid, self.captured_tick + 1));
+        }
+    }
+
+    /// Slots written since the durable checkpoint, ascending (ADR 0020 rule 1).
+    pub(crate) fn checkpoint_changed_slots(&self) -> impl Iterator<Item = EntitySlot> + '_ {
+        let durable = self.durable_tick;
+        self.changed_tick
+            .iter()
+            .enumerate()
+            .filter(move |(_, stamp)| **stamp > durable)
+            .map(|(index, _)| EntitySlot(index as u32))
+    }
+
+    /// Identities that left this store since the durable checkpoint; a UUID
+    /// may repeat and may have come back since.
+    pub(crate) fn checkpoint_removals(&self) -> impl Iterator<Item = Uuid> + '_ {
+        self.removal_log
+            .iter()
+            .filter(|(_, stamp)| *stamp > self.durable_tick)
+            .map(|(uuid, _)| *uuid)
+    }
+
+    pub(crate) fn durable_tick(&self) -> u64 {
+        self.durable_tick
+    }
+
+    /// A capture at `tick` has read every mark so far; later writes outrank it.
+    /// Nothing is cleared: a failed handoff or commit keeps full custody.
+    pub(crate) fn checkpoint_captured(&mut self, tick: u64) {
+        self.captured_tick = self.captured_tick.max(tick);
+    }
+
+    /// Checkpoint `tick` is durable. Marks are never cleared: rows written
+    /// after its capture keep their higher stamps, and a stale ACK is a no-op.
+    pub(crate) fn checkpoint_acknowledged(&mut self, tick: u64) {
+        self.durable_tick = self.durable_tick.max(tick);
+        self.removal_log.retain(|(_, stamp)| *stamp > tick);
+    }
+
+    /// Recovery: every restored row equals its stored row at the durable
+    /// manifest `tick`, except `changed` rows and `removed` identities, which
+    /// the WAL tail or a restore projection moved past it.
+    pub(crate) fn restore_checkpoint_custody(
+        &mut self,
+        tick: u64,
+        changed: &[EntityId],
+        removed: impl IntoIterator<Item = Uuid>,
+    ) {
+        self.captured_tick = tick;
+        self.durable_tick = tick;
+        self.changed_tick.fill(0);
+        self.removal_log.clear();
+        for &id in changed {
+            if let Some(slot) = self.slot_of_any(id) {
+                self.mark_changed(slot.0 as usize);
+            }
+        }
+        let stamp = tick + 1;
+        self.removal_log
+            .extend(removed.into_iter().map(|uuid| (uuid, stamp)));
+    }
+
+    /// Grow every per-slot column and identity index once for `additional`
+    /// rows, so recovery of a known population never doubles a column.
+    pub(crate) fn reserve(&mut self, additional: usize) {
+        self.pos.reserve(additional);
+        self.vel.reserve(additional);
+        self.impulse.reserve(additional);
+        self.rot.reserve(additional);
+        self.ground.reserve(additional);
+        self.bodies.reserve(additional);
+        self.cold.reserve(additional);
+        self.touched_flag.reserve(additional);
+        self.touched.reserve(additional);
+        self.changed_tick.reserve(additional);
+        self.flags.reserve(additional);
+        self.hints.reserve(additional);
+        self.dirty_flag.reserve(additional);
+        self.dirty_ids.reserve(additional);
+        self.wire_marked.reserve(additional);
+        self.wire_pending.reserve(additional);
+        self.id_index.reserve(additional);
+        self.uuid_index.reserve(additional);
+    }
+
     /// Internal transactional custody; callers must publish actual durable changes
     /// through `row_mut`, while cache-only/no-op updates remain unmarked.
     pub(crate) fn row_mut_unmarked(&mut self, slot: EntitySlot) -> &mut ColdRow {
         let index = slot.0 as usize;
         self.mark_motion_dirty(index);
+        &mut self.cold[index]
+    }
+
+    /// Persisted fields whose WAL image is a replay projection (lifecycle
+    /// clocks, fall distance, derived flags): no journal or wire mark, but the
+    /// stored checkpoint row is stale, so checkpoint custody marks it.
+    pub(crate) fn row_mut_projected(&mut self, slot: EntitySlot) -> &mut ColdRow {
+        let index = slot.0 as usize;
+        self.mark_motion_dirty(index);
+        self.mark_changed(index);
         &mut self.cold[index]
     }
 
@@ -1208,6 +1354,9 @@ impl EntityStore {
                 self.impulse[index] = horizontal_impulse;
             } else {
                 self.mark_motion_dirty(index);
+                if self.bodies[index].pickup_delay != pickup_delay {
+                    self.mark_changed(index);
+                }
                 self.bodies[index].pickup_delay = pickup_delay;
                 self.bodies[index].attack_cooldown = attack_cooldown;
                 self.impulse[index] = horizontal_impulse;
@@ -1256,6 +1405,9 @@ impl EntityStore {
             if air_changed {
                 self.mark_touched(index);
             }
+        }
+        if motion_changed || wire {
+            self.mark_changed(index);
         }
         if air_changed || wire {
             let body = &self.bodies[index];
@@ -1318,6 +1470,7 @@ impl EntityStore {
             self.reindex_moved_body(slot, old, pos);
         }
         self.pos[index] = pos;
+        self.mark_changed(index);
         self.entity_changed(self.bodies[index].id, false, slot);
     }
 
@@ -1335,6 +1488,7 @@ impl EntityStore {
         let index = slot.0 as usize;
         if self.vel[index] != vel {
             self.vel[index] = vel;
+            self.mark_changed(index);
             self.entity_changed(self.bodies[index].id, false, slot);
         }
     }
@@ -1350,6 +1504,7 @@ impl EntityStore {
         let next = [yaw, pitch, yaw];
         if self.rot[index] != next {
             self.rot[index] = next;
+            self.mark_changed(index);
             self.entity_changed(self.bodies[index].id, false, slot);
         }
     }
@@ -1364,6 +1519,7 @@ impl EntityStore {
         let index = slot.0 as usize;
         if self.ground[index] != ground {
             self.ground[index] = ground;
+            self.mark_changed(index);
             self.entity_changed(self.bodies[index].id, false, slot);
         }
     }

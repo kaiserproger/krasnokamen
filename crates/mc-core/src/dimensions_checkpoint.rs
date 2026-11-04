@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(crate) struct Capture {
     pub regions: crate::world::ChunkCapture,
     pub players: Vec<CheckpointPlayerData>,
+    /// Entity rows whose stored record may be stale (ADR 0020).
     pub entities: BTreeMap<(i32, i32), mc_world::anvil::EntityChunk>,
     pub spawn: [i32; 3],
     pub rotation: [f32; 2],
@@ -34,7 +35,8 @@ pub(crate) fn capture(state: &mut TickState, tick: u64) -> BTreeMap<Dimension, C
         .other_dimensions
         .iter_mut()
         .map(|(&dimension, world)| {
-            let (players, entities, block_entities) = crate::core::checkpoint_data_for(world, tick);
+            let (players, entities, block_entities) =
+                crate::core::changed_checkpoint_data_for(world, tick);
             crate::campfire::checkpoint(world);
             crate::bees::checkpoint(world);
             crate::jukebox::checkpoint(world);
@@ -113,12 +115,13 @@ pub(crate) fn images(
     manifests
 }
 
-pub(crate) fn acknowledge(state: &mut TickState, acks: BTreeMap<Dimension, Ack>) {
+pub(crate) fn acknowledge(state: &mut TickState, tick: u64, acks: BTreeMap<Dimension, Ack>) {
     for (dimension, ack) in acks {
         if let Some(world) = state.other_dimensions.get_mut(&dimension) {
             world.world.mark_flushed(&ack.written);
             world.block_ticks.acknowledge_flushed(&ack.block_ticks);
             world.fluid_ticks.acknowledge_flushed(&ack.fluid_ticks);
+            world.entities.checkpoint_acknowledged(tick);
         }
     }
 }

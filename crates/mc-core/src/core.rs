@@ -155,7 +155,9 @@ pub struct RemoteTicket {
     pub budget_chunks: usize,
 }
 /// Only a completed checkpoint may acknowledge the captured queue tombstones.
+/// The tick is the durable fence entity custody advances to (ADR 0020).
 type CheckpointAck = Option<(
+    u64,
     Vec<(crate::boundary::ChunkPos, u64)>,
     crate::block_ticks::BlockTicksImage,
     crate::fluids::FluidTicksImage,
@@ -1217,6 +1219,10 @@ fn surface_height(world: &ChunkWorld, air: u32, x: f64, z: f64) -> f64 {
 #[cfg(test)]
 #[path = "native_checkpoint_crash_tests.rs"]
 mod native_checkpoint_crash_tests;
+
+#[cfg(test)]
+#[path = "core_checkpoint_custody_tests.rs"]
+mod checkpoint_custody_tests;
 
 #[cfg(test)]
 #[path = "native_component_26_3_tests.rs"]

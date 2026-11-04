@@ -439,9 +439,18 @@ fn state_heap(state: &EntityStateImage) -> usize {
         })
         + boxed_item_heap(&state.loot.body_armor)
         + boxed_item_heap(&state.loot.saddle)
-        + state.special_mob.as_ref().map_or(0, retained_heap)
-        + state.allay.as_ref().map_or(0, |allay| {
-            item_heap(&allay.held) + item_heap(&allay.inventory) + allay.note_dimension.capacity()
+        + state.special_mob.as_deref().map_or(0, |retained| {
+            std::mem::size_of::<crate::special_mobs::Retained>() + retained_heap(retained)
+        })
+        + state
+            .bee
+            .as_ref()
+            .map_or(0, |_| std::mem::size_of::<crate::bees::BeeState>())
+        + state.allay.as_deref().map_or(0, |allay| {
+            std::mem::size_of::<crate::allay::AllayState>()
+                + item_heap(&allay.held)
+                + item_heap(&allay.inventory)
+                + allay.note_dimension.capacity()
         })
 }
 

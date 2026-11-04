@@ -1,8 +1,9 @@
 # ADR 0020 - Entity checkpoints and reopen at one million entities
 
 **Date:** 2026-11-04  
-**Status:** Proposed, amended after committee review. Not implemented; ADR 0013
-"Durability" remains current until this is accepted and measured.  
+**Status:** Proposed, amended after committee review. Steps 1–2 implemented
+(2026-11-04, see Implementation); step 3 measurements pending, so not Accepted.
+ADR 0013 "Durability" now describes explicit entity tombstones.  
 **Parent contract:** [0013](0013-core-model-v2.md) (atomic native checkpoints, recovery).
 
 ## Problem
@@ -121,12 +122,16 @@ state without WAL marks. Each must set `changed_tick`:
 
 - **`entities.rs` methods:**
   - `advance_age` and `advance_admitted_ages` (420, 435);
-  - `advance_villager_clocks` (484) and `set_harvest_ticks` (1132);
+  - `advance_villager_clocks` (484), only when a projected clock moved, and
+    `set_harvest_ticks` (1132);
   - `set_motion_state` and `apply_motion_result` (1188–1268);
-  - `set_pos`, `set_vel`, `set_rot` and `set_ground` (1311–1370);
-  - `row_mut_unmarked` (1179), which still skips WAL and wire marks.
-- **`row_mut_unmarked` users:** lifecycle counters (`entity_life.rs`
-  1065–1138) and `FallDistance` (`mob_fall.rs` 29–83).
+  - `set_pos`, `set_vel`, `set_rot` and `set_ground` (1311–1370).
+- **Projection writers:** lifecycle counters and embedded-projectile timers
+  (`entity_life.rs` 1065–1138), `FallDistance` (`mob_fall.rs` 29–83) and a
+  changed villager `brain_clock` flag use `row_mut_projected`: no WAL or wire
+  mark, checkpoint mark only. `row_mut_unmarked` keeps its cache-only meaning
+  (allocator and door take/put-back) and marks nothing, or every resident
+  villager would be rewritten after each reopen.
 - **`spawn` then `set_uuid`** (`plugin_npcs.rs` 460–470): `set_uuid` logs the
   previous UUID as a removal.
 - **`remove` (665) and `transfer_to` (727–828):** log the UUID, move the mark
@@ -138,8 +143,10 @@ marks.
 
 **Reopen seeding.** The WAL fold drops a row, and its UUID, on `RemoveEntity`
 and on `Entity`/`EntityVitals` with `alive = false` (`journal/replay.rs`
-881–883, 935–947). So the fold must record `(uuid, tick)` before dropping. It
-also lists rows that got a tail post-image or a non-zero clock projection.
+881–883, 935–947). So the fold must record `(uuid, tick)` before dropping. An
+`Entity` post-image whose UUID differs from the record it replaces (`set_uuid`)
+retires the old UUID the same way. The fold also lists rows that got a tail
+post-image or a non-zero clock projection.
 `advance_replay_clocks` (987–1007) restamps every record's tick, so the tick
 alone cannot identify them.
 
@@ -176,6 +183,35 @@ fallback is pre-accepted.
    materialized capture. Update "full entity membership/tombstones" in 0013.
 3. **Proof**, as below, then mark this ADR Accepted. Revisit A only if dirty
    sets from real play exceed the checkpoint budget.
+
+## Implementation (2026-11-04, steps 1–2)
+
+- Replay records box villager, projectile, special-mob, bee and allay state;
+  recovery reserves the store columns to the replay population.
+- The live checkpoint captures `changed_tick > durable_tick` plus rules 2–3
+  (`core/capture.rs`); `checkpoint_data_for` remains the materialized capture
+  for offline conversion, Anvil export and tests. The writer tombstones only
+  explicit `payload: None` rows and skips identities without a live stored row.
+- The ACK carries its tick; `checkpoint_acknowledged` advances `durable_tick`
+  and prunes the removal log. Recovery seeds marks and removals from the fold.
+- Oracle: `core::checkpoint_custody_tests` (`checkpoint_presents_exactly_the_stale_rows`,
+  `custody_paths_reach_the_next_checkpoint`,
+  `capture_failures_and_stale_acks_keep_full_custody`,
+  `crash_after_commit_before_ack_reopens_at_the_fence`,
+  `tail_removal_and_transfer_survive_reopen_checkpoint_and_prune`,
+  `tail_rename_tombstones_the_stored_identity`,
+  `tail_rename_then_removal_cannot_resurrect_the_original`,
+  `pending_golem_deadline_is_rewritten_until_stored_expired`,
+  `raider_leaving_its_raid_is_rewritten`,
+  `randomized_custody_matches_full_capture_at_every_fence`) and
+  `core::entity_state_persistence_tests::replay_entity_keeps_rare_state_out_of_line`.
+  Identity does not depend on capture: at every fence and reopen, the stored
+  and restored UUID sets must equal the `EntityStore` identity column. The
+  first stored set must also equal the UUIDs recorded at spawn. Dropping
+  `minecraft:zombie` from capture makes the oracle fail.
+  On ff783cce the idle-population and boxing assertions fail (all 8 rows
+  recaptured; inline `Option<VillagerState>` is 2,160 B). Without the rename
+  fold fix both rename tests fail: the original UUID stays stored.
 
 ## Proof
 

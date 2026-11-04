@@ -26,12 +26,12 @@ pub(crate) fn validate(value: &Retained) -> Result<(), &'static str> {
 }
 pub(crate) fn deserialize<'de, D: serde::Deserializer<'de>>(
     decoder: D,
-) -> Result<Option<Retained>, D::Error> {
+) -> Result<Option<Box<Retained>>, D::Error> {
     let value = Option::<Retained>::deserialize(decoder)?;
     if let Some(value) = &value {
         validate(value).map_err(serde::de::Error::custom)?;
     }
-    Ok(value)
+    Ok(value.map(Box::new))
 }
 pub(crate) fn uuid_tag(uuid: uuid::Uuid) -> Tag {
     Tag::IntArray(

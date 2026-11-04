@@ -89,7 +89,7 @@ fn restore(state: &mut TickState, id: EntityId) {
         active_effects: row.active_effects.clone(),
         villager: None,
         state: EntityStateImage::from_row(state.entities.body(slot), row),
-        projectile: row.projectile.as_deref().cloned(),
+        projectile: row.projectile.clone(),
         tick: state.tick,
     };
     let bytes = serde_json::to_vec(&record).unwrap();
@@ -730,8 +730,8 @@ fn retained_checkpoint_projection_and_corruption_fail_closed() {
         .unwrap();
     let image = EntityStateImage::from_record(&state.registry, native).unwrap();
     assert_eq!(
-        image.special_mob,
-        Some(Retained::Wither { invulnerable: 127 })
+        image.special_mob.as_deref(),
+        Some(&Retained::Wither { invulnerable: 127 })
     );
     let mut corrupt = native.clone();
     corrupt
@@ -1083,7 +1083,7 @@ fn every_retained_special_variant_round_trips_real_checkpoint_fields() {
             .find(|entity| entity.uuid == uuid)
             .unwrap();
         let image = EntityStateImage::from_record(&state.registry, entity).unwrap();
-        assert_eq!(image.special_mob, Some(value), "{name}");
+        assert_eq!(image.special_mob.as_deref(), Some(&value), "{name}");
         if name == "evoker_fangs" {
             for (key, tag, diagnostic) in [
                 ("Warmup", mc_nbt::Tag::Int(-2), "Fangs"),
@@ -1394,7 +1394,7 @@ fn no_ai_keeps_witch_drink_and_retained_checkpoint_state_without_population_depe
             .unwrap();
         let image = EntityStateImage::from_record(&state.registry, native).unwrap();
         assert!(image.controls.no_ai);
-        assert_eq!(image.special_mob, retained);
+        assert_eq!(image.special_mob.as_deref(), retained.as_ref());
         assert_eq!(state.hostile.native.attacks[&witch].drink, old.drink);
         assert_eq!(state.hostile.native.attacks[&witch].deadline, old.deadline);
         restore(&mut state, witch);

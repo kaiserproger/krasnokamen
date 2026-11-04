@@ -608,7 +608,10 @@ fn barter_start_remainder_and_payout_survive_checkpoint_plus_disk_wal_restart() 
         )
         .unwrap();
         let replay = &mid.dimensions[&Dimension::Overworld];
-        assert_eq!(replay.entities[&piglin.0].state.special_mob, pending);
+        assert_eq!(
+            replay.entities[&piglin.0].state.special_mob.as_deref(),
+            pending.as_ref()
+        );
         if let Some(item) = payment {
             assert_eq!(replay.entities[&item.0].item.as_ref().unwrap().count, 1);
         } else {

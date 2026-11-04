@@ -13,7 +13,10 @@ pub(super) struct CheckpointJob {
     >,
     pub(super) regions: crate::world::ChunkCapture,
     pub(super) players: Vec<CheckpointPlayerData>,
+    /// Entity rows whose stored record may be stale (ADR 0020), not the image.
     pub(super) entities: std::collections::BTreeMap<(i32, i32), mc_world::anvil::EntityChunk>,
+    /// Identities removed since the durable checkpoint and live in no dimension.
+    pub(super) tombstones: Vec<uuid::Uuid>,
     pub(super) items: std::sync::Arc<mc_data::items::ItemRegistry>,
     pub(super) world_spawn: [i32; 3],
     pub(super) world_spawn_rotation: [f32; 2],
@@ -47,8 +50,8 @@ pub(super) struct CheckpointJob {
     pub(super) reply: Option<std::sync::mpsc::Sender<bool>>,
 }
 
-/// Freeze checkpoint `tick` (dirty chunks by `Arc`, player/entity/block-
-/// entity records by value) and hand it to the journal thread, which
+/// Freeze checkpoint `tick` (dirty chunks by `Arc`, player/block-entity and
+/// changed entity records by value) and hand it to the journal thread, which
 /// writes it in write-ahead order (see [`write_checkpoint`]). Returns
 /// whether a job was sent; queue admission blocks only while the bounded
 /// journal queue is full, and never waits for the disk write itself.
@@ -69,7 +72,13 @@ pub(super) fn start_checkpoint_with_reply(
     reply: Option<std::sync::mpsc::Sender<bool>>,
 ) -> bool {
     let capture_start = std::time::Instant::now();
-    let (players, entities, block_entities) = checkpoint_data_for(state, tick);
+    // Writes from here on stamp above `tick`, so whatever this capture misses
+    // stays dirty after its acknowledgement (ADR 0020).
+    state.entities.checkpoint_captured(tick);
+    for world in state.other_dimensions.values_mut() {
+        world.entities.checkpoint_captured(tick);
+    }
+    let (players, entities, block_entities) = changed_checkpoint_data_for(state, tick);
     let data_time = capture_start.elapsed();
     crate::campfire::checkpoint(state);
     crate::bees::checkpoint(state);
@@ -95,6 +104,7 @@ pub(super) fn start_checkpoint_with_reply(
         .capture_scheduled_fluid_ticks(&mut regions, absent_fluid_ticks);
     let absent_time = capture_start.elapsed();
     let dimensions = crate::dimensions::checkpoint::capture(state, tick);
+    let tombstones = checkpoint_tombstones(state);
     let dimensions_time = capture_start.elapsed();
     if regions.load_error().is_some()
         || dimensions
@@ -118,6 +128,7 @@ pub(super) fn start_checkpoint_with_reply(
         regions,
         players,
         entities,
+        tombstones,
         items: std::sync::Arc::clone(&state.registry.items),
         world_spawn: state.world.world_spawn(),
         world_spawn_rotation: state.world.world_spawn_rotation(),
@@ -803,6 +814,7 @@ pub(super) fn run_native_work(
                 }
             }
             let CheckpointJob {
+                tick,
                 block_ticks,
                 fluid_ticks,
                 dimensions,
@@ -826,7 +838,7 @@ pub(super) fn run_native_work(
                         )
                     })
                     .collect();
-                (written, block_ticks, fluid_ticks, dimensions)
+                (tick, written, block_ticks, fluid_ticks, dimensions)
             });
             let _ = done.send(ack);
             if let Some(reply) = reply {
@@ -1016,6 +1028,11 @@ pub(super) fn commit_checkpoint(
         .flat_map(|(dimension, chunks)| {
             crate::native_checkpoint::entity_snapshots(dimension, chunks, &job.items, job.tick)
         })
+        .chain(
+            job.tombstones
+                .iter()
+                .map(|&uuid| Ok(crate::native_checkpoint::entity_tombstone(uuid, job.tick))),
+        )
         .map(|entity| entity.map_err(|e| mc_world::native::NativeError::Source(e.to_string())));
     let store = job
         .regions

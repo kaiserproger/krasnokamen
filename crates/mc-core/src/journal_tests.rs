@@ -1138,7 +1138,7 @@ fn villager_checkpoint_and_wal_recover_absolute_conversion_custody_and_memories(
             item: None,
             appearance: Default::default(),
             active_effects: Default::default(),
-            villager: Some(checkpoint),
+            villager: Some(Box::new(checkpoint)),
             state: Default::default(),
             projectile: None,
             tick: 100,
@@ -1181,7 +1181,7 @@ fn villager_checkpoint_and_wal_recover_absolute_conversion_custody_and_memories(
     );
     latest.conversion_time = Some(320);
     let recovered = &replay.entities[&7];
-    assert_eq!(recovered.villager.as_ref(), Some(&latest));
+    assert_eq!(recovered.villager.as_deref(), Some(&latest));
     assert_eq!(recovered.health, 18.0);
     assert_eq!(
         recovered.pos, native.pos,

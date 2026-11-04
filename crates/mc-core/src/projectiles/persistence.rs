@@ -626,22 +626,26 @@ pub(crate) fn from_entity(
 }
 
 /// Rebase vanilla clouds (which save age, not absolute deadlines) exactly once.
-/// Native retained clocks already refer to the restored journal tick.
-pub(crate) fn restore_clock(state: &mut ProjectileState, tick: u64) {
-    if let ProjectileData::Cloud(cloud) = &mut state.data
-        && cloud.expires_tick == 0
-    {
-        cloud.expires_tick = if cloud.duration == u32::MAX {
-            u64::MAX
-        } else {
-            tick.saturating_add(
-                u64::from(cloud.duration)
-                    .saturating_add(u64::from(cloud.wait_time))
-                    .saturating_sub(u64::from(state.age)),
-            )
-        };
-        cloud.next_tick = tick.saturating_add(u64::from(cloud.wait_time.saturating_sub(state.age)));
+/// Native retained clocks already refer to the restored journal tick. Returns
+/// whether it rebased, i.e. the restored state no longer equals the stored one.
+pub(crate) fn restore_clock(state: &mut ProjectileState, tick: u64) -> bool {
+    let ProjectileData::Cloud(cloud) = &mut state.data else {
+        return false;
+    };
+    if cloud.expires_tick != 0 {
+        return false;
     }
+    cloud.expires_tick = if cloud.duration == u32::MAX {
+        u64::MAX
+    } else {
+        tick.saturating_add(
+            u64::from(cloud.duration)
+                .saturating_add(u64::from(cloud.wait_time))
+                .saturating_sub(u64::from(state.age)),
+        )
+    };
+    cloud.next_tick = tick.saturating_add(u64::from(cloud.wait_time.saturating_sub(state.age)));
+    true
 }
 
 #[cfg(test)]

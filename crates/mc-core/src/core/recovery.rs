@@ -233,13 +233,36 @@ pub(super) fn load_dimension_state(
         tick_state.offline_players.insert(uuid, player.clone());
     }
     let mut max_wire_id: i32 = 0;
+    // One growth for the known population: doubling the cold columns while the
+    // replay map still holds its tail would raise the reopen peak.
+    tick_state.entities.reserve(replay.entities.len());
+    let mut changed = Vec::new();
     // Drain the replay owner as live rows are restored: retaining both complete
     // populations multiplies peak memory during cold-column growth.
     for (id, record) in replay.entities {
         max_wire_id = max_wire_id.max(id);
         crate::vehicles::validate_replay(&registry, &record)?;
-        restore_entity(&mut tick_state, id, &record)?;
+        if restore_entity(&mut tick_state, id, &record)? || replay.entity_changes.contains(&id) {
+            changed.push(EntityId(id));
+        }
     }
+    // Restored rows equal their stored rows at the manifest tick, except what
+    // the WAL tail or a restore projection changed (ADR 0020).
+    let removed = replay
+        .entity_removals
+        .iter()
+        .map(|uuid| {
+            uuid.parse::<uuid::Uuid>().map_err(|error| {
+                CoreError::Storage(format!(
+                    "{}: removed entity UUID {uuid}: {error}",
+                    dimension.name()
+                ))
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    tick_state
+        .entities
+        .restore_checkpoint_custody(manifest_tick, &changed, removed);
     for (pos, record) in &replay.block_entities {
         tick_state
             .block_entities
@@ -426,12 +449,13 @@ pub(crate) fn recover_tick_state(
     Ok((tick_state, root_manifest, salt_minted))
 }
 
-/// Restore one journaled entity record.
+/// Restore one journaled entity record. Returns whether restore rebased a
+/// tick-relative clock, so the row no longer equals its stored record.
 pub(crate) fn restore_entity(
     state: &mut TickState,
     id: i32,
     record: &crate::journal::ReplayEntity,
-) -> Result<(), CoreError> {
+) -> Result<bool, CoreError> {
     let entity_id = EntityId(id);
     let uuid = crate::dimensions::recovery::validate_entity(state, id, record)?;
     state.entities.set_next_wire_id(id);
@@ -516,6 +540,7 @@ pub(crate) fn restore_entity(
             attack_reach: reach,
         },
     );
+    let mut rebased = false;
     if let Some(slot) = state.entities.slot_of(entity_id) {
         let baby = record.appearance.baby
             || (record.state.entity_life.child_ticks != 0
@@ -536,7 +561,7 @@ pub(crate) fn restore_entity(
         row.age = record.age;
         row.protected_until = record.state.protected_until;
         row.active_effects = record.active_effects.clone();
-        row.villager = record.villager.clone().map(Box::new);
+        row.villager = record.villager.clone();
         row.persistent = record.state.persistent;
         row.no_action_time = record.state.no_action_time;
         body.air_supply = record.state.air_supply;
@@ -546,9 +571,9 @@ pub(crate) fn restore_entity(
         row.controls = record.state.controls;
         row.falling = record.state.falling;
         row.tnt = record.state.tnt;
-        row.special_mob = record.state.special_mob.clone().map(Box::new);
-        row.bee = record.state.bee.clone().map(Box::new);
-        row.allay = record.state.allay.clone().map(Box::new);
+        row.special_mob = record.state.special_mob.clone();
+        row.bee = record.state.bee.clone();
+        row.allay = record.state.allay.clone();
         row.opaque_entity_fields = record.state.opaque_entity_fields.clone();
         crate::entity_life::restore_appearance(body, row);
         if body.burn_ticks != 0 {
@@ -593,13 +618,13 @@ pub(crate) fn restore_entity(
                     *index == crate::projectiles::ARROW_IN_GROUND_INDEX
                         && matches!(value, crate::journal::EntityDataValueImage::Boolean(true))
                 });
-                projectile = Some(migrated);
+                projectile = Some(Box::new(migrated));
             }
         }
         if let Some(projectile) = &mut projectile {
-            crate::projectiles::persistence::restore_clock(projectile, state.tick);
+            rebased = crate::projectiles::persistence::restore_clock(projectile, state.tick);
         }
-        state.entities.row_mut(slot).projectile = projectile.map(Box::new);
+        state.entities.row_mut(slot).projectile = projectile;
         crate::villager::sync_appearance(state, slot);
         let pos = state.entities.pos(slot);
         let chunk = crate::boundary::ChunkPos {
@@ -630,7 +655,7 @@ pub(crate) fn restore_entity(
             );
         }
     }
-    Ok(())
+    Ok(rebased)
 }
 
 /// Restore an [`EntityAppearance`] from its journal image.

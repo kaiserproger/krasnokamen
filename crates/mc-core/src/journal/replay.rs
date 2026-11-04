@@ -17,6 +17,11 @@ pub struct Replay {
     pub opaque_block_entities: BTreeMap<(i32, i32, i32), Option<Vec<u8>>>,
     /// Entity post-images by wire id.
     pub entities: BTreeMap<i32, ReplayEntity>,
+    /// Wire ids whose record the WAL tail or a clock projection moved past its
+    /// stored checkpoint row; recovery marks them for the next checkpoint.
+    pub(crate) entity_changes: BTreeSet<i32>,
+    /// UUIDs of records the WAL tail removed; recovery logs them as removals.
+    pub(crate) entity_removals: Vec<String>,
     /// Ticket post-images by owner: centre, (tick, radius).
     pub tickets: BTreeMap<String, ([i32; 2], (u64, i32))>,
     /// Latest scoreboard image, including an empty-board reset.
@@ -113,12 +118,15 @@ impl ReplayChunkClock {
         });
     }
 
+    /// Advance `villager` over the active intervals of `from..to`; returns
+    /// whether any interval applied.
     pub(super) fn advance_villager(
         &self,
         villager: &mut crate::villager::VillagerState,
         from: u64,
         to: u64,
-    ) {
+    ) -> bool {
+        let mut advanced = false;
         for (index, point) in self.points.iter().enumerate() {
             if !point.active {
                 continue;
@@ -130,8 +138,10 @@ impl ReplayChunkClock {
                 .map_or(to, |next| to.min(next.tick.saturating_sub(1)));
             if start < end {
                 crate::villager::persistence::advance_clocks(villager, start, end);
+                advanced = true;
             }
         }
+        advanced
     }
 }
 
@@ -166,16 +176,16 @@ pub struct ReplayEntity {
     pub active_effects: crate::effects::ActiveEffects,
     #[serde(
         default,
-        deserialize_with = "crate::villager::persistence::deserialize_optional_state"
+        deserialize_with = "super::deserialize_optional_villager_image"
     )]
-    pub villager: Option<crate::villager::VillagerState>,
+    pub villager: Option<Box<crate::villager::VillagerState>>,
     #[serde(default)]
     pub state: EntityStateImage,
     #[serde(
         default,
-        deserialize_with = "crate::projectiles::persistence::deserialize_optional_state"
+        deserialize_with = "super::deserialize_optional_projectile_image"
     )]
-    pub projectile: Option<crate::projectiles::ProjectileState>,
+    pub projectile: Option<Box<crate::projectiles::ProjectileState>>,
     pub tick: u64,
 }
 
@@ -204,11 +214,11 @@ pub struct EntityStateImage {
     pub falling: Option<crate::falling::FallingState>,
     pub tnt: Option<crate::tnt::PrimedTntState>,
     #[serde(deserialize_with = "crate::special_mobs::persistence::deserialize")]
-    pub special_mob: Option<crate::special_mobs::Retained>,
+    pub special_mob: Option<Box<crate::special_mobs::Retained>>,
     #[serde(deserialize_with = "crate::bees::deserialize")]
-    pub bee: Option<crate::bees::BeeState>,
+    pub bee: Option<Box<crate::bees::BeeState>>,
     #[serde(deserialize_with = "crate::allay::deserialize")]
-    pub allay: Option<crate::allay::AllayState>,
+    pub allay: Option<Box<crate::allay::AllayState>>,
 }
 
 impl Default for EntityStateImage {
@@ -252,9 +262,9 @@ impl EntityStateImage {
             controls: row.controls,
             falling: row.falling,
             tnt: row.tnt,
-            special_mob: row.special_mob.as_deref().cloned(),
-            bee: row.bee.as_deref().cloned(),
-            allay: row.allay.as_deref().cloned(),
+            special_mob: row.special_mob.clone(),
+            bee: row.bee.clone(),
+            allay: row.allay.clone(),
         }
     }
 
@@ -325,9 +335,9 @@ impl EntityStateImage {
             && self.controls.journal_eq(&row.controls)
             && self.falling == row.falling
             && self.tnt == row.tnt
-            && self.special_mob.as_ref() == row.special_mob.as_deref()
-            && self.bee.as_ref() == row.bee.as_deref()
-            && self.allay.as_ref() == row.allay.as_deref()
+            && self.special_mob.as_deref() == row.special_mob.as_deref()
+            && self.bee.as_deref() == row.bee.as_deref()
+            && self.allay.as_deref() == row.allay.as_deref()
             && self.opaque_entity_fields == row.opaque_entity_fields
     }
 
@@ -360,9 +370,9 @@ impl EntityStateImage {
             loot: crate::entity_loot::from_fields(&record.extra_fields)?,
             falling: crate::falling::from_record(record, registry).map_err(CoreError::Storage)?,
             tnt: crate::tnt::from_record(registry, record)?,
-            special_mob: crate::special_mobs::persistence::from_record(record)?,
-            bee: crate::bees::from_record(record)?,
-            allay: crate::allay::from_record(&registry.items, record)?,
+            special_mob: crate::special_mobs::persistence::from_record(record)?.map(Box::new),
+            bee: crate::bees::from_record(record)?.map(Box::new),
+            allay: crate::allay::from_record(&registry.items, record)?.map(Box::new),
             ..Default::default()
         };
         crate::mounts::persistence::from_fields(&mut image.entity_life, &record.extra_fields)?;
@@ -851,7 +861,7 @@ pub(crate) fn apply_batch_images(
                                 None => (*spawn_pos, [0.0; 3], *spawn_yaw, *spawn_pitch, false),
                             }
                         };
-                        replay.entities.insert(
+                        let previous = replay.entities.insert(
                             *id,
                             ReplayEntity {
                                 uuid: uuid.clone(),
@@ -869,17 +879,26 @@ pub(crate) fn apply_batch_images(
                                 item: item.clone(),
                                 appearance: appearance.clone(),
                                 active_effects: active_effects.clone(),
-                                villager: villager.as_deref().cloned(),
+                                villager: villager.clone(),
                                 state: EntityStateImage {
                                     age: *age,
                                     ..state.as_ref().clone()
                                 },
-                                projectile: projectile.as_deref().cloned(),
+                                projectile: projectile.clone(),
                                 tick: *tick,
                             },
                         );
+                        // A post-image under another UUID (`set_uuid`) retires
+                        // the old identity like a removal; recovery's live-UUID
+                        // filter still keeps it if it is live elsewhere.
+                        if let Some(previous) = previous
+                            && previous.uuid != *uuid
+                        {
+                            replay.entity_removals.push(previous.uuid);
+                        }
+                        replay.entity_changes.insert(*id);
                     } else {
-                        replay.entities.remove(id);
+                        remove_replay_entity(&mut replay, *id);
                     }
                 }
                 JournalEntry::EntityState { id, state, tick } => {
@@ -898,6 +917,7 @@ pub(crate) fn apply_batch_images(
                         record.state = state.as_ref().clone();
                         record.breed_cooldown = state.breed_cooldown;
                         record.tick = *tick;
+                        replay.entity_changes.insert(*id);
                     }
                 }
                 JournalEntry::EntityVitals {
@@ -932,8 +952,9 @@ pub(crate) fn apply_batch_images(
                             record.health = *health;
                             record.appearance.health = *health;
                             record.tick = *tick;
+                            replay.entity_changes.insert(*id);
                         } else {
-                            replay.entities.remove(id);
+                            remove_replay_entity(&mut replay, *id);
                         }
                     }
                 }
@@ -943,7 +964,7 @@ pub(crate) fn apply_batch_images(
                         .get(id)
                         .is_none_or(|record| *tick >= record.tick)
                     {
-                        replay.entities.remove(id);
+                        remove_replay_entity(&mut replay, *id);
                     }
                 }
                 JournalEntry::Ticket {
@@ -983,9 +1004,17 @@ pub(crate) fn apply_batch_images(
     replay
 }
 
+/// Drop one record and log its UUID, so recovery can tombstone its stored row.
+fn remove_replay_entity(replay: &mut Replay, id: i32) {
+    if let Some(record) = replay.entities.remove(&id) {
+        replay.entity_changes.remove(&id);
+        replay.entity_removals.push(record.uuid);
+    }
+}
+
 /// Project each retained anchor once after the complete streamed tail is folded.
 pub(crate) fn advance_replay_clocks(replay: &mut Replay) {
-    for record in replay.entities.values_mut() {
+    for (&id, record) in &mut replay.entities {
         if record.tick < replay.tick {
             let clock = replay
                 .simulation_clocks
@@ -994,14 +1023,19 @@ pub(crate) fn advance_replay_clocks(replay: &mut Replay) {
             record
                 .state
                 .advance_clocks(record.type_id, record.appearance.baby, elapsed);
+            let mut villager_advanced = false;
             if let Some(villager) = &mut record.villager
                 && let Some(clock) = clock
             {
-                clock.advance_villager(villager, record.tick, replay.tick);
+                villager_advanced = clock.advance_villager(villager, record.tick, replay.tick);
             }
             record.breed_cooldown = record.state.breed_cooldown;
             record.age = record.age.wrapping_add(elapsed as u32);
             record.tick = replay.tick;
+            // A frozen row projects nothing and still equals its stored row.
+            if elapsed != 0 || villager_advanced {
+                replay.entity_changes.insert(id);
+            }
         }
         record.state.age = record.age;
     }

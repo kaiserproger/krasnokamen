@@ -72,7 +72,7 @@ fn full_restore(source: &TickState) -> TickState {
                 active_effects: row.active_effects.clone(),
                 villager: None,
                 state: crate::journal::EntityStateImage::from_row(source.entities.body(slot), row),
-                projectile: row.projectile.as_deref().cloned(),
+                projectile: row.projectile.clone(),
                 tick: source.tick,
             };
             crate::core::restore_entity(&mut target, id, &image).unwrap();

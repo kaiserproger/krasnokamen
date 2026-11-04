@@ -69,12 +69,7 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             .unwrap_or(0);
         while let Ok(written) = checkpoint_done_rx.try_recv() {
             checkpoint_in_flight = false;
-            if let Some((written, block_ticks, fluid_ticks, dimensions)) = written {
-                state.world.mark_flushed(&written);
-                state.block_ticks.acknowledge_flushed(&block_ticks);
-                state.fluid_ticks.acknowledge_flushed(&fluid_ticks);
-                crate::dimensions::checkpoint::acknowledge(&mut state, dimensions);
-            }
+            acknowledge_checkpoint(&mut state, written);
         }
         while let Ok(tick) = plugin_ack_rx.try_recv() {
             plugin_written_tick = plugin_written_tick.max(tick);
@@ -563,6 +558,18 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
     }
     if let Some(log) = channels.input_log.take() {
         log.finish(state.tick);
+    }
+}
+
+/// Apply one checkpoint outcome: only a durable commit clears the captured
+/// chunk/queue revisions and advances entity custody to its tick.
+pub(super) fn acknowledge_checkpoint(state: &mut TickState, ack: CheckpointAck) {
+    if let Some((tick, written, block_ticks, fluid_ticks, dimensions)) = ack {
+        state.world.mark_flushed(&written);
+        state.block_ticks.acknowledge_flushed(&block_ticks);
+        state.fluid_ticks.acknowledge_flushed(&fluid_ticks);
+        state.entities.checkpoint_acknowledged(tick);
+        crate::dimensions::checkpoint::acknowledge(state, tick, dimensions);
     }
 }
 

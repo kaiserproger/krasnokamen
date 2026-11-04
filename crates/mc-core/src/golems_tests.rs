@@ -276,7 +276,10 @@ fn player_created_flag_survives_checkpoint_fields_and_journal_replay() {
             .any(|(key, tag)| key == "PlayerCreated" && *tag == mc_nbt::Tag::Byte(1))
     );
     let image = EntityStateImage::from_record(&state.registry, record).unwrap();
-    assert_eq!(image.special_mob, Some(Retained::PlayerIronGolem));
+    assert_eq!(
+        image.special_mob.as_deref(),
+        Some(&Retained::PlayerIronGolem)
+    );
 
     // WAL: the spawn tick carries the flag, and replay is idempotent.
     let (output, _, _) = run_tick(&mut state, &[]);
@@ -288,13 +291,13 @@ fn player_created_flag_survives_checkpoint_fields_and_journal_replay() {
     let batches = read_complete_batches_after(&dir.join("journal"), 0).unwrap();
     let once = replay_batches(Replay::default(), &batches);
     assert_eq!(
-        once.entities[&id.0].state.special_mob,
-        Some(Retained::PlayerIronGolem)
+        once.entities[&id.0].state.special_mob.as_deref(),
+        Some(&Retained::PlayerIronGolem)
     );
     let twice = replay_batches(once, &batches);
     assert_eq!(
-        twice.entities[&id.0].state.special_mob,
-        Some(Retained::PlayerIronGolem)
+        twice.entities[&id.0].state.special_mob.as_deref(),
+        Some(&Retained::PlayerIronGolem)
     );
     std::fs::remove_dir_all(dir).unwrap();
 }

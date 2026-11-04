@@ -69,6 +69,31 @@ fn replay_record(state: &TickState, native: &mc_data::entity_nbt::VanillaEntity)
     }
 }
 
+/// ADR 0020 step 1: recovery holds the whole population in replay records, so
+/// rare state stays boxed there exactly as in `ColdRow`; a cow pays pointers.
+#[test]
+fn replay_entity_keeps_rare_state_out_of_line() {
+    let state = fixture();
+    let cow = mc_data::entity_nbt::VanillaEntity {
+        id: "minecraft:cow".into(),
+        ..Default::default()
+    };
+    let record = replay_record(&state, &cow);
+    let pointer = std::mem::size_of::<usize>();
+    for (field, size) in [
+        ("villager", std::mem::size_of_val(&record.villager)),
+        ("projectile", std::mem::size_of_val(&record.projectile)),
+        (
+            "special_mob",
+            std::mem::size_of_val(&record.state.special_mob),
+        ),
+        ("bee", std::mem::size_of_val(&record.state.bee)),
+        ("allay", std::mem::size_of_val(&record.state.allay)),
+    ] {
+        assert_eq!(size, pointer, "{field} is inline in every replay record");
+    }
+}
+
 #[test]
 fn mount_cargo_region_roundtrip_uses_current_custody_not_imported_items() {
     use mc_nbt::{ListTag, Tag, tag_type};
@@ -878,12 +903,12 @@ fn villager_clocks_survive_compact_state_vitals_and_staged_replay() {
     };
     let mut record = replay_record(&state, &native);
     record.tick = 100;
-    record.villager = Some(crate::villager::VillagerState {
+    record.villager = Some(Box::new(crate::villager::VillagerState {
         age: -200,
         activity: crate::villager::Activity::Work,
         last_work: 99,
         ..Default::default()
-    });
+    }));
     record.state.breed_cooldown = 200;
     let base = || Replay {
         tick: 100,

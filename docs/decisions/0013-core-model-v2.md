@@ -2278,12 +2278,14 @@ it disappears, so `/forceload remove` cannot be resurrected by a stale image.
   counter. Excluding the idle counter from equality is the primary growth fix,
   not a quota or a change to crash consistency of gameplay custody.
 - **Atomic native checkpoints.** The tick freezes immutable chunk/revision,
-  player/entity and root/child global images; the native writer thread owns DB
+  player, changed-entity and root/child global images; the native writer thread owns DB
   writes (the journal thread owns the WAL), with one checkpoint in flight. The
   journal thread gates durable WAL coverage (fsync) through capture
   tick `c` **before opening checkpoint writes**, then stage all participating
   bases, overlays, metadata, dictionary/applied watermarks, player UUID records,
-  full entity membership/tombstones, scoreboard and globals in **one Immediate
+  every entity row whose stored record may be stale plus explicit tombstones
+  ([ADR 0020](0020-entity-checkpoints-at-one-million.md): the store still holds
+  the full entity image at `c`), scoreboard and globals in **one Immediate
   redb transaction**. All dimensions share tick `c` and that commit; no separate
   chunk/entity commit may publish part of it. Only after durable commit does
   the writer publish committed tick `c`, ACK captured revisions/queue images,
@@ -4294,7 +4296,9 @@ Native checkpoint writers retain byte-identical chunk/entity rows and their
 per-row LSNs instead of restamping unchanged content. The admitted global
 checkpoint tick fences older WAL participants, including absent keys; offline
 edits advance from the maximum of that floor and the chunk's stored LSN.
-Omitted live entities still become new durable tombstones. Identical same-tick
+Entity rows are tombstoned only explicitly: the owner lists identities removed
+since the durable checkpoint that are live in no dimension, and an unlisted row
+stays as stored (ADR 0020). Identical same-tick
 global/player records are also retained rather than reinserted.
 The WAL gate accepts a save without new appends when its whole requested
 interval was already validated at recovery; it never invents a missing tick.
