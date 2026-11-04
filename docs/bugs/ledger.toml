@@ -2352,9 +2352,10 @@ title = "Closing inventory with occupied cursor leaves phantom client cursor"
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-craft-custody-next/REPORT.yaml"
-regression = []
+regression = ["cargo:mc-core:player::tests::close_publishes_cursor_clear_after_inventory_and_crafting_pickup"]
+failing_first = "reported"
 
 [[bug]]
 id = "HUNT-LEVITATION-REST"
@@ -2362,9 +2363,10 @@ title = "Resting active mob delays levitation during non-decision ticks"
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-player-survival-next/REPORT.yaml"
-regression = []
+regression = ["cargo:mc-core:tick::entity_phase::entity_phase_tests::far_resting_cow_levitates_on_non_decision_tick"]
+failing_first = "reported"
 
 [[bug]]
 id = "HUNT-BUCKET-WASH"
