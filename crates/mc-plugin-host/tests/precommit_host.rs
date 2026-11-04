@@ -188,24 +188,28 @@ async fn deny_fault(fault: &str, limits: PluginLimits) {
         Arc::new(NoSessions),
     )
     .expect("host starts");
-    let pending = host
-        .boundary()
-        .begin_precommit(damage(20.0))
-        .expect("question");
-    let mut approval = tokio::time::timeout(Duration::from_secs(10), pending.resolve())
-        .await
-        .expect("host answers")
-        .expect("chain answers");
-    assert_eq!(approval.consume(), Err(HookFailure::Cancelled));
-    let pending = host
-        .boundary()
-        .begin_precommit(damage(20.0))
-        .expect("a later action still asks the mandatory protection");
-    let mut approval = pending
-        .resolve()
-        .await
-        .expect("retired handler answers by policy");
-    assert_eq!(approval.consume(), Err(HookFailure::Cancelled));
+    // An expired question is also a refusal, but it may not have reached the
+    // guest at all. Require two timely cancellations: the first proves the
+    // fault was handled, the second that the retired handler still protects.
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let mut cancellations = 0;
+        while cancellations < 2 {
+            let pending = host
+                .boundary()
+                .begin_precommit(damage(20.0))
+                .expect("mandatory protection remains registered");
+            match pending.resolve().await {
+                Ok(mut approval) => {
+                    assert_eq!(approval.consume(), Err(HookFailure::Cancelled));
+                    cancellations += 1;
+                }
+                Err(HookFailure::Expired) => {}
+                Err(error) => panic!("unexpected precommit failure: {error}"),
+            }
+        }
+    })
+    .await
+    .expect("fault and retired handler answer by policy");
     host.stop();
 }
 
