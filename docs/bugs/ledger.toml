@@ -3385,3 +3385,13 @@ severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/Promote/validation/20261104T195352-native-v2-custody-mount-export-4di9p1dx/result.json"
 regression = []
+
+[[bug]]
+id = "NATIVE-MAP-MARKERS"
+title = "The native client receives correct map decorations (frame marker, off-map player) but draws none on a held map, so waypoints, banners and player markers are invisible."
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Promote gate 20261104T213104-native-v2-map-frame-waypoint-lhku9sjo (promotion-wire-receipts.json, screenshots/map-distant-held-clone.png)"
+regression = []
