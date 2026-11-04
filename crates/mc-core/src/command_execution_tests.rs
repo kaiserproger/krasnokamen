@@ -927,6 +927,26 @@ fn command_parity_sort_limit_options_and_typed_filters() {
     // An NBT predicate with a mismatched field admits nobody.
     let target = crate::commands::target_of("@e[nbt={Health:0.5f}]").unwrap();
     assert!(resolve_target(&state, alice, &target).is_empty());
+    let slot = state.entities.slot_of(cow).unwrap();
+    mc_nbt::write_named(
+        &mut state.entities.row_mut(slot).opaque_entity_fields,
+        "",
+        &mc_nbt::Tag::Compound(vec![("Silent".into(), mc_nbt::Tag::Byte(1))]),
+    )
+    .unwrap();
+    for (selector, expected) in [
+        ("@e[type=minecraft:cow,nbt={Silent:1b}]", true),
+        ("@e[type=minecraft:cow,nbt={Silent:0b}]", false),
+        ("@e[type=minecraft:cow,nbt=!{Silent:1b}]", false),
+        ("@e[type=minecraft:cow,nbt=!{Silent:0b}]", true),
+    ] {
+        let target = crate::commands::target_of(selector).unwrap();
+        assert_eq!(
+            resolve_target(&state, alice, &target).contains(&cow),
+            expected,
+            "{selector}"
+        );
+    }
     // advancements: flagged root=true admits only the granted player.
     state.players.get_mut(&alice).unwrap().advancement_progress =
         std::sync::Arc::new(serde_json::json!({

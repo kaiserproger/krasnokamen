@@ -1376,17 +1376,27 @@ fn hive_unbreaking_plan_refuses_break_without_spending_rng_and_admits_skip() {
 
 #[test]
 fn flowerless_bee_finds_wither_rose_and_rejects_waterlogged() {
-    // BEE-FLOWER-TABLE through the existing pollination search path
-    // (nearby + flower predicate): wither_rose attracts; waterlogged
-    // torchflower and tall upper halves do not.
     let mut state = state(None);
-    place(
-        &mut state,
-        BlockPos { x: 6, y: 201, z: 4 },
+    let pos = BlockPos { x: 6, y: 201, z: 4 };
+    for name in [
+        "minecraft:open_eyeblossom",
         "minecraft:wither_rose",
-    );
-    let found: Option<BlockPos> = nearby(&state, [4.5, 201.0, 4.5], flower);
-    assert_eq!(found, Some(BlockPos { x: 6, y: 201, z: 4 }));
+        "minecraft:mangrove_propagule",
+        "minecraft:chorus_flower",
+        "minecraft:spore_blossom",
+    ] {
+        place(&mut state, pos, name);
+        assert_eq!(
+            nearby_flower(&state, [4.5, 201.0, 4.5]),
+            Some(pos),
+            "{name}"
+        );
+    }
+    state
+        .world
+        .set_block(pos.x, pos.y, pos.z, state.registry.states.air);
+    state.world.fold_overlay();
+    assert_eq!(nearby_flower(&state, [4.5, 201.0, 4.5]), None);
 }
 
 #[test]
@@ -1409,14 +1419,13 @@ fn flower_rules_exclude_waterlogged_and_tall_upper() {
         .expect("waterlogged propagule state");
     state.world.set_block(2, 201, 4, propagule.0);
     state.world.fold_overlay();
-    assert!(!flower_at(&state, BlockPos { x: 2, y: 201, z: 4 }));
+    assert_eq!(nearby_flower(&state, [2.5, 201.0, 4.5]), None);
     let lilac = state.registry.blocks.by_name_and_props(
         &Identifier::parse("minecraft:lilac").unwrap(),
         &[("half".into(), "upper".into())],
     );
-    if let Some(lilac) = lilac {
-        state.world.set_block(4, 201, 6, lilac.0);
-        state.world.fold_overlay();
-        assert!(!flower_at(&state, BlockPos { x: 4, y: 201, z: 6 }));
-    }
+    let lilac = lilac.expect("upper lilac state");
+    state.world.set_block(4, 201, 6, lilac.0);
+    state.world.fold_overlay();
+    assert_eq!(nearby_flower(&state, [4.5, 201.0, 6.5]), None);
 }

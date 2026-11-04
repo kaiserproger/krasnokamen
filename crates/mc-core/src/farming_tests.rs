@@ -910,6 +910,56 @@ fn bone_meal_grows_azalea_and_fungi_but_rejects_wrong_soil() {
 }
 
 #[test]
+fn fungus_plans_include_normal_and_doubled_stems_with_wart_caps() {
+    let (mut state, _) = setup();
+    let soil = block(&state, "crimson_nylium", &[]);
+    let stem = block(&state, "crimson_stem", &[("axis", "y")]);
+    let wart = block(&state, "nether_wart_block", &[]);
+    let pos = BlockPos {
+        x: 0,
+        y: Y + 1,
+        z: 0,
+    };
+    put(&mut state, 0, Y, 0, soil);
+    plant(&mut state, 0, Y + 1, 0, "crimson_fungus", &[]);
+    let (mut normal, mut doubled) = (false, false);
+    for seed in 0..1000 {
+        let Some(plan) = crate::plants::bonemeal(&state, pos, seed) else {
+            continue;
+        };
+        let height = plan
+            .writes
+            .iter()
+            .filter(|(p, id)| p.x == pos.x && p.z == pos.z && *id == stem)
+            .count();
+        let mut roll = crate::farming::Roll::new(seed);
+        let base = 4 + roll.below(10) as usize;
+        let is_doubled = roll.below(12) == 0;
+        assert_eq!(height, base * if is_doubled { 2 } else { 1 }, "seed {seed}");
+        normal |= !is_doubled;
+        doubled |= is_doubled;
+        let brim = BlockPos {
+            x: pos.x + 3,
+            y: pos.y + height as i32 - 1,
+            z: pos.z,
+        };
+        let crown = BlockPos {
+            y: pos.y + height as i32 + 2,
+            ..pos
+        };
+        assert!(plan.writes.contains(&(brim, wart)), "wide wart brim");
+        assert!(plan.writes.contains(&(crown, wart)), "raised wart crown");
+        if normal && doubled {
+            break;
+        }
+    }
+    assert!(
+        normal && doubled,
+        "both ordinary and doubled fungus heights must be reachable"
+    );
+}
+
+#[test]
 fn flowering_azalea_and_warped_fungus_grow_with_bone_meal() {
     for (plant_name, soil, trunk) in [
         ("flowering_azalea", "dirt", "oak_log"),
@@ -1422,6 +1472,53 @@ fn dripstone_mid_column_tip_does_not_grow_but_top_tip_fills() {
     }
     panic!("dripstone never filled the lava cauldron");
 }
+#[test]
+fn water_fed_dripstone_growth_only_runs_at_column_start() {
+    let (mut state, _) = setup();
+    let top = block(
+        &state,
+        "pointed_dripstone",
+        &[
+            ("thickness", "frustum"),
+            ("vertical_direction", "down"),
+            ("waterlogged", "false"),
+        ],
+    );
+    let tip = block(
+        &state,
+        "pointed_dripstone",
+        &[
+            ("thickness", "tip"),
+            ("vertical_direction", "down"),
+            ("waterlogged", "false"),
+        ],
+    );
+    let cap = block(&state, "dripstone_block", &[]);
+    let water = state.registry.states.water_levels[0];
+    let start = BlockPos {
+        x: 0,
+        y: Y + 5,
+        z: -10,
+    };
+    let middle = BlockPos { y: Y + 4, ..start };
+    put(&mut state, 0, Y + 7, -10, water);
+    put(&mut state, 0, Y + 6, -10, cap);
+    put(&mut state, 0, Y + 5, -10, top);
+    put(&mut state, 0, Y + 4, -10, tip);
+    let mut positive = false;
+    for seed in 0..10_000 {
+        assert!(
+            crate::plants::random_growth(&state, middle, tip, seed).is_none(),
+            "mid-column seed {seed}"
+        );
+        positive |= crate::plants::random_growth(&state, start, top, seed)
+            .is_some_and(|plan| plan.writes.iter().any(|(pos, _)| pos.y == Y + 3));
+    }
+    assert!(
+        positive,
+        "the same water-fed column must grow from its start"
+    );
+}
 
 #[test]
 fn budding_amethyst_sprouts_buds_that_advance_to_clusters() {
@@ -1573,6 +1670,126 @@ fn dripstone_probability_boundaries_match_vanilla() {
 }
 
 #[test]
+fn placed_sniffer_egg_cracks_on_each_scheduled_boundary() {
+    for (moss, interval) in [(false, 8_000), (true, 4_000)] {
+        let (mut state, player) = setup();
+        state.gamerules.insert("spawn_mobs".into(), "false".into());
+        if moss {
+            let id = block(&state, "moss_block", &[]);
+            put(&mut state, 0, Y, -2, id);
+        }
+        near(&mut state, player, 0, Y + 1, -2);
+        give(&mut state, player, "sniffer_egg", 1);
+        use_on(&mut state, 0, Y, -2, 1);
+        let pos = BlockPos {
+            x: 0,
+            y: Y + 1,
+            z: -2,
+        };
+        let image = state.block_ticks.image();
+        let first = image
+            .chunks
+            .iter()
+            .flat_map(|chunk| &chunk.ticks)
+            .find(|tick| tick.pos == [pos.x, pos.y, pos.z])
+            .expect("placement schedules egg")
+            .trigger_tick;
+        assert_eq!(first, state.tick - 1 + interval);
+        for stage in 0..3 {
+            let deadline = first + stage * interval;
+            state.tick = deadline - 1;
+            run_tick(&mut state, &[]);
+            let expected = block(&state, "sniffer_egg", &[("hatch", &stage.to_string())]);
+            assert_eq!(
+                at(&state, pos.x, pos.y, pos.z),
+                expected,
+                "before edge {stage}"
+            );
+            let (output, _, _) = run_tick(&mut state, &[]);
+            if stage < 2 {
+                let next = block(
+                    &state,
+                    "sniffer_egg",
+                    &[("hatch", &(stage + 1).to_string())],
+                );
+                assert_eq!(at(&state, pos.x, pos.y, pos.z), next);
+                assert!(output.changes.entities_spawned.is_empty(), "no early birth");
+            } else {
+                assert_eq!(at(&state, pos.x, pos.y, pos.z), state.registry.states.air);
+                let babies: Vec<_> = output
+                    .changes
+                    .entities_spawned
+                    .iter()
+                    .filter_map(|id| state.entities.slot_of(*id))
+                    .collect();
+                assert_eq!(babies.len(), 1);
+                let slot = babies[0];
+                assert!(state.entities.row(slot).entity_life.child_ticks > 0);
+                let crate::entities::EntityKind::Mob { type_id } = state.entities.body(slot).kind
+                else {
+                    panic!("sniffer must be a mob")
+                };
+                assert_eq!(
+                    state.registry.blueprint(type_id).unwrap().name,
+                    "minecraft:sniffer"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn frogspawn_gameplay_write_schedules_and_hatches_at_deadline() {
+    let (mut state, _) = setup();
+    state.gamerules.insert("spawn_mobs".into(), "false".into());
+    let water = state.registry.states.water_levels[0];
+    put(&mut state, 0, Y, -2, water);
+    let start = state.tick;
+    run_tick(
+        &mut state,
+        &[PlayerInput::Command {
+            connection: ConnectionId(1),
+            command: format!("setblock 0 {} -2 minecraft:frogspawn", Y + 1),
+            permission_level: 4,
+        }],
+    );
+    let pos = BlockPos {
+        x: 0,
+        y: Y + 1,
+        z: -2,
+    };
+    let image = state.block_ticks.image();
+    let deadline = image
+        .chunks
+        .iter()
+        .flat_map(|chunk| &chunk.ticks)
+        .find(|tick| tick.pos == [pos.x, pos.y, pos.z])
+        .expect("gameplay write schedules frogspawn")
+        .trigger_tick;
+    assert!((start + 3_600..=start + 12_000).contains(&deadline));
+    state.tick = deadline - 1;
+    let (early, _, _) = run_tick(&mut state, &[]);
+    assert!(early.changes.entities_spawned.is_empty());
+    assert_eq!(
+        at(&state, pos.x, pos.y, pos.z),
+        block(&state, "frogspawn", &[])
+    );
+    let (output, _, _) = run_tick(&mut state, &[]);
+    assert_eq!(at(&state, pos.x, pos.y, pos.z), state.registry.states.air);
+    assert!((2..=5).contains(&output.changes.entities_spawned.len()));
+    for id in &output.changes.entities_spawned {
+        let slot = state.entities.slot_of(*id).unwrap();
+        let crate::entities::EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
+            panic!("tadpole must be a mob")
+        };
+        assert_eq!(
+            state.registry.blueprint(type_id).unwrap().name,
+            "minecraft:tadpole"
+        );
+    }
+}
+
+#[test]
 fn egg_scheduled_clocks_use_vanilla_delays() {
     let (mut state, _) = setup();
     let start = state.tick;
@@ -1634,7 +1851,8 @@ fn turtle_eggs_crack_at_night_into_baby_turtles() {
                 let row = state.entities.row(**slot);
                 let body = state.entities.body(**slot);
                 row.entity_life.child_ticks > 0
-                    && matches!(body.kind, crate::entities::EntityKind::Mob { .. })
+                    && matches!(body.kind, crate::entities::EntityKind::Mob { type_id }
+                        if state.registry.blueprint(type_id).is_some_and(|blueprint| blueprint.name == "minecraft:turtle"))
             })
             .count();
         if babies >= 2 {

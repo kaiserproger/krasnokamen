@@ -502,7 +502,7 @@ pub struct TickState {
     pub(crate) brewing: crate::brewing::BrewingStands,
     pub(crate) crafters: crate::crafter::Crafters,
     pub(crate) merge_shulker_placements: Vec<crate::shulker::Placement>,
-    pub(crate) merge_banner_placements: Vec<(BlockPos, u32, Vec<u8>)>,
+    pub(crate) merge_item_component_placements: Vec<(BlockPos, u32, Vec<u8>)>,
     pub(crate) vibrations: crate::vibration::Bus,
     pub(crate) sculk: crate::sculk::SculkState,
     pub(crate) trial_spawners: crate::trial_spawner::Spawners,
@@ -733,7 +733,7 @@ impl TickState {
             brewing: crate::brewing::BrewingStands::default(),
             crafters: crate::crafter::Crafters::default(),
             merge_shulker_placements: Vec::new(),
-            merge_banner_placements: Vec::new(),
+            merge_item_component_placements: Vec::new(),
             merge_command_block_entities: Vec::new(),
             vibrations: crate::vibration::Bus::default(),
             sculk: crate::sculk::SculkState::default(),
@@ -1505,7 +1505,7 @@ fn run_dimension_tick_inner<'a>(
     }
     crate::shulker::commit_placements(state);
     crate::block_entity_defaults::after_blocks(state, &block_writes);
-    crate::block_entity_defaults::commit_banners(state);
+    crate::block_entity_defaults::commit_item_components(state);
     crate::trial_spawner::after_blocks(state, &block_writes);
     crate::monster_spawner::after_blocks(state, &block_writes);
     crate::vault::after_blocks(state, &block_writes);

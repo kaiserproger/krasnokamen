@@ -336,7 +336,7 @@ title = "Shooting an occupied item frame with an ordinary arrow destroys both th
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-PROJECTILE-CONTENTS"
 regression = ["cargo:mc-core:item_frame::tests::arrow_ejects_display_without_destroying_frame"]
 failing_first = "not recorded"
@@ -1389,15 +1389,26 @@ regression = ["cargo:mc-core:command_execution::tests::command_parity_nearest_en
 failing_first = "reported"
 
 [[bug]]
+id = "SUMMON-NOGRAVITY-INVULNERABLE"
+title = "/summon rejects NoGravity:1b; simply admitting the tag would leave gravity active across native movement lanes. Invulnerable is already supported for ordinary mob summons."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "crates/mc-core/src/command_summon.rs"
+regression = []
+repro_check = "cargo:mc-core:command_summon::tests::summon_no_gravity_and_invulnerable_are_effective_and_persistent"
+
+[[bug]]
 id = "SELECTOR-OPTION-COVERAGE"
 title = "Java scores, tag, team, level, gamemode, x_rotation, y_rotation, nbt and advancements selector options are rejected or matched incorrectly."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-OPTION-COVERAGE"
 regression = ["cargo:mc-core:command_execution::tests::command_parity_sort_limit_options_and_typed_filters"]
-failing_first = "reported"
+failing_first = "not recorded"
 
 [[bug]]
 id = "SELECTOR-PREDICATE-UNSUPPORTED"
@@ -1470,9 +1481,9 @@ title = "Timed set/add rejected; no interpolation state to persist. Merge BORDER
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BORDER-LERP"
-regression = ["cargo:mc-core:command_border::tests::timed_set_interpolates_linearly_and_settles_exact", "cargo:mc-core:command_border::tests::checkpoint_and_fsynced_tail_keep_exact_border_and_reject_invalid_state", "cargo:mc-core:command_execution::tests::worldborder_commands_update_live_tick_state", "cargo:mc-edge:plan::plan_tests::world_border_init_changes_and_credit_deferral_use_vanilla_packet"]
+regression = ["cargo:mc-core:command_border::tests::timed_set_interpolates_linearly_and_settles_exact", "cargo:mc-core:command_border::tests::checkpoint_and_fsynced_tail_keep_exact_border_and_reject_invalid_state", "cargo:mc-core:command_execution::tests::worldborder_commands_update_live_tick_state", "cargo:mc-edge:plan::plan_tests::world_border_init_changes_and_credit_deferral_use_vanilla_packet", "cargo:mc-core:core::difficulty_persistence_tests::worldborder_command_mid_lerp_checkpoint_restores_and_finishes"]
 failing_first = "not recorded"
 
 [[bug]]
@@ -1705,9 +1716,9 @@ title = "Bees omitted 5 bee_attractive members + waterlogged/tall-half rules."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BEE-FLOWER-TABLE"
-regression = ["cargo:mc-core:bees::tests::flowerless_bee_finds_wither_rose_and_rejects_waterlogged"]
+regression = ["cargo:mc-core:bees::tests::flowerless_bee_finds_wither_rose_and_rejects_waterlogged", "cargo:mc-core:bees::tests::flower_rules_exclude_waterlogged_and_tall_upper"]
 failing_first = "not recorded"
 
 [[bug]]
@@ -1843,9 +1854,9 @@ title = "A down-pointed dripstone tip mid-column wrongly grows: candidate requir
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DRIPSTONE-MID-COLUMN-GROWTH"
-regression = ["cargo:mc-core:farming_tests::dripstone_mid_column_tip_does_not_grow_but_top_tip_fills"]
+regression = ["cargo:mc-core:farming_tests::dripstone_mid_column_tip_does_not_grow_but_top_tip_fills", "cargo:mc-core:farming_tests::water_fed_dripstone_growth_only_runs_at_column_start"]
 failing_first = "not recorded"
 
 [[bug]]
@@ -1854,9 +1865,9 @@ title = "Librarian book offers draw from a 35-entry hardcoded pool with flat pri
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LIBRARIAN-BOOK-POOL-PRICING"
-regression = ["cargo:mc-core:villager::trades::tests::mending_book_uses_treasure_trade_price", "cargo:mc-core:villager::trades::tests::librarian_unlock_adds_enchanted_book_offer"]
+regression = ["cargo:mc-core:villager::trades::tests::mending_book_uses_treasure_trade_price", "cargo:mc-core:villager::trades::tests::librarian_unlock_adds_enchanted_book_offer", "cargo:mc-core:villager::trades::tests::librarian_tradeable_pool_and_exact_treasure_roll_are_reachable"]
 failing_first = "not recorded"
 
 [[bug]]
@@ -2549,9 +2560,9 @@ title = "Accepted residual, FIXED @533076b8: sniffer thirds of 24000/12000-moss 
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-EGG-HATCH-CLOCKS"
-regression = ["cargo:mc-core:farming_tests::egg_scheduled_clocks_use_vanilla_delays", "cargo:mc-core:farming_tests::turtle_eggs_crack_at_night_into_baby_turtles", "cargo:mc-core:farming_tests::sniffer_eggs_hatch_into_baby_sniffers", "cargo:mc-core:farming_tests::frogspawn_hatches_tadpoles_in_water"]
+regression = ["cargo:mc-core:farming_tests::egg_scheduled_clocks_use_vanilla_delays", "cargo:mc-core:farming_tests::turtle_eggs_crack_at_night_into_baby_turtles", "cargo:mc-core:farming_tests::sniffer_eggs_hatch_into_baby_sniffers", "cargo:mc-core:farming_tests::frogspawn_hatches_tadpoles_in_water", "cargo:mc-core:farming_tests::placed_sniffer_egg_cracks_on_each_scheduled_boundary", "cargo:mc-core:farming_tests::frogspawn_gameplay_write_schedules_and_hatches_at_deadline"]
 failing_first = "not recorded"
 
 [[bug]]
@@ -2582,9 +2593,9 @@ title = "Accepted residual, FIXED @382da246: wiki-level bending/shape; fungus he
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-SCHEMATIC-TREES"
-regression = ["cargo:mc-core:farming_tests::bone_meal_grows_azalea_and_fungi_but_rejects_wrong_soil"]
+regression = ["cargo:mc-core:farming_tests::bone_meal_grows_azalea_and_fungi_but_rejects_wrong_soil", "cargo:mc-core:farming_tests::fungus_plans_include_normal_and_doubled_stems_with_wart_caps"]
 failing_first = "not recorded"
 
 [[bug]]
@@ -3056,7 +3067,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:29"
-regression = []
+regression = ["cargo:mc-core:block_entity_defaults::tests::patterned_banner_item_use_preserves_layers_in_world_wire_and_journal", "cargo:mc-core:block_entity_defaults::tests::named_unpatterned_banner_retains_custom_name", "cargo:mc-core:block_entity_defaults::tests::placed_head_and_pot_preserve_their_item_components"]
+failing_first = "reported"
 
 [[bug]]
 id = "MODEL-DYNAMIC-CONTEXT"

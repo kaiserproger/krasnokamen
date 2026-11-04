@@ -268,8 +268,8 @@ fn adventure_player_pops_then_breaks_frame() {
 fn arrow_ejects_display_without_destroying_frame() {
     let (mut state, actor) = fixture();
     let frame = place(&mut state, actor, "minecraft:item_frame");
-    state.players.get_mut(&actor).unwrap().inventory.slots[0] =
-        item(&state, "minecraft:diamond", 1);
+    let stack = item(&state, "minecraft:diamond", 1).with_custom_name("Frame treasure");
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] = stack.clone();
     click(&mut state, frame);
     let owner = state
         .entities
@@ -280,10 +280,27 @@ fn arrow_ejects_display_without_destroying_frame() {
         Some(owner),
         item(&state, "minecraft:arrow", 1),
     );
-    crate::projectiles::launch(&mut state, arrow, [6.6, 65.8, 8.5], [2.0, 0.0, 0.0]).unwrap();
-    run_tick(&mut state, &[]);
+    let arrow_id =
+        crate::projectiles::launch(&mut state, arrow, [6.6, 65.8, 8.5], [2.0, 0.0, 0.0]).unwrap();
+    let (output, _, _) = run_tick(&mut state, &[]);
     let slot = state.entities.slot_of(frame).expect("frame survives");
     assert!(displayed(&state, slot).is_none());
+    let drops: Vec<_> = output
+        .changes
+        .entities_spawned
+        .iter()
+        .copied()
+        .filter(|id| *id != arrow_id)
+        .collect();
+    assert_eq!(drops.len(), 1, "only the displayed item is dropped");
+    let dropped = state
+        .entities
+        .row(state.entities.slot_of(drops[0]).unwrap())
+        .item
+        .as_ref()
+        .expect("spawned entity is the dropped item")
+        .full_stack();
+    assert_eq!(dropped, stack);
 }
 
 #[test]

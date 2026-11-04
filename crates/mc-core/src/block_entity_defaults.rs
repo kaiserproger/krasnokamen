@@ -20,22 +20,23 @@ pub(crate) fn accepted_placement(state: &mut TickState, pos: BlockPos, written: 
 }
 
 /// Capture the accepted placement stack before its inventory claim is debited.
-pub(crate) fn stage_banner(
+pub(crate) fn stage_item_components(
     state: &mut TickState,
     intent: &crate::intent::Intent,
 ) -> Result<(), ()> {
     let crate::intent::IntentKind::PlaceBlock { pos, state: block } = intent.kind else {
         return Ok(());
     };
-    if state
+    let Some(
+        kind @ (BlockEntityKind::Banner | BlockEntityKind::Skull | BlockEntityKind::DecoratedPot),
+    ) = state
         .registry
         .blocks
         .by_id(mc_world::BlockStateId(block))
         .and_then(|entry| BlockEntityKind::for_block(entry.block.id.path()))
-        != Some(BlockEntityKind::Banner)
-    {
+    else {
         return Ok(());
-    }
+    };
     let Some(stack) = intent
         .footprint
         .inv
@@ -51,7 +52,33 @@ pub(crate) fn stage_banner(
         return Ok(());
     };
     let patterns = &stack.extended().banner_patterns;
-    if patterns.is_empty() {
+    if patterns.is_empty()
+        && stack.custom_name.is_none()
+        && stack.extended().preserved_components.is_empty()
+    {
+        return Ok(());
+    }
+    let item_fields =
+        mc_data::item_nbt::stack_to_fields(&state.registry.items, stack).map_err(|_| ())?;
+    let components = match mc_data::item_nbt::field(&item_fields, "components") {
+        Some(Tag::Compound(components)) => components.as_slice(),
+        _ => &[],
+    };
+    let mut copied = Vec::new();
+    for (component, field) in match kind {
+        BlockEntityKind::Banner => &[("minecraft:custom_name", "CustomName")][..],
+        BlockEntityKind::Skull => &[
+            ("minecraft:profile", "profile"),
+            ("minecraft:note_block_sound", "note_block_sound"),
+        ][..],
+        BlockEntityKind::DecoratedPot => &[("minecraft:pot_decorations", "sherds")][..],
+        _ => unreachable!(),
+    } {
+        if let Some(value) = mc_data::item_nbt::field(components, component) {
+            copied.push(((*field).to_owned(), value.clone()));
+        }
+    }
+    if patterns.is_empty() && copied.is_empty() {
         return Ok(());
     }
     let layers = patterns
@@ -67,41 +94,50 @@ pub(crate) fn stage_banner(
             ]))
         })
         .collect::<Result<Vec<_>, ()>>()?;
-    let image = Tag::Compound(vec![
-        (
-            "id".into(),
-            Tag::String(BlockEntityKind::Banner.vanilla_id().into()),
-        ),
+    let mut fields = vec![
+        ("id".into(), Tag::String(kind.vanilla_id().into())),
         ("x".into(), Tag::Int(pos.x)),
         ("y".into(), Tag::Int(pos.y)),
         ("z".into(), Tag::Int(pos.z)),
-        (
+    ];
+    if kind == BlockEntityKind::Banner && !patterns.is_empty() {
+        fields.push((
             "patterns".into(),
             Tag::List(mc_nbt::ListTag {
                 element_type: mc_nbt::tag_type::COMPOUND,
                 elements: layers,
             }),
-        ),
-    ]);
+        ));
+    }
+    fields.extend(copied);
+    let image = Tag::Compound(fields);
     let mut bytes = Vec::new();
     mc_nbt::write_network(&mut bytes, &image).map_err(|_| ())?;
-    state.merge_banner_placements.push((pos, block, bytes));
+    state
+        .merge_item_component_placements
+        .push((pos, block, bytes));
     Ok(())
 }
 
-pub(crate) fn commit_banners(state: &mut TickState) {
-    for (pos, block, bytes) in std::mem::take(&mut state.merge_banner_placements) {
+pub(crate) fn commit_item_components(state: &mut TickState) {
+    for (pos, block, bytes) in std::mem::take(&mut state.merge_item_component_placements) {
         if state.world.block_at(pos.x, pos.y, pos.z) != Some(block) {
             continue;
         }
+        let kind = state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(block))
+            .and_then(|entry| BlockEntityKind::for_block(entry.block.id.path()))
+            .expect("staged block entity kind");
         state
             .world
             .set_opaque_block_entity(pos, Some(bytes.clone()));
         state.world.mark_block_entity_visible(pos);
         let Tag::Compound(mut fields) =
-            mc_nbt::read_network(&mut bytes.as_slice()).expect("staged banner NBT decodes")
+            mc_nbt::read_network(&mut bytes.as_slice()).expect("staged block entity NBT decodes")
         else {
-            unreachable!("staged banner is a compound");
+            unreachable!("staged block entity is a compound");
         };
         fields.retain(|(key, _)| !matches!(key.as_str(), "id" | "x" | "y" | "z"));
         let nbt = Tag::Compound(fields);
@@ -124,7 +160,7 @@ pub(crate) fn commit_banners(state: &mut TickState) {
                 viewer,
                 crate::boundary::PlayerChange::BlockEntityData {
                     position: pos,
-                    block_entity_type: BlockEntityKind::Banner.protocol_id(),
+                    block_entity_type: kind.protocol_id(),
                     nbt: nbt.clone(),
                 },
             );

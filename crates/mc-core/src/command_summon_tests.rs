@@ -93,6 +93,41 @@ fn invulnerable_is_applied() {
 }
 
 #[test]
+#[ignore = "known open SUMMON-NOGRAVITY-INVULNERABLE; run explicitly with --ignored"]
+fn summon_no_gravity_and_invulnerable_are_effective_and_persistent() {
+    let (mut state, id) = summon("cow", "{NoGravity:1b,Invulnerable:1b,NoAI:1b}");
+    let slot = state.entities.slot_of(id).unwrap();
+    let y = state.entities.pos(slot)[1];
+    assert_eq!(
+        state
+            .entities
+            .land_hit(slot, 1000, 4.0, crate::survival::DamageKind::Melee),
+        0.0,
+    );
+    for _ in 0..20 {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    assert_eq!(state.entities.pos(slot)[1], y);
+    let row = state.entities.row(slot);
+    let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+    let native = chunks
+        .values()
+        .flat_map(|chunk| &chunk.entities)
+        .find(|entity| entity.uuid == row.uuid)
+        .unwrap();
+    assert!(
+        native
+            .extra_fields
+            .contains(&("NoGravity".into(), Tag::Byte(1)))
+    );
+    assert!(
+        native
+            .extra_fields
+            .contains(&("Invulnerable".into(), Tag::Byte(1)))
+    );
+}
+
+#[test]
 fn health_is_applied() {
     let (state, id) = summon("cow", "{Health:7f}");
     assert_eq!(

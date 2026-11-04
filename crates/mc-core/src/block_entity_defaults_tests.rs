@@ -345,6 +345,7 @@ fn patterned_banner_item_use_preserves_layers_in_world_wire_and_journal() {
             color: 11,
         },
     ];
+    banner = banner.with_custom_name("Named banner");
     state.players.get_mut(&actor).unwrap().inventory.slots[0] = banner;
     let (output, drains, _) = crate::tick::run_tick(
         &mut state,
@@ -383,6 +384,8 @@ fn patterned_banner_item_use_preserves_layers_in_world_wire_and_journal() {
         mc_data::item_nbt::field(&fields, "patterns"),
         Some(&expected)
     );
+    let name = Tag::Compound(vec![("text".into(), Tag::String("Named banner".into()))]);
+    assert_eq!(mc_data::item_nbt::field(&fields, "CustomName"), Some(&name));
     let block = state.world.block_at(pos.x, pos.y, pos.z).unwrap();
     let (_, changes) = drains
         .iter()
@@ -394,7 +397,8 @@ fn patterned_banner_item_use_preserves_layers_in_world_wire_and_journal() {
         && matches!(&pair[1],
             PlayerChange::BlockEntityData { position, block_entity_type, nbt: Tag::Compound(fields) }
                 if *position == pos && *block_entity_type == BlockEntityKind::Banner.protocol_id()
-                    && mc_data::item_nbt::field(fields, "patterns") == Some(&expected))),
+                    && mc_data::item_nbt::field(fields, "patterns") == Some(&expected)
+                    && mc_data::item_nbt::field(fields, "CustomName") == Some(&name))),
         "the viewer must receive the banner block before its matching data");
     let entries = crate::core::journal_entries_for_tick(&mut state, &output);
     let batches = vec![(state.tick, state.tick, entries)];
@@ -407,6 +411,98 @@ fn patterned_banner_item_use_preserves_layers_in_world_wire_and_journal() {
         mc_data::item_nbt::field(&fields, "patterns"),
         Some(&expected)
     );
+    assert_eq!(mc_data::item_nbt::field(&fields, "CustomName"), Some(&name));
+}
+
+#[test]
+fn named_unpatterned_banner_retains_custom_name() {
+    use crate::boundary::{Hand, PlayerInput};
+    let (mut state, actor) = fixture(None);
+    let stack = crate::crafter::tests::stack(&state, "white_banner", 1).with_custom_name("Plain");
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] = stack;
+    crate::tick::run_tick(
+        &mut state,
+        &[PlayerInput::UseItemOn {
+            connection: ConnectionId(1),
+            hand: Hand::Main,
+            position: BlockPos { x: 8, y: 200, z: 8 },
+            face: 1,
+            cursor: [0.5, 1.0, 0.5],
+            sequence: 1,
+        }],
+    );
+    let pos = BlockPos { x: 8, y: 201, z: 8 };
+    let bytes = &state
+        .world
+        .chunk(ChunkPos { x: 0, z: 0 })
+        .unwrap()
+        .block_entities[&pos];
+    let Tag::Compound(fields) = mc_nbt::read_network(&mut bytes.as_slice()).unwrap() else {
+        panic!()
+    };
+    assert_eq!(
+        mc_data::item_nbt::field(&fields, "CustomName"),
+        Some(&Tag::Compound(vec![(
+            "text".into(),
+            Tag::String("Plain".into())
+        )]))
+    );
+}
+
+#[test]
+fn placed_head_and_pot_preserve_their_item_components() {
+    use crate::boundary::{Hand, PlayerInput};
+    for (item, component, field, value) in [
+        (
+            "minecraft:player_head",
+            "minecraft:profile",
+            "profile",
+            Tag::String("Alex".into()),
+        ),
+        (
+            "minecraft:decorated_pot",
+            "minecraft:pot_decorations",
+            "sherds",
+            Tag::Compound(vec![(
+                "back".into(),
+                Tag::String("minecraft:angler_pottery_sherd".into()),
+            )]),
+        ),
+    ] {
+        let (mut state, actor) = fixture(None);
+        let stack = mc_data::item_nbt::stack_from_component_patch(
+            &state.registry.items,
+            &mc_data::Identifier::parse(item).unwrap(),
+            &[(component.into(), value.clone())],
+        )
+        .unwrap();
+        state.players.get_mut(&actor).unwrap().inventory.slots[0] = stack;
+        crate::tick::run_tick(
+            &mut state,
+            &[PlayerInput::UseItemOn {
+                connection: ConnectionId(1),
+                hand: Hand::Main,
+                position: BlockPos { x: 8, y: 200, z: 8 },
+                face: 1,
+                cursor: [0.5, 1.0, 0.5],
+                sequence: 1,
+            }],
+        );
+        let pos = BlockPos { x: 8, y: 201, z: 8 };
+        let bytes = &state
+            .world
+            .chunk(ChunkPos { x: 0, z: 0 })
+            .unwrap()
+            .block_entities[&pos];
+        let Tag::Compound(fields) = mc_nbt::read_network(&mut bytes.as_slice()).unwrap() else {
+            panic!()
+        };
+        assert_eq!(
+            mc_data::item_nbt::field(&fields, field),
+            Some(&value),
+            "{item}"
+        );
+    }
 }
 
 #[test]

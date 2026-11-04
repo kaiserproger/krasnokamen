@@ -365,7 +365,7 @@ impl TickState {
                 }
                 if crate::bees::place_from_item(self, intent).is_err()
                     || crate::shulker::place_from_item(self, intent).is_err()
-                    || crate::block_entity_defaults::stage_banner(self, intent).is_err()
+                    || crate::block_entity_defaults::stage_item_components(self, intent).is_err()
                 {
                     self.merge_block_writes.truncate(staged);
                     return false;

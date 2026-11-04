@@ -161,6 +161,82 @@ fn mending_book_uses_treasure_trade_price() {
     }
     assert!(found, "mending must be reachable");
 }
+#[test]
+fn librarian_tradeable_pool_and_exact_treasure_roll_are_reachable() {
+    let registry = registry();
+    let mut seen = std::collections::BTreeSet::new();
+    for birth in 0..10_000 {
+        let mut villager = VillagerState::default();
+        villager.data.profession = VillagerProfession::Librarian;
+        villager.birth_sequence = Some(birth);
+        unlock(&mut villager, &registry, 1);
+        let seed = villager_seed(&villager, 1).wrapping_add(0x9E37_79B9_7F4A_7C15);
+        for offer in &villager.offers {
+            for enchantment in &offer.result.extended().stored_enchantments {
+                let name = enchantment.id.path();
+                seen.insert(name.to_owned());
+                let level = enchantment.level;
+                let roll = 2 + ((seed >> 29) % (5 + 10 * level) as u64) as i32 + 3 * level;
+                let treasure = matches!(
+                    name,
+                    "mending" | "frost_walker" | "binding_curse" | "vanishing_curse"
+                );
+                assert_eq!(
+                    offer.cost_a.count,
+                    (roll * if treasure { 2 } else { 1 }).min(64),
+                    "{name} level {level}"
+                );
+            }
+        }
+    }
+    for name in [
+        "mending",
+        "unbreaking",
+        "efficiency",
+        "fortune",
+        "silk_touch",
+        "sharpness",
+        "smite",
+        "bane_of_arthropods",
+        "fire_aspect",
+        "looting",
+        "power",
+        "punch",
+        "flame",
+        "infinity",
+        "protection",
+        "fire_protection",
+        "projectile_protection",
+        "blast_protection",
+        "thorns",
+        "respiration",
+        "aqua_affinity",
+        "depth_strider",
+        "feather_falling",
+        "loyalty",
+        "riptide",
+        "channeling",
+        "impaling",
+        "multishot",
+        "piercing",
+        "quick_charge",
+        "sweeping_edge",
+        "knockback",
+        "luck_of_the_sea",
+        "lure",
+        "frost_walker",
+        "binding_curse",
+        "vanishing_curse",
+        "density",
+        "breach",
+        "lunge",
+    ] {
+        assert!(
+            seen.contains(name),
+            "tradeable enchantment {name} was not offered"
+        );
+    }
+}
 
 #[test]
 fn librarian_unlock_adds_enchanted_book_offer() {
