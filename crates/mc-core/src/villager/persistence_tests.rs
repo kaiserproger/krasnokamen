@@ -1131,6 +1131,7 @@ fn journal_image_runtime_fields_are_zeroed() {
     live.navigation_chunks = vec![(crate::boundary::ChunkPos { x: 0, z: 0 }, 9)];
     live.opened_doors = vec![BlockPos { x: 7, y: 8, z: 9 }];
     live.harvest_at = 123;
+    live.shepherd_at = 234;
     live.navigation_repath_at = 456;
     live.navigation_can_open_doors = true;
     live.navigation_progress_len = 2;
@@ -1142,6 +1143,7 @@ fn journal_image_runtime_fields_are_zeroed() {
     assert!(image.navigation_chunks.is_empty());
     assert!(image.opened_doors.is_empty());
     assert_eq!(image.harvest_at, 0);
+    assert_eq!(image.shepherd_at, 0);
     assert_eq!(image.navigation_repath_at, 0);
     assert!(!image.navigation_can_open_doors);
     assert_eq!(image.navigation_progress_len, 0);

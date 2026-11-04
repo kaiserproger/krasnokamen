@@ -739,6 +739,10 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
         [10, 201, 19],
         "the stretch's verge lamp column"
     );
+    // The direct-work helper ended in an unticketed neighbour chunk. Return
+    // to the active fixture before admitting the next temporary job.
+    state.entities.set_pos(slot, [1.5, 201.0, 2.5]);
+    assign_builder(&mut state, id);
     complete(&mut state, id, slot);
     assert_eq!(block_name(&state, 10, 201, 19), "oak_fence");
     assert_eq!(block_name(&state, 10, 202, 19), "oak_fence");
@@ -753,4 +757,189 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
         "{report}"
     );
     assert!(report.contains("Next street work: none."), "{report}");
+}
+
+/// Seed 24's generated village obstructs the three road columns, but the
+/// adjacent verge gives a legal one-block-step walk to the lots beyond.
+/// A street walk must use that shoulder, not discard all distant frontage.
+#[test]
+fn funded_workshops_reach_lots_past_a_road_obstruction_via_the_verge() {
+    for name in ["mine", "mason"] {
+        let (mut state, id, _) = fixture();
+        open_plan(&mut state);
+        let blueprint = blueprints::get(&state.registry, name).unwrap();
+        let record = state.settlements.get(id).unwrap();
+        let mut network = layout::Network::walk(&state, record);
+        let lot = network.lot(blueprint, [9, 200, 22], [1, 0]).unwrap();
+        let site = Site {
+            front: 0,
+            size: blueprint.footprint(Rotation::from_quarter_turns(lot.rotation)),
+            lot,
+        };
+        street_plateau(&mut state, id, &[site]);
+        // An authored obstacle spans the road, not the walkable verge.
+        for x in 7..=9 {
+            for y in 201..=203 {
+                state.world.set_block(x, y, 13, state.registry.states.stone);
+            }
+        }
+        state.world.fold_overlay();
+        fund(&mut state, name, 1);
+        request_build(&mut state, id, name).unwrap();
+        let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+        assert_eq!(project.blueprint, name);
+        assert_eq!(project.origin, site.lot.origin);
+        assert_eq!(project.rotation, site.lot.rotation);
+        for x in 7..=9 {
+            assert_eq!(
+                state.world.block_at(x, 203, 13),
+                Some(state.registry.states.stone),
+                "the route must go around, never clear the obstacle"
+            );
+        }
+    }
+}
+
+fn active_street_fixture() -> (TickState, SettlementId, crate::entities::EntitySlot) {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    let grass = crate::settlements::allocator::tests::block(&state, "minecraft:grass_block", &[]);
+    for x in -16i32..32 {
+        for z in -16i32..32 {
+            if layout::cell(anchor, x, z) == layout::Cell::Road {
+                state.world.set_block(x, 200, z, grass);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    fund(&mut state, "storage", 1);
+    request_build(&mut state, id, "storage").unwrap();
+    super::tests::complete(&mut state, id, slot);
+    plan(&mut state, id);
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .unwrap()
+            .blueprint,
+        layout::ROAD
+    );
+    (state, id, slot)
+}
+
+#[test]
+fn street_work_releases_its_builder_after_completion() {
+    let (mut state, id, slot) = active_street_fixture();
+    let before = state
+        .entities
+        .row(slot)
+        .villager
+        .as_ref()
+        .unwrap()
+        .inventory
+        .clone();
+    super::tests::complete(&mut state, id, slot);
+    let worker = state.entities.row(slot).villager.as_ref().unwrap();
+    assert_eq!(
+        worker.data.profession,
+        Profession::None,
+        "finished free street work must not retain the only extraction/shearing worker"
+    );
+    assert_eq!(
+        worker.inventory, before,
+        "free paving cannot lose or mint carry"
+    );
+}
+
+#[test]
+fn waiting_house_wool_demand_survives_an_active_street_project() {
+    let (state, id, _) = active_street_fixture();
+    assert!(
+        waiting(&state, id)
+            .iter()
+            .any(|kind| kind.blueprint == "house")
+    );
+    assert!(
+        wool_demand(&state, id),
+        "the published unmet house bill still needs wool while a road occupies the project slot"
+    );
+}
+
+#[test]
+fn funded_mine_without_a_site_does_not_starve_a_legal_mason() {
+    let (mut state, id, _) = fixture();
+    open_plan(&mut state);
+    buildings::certify(
+        &mut state,
+        id,
+        BuildingKind::Storage,
+        ScriptWorldBounds::new([0, 200, 0], [2, 203, 2]).unwrap(),
+    )
+    .unwrap();
+    let mason = blueprints::get(&state.registry, "mason").unwrap();
+    let mut network = layout::Network::walk(&state, state.settlements.get(id).unwrap());
+    let lot = network.lot(mason, [9, 200, 22], [1, 0]).unwrap();
+    let site = Site {
+        front: 0,
+        size: mason.footprint(Rotation::from_quarter_turns(lot.rotation)),
+        lot,
+    };
+    street_plateau(&mut state, id, &[site]);
+    let mut bill = std::collections::BTreeMap::<u32, u32>::new();
+    for name in ["mine", "mason"] {
+        for &(item, count) in &blueprints::get(&state.registry, name)
+            .unwrap()
+            .level(1)
+            .unwrap()
+            .materials
+        {
+            let total = bill.entry(item).or_default();
+            *total = (*total).max(count);
+        }
+    }
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    let mut index = 0;
+    for (item, mut count) in bill {
+        while count > 0 {
+            let moving = count.min(64);
+            slots[index] = mc_data::ItemStack::new(item, moving as i32);
+            index += 1;
+            count -= moving;
+        }
+    }
+    state.world.fold_overlay();
+    let images = executor::source_images(&state, id);
+    for name in ["mine", "mason"] {
+        assert!(
+            funded_species(
+                &state,
+                &blueprints::get(&state.registry, name)
+                    .unwrap()
+                    .level(1)
+                    .unwrap()
+                    .materials,
+                &images
+            )
+            .is_some()
+        );
+    }
+    for _ in 0..256 {
+        plan(&mut state, id);
+        if state.settlements.get(id).unwrap().project.is_some() {
+            break;
+        }
+    }
+    let project = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .project
+        .as_ref()
+        .expect("later funded kind with a legal site must be admitted");
+    assert_eq!(project.blueprint, "mason");
+    assert_eq!(project.origin, site.lot.origin);
 }

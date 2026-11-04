@@ -938,6 +938,11 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                     changes,
                 )
             });
+            let blocks_before_work = changes.blocks.len();
+            let carry_before_work = v
+                .inventory
+                .each_ref()
+                .map(|stack| stack.as_ref().map(|stack| (stack.item_id, stack.count)));
             decision_phase!(cache, 4, {
                 super::harvest::work(state, slot, &mut v, changes);
                 share_food(state, &cache.food, slot, &mut v, changes)
@@ -948,7 +953,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             } else if let Some(target) = super::smelting::work(state, slot, &mut v) {
                 target
             } else {
-                match v.data.profession {
+                let target = match v.data.profession {
                     Profession::Miner => super::mining::work(state, slot, &mut v, changes),
                     Profession::Lumberjack => super::lumber::work(state, slot, &mut v, changes),
                     Profession::Builder => {
@@ -965,10 +970,17 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                     }
                     Profession::Farmer => super::harvest::deposit(state, slot, &mut v)
                         .or_else(|| super::harvest::target(&v)),
-                    Profession::Shepherd | Profession::None => {
-                        super::shepherd::work(state, slot, &mut v, changes)
-                    }
                     _ => None,
+                };
+                if changes.blocks.len() != blocks_before_work
+                    || v.inventory
+                        .each_ref()
+                        .map(|stack| stack.as_ref().map(|stack| (stack.item_id, stack.count)))
+                        != carry_before_work
+                {
+                    target
+                } else {
+                    super::shepherd::work(state, slot, &mut v, changes).unwrap_or(target)
                 }
             };
             let mut short_wander = false;

@@ -4471,6 +4471,46 @@ profession-specific smelting order: an otherwise eligible employed resident
 may collect and deliver it even when the iron bill is already satisfied.
 Ore/fuel procurement remains restricted to the existing tender professions.
 
+Seed-24 civilization continuation (2026-11-04): street connectivity includes
+walkable verges, not only the three road columns and plaza. Generated village
+geometry can block a road while leaving its shoulder walkable. This admits
+frontage beyond the obstruction without changing the one-block walking step,
+terrain band/variance, loadedness, authored-block, footprint, path, crop or
+structure-reservation protections. The retained world exposed 39 frontage
+entries before the change and 494 after it; one Mason lot passed the unchanged
+whole-footprint check. Each original lot refusal is retained in
+`receipts/civ-stall2/site-refusals-detailed.json` on the work disk.
+
+The funded Mine has no legal lot in that retained world, so selecting only
+the first funded kind would still starve the legal Mason. Autonomous admission
+now shares its existing 64-attempt budget among the funded kinds in priority
+order, reusing one street walk and frontage list. A fixed stack cache is sized
+by the canonical priority table; no extra per-kind heap cache, new saved
+cursor or expanded search allowance is introduced. Direct owner requests
+still search only their requested blueprint with the existing admission limit.
+
+Shearing is tool work, not a profession restriction. Eligible employed adults
+may satisfy an outstanding construction wool bill through the existing
+shears/iron custody, sheep interaction and storage-deposit paths after their
+own job attempt. Actual primary block work keeps its turn; wool procurement
+can use otherwise idle job-navigation turns. Nitwits, children, Builders,
+Soldiers and economy-reserved residents remain excluded. Shearing cadence is
+independent of primary harvesting/mining cadence; no-demand checks cannot
+delay those jobs. Inventory transfers continue to respect reserved stock.
+
+The fresh seed-24 replay also exposed infrastructure retaining its temporary
+Builder after the road/lamp finished. With only one reachable employable adult
+this consumed the whole extraction workforce even when no project remained.
+Street completion now shares the furnace's existing detach path (including
+its traded-Mason restoration and preserved carry); authored building careers
+are unchanged. An active non-wool project does not hide the planner's
+published unmet housing wool bill from otherwise idle shearing work.
+
+Sheep work and its wool-source classifier inspect only actively simulated
+chunks, like forestry. A loaded sheep beyond the simulation radius must not
+send a worker across that boundary, where its brain stops ticking. This is
+a target-admission constraint, not an expansion of simulation tickets.
+
 Seed-87122 follow-up replay (2026-10-21): a jump step in `find_path_ctx`
 (above `STEP_HEIGHT`) requires body clearance over the edge at the highest
 rise the departure column permits (1.16, 1.10 or 1.05 blocks), because a

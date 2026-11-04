@@ -222,6 +222,52 @@ fn unemployed_resident_with_shears_supplies_wool_without_a_workshop() {
 }
 
 #[test]
+fn employed_miner_with_shears_is_a_wool_source_but_excluded_roles_are_not() {
+    let mut state = state();
+    let id = settle(&mut state);
+    let slot = worker(&mut state, id, VillagerProfession::Miner);
+    let shears = item(&state, "minecraft:shears");
+    let wool = item(&state, "minecraft:white_wool");
+    sheep(&mut state, [8.5, 201.0, 8.5], 0);
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(shears, 1));
+    assert!(
+        can_produce(&state, id, wool, &[]),
+        "employed miner can shear"
+    );
+    for profession in [
+        VillagerProfession::Nitwit,
+        VillagerProfession::Builder,
+        VillagerProfession::Soldier,
+    ] {
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .data
+            .profession = profession;
+        assert!(
+            !can_produce(&state, id, wool, &[]),
+            "{profession:?} must not shear"
+        );
+    }
+    let resident = state.entities.row_mut(slot).villager.as_mut().unwrap();
+    resident.data.profession = VillagerProfession::Miner;
+    resident.age = -1;
+    assert!(
+        !can_produce(&state, id, wool, &[]),
+        "children must not shear"
+    );
+}
+
+#[test]
 fn no_resident_means_no_wool() {
     let mut state = state();
     let id = settle(&mut state);
@@ -450,4 +496,31 @@ fn stocked_leaf_satisfies_without_worker() {
     assert!(can_produce(&state, id, wool, &images));
     assert_eq!(missing_source(&state, id, wool, &images), None);
     assert!(!can_produce(&state, id, white_bed, &images));
+}
+
+#[test]
+fn inactive_sheep_is_not_a_live_wool_source() {
+    let mut state = state();
+    let id = settle(&mut state);
+    let slot = worker(&mut state, id, VillagerProfession::Miner);
+    let shears = item(&state, "minecraft:shears");
+    let wool = item(&state, "minecraft:white_wool");
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(shears, 1));
+    state
+        .world
+        .ensure_blocking(&rustc_hash::FxHashMap::from_iter([(
+            crate::boundary::ChunkPos { x: 1, z: 0 },
+            0,
+        )]));
+    assert!(!state.world.is_active(1, 0));
+    sheep(&mut state, [16.5, 201.0, 8.5], 0);
+    assert!(!can_produce(&state, id, wool, &[]));
+    sheep(&mut state, [8.5, 201.0, 8.5], 0);
+    assert!(can_produce(&state, id, wool, &[]));
 }

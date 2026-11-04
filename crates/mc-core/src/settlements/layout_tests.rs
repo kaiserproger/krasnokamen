@@ -113,6 +113,20 @@ fn walk_reaches_every_loaded_street_and_stops_at_water() {
     let record = state.settlements.get(id).unwrap();
     let network = Network::walk(&state, record);
     assert!(network.index.contains_key(&(8, 19)));
+    assert!(!network.index.contains_key(&(8, 20)), "never walk on water");
+    assert!(
+        network.index.contains_key(&(8, 21)),
+        "the dry verge bypasses the pool"
+    );
+    assert!(report(&state, record).contains("Cut off: 3 by terrain"));
+    // Flood the shoulders too: no dry crossing remains, so the far road
+    // must still be cut off. Verge traversal never weakens fluid refusal.
+    for x in [6, 10] {
+        state.world.set_block(x, 200, 20, water);
+    }
+    state.world.fold_overlay();
+    let record = state.settlements.get(id).unwrap();
+    let network = Network::walk(&state, record);
     for z in 20..32 {
         assert!(!network.index.contains_key(&(8, z)), "{z}");
     }

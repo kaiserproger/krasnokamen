@@ -1,5 +1,5 @@
 //! Settlement residents shear adult sheep with a real tool and carry wool to storage.
-//! Unemployed adults and optional shepherds share the same bounded sheep search.
+//! Eligible adults share the same bounded sheep search after their own job.
 //! Shears are taken from settlement storage or crafted from two iron ingots.
 use super::mining;
 use super::{Activity, VillagerProfession, VillagerState};
@@ -41,6 +41,9 @@ fn find_sheep(
     let mut examined = 0;
     for cx in min_cx..=max_cx {
         for cz in min_cz..=max_cz {
+            if !state.world.is_active(cx, cz) {
+                continue;
+            }
             let Some(ids) = state
                 .entities
                 .brain_sensor_chunks()
@@ -148,14 +151,18 @@ fn acquire_tool(
         let Ok(before) = inventory::load(state, &endpoint) else {
             continue;
         };
+        let Ok(free) = inventory::unreserved_stock(state, &before) else {
+            continue;
+        };
         let selected = [shears, iron].into_iter().find_map(|item| {
+            let available = free.get(&item).copied().unwrap_or(0);
             before
                 .slots
                 .iter()
-                .position(|stack| stack.item_id == item && stack.count > 0)
-                .map(|index| (item, index))
+                .position(|stack| stack.item_id == item && stack.count > 0 && available > 0)
+                .map(|index| (item, index, available))
         });
-        let Some((item, index)) = selected else {
+        let Some((item, index, available)) = selected else {
             continue;
         };
         let pos = BlockPos {
@@ -171,7 +178,8 @@ fn acquire_tool(
             1
         } else {
             (2 - iron_count).min(before.slots[index].count)
-        };
+        }
+        .min(available.min(i32::MAX as u64) as i32);
         let Some(empty) = carried.iter_mut().find(|stack| stack.is_none()) else {
             return deposit(state, slot, v);
         };
@@ -191,27 +199,27 @@ fn acquire_tool(
     None
 }
 
+pub(crate) fn eligible(state: &TickState, slot: EntitySlot, v: &VillagerState) -> bool {
+    v.age >= 0
+        && v.conversion_time.is_none()
+        && !matches!(
+            v.data.profession,
+            VillagerProfession::Nitwit | VillagerProfession::Builder | VillagerProfession::Soldier
+        )
+        && !crate::settlements::economy::worker_reserved(
+            state,
+            v.settlement,
+            state.entities.row(slot).uuid,
+        )
+}
+
 pub(super) fn work(
     state: &mut TickState,
     slot: EntitySlot,
     v: &mut VillagerState,
     _changes: &mut ChangeSet,
-) -> Option<BlockPos> {
-    if !matches!(
-        v.data.profession,
-        VillagerProfession::Shepherd | VillagerProfession::None
-    ) || v.age < 0
-        || v.sleeping
-        || v.conversion_time.is_some()
-        || v.activity == Activity::Panic
-    {
-        return None;
-    }
-    if crate::settlements::economy::worker_reserved(
-        state,
-        v.settlement,
-        state.entities.row(slot).uuid,
-    ) {
+) -> Option<Option<BlockPos>> {
+    if !eligible(state, slot, v) || v.sleeping || v.activity == Activity::Panic {
         return None;
     }
     let settlement = v.settlement?;
@@ -222,15 +230,23 @@ pub(super) fn work(
         && crate::command_rules::boolean(state, crate::command_rules::BoolRule::MOB_GRIEFING);
     let shears = mining::item_id(state, "shears")?;
     let iron = mining::item_id(state, "iron_ingot")?;
-    if !working || v.inventory.iter().flatten().any(|stack| wool(state, stack)) {
-        return deposit(state, slot, v);
+    if v.inventory.iter().flatten().any(|stack| wool(state, stack)) {
+        return Some(deposit(state, slot, v));
     }
-    if state.tick < v.harvest_at {
+    if !working || state.tick < v.shepherd_at {
+        return None;
+    }
+    if !matches!(
+        v.data.profession,
+        VillagerProfession::Shepherd | VillagerProfession::None
+    ) && !crate::settlements::construction::wool_demand(state, settlement)
+    {
+        v.shepherd_at = state.tick + PERIOD;
         return None;
     }
     let from = state.entities.pos(slot);
     let Some(target) = find_sheep(state, anchor, radius, from) else {
-        v.harvest_at = state.tick + PERIOD;
+        v.shepherd_at = state.tick + PERIOD;
         return None;
     };
     if !v
@@ -243,9 +259,10 @@ pub(super) fn work(
         let destination = acquire_tool(state, slot, v, shears, iron);
         let after: i32 = v.inventory.iter().flatten().map(|stack| stack.count).sum();
         if destination.is_none() && before == after {
-            v.harvest_at = state.tick + PERIOD;
+            v.shepherd_at = state.tick + PERIOD;
+            return None;
         }
-        return destination;
+        return Some(destination);
     }
     let feet = state.entities.pos(target);
     let block = BlockPos {
@@ -256,7 +273,7 @@ pub(super) fn work(
     if !mining::near(state, slot, block, REACH) {
         // Walk without consuming the shear cooldown: the next attempt
         // re-scans and keeps navigating until within reach.
-        return Some(block);
+        return Some(Some(block));
     }
     // The whole yield must fit before the sheep is touched; otherwise haul
     // first and the wool stays on the sheep.
@@ -270,7 +287,7 @@ pub(super) fn work(
             .unwrap_or("white")
     );
     let Some(item) = mining::item_id(state, &name) else {
-        v.harvest_at = state.tick + PERIOD;
+        v.shepherd_at = state.tick + PERIOD;
         return None;
     };
     let count = 1 + (u64::from(target.0) ^ state.tick).wrapping_mul(0x9E37_79B9_7F4A_7C15) % 3;
@@ -278,7 +295,7 @@ pub(super) fn work(
     if mining::room(state, v, &stack) < count as i32
         || !mining::collect(state, v, item, count as i32)
     {
-        return deposit(state, slot, v);
+        return Some(deposit(state, slot, v));
     }
     let id = state.entities.body(target).id;
     let appearance = std::sync::Arc::make_mut(&mut state.entities.row_mut(target).appearance);
@@ -306,6 +323,6 @@ pub(super) fn work(
             }
         }
     }
-    v.harvest_at = state.tick + PERIOD;
-    None
+    v.shepherd_at = state.tick + PERIOD;
+    Some(None)
 }

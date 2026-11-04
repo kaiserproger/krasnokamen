@@ -354,7 +354,7 @@ fn facing(blueprint: &Blueprint, normal: [i32; 2]) -> Option<u8> {
     u8::try_from((outward + 4 - front(blueprint)?) % 4).ok()
 }
 
-/// Road and plaza columns reachable on foot from the bell, in walking order.
+/// Street columns reachable on foot from the bell, including verge detours.
 pub(crate) struct Network<'a> {
     state: &'a TickState,
     record: &'a SettlementRecord,
@@ -365,9 +365,9 @@ pub(crate) struct Network<'a> {
 }
 
 impl<'a> Network<'a> {
-    /// Breadth-first walk over road and plaza columns starting on the open
-    /// plaza: steps of at most one block up or down, inside the territory,
-    /// on loaded walkable ground only.
+    /// Breadth-first walk over roads, the plaza and their walkable verges:
+    /// steps of at most one block, inside the territory, on loaded ground.
+    /// An existing village obstacle may block the road without its shoulder.
     pub(crate) fn walk(state: &'a TickState, record: &'a SettlementRecord) -> Self {
         let mut network = Self {
             state,
@@ -398,7 +398,10 @@ impl<'a> Network<'a> {
             for (dx, dz) in [(1, 0), (0, 1), (-1, 0), (0, -1)] {
                 let (nx, nz) = (x + dx, z + dz);
                 if network.index.contains_key(&(nx, nz))
-                    || !matches!(cell(record.anchor, nx, nz), Cell::Road | Cell::Plaza)
+                    || !matches!(
+                        cell(record.anchor, nx, nz),
+                        Cell::Road | Cell::Plaza | Cell::Verge
+                    )
                     || !level_inside(record, nx, nz)
                 {
                     continue;
@@ -490,6 +493,13 @@ impl<'a> Network<'a> {
         })
     }
 
+    /// A verge may carry a detour, but a door still fronts an actual street.
+    fn street_index(&self, x: i32, z: i32) -> Option<usize> {
+        matches!(cell(self.record.anchor, x, z), Cell::Road | Cell::Plaza)
+            .then(|| self.index.get(&(x, z)).copied())
+            .flatten()
+    }
+
     /// A standing building's street access, as a reached column index. A
     /// blueprint build is reached through its door: the first reached road or
     /// plaza column straight out of its level-one entrance. A player-certified
@@ -504,7 +514,7 @@ impl<'a> Network<'a> {
             let [nx, nz] = COMPASS[(front(blueprint)? + usize::from(rotation)) % 4];
             let (x, z) = (origin[0] + ex, origin[2] + ez);
             return (1..=LOT_FRONT + LOT_DEPTH)
-                .find_map(|step| self.index.get(&(x + step * nx, z + step * nz)).copied());
+                .find_map(|step| self.street_index(x + step * nx, z + step * nz));
         }
         let bounds = building.bounds;
         let mut best: Option<usize> = None;
@@ -519,7 +529,7 @@ impl<'a> Network<'a> {
                 }
                 for [nx, nz] in [[1, 0], [-1, 0], [0, 1], [0, -1]] {
                     for step in 2..=4 {
-                        if let Some(&index) = self.index.get(&(x + step * nx, z + step * nz)) {
+                        if let Some(index) = self.street_index(x + step * nx, z + step * nz) {
                             best = Some(best.map_or(index, |known| known.min(index)));
                         }
                     }

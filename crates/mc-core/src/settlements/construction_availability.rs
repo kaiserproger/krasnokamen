@@ -18,8 +18,8 @@
 //!   Miner plus a certified Mine;
 //! * `<stem>_log` needs a bound adult Lumberjack plus a certified LumberCamp;
 //! * crops/seeds need a bound adult Farmer plus a certified Farmer workshop;
-//! * `<color>_wool` needs an adult unemployed resident or shepherd, real
-//!   shears, two ingots, or raw iron and fuel with an owned live furnace,
+//! * `<color>_wool` needs an eligible adult resident, real shears, two ingots,
+//!   or raw iron and fuel with an owned live furnace,
 //!   and a loaded adult sheep of that color. A sheared sheep still counts:
 //!   native grazing regrows its wool.
 //!
@@ -255,20 +255,20 @@ fn caps(state: &TickState, id: SettlementId, record: &SettlementRecord, images: 
             VillagerProfession::Miner => caps.miner = true,
             VillagerProfession::Lumberjack => caps.lumberjack = true,
             VillagerProfession::Farmer => caps.farmer = true,
-            VillagerProfession::Shepherd | VillagerProfession::None => {
-                caps.shearer = true;
-                let mut carried_iron = 0;
-                for stack in v.inventory.iter().flatten() {
-                    if Some(stack.item_id) == shears && stack.count > 0 {
-                        caps.shears = true;
-                    }
-                    if Some(stack.item_id) == iron && v.smelting.is_none() {
-                        carried_iron += i64::from(stack.count.max(0));
-                    }
-                }
-                max_carried_iron = max_carried_iron.max(carried_iron);
-            }
             _ => {}
+        }
+        if crate::villager::shepherd::eligible(state, slot, v) {
+            caps.shearer = true;
+            let mut carried_iron = 0;
+            for stack in v.inventory.iter().flatten() {
+                if Some(stack.item_id) == shears && stack.count > 0 {
+                    caps.shears = true;
+                }
+                if Some(stack.item_id) == iron && v.smelting.is_none() {
+                    carried_iron += i64::from(stack.count.max(0));
+                }
+            }
+            max_carried_iron = max_carried_iron.max(carried_iron);
         }
     }
     caps.iron += max_carried_iron;
@@ -329,6 +329,9 @@ fn sheep_colors(state: &TickState, anchor: [i32; 3], radius: u32) -> u16 {
     let mut examined = 0usize;
     'outer: for cx in min_cx..=max_cx {
         for cz in min_cz..=max_cz {
+            if !state.world.is_active(cx, cz) {
+                continue;
+            }
             let Some(ids) = state
                 .entities
                 .brain_sensor_chunks()
@@ -405,8 +408,7 @@ fn farmer_raw(path: &str) -> bool {
     )
 }
 
-/// Whether a bill has an unfilled wool ingredient in its canonical grid
-/// recipe. Counts real stock, including partial wool stacks.
+/// Whether the bill needs wool and the settlement lacks shears.
 pub(super) fn needs_shears(
     state: &TickState,
     id: SettlementId,
@@ -416,10 +418,13 @@ pub(super) fn needs_shears(
     let Some(record) = state.settlements.get(id) else {
         return false;
     };
+    !caps(state, id, record, images).shears && needs_wool(state, bill, images)
+}
+
+/// Whether a bill has an unfilled wool ingredient in its canonical grid
+/// recipe. Counts real stock, including partial wool stacks.
+pub(super) fn needs_wool(state: &TickState, bill: &[(u32, u32)], images: &[Image]) -> bool {
     if super::super::construction_crafting::can_fund(state, bill, images) {
-        return false;
-    }
-    if caps(state, id, record, images).shears {
         return false;
     }
     for &(item, count) in bill {

@@ -3205,3 +3205,66 @@ status = "fixed"
 source = "L2 .analysis/validation/20261104T070730-correctness-vv86u65r (precommit_host.rs:198)"
 failing_first = "reported"
 regression = ["cargo:mc-plugin-host:a_real_component_nonreturning_hook_fails_closed", "cargo:mc-plugin-host:a_real_component_trap_keeps_the_deny_registration_protecting_damage"]
+
+[[bug]]
+id = "CIVILIZATION-STREET-VERGE"
+title = "Generated village road obstructions hide legal construction frontage despite a walkable verge."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/result.yaml"
+regression = ["cargo:mc-core:settlements::construction::site_tests::funded_workshops_reach_lots_past_a_road_obstruction_via_the_verge"]
+
+[[bug]]
+id = "CIVILIZATION-EMPLOYED-SHEARING"
+title = "A construction wool bill cannot use an otherwise eligible working adult with shears or two iron ingots."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/result.yaml"
+regression = ["cargo:mc-core:villager::shepherd_tests::working_miner_crafts_shears_and_delivers_wool_during_house_demand"]
+
+[[bug]]
+id = "CIVILIZATION-GENERATED-DOOR-TREE"
+title = "Seed-24 village resident is trapped by an oak leaf immediately outside an open house door."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/route-conclusion.yaml"
+regression = []
+
+[[bug]]
+id = "CIVILIZATION-STREET-BUILDER-RETENTION"
+title = "Completed road/lamp work retains the only reachable adult as Builder, starving extraction and wool production."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/20261104T081120-civilization-seed-qa-f7kvk6_m/result.json"
+failing_first = "reported"
+regression = ["cargo:mc-core:settlements::construction::site_tests::street_work_releases_its_builder_after_completion", "cargo:mc-core:settlements::construction::site_tests::waiting_house_wool_demand_survives_an_active_street_project"]
+
+[[bug]]
+id = "CIVILIZATION-FUNDED-KIND-SITE-STARVATION"
+title = "A funded Mine with no legal site monopolizes autonomous planning despite a funded Mason with a legal site."
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/kind-starvation-baseline.log"
+failing_first = "reported"
+regression = ["cargo:mc-core:settlements::construction::site_tests::funded_mine_without_a_site_does_not_starve_a_legal_mason"]
+
+[[bug]]
+id = "CIVILIZATION-INACTIVE-SHEEP-TARGET"
+title = "Shearing targets loaded sheep beyond simulation distance and strands the worker at the inactive boundary."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/20261104T085019-civilization-seed-qa-di4hpibs/result.json"
+failing_first = "reported"
+regression = ["cargo:mc-core:villager::shepherd_tests::shepherd_uses_a_simulated_sheep_not_a_closer_inactive_one", "cargo:mc-core:settlements::construction::availability::tests::inactive_sheep_is_not_a_live_wool_source"]

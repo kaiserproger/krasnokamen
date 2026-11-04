@@ -151,13 +151,309 @@ fn allocator_and_brain_allow_unemployed_resident_to_shear_and_store_wool() {
 }
 
 #[test]
+fn miner_brain_crafts_shears_and_delivers_wool_for_house_bill() {
+    let (mut state, slot, mut v) = setup();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    state.registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(Some(&root)).unwrap());
+    v.data.profession = VillagerProfession::Miner;
+    v.job_site = None;
+    v.inventory = std::array::from_fn(|_| None);
+    let town = v.settlement.unwrap();
+    state.settlements.get_mut(town).unwrap().buildings.clear();
+    storage(&mut state, &v, [4, 201, 3]);
+    let iron = mining::item_id(&state, "iron_ingot").unwrap();
+    let shears = mining::item_id(&state, "shears").unwrap();
+    let white = mining::item_id(&state, "white_wool").unwrap();
+    state.block_entities.get_mut(&(4, 201, 3)).unwrap().slots[0] = ItemStack::new(iron, 2);
+    let sheep_slot = sheep(&mut state, [3.5, 201.0, 4.5], 0);
+    state.entities.set_pos(slot, [3.5, 201.0, 3.5]);
+    state.world.set_block(3, 201, 3, state.registry.states.air);
+    state.entities.row_mut(slot).villager = Some(v);
+    state.world.fold_overlay();
+    crate::settlements::construction::request_build(&mut state, town, "house").unwrap();
+    for _ in 0..2_000 {
+        crate::tick::run_tick(&mut state, &[]);
+        if state.block_entities[&(4, 201, 3)]
+            .slots
+            .iter()
+            .any(|item| item.item_id == white && item.count > 0)
+        {
+            break;
+        }
+    }
+    assert_eq!(
+        crate::tick::wool_of(&state.entities.row(sheep_slot).appearance),
+        0x10
+    );
+    let worker = state.entities.row(slot).villager.as_ref().unwrap();
+    assert_eq!(worker.data.profession, VillagerProfession::Miner);
+    assert_eq!(carried(worker, shears), 1);
+    assert_eq!(carried(worker, iron), 0);
+    let stock = &state.block_entities[&(4, 201, 3)].slots;
+    assert!(
+        !stock
+            .iter()
+            .any(|item| item.item_id == iron && item.count > 0)
+    );
+    assert!(
+        stock
+            .iter()
+            .any(|item| item.item_id == white && (1..=3).contains(&item.count))
+    );
+}
+
+#[test]
+fn miner_native_ticks_craft_shears_and_deliver_wool() {
+    let (mut state, slot, mut v) = setup();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    state.registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(Some(&root)).unwrap());
+    v.data.profession = VillagerProfession::Miner;
+    v.job_site = None;
+    v.inventory = std::array::from_fn(|_| None);
+    let town = v.settlement.unwrap();
+    state.settlements.get_mut(town).unwrap().buildings.clear();
+    storage(&mut state, &v, [4, 201, 3]);
+    let iron = mining::item_id(&state, "iron_ingot").unwrap();
+    let shears = mining::item_id(&state, "shears").unwrap();
+    let wool = mining::item_id(&state, "white_wool").unwrap();
+    state.block_entities.get_mut(&(4, 201, 3)).unwrap().slots[0] = ItemStack::new(iron, 2);
+    let sheep_slot = sheep(&mut state, [3.5, 201.0, 4.5], 0);
+    state.entities.row_mut(sheep_slot).controls.no_ai = true;
+    state.world.set_block(3, 201, 3, state.registry.states.air);
+    state.entities.row_mut(slot).villager = Some(v);
+    state.world.fold_overlay();
+    crate::settlements::construction::request_build(&mut state, town, "house").unwrap();
+    for _ in 0..2_000 {
+        crate::tick::run_tick(&mut state, &[]);
+        if state.block_entities[&(4, 201, 3)]
+            .slots
+            .iter()
+            .any(|item| item.item_id == wool && item.count > 0)
+        {
+            break;
+        }
+    }
+    assert_eq!(
+        crate::tick::wool_of(&state.entities.row(sheep_slot).appearance),
+        0x10
+    );
+    let worker = state.entities.row(slot).villager.as_ref().unwrap();
+    assert_eq!(worker.data.profession, VillagerProfession::Miner);
+    assert_eq!(carried(worker, shears), 1);
+    assert_eq!(carried(worker, iron), 0);
+    let stock = &state.block_entities[&(4, 201, 3)].slots;
+    assert!(
+        !stock
+            .iter()
+            .any(|item| item.item_id == iron && item.count > 0)
+    );
+    assert!(
+        stock
+            .iter()
+            .any(|item| item.item_id == wool && (1..=3).contains(&item.count))
+    );
+}
+
+#[test]
+fn working_miner_crafts_shears_and_delivers_wool_during_house_demand() {
+    let (mut state, slot, mut v) = fixture(BuildingKind::Mine);
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    state.registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(Some(&root)).unwrap());
+    v.inventory = std::array::from_fn(|_| None);
+    let town = v.settlement.unwrap();
+    storage(&mut state, &v, [4, 201, 3]);
+    let iron = mining::item_id(&state, "iron_ingot").unwrap();
+    let shears = mining::item_id(&state, "shears").unwrap();
+    let wool = mining::item_id(&state, "white_wool").unwrap();
+    state.block_entities.get_mut(&(4, 201, 3)).unwrap().slots[0] = ItemStack::new(iron, 2);
+    let sheep_slot = sheep(&mut state, [3.5, 201.0, 4.5], 0);
+    state.entities.row_mut(sheep_slot).controls.no_ai = true;
+    state.entities.set_pos(slot, [2.5, 201.0, 3.5]);
+    state.entities.row_mut(slot).villager = Some(v);
+    state.world.fold_overlay();
+    crate::settlements::construction::request_build(&mut state, town, "house").unwrap();
+    for _ in 0..4_000 {
+        crate::tick::run_tick(&mut state, &[]);
+        if state.block_entities[&(4, 201, 3)]
+            .slots
+            .iter()
+            .any(|item| item.item_id == wool && item.count > 0)
+        {
+            break;
+        }
+    }
+    let worker = state.entities.row(slot).villager.as_ref().unwrap();
+    assert_eq!(worker.data.profession, VillagerProfession::Miner);
+    assert_ne!(
+        worker.mining_progress.building, 0,
+        "the certified mine was worked"
+    );
+    assert_eq!(
+        crate::tick::wool_of(&state.entities.row(sheep_slot).appearance),
+        0x10
+    );
+    assert_eq!(carried(worker, shears), 1);
+    assert_eq!(carried(worker, iron), 0);
+    let stock = &state.block_entities[&(4, 201, 3)].slots;
+    assert!(
+        !stock
+            .iter()
+            .any(|item| item.item_id == iron && item.count > 0)
+    );
+    assert!(
+        stock
+            .iter()
+            .any(|item| item.item_id == wool && (1..=3).contains(&item.count))
+    );
+}
+
+#[test]
+fn active_miner_job_takes_precedence_over_shearing() {
+    let (mut state, slot, mut v) = setup();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    state.registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(Some(&root)).unwrap());
+    v.data.profession = VillagerProfession::Miner;
+    let town = v.settlement.unwrap();
+    let sheep_slot = sheep(&mut state, [3.5, 201.0, 4.5], 0);
+    state.entities.row_mut(sheep_slot).controls.no_ai = true;
+    state.entities.set_pos(slot, [2.5, 201.0, 3.5]);
+    state.entities.row_mut(slot).villager = Some(v);
+    state.world.fold_overlay();
+    crate::settlements::construction::request_build(&mut state, town, "house").unwrap();
+    let mut mined = false;
+    for _ in 0..500 {
+        crate::tick::set_wool(
+            std::sync::Arc::make_mut(&mut state.entities.row_mut(sheep_slot).appearance),
+            0,
+        );
+        let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+        let worker = state.entities.row(slot).villager.as_ref().unwrap();
+        if worker.mining_progress.building != 0 && !output.changes.blocks.is_empty() {
+            assert_eq!(
+                crate::tick::wool_of(&state.entities.row(sheep_slot).appearance),
+                0,
+                "shearing must not run in the same decision as mining"
+            );
+            mined = true;
+            break;
+        }
+    }
+    assert!(mined, "the certified miner must actually mutate a block");
+}
+
+#[test]
+fn excluded_roles_and_children_never_shear_even_with_tools() {
+    for (profession, age) in [
+        (VillagerProfession::Nitwit, 0),
+        (VillagerProfession::Builder, 0),
+        (VillagerProfession::Soldier, 0),
+        (VillagerProfession::Miner, -1),
+    ] {
+        let (mut state, slot, mut v) = setup();
+        v.data.profession = profession;
+        v.age = age;
+        let sheep_slot = sheep(&mut state, [3.5, 201.0, 3.5], 0);
+        let before = v.inventory.clone();
+        state.tick = 20;
+        shepherd::work(&mut state, slot, &mut v, &mut ChangeSet::default());
+        assert_eq!(
+            crate::tick::wool_of(&state.entities.row(sheep_slot).appearance),
+            0
+        );
+        assert_eq!(v.inventory, before);
+    }
+}
+
+#[test]
+fn employed_worker_does_not_shear_when_wool_bill_is_satisfied() {
+    let (mut state, slot, mut v) = setup();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    state.registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(Some(&root)).unwrap());
+    v.data.profession = VillagerProfession::Miner;
+    v.job_site = None;
+    let town = v.settlement.unwrap();
+    state.settlements.get_mut(town).unwrap().buildings.clear();
+    storage(&mut state, &v, [4, 201, 3]);
+    let wool = mining::item_id(&state, "white_wool").unwrap();
+    state.block_entities.get_mut(&(4, 201, 3)).unwrap().slots[0] = ItemStack::new(wool, 64);
+    let sheep_slot = sheep(&mut state, [3.5, 201.0, 3.5], 0);
+    crate::settlements::construction::request_build(&mut state, town, "house").unwrap();
+    let before = v.inventory.clone();
+    v.harvest_at = 10;
+    state.tick = 20;
+    shepherd::work(&mut state, slot, &mut v, &mut ChangeSet::default());
+    assert_eq!(
+        crate::tick::wool_of(&state.entities.row(sheep_slot).appearance),
+        0
+    );
+    assert_eq!(v.inventory, before);
+    assert_eq!(
+        v.harvest_at, 10,
+        "wool demand must not delay the miner's own work"
+    );
+}
+
+#[test]
+fn economy_reserved_farmer_cannot_shear() {
+    use crate::settlements::{commands::EconomyDomain, economy_commands};
+    let (mut state, slot, mut v) = fixture(BuildingKind::Workshop(VillagerProfession::Farmer));
+    crate::plugin_startup::apply(
+        std::sync::Arc::make_mut(&mut state.registry),
+        &mc_plugin_host::DeploymentContribution::default(),
+        None,
+        &[],
+    )
+    .unwrap();
+    v.data.profession = VillagerProfession::Farmer;
+    let town = v.settlement.unwrap();
+    let worker = state.entities.row(slot).uuid;
+    let shears = mining::item_id(&state, "shears").unwrap();
+    v.inventory[0] = Some(ItemStack::new(shears, 1));
+    state.entities.row_mut(slot).villager = Some(v);
+    economy_commands::execute(
+        &mut state,
+        town,
+        EconomyDomain::Production,
+        &[
+            "start".into(),
+            "shearing-reservation".into(),
+            worker.to_string(),
+            "solaris-settlements:bread".into(),
+            "1".into(),
+            ((town.0 << 32) | 1).to_string(),
+            "3,201,3".into(),
+            "3,201,4".into(),
+        ],
+    )
+    .unwrap();
+    assert!(crate::settlements::economy::worker_reserved(
+        &state,
+        Some(town),
+        worker
+    ));
+    let sheep_slot = sheep(&mut state, [3.5, 201.0, 3.5], 0);
+    let mut v = state.entities.row_mut(slot).villager.take().unwrap();
+    let before = v.inventory.clone();
+    state.tick = 20;
+    shepherd::work(&mut state, slot, &mut v, &mut ChangeSet::default());
+    assert_eq!(
+        crate::tick::wool_of(&state.entities.row(sheep_slot).appearance),
+        0
+    );
+    assert_eq!(v.inventory, before);
+}
+
+#[test]
 fn shepherd_shears_adult_sheep_for_matching_wool_once() {
     let (mut state, slot, mut v) = setup();
     let sheep_slot = sheep(&mut state, [3.5, 201.0, 3.5], 14);
     state.entities.set_pos(slot, [3.5, 201.0, 3.5]);
     let mut changes = ChangeSet::default();
     state.tick = 20;
-    assert_eq!(shepherd::work(&mut state, slot, &mut v, &mut changes), None);
+    assert_eq!(
+        shepherd::work(&mut state, slot, &mut v, &mut changes),
+        Some(None)
+    );
     let red = mining::item_id(&state, "red_wool").unwrap();
     let yield_count = carried(&v, red);
     assert!(
@@ -177,7 +473,10 @@ fn shepherd_shears_adult_sheep_for_matching_wool_once() {
     );
     // A sheared sheep pays nothing until native grazing regrows the wool.
     state.tick = 120;
-    assert_eq!(shepherd::work(&mut state, slot, &mut v, &mut changes), None);
+    assert_eq!(
+        shepherd::work(&mut state, slot, &mut v, &mut changes),
+        Some(None)
+    );
     assert_eq!(carried(&v, red), yield_count);
     assert_eq!(
         crate::tick::wool_of(&state.entities.row(sheep_slot).appearance),
@@ -246,9 +545,37 @@ fn shepherd_stock_deposit_conserves_wool() {
     state.entities.set_pos(slot, [4.5, 201.0, 3.5]);
     let mut changes = ChangeSet::default();
     state.tick = 20;
-    assert_eq!(shepherd::work(&mut state, slot, &mut v, &mut changes), None);
+    assert_eq!(
+        shepherd::work(&mut state, slot, &mut v, &mut changes),
+        Some(None)
+    );
     assert!(v.inventory.iter().all(Option::is_none));
     let chest = state.block_entities.get(&(4, 201, 3)).unwrap();
     let total: i32 = chest.slots.iter().map(|stack| stack.count).sum();
     assert_eq!(total, 10 + 8 * 64, "stock plus carry, nothing duplicated");
+}
+
+#[test]
+fn shepherd_uses_a_simulated_sheep_not_a_closer_inactive_one() {
+    let (mut state, slot, mut v) = setup();
+    let inactive_chunk = crate::boundary::ChunkPos { x: 1, z: 0 };
+    state
+        .world
+        .ensure_blocking(&rustc_hash::FxHashMap::from_iter([(inactive_chunk, 0)]));
+    assert!(state.world.is_active(0, 0));
+    assert!(!state.world.is_active(1, 0));
+    state.entities.set_pos(slot, [15.5, 201.0, 3.5]);
+    let inactive = sheep(&mut state, [16.5, 201.0, 3.5], 0);
+    let active = sheep(&mut state, [13.5, 201.0, 3.5], 0);
+    state.tick = 20;
+    shepherd::work(&mut state, slot, &mut v, &mut ChangeSet::default());
+    assert_eq!(
+        crate::tick::wool_of(&state.entities.row(inactive).appearance),
+        0,
+        "a worker must not route into an inactive chunk and stop ticking"
+    );
+    assert_eq!(
+        crate::tick::wool_of(&state.entities.row(active).appearance),
+        0x10
+    );
 }

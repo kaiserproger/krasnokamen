@@ -478,7 +478,14 @@ fn start_build(
     // A direct owner request searches once for immediate admission. Retried
     // pending work shares the autonomous planner's bounded, resumable scan.
     let (start, attempts) = planning_cursor.map_or((0, u32::MAX), |cursor| (cursor, SITE_ATTEMPTS));
-    let (site, cursor) = site_project(state, record, blueprint, start, attempts, &images);
+    let (site, cursor) = site_project(
+        state,
+        record,
+        std::iter::once(blueprint),
+        start,
+        attempts,
+        &images,
+    );
     let Some(mut site) = site else {
         if planning_cursor.is_some() {
             let record = state.settlements.get_mut(id).expect("planned settlement");
@@ -582,6 +589,9 @@ pub(crate) fn remove(state: &mut TickState, id: SettlementId) -> bool {
     executor::cancel(state, id).is_ok()
 }
 
+// The priority table's array type keeps the stack funding cache in sync.
+const AUTONOMOUS_KINDS: usize = 9;
+
 /// Needed authored kinds in priority order. A natural work zone is not an
 /// authored level-one building, and housing remains needed until beds suffice.
 pub(super) fn needed_kinds(
@@ -600,7 +610,7 @@ pub(super) fn needed_kinds(
         .filter(|building| building.kind == BuildingKind::House)
         .map(|building| usize::from(building.level))
         .sum();
-    [
+    let kinds: [(BuildingKind, bool); AUTONOMOUS_KINDS] = [
         (BuildingKind::Storage, !has(BuildingKind::Storage)),
         (BuildingKind::House, beds < residents),
         (
@@ -625,9 +635,10 @@ pub(super) fn needed_kinds(
             BuildingKind::Wall,
             residents >= 10 && !has(BuildingKind::Wall),
         ),
-    ]
-    .into_iter()
-    .filter_map(|(kind, needed)| needed.then_some(kind))
+    ];
+    kinds
+        .into_iter()
+        .filter_map(|(kind, needed)| needed.then_some(kind))
 }
 
 fn candidate_kinds<'a>(
@@ -1096,19 +1107,19 @@ struct FundedSite {
     cells: Vec<executor::PlannedCell>,
 }
 
-/// Shared site search over the street plan's road-fronting lots in walking
-/// order from the plaza, examining at most `attempts` candidates from `start`.
-/// Autonomous and pending-owner planning use SITE_ATTEMPTS and retain the
-/// returned cursor on failure. A direct owner command examines every
-/// candidate once for immediate admission. Success resets the cursor.
-fn site_project(
+/// Search the funded kinds in priority order over one shared street walk.
+/// Divide the admission's total attempt budget among them: an unplaceable
+/// early kind must not hide a later legal lot. Each kind resumes at the same
+/// frontage cursor. Owner requests pass one kind and retain their full scan.
+fn site_project<'a>(
     state: &TickState,
     record: &SettlementRecord,
-    blueprint: &blueprints::Blueprint,
+    blueprints: impl ExactSizeIterator<Item = &'a blueprints::Blueprint>,
     start: u32,
     attempts: u32,
     images: &[super::inventory::Image],
 ) -> (Option<FundedSite>, u32) {
+    let share = attempts / blueprints.len().max(1) as u32;
     let mut network = layout::Network::walk(state, record);
     let fronts = network.frontage();
     let count = u32::try_from(fronts.len()).unwrap_or(u32::MAX);
@@ -1116,39 +1127,42 @@ fn site_project(
         return (None, 0);
     }
     let mut index = start % count;
-    for _ in 0..attempts.min(count) {
-        let (front, normal) = fronts[index as usize];
-        index = (index + 1) % count;
-        let Some(lot) = network.lot(blueprint, front, normal) else {
-            continue;
-        };
-        let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
-        if !site_free(state, record, lot.origin, size) {
-            continue;
-        }
-        let project = Project {
-            settlement: record.id,
-            blueprint: blueprint.id.clone(),
-            level: 1,
-            origin: lot.origin,
-            rotation: lot.rotation,
-            building: None,
-            structure: String::new(),
-            ordered: false,
-        };
-        if let Some((bounds, mut cells)) = planned_cells(state, &project, "oak")
-            && let Some(bill) = cell_bill(state, &cells)
-            && let Some(species) = funded_species(state, &bill, images)
-            && apply_species(state, &mut cells, species).is_some()
-        {
-            return (
-                Some(FundedSite {
-                    project,
-                    bounds,
-                    cells,
-                }),
-                0,
-            );
+    for blueprint in blueprints {
+        index = start % count;
+        for _ in 0..share.min(count) {
+            let (front, normal) = fronts[index as usize];
+            index = (index + 1) % count;
+            let Some(lot) = network.lot(blueprint, front, normal) else {
+                continue;
+            };
+            let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+            if !site_free(state, record, lot.origin, size) {
+                continue;
+            }
+            let project = Project {
+                settlement: record.id,
+                blueprint: blueprint.id.clone(),
+                level: 1,
+                origin: lot.origin,
+                rotation: lot.rotation,
+                building: None,
+                structure: String::new(),
+                ordered: false,
+            };
+            if let Some((bounds, mut cells)) = planned_cells(state, &project, "oak")
+                && let Some(bill) = cell_bill(state, &cells)
+                && let Some(species) = funded_species(state, &bill, images)
+                && apply_species(state, &mut cells, species).is_some()
+            {
+                return (
+                    Some(FundedSite {
+                        project,
+                        bounds,
+                        cells,
+                    }),
+                    0,
+                );
+            }
         }
     }
     (None, index)
@@ -1223,16 +1237,28 @@ fn plan(state: &mut TickState, id: SettlementId) {
     // need cannot monopolize the single project slot.
     let images = executor::source_images(state, id);
     let catalog = blueprints::all(&state.registry);
-    let blueprint = candidate_kinds(state, record, &images).find_map(|kind| {
-        let blueprint = catalog.iter().find(|blueprint| blueprint.kind == kind)?;
-        let level = blueprint.level(1)?;
-        funded_species(state, &level.materials, &images).map(|_| blueprint)
-    });
-    if let Some(blueprint) = blueprint {
+    let mut funded = [None; AUTONOMOUS_KINDS];
+    let mut funded_count = 0;
+    for kind in candidate_kinds(state, record, &images) {
+        let Some(blueprint) = catalog.iter().find(|blueprint| blueprint.kind == kind) else {
+            continue;
+        };
+        if blueprint
+            .level(1)
+            .is_some_and(|level| funded_species(state, &level.materials, &images).is_some())
+        {
+            funded[funded_count] = Some(blueprint);
+            funded_count += 1;
+        }
+    }
+    if funded_count != 0 {
         let (site, cursor) = site_project(
             state,
             record,
-            blueprint,
+            funded
+                .into_iter()
+                .take(funded_count)
+                .map(|blueprint| blueprint.expect("funded prefix")),
             record.construction_cursor,
             SITE_ATTEMPTS,
             &images,
@@ -1513,9 +1539,9 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
     {
         return false;
     }
-    if project.blueprint == furnace::NAME {
-        // Workstation construction is temporary employment. Release its
-        // builder so even a single-resident town can tend it and shear sheep.
+    if project.blueprint == furnace::NAME || layout::infra(&project.blueprint) {
+        // Workstations and street work are temporary employment. Release
+        // their builder so a small town can staff extraction and shearing.
         let builder = residents(state, id).find(|slot| {
             state
                 .entities
@@ -1533,15 +1559,9 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
             crate::villager::sync_appearance(state, slot);
         }
         let record = state.settlements.get_mut(id).expect("finished settlement");
-        record.furnace_workstation = Some(project.structure);
-        record.project = None;
-        record.revision = record.revision.saturating_add(1);
-        return true;
-    }
-    // A committed road or lamp is street work, not a certified building: the
-    // world and the committed ledger record are its whole state.
-    if layout::infra(&project.blueprint) {
-        let record = state.settlements.get_mut(id).expect("finished settlement");
+        if project.blueprint == furnace::NAME {
+            record.furnace_workstation = Some(project.structure);
+        }
         record.project = None;
         record.revision = record.revision.saturating_add(1);
         return true;
@@ -1655,6 +1675,46 @@ pub(crate) fn iron_demand(
         .map(|level| demand(&level.materials))
         .max()
         .unwrap_or(0)
+}
+
+/// A current construction bill still needs wool, directly or through a bed.
+/// Uses the same stock and recipe proof as shears/iron provisioning.
+pub(crate) fn wool_demand(state: &TickState, id: SettlementId) -> bool {
+    let Some(record) = state.settlements.get(id) else {
+        return false;
+    };
+    let images = executor::source_images(state, id);
+    if let Some(order) = &record.pending_order {
+        return blueprints::get(&state.registry, &order.blueprint)
+            .and_then(|blueprint| blueprint.level(order.level))
+            .is_some_and(|level| availability::needs_wool(state, &level.materials, &images));
+    }
+    if let Some(project) = &record.project {
+        let active_wool = executor::status(state, id, &project.structure)
+            .ok()
+            .is_some_and(|snapshot| {
+                let bill: Vec<_> = snapshot
+                    .remaining
+                    .iter()
+                    .filter_map(|material| {
+                        let item = state
+                            .registry
+                            .items
+                            .id_of(&mc_data::Identifier::parse(&material.resource).ok()?)?;
+                        Some((item, u32::try_from(material.quantity).unwrap_or(u32::MAX)))
+                    })
+                    .collect();
+                availability::needs_wool(state, &bill, &images)
+            });
+        if active_wool {
+            return true;
+        }
+    }
+    let catalog = blueprints::all(&state.registry);
+    candidate_kinds(state, record, &images)
+        .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
+        .filter_map(|blueprint| blueprint.level(1))
+        .any(|level| availability::needs_wool(state, &level.materials, &images))
 }
 
 /// Whether the planner can fund at least one of its current candidates.
