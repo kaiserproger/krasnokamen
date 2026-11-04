@@ -712,38 +712,39 @@ fn passive_gap_temptation_respects_sitting_no_ai_and_spectator() {
 }
 
 #[test]
-fn sniffer_pair_places_egg_through_gameplay() {
+fn sniffer_pair_drops_egg_through_gameplay() {
     let (mut state, actor, pos) = fixture();
     let a = spawn(&mut state, "sniffer", [pos[0], pos[1], pos[2] + 1.0]);
     let b = spawn(&mut state, "sniffer", [pos[0] + 1.0, pos[1], pos[2] + 1.0]);
     hold(&mut state, actor, "torchflower_seeds", 2);
     run_tick(&mut state, &[use_animal(a)]);
     run_tick(&mut state, &[use_animal(b)]);
+    let player_slot = state.entities.slot_of(actor).unwrap();
+    state
+        .entities
+        .set_pos(player_slot, [pos[0] + 20.0, pos[1], pos[2]]);
     for _ in 0..90 {
         run_tick(&mut state, &[]);
     }
-    let egg = state
-        .registry
-        .blocks
-        .block(&mc_data::Identifier::parse("minecraft:sniffer_egg").unwrap())
-        .unwrap()
-        .default
-        .0;
+    let egg = item(&state, "sniffer_egg");
+    let eggs: i32 = state
+        .entities
+        .slots()
+        .filter_map(|slot| state.entities.row(slot).item.as_ref())
+        .filter(|stack| stack.item_id == egg)
+        .map(|stack| stack.count)
+        .sum();
+    assert_eq!(eggs, 1, "breeding drops one sniffer egg item");
     assert!(
-        (-4..=4).any(|dx| (-4..=4).any(|dz| {
-            (-1..=2).any(|dy| {
-                state
-                    .world
-                    .block_at(pos[0] as i32 + dx, pos[1] as i32 + dy, pos[2] as i32 + dz)
-                    == Some(egg)
-            })
-        })),
-        "sniffers must produce a placed egg"
+        !state
+            .entities
+            .slots()
+            .any(|slot| state.entities.row(slot).entity_life.child_ticks > 0)
     );
 }
 
 #[test]
-fn sniffer_breeding_stages_an_egg_block_instead_of_a_live_child() {
+fn sniffer_breeding_stages_an_egg_item_instead_of_a_live_child() {
     let (mut state, _, pos) = fixture();
     let a = spawn(&mut state, "sniffer", pos);
     let b = spawn(&mut state, "sniffer", pos);
@@ -767,14 +768,72 @@ fn sniffer_breeding_stages_an_egg_block_instead_of_a_live_child() {
             == 0,
         "sniffer birth lays an egg, not a live child"
     );
-    let egg = state
+    let egg = item(&state, "sniffer_egg");
+    assert_eq!(
+        state
+            .merge_life_drops
+            .iter()
+            .filter(|(_, stack)| stack.item_id == egg)
+            .map(|(_, stack)| stack.count)
+            .sum::<i32>(),
+        1
+    );
+    assert!(state.merge_block_writes.is_empty());
+}
+
+#[test]
+fn sniffer_breeding_accepts_a_carpet_in_the_midpoint_cell() {
+    let (mut state, _, pos) = fixture();
+    let a = spawn(&mut state, "sniffer", pos);
+    let b = spawn(&mut state, "sniffer", pos);
+    for id in [a, b] {
+        let slot = state.entities.slot_of(id).unwrap();
+        state.entities.row_mut(slot).love = 540;
+    }
+    let carpet = state
         .registry
         .blocks
-        .block(&mc_data::Identifier::parse("minecraft:sniffer_egg").unwrap())
+        .block(&mc_data::Identifier::parse("minecraft:white_carpet").unwrap())
         .unwrap()
         .default
         .0;
-    assert!(state.merge_block_writes.iter().any(|(_, id)| *id == egg));
+    let cell = (
+        pos[0].floor() as i32,
+        pos[1].floor() as i32,
+        pos[2].floor() as i32,
+    );
+    state.world.set_block(cell.0, cell.1, cell.2, carpet);
+    state.world.fold_overlay();
+    let type_id = match body(&state, a).kind {
+        EntityKind::Mob { type_id } => type_id,
+        _ => unreachable!(),
+    };
+    let mut intents = vec![Intent {
+        actor: a,
+        seq: 0,
+        kind: IntentKind::Breed {
+            partner: b,
+            child_pos: pos,
+            child_type: type_id,
+        },
+        footprint: Footprint {
+            entity_reads: vec![a, b],
+            entity_writes: vec![a, b],
+            ..Default::default()
+        },
+    }];
+    assert_eq!(state.merge(&mut intents), 1);
+    assert_eq!(state.world.block_at(cell.0, cell.1, cell.2), Some(carpet));
+    let egg = item(&state, "sniffer_egg");
+    assert_eq!(
+        state
+            .merge_life_drops
+            .iter()
+            .filter(|(_, stack)| stack.item_id == egg)
+            .map(|(_, stack)| stack.count)
+            .sum::<i32>(),
+        1
+    );
 }
 
 #[test]

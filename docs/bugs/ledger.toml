@@ -726,7 +726,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BREEDING-EGG-LIFECYCLE"
-regression = ["cargo:mc-core:entity_life_tests::sniffer_breeding_stages_an_egg_block_instead_of_a_live_child", "cargo:mc-core:entity_life_tests::sniffer_pair_places_egg_through_gameplay", "cargo:mc-core:entity_life_tests::turtle_breeding_lays_egg_blocks_on_home_sand", "cargo:mc-core:entity_life_tests::frog_breeding_places_frogspawn_on_nearby_water"]
+regression = ["cargo:mc-core:entity_life_tests::sniffer_breeding_stages_an_egg_item_instead_of_a_live_child", "cargo:mc-core:entity_life_tests::sniffer_pair_drops_egg_through_gameplay", "cargo:mc-core:entity_life_tests::sniffer_breeding_accepts_a_carpet_in_the_midpoint_cell", "cargo:mc-core:entity_life_tests::turtle_breeding_lays_egg_blocks_on_home_sand", "cargo:mc-core:entity_life_tests::frog_breeding_places_frogspawn_on_nearby_water"]
 
 [[bug]]
 id = "AXOLOTL-FEED-BUCKET"

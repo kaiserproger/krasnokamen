@@ -406,16 +406,8 @@ fn stage_egg_birth(
     let _ = (actor, partner, advancement_breeding);
     match birth {
         breeding::EggBirth::SnifferEgg => {
-            let at = crate::boundary::BlockPos {
-                x: pos[0].floor() as i32,
-                y: pos[1].floor() as i32,
-                z: pos[2].floor() as i32,
-            };
-            if state.world.block_at(at.x, at.y, at.z) == Some(state.registry.states.air)
-                && let Some(name) = Identifier::parse("minecraft:sniffer_egg").ok()
-                && let Some(block) = state.registry.blocks.block(&name)
-            {
-                state.merge_block_writes.push((at, block.default.0));
+            if let Some(id) = item(state, "minecraft:sniffer_egg") {
+                state.merge_life_drops.push((pos, ItemStack::new(id, 1)));
             }
         }
         breeding::EggBirth::TurtleEgg => {
