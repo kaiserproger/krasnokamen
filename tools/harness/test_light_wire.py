@@ -99,7 +99,7 @@ class ProxyTests(unittest.TestCase):
         proxy = light_wire.LightWireProxy.__new__(light_wire.LightWireProxy)
         proxy.lock = threading.Lock()
         observed = []
-        proxy.packet_observer = lambda phase, packet, body: observed.append((phase, packet, body))
+        proxy.packet_observer = lambda wire, phase, packet, body: observed.append((phase, packet, body))
         wire = light_wire.WireLight()
         payload = b"\x14distant_horizons:msg\x00\x10\x00\x04"
         frames = bytearray(_frame(3, b"", True) + _frame(0x18, payload, True))
@@ -113,7 +113,7 @@ class ProxyTests(unittest.TestCase):
         proxy.lock = threading.Lock()
         proxy.packet_observer = lambda *_: self.fail("serverbound packet reached clientbound observer")
         observed = []
-        proxy.client_packet_observer = lambda phase, packet, body: observed.append((phase, packet, body))
+        proxy.client_packet_observer = lambda wire, phase, packet, body: observed.append((phase, packet, body))
         wire = light_wire.WireLight()
         frames = bytearray(_frame(3, b"", False))
         self.assertEqual(proxy._frames(frames, wire, "login", False, serverbound=True), ("login", False))

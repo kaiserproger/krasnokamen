@@ -49,9 +49,7 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     if v2_scenario:
         if ctx.client != "native" or kind != "entities":
             raise ValueError("native-v2 scenarios require --client native and entities")
-    if ctx.scenario_id in ("native-v2-p5-humanoid-armor", native_light.SCENARIO_ID,
-                           "native-v2-radius-full-view", "native-v2-craft-drag",
-                           "native-v2-settlement-storage") and not ctx.windowed:
+    if v2_scenario and native_v2.scenario_catalog.SCENARIOS[ctx.scenario_id].evidence == "graphical" and not ctx.windowed:
         raise ValueError(f"{ctx.scenario_id} requires --windowed")
     soak_seconds = 1800.0
     check = kind in {"inventory", "core-client"} and ctx.extra_args == ["--check"]
@@ -83,6 +81,8 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         required = required | {"minecraft_open_inventory", "client_capture"}
     if ctx.scenario_id == "native-v2-settlement-storage":
         required = required | {"client_capture"}
+    if ctx.scenario_id == "native-v2-custody-mount-export":
+        required = required | {"minecraft_approach_entity", "minecraft_interact_entity", "client_capture"}
     if p5_scenario:
         required = java_p5.REQUIRED_TOOLS
     artifact = ctx.artifact_dir
@@ -122,6 +122,9 @@ vanilla_data_dir = {json.dumps(os.environ.get("SOLARIS_SERVER_VANILLA_DATA_DIR",
 seed = 81
 ''')
     prepare_operator_fixture(ctx, operators)
+    if ctx.scenario_id == "native-v2-p2-optional-pack":
+        with config.open("a") as output:
+            output.write('\n[resource_pack]\nurl = "http://127.0.0.1:9/promotion-pack.zip"\nrequired = false\n')
     with binary.open("rb") as executable:
         digest = hashlib.file_digest(executable, "sha256").hexdigest()
     evidence = ctx.client_evidence
@@ -160,6 +163,15 @@ seed = 81
                 wire_trace = light_wire.LightWireProxy(port, artifact)
                 client_address = wire_trace.address
                 evidence["native_wire_trace"] = str(wire_trace.path)
+            elif ctx.scenario_id == "native-v2-p2-optional-pack":
+                from .native_promotion_custody import PackWireReceipt
+
+                pack_receipt = PackWireReceipt(
+                    Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json", artifact)
+                wire_trace = light_wire.LightWireProxy(
+                    port, artifact, pack_receipt.server_packet, pack_receipt.client_packet)
+                client_address = wire_trace.address
+                evidence["native_wire_trace"] = str(pack_receipt.path)
             if ctx.windowed:
                 xvfb, display, display_log = runtime.start_xvfb(artifact)
                 ctx.logs.append(str(artifact / "xvfb.log"))
@@ -170,6 +182,13 @@ seed = 81
                 mcp.p2_wire_trace = wire_trace
             if ctx.scenario_id in (native_light.SCENARIO_ID, "native-v2-radius-full-view"):
                 mcp.light_wire = wire_trace
+            if ctx.scenario_id == "native-v2-p2-optional-pack":
+                def single_connection_pack_receipt() -> dict[str, Any]:
+                    if wire_trace.errors:
+                        raise RuntimeError(f"optional pack wire errors: {wire_trace.errors}")
+                    return pack_receipt.receipt()
+
+                mcp.promotion_pack_receipt = single_connection_pack_receipt
             if ctx.scenario_id == "native-v2-p1-player-observer":
                 peer_ctx = replace(ctx, artifact_dir=artifact / "observer-client", client_evidence=peer_evidence)
                 evidence["observer_client"] = peer_evidence
@@ -309,7 +328,9 @@ seed = 81
             from . import native_p4
             mcp.p4_window = evidence.get("window_focus")
 
-            if ctx.scenario_id in native_p4.RESTART_SCENARIOS or ctx.scenario_id == native_light.SCENARIO_ID:
+            if (ctx.scenario_id in native_p4.RESTART_SCENARIOS
+                    or ctx.scenario_id in (native_light.SCENARIO_ID, "native-v2-end-restart",
+                                           "native-v2-custody-mount-export")):
                 def restart_server(remaining: float) -> str:
                     nonlocal server, server_log
                     old_pid = server.pid
@@ -317,18 +338,28 @@ seed = 81
                     if server.returncode != 0:
                         raise RuntimeError(f"P4 server did not stop cleanly: {server.returncode}")
                     server_log.close()
+                    if ctx.scenario_id == "native-v2-custody-mount-export":
+                        from .native_promotion_custody import convert_mount_world
+
+                        convert_mount_world(ctx, binary, config, evidence)
                     server_log = server_log_path.open("ab")
                     server = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],
                                               cwd=runtime.REPO_ROOT, stdout=server_log,
                                               stderr=subprocess.STDOUT, start_new_session=True)
                     runtime.wait_port(port, remaining, server, log_path=server_log_path)
                     evidence.setdefault("server_restarts", []).append({
-                        "old_pid": old_pid, "new_pid": server.pid, "same_world_dir": str(artifact / "world"),
+                        "old_pid": old_pid, "new_pid": server.pid, "world_dir": evidence["world_dir"],
                         "same_binary_sha256": digest,
                     })
                     return address
 
                 mcp.p4_restart_server = restart_server
+                if ctx.scenario_id == "native-v2-custody-mount-export":
+                    def export_reimport(remaining: float) -> dict[str, str]:
+                        address = restart_server(remaining)
+                        return {"address": address, **evidence["mount_conversions"][-1]}
+
+                    mcp.promotion_mount_export_reimport = export_reimport
             result = native_v2.run(mcp, artifact, timeout, ctx.scenario_id)
         elif p5_scenario:
             runners = {

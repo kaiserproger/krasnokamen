@@ -566,7 +566,30 @@ def _settlement_storage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None
 
 
 
+def _destroyed_chest(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_custody import destroyed_chest
+
+    destroyed_chest(steps, origin)
+
+
+def _promotion_world(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_promotion_world import run
+
+    run(steps, origin, steps.report["id"].removeprefix("native-v2-"))
+
+
+def _promotion_custody(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_promotion_custody import run
+
+    run(steps, origin, steps.report["id"])
+
+
 RUNNERS = {
+    "native-v2-custody-mount-export": _promotion_custody,
+    "native-v2-p2-optional-pack": _promotion_custody,
+    "native-v2-end-restart": _promotion_world,
+    "native-v2-entity-gallery": _promotion_world,
+    "native-v2-destroyed-chest": _destroyed_chest,
     "native-v2-craft-drag": _craft_drag,
     "native-v2-settlement-storage": _settlement_storage,
     "native-v2-redstone": _redstone, "native-v2-stations": _stations,

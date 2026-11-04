@@ -208,8 +208,8 @@ class LightWireProxy:
     """Unmodified forwarding listener; every server Play light packet feeds `WireLight`."""
 
     def __init__(self, server_port: int, artifact: Path,
-                 packet_observer: Callable[[str, int, bytes], None] | None = None,
-                 client_packet_observer: Callable[[str, int, bytes], None] | None = None) -> None:
+                 packet_observer: Callable[[WireLight, str, int, bytes], None] | None = None,
+                 client_packet_observer: Callable[[WireLight, str, int, bytes], None] | None = None) -> None:
         self.server_port = server_port
         self.path = artifact / "light-wire-trace.json"
         self.packet_observer = packet_observer
@@ -298,11 +298,11 @@ class LightWireProxy:
             payload = body[reader.offset:]
             if serverbound:
                 with self.lock:
-                    self.client_packet_observer(phase, packet_id, payload)
+                    self.client_packet_observer(wire, phase, packet_id, payload)
                 continue
             with self.lock:
                 if self.packet_observer is not None:
-                    self.packet_observer(phase, packet_id, payload)
+                    self.packet_observer(wire, phase, packet_id, payload)
                 if phase == "play" and packet_id == LEVEL_CHUNK_WITH_LIGHT:
                     wire.chunk_packet(payload)
                 elif phase == "play" and packet_id == LIGHT_UPDATE:

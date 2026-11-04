@@ -849,9 +849,9 @@ title = "Clean shutdown checkpoint tick2479; same End world cannot reopen: Drago
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#END-RESTART"
-regression = ["cargo:mc-core:end_fight::tests::checkpoint_reopens_live_and_dead_dragon_fights"]
+regression = ["cargo:mc-core:end_fight::tests::checkpoint_reopens_live_and_dead_dragon_fights", "harness:entities:native-v2-end-restart"]
 failing_first = "reported"
 
 [[bug]]
@@ -860,9 +860,9 @@ title = "Mixed entity gallery after unfreeze crashes core: entities.rs:1000 len1
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ENTITY-BODY-PANIC"
-regression = ["cargo:mc-core:projectiles::flight_tests::mixed_gallery_unfreeze_survives_projectile_compaction"]
+regression = ["cargo:mc-core:projectiles::flight_tests::mixed_gallery_unfreeze_survives_projectile_compaction", "harness:entities:native-v2-entity-gallery"]
 failing_first = "reported"
 
 [[bug]]
@@ -1291,9 +1291,9 @@ title = "Optional server resource-pack offer unconditionally disconnects native 
 area = "client"
 repro = "source"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P2"
-regression = ["cargo:mc-edge:configuration::tests::optional_pack_decline_completes_configuration"]
+regression = ["cargo:mc-edge:configuration::tests::optional_pack_decline_completes_configuration", "harness:entities:native-v2-p2-optional-pack"]
 
 [[bug]]
 id = "P3"
@@ -3375,3 +3375,13 @@ status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/BugsBlocks/construct-before.log"
 regression = ["cargo:mc-core:redstone::containers::tests::dispenser_construct_heads_do_not_erase_solid_target"]
 failing_first = "reported"
+
+[[bug]]
+id = "NATIVE-MOUNT-MENU-KIND"
+title = "In the native client, quick-moving cargo in an ordinary horse/donkey/llama inventory fails with 'mount kind unknown': inventory/policies.rs:263-269 requires the menu's mount kind, but InventoryStore::configure_mount is never called."
+area = "client"
+repro = "client"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/Promote/validation/20261104T195352-native-v2-custody-mount-export-4di9p1dx/result.json"
+regression = []

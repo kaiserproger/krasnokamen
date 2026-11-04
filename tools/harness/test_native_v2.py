@@ -13,6 +13,14 @@ from .backends.probe_steps import ProbeSteps
 
 
 class NativeV2ProbeTests(unittest.TestCase):
+    def test_destroyed_chest_scenario_is_graphical_and_registered(self) -> None:
+        name = "native-v2-destroyed-chest"
+        self.assertIn(name, native_v2.RUNNERS)
+        entry = scenarios.SCENARIOS[name]
+        self.assertEqual(entry.evidence, "graphical")
+        self.assertEqual(entry.profile, "entities")
+        self.assertIn("tools/harness/backends/native_custody.py", entry.sources)
+
     def test_lifecycle_difficulty_uses_only_fresh_fenced_responses(self) -> None:
         from .backends.native_lifecycle import _difficulty_from_interval
 
@@ -108,7 +116,9 @@ class NativeV2ProbeTests(unittest.TestCase):
             self.assertEqual(entry.scenario_id, name)
             expected = ("graphical" if name in ("native-v2-p5-humanoid-armor", "native-v2-light-seam",
                                                 "native-v2-radius-full-view", "native-v2-craft-drag",
-                                                "native-v2-settlement-storage")
+                                                "native-v2-settlement-storage", "native-v2-destroyed-chest",
+                                                "native-v2-end-restart", "native-v2-entity-gallery",
+                                                "native-v2-p2-optional-pack", "native-v2-custody-mount-export")
                         else "tcp")
             self.assertEqual(entry.evidence, expected)
 

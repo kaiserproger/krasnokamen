@@ -27,3 +27,28 @@ Run `python3 -m tools.harness run regressions` on every integration and
 `python3 -m tools.harness run regressions-client` when promoting a
 client-surface fix and before release. The independent breaker in
 `../QA_AGENT_PROTOCOL.md` remains a release requirement.
+
+## Native promotion probes
+
+The `entities` profile includes windowed native-client probes:
+
+- `native-v2-end-restart`: enter the End on hard difficulty, identify the live
+  dragon, switch to peaceful, save and restart, then require the same player,
+  End world and dragon UUID. This covers live peaceful-fight persistence, not
+  the dead-dragon branch or dragon model parity.
+- `native-v2-entity-gallery`: remove a projectile during a mixed live-entity
+  tick, then require the other fixture UUIDs and an ordered server response.
+  Its negative control must show the original body-slot compaction panic,
+  not merely a disconnected client.
+- `native-v2-custody-mount-export`: create imported donkey cargo using the
+  shipping export/import CLI, withdraw seven diamonds, deposit five emeralds,
+  export/import again and assert both mount and player custody.
+- `native-v2-p2-optional-pack`: observe a Configuration pack offer, a matching
+  decline and Play on one error-free connection, then require playable chat.
+- `native-v2-destroyed-chest`: records visible menu closure and custody after
+  chest destruction. The MCP refusal to click an already-closed menu is not
+  a stale server-packet test; this probe alone cannot close HS-1.
+
+Only promote a row after recording its fixed-build and failing pre-fix
+receipts. Repeat timing-variable probes at least three times. A probe's
+registration or screenshot alone is not acceptance evidence.
