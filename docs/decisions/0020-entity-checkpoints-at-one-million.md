@@ -213,6 +213,29 @@ fallback is pre-accepted.
   recaptured; inline `Option<VillagerState>` is 2,160 B). Without the rename
   fold fix both rename tests fail: the original UUID stays stored.
 
+## Measurements (2026-11-05, step 3, `057bcfbd` vs `037cfa2b`)
+
+Release builds, `mem-run -x -m 8G`, CPUs 0–3, system allocator, 5 AB/BA pairs
+per row; receipts `receipts/CkptMeasure/RESULT.yaml`. Values are medians of
+per-run maxima (ms), baseline → candidate.
+
+| Fixture | Checkpoint tick | Normal tick |
+|---|---|---|
+| frozen-distant 10k | 27.7 → 2.3 | paired Δ −0.27, +0.06, −0.18, +0.30, −5.37 |
+| frozen-distant 100k | 259.8 → 10.7 | — |
+| all-active 10k (NoAI, forced chunks) | 35.4 → 34.7 | 15.7 → 15.4 |
+| all-active 100k (NoAI cows) | 310.8 → 307.6 | 851.4 → 100.4 |
+
+- Reopen readiness at 262k: 32.0 s → 27.6 s (−14%), within the +10% gate.
+- 1M, 8 GiB scope: three committed checkpoints, SIGKILL at the next checkpoint
+  entry, reopened species/total counts equal the pre-kill census; sampled
+  anon peak 5.76 GB, scope peak 6.48 GB, `max` and `oom` 0. The offline fold
+  and the post-checkpoint SIGKILL were not run.
+- The strict latency pass ("none worse") fails on outliers: two frozen 10k
+  paired normal-tick maxima are worse by 0.06 and 0.30 ms, and the worst single
+  all-active 100k normal stall rose from 2.79 s to 3.29 s. Not run: the
+  1–2-core profile. Status stays Proposed until the owner rules on these.
+
 ## Proof
 
 - **Oracle (small world, failing-first).**
