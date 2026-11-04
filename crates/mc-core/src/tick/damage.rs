@@ -535,6 +535,7 @@ impl TickState {
                 let victim_uuid = self.entities.row(slot).uuid;
                 let mut combat_hits = Vec::new();
                 let mut infection_attacker = None;
+                let mut lethal_damage = None;
                 let was_alive = self.entities.body(slot).alive;
                 let resists_magic = match self.entities.body(slot).kind {
                     EntityKind::Mob { type_id } => self
@@ -604,6 +605,7 @@ impl TickState {
                         amount
                     };
                     if before_hit > 0.0 && row.health <= 0.0 {
+                        lethal_damage = Some((piece.kind, piece.source));
                         infection_attacker = match piece.source {
                             Some(
                                 crate::intent::DamageSource::Melee { attacker, .. }
@@ -636,6 +638,40 @@ impl TickState {
                     .villager
                     .as_ref()
                     .is_some_and(|v| v.conversion_time.is_none());
+                if killed && villager {
+                    let resident = self.entities.row(slot).villager.as_ref().unwrap();
+                    let position = self.entities.pos(slot);
+                    let simulated = self.world.is_active(
+                        (position[0].floor() as i32).div_euclid(16),
+                        (position[2].floor() as i32).div_euclid(16),
+                    );
+                    let attacker_type = lethal_damage
+                        .and_then(|(_, source)| crate::plugin::damage_attacker(source))
+                        .and_then(|attacker| self.entities.slot_of(attacker))
+                        .and_then(|attacker| match self.entities.body(attacker).kind {
+                            EntityKind::Mob { type_id } => self
+                                .registry
+                                .blueprint(type_id)
+                                .map(|blueprint| blueprint.name.as_str()),
+                            EntityKind::Player { .. } => Some("minecraft:player"),
+                            _ => None,
+                        });
+                    tracing::warn!(
+                        target: "solaris::settlement",
+                        tick = self.tick,
+                        game_time = self.day_time,
+                        entity = ?id,
+                        uuid = %victim_uuid,
+                        settlement = ?resident.settlement,
+                        profession = ?resident.data.profession,
+                        activity = ?resident.activity,
+                        ?position,
+                        simulated,
+                        ?attacker_type,
+                        damage = ?lethal_damage,
+                        "resident received lethal damage"
+                    );
+                }
                 for (attacker, damage, killed) in combat_hits {
                     crate::plugin_npcs::record_combat(self, attacker, victim_uuid, damage, killed);
                 }

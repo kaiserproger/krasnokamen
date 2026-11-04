@@ -557,6 +557,12 @@ fn wander_to(
                             y: cell.y + dy,
                             z: cell.z + dz,
                         };
+                        if !state
+                            .world
+                            .is_active(next.x.div_euclid(16), next.z.div_euclid(16))
+                        {
+                            return None;
+                        }
                         let end = allocator::standing_for_route(
                             &(state).world,
                             &(state).registry,
@@ -592,7 +598,11 @@ fn wander_to(
     move_committed_with_route(state, slot, v, scheduled, unchanged);
 }
 
-fn nearest_threat(cache: &PoiCache, pos: [f64; 3]) -> Option<[f64; 3]> {
+fn nearest_threat(
+    cache: &PoiCache,
+    pos: [f64; 3],
+    visible: impl Fn([f64; 3]) -> bool,
+) -> Option<[f64; 3]> {
     let range = cache.threat_max_range;
     let min_x = ((pos[0] - range).floor() as i32).div_euclid(16);
     let max_x = ((pos[0] + range).floor() as i32).div_euclid(16);
@@ -607,6 +617,7 @@ fn nearest_threat(cache: &PoiCache, pos: [f64; 3]) -> Option<[f64; 3]> {
             let d = distance(pos, at);
             (d <= range * range).then_some((d, index, at))
         })
+        .filter(|&(_, _, at)| visible(at))
         // Chunk traversal must not change the original sensor-order tie break.
         .min_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.cmp(&b.1)))
         .map(|(_, _, at)| at)
@@ -789,7 +800,20 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             v.data.profession = profession;
             v.offers.clear();
         }
-        let threat = decision_phase!(cache, 2, nearest_threat(&cache, pos));
+        let threat = decision_phase!(
+            cache,
+            2,
+            nearest_threat(&cache, pos, |at| {
+                let eye = [
+                    pos[0],
+                    pos[1] + state.entities.body(slot).height * 0.85,
+                    pos[2],
+                ];
+                // A sleeping eye lies above the bed shape, but inside its
+                // voxel: full-voxel sight would hide even visible hostiles.
+                crate::projectiles::flight::clear_segment(state, eye, [at[0], at[1] + 1.62, at[2]])
+            })
+        );
         if v.data.profession == Profession::Soldier {
             v.panic_until = 0;
         } else {
@@ -948,41 +972,41 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 share_food(state, &cache.food, slot, &mut v, changes)
             });
             let mut worker_exact = false;
-            let worker_target = if merchant_busy || awaiting_profession {
-                None
-            } else if let Some(target) = super::smelting::work(state, slot, &mut v) {
-                target
-            } else {
-                let target = match v.data.profession {
-                    Profession::Miner => super::mining::work(state, slot, &mut v, changes),
-                    Profession::Lumberjack => super::lumber::work(state, slot, &mut v, changes),
-                    Profession::Builder => {
-                        super::building::work(state, slot, &mut v, changes).map(|target| {
-                            worker_exact = target.exact;
-                            target.pos
-                        })
-                    }
-                    Profession::Soldier => {
-                        super::soldier::work(state, slot, &mut v).map(|(target, exact)| {
-                            worker_exact = exact;
-                            target
-                        })
-                    }
-                    Profession::Farmer => super::harvest::deposit(state, slot, &mut v)
-                        .or_else(|| super::harvest::target(&v)),
-                    _ => None,
-                };
-                if changes.blocks.len() != blocks_before_work
-                    || v.inventory
-                        .each_ref()
-                        .map(|stack| stack.as_ref().map(|stack| (stack.item_id, stack.count)))
-                        != carry_before_work
-                {
+            let worker_target =
+                if merchant_busy || awaiting_profession || v.activity == Activity::Rest {
+                    None
+                } else if let Some(target) = super::smelting::work(state, slot, &mut v) {
                     target
                 } else {
-                    super::shepherd::work(state, slot, &mut v, changes).unwrap_or(target)
-                }
-            };
+                    let target = match v.data.profession {
+                        Profession::Miner => super::mining::work(state, slot, &mut v, changes),
+                        Profession::Lumberjack => super::lumber::work(state, slot, &mut v, changes),
+                        Profession::Builder => super::building::work(state, slot, &mut v, changes)
+                            .map(|target| {
+                                worker_exact = target.exact;
+                                target.pos
+                            }),
+                        Profession::Soldier => {
+                            super::soldier::work(state, slot, &mut v).map(|(target, exact)| {
+                                worker_exact = exact;
+                                target
+                            })
+                        }
+                        Profession::Farmer => super::harvest::deposit(state, slot, &mut v)
+                            .or_else(|| super::harvest::target(&v)),
+                        _ => None,
+                    };
+                    if changes.blocks.len() != blocks_before_work
+                        || v.inventory
+                            .each_ref()
+                            .map(|stack| stack.as_ref().map(|stack| (stack.item_id, stack.count)))
+                            != carry_before_work
+                    {
+                        target
+                    } else {
+                        super::shepherd::work(state, slot, &mut v, changes).unwrap_or(target)
+                    }
+                };
             let mut short_wander = false;
             let mut exact_target = false;
             let target = if shelter_night {
@@ -1023,6 +1047,10 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 } else {
                     v.navigation_target
                 }
+            } else if v.activity == Activity::Rest {
+                // Rest owns the destination even when a worker still carries
+                // a delivery or an economy task has reserved its next shift.
+                home
             } else if v.data.profession == Profession::Soldier
                 && !crate::settlements::economy::worker_reserved(
                     state,

@@ -944,6 +944,165 @@ fn funded_house_retains_priority_over_later_needs() {
     );
 }
 
+#[test]
+fn colored_wool_funds_and_builds_matching_bed_without_mixing() {
+    let (mut state, id, builder) = fixture();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    state.registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(Some(&root)).unwrap());
+    open_plan(&mut state);
+    fund(&mut state, "house", 1);
+    let item = |name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
+            .unwrap()
+    };
+    let white_bed = item("white_bed");
+    let red_wool = item("red_wool");
+    let blue_wool = item("blue_wool");
+    let planks = item("oak_planks");
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    let bed = slots
+        .iter()
+        .position(|stack| stack.item_id == white_bed)
+        .unwrap();
+    slots[bed] = mc_data::ItemStack::new(red_wool, 2);
+    let empty = slots.iter().position(mc_data::ItemStack::is_empty).unwrap();
+    slots[empty] = mc_data::ItemStack::new(blue_wool, 1);
+    let empty = slots.iter().position(mc_data::ItemStack::is_empty).unwrap();
+    slots[empty] = mc_data::ItemStack::new(planks, 3);
+    assert!(wool_demand(&state, id), "mixed wool cannot satisfy a bed");
+    assert!(
+        funding_error(
+            &state,
+            id,
+            &blueprints::get(&state.registry, "house")
+                .unwrap()
+                .level(1)
+                .unwrap()
+                .materials
+        )
+        .is_some()
+    );
+    state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[bed].count = 3;
+    assert!(
+        !wool_demand(&state, id),
+        "three matching wool satisfy the bed"
+    );
+    request_build(&mut state, id, "house").unwrap();
+    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let level = blueprints::get(&state.registry, "house")
+        .unwrap()
+        .level(1)
+        .unwrap()
+        .rotated(Rotation::from_quarter_turns(project.rotation));
+    let beds: Vec<_> = level
+        .blocks
+        .iter()
+        .filter_map(|(offset, block)| {
+            state
+                .registry
+                .blocks
+                .by_id(*block)
+                .filter(|entry| entry.block.id.path() == "white_bed")
+                .map(|_| level.world(project.origin, *offset))
+        })
+        .collect();
+    assert_eq!(beds.len(), 2);
+    complete(&mut state, id, builder);
+    assert!(
+        beds.iter().any(|&[x, y, z]| {
+            super::super::allocator::bed_pair(
+                &state.world,
+                &state.registry,
+                crate::boundary::BlockPos { x, y, z },
+            )
+            .is_some()
+        }),
+        "the placed bed is a valid matched pair"
+    );
+    for [x, y, z] in beds {
+        let placed = state.world.block_at(x, y, z).unwrap();
+        assert_eq!(
+            state
+                .registry
+                .blocks
+                .by_id(mc_world::BlockStateId(placed))
+                .unwrap()
+                .block
+                .id
+                .path(),
+            "red_bed"
+        );
+    }
+    assert_eq!(
+        state.block_entities[&(1, 201, 1)]
+            .slots
+            .iter()
+            .filter(|stack| stack.item_id == red_wool)
+            .map(|stack| stack.count)
+            .sum::<i32>(),
+        0
+    );
+}
+
+#[test]
+fn colored_sheep_is_the_house_wool_source() {
+    let (mut state, id, worker) = fixture();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    state.registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(Some(&root)).unwrap());
+    state
+        .entities
+        .row_mut(worker)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::None;
+    let sheep = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:sheep").unwrap())
+        .unwrap();
+    let entity = state.spawn_mob(sheep, [8.5, 201.0, 8.5], 8.0);
+    let slot = state.entities.slot_of(entity).unwrap();
+    crate::tick::set_wool(
+        std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance),
+        14,
+    );
+    let iron = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:iron_ingot").unwrap())
+        .unwrap();
+    state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[0] = mc_data::ItemStack::new(iron, 2);
+    let planks = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_planks").unwrap())
+        .unwrap();
+    state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[1] =
+        mc_data::ItemStack::new(planks, 3);
+    state.settlements.get_mut(id).unwrap().pending_order = Some(OwnerOrder {
+        blueprint: "house".into(),
+        level: 1,
+        building: None,
+    });
+    assert!(wool_demand(&state, id));
+    let house = waiting(&state, id);
+    let bed = house
+        .iter()
+        .flat_map(|kind| &kind.needs)
+        .find(|need| need.item.ends_with("_bed"))
+        .unwrap();
+    assert_eq!(bed.item, "minecraft:red_bed");
+    assert_eq!(
+        bed.no_source, None,
+        "red sheep and real iron supply red wool"
+    );
+}
+
 /// Merge several blueprints' level-one materials into the fixture chest.
 fn fund_all(state: &mut TickState, blueprints_: &[&str]) {
     let mut total: Vec<(u32, u32)> = Vec::new();

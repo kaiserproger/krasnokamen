@@ -254,6 +254,13 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
     probe.check("ordinary_player_claimed", any(line.startswith("Claimed ") for line in claim))
     detail["claim_screenshot"] = native_client.capture(probe.client, artifact, "civilization-claim")
     fund(probe, detail, server, chest)
+    # Claim and the conserved stock transfer above use ordinary survival play.
+    # The remaining gate observes residents, not player hunger/combat survival.
+    # Creative preserves container interaction and normal world/mob simulation.
+    command = f"gamemode creative {village.USERNAME}"
+    probe.report["fixture_commands"].append("console: " + command)
+    item_merge._console(server, command)
+    detail["observer_mode"] = "creative after claim and founding transfer; player survival is not tested"
     entities = probe.call("minecraft_list_entities", {"radius": 128, "limit": 48})
     detail["initial_entities"] = entities
     detail["initial_sheep_count"] = sum(

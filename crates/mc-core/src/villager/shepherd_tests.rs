@@ -255,6 +255,70 @@ fn miner_native_ticks_craft_shears_and_deliver_wool() {
 }
 
 #[test]
+fn colored_sheep_and_iron_supply_the_pending_house_bed() {
+    let (mut state, slot, mut v) = setup();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    state.registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(Some(&root)).unwrap());
+    v.data.profession = VillagerProfession::Miner;
+    v.job_site = None;
+    v.inventory = std::array::from_fn(|_| None);
+    let town = v.settlement.unwrap();
+    state.settlements.get_mut(town).unwrap().buildings.clear();
+    storage(&mut state, &v, [4, 201, 3]);
+    let iron = mining::item_id(&state, "iron_ingot").unwrap();
+    let shears = mining::item_id(&state, "shears").unwrap();
+    let wool = mining::item_id(&state, "red_wool").unwrap();
+    state.block_entities.get_mut(&(4, 201, 3)).unwrap().slots[0] = ItemStack::new(iron, 2);
+    let planks = mining::item_id(&state, "oak_planks").unwrap();
+    state.block_entities.get_mut(&(4, 201, 3)).unwrap().slots[1] = ItemStack::new(planks, 3);
+    state.block_entities.get_mut(&(4, 201, 3)).unwrap().slots[2] = ItemStack::new(wool, 1);
+    let nearer_white = sheep(&mut state, [3.5, 201.0, 3.5], 0);
+    state.entities.row_mut(nearer_white).controls.no_ai = true;
+    let sheep_slot = sheep(&mut state, [3.5, 201.0, 4.5], 14);
+    state.entities.row_mut(sheep_slot).controls.no_ai = true;
+    state.world.set_block(3, 201, 3, state.registry.states.air);
+    state.entities.row_mut(slot).villager = Some(v);
+    state.world.fold_overlay();
+    crate::settlements::construction::request_build(&mut state, town, "house").unwrap();
+    let waiting = crate::settlements::construction::waiting(&state, town);
+    assert!(
+        waiting
+            .iter()
+            .flat_map(|kind| &kind.needs)
+            .any(|need| need.item == "minecraft:red_bed" && need.no_source.is_none())
+    );
+    for _ in 0..2_000 {
+        crate::tick::run_tick(&mut state, &[]);
+        if state.block_entities[&(4, 201, 3)]
+            .slots
+            .iter()
+            .filter(|item| item.item_id == wool)
+            .map(|item| item.count)
+            .sum::<i32>()
+            > 1
+        {
+            break;
+        }
+    }
+    assert_eq!(
+        crate::tick::wool_of(&state.entities.row(sheep_slot).appearance),
+        0x10 | 14
+    );
+    assert_eq!(
+        crate::tick::wool_of(&state.entities.row(nearer_white).appearance),
+        0
+    );
+    let worker = state.entities.row(slot).villager.as_ref().unwrap();
+    assert_eq!(carried(worker, shears), 1);
+    assert!(
+        state.block_entities[&(4, 201, 3)]
+            .slots
+            .iter()
+            .any(|item| item.item_id == wool && item.count > 0)
+    );
+}
+
+#[test]
 fn working_miner_crafts_shears_and_delivers_wool_during_house_demand() {
     let (mut state, slot, mut v) = fixture(BuildingKind::Mine);
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");

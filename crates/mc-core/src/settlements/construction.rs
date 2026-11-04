@@ -409,6 +409,135 @@ fn species_bill(
         .collect()
 }
 
+/// Resolve the authored white bed to one concrete vanilla bed color. A
+/// complete stock wins; otherwise prefer a live sheep and its partial stock.
+fn bed_colors(
+    state: &TickState,
+    id: SettlementId,
+    materials: &[(u32, u32)],
+    images: &[super::inventory::Image],
+) -> ([u8; 16], usize) {
+    let mut result = [0; 16];
+    let Some((_, needed)) = materials.iter().find(|(item, _)| {
+        state
+            .registry
+            .items
+            .name_of(*item)
+            .is_some_and(|name| name.as_str() == "minecraft:white_bed")
+    }) else {
+        return (result, 1);
+    };
+    let sheep = state.settlements.get(id).map_or(0, |record| {
+        availability::sheep_colors(state, record.anchor, record.radius.min(256))
+    });
+    let mut beds = [0_u64; 16];
+    let mut wool = [0_u64; 16];
+    for stack in images
+        .iter()
+        .flat_map(|image| &image.slots)
+        .filter(|stack| stack.count > 0)
+    {
+        let Some(name) = state.registry.items.name_of(stack.item_id) else {
+            continue;
+        };
+        if name.namespace() != "minecraft" {
+            continue;
+        }
+        let (color, counts) = if let Some(color) = name.path().strip_suffix("_bed") {
+            (color, &mut beds)
+        } else if let Some(color) = name.path().strip_suffix("_wool") {
+            (color, &mut wool)
+        } else {
+            continue;
+        };
+        if let Some(index) = crate::blueprint::DYE_COLORS
+            .iter()
+            .position(|candidate| *candidate == color)
+        {
+            counts[index] += stack.count as u64;
+        }
+    }
+    let mut candidates = [(0_u8, false, false, 0_u64, 0_u64); 16];
+    for (index, candidate) in candidates.iter_mut().enumerate() {
+        let covered = beds[index] >= u64::from(*needed)
+            || wool[index] >= u64::from(*needed).saturating_sub(beds[index]) * 3;
+        *candidate = (
+            index as u8,
+            covered,
+            sheep & (1 << index) != 0,
+            beds[index],
+            wool[index],
+        );
+    }
+    let count = candidates.len();
+    candidates[..count].sort_unstable_by(|a, b| {
+        (b.1, b.2, b.3, b.4)
+            .cmp(&(a.1, a.2, a.3, a.4))
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    for (slot, candidate) in result.iter_mut().zip(&candidates[..count]) {
+        *slot = candidate.0;
+    }
+    (result, count)
+}
+
+fn bed_bill<'a>(
+    state: &TickState,
+    materials: &'a [(u32, u32)],
+    color: u8,
+) -> Option<std::borrow::Cow<'a, [(u32, u32)]>> {
+    if color == 0 {
+        return Some(std::borrow::Cow::Borrowed(materials));
+    }
+    let Some(white) = materials.iter().find_map(|(item, _)| {
+        state
+            .registry
+            .items
+            .name_of(*item)
+            .filter(|name| name.as_str() == "minecraft:white_bed")
+            .map(|_| *item)
+    }) else {
+        return Some(std::borrow::Cow::Borrowed(materials));
+    };
+    let colored = state.registry.items.id_of(
+        &mc_data::Identifier::parse(format!(
+            "minecraft:{}_bed",
+            crate::blueprint::DYE_COLORS[usize::from(color)]
+        ))
+        .ok()?,
+    )?;
+    Some(std::borrow::Cow::Owned(
+        materials
+            .iter()
+            .map(|&(item, count)| (if item == white { colored } else { item }, count))
+            .collect(),
+    ))
+}
+
+fn funded_variant<'a>(
+    state: &'a TickState,
+    id: SettlementId,
+    materials: &[(u32, u32)],
+    images: &[super::inventory::Image],
+) -> Option<(&'a str, u8)> {
+    let (colors, count) = bed_colors(state, id, materials, images);
+    colors[..count].iter().copied().find_map(|color| {
+        let bill = bed_bill(state, materials, color)?;
+        funded_species(state, &bill, images).map(|species| (species, color))
+    })
+}
+
+fn selected_bill<'a>(
+    state: &TickState,
+    id: SettlementId,
+    materials: &'a [(u32, u32)],
+    images: &[super::inventory::Image],
+) -> Option<std::borrow::Cow<'a, [(u32, u32)]>> {
+    let (colors, count) = bed_colors(state, id, materials, images);
+    let color = *colors.get(..count)?.first()?;
+    bed_bill(state, materials, color)
+}
+
 /// A real worker load can fund the next building or upgrade before a stack is full.
 pub(crate) fn candidate_funded_by_delivery(
     state: &TickState,
@@ -433,10 +562,13 @@ pub(crate) fn candidate_funded_by_delivery(
 
 fn funding_error(state: &TickState, id: SettlementId, materials: &[(u32, u32)]) -> Option<String> {
     let images = executor::source_images(state, id);
-    if funded_species(state, materials, &images).is_some() {
+    if funded_variant(state, id, materials, &images).is_some() {
         return None;
     }
-    for &(item, count) in materials {
+    let Some(bill) = selected_bill(state, id, materials, &images) else {
+        return Some("Construction bed material is unavailable.".into());
+    };
+    for &(item, count) in bill.iter() {
         if !super::construction_crafting::can_fund(state, &[(item, count)], &images) {
             return Some(match state.registry.items.name_of(item) {
                 Some(name) => format!("not enough: {name} x{count}"),
@@ -534,13 +666,14 @@ fn start_upgrade(
         return Err(error);
     }
     let images = executor::source_images(state, id);
-    let species = funded_species(
+    let (species, color) = funded_variant(
         state,
+        id,
         &blueprint.level(level).expect("upgrade level").materials,
         &images,
     )
-    .ok_or("Construction materials changed during admission.")?
-    .to_owned();
+    .map(|(species, color)| (species.to_owned(), color))
+    .ok_or("Construction materials changed during admission.")?;
     let project = Project {
         settlement: id,
         blueprint: blueprint.id.clone(),
@@ -554,7 +687,7 @@ fn start_upgrade(
     if preempting {
         preempt(state, id)?;
     }
-    if !begin(state, project, &species) {
+    if !begin(state, project, &species, color) {
         return Err("Construction admission failed.".into());
     }
     Ok(())
@@ -957,6 +1090,36 @@ fn apply_species(
     Some(())
 }
 
+/// Both bed halves and the paid foot use the same selected color.
+fn apply_bed_color(
+    state: &TickState,
+    cells: &mut [executor::PlannedCell],
+    color: u8,
+) -> Option<()> {
+    if color == 0 {
+        return Some(());
+    }
+    let color = crate::blueprint::DYE_COLORS.get(usize::from(color))?;
+    let name = mc_data::Identifier::parse(format!("minecraft:{color}_bed")).ok()?;
+    for cell in cells {
+        let original = state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(cell.state))?;
+        if original.block.id.as_str() == "minecraft:white_bed" {
+            cell.state = state
+                .registry
+                .blocks
+                .by_name_and_props(&name, &original.properties)?
+                .0;
+        }
+        if cell.resource.as_deref() == Some("minecraft:white_bed") {
+            cell.resource = Some(name.to_string());
+        }
+    }
+    Some(())
+}
+
 fn cell_bill(state: &TickState, cells: &[executor::PlannedCell]) -> Option<Vec<(u32, u32)>> {
     let mut bill = std::collections::BTreeMap::new();
     for cell in cells {
@@ -971,10 +1134,13 @@ fn cell_bill(state: &TickState, cells: &[executor::PlannedCell]) -> Option<Vec<(
     Some(bill.into_iter().collect())
 }
 
-fn begin(state: &mut TickState, project: Project, species: &str) -> bool {
-    let Some((bounds, cells)) = planned_cells(state, &project, species) else {
+fn begin(state: &mut TickState, project: Project, species: &str, color: u8) -> bool {
+    let Some((bounds, mut cells)) = planned_cells(state, &project, species) else {
         return false;
     };
+    if apply_bed_color(state, &mut cells, color).is_none() {
+        return false;
+    }
     begin_cells(state, project, bounds, cells)
 }
 
@@ -1054,11 +1220,13 @@ fn upgrade_project(
     state: &TickState,
     record: &SettlementRecord,
     images: &[super::inventory::Image],
-) -> Option<(Project, String)> {
+) -> Option<(Project, String, u8)> {
     record.buildings.values().find_map(|building| {
         let (blueprint, origin, rotation) = upgrade_blueprint(state, record.id, building)?;
         let level = building.level + 1;
-        let species = funded_species(state, &blueprint.level(level)?.materials, images)?.to_owned();
+        let (species, color) =
+            funded_variant(state, record.id, &blueprint.level(level)?.materials, images)?;
+        let species = species.to_owned();
         Some((
             Project {
                 settlement: record.id,
@@ -1071,6 +1239,7 @@ fn upgrade_project(
                 ordered: false,
             },
             species,
+            color,
         ))
     })
 }
@@ -1151,8 +1320,9 @@ fn site_project<'a>(
             };
             if let Some((bounds, mut cells)) = planned_cells(state, &project, "oak")
                 && let Some(bill) = cell_bill(state, &cells)
-                && let Some(species) = funded_species(state, &bill, images)
+                && let Some((species, color)) = funded_variant(state, record.id, &bill, images)
                 && apply_species(state, &mut cells, species).is_some()
+                && apply_bed_color(state, &mut cells, color).is_some()
             {
                 return (
                     Some(FundedSite {
@@ -1245,7 +1415,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
         };
         if blueprint
             .level(1)
-            .is_some_and(|level| funded_species(state, &level.materials, &images).is_some())
+            .is_some_and(|level| funded_variant(state, id, &level.materials, &images).is_some())
         {
             funded[funded_count] = Some(blueprint);
             funded_count += 1;
@@ -1270,8 +1440,8 @@ fn plan(state: &mut TickState, id: SettlementId) {
             begin_cells(state, site.project, site.bounds, site.cells);
             return;
         }
-    } else if let Some((project, species)) = upgrade_project(state, record, &images)
-        && begin(state, project, &species)
+    } else if let Some((project, species, color)) = upgrade_project(state, record, &images)
+        && begin(state, project, &species, color)
     {
         return;
     }
@@ -1650,7 +1820,8 @@ pub(crate) fn iron_demand(
     if let Some(order) = &record.pending_order {
         return blueprints::get(&state.registry, &order.blueprint)
             .and_then(|blueprint| blueprint.level(order.level))
-            .map_or(0, |level| demand(&level.materials));
+            .and_then(|level| selected_bill(state, id, &level.materials, &images))
+            .map_or(0, |bill| demand(&bill));
     }
     if let Some(project) = &record.project {
         return executor::status(state, id, &project.structure)
@@ -1672,7 +1843,8 @@ pub(crate) fn iron_demand(
     candidate_kinds(state, record, &images)
         .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
         .filter_map(|blueprint| blueprint.level(1))
-        .map(|level| demand(&level.materials))
+        .filter_map(|level| selected_bill(state, id, &level.materials, &images))
+        .map(|bill| demand(&bill))
         .max()
         .unwrap_or(0)
 }
@@ -1684,11 +1856,6 @@ pub(crate) fn wool_demand(state: &TickState, id: SettlementId) -> bool {
         return false;
     };
     let images = executor::source_images(state, id);
-    if let Some(order) = &record.pending_order {
-        return blueprints::get(&state.registry, &order.blueprint)
-            .and_then(|blueprint| blueprint.level(order.level))
-            .is_some_and(|level| availability::needs_wool(state, &level.materials, &images));
-    }
     if let Some(project) = &record.project {
         let active_wool = executor::status(state, id, &project.structure)
             .ok()
@@ -1710,11 +1877,68 @@ pub(crate) fn wool_demand(state: &TickState, id: SettlementId) -> bool {
             return true;
         }
     }
+    if let Some(order) = &record.pending_order {
+        return blueprints::get(&state.registry, &order.blueprint)
+            .and_then(|blueprint| blueprint.level(order.level))
+            .and_then(|level| selected_bill(state, id, &level.materials, &images))
+            .is_some_and(|bill| availability::needs_wool(state, &bill, &images));
+    }
     let catalog = blueprints::all(&state.registry);
     candidate_kinds(state, record, &images)
         .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
         .filter_map(|blueprint| blueprint.level(1))
-        .any(|level| availability::needs_wool(state, &level.materials, &images))
+        .filter_map(|level| selected_bill(state, id, &level.materials, &images))
+        .any(|bill| availability::needs_wool(state, &bill, &images))
+}
+
+/// Color of the concrete unmet bed bill, for the worker that supplies it.
+pub(crate) fn wool_color(state: &TickState, id: SettlementId) -> Option<u8> {
+    let record = state.settlements.get(id)?;
+    let images = executor::source_images(state, id);
+    let color_for = |bill: &[(u32, u32)]| {
+        if !availability::needs_wool(state, bill, &images) {
+            return None;
+        }
+        bill.iter().find_map(|(item, _)| {
+            let name = state.registry.items.name_of(*item)?;
+            let color = name
+                .path()
+                .strip_suffix("_bed")
+                .or_else(|| name.path().strip_suffix("_wool"))?;
+            crate::blueprint::DYE_COLORS
+                .iter()
+                .position(|candidate| *candidate == color)
+                .map(|index| index as u8)
+        })
+    };
+    if let Some(project) = &record.project
+        && let Ok(snapshot) = executor::status(state, id, &project.structure)
+    {
+        let bill: Vec<_> = snapshot
+            .remaining
+            .iter()
+            .filter_map(|material| {
+                let item = state
+                    .registry
+                    .items
+                    .id_of(&mc_data::Identifier::parse(&material.resource).ok()?)?;
+                Some((item, u32::try_from(material.quantity).unwrap_or(u32::MAX)))
+            })
+            .collect();
+        if let Some(color) = color_for(&bill) {
+            return Some(color);
+        }
+    }
+    if let Some(order) = &record.pending_order {
+        let level = blueprints::get(&state.registry, &order.blueprint)?.level(order.level)?;
+        return color_for(&selected_bill(state, id, &level.materials, &images)?);
+    }
+    let catalog = blueprints::all(&state.registry);
+    candidate_kinds(state, record, &images)
+        .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
+        .filter_map(|blueprint| blueprint.level(1))
+        .filter_map(|level| selected_bill(state, id, &level.materials, &images))
+        .find_map(|bill| color_for(&bill))
 }
 
 /// Whether the planner can fund at least one of its current candidates.
@@ -1734,7 +1958,9 @@ fn funded_candidate(
     if let Some(order) = &record.pending_order {
         return blueprints::get(&state.registry, &order.blueprint)
             .and_then(|blueprint| blueprint.level(order.level))
-            .is_some_and(|level| funded_species(state, &level.materials, images).is_some());
+            .is_some_and(|level| {
+                funded_variant(state, record.id, &level.materials, images).is_some()
+            });
     }
     let catalog = blueprints::all(&state.registry);
     candidate_kinds(state, record, images).any(|kind| {
@@ -1742,7 +1968,9 @@ fn funded_candidate(
             .iter()
             .find(|blueprint| blueprint.kind == kind)
             .and_then(|blueprint| blueprint.level(1))
-            .is_some_and(|level| funded_species(state, &level.materials, images).is_some())
+            .is_some_and(|level| {
+                funded_variant(state, record.id, &level.materials, images).is_some()
+            })
     }) || upgrade_project(state, record, images).is_some()
 }
 
@@ -1772,16 +2000,24 @@ pub(crate) fn waiting(state: &TickState, id: SettlementId) -> Vec<WaitingKind> {
         let Some(level) = blueprint.level(level) else {
             continue;
         };
-        if funded_species(state, &level.materials, &images).is_some() {
+        if funded_variant(state, id, &level.materials, &images).is_some() {
             continue;
         }
+        let (colors, count) = bed_colors(state, id, &level.materials, &images);
+        let Some(color) = colors
+            .get(..count)
+            .and_then(|colors| colors.first())
+            .copied()
+        else {
+            continue;
+        };
+        let Some(bill) = bed_bill(state, &level.materials, color) else {
+            continue;
+        };
         let mut needs = Vec::new();
-        for (item, count) in
-            super::construction_crafting::missing_base(state, &level.materials, &images)
-        {
+        for (item, count) in super::construction_crafting::missing_base(state, &bill, &images) {
             if let Some(name) = state.registry.items.name_of(item) {
-                let total = level
-                    .materials
+                let total = bill
                     .iter()
                     .find(|(id, _)| *id == item)
                     .map_or(u64::from(count), |(_, total)| u64::from(*total));

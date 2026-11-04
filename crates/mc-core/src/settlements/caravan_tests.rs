@@ -1032,6 +1032,9 @@ fn exhausted_receipt_sequence_refuses_before_any_native_pickup_write() {
 fn native_brain_walks_the_real_carrier_and_completes_actual_delivery() {
     use crate::tick_budget::Consumer;
     let mut f = fixture();
+    // This proves on-shift delivery. A frozen dawn (day_time=0) is Rest,
+    // whose home/shelter destination now takes precedence over hauling.
+    f.state.day_time = 3_000;
     stock(&mut f.state, SRC_CHEST, "minecraft:bread", 3);
     let request = open(&f, "native-walking", 3, None);
     super::super::economy::execute(

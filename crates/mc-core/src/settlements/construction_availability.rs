@@ -308,7 +308,7 @@ fn caps(state: &TickState, id: SettlementId, record: &SettlementRecord, images: 
 /// Colors of adult living sheep inside the settlement sphere, read through
 /// the entity chunk index over the settlement-bounded chunk range only. The
 /// sheared bit is ignored: grazed regrowth keeps a sheared sheep a source.
-fn sheep_colors(state: &TickState, anchor: [i32; 3], radius: u32) -> u16 {
+pub(super) fn sheep_colors(state: &TickState, anchor: [i32; 3], radius: u32) -> u16 {
     let Ok(sheep_name) = mc_data::Identifier::parse("minecraft:sheep") else {
         return 0;
     };

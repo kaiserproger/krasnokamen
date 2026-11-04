@@ -3614,19 +3614,22 @@ fn threat_sensor_filters_distant_chunks_and_finds_nearest_across_boundaries() {
     assert_eq!(cache.threats.len(), local.len());
     assert_eq!(cache.threat_chunks.len(), local.len());
     assert_eq!(
-        nearest_threat(&cache, [15.75, 201.0, -0.25]),
+        nearest_threat(&cache, [15.75, 201.0, -0.25], |_| true),
         Some(local[0])
     );
     assert_eq!(
-        nearest_threat(&cache, [-0.25, 201.0, -16.25]),
+        nearest_threat(&cache, [-0.25, 201.0, -16.25], |_| true),
         Some(local[2])
     );
-    assert_eq!(nearest_threat(&cache, [128.0, 201.0, 128.0]), None);
+    assert_eq!(
+        nearest_threat(&cache, [128.0, 201.0, 128.0], |_| true),
+        None
+    );
     for x in [-16.1, -16.0, -0.1, 0.0, 15.9, 16.0, 16.1] {
         for z in [-16.1, -16.0, -0.1, 0.0, 15.9, 16.0, 16.1] {
             let pos = [x, 201.0, z];
             assert_eq!(
-                nearest_threat(&cache, pos),
+                nearest_threat(&cache, pos, |_| true),
                 threat_sensor_full_scan(&cache, pos)
             );
         }
@@ -3672,7 +3675,7 @@ fn threat_sensor_preserves_exact_ranges_and_three_dimensional_distance() {
             state.entities.set_pos(slot, at);
             cache.refresh(&state);
             assert_eq!(
-                nearest_threat(&cache, origin),
+                nearest_threat(&cache, origin, |_| true),
                 inside.then_some(at),
                 "{name}: {offset:?}"
             );
@@ -3698,7 +3701,7 @@ fn threat_sensor_ties_follow_original_sensor_order_across_chunks() {
     cache.refresh(&state);
     let expected = threat_sensor_full_scan(&cache, origin);
     assert_eq!(expected, Some(cache.threats[0].0));
-    assert_eq!(nearest_threat(&cache, origin), expected);
+    assert_eq!(nearest_threat(&cache, origin, |_| true), expected);
     // Reverse sensor indices without changing geometry or chunk traversal:
     // the tie must still follow the global sequence, not the first chunk.
     cache.threats.reverse();
@@ -3710,7 +3713,7 @@ fn threat_sensor_ties_follow_original_sensor_order_across_chunks() {
     }
     let reversed = threat_sensor_full_scan(&cache, origin);
     assert_ne!(expected, reversed);
-    assert_eq!(nearest_threat(&cache, origin), reversed);
+    assert_eq!(nearest_threat(&cache, origin, |_| true), reversed);
 }
 
 #[test]
@@ -3733,9 +3736,9 @@ fn threat_sensor_refresh_reuses_buckets_and_discards_moved_or_removed_threats() 
     state.entities.set_pos(moved, [80.0, 201.0, 0.0]);
     state.entities.remove(removed);
     cache.refresh(&state);
-    assert_eq!(nearest_threat(&cache, [0.0, 201.0, 0.0]), None);
+    assert_eq!(nearest_threat(&cache, [0.0, 201.0, 0.0], |_| true), None);
     assert_eq!(
-        nearest_threat(&cache, [80.0, 201.0, 0.0]),
+        nearest_threat(&cache, [80.0, 201.0, 0.0], |_| true),
         Some([80.0, 201.0, 0.0])
     );
     assert!(!cache.threat_chunks.contains_key(&(0, 0)));
@@ -3749,7 +3752,7 @@ fn threat_sensor_refresh_reuses_buckets_and_discards_moved_or_removed_threats() 
     assert!(cache.threats.is_empty());
     assert!(cache.threat_chunks.is_empty());
     assert_eq!(cache.threat_max_range, 0.0);
-    assert_eq!(nearest_threat(&cache, [80.0, 201.0, 0.0]), None);
+    assert_eq!(nearest_threat(&cache, [80.0, 201.0, 0.0], |_| true), None);
 }
 
 #[test]
@@ -4195,13 +4198,13 @@ fn threat_sensor_tracks_in_place_zombie_villager_infection_and_cure() {
     };
     let mut cache = PoiCache::default();
     cache.refresh(&state);
-    assert_eq!(nearest_threat(&cache, pos), None);
+    assert_eq!(nearest_threat(&cache, pos, |_| true), None);
     for (kind, expected) in [(zombie, Some(pos)), (original, None)] {
         let mut changed = FxHashSet::default();
         state.entities.swap_brain_changes(&mut changed);
         state.entities.set_kind(slot, kind);
         cache.refresh(&state);
-        assert_eq!(nearest_threat(&cache, pos), expected);
+        assert_eq!(nearest_threat(&cache, pos, |_| true), expected);
     }
 }
 
@@ -4898,12 +4901,15 @@ fn sensor_refresh_ignores_remote_population_and_follows_resident_chunk_moves() {
     crate::tick::spawn_item_entity(&mut state, far, ItemStack::new(bread, 1));
     let mut cache = PoiCache::default();
     cache.refresh(&state);
-    assert_eq!(nearest_threat(&cache, [-0.1, 201.0, 0.1]), Some(near));
+    assert_eq!(
+        nearest_threat(&cache, [-0.1, 201.0, 0.1], |_| true),
+        Some(near)
+    );
     assert_eq!(cache.threats.len(), 1, "remote mobs must not be projected");
     assert!(cache.items.is_empty(), "remote drops must not be projected");
     state.entities.set_pos(resident, far);
     cache.refresh(&state);
-    assert_eq!(nearest_threat(&cache, far), Some(far));
+    assert_eq!(nearest_threat(&cache, far, |_| true), Some(far));
     assert_eq!(cache.threats.len(), 1);
     assert_eq!(cache.items.len(), 1);
 }
@@ -4965,13 +4971,17 @@ fn panicking_villager_whose_flee_route_is_walled_off_retreats_home() {
         .entity_types
         .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap())
         .unwrap();
-    state.spawn_mob(zombie, [4.5, 201.0, 11.5], 20.0);
+    let attacker = state.spawn_mob(zombie, [4.5, 201.0, 11.5], 20.0);
     {
         let v = state.entities.row_mut(slot).villager.as_mut().unwrap();
         v.home = Some(home);
         v.home_dimension = state.dimension.name().into();
     }
-    for _ in 0..400 {
+    // The attacker is now behind the wall, but its recent hit still causes
+    // panic. Hidden hostiles alone must not empty a safe house.
+    state.entities.body_mut(slot).hurt_at = Some(state.tick);
+    state.entities.row_mut(slot).last_player_hit = Some((attacker, state.tick));
+    for _ in 0..80 {
         step(&mut state);
     }
     let pos = state.entities.pos(slot);
@@ -4986,3 +4996,156 @@ mod delivery_food_tests;
 
 #[path = "delivery_pickup_tests.rs"]
 mod delivery_pickup_tests;
+
+#[test]
+fn loaded_resource_workers_go_home_at_night_instead_of_hauling_to_storage() {
+    use crate::settlements::buildings::BuildingKind;
+    for kind in [BuildingKind::Mine, BuildingKind::LumberCamp] {
+        let (mut state, slot, mut resident) = crate::villager::mining_tests::fixture(kind);
+        crate::villager::mining_tests::storage(&mut state, &resident, [3, 201, 12]);
+        let home = bed(&mut state, 13, 3);
+        state
+            .world
+            .set_block(13, 204, 3, state.registry.states.stone);
+        state.world.fold_overlay();
+        let coal = item(&state, "minecraft:coal");
+        resident.inventory[0] = Some(ItemStack::new(coal, 64));
+        resident.home = Some(home);
+        resident.home_dimension = state.dimension.name().into();
+        state.entities.row_mut(slot).villager = Some(resident);
+        state.day_time = 13_000;
+        step(&mut state);
+        let resident = state.entities.row(slot).villager.as_ref().unwrap();
+        assert_eq!(resident.activity, Activity::Rest);
+        assert_eq!(
+            resident.navigation_target,
+            Some(home),
+            "{kind:?}: nighttime hauling must not override the safe home"
+        );
+        assert_eq!(resident.inventory[0].as_ref().unwrap().count, 64);
+    }
+}
+
+#[test]
+fn sleeping_resident_does_not_flee_a_zombie_hidden_by_the_house_wall() {
+    let mut state = test_state();
+    let home = bed(&mut state, 8, 8);
+    for x in 6..=10 {
+        for y in 201..=203 {
+            state.world.set_block(x, y, 6, state.registry.states.stone);
+        }
+        for z in 6..=10 {
+            state
+                .world
+                .set_block(x, 204, z, state.registry.states.stone);
+        }
+    }
+    state.world.fold_overlay();
+    let slot = villager(&mut state, [8.5, 201.0, 8.5]);
+    state.day_time = 13_000;
+    for _ in 0..200 {
+        step(&mut state);
+        if state.entities.row(slot).villager.as_ref().unwrap().sleeping {
+            break;
+        }
+    }
+    let resident = state.entities.row(slot).villager.as_ref().unwrap();
+    assert_eq!(resident.home, Some(home));
+    assert!(resident.sleeping);
+    let zombie = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap())
+        .unwrap();
+    state.spawn_mob(zombie, [8.5, 201.0, 5.5], 20.0);
+    step(&mut state);
+    let resident = state.entities.row(slot).villager.as_ref().unwrap();
+    assert_eq!(
+        resident.activity,
+        Activity::Rest,
+        "an unseen zombie outside must not empty the safe house"
+    );
+    assert!(resident.sleeping);
+    for x in 6..=10 {
+        for y in 201..=203 {
+            state.world.set_block(x, y, 6, state.registry.states.air);
+        }
+    }
+    state.world.fold_overlay();
+    step(&mut state);
+    let resident = state.entities.row(slot).villager.as_ref().unwrap();
+    assert_eq!(
+        resident.activity,
+        Activity::Panic,
+        "a visible zombie still wakes the resident"
+    );
+    assert!(!resident.sleeping);
+}
+
+#[test]
+fn home_route_does_not_freeze_a_resident_in_a_loaded_inactive_detour() {
+    let mut state = test_state();
+    state.world.ensure_blocking(&FxHashMap::from_iter([(
+        crate::boundary::ChunkPos { x: 1, z: 0 },
+        0,
+    )]));
+    for x in 16..32 {
+        for z in 0..16 {
+            state
+                .world
+                .set_block(x, 200, z, state.registry.states.stone);
+            for y in 201..206 {
+                state.world.set_block(x, y, z, state.registry.states.air);
+            }
+        }
+    }
+    // The only walkable detour around this wall crosses loaded chunk (1,0),
+    // which is outside the resident's simulation ticket.
+    for x in 0..16 {
+        for y in 201..205 {
+            state.world.set_block(x, y, 8, state.registry.states.stone);
+        }
+    }
+    let home = bed(&mut state, 14, 12);
+    state
+        .world
+        .set_block(14, 204, 12, state.registry.states.stone);
+    state.world.fold_overlay();
+    assert!(state.world.has_chunk(1, 0));
+    assert!(!state.world.is_active(1, 0));
+    let slot = villager(&mut state, [14.5, 201.0, 4.5]);
+    let v = state.entities.row_mut(slot).villager.as_mut().unwrap();
+    v.home = Some(home);
+    state.day_time = 13_000;
+    for _ in 0..240 {
+        step(&mut state);
+    }
+    let pos = state.entities.pos(slot);
+    assert!(
+        state.world.is_active(
+            (pos[0].floor() as i32).div_euclid(16),
+            (pos[2].floor() as i32).div_euclid(16)
+        ),
+        "a loaded detour must not freeze the brain beyond simulation distance: {pos:?}"
+    );
+    let v = state.entities.row(slot).villager.as_ref().unwrap();
+    assert!(v.navigation_path.iter().all(|cell| {
+        state
+            .world
+            .is_active(cell.x.div_euclid(16), cell.z.div_euclid(16))
+    }));
+    // Activating the real detour restores ordinary navigation, not a blanket
+    // refusal of this home or a movement no-op.
+    state.tickets.insert(
+        "detour".into(),
+        (crate::boundary::ChunkPos { x: 1, z: 0 }, 0),
+    );
+    state.refresh_active_chunks(state.tick);
+    for _ in 0..600 {
+        step(&mut state);
+        if state.entities.row(slot).villager.as_ref().unwrap().sleeping {
+            break;
+        }
+    }
+    assert!(state.entities.row(slot).villager.as_ref().unwrap().sleeping);
+}

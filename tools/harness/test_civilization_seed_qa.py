@@ -80,6 +80,42 @@ class CivilizationEvidenceTests(unittest.TestCase):
                          ["minecraft_close_screen", "minecraft_set_hotbar_slot",
                           "minecraft_use_item_on", "minecraft_close_screen"])
 
+    def test_observer_is_safe_only_after_ordinary_claim_and_stock_transfer(self):
+        probe = Mock()
+        player = {"player": {"x": 1.0, "y": 70.0, "z": 1.0}}
+        probe.wait.return_value = player
+        census = 0
+
+        def call(name, args):
+            nonlocal census
+            if name == "minecraft_list_entities":
+                census += 1
+                if census == 2:
+                    raise RuntimeError("observation begins")
+            return {}
+
+        probe.call.side_effect = call
+        detail = {"fixture_commands": []}
+        probe.report = detail
+        events = []
+        with patch.object(qa, "walk_to_village", return_value=player), \
+             patch.object(qa.village, "_send", side_effect=[
+                 ["Settlements: Test."],
+                 ["owner=autonomous anchor=[1, 70, 1]"],
+                 ["Claimed Test"]]), \
+             patch.object(qa.village, "_recent_chat", side_effect=lambda lines, _: lines), \
+             patch.object(qa.village, "_founding_storage", return_value=(1, 70, 1)), \
+             patch.object(qa.village, "_open_chest", return_value={}), \
+             patch.object(qa, "fund", side_effect=lambda *args: events.append("stock")), \
+             patch.object(qa.item_merge, "_console",
+                          side_effect=lambda _, command: events.append(command)), \
+             patch.object(qa.native_client, "capture", return_value={}):
+            with self.assertRaisesRegex(RuntimeError, "observation begins"):
+                qa.scenario(probe, detail, "artifact", Mock(), "server.log", Mock())
+        self.assertEqual(events, ["stock", f"gamemode creative {qa.village.USERNAME}"])
+        self.assertEqual(detail["fixture_commands"],
+                         [f"console: gamemode creative {qa.village.USERNAME}"])
+
 
 if __name__ == "__main__":
     unittest.main()

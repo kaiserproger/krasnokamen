@@ -22,6 +22,7 @@ fn find_sheep(
     anchor: [i32; 3],
     radius: u32,
     from: [f64; 3],
+    color: Option<u8>,
 ) -> Option<EntitySlot> {
     let sheep = state
         .registry
@@ -68,6 +69,8 @@ fn find_sheep(
                 let row = state.entities.row(slot);
                 if !crate::entity_life::adult(row)
                     || crate::tick::wool_of(&row.appearance) & 0x10 != 0
+                    || color
+                        .is_some_and(|color| crate::tick::wool_of(&row.appearance) & 15 != color)
                 {
                     continue;
                 }
@@ -245,7 +248,8 @@ pub(super) fn work(
         return None;
     }
     let from = state.entities.pos(slot);
-    let Some(target) = find_sheep(state, anchor, radius, from) else {
+    let color = crate::settlements::construction::wool_color(state, settlement);
+    let Some(target) = find_sheep(state, anchor, radius, from, color) else {
         v.shepherd_at = state.tick + PERIOD;
         return None;
     };

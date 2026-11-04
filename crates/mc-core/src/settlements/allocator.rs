@@ -944,6 +944,16 @@ pub(crate) fn find_path_ctx(
                     y: node.pos.y + dy,
                     z: node.pos.z + dz,
                 };
+                // A resident's loaded-margin shortcut can freeze its brain
+                // outside simulation distance while nearby hostiles still tick.
+                // Other route consumers keep their own residency policy.
+                if ctx.consumer == Consumer::Brain
+                    && !ctx
+                        .world
+                        .is_active(next.x.div_euclid(16), next.z.div_euclid(16))
+                {
+                    continue;
+                }
                 if start.x.abs_diff(next.x) > horizontal
                     || start.z.abs_diff(next.z) > horizontal
                     || start.y.abs_diff(next.y) > vertical
