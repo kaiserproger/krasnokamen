@@ -128,6 +128,64 @@ fn two_tenders_share_one_two_iron_demand() {
 }
 
 #[test]
+fn nitwit_does_not_collect_owned_furnace_output() {
+    let (mut state, worker, _) = setup();
+    let slot = state.entities.slot_of(worker).unwrap();
+    let iron = mining::item_id(&state, "iron_ingot").unwrap();
+    state.block_entities.get_mut(&FURNACE).unwrap().slots[2] = ItemStack::new(iron, 2);
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = VillagerProfession::Nitwit;
+    at_furnace(&mut state, slot);
+    let before = counts(&state);
+    assert!(step(&mut state, slot).is_none());
+    assert_eq!(state.block_entities[&FURNACE].slots[2].count, 2);
+    assert_eq!(carried(&state, slot, iron), 0);
+    assert_eq!(counts(&state), before);
+}
+
+#[test]
+fn lumberjack_collects_output_without_starting_smelting_work() {
+    let (mut state, worker, _) = setup();
+    let slot = state.entities.slot_of(worker).unwrap();
+    let iron = mining::item_id(&state, "iron_ingot").unwrap();
+    let wool = mining::item_id(&state, "white_wool").unwrap();
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = VillagerProfession::Lumberjack;
+    let before = counts(&state);
+    assert!(
+        step(&mut state, slot).is_none(),
+        "forestry workers must not load furnaces"
+    );
+    assert_eq!(counts(&state), before);
+
+    state.block_entities.get_mut(&CHEST).unwrap().slots[3] = ItemStack::new(wool, 3);
+    state.block_entities.get_mut(&FURNACE).unwrap().slots[2] = ItemStack::new(iron, 2);
+    let before = counts(&state);
+    at_furnace(&mut state, slot);
+    assert_eq!(step(&mut state, slot), Some(None));
+    assert_eq!(carried(&state, slot, iron), 2);
+    assert!(state.block_entities[&FURNACE].slots[2].is_empty());
+    assert_eq!(counts(&state), before);
+    at_chest(&mut state, slot);
+    assert_eq!(step(&mut state, slot), Some(None));
+    assert_eq!(stored(&state, iron), 2);
+    assert_eq!(carried(&state, slot, iron), 0);
+    assert_eq!(counts(&state), before);
+}
+
+#[test]
 fn real_furnace_output_is_carried_to_storage_without_tender_crafting() {
     let (mut state, worker, _) = setup();
     let slot = state.entities.slot_of(worker).unwrap();

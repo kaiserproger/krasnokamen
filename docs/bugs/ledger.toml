@@ -3172,3 +3172,25 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#RULE-COMMAND-BUDGET; ReviewAcceptanceOpus first-promotion-batch"
 regression = []
+
+[[bug]]
+id = "CIV-SEED24-FORESTRY-STAFFING"
+title = "Claimed seed-24 village leaves its certified lumber camp unstaffed while construction needs logs."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "civilization-seed-qa seed 24, 20261104T052839-civilization-seed-qa-qd6z7egu; receipts/civ-stall"
+failing_first = "reported"
+regression = ["cargo:mc-core:settlements::allocator::tests::claimed_village_with_storage_assigns_its_free_adult_to_forestry_before_workshops"]
+
+[[bug]]
+id = "CIV-SEED24-FURNACE-OUTPUT"
+title = "Completed settlement furnace output remains stranded after the nearby tender takes a vanilla profession."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "civilization-seed-qa seed 24, 20261104T052839-civilization-seed-qa-qd6z7egu; receipts/civ-stall"
+failing_first = "reported"
+regression = ["cargo:mc-core:villager::smelting_tests::employed_resident_delivers_owned_furnace_output_without_iron_demand", "cargo:mc-core:villager::smelting_tests::guards::lumberjack_collects_output_without_starting_smelting_work", "cargo:mc-core:villager::smelting_tests::guards::nitwit_does_not_collect_owned_furnace_output"]

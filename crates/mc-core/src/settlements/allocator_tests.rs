@@ -990,6 +990,145 @@ fn bound_resource_roles_keep_their_profession_while_other_roles_can_retarget() {
     }
 }
 
+#[test]
+fn claimed_village_with_storage_assigns_its_free_adult_to_forestry_before_workshops() {
+    use crate::settlements::buildings::{Building, BuildingId, BuildingKind};
+    use mc_script::ScriptWorldBounds;
+
+    let (mut state, settlement, builder) = crate::settlements::construction::tests::fixture();
+    state.day_time = 3000;
+    crate::settlements::buildings::certify(
+        &mut state,
+        settlement,
+        BuildingKind::Storage,
+        ScriptWorldBounds::new([0, 200, 0], [2, 203, 2]).unwrap(),
+    )
+    .unwrap();
+    for (index, (name, count)) in [
+        ("oak_log", 32),
+        ("bread", 16),
+        ("raw_iron", 8),
+        ("coal", 8),
+        ("cobblestone", 32),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let item = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
+            .unwrap();
+        state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[index] =
+            mc_data::ItemStack::new(item, count);
+    }
+    // Seed 24 has storage, nearby vanilla workshops, a natural lumber zone,
+    // two nitwits, a child, a builder and one remaining employable adult.
+    let stonecutter = block(&state, "minecraft:stonecutter", &[]);
+    state.world.set_block(4, 201, 4, stonecutter);
+    crate::settlements::buildings::certify(
+        &mut state,
+        settlement,
+        BuildingKind::Workshop(Profession::Mason),
+        ScriptWorldBounds::new([3, 200, 3], [5, 203, 5]).unwrap(),
+    )
+    .unwrap();
+    let camp = BlockPos {
+        x: 12,
+        y: 201,
+        z: 12,
+    };
+    let record = state.settlements.get_mut(settlement).unwrap();
+    let id = BuildingId((settlement.0 << 32) | 100);
+    record.buildings.insert(
+        id,
+        Building {
+            id,
+            settlement,
+            kind: BuildingKind::LumberCamp,
+            level: 1,
+            bounds: ScriptWorldBounds::new([11, 200, 12], [12, 206, 12]).unwrap(),
+            work_points: vec![[camp.x, camp.y, camp.z]],
+            revision: 1,
+            natural_zone: true,
+        },
+    );
+    let mine_id = BuildingId((settlement.0 << 32) | 101);
+    record.buildings.insert(
+        mine_id,
+        Building {
+            id: mine_id,
+            settlement,
+            kind: BuildingKind::Mine,
+            level: 1,
+            bounds: ScriptWorldBounds::new([7, 195, 7], [9, 203, 9]).unwrap(),
+            work_points: vec![[8, 201, 8]],
+            revision: 1,
+            natural_zone: true,
+        },
+    );
+    let mut workers = Vec::new();
+    for (profession, age) in [
+        (Profession::Nitwit, 0),
+        (Profession::Nitwit, 0),
+        (Profession::None, -24000),
+        (Profession::None, 0),
+    ] {
+        let slot = villager(&mut state, [3.5, 201.0, 4.5]);
+        let entity = state.entities.body(slot).id;
+        crate::settlements::bind(&mut state, settlement, entity).unwrap();
+        let v = state.entities.row_mut(slot).villager.as_mut().unwrap();
+        v.data.profession = profession;
+        v.age = age;
+        workers.push(slot);
+    }
+    state.world.fold_overlay();
+    for _ in 0..1500 {
+        step(&mut state);
+    }
+    let worker = state.entities.row(workers[3]).villager.as_ref().unwrap();
+    assert_eq!(
+        worker.job_site,
+        Some(camp),
+        "storage must not end resource staffing"
+    );
+    assert_eq!(worker.data.profession, Profession::Lumberjack);
+    for &slot in &workers[..2] {
+        assert_eq!(
+            state
+                .entities
+                .row(slot)
+                .villager
+                .as_ref()
+                .unwrap()
+                .data
+                .profession,
+            Profession::Nitwit
+        );
+    }
+    assert!(
+        state
+            .entities
+            .row(workers[2])
+            .villager
+            .as_ref()
+            .unwrap()
+            .job_site
+            .is_none()
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(builder)
+            .villager
+            .as_ref()
+            .unwrap()
+            .data
+            .profession,
+        Profession::Builder
+    );
+}
+
 fn far_workshop_fixture() -> (TickState, SettlementId, EntitySlot, BlockPos) {
     let mut state = test_state();
     let chunks = (1..=4).map(|x| (ChunkPos { x, z: 0 }, 0)).collect();

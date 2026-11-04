@@ -125,6 +125,89 @@ fn shear_yield(state: &TickState, sheep: EntityId) -> Option<i32> {
 }
 
 #[test]
+fn employed_resident_delivers_owned_furnace_output_without_iron_demand() {
+    let (mut state, worker, _) = setup();
+    let slot = state.entities.slot_of(worker).unwrap();
+    let town = state
+        .entities
+        .row(slot)
+        .villager
+        .as_ref()
+        .unwrap()
+        .settlement
+        .unwrap();
+    let iron = mining::item_id(&state, "iron_ingot").unwrap();
+    let wool = mining::item_id(&state, "white_wool").unwrap();
+    state.block_entities.get_mut(&CHEST).unwrap().slots[3] = ItemStack::new(wool, 3);
+    state.block_entities.get_mut(&FURNACE).unwrap().slots[2] = ItemStack::new(iron, 2);
+    let foreign = (2, 201, 4);
+    state.world.set_block(
+        foreign.0,
+        foreign.1,
+        foreign.2,
+        mining_tests::block(&state, "furnace"),
+    );
+    state.block_entities.insert(
+        foreign,
+        crate::tick::BlockEntityState {
+            slots: vec![ItemStack::EMPTY, ItemStack::EMPTY, ItemStack::new(iron, 3)],
+            furnace: Some(Default::default()),
+        },
+    );
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = VillagerProfession::Mason;
+    assert_eq!(
+        crate::settlements::construction::iron_demand(&state, town, None),
+        0
+    );
+    assert!(
+        super::smelting::owned_furnaces(&state, town)
+            .any(|at| at == [FURNACE.0, FURNACE.1, FURNACE.2])
+    );
+    assert!(
+        !super::smelting::owned_furnaces(&state, town)
+            .any(|at| at == [foreign.0, foreign.1, foreign.2])
+    );
+    let before = counts(&state);
+    for _ in 0..2_000 {
+        crate::tick::run_tick(&mut state, &[]);
+        assert_eq!(
+            counts(&state),
+            before,
+            "furnace collection must conserve stock"
+        );
+        assert_eq!(
+            state.block_entities[&foreign].slots[2].count, 3,
+            "foreign furnace must remain untouched"
+        );
+        if state.block_entities[&CHEST]
+            .slots
+            .iter()
+            .any(|s| s.item_id == iron && s.count == 2)
+        {
+            break;
+        }
+    }
+    assert!(
+        state.block_entities[&FURNACE].slots[2].is_empty(),
+        "owned output must be collected"
+    );
+    assert!(
+        state.block_entities[&CHEST]
+            .slots
+            .iter()
+            .any(|s| s.item_id == iron && s.count == 2),
+        "owned output must reach storage"
+    );
+}
+
+#[test]
 fn native_ticks_smelt_only_needed_iron_then_craft_shears_and_deliver_wool() {
     let (mut state, worker, sheep) = setup();
     let before = counts(&state);

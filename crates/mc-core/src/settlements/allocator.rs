@@ -1096,13 +1096,9 @@ fn acquire(
         // Only certified slots are settlement jobs. Work-point lists are
         // bounded at certification; never rescan the settlement radius here.
         cache.candidates.clear();
-        let mut needs_resources = false;
         if let Some(record) = v.settlement.and_then(|id| state.settlements.get(id)) {
-            needs_resources = v.data.profession == Profession::None
-                && !record
-                    .buildings
-                    .values()
-                    .any(|building| building.kind == super::buildings::BuildingKind::Storage);
+            // Storage is a destination, not a replacement for extraction.
+            // Keep staffing the certified resource slots after it is built.
             for building in record.buildings.values() {
                 let Some(profession) = building.kind.profession() else {
                     continue;
@@ -1146,12 +1142,10 @@ fn acquire(
             }
         }
         cache.candidates.sort_unstable_by(|a, b| {
-            let resource = |poi: Poi| {
-                needs_resources
-                    && matches!(
-                        poi.kind,
-                        PoiKind::Job(Profession::Miner | Profession::Lumberjack)
-                    )
+            let resource = |poi: Poi| match poi.kind {
+                PoiKind::Job(Profession::Lumberjack) => 2,
+                PoiKind::Job(Profession::Miner) => 1,
+                _ => 0,
             };
             resource(a.1)
                 .cmp(&resource(b.1))

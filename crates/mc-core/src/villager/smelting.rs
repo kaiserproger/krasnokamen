@@ -609,10 +609,14 @@ pub(super) fn work(
     {
         return None;
     }
+    let tender = matches!(
+        v.data.profession,
+        VillagerProfession::None | VillagerProfession::Shepherd
+    );
     if v.smelting.is_none()
-        && !matches!(
+        && matches!(
             v.data.profession,
-            VillagerProfession::None | VillagerProfession::Shepherd
+            VillagerProfession::Builder | VillagerProfession::Soldier | VillagerProfession::Nitwit
         )
     {
         return None;
@@ -683,13 +687,15 @@ pub(super) fn work(
         .filter_map(|at| {
             let entity = &state.block_entities[&(at[0], at[1], at[2])];
             if entity.slots[OUTPUT].is_empty()
-                && (entity.slots[FUEL].is_empty() || fuel_ticks(state, &entity.slots[FUEL]) > 0)
+                && (!tender
+                    || entity.slots[FUEL].is_empty()
+                    || fuel_ticks(state, &entity.slots[FUEL]) > 0)
             {
                 return None;
             }
             let before = inventory::load(state, &endpoint(state, at)).ok()?;
             let (index, free) = source(state, &before, |index, s| {
-                index == OUTPUT || (index == FUEL && fuel_ticks(state, s) == 0)
+                index == OUTPUT || (tender && index == FUEL && fuel_ticks(state, s) == 0)
             })?;
             (mining::room(state, v, &before.slots[index]) > 0).then_some((at, before, index, free))
         })
@@ -707,7 +713,7 @@ pub(super) fn work(
         }
         return Some(target);
     }
-    if demand == 0 {
+    if demand == 0 || !tender {
         return None;
     }
     // Finish fuel for an already committed batch before loading any new ore.

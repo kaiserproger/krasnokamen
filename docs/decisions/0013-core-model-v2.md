@@ -4459,6 +4459,18 @@ Construction releases an incumbent outside the simulation area and considers
 only simulated residents for replacement. An active incumbent still keeps the
 slot while off-shift; neither simulation tickets nor work hours are expanded.
 
+Seed-24 claimed-village continuation (2026-11-04): certified resource jobs
+retain allocator priority after Storage is certified. Forestry precedes mining
+and vanilla workshops when a free adult chooses a job: with only one free
+adult, the renewable timber supply must not disappear into a nearby Mason
+slot while housing still needs logs. Existing profession/trade locks, child
+and nitwit exclusions, claim custody and route admission remain unchanged;
+this does not assign a role without reaching its certified work point.
+Completed output in a settlement-owned furnace is hauling work, not a
+profession-specific smelting order: an otherwise eligible employed resident
+may collect and deliver it even when the iron bill is already satisfied.
+Ore/fuel procurement remains restricted to the existing tender professions.
+
 Seed-87122 follow-up replay (2026-10-21): a jump step in `find_path_ctx`
 (above `STEP_HEIGHT`) requires body clearance over the edge at the highest
 rise the departure column permits (1.16, 1.10 or 1.05 blocks), because a
