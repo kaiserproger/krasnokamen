@@ -70,7 +70,12 @@ fn name_kind(name: &str) -> Option<VehicleKind> {
         Some(VehicleKind::Boat)
     } else if matches!(
         path,
-        "minecart" | "chest_minecart" | "hopper_minecart" | "furnace_minecart" | "tnt_minecart"
+        "minecart"
+            | "chest_minecart"
+            | "hopper_minecart"
+            | "furnace_minecart"
+            | "tnt_minecart"
+            | "command_block_minecart"
     ) {
         Some(VehicleKind::Minecart)
     } else {

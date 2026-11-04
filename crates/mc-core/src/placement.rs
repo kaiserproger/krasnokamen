@@ -916,6 +916,14 @@ pub(crate) fn supported(
     let Some(block) = blocks.by_id(BlockStateId(id)) else {
         return false;
     };
+    if at.y < pos.y
+        && block.block.id.path() == "hopper"
+        && blocks
+            .by_id(BlockStateId(state))
+            .is_some_and(|placed| placed.block.id.path() == "redstone_wire")
+    {
+        return true;
+    }
     let face = if at.y < pos.y {
         SturdyFace::Up
     } else if at.y > pos.y {

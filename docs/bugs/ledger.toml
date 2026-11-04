@@ -237,9 +237,10 @@ title = "Using dye or a glow ink sac on a blank sign face consumes the item and 
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SIGN-BLANK-DECORATION"
-regression = []
+regression = ["cargo:mc-core:farming_tests::signs_tests::blank_sign_face_rejects_dye_and_glow_even_when_other_face_is_written"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "MAP-FRAME-WAYPOINT-PERSISTENCE"
@@ -497,9 +498,10 @@ title = "Dispensers cannot complete snow/iron golems or withers with a carved pu
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-CONSTRUCT-SUMMON"
-regression = []
+regression = ["cargo:mc-core:redstone::containers::tests::automation_construct_summons_from_dispenser"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "DISPENSER-PROJECTILE-KINDS"
@@ -507,9 +509,10 @@ title = "Dispenser projectile classification is wrong: wind charges fall through
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-PROJECTILE-KINDS"
-regression = []
+regression = ["cargo:mc-core:redstone::containers::tests::dispenser_launches_wind_charge_but_ejects_ender_pearl"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "RESPAWN-PARTIAL-COLLISION"
@@ -626,9 +629,10 @@ title = "Torchflower seeds and pitcher pods cannot be planted on farmland: neith
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SNIFFER-SEED-PLACEMENT"
-regression = []
+regression = ["cargo:mc-core:farming_tests::sniffer_seeds_plant_their_crops_on_farmland"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "VINE-PLACEMENT-FACES"
@@ -647,9 +651,10 @@ title = "Bone meal never grows planted azalea/flowering azalea, mangrove propagu
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPECIAL-TREE-BONEMEAL"
-regression = ["cargo:mc-core:farming_tests::bone_meal_grows_azalea_and_fungi_but_rejects_wrong_soil"]
+regression = ["cargo:mc-core:farming_tests::bone_meal_grows_azalea_and_fungi_but_rejects_wrong_soil", "cargo:mc-core:farming_tests::planted_mangrove_propagule_grows_with_bone_meal", "cargo:mc-core:farming_tests::flowering_azalea_and_warped_fungus_grow_with_bone_meal"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "GROUND-COVER-BONEMEAL"
@@ -657,9 +662,10 @@ title = "Ordinary moss spreading and Nether ground-cover propagation do nothing:
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GROUND-COVER-BONEMEAL"
-regression = ["cargo:mc-core:farming_tests::bone_meal_spreads_moss_and_nylium_and_converts_netherrack"]
+regression = ["cargo:mc-core:farming_tests::bone_meal_spreads_moss_and_nylium_and_converts_netherrack", "cargo:mc-core:farming_tests::bone_meal_on_nylium_produces_nether_ground_cover"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "SEA-PICKLE-BONEMEAL"
@@ -700,9 +706,10 @@ title = "Wheat seeds are accepted onto farmland in a completely dark roofed room
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CROP-DARK-PLACEMENT"
-regression = []
+regression = ["cargo:mc-core:farming_tests::wheat_seeds_refuse_planting_in_darkness_but_accept_light"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "FLOWER-SOIL-PLACEMENT"
@@ -710,9 +717,10 @@ title = "A poppy/dandelion can be planted directly onto stone: generic flower pl
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FLOWER-SOIL-PLACEMENT"
-regression = []
+regression = ["cargo:mc-core:farming_tests::flowers_plant_on_soil_but_not_on_bare_stone"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "TALL-FLOWER-DUPLICATION"
@@ -1720,9 +1728,10 @@ title = "An arrow striking a target block produces no redstone output."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TARGET-PROJECTILE-POWER"
 regression = ["cargo:mc-core:projectiles::flight_tests::target_block_emits_power_when_shot"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "ELYTRA-FIREWORK-BOOST"
@@ -1778,13 +1787,14 @@ regression = []
 
 [[bug]]
 id = "REDSTONE-WIRE-HOPPER-SUPPORT"
-title = "Redstone dust pops when the hopper below is broken: wire support requires a full-sturdy UP face, but vanilla `RedStoneWireBlock.canSurviveOn` survives on any upward-sturdy face OR a hopper below (`isFaceSturdy(UP)` \\"
+title = "Redstone dust is rejected or pops while supported by an intact hopper: vanilla permits hopper support even though its upper face is not fully sturdy. Dust should still pop when the hopper is broken."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#REDSTONE-WIRE-HOPPER-SUPPORT"
-regression = []
+regression = ["cargo:mc-core:farming_tests::redstone_wire_survives_on_hopper_until_the_hopper_is_broken"]
+failing_first = "reported"
 
 [[bug]]
 id = "DRIPSTONE-MID-COLUMN-GROWTH"
@@ -1792,9 +1802,10 @@ title = "A down-pointed dripstone tip mid-column wrongly grows: candidate requir
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DRIPSTONE-MID-COLUMN-GROWTH"
-regression = []
+regression = ["cargo:mc-core:farming_tests::dripstone_mid_column_tip_does_not_grow_but_top_tip_fills"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "LIBRARIAN-BOOK-POOL-PRICING"
@@ -1823,9 +1834,10 @@ title = "Dispensers eject command-block minecarts as items: the vehicle matcher 
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-MINECART-VARIANTS"
-regression = []
+regression = ["cargo:mc-core:redstone::containers::tests::automation_regression_vehicle_placement"]
+failing_first = "reported"
 
 [[bug]]
 id = "SHELF-HYDRATE-PANIC"
@@ -1905,9 +1917,10 @@ title = "Placing the final wither skull by hand never summons the wither: `golem
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#WITHER-MANUAL-BUILD"
-regression = []
+regression = ["cargo:mc-core:golems::tests::player_places_final_skull_and_summons_wither"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "CONDUIT-RUNTIME-PANIC"
@@ -2488,9 +2501,10 @@ title = "Accepted residual, FIXED @533076b8: sniffer thirds of 24000/12000-moss 
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-EGG-HATCH-CLOCKS"
-regression = []
+regression = ["cargo:mc-core:farming_tests::egg_scheduled_clocks_use_vanilla_delays", "cargo:mc-core:farming_tests::turtle_eggs_crack_at_night_into_baby_turtles", "cargo:mc-core:farming_tests::sniffer_eggs_hatch_into_baby_sniffers", "cargo:mc-core:farming_tests::frogspawn_hatches_tadpoles_in_water"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "GAP-SIMPLIFIED-CHANCES"
@@ -2498,9 +2512,10 @@ title = "Accepted residual, FIXED @e45ec5cc+@a2675f6a: azalea/propagule 0.45, fu
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-SIMPLIFIED-CHANCES"
-regression = ["cargo:mc-core:farming_tests::bone_meal_cadence_gates_azalea_fungus_and_mangrove"]
+regression = ["cargo:mc-core:farming_tests::bone_meal_cadence_gates_azalea_fungus_and_mangrove", "cargo:mc-core:farming_tests::fertilizer_probability_boundaries_match_vanilla", "cargo:mc-core:farming_tests::dripstone_probability_boundaries_match_vanilla", "cargo:mc-core:farming_tests::dripstone_grows_without_cauldron_below", "cargo:mc-core:farming_tests::dripstone_fills_water_and_grows_stalagmite", "cargo:mc-core:farming_tests::dripstone_with_lava_source_fills_the_cauldron_below"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "GAP-VINE-TOP-BOTTOM"
@@ -2508,9 +2523,10 @@ title = "Accepted residual, FIXED @9dd0ee29: ceiling click sets up=true (getStat
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-VINE-TOP-BOTTOM"
-regression = []
+regression = ["cargo:mc-core:farming_tests::placed_vines_attach_to_the_clicked_wall_and_can_spread"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "GAP-SCHEMATIC-TREES"
@@ -2518,19 +2534,21 @@ title = "Accepted residual, FIXED @382da246: wiki-level bending/shape; fungus he
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-SCHEMATIC-TREES"
-regression = []
+regression = ["cargo:mc-core:farming_tests::bone_meal_grows_azalea_and_fungi_but_rejects_wrong_soil"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "GAP-KELP-SINGLE-FLOW"
-title = "Accepted residual, FIXED @23cdf697: lone downward-flow over column extends tip + turns to source (canGrowInto any water per KelpBlock citation); sideways flow still refuses (control)."
+title = "Kelp must grow into a single flowing or falling water cell above its tip; vanilla canGrowInto accepts any water state."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-KELP-SINGLE-FLOW"
-regression = []
+regression = ["cargo:mc-core:farming_tests::kelp_bonemeal_grows_into_flowing_and_falling_water_under_air", "cargo:mc-core:farming_tests::kelp_random_ticks_grow_into_flowing_and_falling_water_under_air"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "TEST-MATRIX-CONSOLE-FENCE-CHAT"
@@ -3098,9 +3116,10 @@ title = "Weathering did not cover the vanilla copper families"
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COPPER-WEATHERING"
 regression = ["cargo:mc-core:copper::tests::all_weathering_families_oxidize_wax_and_scrape"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "CUSTOM-POTION-SPLASH"
@@ -3152,9 +3171,10 @@ title = "Common flowers cannot be composted and grass blocks are incorrectly adm
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COMPOSTER-INPUT-TABLE"
 regression = ["cargo:mc-core:composter::tests::omitted_java_flowers_compost_and_grass_block_does_not"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "BED-SMALL-SLIME"
@@ -3283,3 +3303,14 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/20261104T085019-civilization-seed-qa-di4hpibs/result.json"
 failing_first = "reported"
 regression = ["cargo:mc-core:villager::shepherd_tests::shepherd_uses_a_simulated_sheep_not_a_closer_inactive_one", "cargo:mc-core:settlements::construction::availability::tests::inactive_sheep_is_not_a_live_wool_source"]
+
+[[bug]]
+id = "DISPENSER-CONSTRUCT-ERASES-BLOCK"
+title = "A dispenser attempting to place a pumpkin or wither skull overwrites a solid target block and restores air when the construct is incomplete."
+area = "gameplay"
+repro = "source"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/BugsBlocks/construct-before.log"
+regression = ["cargo:mc-core:redstone::containers::tests::dispenser_construct_heads_do_not_erase_solid_target"]
+failing_first = "reported"

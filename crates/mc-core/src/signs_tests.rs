@@ -596,3 +596,28 @@ fn adventure_cannot_edit_or_decorate_signs() {
     edit(&mut state, true, "unauthorized");
     assert_eq!(image(&state), before);
 }
+
+#[test]
+fn blank_sign_face_rejects_dye_and_glow_even_when_other_face_is_written() {
+    for item in ["red_dye", "glow_ink_sac"] {
+        let (mut state, player) = setup();
+        plant(
+            &mut state,
+            POS.x,
+            POS.y,
+            POS.z,
+            "oak_sign",
+            &[("rotation", "8"), ("waterlogged", "false")],
+        );
+        let nbt = crate::signs::text_nbt(&["written front".into()]);
+        let mut bytes = Vec::new();
+        mc_nbt::write_network(&mut bytes, &nbt).unwrap();
+        state.world.set_opaque_block_entity(POS, Some(bytes));
+        let slot = state.entities.slot_of(player).unwrap();
+        state.entities.set_pos(slot, [1.5, f64::from(Y + 1), 1.5]);
+        let before = image(&state);
+        use_item(&mut state, player, item);
+        assert_eq!(held(&state, player).count, 3, "{item}");
+        assert_eq!(image(&state), before, "{item}");
+    }
+}

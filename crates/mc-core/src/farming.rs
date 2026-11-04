@@ -196,9 +196,8 @@ impl FarmSections {
     }
 }
 
-/// Items that plant a block of another name (vanilla `Items`
-/// `createBlockItemWithCustomItemName`): `(item, block)`.
-const PLANTING: [(&str, &str); 10] = [
+/// Items placing blocks with a different registry name, as `(item, block)`.
+const PLANTING: [(&str, &str); 11] = [
     ("wheat_seeds", "wheat"),
     ("beetroot_seeds", "beetroots"),
     ("carrot", "carrots"),
@@ -209,6 +208,7 @@ const PLANTING: [(&str, &str); 10] = [
     ("cocoa_beans", "cocoa"),
     ("torchflower_seeds", "torchflower_crop"),
     ("pitcher_pod", "pitcher_crop"),
+    ("redstone", "redstone_wire"),
 ];
 
 /// The block an item places when it is not the block of the same name:

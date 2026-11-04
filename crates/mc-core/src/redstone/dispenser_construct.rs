@@ -26,6 +26,19 @@ pub(super) fn complete(
     if !pumpkin && !skull {
         return false;
     }
+    let Some(original) = state.world.block_at(target.x, target.y, target.z) else {
+        return false;
+    };
+    let Some(block) = state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(original))
+    else {
+        return false;
+    };
+    if !matches!(block.block.id.path(), "air" | "cave_air" | "void_air") {
+        return false;
+    }
     // The head cell must be empty (the dispenser places the head there);
     // a wearable entity target instead takes the equipment path.
     let occupied = state.entities.slots().any(|slot| {
@@ -105,7 +118,7 @@ pub(super) fn complete(
         writes.truncate(writes_len);
         state
             .world
-            .set_block(target.x, target.y, target.z, state.registry.states.air);
+            .set_block(target.x, target.y, target.z, original);
     }
     summoned
 }

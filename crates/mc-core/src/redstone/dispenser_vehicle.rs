@@ -20,7 +20,12 @@ pub(super) fn place(
     let boat = path.ends_with("_boat") || path == "bamboo_raft" || path == "bamboo_chest_raft";
     let minecart = matches!(
         path,
-        "minecart" | "chest_minecart" | "hopper_minecart" | "furnace_minecart" | "tnt_minecart"
+        "minecart"
+            | "chest_minecart"
+            | "hopper_minecart"
+            | "furnace_minecart"
+            | "tnt_minecart"
+            | "command_block_minecart"
     );
     if !boat && !minecart {
         return false;

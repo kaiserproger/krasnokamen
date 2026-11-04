@@ -560,6 +560,37 @@ fn dispenser_consumes_projectile_once_and_unknown_item_ejects_once() {
 }
 
 #[test]
+fn dispenser_launches_wind_charge_but_ejects_ender_pearl() {
+    let mut state = state();
+    place(&mut state, HOPPER, "dispenser", &[("facing", "east")]);
+    let charge = item(&state, "wind_charge", 1);
+    set_slot(&mut state, HOPPER, 0, charge);
+    let mut spawned = Vec::new();
+    trigger(&mut state, HOPPER, &mut Vec::new(), &mut spawned);
+    assert!(spawned.is_empty());
+    let projectile = *state.projectiles.spawned.last().unwrap();
+    let slot = state.entities.slot_of(projectile).unwrap();
+    assert_eq!(
+        state.entities.row(slot).projectile.as_ref().unwrap().kind,
+        crate::projectiles::ProjectileKind::WindCharge
+    );
+    assert!(state.block_entities[&key(HOPPER)].slots[0].is_empty());
+
+    let pearl = item(&state, "ender_pearl", 1);
+    set_slot(&mut state, HOPPER, 0, pearl.clone());
+    let projectile_count = state.projectiles.spawned.len();
+    trigger(&mut state, HOPPER, &mut Vec::new(), &mut spawned);
+    assert_eq!(state.projectiles.spawned.len(), projectile_count);
+    assert_eq!(spawned.len(), 1);
+    let slot = state.entities.slot_of(spawned[0]).unwrap();
+    assert_eq!(
+        state.entities.row(slot).item.as_ref().unwrap().full_stack(),
+        pearl
+    );
+    assert!(state.block_entities[&key(HOPPER)].slots[0].is_empty());
+}
+
+#[test]
 fn dispenser_bucket_actions_commit_block_and_remainder_together() {
     let mut state = state();
     place(&mut state, HOPPER, "dispenser", &[("facing", "east")]);
@@ -824,12 +855,118 @@ fn automation_regression_hive_releases_occupants() {
 }
 
 #[test]
+fn automation_construct_summons_from_dispenser() {
+    let dispenser = BlockPos { x: 3, y: 203, z: 3 };
+    let head = BlockPos { x: 4, y: 203, z: 3 };
+    for (item_name, entity, body) in [
+        ("carved_pumpkin", "snow_golem", "snow_block"),
+        ("carved_pumpkin", "iron_golem", "iron_block"),
+        ("wither_skeleton_skull", "wither", "soul_sand"),
+    ] {
+        let mut state = state();
+        place(&mut state, dispenser, "dispenser", &[("facing", "east")]);
+        for dy in [1, 2] {
+            place(
+                &mut state,
+                BlockPos {
+                    y: head.y - dy,
+                    ..head
+                },
+                body,
+                &[],
+            );
+        }
+        if entity != "snow_golem" {
+            for dz in [-1, 1] {
+                place(
+                    &mut state,
+                    BlockPos {
+                        y: head.y - 1,
+                        z: head.z + dz,
+                        ..head
+                    },
+                    body,
+                    &[],
+                );
+                if entity == "wither" {
+                    place(
+                        &mut state,
+                        BlockPos {
+                            z: head.z + dz,
+                            ..head
+                        },
+                        item_name,
+                        &[],
+                    );
+                }
+            }
+        }
+        let stack = item(&state, item_name, 1);
+        set_slot(&mut state, dispenser, 0, stack);
+        trigger(&mut state, dispenser, &mut Vec::new(), &mut Vec::new());
+        assert!(
+            state.block_entities[&key(dispenser)].slots[0].is_empty(),
+            "{entity}"
+        );
+        assert_eq!(
+            state.world.block_at(head.x, head.y, head.z),
+            Some(state.registry.states.air),
+            "{entity}"
+        );
+        assert!(
+            state.hostile.spawned.iter().any(|id| {
+                let slot = state.entities.slot_of(*id).unwrap();
+                match state.entities.body(slot).kind {
+                    crate::entities::EntityKind::Mob { type_id } => {
+                        state.registry.entity_type_name(type_id)
+                            == Some(format!("minecraft:{entity}").as_str())
+                    }
+                    _ => false,
+                }
+            }),
+            "{entity}"
+        );
+    }
+}
+
+#[test]
+fn dispenser_construct_heads_do_not_erase_solid_target() {
+    for head in ["carved_pumpkin", "wither_skeleton_skull"] {
+        let mut state = state();
+        let target = super::super::offset(HOPPER, (1, 0, 0)).unwrap();
+        place(&mut state, HOPPER, "dispenser", &[("facing", "east")]);
+        place(&mut state, target, "stone", &[]);
+        let stone = state.world.block_at(target.x, target.y, target.z);
+        let stack = item(&state, head, 1);
+        set_slot(&mut state, HOPPER, 0, stack.clone());
+        let mut writes = Vec::new();
+        let mut spawned = Vec::new();
+        trigger(&mut state, HOPPER, &mut writes, &mut spawned);
+        assert_eq!(
+            state.world.block_at(target.x, target.y, target.z),
+            stone,
+            "{head}"
+        );
+        assert!(writes.iter().all(|(pos, _)| *pos != target));
+        assert_eq!(spawned.len(), 1);
+        let slot = state.entities.slot_of(spawned[0]).unwrap();
+        assert_eq!(
+            state.entities.row(slot).item.as_ref().unwrap().full_stack(),
+            stack
+        );
+        assert!(state.block_entities[&key(HOPPER)].slots[0].is_empty());
+    }
+}
+
+#[test]
 fn automation_regression_vehicle_placement() {
     for (vehicle, ground, below) in [
         ("oak_boat", "water", false),
         ("oak_boat", "water", true),
         ("minecart", "rail", false),
         ("minecart", "rail", true),
+        ("command_block_minecart", "rail", false),
+        ("command_block_minecart", "rail", true),
     ] {
         let mut state = state();
         let target = super::super::offset(HOPPER, (1, 0, 0)).unwrap();
@@ -849,6 +986,10 @@ fn automation_regression_vehicle_placement() {
         assert_eq!(
             crate::vehicles::name(&state, slot),
             Some(format!("minecraft:{vehicle}").as_str())
+        );
+        assert!(
+            state.entities.row(slot).entity_life.vehicle.is_some(),
+            "{vehicle}"
         );
         assert!(state.block_entities[&key(HOPPER)].slots[0].is_empty());
     }

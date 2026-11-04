@@ -104,6 +104,55 @@ fn is_air(state: &TickState, pos: BlockPos) -> bool {
 }
 
 #[test]
+fn player_places_final_skull_and_summons_wither() {
+    let mut state = fixture();
+    state.difficulty = crate::survival::Difficulty::Normal;
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(1),
+            uuid: uuid::Uuid::new_v4(),
+            name: "builder".into(),
+            permission_level: 0,
+        }],
+    );
+    let player = state.connections.entity_of(ConnectionId(1)).unwrap();
+    let slot = state.entities.slot_of(player).unwrap();
+    state.entities.set_pos(slot, [2.5, 201.0, 3.5]);
+    for dz in -1..=1 {
+        put(&mut state, cell(0, -1, dz), "soul_sand");
+        if dz != 0 {
+            put(&mut state, cell(0, 0, dz), "wither_skeleton_skull");
+        }
+    }
+    put(&mut state, cell(0, -2, 0), "soul_sand");
+    let skull = state
+        .registry
+        .items
+        .id_of(&Identifier::parse("minecraft:wither_skeleton_skull").unwrap())
+        .unwrap();
+    state.players.get_mut(&player).unwrap().inventory.slots[0] = mc_data::ItemStack::new(skull, 1);
+    run_tick(
+        &mut state,
+        &[PlayerInput::UseItemOn {
+            connection: ConnectionId(1),
+            hand: crate::boundary::Hand::Main,
+            position: cell(0, -1, 0),
+            face: 1,
+            cursor: [0.5, 1.0, 0.5],
+            sequence: 1,
+        }],
+    );
+    assert_eq!(golems(&state, "minecraft:wither").len(), 1);
+    for dz in -1..=1 {
+        assert!(is_air(&state, cell(0, 0, dz)));
+        assert!(is_air(&state, cell(0, -1, dz)));
+    }
+    assert!(is_air(&state, cell(0, -2, 0)));
+    assert!(state.players[&player].inventory.slots[0].is_empty());
+}
+
+#[test]
 fn snow_golem_consumes_two_snow_blocks_and_head() {
     for head in ["carved_pumpkin", "jack_o_lantern"] {
         let mut state = fixture();
