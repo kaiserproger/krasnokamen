@@ -3194,3 +3194,13 @@ status = "open"
 source = "civilization-seed-qa seed 24, 20261104T052839-civilization-seed-qa-qd6z7egu; receipts/civ-stall"
 failing_first = "reported"
 regression = ["cargo:mc-core:villager::smelting_tests::employed_resident_delivers_owned_furnace_output_without_iron_demand", "cargo:mc-core:villager::smelting_tests::guards::lumberjack_collects_output_without_starting_smelting_work", "cargo:mc-core:villager::smelting_tests::guards::nitwit_does_not_collect_owned_furnace_output"]
+
+[[bug]]
+id = "PLUGIN-PRECOMMIT-DEADLINE-RACE"
+title = "precommit_host real-component tests (nonreturning hook, trap keeps deny registration) can see the chain answer Expired instead of Cancelled under CPU contention: the chain deadline races the hook's epoch cancellation. Failed 2 tests in L2 at load ~21 on 12 cores; 3/3 isolated reruns pass."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "L2 .analysis/validation/20261104T070730-correctness-vv86u65r (precommit_host.rs:198)"
+regression = []
