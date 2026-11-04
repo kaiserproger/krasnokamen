@@ -42,6 +42,7 @@ fn exclusive_worker_roles_and_furnace_carry_refuse_native_production_start() {
                 .smelting = Some(crate::villager::smelting::Task {
                 furnace: [8, 201, 8],
                 phase: crate::villager::smelting::Phase::Load,
+                carried: Default::default(),
             });
         }
         let before = carry(&world, body);

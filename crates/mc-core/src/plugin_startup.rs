@@ -183,6 +183,7 @@ pub(crate) fn apply(
                 .map(|(_, recipe)| recipe.id.clone()),
         )
         .collect();
+    registry.refresh_iron_smelting();
     Ok(())
 }
 

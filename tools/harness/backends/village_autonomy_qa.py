@@ -195,7 +195,7 @@ def _claim_via_dialog(
     return True
 
 
-def _project_status(probe: ProbeSteps) -> dict[str, Any]:
+def _project_status(probe: ProbeSteps, capture: Callable[[], Any] | None = None) -> dict[str, Any]:
     """Observe the Project status dialog (live progress lives there, not on the Projects grid)."""
     grid = _send(probe, "settlement menu projects")
     screen = grid.get("screen") or {}
@@ -213,6 +213,8 @@ def _project_status(probe: ProbeSteps) -> dict[str, Any]:
             break
         probe.call("minecraft_wait_ticks", {"ticks": 20})
         state = probe.observe()
+    if capture is not None:
+        capture()
     probe.call("minecraft_close_screen", {})
     return state
 
@@ -534,7 +536,7 @@ def _verdict(
         detail["repro"][name] = repro
 
 
-def run(ctx: ProfileContext, *, owner_order: bool = False) -> dict[str, Any]:
+def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = False) -> dict[str, Any]:
     if ctx.client != "native":
         raise ValueError("village-autonomy-qa requires --client native")
     if ctx.extra_args or ctx.platform is not None:
@@ -542,8 +544,9 @@ def run(ctx: ProfileContext, *, owner_order: bool = False) -> dict[str, Any]:
     if not ctx.windowed:
         raise ValueError("village-autonomy-qa requires --windowed (dialog Claim needs a presented window)")
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 3600.0
-    if not 0 < timeout <= 3600:
-        raise ValueError("village-autonomy-qa --timeout-seconds must be in (0, 3600]")
+    maximum = 7200 if civilization else 3600
+    if not 0 < timeout <= maximum:
+        raise ValueError(f"scenario --timeout-seconds must be in (0, {maximum}]")
     artifact = ctx.artifact_dir
     if owner_order and (SEED != 100 or QA_VILLAGE or os.environ.get("VILLAGE_AUTONOMY_RESUME_WORLD")):
         raise ValueError("village-owner-order-qa requires a fresh seed-100 world and default center")
@@ -586,7 +589,8 @@ def run(ctx: ProfileContext, *, owner_order: bool = False) -> dict[str, Any]:
     (artifact / "plugins").mkdir(parents=True, exist_ok=True)
     # The second player is an operator only so it can teleport into the village;
     # the claim itself stays the ordinary player command.
-    prepare_operator_fixture(ctx, [SECOND_USERNAME])
+    if not civilization:
+        prepare_operator_fixture(ctx, [SECOND_USERNAME])
     evidence = ctx.client_evidence
     with binary.open("rb") as server_executable:
         server_hash = hashlib.file_digest(server_executable, "sha256").hexdigest()
@@ -635,7 +639,8 @@ def run(ctx: ProfileContext, *, owner_order: bool = False) -> dict[str, Any]:
             ctx, native_client.resolve_binary(ctx), address, USERNAME, timeout, display=display
         )
         mcp.request_timeout_seconds = min(timeout + 10, 130.0)
-        scenario_name = "village-owner-order-qa" if owner_order else "village-autonomy-qa"
+        scenario_name = ("civilization-seed-qa" if civilization else
+                         "village-owner-order-qa" if owner_order else "village-autonomy-qa")
         with ProbeSteps(mcp, artifact / scenario_name, timeout, scenario_name) as probe:
             probe.call("minecraft_wait_for_play", {"timeout_seconds": probe.remaining()})
             if ctx.windowed:
@@ -645,6 +650,10 @@ def run(ctx: ProfileContext, *, owner_order: bool = False) -> dict[str, Any]:
             def read_container(pos: tuple[int, int, int]) -> dict[str, int]:
                 return _read_storage_container(server, server_log_path, pos, min(15.0, probe.remaining()))
 
+            if civilization:
+                from . import civilization_seed_qa
+                civilization_seed_qa.scenario(probe, detail, artifact, server, server_log_path, read_container)
+                return {"scenario": probe.report}
             if owner_order:
                 _owner_order_before_restart(probe, detail, artifact)
                 before = None
@@ -1600,6 +1609,7 @@ PROJECT_LABELS = {
     "Storage": "storage", "Склад": "storage",
     "Farm": "farm", "Ферма": "farm",
     "Mason's workshop": "mason", "Мастерская каменщика": "mason",
+    "Shepherd's workshop": "shepherd", "Мастерская пастуха": "shepherd",
     "Lumber camp": "lumber_camp", "Лесопилка": "lumber_camp",
     "Mine": "mine", "Шахта": "mine",
     "Barracks": "barracks", "Казарма": "barracks",
@@ -1607,6 +1617,7 @@ PROJECT_LABELS = {
     "Watchtower": "watch_tower", "Сторожевая башня": "watch_tower",
     "Road": "road", "Дорога": "road",
     "Street lamp": "lamp", "Фонарь": "lamp",
+    "Building": "unlabelled", "Здание": "unlabelled",
 }
 # Street work: structure-ledger projects with no authored blueprint or
 # certificate. A road paves one stretch; a lamp is two fences and a torch.
@@ -1628,11 +1639,14 @@ def _project_progress(observed: dict[str, Any]) -> dict[str, Any] | None:
     if blueprint is None:
         # An active project the harness cannot name is not "no project".
         raise RuntimeError(f"unrecognised active project label {match[1]!r}")
-    return {
+    result = {
         "blueprint": blueprint, "level": int(match[2]),
         "done": int(match[3]), "total": int(match[4]),
         "origin": [int(match[n]) for n in (5, 6, 7)],
     }
+    if blueprint == "unlabelled":
+        result["label"] = match[1]
+    return result
 
 
 def _street_layout(probe: ProbeSteps) -> dict[str, Any] | None:
@@ -1860,11 +1874,12 @@ def _wait_autonomous_progress(
 def _planner_status(
     probe: ProbeSteps, detail: dict[str, Any], chest_pos: tuple[int, int, int],
     read_container: Callable[[tuple[int, int, int]], dict[str, int]],
+    capture: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
     """Non-gating read of what the autonomous planner is doing right now."""
     status: dict[str, Any] = {}
     try:
-        observed = _project_status(probe)
+        observed = _project_status(probe, capture)
         status["project"] = _project_progress(observed)
         status["project_ui"] = observed.get("ui_nodes", [])
     except Exception as exc:

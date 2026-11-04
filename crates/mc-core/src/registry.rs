@@ -27,6 +27,36 @@ type LoadedVanillaData = (
     Arc<mc_worldgen::vanilla_features::CacheTags>,
 );
 
+fn resolve_iron_smelting(
+    items: &mc_data::items::ItemRegistry,
+    item_facts: &mc_data::item_components::ItemFactsTable,
+    tags: &mc_data::tags::TagsData,
+    recipes: &[mc_data::recipes::Recipe],
+) -> Option<crate::villager::smelting::IronSmelting> {
+    let raw = items.id_of(&Identifier::parse("minecraft:raw_iron").expect("valid item id"))?;
+    let iron = items.id_of(&Identifier::parse("minecraft:iron_ingot").expect("valid item id"))?;
+    let stack = mc_data::ItemStack::new(raw, 1);
+    let cook_ticks = recipes.iter().find_map(|recipe| {
+        let mc_data::recipes::RecipeKind::Smelting(cooking) = &recipe.kind else {
+            return None;
+        };
+        (recipe.result.item.as_str() == "minecraft:iron_ingot"
+            && mc_data::recipes::ingredient_accepts_stack(
+                items,
+                item_facts,
+                tags,
+                &stack,
+                &cooking.ingredient,
+            ))
+        .then_some(cooking.cooking_time.max(1))
+    })?;
+    Some(crate::villager::smelting::IronSmelting {
+        raw,
+        iron,
+        cook_ticks,
+    })
+}
+
 /// Dense contact-hazard flags indexed by global block-state id, built once
 /// at registry load so the tick never matches names or reads properties.
 pub(crate) const HAZARD_WATER: u8 = 0x01;
@@ -84,6 +114,8 @@ pub struct CoreRegistry {
     pub(crate) worldgen_tags: Option<Arc<mc_worldgen::vanilla_features::CacheTags>>,
     /// Crafting/furnace recipes, index = recipe display id (contract).
     pub recipes: Vec<mc_data::recipes::Recipe>,
+    /// First native iron-smelting recipe, resolved when registry content changes.
+    pub(crate) iron_smelting: Option<crate::villager::smelting::IronSmelting>,
     pub advancements: Arc<mc_data::advancements::AdvancementTree>,
     /// Immutable advancement block properties/tags, populated once per state.
     pub(crate) advancement_blocks: Vec<std::sync::OnceLock<serde_json::Value>>,
@@ -148,6 +180,11 @@ impl std::fmt::Debug for CoreRegistry {
 }
 
 impl CoreRegistry {
+    pub(crate) fn refresh_iron_smelting(&mut self) {
+        self.iron_smelting =
+            resolve_iron_smelting(&self.items, &self.item_facts, &self.tags, &self.recipes);
+    }
+
     /// [`ItemRules`](crate::inventory::ItemRules) over immutable startup data.
     #[must_use]
     pub fn item_rules(&self) -> crate::inventory::ItemRules<'_> {
@@ -285,6 +322,7 @@ impl CoreRegistry {
                 None,
             ),
         };
+        let iron_smelting = resolve_iron_smelting(&items, &item_facts, &tags, &recipes);
         let biome_spawns = match vanilla_data_dir {
             Some(dir) => mc_data::biomes::load_biome_spawn_rules(
                 dir.join("data")
@@ -503,6 +541,7 @@ impl CoreRegistry {
             tags,
             worldgen_tags,
             recipes,
+            iron_smelting,
             advancements,
             advancement_blocks,
             advancement_reward_loot,
@@ -729,6 +768,79 @@ impl ResolvedStates {
 mod tests {
     use super::CoreRegistry;
     use std::sync::Arc;
+
+    #[test]
+    fn iron_smelting_fact_tracks_first_matching_recipe_and_tags() {
+        use mc_data::Identifier;
+        use mc_data::recipes::{
+            Ingredient, IngredientAlternative, Recipe, RecipeKind, RecipeResult, SmeltingRecipe,
+        };
+        use std::collections::BTreeMap;
+
+        let id = |name: &str| Identifier::parse(name).unwrap();
+        let mut registry = CoreRegistry::load(None).expect("embedded registry");
+        let raw = registry.items.id_of(&id("minecraft:raw_iron")).unwrap();
+        let iron = registry.items.id_of(&id("minecraft:iron_ingot")).unwrap();
+        let recipe = |name, ingredient, output, ticks| Recipe {
+            id: id(name),
+            kind: RecipeKind::Smelting(SmeltingRecipe {
+                ingredient: Ingredient {
+                    alternatives: vec![ingredient],
+                },
+                cooking_time: ticks,
+                experience_milli: 0,
+            }),
+            result: RecipeResult {
+                item: id(output),
+                count: 1,
+                stew_effects: Vec::new(),
+            },
+            show_notification: true,
+        };
+        let tag = id("test:raw_iron");
+        registry.recipes = vec![
+            recipe(
+                "test:wrong_output",
+                IngredientAlternative::Item(id("minecraft:raw_iron")),
+                "minecraft:gold_ingot",
+                4,
+            ),
+            recipe(
+                "test:tagged",
+                IngredientAlternative::Tag(tag.clone()),
+                "minecraft:iron_ingot",
+                0,
+            ),
+            recipe(
+                "test:direct",
+                IngredientAlternative::Item(id("minecraft:raw_iron")),
+                "minecraft:iron_ingot",
+                37,
+            ),
+        ];
+        registry.tags = Arc::new(mc_data::tags::TagsData::from_registries(BTreeMap::from([
+            (
+                id("minecraft:item"),
+                BTreeMap::from([(tag.clone(), vec![raw as i32])]),
+            ),
+        ])));
+        registry.refresh_iron_smelting();
+        let fact = registry.iron_smelting.expect("tagged recipe matches");
+        assert_eq!((fact.raw, fact.iron, fact.cook_ticks), (raw, iron, 1));
+
+        Arc::make_mut(&mut registry.tags)
+            .registries
+            .get_mut(&id("minecraft:item"))
+            .unwrap()
+            .get_mut(&tag)
+            .unwrap()
+            .clear();
+        registry.refresh_iron_smelting();
+        assert_eq!(registry.iron_smelting.unwrap().cook_ticks, 37);
+        registry.recipes.clear();
+        registry.refresh_iron_smelting();
+        assert!(registry.iron_smelting.is_none());
+    }
 
     #[test]
     fn embedded_template_shares_immutable_blocks_but_isolates_fixture_edits() {

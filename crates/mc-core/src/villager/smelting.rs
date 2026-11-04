@@ -7,20 +7,109 @@ use crate::inventory::furnace::{FUEL, INPUT, OUTPUT};
 use crate::settlements::{SettlementId, construction, inventory};
 use crate::tick::TickState;
 use mc_data::ItemStack;
-use mc_data::recipes::{CookingKind, RecipeKind};
+use mc_data::recipes::CookingKind;
 use serde::{Deserialize, Serialize};
+
+#[path = "smelting_cache.rs"]
+mod cache;
+pub(crate) use cache::Cache;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Task {
     pub furnace: [i32; 3],
     pub phase: Phase,
+    /// Quantities actually fetched for this task, tied to their carry slots.
+    /// This is a receipt, not another physical inventory.
+    #[serde(default)]
+    pub carried: [Taken; 8],
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Taken {
+    item: u32,
+    count: u32,
+}
+
+impl Task {
+    fn new(furnace: [i32; 3], phase: Phase) -> Self {
+        Self {
+            furnace,
+            phase,
+            carried: [Taken { item: 0, count: 0 }; 8],
+        }
+    }
+
+    fn record_taken(&mut self, before: [u32; 8], inventory: &[Option<ItemStack>; 8]) {
+        for (index, stack) in inventory.iter().enumerate() {
+            let Some(stack) = stack else { continue };
+            let added = (stack.count.max(0) as u32).saturating_sub(before[index]);
+            if added == 0 {
+                continue;
+            }
+            let receipt = &mut self.carried[index];
+            if receipt.item != stack.item_id {
+                *receipt = Taken {
+                    item: stack.item_id,
+                    count: 0,
+                };
+            }
+            receipt.count = receipt.count.saturating_add(added);
+        }
+    }
+}
+
+fn carry_counts(v: &VillagerState) -> [u32; 8] {
+    std::array::from_fn(|index| {
+        v.inventory[index]
+            .as_ref()
+            .map_or(0, |stack| stack.count.max(0) as u32)
+    })
+}
+
+fn owned_amount(v: &VillagerState, index: usize, protected: u32) -> u32 {
+    let Some(task) = v.smelting.as_ref() else {
+        return 0;
+    };
+    let Some(stack) = v.inventory[index].as_ref() else {
+        return 0;
+    };
+    let receipt = &task.carried[index];
+    if receipt.item != stack.item_id {
+        return 0;
+    }
+    receipt
+        .count
+        .min((stack.count.max(0) as u32).saturating_sub(protected))
+}
+
+fn owned_raw(v: &VillagerState, raw: u32) -> u32 {
+    v.inventory
+        .iter()
+        .enumerate()
+        .filter(|(_, stack)| stack.as_ref().is_some_and(|stack| stack.item_id == raw))
+        .map(|(index, _)| owned_amount(v, index, 0))
+        .sum()
+}
+
+fn debit_limit(state: &mut TickState, v: &VillagerState, raw: u32) -> Option<u32> {
+    let (demand, committed) = cache::for_debit(state, v);
+    (demand > 0).then(|| demand.saturating_sub(committed.saturating_sub(owned_raw(v, raw))))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum Phase {
     Load,
     Deliver,
+}
+
+/// Immutable native recipe facts, resolved when the registry is admitted.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct IronSmelting {
+    pub raw: u32,
+    pub iron: u32,
+    pub cook_ticks: u32,
 }
 
 fn pos([x, y, z]: [i32; 3]) -> BlockPos {
@@ -38,9 +127,32 @@ fn furnace_point(point: &mc_script::ScriptWorksiteInteractionPoint) -> Option<[i
     }
 }
 
-/// Loaded furnaces in certified buildings or district-bound furnace workstations.
+/// Loaded furnaces in certified buildings or town-registered workstations.
 /// Natural mining/lumber zones never confer ownership of somebody's furnace.
 pub(crate) fn owned_furnaces(
+    state: &TickState,
+    id: SettlementId,
+) -> impl Iterator<Item = [i32; 3]> + '_ {
+    let cached = cache::current(state, id);
+    let uncached = cached.is_none().then(|| discover_owned_furnaces(state, id));
+    cached
+        .into_iter()
+        .flat_map(|slice| slice.furnaces.iter().copied())
+        .filter(move |&[x, y, z]| {
+            state
+                .block_entities
+                .get(&(x, y, z))
+                .is_some_and(|entity| entity.furnace.is_some() && entity.slots.len() == 3)
+                && state
+                    .world
+                    .block_at(x, y, z)
+                    .and_then(|block| state.registry.blocks.by_id(mc_world::BlockStateId(block)))
+                    .is_some_and(|block| block.block.id.as_str() == "minecraft:furnace")
+        })
+        .chain(uncached.into_iter().flatten())
+}
+
+fn discover_owned_furnaces(
     state: &TickState,
     id: SettlementId,
 ) -> impl Iterator<Item = [i32; 3]> + '_ {
@@ -61,6 +173,11 @@ pub(crate) fn owned_furnaces(
             .ok()
         })
         .unwrap_or_default();
+    let workstation = record
+        .and_then(|record| record.furnace_workstation.as_deref())
+        .and_then(|handle| {
+            crate::plugin_structures::settlement_builds::furnace_workstation(state, id, handle)
+        });
     let (min_x, max_x) = record
         .into_iter()
         .flat_map(|record| record.buildings.values())
@@ -73,6 +190,7 @@ pub(crate) fn owned_furnaces(
                 .flat_map(|facts| facts.points.iter().filter_map(furnace_point))
                 .map(|at| (at[0], at[0])),
         )
+        .chain(workstation.map(|at| (at[0], at[0])))
         .fold(None, |range, (left, right)| match range {
             None => Some((left, right)),
             Some((min, max)) => Some((min.min(left), max.max(right))),
@@ -93,14 +211,15 @@ pub(crate) fn owned_furnaces(
                         && at.into_iter().enumerate().all(|(axis, n)| {
                             n >= building.bounds.min[axis] && n <= building.bounds.max[axis]
                         })
-                }) || registered.iter().any(|facts| {
-                    facts.dimension == state.dimension.name()
-                        && facts
-                            .points
-                            .iter()
-                            .filter_map(furnace_point)
-                            .any(|point| point == at)
-                }))
+                }) || workstation == Some(at)
+                    || registered.iter().any(|facts| {
+                        facts.dimension == state.dimension.name()
+                            && facts
+                                .points
+                                .iter()
+                                .filter_map(furnace_point)
+                                .any(|point| point == at)
+                    }))
                 && state
                     .world
                     .block_at(x, y, z)
@@ -134,33 +253,10 @@ fn fuel_ticks(state: &TickState, stack: &ItemStack) -> u32 {
         .map_or(0, |ticks| ticks.max(0) as u32)
 }
 
-fn cooking_ticks(state: &TickState, raw: u32) -> Option<u32> {
-    let stack = ItemStack::new(raw, 1);
-    state.registry.recipes.iter().find_map(|recipe| {
-        let RecipeKind::Smelting(cooking) = &recipe.kind else {
-            return None;
-        };
-        (recipe.result.item.as_str() == "minecraft:iron_ingot"
-            && mc_data::recipes::ingredient_accepts_stack(
-                &state.registry.items,
-                &state.registry.item_facts,
-                &state.registry.tags,
-                &stack,
-                &cooking.ingredient,
-            ))
-        .then_some(cooking.cooking_time.max(1))
-    })
-}
-
 /// All iron already promised to the bill, including this detached brain's carry.
 fn committed(state: &TickState, v: &VillagerState, raw: u32, iron: u32) -> u32 {
     let id = v.settlement.expect("bound worker");
-    let mut total = count(v, iron)
-        + if v.smelting.is_some() {
-            count(v, raw)
-        } else {
-            0
-        };
+    let mut total = count(v, iron) + owned_raw(v, raw);
     for (_, image) in inventory::town_storage(state, id) {
         if let Ok(free) = inventory::unreserved_stock(state, &image) {
             total = total.saturating_add(
@@ -181,12 +277,7 @@ fn committed(state: &TickState, v: &VillagerState, raw: u32, iron: u32) -> u32 {
                 state.entities.row(slot).uuid,
             )
         {
-            total += count(other, iron)
-                + if other.smelting.is_some() {
-                    count(other, raw)
-                } else {
-                    0
-                };
+            total += count(other, iron) + owned_raw(other, raw);
         }
     }
     for at in owned_furnaces(state, id) {
@@ -276,6 +367,8 @@ fn take(
 
 fn deliver(state: &mut TickState, slot: EntitySlot, v: &mut VillagerState) -> Option<BlockPos> {
     let shears = mining::item_id(state, "shears");
+    let raw = state.registry.iron_smelting.map(|recipe| recipe.raw);
+    let promised = raw.map_or(0, |raw| owned_raw(v, raw));
     let mut protected = crate::settlements::economy::protected_carry(state, slot, v);
     for (index, stack) in v.inventory.iter().enumerate() {
         if let Some(stack) = stack
@@ -285,6 +378,9 @@ fn deliver(state: &mut TickState, slot: EntitySlot, v: &mut VillagerState) -> Op
         }
     }
     let target = mining::deposit_with_protected(state, slot, v, protected);
+    if let (Some(id), Some(raw)) = (v.settlement, raw) {
+        cache::returned_raw(state, id, promised.saturating_sub(owned_raw(v, raw)));
+    }
     if !v
         .inventory
         .iter()
@@ -312,12 +408,18 @@ fn insert(
     };
     let mut after = before.slots.clone();
     let mut carry = v.inventory.clone();
+    let protected = crate::settlements::economy::protected_carry(state, slot, v);
+    let mut task = v.smelting.expect("active load");
     let rules = state.registry.item_rules();
     let mut moved = false;
-    for stack in &mut carry {
+    for (carry_index, stack) in carry.iter_mut().enumerate() {
         let Some(moving) = stack else {
             continue;
         };
+        let available = owned_amount(v, carry_index, protected[carry_index]);
+        if available == 0 {
+            continue;
+        }
         let index = if moving.item_id == raw {
             INPUT
         } else if fuel_ticks(state, moving) > 0 {
@@ -331,6 +433,7 @@ fn insert(
         }
         let amount = moving
             .count
+            .min(available.min(i32::MAX as u32) as i32)
             .min(rules.max_stack(moving).min(99) - if stored.is_empty() { 0 } else { stored.count })
             .min(if index == INPUT {
                 remaining.min(i32::MAX as u32) as i32
@@ -346,6 +449,7 @@ fn insert(
         }
         stored.count += amount;
         moving.count -= amount;
+        task.carried[carry_index].count -= amount as u32;
         moved = true;
         if index == INPUT {
             remaining -= amount as u32;
@@ -356,10 +460,8 @@ fn insert(
     }
     if moved && inventory::commit(state, vec![inventory::Change { before, after }]).is_ok() {
         v.inventory = carry;
-        v.smelting = Some(Task {
-            furnace: at,
-            phase: Phase::Deliver,
-        });
+        task.phase = Phase::Deliver;
+        v.smelting = Some(task);
     }
     None
 }
@@ -371,19 +473,47 @@ fn load(
     at: [i32; 3],
     raw: u32,
     cook: u32,
-    maximum: u32,
+    mut maximum: u32,
 ) -> Option<BlockPos> {
+    let task = v.smelting.expect("active load");
+    // A pre-receipt persisted task may own no carried material. Return legacy
+    // raw/fuel carry instead of adopting unrelated stacks as furnace supplies.
+    if task.carried.iter().all(|receipt| receipt.count == 0)
+        && v.inventory
+            .iter()
+            .flatten()
+            .any(|stack| stack.item_id == raw || fuel_ticks(state, stack) > 0)
+    {
+        v.smelting.as_mut().expect("active load").phase = Phase::Deliver;
+        return deliver(state, slot, v);
+    }
+    if mining::near(state, slot, pos(at), 2.5) {
+        let Some(limit) = debit_limit(state, v, raw) else {
+            v.smelting.as_mut().expect("active load").phase = Phase::Deliver;
+            return deliver(state, slot, v);
+        };
+        if limit == 0 && owned_raw(v, raw) > 0 {
+            v.smelting.as_mut().expect("active load").phase = Phase::Deliver;
+            return deliver(state, slot, v);
+        }
+        maximum = limit;
+    }
     let furnace = &state.block_entities[&(at[0], at[1], at[2])];
     let input = &furnace.slots[INPUT];
     if !input.is_empty() && input.item_id != raw {
-        v.smelting = Some(Task {
-            furnace: at,
-            phase: Phase::Deliver,
-        });
+        v.smelting.as_mut().expect("active load").phase = Phase::Deliver;
         return deliver(state, slot, v);
     }
+    let protected = crate::settlements::economy::protected_carry(state, slot, v);
+    let carried_raw: u32 = v
+        .inventory
+        .iter()
+        .enumerate()
+        .filter(|(_, stack)| stack.as_ref().is_some_and(|stack| stack.item_id == raw))
+        .map(|(index, _)| owned_amount(v, index, protected[index]))
+        .sum();
     let progress = furnace.furnace.as_ref().expect("owned furnace");
-    let ore = count(v, raw).min(maximum)
+    let ore = carried_raw.min(maximum)
         + if input.item_id == raw {
             input.count.max(0) as u32
         } else {
@@ -397,28 +527,67 @@ fn load(
             .saturating_mul(furnace.slots[FUEL].count.max(0) as u32)
         + v.inventory
             .iter()
-            .flatten()
-            .map(|s| fuel_ticks(state, s).saturating_mul(s.count.max(0) as u32))
+            .enumerate()
+            .filter_map(|(index, stack)| {
+                let stack = stack.as_ref()?;
+                Some(fuel_ticks(state, stack).saturating_mul(owned_amount(
+                    v,
+                    index,
+                    protected[index],
+                )))
+            })
             .sum::<u32>();
     if supplied < needed {
-        for (_, before) in storage(state, slot, v) {
+        for (source_at, before) in storage(state, slot, v) {
             if let Some((index, free)) = source(state, &before, |_, s| fuel_ticks(state, s) > 0) {
                 let stack = &before.slots[index];
                 if mining::room(state, v, stack) == 0 {
-                    v.smelting = Some(Task {
-                        furnace: at,
-                        phase: Phase::Deliver,
-                    });
+                    v.smelting.as_mut().expect("active load").phase = Phase::Deliver;
                     return deliver(state, slot, v);
+                }
+                if mining::near(state, slot, pos(source_at), 2.5) {
+                    let Some(limit) = debit_limit(state, v, raw) else {
+                        v.smelting.as_mut().expect("active load").phase = Phase::Deliver;
+                        return deliver(state, slot, v);
+                    };
+                    if limit == 0 && owned_raw(v, raw) > 0 {
+                        v.smelting.as_mut().expect("active load").phase = Phase::Deliver;
+                        return deliver(state, slot, v);
+                    }
+                    if limit != maximum {
+                        // Demand is refreshed at most once this tick: recomputing
+                        // the fuel budget cannot recurse a second time.
+                        return load(state, slot, v, at, raw, cook, limit);
+                    }
                 }
                 let amount = (needed - supplied)
                     .div_ceil(fuel_ticks(state, stack))
                     .min(free);
-                return take(state, slot, v, before, index, amount);
+                let prior = carry_counts(v);
+                let target = take(state, slot, v, before, index, amount);
+                if prior != carry_counts(v) {
+                    v.smelting
+                        .as_mut()
+                        .expect("active load")
+                        .record_taken(prior, &v.inventory);
+                    return target;
+                }
+                if target.is_some() {
+                    return target;
+                }
+                v.smelting.as_mut().expect("active load").phase = Phase::Deliver;
+                return deliver(state, slot, v);
             }
         }
     }
-    insert(state, slot, v, at, raw, maximum)
+    let target = insert(state, slot, v, at, raw, maximum);
+    if target.is_none() && v.smelting.is_some_and(|task| task.phase == Phase::Load) {
+        // No insertion and no route means this load cannot make progress.
+        // Release the durable task rather than monopolizing every work turn.
+        v.smelting.as_mut().expect("active load").phase = Phase::Deliver;
+        return deliver(state, slot, v);
+    }
+    target
 }
 
 /// `Some` owns this work turn, even when the transfer completes without walking.
@@ -458,10 +627,23 @@ pub(super) fn work(
     {
         return None;
     }
-    let raw = mining::item_id(state, "raw_iron")?;
-    let iron = mining::item_id(state, "iron_ingot")?;
-    let cook = cooking_ticks(state, raw)?;
-    let demand = construction::iron_demand(state, id, Some(v));
+    let recipe = state.registry.iron_smelting?;
+    state.settlements.get(id)?;
+    cache::prepare(state, v, recipe);
+    if owned_furnaces(state, id).next().is_none() {
+        if let Some(task) = v.smelting {
+            v.smelting = Some(Task {
+                phase: Phase::Deliver,
+                ..task
+            });
+            return Some(deliver(state, slot, v));
+        }
+        return None;
+    }
+    let raw = recipe.raw;
+    let cook = recipe.cook_ticks;
+    let slice = cache::current(state, id).expect("prepared town slice");
+    let (demand, committed) = (slice.demand, slice.committed);
     if let Some(mut task) = v.smelting {
         if demand == 0 || !owned_furnaces(state, id).any(|at| at == task.furnace) {
             v.smelting = Some(Task {
@@ -470,9 +652,8 @@ pub(super) fn work(
             });
             return Some(deliver(state, slot, v));
         }
-        let maximum =
-            demand.saturating_sub(committed(state, v, raw, iron).saturating_sub(count(v, raw)));
-        if maximum == 0 && count(v, raw) > 0 {
+        let maximum = demand.saturating_sub(committed.saturating_sub(owned_raw(v, raw)));
+        if maximum == 0 && owned_raw(v, raw) > 0 {
             v.smelting = Some(Task {
                 phase: Phase::Deliver,
                 ..task
@@ -522,10 +703,7 @@ pub(super) fn work(
         let prior: i32 = v.inventory.iter().flatten().map(|s| s.count).sum();
         let target = take(state, slot, v, before, index, free);
         if v.inventory.iter().flatten().map(|s| s.count).sum::<i32>() > prior {
-            v.smelting = Some(Task {
-                furnace: at,
-                phase: Phase::Deliver,
-            });
+            v.smelting = Some(Task::new(at, Phase::Deliver));
         }
         return Some(target);
     }
@@ -543,13 +721,23 @@ pub(super) fn work(
                 && !entity.furnace.as_ref().expect("furnace").is_lit()
         });
     if let Some(at) = unfueled {
-        v.smelting = Some(Task {
-            furnace: at,
-            phase: Phase::Load,
-        });
+        if v.inventory
+            .iter()
+            .flatten()
+            .any(|stack| stack.item_id == raw || fuel_ticks(state, stack) > 0)
+        {
+            v.smelting = Some(Task::new(at, Phase::Deliver));
+            return Some(deliver(state, slot, v));
+        }
+        if !storage(state, slot, v).iter().any(|(_, image)| {
+            source(state, image, |_, stack| fuel_ticks(state, stack) > 0).is_some()
+        }) {
+            return None;
+        }
+        v.smelting = Some(Task::new(at, Phase::Load));
         return Some(load(state, slot, v, at, raw, cook, 0));
     }
-    let missing = demand.saturating_sub(committed(state, v, raw, iron));
+    let missing = demand.saturating_sub(committed);
     if missing == 0 {
         return None;
     }
@@ -558,10 +746,7 @@ pub(super) fn work(
         .flatten()
         .any(|s| s.item_id == raw || fuel_ticks(state, s) > 0)
     {
-        v.smelting = Some(Task {
-            furnace: owned_furnaces(state, id).next()?,
-            phase: Phase::Deliver,
-        });
+        v.smelting = Some(Task::new(owned_furnaces(state, id).next()?, Phase::Deliver));
         return Some(deliver(state, slot, v));
     }
     let at = owned_furnaces(state, id)
@@ -584,15 +769,24 @@ pub(super) fn work(
     {
         return None;
     }
-    for (_, before) in stock {
+    for (source_at, before) in stock {
         if let Some((index, free)) = source(state, &before, |_, s| s.item_id == raw) {
             let prior = count(v, raw);
-            let target = take(state, slot, v, before, index, missing.min(free));
+            let prior_slots = carry_counts(v);
+            let mut amount = missing.min(free);
+            if mining::near(state, slot, pos(source_at), 2.5) {
+                let (demand, committed) = cache::for_debit(state, v);
+                amount = amount.min(demand.saturating_sub(committed));
+                if amount == 0 {
+                    return None;
+                }
+            }
+            let target = take(state, slot, v, before, index, amount);
             if count(v, raw) > prior {
-                v.smelting = Some(Task {
-                    furnace: at,
-                    phase: Phase::Load,
-                });
+                let mut task = Task::new(at, Phase::Load);
+                task.record_taken(prior_slots, &v.inventory);
+                v.smelting = Some(task);
+                cache::taken_raw(state, id, count(v, raw) - prior);
             }
             return Some(target);
         }

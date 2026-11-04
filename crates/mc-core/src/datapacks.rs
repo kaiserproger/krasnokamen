@@ -390,6 +390,7 @@ impl PackSet {
                 ));
             }
         }
+        registry.refresh_iron_smelting();
         Ok(())
     }
 }
@@ -769,3 +770,32 @@ mod tests;
 
 #[path = "datapack_management.rs"]
 mod management;
+
+#[cfg(test)]
+mod iron_smelting_tests {
+    use super::PackSet;
+    use crate::registry::CoreRegistry;
+
+    #[test]
+    fn recipe_install_refreshes_iron_smelting_fact() {
+        let mut registry = CoreRegistry::load(None).unwrap();
+        registry.recipes.clear();
+        registry.refresh_iron_smelting();
+        assert!(registry.iron_smelting.is_none());
+
+        let mut packs = PackSet::default();
+        packs.resources.insert(
+            "test/recipe/iron.json".into(),
+            r#"{"type":"minecraft:smelting","ingredient":"minecraft:raw_iron","result":{"id":"minecraft:iron_ingot"},"cookingtime":37}"#.into(),
+        );
+        packs.install_content(&mut registry).unwrap();
+        assert_eq!(registry.iron_smelting.unwrap().cook_ticks, 37);
+
+        packs.resources.insert(
+            "test/recipe/iron.json".into(),
+            r#"{"type":"minecraft:smelting","ingredient":"minecraft:raw_iron","result":{"id":"minecraft:iron_ingot"},"cookingtime":53}"#.into(),
+        );
+        packs.install_content(&mut registry).unwrap();
+        assert_eq!(registry.iron_smelting.unwrap().cook_ticks, 53);
+    }
+}

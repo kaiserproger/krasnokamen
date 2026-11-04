@@ -435,6 +435,7 @@ fn caravan_admission_preserves_an_active_tenders_carry() {
     worker.smelting = Some(crate::villager::smelting::Task {
         furnace: [8, 201, 8],
         phase: crate::villager::smelting::Phase::Load,
+        carried: Default::default(),
     });
     let before = worker.inventory.clone();
     let request = open(&f, "tender", 3, None);

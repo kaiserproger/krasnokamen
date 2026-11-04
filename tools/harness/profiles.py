@@ -399,6 +399,12 @@ def run_village_autonomy_qa(ctx: ProfileContext) -> dict[str, Any]:
 
     return village_autonomy_qa.run(ctx)
 
+def run_civilization_seed_qa(ctx: ProfileContext) -> dict[str, Any]:
+    from .backends import village_autonomy_qa
+
+    return village_autonomy_qa.run(ctx, civilization=True)
+
+
 def run_village_owner_order_qa(ctx: ProfileContext) -> dict[str, Any]:
     """Short owner-order persistence and admission scenario."""
     from .backends import village_autonomy_qa
@@ -841,6 +847,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "scope": "real-client",
         "description": "Generated-village autonomy: walk-to-village adoption, unfunded Storage L1 + House L1, dialog claim, second-claim refusal (native --client, windowed for screenshots)",
         "run": run_village_autonomy_qa,
+    },
+    "civilization-seed-qa": {
+        "scope": "real-client",
+        "description": "Claim a generated village and observe growth after player-deposited founding stock (native, windowed)",
+        "run": run_civilization_seed_qa,
     },
     "village-owner-order-qa": {
         "scope": "real-client",

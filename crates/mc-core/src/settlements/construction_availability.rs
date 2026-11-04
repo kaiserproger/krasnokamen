@@ -170,6 +170,20 @@ pub(super) fn missing_explanation(
     Some((leaf, reason))
 }
 
+/// Shared physical stock/carry capability proof for furnace provisioning.
+pub(super) fn needs_furnace(
+    state: &TickState,
+    id: SettlementId,
+    demand: u32,
+    images: &[Image],
+) -> bool {
+    let Some(record) = state.settlements.get(id) else {
+        return false;
+    };
+    let caps = caps(state, id, record, images);
+    !caps.furnace && caps.iron < i64::from(demand) && caps.smeltable_iron > 0 && caps.fuel
+}
+
 fn caps(state: &TickState, id: SettlementId, record: &SettlementRecord, images: &[Image]) -> Caps {
     let mut caps = Caps {
         miner: false,

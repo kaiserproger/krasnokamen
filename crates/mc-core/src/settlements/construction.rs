@@ -14,6 +14,11 @@ use mc_script::{ScriptStructureState, ScriptWorldBounds};
 mod availability;
 pub(crate) use availability::SourceReason;
 
+#[path = "construction_furnace.rs"]
+pub(crate) mod furnace;
+
+pub(crate) const PLAN_CADENCE: u64 = 20;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Project {
@@ -1198,6 +1203,9 @@ fn street_site(
 }
 
 fn plan(state: &mut TickState, id: SettlementId) {
+    if furnace::plan(state, id) {
+        return;
+    }
     if plan_order(state, id) {
         return;
     }
@@ -1470,8 +1478,8 @@ pub(crate) fn tick(state: &mut TickState) {
             })
             .map(|record| record.id)
     };
-    if state.tick.is_multiple_of(20)
-        && let Some(id) = selected(state, state.tick / 20)
+    if state.tick.is_multiple_of(PLAN_CADENCE)
+        && let Some(id) = selected(state, state.tick / PLAN_CADENCE)
     {
         plan(state, id);
         if state
@@ -1504,6 +1512,31 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
         .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
     {
         return false;
+    }
+    if project.blueprint == furnace::NAME {
+        // Workstation construction is temporary employment. Release its
+        // builder so even a single-resident town can tend it and shear sheep.
+        let builder = residents(state, id).find(|slot| {
+            state
+                .entities
+                .row(*slot)
+                .villager
+                .as_ref()
+                .is_some_and(|v| {
+                    v.settlement == Some(id) && v.data.profession == Profession::Builder
+                })
+        });
+        if let Some(slot) = builder
+            && let Some(v) = state.entities.row_mut(slot).villager.as_mut()
+            && detach(v)
+        {
+            crate::villager::sync_appearance(state, slot);
+        }
+        let record = state.settlements.get_mut(id).expect("finished settlement");
+        record.furnace_workstation = Some(project.structure);
+        record.project = None;
+        record.revision = record.revision.saturating_add(1);
+        return true;
     }
     // A committed road or lamp is street work, not a certified building: the
     // world and the committed ledger record are its whole state.

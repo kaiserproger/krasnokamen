@@ -161,10 +161,19 @@ class VillageAutonomyQaTests(unittest.TestCase):
                 self.assertEqual(qa._project_progress(observed), {
                     "blueprint": kind, "level": 1, "done": 7, "total": 42, "origin": [7, 200, 10],
                 })
-        # The dialog's fallback label for a blueprint the harness cannot name.
-        with self.assertRaisesRegex(RuntimeError, "'Building'"):
+        # The server uses this generic label for otherwise unlabelled projects;
+        # retain it without guessing which blueprint it denotes.
+        for label, level, site in (("Building", "level", "Site"), ("Здание", "уровень", "Место")):
+            observed = {"ui_nodes": [{
+                "id": "dialog/body/0", "label": f"{label} · {level} 1 · 1/9\n{site}: 1, 2, 3",
+            }]}
+            self.assertEqual(qa._project_progress(observed), {
+                "blueprint": "unlabelled", "label": label, "level": 1,
+                "done": 1, "total": 9, "origin": [1, 2, 3],
+            })
+        with self.assertRaisesRegex(RuntimeError, "'Mystery'"):
             qa._project_progress({"ui_nodes": [{
-                "id": "dialog/body/0", "label": "Building · level 1 · 1/9\nSite: 1, 2, 3",
+                "id": "dialog/body/0", "label": "Mystery · level 1 · 1/9\nSite: 1, 2, 3",
             }]})
 
     def test_road_restart_subject_records_the_street_plan_before_restart(self) -> None:

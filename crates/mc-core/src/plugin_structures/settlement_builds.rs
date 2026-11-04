@@ -449,6 +449,34 @@ fn same_site(state: &TickState, record: &Structure, origin: [i32; 3]) -> bool {
     })
 }
 
+/// Resolve a town's workstation reference without deserializing the world's
+/// cell/receipt ledger on every villager admission. The borrowed JSON is the
+/// canonical ledger itself; the settlement handle grants no custody alone.
+pub(crate) fn furnace_workstation(
+    state: &TickState,
+    id: SettlementId,
+    handle: &str,
+) -> Option<[i32; 3]> {
+    let record = state
+        .plugins
+        .get_domain(OWNER, KEY)?
+        .get("structures")?
+        .get(handle)?;
+    if record.get("settlement")?.as_u64()? != id.0 {
+        return None;
+    }
+    let snapshot = record.get("snapshot")?;
+    if snapshot.get("dimension")?.as_str()? != state.dimension.name()
+        || snapshot.get("blueprint_id")?.as_str()? != "solaris-settlements:furnace"
+        || ScriptStructureState::deserialize(snapshot.get("state")?).ok()?
+            != ScriptStructureState::Committed
+        || <[i32; 3]>::deserialize(snapshot.get("reserved_footprint")?).ok()? != [1, 1, 1]
+    {
+        return None;
+    }
+    <[i32; 3]>::deserialize(snapshot.get("origin")?).ok()
+}
+
 pub(crate) fn built_at(
     state: &TickState,
     id: SettlementId,

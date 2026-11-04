@@ -59,6 +59,9 @@ fn site_target(
     project: &construction::Project,
     next: [i32; 3],
 ) -> Option<BlockPos> {
+    if project.blueprint == construction::furnace::NAME {
+        return construction::furnace::stand(state, project, next).map(block_pos);
+    }
     if layout::infra(&project.blueprint) {
         return layout::stand(state, project, next).map(block_pos);
     }
@@ -135,10 +138,10 @@ fn in_reach(
 ) -> bool {
     let pos = state.entities.pos(slot);
     let width = state.entities.body(slot).half_width;
-    if layout::infra(&project.blueprint) {
-        // Roads are walked on while they are paved; only a lamp post's own
-        // column must stay clear of the builder's body.
-        let clear = project.blueprint != layout::LAMP
+    if layout::infra(&project.blueprint) || project.blueprint == construction::furnace::NAME {
+        // Roads are walked on while paved; a lamp or furnace column must
+        // stay clear of the builder's whole body.
+        let clear = project.blueprint == layout::ROAD
             || [0, 2].into_iter().any(|axis| {
                 let min = f64::from(next[axis]);
                 pos[axis] + width <= min || pos[axis] - width >= min + 1.0

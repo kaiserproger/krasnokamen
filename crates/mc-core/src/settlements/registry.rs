@@ -47,6 +47,10 @@ pub struct SettlementRecord {
     pub bootstrap_storage: Option<[i32; 3]>,
     #[serde(default)]
     pub project: Option<super::construction::Project>,
+    /// Reference to the canonical committed one-cell furnace structure.
+    /// Discovery validates the ledger record and live block, not this pointer alone.
+    #[serde(default)]
+    pub(crate) furnace_workstation: Option<String>,
     /// One owner request, retried before autonomous planning.
     #[serde(default)]
     pub pending_order: Option<super::construction::OwnerOrder>,
@@ -251,6 +255,7 @@ impl SettlementRecord {
             + opt(&self.owner)
             + opt(&self.village_source)
             + opt(&self.owner_name)
+            + opt(&self.furnace_workstation)
             + self.project.as_ref().map_or(0, |project| {
                 project.blueprint.capacity() + project.structure.capacity()
             })
@@ -446,6 +451,7 @@ impl Registry {
             village_source: None,
             bootstrap_storage: None,
             project: None,
+            furnace_workstation: None,
             pending_order: None,
             construction_cursor: 0,
         };
@@ -490,6 +496,7 @@ impl Registry {
             village_source: Some(source.to_owned()),
             bootstrap_storage: None,
             project: None,
+            furnace_workstation: None,
             pending_order: None,
             construction_cursor: 0,
         };

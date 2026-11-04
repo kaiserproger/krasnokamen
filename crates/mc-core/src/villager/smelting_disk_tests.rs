@@ -243,6 +243,7 @@ fn furnace_phase_round_trips_nbt_and_changes_the_worker_journal() {
     resident.smelting = Some(smelting::Task {
         furnace: [FURNACE.0, FURNACE.1, FURNACE.2],
         phase: smelting::Phase::Deliver,
+        carried: Default::default(),
     });
     assert!(!persistence::journal_eq(&resident, &before));
     let fields =
@@ -252,3 +253,6 @@ fn furnace_phase_round_trips_nbt_and_changes_the_worker_journal() {
     assert_eq!(loaded.smelting, resident.smelting);
     assert!(persistence::journal_eq(&loaded, &resident));
 }
+
+#[path = "smelting_provisioning_disk_tests.rs"]
+mod provisioning;

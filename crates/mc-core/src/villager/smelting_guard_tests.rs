@@ -123,6 +123,8 @@ fn two_tenders_share_one_two_iron_demand() {
     assert_eq!(carried(&state, second, raw), 0);
     assert_eq!(stored(&state, raw), 7);
     assert_eq!(counts(&state), before);
+    assert_eq!(state.smelting_cache.snapshots, 1);
+    assert_eq!(state.smelting_cache.demand_scans, 1);
 }
 
 #[test]
