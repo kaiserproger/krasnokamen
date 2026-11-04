@@ -2370,12 +2370,11 @@ failing_first = "reported"
 id = "HUNT-CURSOR-CLOSE"
 title = "Closing inventory with occupied cursor leaves phantom client cursor"
 area = "gameplay"
-repro = "source"
+repro = "client"
 severity = "major"
-status = "fixed"
-source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-craft-custody-next/REPORT.yaml"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-craft-custody-next/REPORT.yaml; baseline graphical failure hunt-craft-custody-next/receipts/20261103T112621-scene-shot-i69ak7dg/result.json"
 regression = ["cargo:mc-core:player::tests::close_publishes_cursor_clear_after_inventory_and_crafting_pickup"]
-failing_first = "reported"
 
 [[bug]]
 id = "HUNT-LEVITATION-REST"
