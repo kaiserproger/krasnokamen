@@ -747,7 +747,7 @@ fn plan_viewer_inner(
                     center_z: snapshot.border.center_z,
                     old_size: snapshot.border.size,
                     new_size: snapshot.border.lerp_target,
-                    lerp_time: snapshot.border.lerp_remaining,
+                    lerp_time: snapshot.border.lerp_remaining.saturating_mul(50),
                     absolute_max_size: 29_999_984,
                     warning_blocks: snapshot.border.warning_blocks,
                     // Protocol warning time is seconds; vanilla

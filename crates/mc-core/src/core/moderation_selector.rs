@@ -23,14 +23,12 @@ fn resolve(
     source: ConnectionId,
     text: &str,
 ) -> Result<Vec<ModerationPlayer>, String> {
-    // The shared parser currently represents @n and @p as the same nearest
-    // target, but @n is entity-type and is not a player-profile argument.
-    if text == "@n" || text.starts_with("@n[") {
-        return Err("Only player selectors are allowed".into());
-    }
     let target = crate::commands::target_of(text).map_err(|error| error.message())?;
     if let Target::Selector(selector) = &target
-        && matches!(selector.kind, SelectorKind::Entities)
+        && matches!(
+            selector.kind,
+            SelectorKind::Entities | SelectorKind::NearestEntity
+        )
         && !selector
             .entity_types
             .iter()

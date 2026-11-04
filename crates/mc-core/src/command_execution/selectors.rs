@@ -2,27 +2,46 @@
 //! Moved verbatim from `command_execution.rs`.
 
 use super::*;
+fn rotation_matches(value: f32, range: (Option<f32>, Option<f32>)) -> bool {
+    let wrap = |value: f32| (value + 180.0).rem_euclid(360.0) - 180.0;
+    let value = wrap(value);
+    let min = range.0.map_or(-180.0, wrap);
+    let max = range.1.map_or(180.0, wrap);
+    if min > max {
+        value >= min || value <= max
+    } else {
+        value >= min && value <= max
+    }
+}
 
 /// Java target-selector option families beyond type/name/position: scores,
-/// tag, team, level, gamemode, pitch/yaw, nbt, advancements, predicates.
+/// tag, team, level, gamemode, pitch/yaw, nbt and advancements.
 pub(super) fn options_match(
     state: &TickState,
-    executor: EntityId,
     slot: crate::entities::EntitySlot,
     selector: &Selector,
 ) -> bool {
     let body = state.entities.body(slot);
-    let row = state.entities.row(slot);
-    let holder = state
-        .connections
-        .name_of(body.id)
-        .map(str::to_owned)
-        .unwrap_or_else(|| format!("entity_{}", body.id.0));
+    let mut uuid_buffer = uuid::Uuid::encode_buffer();
+    let holder: Option<&str> = if !selector.scores.is_empty() || selector.team.is_some() {
+        Some(if let Some(name) = state.connections.name_of(body.id) {
+            name
+        } else {
+            state
+                .entities
+                .row(slot)
+                .uuid
+                .hyphenated()
+                .encode_lower(&mut uuid_buffer)
+        })
+    } else {
+        None
+    };
     for (objective, (min, max)) in &selector.scores {
         let value = state
             .scoreboard
             .scores
-            .get(&holder)
+            .get(holder.expect("score holder"))
             .and_then(|scores| scores.get(objective))
             .map(|score| score.value);
         let inside = match value {
@@ -63,14 +82,18 @@ pub(super) fn options_match(
         }
     }
     if let Some((team, inverted)) = &selector.team {
-        let id_label = format!("entity_{}", body.id.0);
+        let holder = holder.expect("team holder");
         let member = match team.as_str() {
-            "" => state.scoreboard.teams.values().all(|entry| {
-                !entry.members.contains(&holder) && !entry.members.contains(&id_label)
-            }),
-            name => state.scoreboard.teams.get(name).is_some_and(|entry| {
-                entry.members.contains(&holder) || entry.members.contains(&id_label)
-            }),
+            "" => state
+                .scoreboard
+                .teams
+                .values()
+                .all(|entry| !entry.members.contains(holder)),
+            name => state
+                .scoreboard
+                .teams
+                .get(name)
+                .is_some_and(|entry| entry.members.contains(holder)),
         };
         if member == *inverted {
             return false;
@@ -91,46 +114,23 @@ pub(super) fn options_match(
         }
     }
     if let Some((mode, inverted)) = &selector.gamemode {
-        let matched = state
-            .players
-            .get(&body.id)
-            .is_some_and(|player| &player.game_mode == mode);
-        if matched == *inverted {
+        let Some(player) = state.players.get(&body.id) else {
+            return false;
+        };
+        if (&player.game_mode == mode) == *inverted {
             return false;
         }
     }
     if selector.pitch.is_some() || selector.yaw.is_some() {
         let [yaw, pitch, _] = state.entities.rot(slot);
-        if let Some((min, max)) = selector.pitch {
-            let pitch = f64::from(pitch);
-            let inside = match (min, max) {
-                (Some(min), Some(max)) if min <= max => {
-                    pitch >= f64::from(min) && pitch <= f64::from(max)
-                }
-                _ => {
-                    let lo = min.map(f64::from);
-                    let hi = max.map(f64::from);
-                    lo.is_none_or(|lo| pitch >= lo) && hi.is_none_or(|hi| pitch <= hi)
-                }
-            };
-            if !inside {
-                return false;
-            }
-        }
-        if let Some((min, max)) = selector.yaw {
-            let yaw = f64::from(yaw).rem_euclid(360.0);
-            let inside = match (min, max) {
-                (Some(min), Some(max)) if f64::from(min) <= f64::from(max) => {
-                    yaw >= f64::from(min) && yaw <= f64::from(max)
-                }
-                (Some(min), Some(max)) => yaw >= f64::from(min) || yaw <= f64::from(max),
-                (Some(min), None) => yaw >= f64::from(min),
-                (None, Some(max)) => yaw <= f64::from(max),
-                (None, None) => true,
-            };
-            if !inside {
-                return false;
-            }
+        if selector
+            .pitch
+            .is_some_and(|range| !rotation_matches(pitch, range))
+            || selector
+                .yaw
+                .is_some_and(|range| !rotation_matches(yaw, range))
+        {
+            return false;
         }
     }
     if let Some(actual) = &entity_data {
@@ -153,15 +153,6 @@ pub(super) fn options_match(
             return false;
         }
     }
-    for (id, inverted) in &selector.predicates {
-        // No loot-predicate registry is wired to selectors yet; a positive
-        // predicate matches nothing while a negative one admits everything.
-        if !inverted {
-            return false;
-        }
-        let _ = (id, executor);
-    }
-    let _ = row;
     true
 }
 
@@ -185,14 +176,14 @@ pub(super) fn selector(
         .filter_map(|slot| {
             let body = state.entities.body(slot);
             let row = state.entities.row(slot);
-            // Java @a includes dead players and @s may select a nonliving
-            // executor; @e and @n stay alive-only.
+            // Player selectors include retained dead players; entity
+            // selectors @e and @n admit only living entities.
             let dead_player = !body.alive && matches!(body.kind, EntityKind::Player { .. });
             let admitted = body.alive
                 || (dead_player
-                    && matches!(
+                    && !matches!(
                         selector.kind,
-                        SelectorKind::AllPlayers | SelectorKind::Executor
+                        SelectorKind::Entities | SelectorKind::NearestEntity
                     ));
             if !admitted
                 || (players_only && !matches!(body.kind, EntityKind::Player { .. }))
@@ -225,7 +216,7 @@ pub(super) fn selector(
                     }
                 }
             }
-            if !options_match(state, executor, slot, selector) {
+            if !options_match(state, slot, selector) {
                 return None;
             }
             let pos = state.entities.pos(slot);
@@ -270,7 +261,7 @@ pub(crate) fn order_and_limit(
     mut candidates: Vec<(EntityId, f64)>,
 ) -> Vec<EntityId> {
     let sort = selector.sort.unwrap_or(match selector.kind {
-        SelectorKind::Nearest => SelectorSort::Nearest,
+        SelectorKind::Nearest | SelectorKind::NearestEntity => SelectorSort::Nearest,
         SelectorKind::Random => SelectorSort::Random,
         _ => SelectorSort::Arbitrary,
     });
@@ -310,7 +301,10 @@ pub(crate) fn order_and_limit(
     }
     let default_limit = if matches!(
         selector.kind,
-        SelectorKind::Nearest | SelectorKind::Random | SelectorKind::Executor
+        SelectorKind::Nearest
+            | SelectorKind::NearestEntity
+            | SelectorKind::Random
+            | SelectorKind::Executor
     ) {
         1
     } else {
@@ -359,7 +353,6 @@ pub(crate) fn resolve_target(
                 yaw: None,
                 nbt: Vec::new(),
                 advancements: Vec::new(),
-                predicates: Vec::new(),
                 distance: None,
                 position: [None; 3],
                 extent: [None; 3],
@@ -403,7 +396,10 @@ pub(super) fn single_target(target: &Target) -> bool {
             }
             matches!(
                 selector.kind,
-                SelectorKind::Nearest | SelectorKind::Executor | SelectorKind::Random
+                SelectorKind::Nearest
+                    | SelectorKind::NearestEntity
+                    | SelectorKind::Executor
+                    | SelectorKind::Random
             ) && selector.limit.is_none()
         }
         _ => false,

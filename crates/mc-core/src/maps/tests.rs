@@ -1,5 +1,5 @@
 use super::*;
-use crate::boundary::{ChangeSet, Hand};
+use crate::boundary::{ChangeSet, Hand, PlayerChange};
 use crate::dimensions::Dimension;
 use crate::maps::{Maps, SavedMap, map_id};
 
@@ -11,6 +11,321 @@ fn framed_waypoints_survive_nbt_roundtrip() {
     let tag = crate::maps::nbt::to_tag(&map).unwrap();
     let loaded = crate::maps::nbt::from_tag(&tag).unwrap();
     assert_eq!(loaded.frame_markers, vec![(10, 20, 90)]);
+}
+
+#[test]
+fn inventory_map_markers_include_each_distinct_map_id() {
+    let mut state = test_state();
+    let alice = join(&mut state, 1, "alice");
+    let bob = join(&mut state, 2, "bob");
+    let first = state
+        .maps
+        .allocate(SavedMap::new([0, 0], 0, Dimension::Overworld).unwrap())
+        .unwrap();
+    let second = state
+        .maps
+        .allocate(SavedMap::new([0, 0], 0, Dimension::Overworld).unwrap())
+        .unwrap();
+    let first_stack = crate::maps::filled_map(&state, first).unwrap();
+    let second_stack = crate::maps::filled_map(&state, second).unwrap();
+    state.players.get_mut(&alice).unwrap().inventory.slots[0] = second_stack.clone();
+    state.players.get_mut(&bob).unwrap().inventory.slots[10] = first_stack;
+    state.players.get_mut(&bob).unwrap().inventory.slots[11] = second_stack;
+    state.outbox.clear();
+    state.tick = 10;
+    crate::maps::tick(&mut state);
+    let updates = &state.outbox[&ConnectionId(1)];
+    let update = updates
+        .iter()
+        .find_map(|change| match change {
+            PlayerChange::Map { update } if update.id == second => Some(update),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(
+        update
+            .markers
+            .iter()
+            .filter(|marker| marker.kind == 0)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn carved_pumpkin_hides_carrier_marker_from_other_players() {
+    let mut state = test_state();
+    let alice = join(&mut state, 1, "alice");
+    let bob = join(&mut state, 2, "bob");
+    let id = state
+        .maps
+        .allocate(SavedMap::new([0, 0], 0, Dimension::Overworld).unwrap())
+        .unwrap();
+    let map = crate::maps::filled_map(&state, id).unwrap();
+    state.players.get_mut(&alice).unwrap().inventory.slots[0] = map.clone();
+    state.players.get_mut(&bob).unwrap().inventory.slots[10] = map;
+    let pumpkin = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:carved_pumpkin").unwrap())
+        .unwrap();
+    state.players.get_mut(&bob).unwrap().inventory.slots[39] = mc_data::ItemStack::new(pumpkin, 1);
+    state.outbox.clear();
+    state.tick = 10;
+    crate::maps::tick(&mut state);
+    let count = |connection| {
+        state.outbox[&ConnectionId(connection)]
+            .iter()
+            .find_map(|change| match change {
+                PlayerChange::Map { update } if update.id == id => Some(
+                    update
+                        .markers
+                        .iter()
+                        .filter(|marker| marker.kind == 0)
+                        .count(),
+                ),
+                _ => None,
+            })
+            .unwrap()
+    };
+    assert_eq!(count(1), 1, "observer must not see pumpkin carrier");
+    assert_eq!(count(2), 2, "carrier still sees own marker");
+}
+
+#[test]
+fn framed_and_pocket_maps_do_not_explore_until_held() {
+    let mut state = test_state();
+    let player = join(&mut state, 1, "mapper");
+    let slot = state.entities.slot_of(player).unwrap();
+    state.config_view_distance = 1;
+    state.entities.set_pos(slot, [6.5, 65.0, 8.5]);
+    state.world.set_block(8, 65, 8, state.registry.states.stone);
+    state.world.set_block(7, 65, 8, state.registry.states.air);
+    state.world.fold_overlay();
+    let id = state
+        .maps
+        .allocate(SavedMap::new([0, 0], 0, Dimension::Overworld).unwrap())
+        .unwrap();
+    let map = crate::maps::filled_map(&state, id).unwrap();
+    let frame = crate::item_frame::spawn(
+        &mut state,
+        crate::boundary::BlockPos { x: 7, y: 65, z: 8 },
+        4,
+        false,
+        map.clone(),
+    )
+    .expect("supported frame");
+    state.players.get_mut(&player).unwrap().inventory.slots[10] = map.clone();
+    state.tick = 10;
+    crate::maps::tick(&mut state);
+    assert!(state.entities.slot_of(frame).is_some());
+    assert!(
+        !state.maps.cursors.contains_key(&id),
+        "pocket and framed copies must not explore"
+    );
+    state.players.get_mut(&player).unwrap().inventory.slots[0] = map;
+    state.tick = 15;
+    crate::maps::tick(&mut state);
+    assert!(
+        state.maps.cursors.contains_key(&id),
+        "held map must explore"
+    );
+    assert!(!state.maps.records[&id].frame_markers.is_empty());
+    state.entities.set_pos(slot, [40.0, 65.0, 8.5]);
+    state.outbox.clear();
+    state.tick = 20;
+    crate::maps::tick(&mut state);
+    let update = state.outbox[&ConnectionId(1)]
+        .iter()
+        .find_map(|change| match change {
+            PlayerChange::Map { update } if update.id == id => Some(update),
+            _ => None,
+        })
+        .unwrap();
+    assert!(
+        update.markers.iter().any(|marker| marker.kind == 1),
+        "distant frame waypoint disappeared"
+    );
+}
+
+#[test]
+fn water_map_pixels_keep_water_color_and_distinguish_depth() {
+    let mut state = test_state();
+    let player = join(&mut state, 1, "mapper");
+    let slot = state.entities.slot_of(player).unwrap();
+    let pos = state.entities.pos(slot);
+    let (x, z) = (pos[0].floor() as i32, pos[2].floor() as i32);
+    let id = state
+        .maps
+        .allocate(SavedMap::new([x, z], 0, Dimension::Overworld).unwrap())
+        .unwrap();
+    state.players.get_mut(&player).unwrap().inventory.slots[0] =
+        crate::maps::filled_map(&state, id).unwrap();
+    let water = state.registry.states.water;
+    let stone = state.registry.states.stone;
+    for dx in 0..=1 {
+        state.world.set_block(x + dx, 100, z, stone);
+        for y in 101..=if dx == 0 { 101 } else { 104 } {
+            state.world.set_block(x + dx, y, z, water);
+        }
+    }
+    state.world.set_block(x + 2, 100, z, stone);
+    state.world.set_block(x + 2, 100, z - 1, stone);
+    state.world.set_block(x + 3, 102, z, stone);
+    state.world.set_block(x + 3, 100, z - 1, stone);
+    let map = &state.maps.records[&id];
+    let index = ((z - map.center[1] + 64) * 128 + x - map.center[0] + 64) as usize;
+    state.maps.cursors.insert(id, index);
+    state.tick = 10;
+    crate::maps::tick(&mut state);
+    let colors = &state.maps.records[&id].colors;
+    let water_color = state.registry.map_colors[water as usize];
+    assert_eq!(colors[index] / 4, water_color);
+    assert_eq!(colors[index + 1] / 4, water_color);
+    assert_ne!(
+        colors[index],
+        colors[index + 1],
+        "water depth must change shade"
+    );
+    assert_eq!(
+        colors[index + 2] / 4,
+        state.registry.map_colors[stone as usize]
+    );
+    assert_eq!(
+        colors[index + 3] / 4,
+        state.registry.map_colors[stone as usize]
+    );
+    assert_ne!(
+        colors[index + 2],
+        colors[index + 3],
+        "height must change shade"
+    );
+}
+
+#[test]
+fn nether_map_noise_uses_vanilla_colors_not_roof_blocks() {
+    let mut state = test_state();
+    let player = join(&mut state, 1, "mapper");
+    state.dimension = Dimension::Nether;
+    let slot = state.entities.slot_of(player).unwrap();
+    let pos = state.entities.pos(slot);
+    let (x, z) = (pos[0].floor() as i32, pos[2].floor() as i32);
+    let id = state
+        .maps
+        .allocate(SavedMap::new([x, z], 0, Dimension::Nether).unwrap())
+        .unwrap();
+    state.players.get_mut(&player).unwrap().inventory.slots[0] =
+        crate::maps::filled_map(&state, id).unwrap();
+    let map = &state.maps.records[&id];
+    let index = ((z - map.center[1] + 64) * 128 + x - map.center[0] + 64) as usize;
+    state.maps.cursors.insert(id, index);
+    state.tick = 10;
+    crate::maps::tick(&mut state);
+    let colors = state.maps.records[&id].colors[index..index + 32].to_vec();
+    let stone = state.registry.map_colors[state.registry.states.stone as usize];
+    let dirt = state.registry.map_colors[state.registry.states.dirt as usize];
+    assert!(
+        colors
+            .iter()
+            .all(|color| *color / 4 == stone || *color / 4 == dirt)
+    );
+    state
+        .world
+        .set_block(x, 200, z, state.registry.states.stone);
+    state.maps.cursors.insert(id, index);
+    state.tick = 15;
+    crate::maps::tick(&mut state);
+    assert_eq!(&state.maps.records[&id].colors[index..index + 32], &colors);
+}
+
+#[test]
+fn locked_map_can_toggle_banner_waypoint() {
+    let mut state = test_state();
+    let player = join(&mut state, 1, "mapper");
+    let slot = state.entities.slot_of(player).unwrap();
+    state.entities.set_pos(slot, [6.5, 65.0, 8.5]);
+    let position = crate::boundary::BlockPos { x: 8, y: 65, z: 8 };
+    let banner = state
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:white_banner").unwrap())
+        .unwrap()
+        .default
+        .0;
+    state.world.set_block(8, 64, 8, state.registry.states.stone);
+    state.world.set_block(8, 65, 8, banner);
+    state.world.fold_overlay();
+    let mut map = SavedMap::new([0, 0], 0, Dimension::Overworld).unwrap();
+    map.locked = true;
+    let id = state.maps.allocate(map).unwrap();
+    state.players.get_mut(&player).unwrap().inventory.slots[0] =
+        crate::maps::filled_map(&state, id).unwrap();
+    let click = PlayerInput::UseItemOn {
+        connection: ConnectionId(1),
+        hand: Hand::Main,
+        position,
+        face: 1,
+        cursor: [0.5, 0.5, 0.5],
+        sequence: 1,
+    };
+    run_tick(&mut state, std::slice::from_ref(&click));
+    assert_eq!(state.maps.records[&id].banners.len(), 1);
+    run_tick(&mut state, &[click]);
+    assert!(state.maps.records[&id].banners.is_empty());
+}
+
+#[test]
+fn revisiting_destroyed_banner_removes_its_map_waypoint() {
+    let mut state = test_state();
+    let player = join(&mut state, 1, "mapper");
+    state.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
+    let slot = state.entities.slot_of(player).unwrap();
+    state.entities.set_pos(slot, [6.5, 65.0, 8.5]);
+    let position = crate::boundary::BlockPos { x: 8, y: 65, z: 8 };
+    let banner = state
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:white_banner").unwrap())
+        .unwrap()
+        .default
+        .0;
+    state.world.set_block(8, 64, 8, state.registry.states.stone);
+    state.world.set_block(8, 65, 8, banner);
+    state.world.fold_overlay();
+    let id = state
+        .maps
+        .allocate(SavedMap::new([0, 0], 0, Dimension::Overworld).unwrap())
+        .unwrap();
+    state.players.get_mut(&player).unwrap().inventory.slots[0] =
+        crate::maps::filled_map(&state, id).unwrap();
+    run_tick(
+        &mut state,
+        &[PlayerInput::UseItemOn {
+            connection: ConnectionId(1),
+            hand: Hand::Main,
+            position,
+            face: 1,
+            cursor: [0.5, 0.5, 0.5],
+            sequence: 1,
+        }],
+    );
+    assert_eq!(state.maps.records[&id].banners.len(), 1);
+    run_tick(
+        &mut state,
+        &[PlayerInput::Dig {
+            connection: ConnectionId(1),
+            position,
+            action: DigAction::Start,
+            sequence: 2,
+        }],
+    );
+    assert_eq!(
+        state.world.block_at(8, 65, 8),
+        Some(state.registry.states.air)
+    );
+    state.tick = 10;
+    crate::maps::tick(&mut state);
+    assert!(state.maps.records[&id].banners.is_empty());
 }
 
 #[test]

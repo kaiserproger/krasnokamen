@@ -260,6 +260,7 @@ fn classify_row(
     positions: &[[f64; 3]],
     world: &crate::world::ChunkWorld,
     hazard: &crate::world::SectionMatchCache,
+    border: crate::command_border::Border,
     index: usize,
     stamp: &mut Option<crate::world::ContactStamp<2>>,
 ) -> Option<ContactWork> {
@@ -298,6 +299,14 @@ fn classify_row(
         *stamp = None;
         return None;
     }
+    if border.damage_per_block > 0.0
+        && (pos[0] - border.center_x)
+            .abs()
+            .max((pos[2] - border.center_z).abs())
+            > border.size * 0.5 + border.safe_zone
+    {
+        return Some(ContactWork::Scan);
+    }
     let quiet = stamp
         .as_mut()
         .filter(|stamp| stamp.entity == row.id)
@@ -330,7 +339,9 @@ pub(crate) fn run_with(state: &mut TickState, intents: &mut Vec<Intent>, min_par
         classify_rows(
             &mut scratch.negative[..rows],
             min_parallel,
-            |index, stamp| classify_row(bodies, positions, world, hazard, index, stamp),
+            |index, stamp| {
+                classify_row(bodies, positions, world, hazard, state.border, index, stamp)
+            },
         )
     };
     // This pass cannot spawn/remove rows; indexing avoids an ID snapshot.
@@ -510,7 +521,6 @@ pub(crate) fn run_all_serial(state: &mut TickState, intents: &mut Vec<Intent>) {
 fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Intent>, index: usize) {
     let living_by_type = &*LIVING_BY_TYPE;
     let slot = crate::entities::EntitySlot(index as u32);
-    let row = state.entities.row(slot);
     let body = state.entities.body(slot);
     let kind = body.kind;
     let is_player = matches!(kind, crate::entities::EntityKind::Player { .. });
@@ -545,14 +555,7 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
     } else {
         [floor_i32(pos[0]), floor_i32(pos[2])]
     };
-    if !state
-        .world
-        .is_active(foot_xz[0].div_euclid(16), foot_xz[1].div_euclid(16))
-    {
-        scratch.negative[index] = None;
-        return;
-    }
-    let mut sneaking = row.appearance.shared_flags & 2 != 0;
+    let mut sneaking = state.entities.row(slot).appearance.shared_flags & 2 != 0;
     let mut moving = true;
     let mut immune = false;
     // Non-players keep `moving = true`; only players have player-map rows.
@@ -562,12 +565,37 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
             (old[0] - pos[0]).abs() > 1.0e-9 || (old[2] - pos[2]).abs() > 1.0e-9
         });
         player.last_contact_position = Some(pos);
-        sneaking |= row.appearance.pose == 5;
+        sneaking |= state.entities.row(slot).appearance.pose == 5;
     }
     if immune {
         scratch.negative[index] = None;
         return;
     }
+    if living && state.border.damage_per_block > 0.0 {
+        let border = state.border;
+        let outside = (pos[0] - border.center_x)
+            .abs()
+            .max((pos[2] - border.center_z).abs())
+            - border.size * 0.5
+            - border.safe_zone;
+        if outside > 0.0 {
+            damage(
+                state,
+                entity,
+                DamageKind::OutsideBorder,
+                (outside * border.damage_per_block) as f32,
+                intents,
+            );
+        }
+    }
+    if !state
+        .world
+        .is_active(foot_xz[0].div_euclid(16), foot_xz[1].div_euclid(16))
+    {
+        scratch.negative[index] = None;
+        return;
+    }
+    let row = state.entities.row(slot);
     let (quiet, computed) = scratch.negative[index]
         .as_mut()
         .filter(|stamp| !item && stamp.entity == entity)

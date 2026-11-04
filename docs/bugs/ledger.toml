@@ -248,9 +248,10 @@ title = "A framed home-map waypoint disappears from the traveler's held clone on
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-FRAME-WAYPOINT-PERSISTENCE"
-regression = ["cargo:mc-core:tick_tests::maps_tests::framed_waypoints_survive_nbt_roundtrip"]
+regression = ["cargo:mc-core:tick_tests::maps_tests::framed_waypoints_survive_nbt_roundtrip", "cargo:mc-core:tick_tests::maps_tests::framed_and_pocket_maps_do_not_explore_until_held"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "MAP-BANNER-REMOVAL"
@@ -258,9 +259,10 @@ title = "Destroying a marked banner leaves its waypoint on an unlocked map perma
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-BANNER-REMOVAL"
-regression = []
+regression = ["cargo:mc-core:tick_tests::maps_tests::revisiting_destroyed_banner_removes_its_map_waypoint"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "MAP-LOCKED-BANNERS"
@@ -268,9 +270,10 @@ title = "A locked map cannot add/remove banner waypoints at all, although lockin
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-LOCKED-BANNERS"
-regression = []
+regression = ["cargo:mc-core:tick_tests::maps_tests::locked_map_can_toggle_banner_waypoint"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "MAP-PUMPKIN-HIDING"
@@ -278,9 +281,10 @@ title = "Wearing a carved pumpkin does not hide the player's marker from other p
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-PUMPKIN-HIDING"
-regression = []
+regression = ["cargo:mc-core:tick_tests::maps_tests::carved_pumpkin_hides_carrier_marker_from_other_players"]
+failing_first = "reported"
 
 [[bug]]
 id = "MAP-TERRAIN-SHADING"
@@ -288,9 +292,10 @@ title = "Maps render every visible base color at one constant brightness, losing
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-TERRAIN-SHADING"
-regression = []
+regression = ["cargo:mc-core:tick_tests::maps_tests::water_map_pixels_keep_water_color_and_distinguish_depth"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "MAP-NETHER-TERRAIN"
@@ -298,9 +303,10 @@ title = "Nether maps use the ordinary top-block sampler, so they map the physica
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-NETHER-TERRAIN"
-regression = []
+regression = ["cargo:mc-core:tick_tests::maps_tests::nether_map_noise_uses_vanilla_colors_not_roof_blocks"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "MAP-INVENTORY-PLAYER-MARKERS"
@@ -308,9 +314,10 @@ title = "A teammate carrying a cloned map in an ordinary inventory slot disappea
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-INVENTORY-PLAYER-MARKERS"
-regression = []
+regression = ["cargo:mc-core:tick_tests::maps_tests::inventory_map_markers_include_each_distinct_map_id"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "MAP-FRAME-AUTO-EXPLORE"
@@ -318,9 +325,10 @@ title = "A framed, unlocked map refreshes terrain without any player holding tha
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-FRAME-AUTO-EXPLORE"
-regression = []
+regression = ["cargo:mc-core:tick_tests::maps_tests::framed_and_pocket_maps_do_not_explore_until_held"]
+failing_first = "reported"
 
 [[bug]]
 id = "ITEM-FRAME-PROJECTILE-CONTENTS"
@@ -328,9 +336,10 @@ title = "Shooting an occupied item frame with an ordinary arrow destroys both th
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-PROJECTILE-CONTENTS"
 regression = ["cargo:mc-core:item_frame::tests::arrow_ejects_display_without_destroying_frame"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "ITEM-FRAME-CELL-COEXISTENCE"
@@ -338,9 +347,10 @@ title = "A valid wall-mounted frame cannot share its block cell with floor redst
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-CELL-COEXISTENCE"
-regression = []
+regression = ["cargo:mc-core:item_frame::tests::frame_and_redstone_dust_can_share_cell_in_either_order"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "ITEM-FRAME-ADVENTURE-BREAK"
@@ -348,9 +358,10 @@ title = "Adventure players cannot punch an item out of a frame or break the empt
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-ADVENTURE-BREAK"
 regression = ["cargo:mc-core:item_frame::tests::adventure_player_pops_then_breaks_frame"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "ARMOR-STAND-PROJECTILE-BREAK"
@@ -358,9 +369,10 @@ title = "A low-damage ordinary arrow or unenchanted thrown trident subtracts gen
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMOR-STAND-PROJECTILE-BREAK"
-regression = ["cargo:mc-core:armor_stand::tests::weak_arrow_breaks_stand_outright", "cargo:mc-core:projectiles::flight_tests::weak_arrow_removes_fresh_armor_stand"]
+regression = ["cargo:mc-core:armor_stand::tests::weak_arrow_breaks_stand_outright", "cargo:mc-core:projectiles::flight_tests::weak_arrow_removes_fresh_armor_stand", "cargo:mc-core:projectiles::flight_tests::weak_trident_removes_fresh_armor_stand"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "ARMOR-STAND-POTION-IMMUNITY"
@@ -379,9 +391,10 @@ title = "Breaking armor stands with an ordinary tool costs no tool durability: t
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMOR-STAND-TOOL-WEAR"
-regression = []
+regression = ["cargo:mc-core:armor_stand::tests::breaking_armor_stand_wears_held_tool"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "ITEM-FRAME-SUPPORT"
@@ -389,9 +402,10 @@ title = "Normal/glow item frames reject valid partial-block supports because att
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-SUPPORT"
-regression = []
+regression = ["cargo:mc-core:item_frame::tests::partial_block_supports_hold_normal_and_glow_frames"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "ITEM-FRAME-ROTATION-MEMORY"
@@ -1347,9 +1361,10 @@ title = "Consumed AuthorizedBuild records contain only kind/connection, so a fre
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#INPUTLOG-AUTHORIZED"
-regression = []
+regression = ["cargo:mc-core:build_precommit::tests::consumed_authorization_log_keeps_original_input_and_planning_tick"]
+failing_first = "reported"
 
 [[bug]]
 id = "SELECTOR-AABB"
@@ -1357,9 +1372,10 @@ title = "dx/dy/dz selector tests entity position, excluding pig whose body inter
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-AABB"
 regression = ["cargo:mc-core:command_execution::tests::command_parity_selector_box_intersects_body_and_defaults_missing_axes"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "SELECTOR-NEAREST-ENTITY"
@@ -1367,19 +1383,31 @@ title = "Java @n is rejected as an unknown selector, so commands/functions canno
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-NEAREST-ENTITY"
 regression = ["cargo:mc-core:command_execution::tests::command_parity_nearest_entity_selects_closest_alive"]
+failing_first = "reported"
 
 [[bug]]
 id = "SELECTOR-OPTION-COVERAGE"
-title = "Java scores, tag, team, level, gamemode, x_rotation, y_rotation, nbt, advancements and predicate arguments are all rejected as unknown options; functions using vanilla filtered targets cannot run. One explicit missing option-family row, not ten unproven runtime failures."
+title = "Java scores, tag, team, level, gamemode, x_rotation and y_rotation selector options are rejected or matched incorrectly."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-OPTION-COVERAGE"
 regression = ["cargo:mc-core:command_execution::tests::command_parity_sort_limit_options_and_typed_filters"]
+failing_first = "reported"
+
+[[bug]]
+id = "SELECTOR-PREDICATE-UNSUPPORTED"
+title = "Loot predicate selector arguments are explicitly rejected until a real predicate registry is wired."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-OPTION-COVERAGE"
+regression = []
 
 [[bug]]
 id = "SELECTOR-DEAD-PLAYERS"
@@ -1387,9 +1415,10 @@ title = "@a and @s omit retained dead players, so commands directed at players o
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-DEAD-PLAYERS"
 regression = ["cargo:mc-core:command_execution::tests::command_parity_dead_players_stay_selectable_by_name_and_all"]
+failing_first = "reported"
 
 [[bug]]
 id = "SELECTOR-TYPE-NAME-FILTERS"
@@ -1397,9 +1426,10 @@ title = "Implemented type/name filters reject valid repeated negative clauses, e
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-TYPE-NAME-FILTERS"
 regression = ["cargo:mc-core:command_execution::tests::command_parity_repeated_negative_type_name_clauses", "cargo:mc-core:command_execution::tests::command_parity_unnamed_mob_plain_name_and_player_type_rejection"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "SELECTOR-DIMENSION-SCOPE"
@@ -1407,9 +1437,10 @@ title = "Unqualified @e and @p are resolved only in the request dimension, so `/
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-DIMENSION-SCOPE"
 regression = ["cargo:mc-core:command_execution::tests::command_parity_unqualified_entity_selector_reaches_loaded_remote_dimensions"]
+failing_first = "reported"
 
 [[bug]]
 id = "SELECTOR-TYPED-ADMISSION"
@@ -1417,9 +1448,10 @@ title = "Java-invalid selector types are accepted and can mutate state: `/give @
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-TYPED-ADMISSION"
 regression = ["cargo:mc-core:command_execution::tests::command_parity_give_rejects_entity_selector_shape", "cargo:mc-core:command_execution::tests::command_parity_teleport_rejects_multi_target_destination"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "SELECTOR-RANDOM-REPEAT"
@@ -1427,9 +1459,10 @@ title = "Repeated @r or sort=random evaluations by the same executor within one 
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-RANDOM-REPEAT"
 regression = ["cargo:mc-core:command_execution::tests::command_parity_repeated_random_evaluation_redraws_within_one_tick"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "BORDER-LERP"
@@ -1437,9 +1470,10 @@ title = "Timed set/add rejected; no interpolation state to persist. Merge BORDER
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BORDER-LERP"
-regression = ["cargo:mc-core:command_border::tests::timed_set_interpolates_linearly_and_settles_exact"]
+regression = ["cargo:mc-core:command_border::tests::timed_set_interpolates_linearly_and_settles_exact", "cargo:mc-core:command_border::tests::checkpoint_and_fsynced_tail_keep_exact_border_and_reject_invalid_state", "cargo:mc-core:command_execution::tests::worldborder_commands_update_live_tick_state", "cargo:mc-edge:plan::plan_tests::world_border_init_changes_and_credit_deferral_use_vanilla_packet"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "BORDER-OPTIONS"
@@ -1447,9 +1481,10 @@ title = "Border damage buffer/amount and warning distance/time commands and fiel
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BORDER-OPTIONS"
-regression = ["cargo:mc-core:command_border::tests::damage_and_warning_options_mutate_named_fields"]
+regression = ["cargo:mc-core:command_border::tests::damage_and_warning_options_mutate_named_fields", "cargo:mc-core:command_execution::tests::worldborder_damage_options_hurt_players_outside_buffer", "cargo:mc-edge:plan::plan_tests::world_border_init_changes_and_credit_deferral_use_vanilla_packet"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "RULE-COMMAND-BUDGET"
@@ -1649,9 +1684,10 @@ title = "Directory-pack loading accepts metadata that requires a world-disabled 
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-FEATURE-ADMISSION"
-regression = []
+regression = ["cargo:mc-core:datapacks::tests::disabled_feature_pack_cannot_load_or_execute_its_function"]
+failing_first = "reported"
 
 [[bug]]
 id = "DATAPACK-LIST-HOVER"
@@ -3216,9 +3252,10 @@ title = "Command forks may not obey vanilla strict admission and fork-counting s
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#RULE-COMMAND-BUDGET; ReviewAcceptanceOpus first-promotion-batch"
-regression = []
+regression = ["cargo:mc-core:command_context::tests::command_parity_fork_limit_is_strict_and_sequence_costs_modifier_stages"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "CIV-SEED24-FORESTRY-STAFFING"

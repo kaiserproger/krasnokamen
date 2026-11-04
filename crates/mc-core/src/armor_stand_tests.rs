@@ -277,6 +277,22 @@ fn armor_stand_hand_items_require_stored_arms_and_never_swap_a_stacked_item_into
 }
 
 #[test]
+fn breaking_armor_stand_wears_held_tool() {
+    let (mut state, actor) = fixture();
+    let (stand, _) = place(&mut state, actor);
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] =
+        item(&state, "minecraft:diamond_pickaxe", 1);
+    let attack = PlayerInput::Attack {
+        connection: ConnectionId(1),
+        target: stand,
+    };
+    run_tick(&mut state, std::slice::from_ref(&attack));
+    run_tick(&mut state, &[attack]);
+    assert!(state.entities.slot_of(stand).is_none());
+    assert_eq!(state.players[&actor].inventory.slots[0].damage, Some(1));
+}
+
+#[test]
 fn armor_stand_two_quick_punches_drop_stand_and_every_equipped_stack_once() {
     let (mut state, actor) = fixture();
     let (stand, _) = place(&mut state, actor);

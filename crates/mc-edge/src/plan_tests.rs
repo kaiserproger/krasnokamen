@@ -3137,7 +3137,7 @@ fn world_border_init_changes_and_credit_deferral_use_vanilla_packet() {
             (2.5, -3.5, 60.0)
         );
         assert_eq!(changed[0].old_size, 100.0);
-        assert_eq!(changed[0].lerp_time, 200);
+        assert_eq!(changed[0].lerp_time, 10_000);
         assert_eq!(changed[0].warning_blocks, 7);
         assert_eq!(changed[0].warning_time, 3);
         assert!(borders(plan_viewer(&output, &mut viewer, 0, cache)).is_empty());

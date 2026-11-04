@@ -34,7 +34,10 @@ fn single_target(word: &str) -> Result<Target, CommandError> {
         Target::AllPlayers => true,
         Target::Selector(selector) => {
             selector.limit.unwrap_or(match selector.kind {
-                SelectorKind::Nearest | SelectorKind::Random | SelectorKind::Executor => 1,
+                SelectorKind::Nearest
+                | SelectorKind::NearestEntity
+                | SelectorKind::Random
+                | SelectorKind::Executor => 1,
                 SelectorKind::AllPlayers | SelectorKind::Entities => usize::MAX,
             }) > 1
         }

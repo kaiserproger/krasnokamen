@@ -83,9 +83,12 @@ pub async fn handle_configuration(
 ) -> anyhow::Result<ConfigOutcome> {
     // Vanilla publishes feature flags before registry/known-pack negotiation.
     conn.send_packet(&UpdateEnabledFeatures {
-        features: vec![
-            mc_data::Identifier::parse("minecraft:vanilla").expect("static feature id is valid"),
-        ],
+        features: mc_core::datapacks::ENABLED_FEATURES
+            .iter()
+            .map(|feature| {
+                mc_data::Identifier::parse(*feature).expect("static feature id is valid")
+            })
+            .collect(),
     })
     .await?;
 

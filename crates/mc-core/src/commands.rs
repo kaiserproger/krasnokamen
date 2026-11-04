@@ -111,6 +111,7 @@ pub enum Target {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelectorKind {
     Nearest,
+    NearestEntity,
     AllPlayers,
     Random,
     Executor,
@@ -156,8 +157,6 @@ pub struct Selector {
     pub nbt: Vec<(mc_nbt::Tag, bool)>,
     /// Advancement filters (`advancements={id=true}`).
     pub advancements: Vec<(String, bool)>,
-    /// Loot-predicate filters (`predicate=namespace:id`, negatable).
-    pub predicates: Vec<(Identifier, bool)>,
     pub distance: Option<(Option<f64>, Option<f64>)>,
     /// Absolute selector-origin overrides (`x`, `y`, `z`).
     pub position: [Option<f64>; 3],
@@ -589,12 +588,13 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
     }
     match word {
         "@s" => return Ok(Target::Executor),
-        "@p" | "@n" => return Ok(Target::Nearest),
+        "@p" => return Ok(Target::Nearest),
         "@a" => return Ok(Target::AllPlayers),
         _ => {}
     }
     let kind = match word.as_bytes().get(1) {
-        Some(b'p') | Some(b'n') => SelectorKind::Nearest,
+        Some(b'p') => SelectorKind::Nearest,
+        Some(b'n') => SelectorKind::NearestEntity,
         Some(b'a') => SelectorKind::AllPlayers,
         Some(b'r') => SelectorKind::Random,
         Some(b's') => SelectorKind::Executor,
@@ -619,7 +619,6 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
         yaw: None,
         nbt: Vec::new(),
         advancements: Vec::new(),
-        predicates: Vec::new(),
         distance: None,
         position: [None; 3],
         extent: [None; 3],
@@ -695,7 +694,10 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
                 *target = Some(number);
             }
             "type" => {
-                if !matches!(kind, SelectorKind::Entities | SelectorKind::Executor) {
+                if !matches!(
+                    kind,
+                    SelectorKind::Entities | SelectorKind::NearestEntity | SelectorKind::Executor
+                ) {
                     return Err(invalid());
                 }
                 let negated = value.starts_with('!');
@@ -819,11 +821,9 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
                 selector.nbt.push((nbt, negated));
             }
             "predicate" => {
-                let negated = value.starts_with('!');
-                let id = value.strip_prefix('!').unwrap_or(value);
-                selector
-                    .predicates
-                    .push((item_id(id).ok_or_else(invalid)?, negated));
+                return Err(CommandError::Message(
+                    "unsupported selector option 'predicate'".into(),
+                ));
             }
             "advancements" => {
                 let body = value

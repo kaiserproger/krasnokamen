@@ -57,11 +57,15 @@ pub(crate) fn global_target(target: &Target) -> bool {
     // selector carries no world-limiting option. Explicit position,
     // distance or volume constrains the dimension instead.
     match target {
-        Target::Player(_) | Target::AllPlayers => true,
+        Target::Player(_) | Target::AllPlayers | Target::Nearest => true,
         Target::Selector(selector) => {
             matches!(
                 selector.kind,
-                SelectorKind::AllPlayers | SelectorKind::Random | SelectorKind::Entities
+                SelectorKind::AllPlayers
+                    | SelectorKind::Random
+                    | SelectorKind::Entities
+                    | SelectorKind::Nearest
+                    | SelectorKind::NearestEntity
             ) && selector.distance.is_none()
                 && selector.position.iter().all(Option::is_none)
                 && selector.extent.iter().all(Option::is_none)
@@ -86,6 +90,15 @@ pub(crate) fn resolve(
             .map(|world| crate::command_execution::resolve_target(world, request.executor, target))
             .unwrap_or_default();
     }
+    // Normalize the bare @p shortcut so global sorting and limiting use the
+    // same selector path as @p with options.
+    let nearest;
+    let target = if matches!(target, Target::Nearest) {
+        nearest = crate::commands::target_of("@p[]").expect("built-in nearest selector");
+        &nearest
+    } else {
+        target
+    };
     let mut selected = Vec::new();
     let selector = if let Target::Selector(selector) = target {
         let mut selector = selector.clone();

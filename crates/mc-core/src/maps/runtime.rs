@@ -102,6 +102,7 @@ fn sample(state: &TickState, map: &SavedMap, index: usize) -> Option<u8> {
     for dx in 0..step {
         for dz in 0..step {
             let mut water_depth = 0_u32;
+            let mut water_surface = None;
             for y in (geometry.min_y()..geometry.max_y()).rev() {
                 let raw = state.world.block_at(x + dx, y, z + dz)?;
                 let color = *state.registry.map_colors.get(raw as usize)?;
@@ -111,11 +112,16 @@ fn sample(state: &TickState, map: &SavedMap, index: usize) -> Option<u8> {
                 let water =
                     state.registry.materials.classify(raw) == mc_physics::BlockMaterial::Water;
                 if water {
+                    water_surface.get_or_insert((color, y));
                     water_depth += 1;
                     continue;
                 }
-                cells.push((color, y, water_depth));
+                let (color, height) = water_surface.take().unwrap_or((color, y));
+                cells.push((color, height, water_depth));
                 break;
+            }
+            if let Some((color, height)) = water_surface {
+                cells.push((color, height, water_depth));
             }
         }
     }
@@ -215,9 +221,12 @@ fn nether_sample(state: &TickState, map: &SavedMap, index: usize) -> u8 {
     seed ^= seed >> 27;
     seed = seed.wrapping_mul(0x94D0_49BB_1331_11EB);
     seed ^= seed >> 31;
-    // Local palette rows for vanilla dirt/stone equivalents (verified: dirt=7,
-    // stone=13 in block_map_colors.json); brightness varies per pixel.
-    let base = if seed & 1 == 0 { 13_u8 } else { 7_u8 };
+    let block = if seed & 1 == 0 {
+        state.registry.states.stone
+    } else {
+        state.registry.states.dirt
+    };
+    let base = state.registry.map_colors[block as usize];
     base * 4 + ((seed >> 7) % 3) as u8
 }
 
@@ -228,6 +237,7 @@ pub(crate) fn tick(state: &mut TickState) {
     let mut views: BTreeMap<i32, BTreeSet<ConnectionId>> = BTreeMap::new();
     // Marker: x, z, rotation, frame flag, carrier-hidden, owner connection.
     let mut markers: BTreeMap<i32, Vec<MarkerRow>> = BTreeMap::new();
+    let mut explorers: BTreeMap<i32, Vec<(f64, f64)>> = BTreeMap::new();
     for (&entity, player) in &state.players {
         if player.spectator() {
             continue;
@@ -238,7 +248,7 @@ pub(crate) fn tick(state: &mut TickState) {
         let pos = state.entities.pos(slot);
         // Vanilla pumpkin hiding: a carrier wearing a carved pumpkin is
         // hidden from other players' maps (but keeps their own marker).
-        let hidden = player.inventory.slots.get(5).is_some_and(|stack| {
+        let hidden = player.inventory.slots.get(39).is_some_and(|stack| {
             !stack.is_empty()
                 && state
                     .registry
@@ -249,11 +259,16 @@ pub(crate) fn tick(state: &mut TickState) {
         // Vanilla multiplayer markers: a cloned map anywhere in the
         // inventory (not only held) makes its carrier visible.
         let mut seen = std::collections::BTreeSet::new();
-        for held in &player.inventory.slots {
-            if held.is_empty() || !seen.insert(held.item_id) {
-                continue;
-            }
+        for (index, held) in player.inventory.slots.iter().enumerate() {
             if let Some(id) = map_id(held) {
+                if index == usize::from(player.inventory.selected)
+                    || index == crate::inventory::OFF_HAND
+                {
+                    explorers.entry(id).or_default().push((pos[0], pos[2]));
+                }
+                if !seen.insert(id) {
+                    continue;
+                }
                 super::adopt_item_decorations(&mut state.maps, id, held);
                 views.entry(id).or_default().insert(player.connection);
                 markers.entry(id).or_default().push((
@@ -382,18 +397,13 @@ pub(crate) fn tick(state: &mut TickState) {
         // Vanilla mapping requires the map (or a clone) in a player's hand:
         // framed copies alone never sample terrain (they still deliver
         // pixels/markers to viewers). A held clone revisiting updates both.
-        let holders = &markers[&id];
-        let held = holders.iter().any(|&(_, _, _, frame, _, _)| !frame);
-        if !map.locked && map.dimension == state.dimension && held {
+        if !map.locked
+            && map.dimension == state.dimension
+            && let Some(holders) = explorers.get(&id)
+        {
             let cost = 1_usize << (2 * map.scale);
             let count = (budget / cost).min(128);
-            let (x, z, _, _, _, _) = holders
-                .iter()
-                .enumerate()
-                .filter(|(_, holder)| !holder.3)
-                .nth(start % holders.iter().filter(|holder| !holder.3).count().max(1))
-                .map(|(_, holder)| *holder)
-                .unwrap_or(holders[start % holders.len()]);
+            let (x, z) = holders[start % holders.len()];
             let step = f64::from(1_u32 << map.scale);
             let radius = (128.0 / step).ceil() as i32;
             let px = ((x - f64::from(map.center[0])) / step).floor() as i32 + 64;

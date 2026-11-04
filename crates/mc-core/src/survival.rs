@@ -82,6 +82,7 @@ pub enum DamageKind {
     OnFire,
     Lava,
     Suffocation,
+    OutsideBorder,
     Cactus,
     SweetBerryBush,
     HotFloor,
@@ -127,6 +128,7 @@ impl DamageKind {
             Self::OnFire,
             Self::Lava,
             Self::Suffocation,
+            Self::OutsideBorder,
             Self::Cactus,
             Self::SweetBerryBush,
             Self::HotFloor,
@@ -189,6 +191,7 @@ impl DamageKind {
             (Self::OnFire, _) => "minecraft:on_fire",
             (Self::Lava, _) => "minecraft:lava",
             (Self::Suffocation, _) => "minecraft:in_wall",
+            (Self::OutsideBorder, _) => "minecraft:outside_border",
             (Self::Cactus, _) => "minecraft:cactus",
             (Self::SweetBerryBush, _) => "minecraft:sweet_berry_bush",
             (Self::HotFloor, _) => "minecraft:hot_floor",
@@ -253,6 +256,7 @@ impl DamageKind {
                 | Self::Wither
                 | Self::Magic
                 | Self::Suffocation
+                | Self::OutsideBorder
         )
     }
 
@@ -286,6 +290,7 @@ impl DamageKind {
             | Self::Wither
             | Self::Magic
             | Self::Suffocation
+            | Self::OutsideBorder
             | Self::GenericKill
             | Self::Freeze
             | Self::FlyIntoWall

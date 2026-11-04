@@ -367,6 +367,8 @@ impl Gateway {
             authorization: AuthorizedBuild {
                 connection: prepared.connection,
                 actor: prepared.intent.actor,
+                log_input: Arc::new(prepared.source.clone()),
+                planning_tick: prepared.planning_tick,
                 inner: Arc::new(Mutex::new(Some(AdmittedBuild { prepared, approval }))),
             },
         })
@@ -410,6 +412,8 @@ struct AdmittedBuild {
 pub struct AuthorizedBuild {
     connection: ConnectionId,
     actor: crate::boundary::EntityId,
+    log_input: Arc<PlayerInput>,
+    planning_tick: u64,
     inner: Arc<Mutex<Option<AdmittedBuild>>>,
 }
 
@@ -431,6 +435,10 @@ impl PartialEq for AuthorizedBuild {
 impl AuthorizedBuild {
     pub(crate) fn connection(&self) -> ConnectionId {
         self.connection
+    }
+
+    pub(crate) fn into_log_details(self) -> (PlayerInput, u64) {
+        (Arc::unwrap_or_clone(self.log_input), self.planning_tick)
     }
 }
 

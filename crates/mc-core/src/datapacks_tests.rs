@@ -32,6 +32,34 @@ fn run(state: &mut TickState, line: &str) {
 }
 
 #[test]
+fn disabled_feature_pack_cannot_load_or_execute_its_function() {
+    let directory = tempfile::tempdir().unwrap();
+    pack(
+        directory.path(),
+        "future",
+        &[("test/function/run.mcfunction", "time add 10")],
+    );
+    std::fs::write(
+        directory.path().join("future/pack.mcmeta"),
+        r#"{"pack":{"pack_format":101,"description":"test"},"features":{"enabled":["minecraft:trade_rebalance"]}}"#,
+    ).unwrap();
+    let error = match PackSet::load(directory.path(), Selection::default()) {
+        Ok(_) => panic!("world-disabled feature pack was admitted"),
+        Err(error) => error,
+    };
+    assert!(error.contains("minecraft:trade_rebalance"), "{error}");
+    let mut disabled = Selection::default();
+    disabled.disabled.push("file/future".into());
+    let packs = PackSet::load(directory.path(), disabled).unwrap();
+    assert!(!packs.selection.enabled.contains(&"file/future".into()));
+    std::fs::write(
+        directory.path().join("future/pack.mcmeta"),
+        r#"{"pack":{"pack_format":101,"description":"test"},"features":{"enabled":["minecraft:vanilla"]}}"#,
+    ).unwrap();
+    assert!(PackSet::load(directory.path(), Selection::default()).is_ok());
+}
+
+#[test]
 fn command_parity_configured_sequence_budget_is_per_invocation() {
     let directory = tempfile::tempdir().unwrap();
     pack(

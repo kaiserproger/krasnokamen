@@ -9,6 +9,8 @@ use crate::tick::TickState;
 const COMMAND_BUDGET: usize = crate::command_context::LIMIT;
 const MAX_RESOURCES: usize = 16384;
 const MAX_BYTES: usize = 16 * 1024 * 1024;
+/// Feature flags enabled for this world and advertised during configuration.
+pub const ENABLED_FEATURES: &[&str] = &["minecraft:vanilla"];
 
 /// Ordered native authority for the enabled and explicitly disabled pack ids.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -188,6 +190,22 @@ impl PackSet {
                     .into_string()
                     .map_err(|_| "Non-UTF8 datapack name")?;
                 let id = format!("file/{name}");
+                if !selection.disabled.contains(&id)
+                    && let Some(features) = metadata.get("features")
+                {
+                    let required = features
+                        .get("enabled")
+                        .and_then(serde_json::Value::as_array)
+                        .ok_or_else(|| format!("{id}: invalid features.enabled"))?;
+                    for feature in required {
+                        let feature = feature
+                            .as_str()
+                            .ok_or_else(|| format!("{id}: feature identifier must be a string"))?;
+                        if !ENABLED_FEATURES.contains(&feature) {
+                            return Err(format!("{id}: world-disabled feature {feature}"));
+                        }
+                    }
+                }
                 let description = metadata
                     .get("pack")
                     .and_then(|pack| pack.get("description"))

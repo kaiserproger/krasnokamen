@@ -82,6 +82,44 @@ fn chat_contains(state: &TickState, text: &str) -> bool {
 }
 
 #[test]
+fn worldborder_commands_update_live_tick_state() {
+    let (mut state, alice, _) = fixture();
+    command(&mut state, alice, "worldborder set 100");
+    command(&mut state, alice, "worldborder set 50 2t");
+    assert_eq!((state.border.size, state.border.lerp_remaining), (100.0, 2));
+    crate::tick::run_tick(&mut state, &[]);
+    assert_eq!((state.border.size, state.border.lerp_remaining), (75.0, 1));
+    crate::tick::run_tick(&mut state, &[]);
+    assert_eq!((state.border.size, state.border.lerp_remaining), (50.0, 0));
+    command(&mut state, alice, "worldborder damage buffer 1");
+    command(&mut state, alice, "worldborder damage amount 2");
+    command(&mut state, alice, "worldborder warning distance 7");
+    command(&mut state, alice, "worldborder warning time 3");
+    assert_eq!(
+        (
+            state.border.safe_zone,
+            state.border.damage_per_block,
+            state.border.warning_blocks,
+            state.border.warning_time
+        ),
+        (1.0, 2.0, 7, 3)
+    );
+}
+#[test]
+fn worldborder_damage_options_hurt_players_outside_buffer() {
+    let (mut state, alice, bob) = fixture();
+    let slot = state.entities.slot_of(bob).unwrap();
+    state.entities.row_mut(slot).protected_until = 0;
+    state.entities.set_pos(slot, [28.0, 80.0, 0.0]);
+    command(&mut state, alice, "worldborder set 50");
+    command(&mut state, alice, "worldborder damage buffer 1");
+    command(&mut state, alice, "worldborder damage amount 2");
+    let before = state.players[&bob].vitals.health;
+    crate::tick::run_tick(&mut state, &[]);
+    assert_eq!(state.players[&bob].vitals.health, before - 4.0);
+}
+
+#[test]
 fn admin_item_replace_entity_changes_slot() {
     let (mut state, alice, _) = fixture();
     command(
@@ -628,6 +666,12 @@ fn command_parity_nearest_entity_selects_closest_alive() {
     let target = crate::commands::target_of("@n[distance=..5]").unwrap();
     assert_eq!(resolve_target(&state, alice, &target), vec![alice]);
     let target = crate::commands::target_of("@n[distance=6..20]").unwrap();
+    let cow = state.spawn_mob(state.registry.cow_type_id, [2.0, 80.0, 0.0], 10.0);
+    command(&mut state, alice, "kill @n[type=minecraft:cow]");
+    assert!(state.merge_damage.iter().any(|(slot, damage)| {
+        state.entities.body(*slot).id == cow
+            && damage.kind == crate::survival::DamageKind::GenericKill
+    }));
     assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
 }
 
@@ -646,6 +690,19 @@ fn command_parity_dead_players_stay_selectable_by_name_and_all() {
     assert_eq!(selected, expected);
     let target = crate::commands::target_of("@s").unwrap();
     assert_eq!(resolve_target(&state, bob, &target), vec![bob]);
+    for selector in ["@p[name=Bob]", "@r[name=Bob]"] {
+        let target = crate::commands::target_of(selector).unwrap();
+        assert_eq!(
+            resolve_target(&state, alice, &target),
+            vec![bob],
+            "{selector}"
+        );
+    }
+    command(&mut state, alice, "gamemode creative @p[name=Bob]");
+    assert_eq!(
+        state.players[&bob].game_mode,
+        crate::commands::GameMode::Creative
+    );
     let target = crate::commands::target_of("@e").unwrap();
     assert!(!resolve_target(&state, alice, &target).contains(&bob));
     let target = crate::commands::target_of("@n").unwrap();
@@ -667,6 +724,28 @@ fn command_parity_repeated_negative_type_name_clauses() {
     let target = crate::commands::target_of("@e[name=!Alice,name=!Bob]").unwrap();
     let selected = resolve_target(&state, alice, &target);
     assert!(!selected.contains(&alice));
+    // The test-only bootstrap registry omits most vanilla entity tags;
+    // production loads these from the content pack.
+    let registry = Arc::make_mut(&mut state.registry);
+    let tags = Arc::make_mut(&mut registry.tags);
+    tags.registries
+        .entry(mc_data::Identifier::parse("minecraft:entity_type").unwrap())
+        .or_default()
+        .insert(
+            mc_data::Identifier::parse("minecraft:followable_friendly_mobs").unwrap(),
+            vec![registry.cow_type_id as i32],
+        );
+    command(
+        &mut state,
+        alice,
+        "kill @e[type=#minecraft:followable_friendly_mobs]",
+    );
+    for id in [cow, calf] {
+        assert!(state.merge_damage.iter().any(|(slot, damage)| {
+            state.entities.body(*slot).id == id
+                && damage.kind == crate::survival::DamageKind::GenericKill
+        }));
+    }
 }
 
 #[test]
@@ -743,6 +822,9 @@ fn command_parity_sort_limit_options_and_typed_filters() {
     assert_eq!(resolve_target(&state, alice, &target), vec![alice]);
     let target = crate::commands::target_of("@a[gamemode=!survival]").unwrap();
     assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
+    let cow = state.spawn_mob(state.registry.cow_type_id, [2.0, 80.0, 0.0], 10.0);
+    let target = crate::commands::target_of("@e[gamemode=!creative]").unwrap();
+    assert!(!resolve_target(&state, alice, &target).contains(&cow));
     // team: Bob joins red via scored state; team=red admits Bob only.
     state.scoreboard.teams.insert(
         "red".into(),
@@ -791,12 +873,46 @@ fn command_parity_sort_limit_options_and_typed_filters() {
     assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
     let target = crate::commands::target_of("@a[scores={test=..7}]").unwrap();
     assert_eq!(resolve_target(&state, alice, &target), vec![alice]);
-    // tag: no /tag support yet, so positive matches nothing, negative admits.
+    let cow_uuid = state
+        .entities
+        .row(state.entities.slot_of(cow).unwrap())
+        .uuid
+        .to_string();
+    state
+        .scoreboard
+        .scores
+        .entry(cow_uuid.clone())
+        .or_default()
+        .insert(
+            "test".into(),
+            crate::scoreboard::Score {
+                value: 13,
+                locked: false,
+            },
+        );
+    let target = crate::commands::target_of("@e[scores={test=13}]").unwrap();
+    assert_eq!(resolve_target(&state, alice, &target), vec![cow]);
+    state
+        .scoreboard
+        .teams
+        .get_mut("red")
+        .unwrap()
+        .members
+        .insert(cow_uuid);
+    let target = crate::commands::target_of("@e[type=minecraft:cow,team=red]").unwrap();
+    assert_eq!(resolve_target(&state, alice, &target), vec![cow]);
+    // Tags are retained by the native /tag command and selected thereafter.
     let target = crate::commands::target_of("@e[tag=!untagged]").unwrap();
     let selected = resolve_target(&state, alice, &target);
     assert!(selected.contains(&alice) && selected.contains(&bob));
     let target = crate::commands::target_of("@e[tag=untagged]").unwrap();
     assert!(resolve_target(&state, alice, &target).is_empty());
+    let context = crate::command_context::Context::source(&state, ConnectionId(1), alice, 4);
+    crate::command_tag::execute(&mut state, context, "tag Bob add marked");
+    let target = crate::commands::target_of("@a[tag=marked]").unwrap();
+    assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
+    let target = crate::commands::target_of("@a[tag=!marked]").unwrap();
+    assert_eq!(resolve_target(&state, alice, &target), vec![alice]);
     // pitch/yaw: both players spawn at rot 0/0; tight 1..90 pitch rejects.
     let target = crate::commands::target_of("@a[x_rotation=-90..90]").unwrap();
     assert_eq!(resolve_target(&state, alice, &target).len(), 2);
@@ -804,6 +920,10 @@ fn command_parity_sort_limit_options_and_typed_filters() {
     assert!(resolve_target(&state, alice, &target).is_empty());
     let target = crate::commands::target_of("@a[y_rotation=0..360]").unwrap();
     assert_eq!(resolve_target(&state, alice, &target).len(), 2);
+    let slot = state.entities.slot_of(bob).unwrap();
+    state.entities.set_rot(slot, -90.0, 0.0);
+    let target = crate::commands::target_of("@a[y_rotation=-100..-80]").unwrap();
+    assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
     // An NBT predicate with a mismatched field admits nobody.
     let target = crate::commands::target_of("@e[nbt={Health:0.5f}]").unwrap();
     assert!(resolve_target(&state, alice, &target).is_empty());
@@ -818,12 +938,13 @@ fn command_parity_sort_limit_options_and_typed_filters() {
     let target =
         crate::commands::target_of("@a[advancements={minecraft:story/root=false}]").unwrap();
     assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
-    // predicate: no loot-predicate registry is wired; positive matches
-    // nothing (documented limitation), negative admits everything.
-    let target = crate::commands::target_of("@e[predicate=minecraft:test]").unwrap();
-    assert!(resolve_target(&state, alice, &target).is_empty());
-    let target = crate::commands::target_of("@e[predicate=!minecraft:test]").unwrap();
-    assert!(!resolve_target(&state, alice, &target).is_empty());
+    for selector in [
+        "@e[predicate=minecraft:test]",
+        "@e[predicate=!minecraft:test]",
+    ] {
+        let error = crate::commands::target_of(selector).unwrap_err();
+        assert!(error.message().contains("unsupported selector option"));
+    }
 }
 
 #[test]
@@ -882,19 +1003,26 @@ fn command_parity_unqualified_entity_selector_reaches_loaded_remote_dimensions()
         vec![local_pig],
         "distance-qualified @e stays local"
     );
-    // Bare @p parses to Target::Nearest, which bypasses global_target
-    // routing (dimensions_commands matches Target::Selector only): the
-    // cross-dimension claim covers @e/@a/@r shapes, not bare @p/@n.
-    assert!(!crate::dimensions::commands::global_target(
-        &crate::commands::target_of("@p").unwrap()
-    ));
+    // A source positioned in the Nether can select the closest player in
+    // another loaded dimension with either spelling of nearest-player.
+    let mut context = crate::command_context::Context::source(&state, request.connection, alice, 4);
+    context.dimension = crate::dimensions::Dimension::Nether;
+    context.position = [10.0, 80.0, 0.0];
+    for selector in ["@p", "@p[sort=nearest]"] {
+        let target = crate::commands::target_of(selector).unwrap();
+        assert_eq!(
+            crate::dimensions::travel::context_targets(&state, context, &target).unwrap(),
+            vec![state.connections.entity_of(ConnectionId(2)).unwrap()],
+            "{selector} must select the nearest player across dimensions"
+        );
+    }
 }
 
 #[test]
 fn command_parity_repeated_random_evaluation_redraws_within_one_tick() {
     // SELECTOR-RANDOM-REPEAT: Java ORDER_RANDOM shuffles on every
     // evaluation, so repeated same-tick @r draws must not all agree.
-    let (state, alice, bob) = fixture();
+    let (mut state, alice, bob) = fixture();
     let target = crate::commands::target_of("@r").unwrap();
     let mut seen_alice = false;
     let mut seen_bob = false;
@@ -912,6 +1040,23 @@ fn command_parity_repeated_random_evaluation_redraws_within_one_tick() {
         seen_alice && seen_bob,
         "32 same-tick @r draws must select both players across redraws"
     );
+    for _ in 0..32 {
+        command(&mut state, alice, "give @r minecraft:stone 1");
+    }
+    let stone = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:stone").unwrap())
+        .unwrap();
+    for player in [alice, bob] {
+        assert!(
+            state.players[&player]
+                .inventory
+                .slots
+                .iter()
+                .any(|stack| { stack.item_id == stone && stack.count > 0 })
+        );
+    }
 }
 
 #[test]
@@ -962,6 +1107,17 @@ fn command_parity_selector_box_intersects_body_and_defaults_missing_axes() {
     let target =
         crate::commands::target_of("@e[type=minecraft:pig,x=0,y=80,z=0,dx=4,dy=1,dz=1]").unwrap();
     assert_eq!(resolve_target(&state, alice, &target).len(), 1);
+    command(
+        &mut state,
+        alice,
+        "kill @e[type=minecraft:pig,x=0,y=80,z=0,dx=4,dy=1,dz=1]",
+    );
+    assert!(state.merge_damage.iter().any(|(slot, damage)| {
+        matches!(
+            state.entities.body(*slot).kind,
+            crate::entities::EntityKind::Mob { .. }
+        ) && damage.kind == crate::survival::DamageKind::GenericKill
+    }));
 }
 
 #[test]

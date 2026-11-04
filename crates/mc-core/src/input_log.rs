@@ -46,7 +46,7 @@ pub(crate) const AUTH_COMMAND: &str = "auth_command";
 /// Marker kind for text from a session the auth gate holds locked (refused by
 /// the tick anyway, so a replay that skips it is equivalent).
 pub(crate) const LOCKED_SESSION_TEXT: &str = "locked_session_text";
-/// Marker kind for a frozen before-build plan that cannot be serialized.
+/// A non-replayable approval; the marker carries the original input and planning tick.
 pub(crate) const AUTHORIZED_BUILD: &str = "authorized_build";
 /// Marker kind for a tick whose inputs did not survive a serialization round trip.
 pub(crate) const UNSERIALIZABLE: &str = "unserializable_input";
@@ -95,6 +95,10 @@ pub(crate) enum LoggedInput {
     Uncovered {
         kind: String,
         connection: ConnectionId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        input: Option<PlayerInput>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        planning_tick: Option<u64>,
     },
 }
 
@@ -169,13 +173,19 @@ fn carries_text(input: &PlayerInput) -> bool {
 
 /// `None`: no state effect, not logged. Secrets and unserializable plans
 /// become markers. `locked` lists connections the auth gate held locked.
-fn logged(input: PlayerInput, locked: &[ConnectionId]) -> Option<LoggedInput> {
+pub(crate) fn logged(input: PlayerInput, locked: &[ConnectionId]) -> Option<LoggedInput> {
     match input {
         PlayerInput::BuildPreviewFence { .. } => None,
-        PlayerInput::AuthorizedBuild { authorization } => Some(LoggedInput::Uncovered {
-            kind: AUTHORIZED_BUILD.to_owned(),
-            connection: authorization.connection(),
-        }),
+        PlayerInput::AuthorizedBuild { authorization } => {
+            let connection = authorization.connection();
+            let (input, planning_tick) = authorization.into_log_details();
+            Some(LoggedInput::Uncovered {
+                kind: AUTHORIZED_BUILD.to_owned(),
+                connection,
+                input: Some(input),
+                planning_tick: Some(planning_tick),
+            })
+        }
         PlayerInput::Command {
             connection,
             ref command,
@@ -183,11 +193,15 @@ fn logged(input: PlayerInput, locked: &[ConnectionId]) -> Option<LoggedInput> {
         } if is_auth_command(command) => Some(LoggedInput::Uncovered {
             kind: AUTH_COMMAND.to_owned(),
             connection,
+            input: None,
+            planning_tick: None,
         }),
         input if carries_text(&input) && locked.contains(&input.connection()) => {
             Some(LoggedInput::Uncovered {
                 kind: LOCKED_SESSION_TEXT.to_owned(),
                 connection: input.connection(),
+                input: None,
+                planning_tick: None,
             })
         }
         input => Some(LoggedInput::Input(input)),
@@ -375,6 +389,8 @@ fn tick_line(
         record.inputs = vec![LoggedInput::Uncovered {
             kind: UNSERIALIZABLE.to_owned(),
             connection: ConnectionId(0),
+            input: None,
+            planning_tick: None,
         }];
         serde_json::to_string(&Line::Tick(record)).expect("marker line serializes")
     })

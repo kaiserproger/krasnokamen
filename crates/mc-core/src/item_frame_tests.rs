@@ -285,3 +285,76 @@ fn arrow_ejects_display_without_destroying_frame() {
     let slot = state.entities.slot_of(frame).expect("frame survives");
     assert!(displayed(&state, slot).is_none());
 }
+
+#[test]
+fn partial_block_supports_hold_normal_and_glow_frames() {
+    for support in [
+        "minecraft:chest",
+        "minecraft:stone_slab",
+        "minecraft:oak_fence",
+    ] {
+        for frame_type in ["minecraft:item_frame", "minecraft:glow_item_frame"] {
+            let (mut state, actor) = fixture();
+            let id = Identifier::parse(support).unwrap();
+            let block = state.registry.blocks.block(&id).unwrap().default.0;
+            state.world.set_block(8, 65, 8, block);
+            state.world.fold_overlay();
+            let frame = place(&mut state, actor, frame_type);
+            run_tick(&mut state, &[]);
+            blocks_changed(
+                &mut state,
+                &[(BlockPos { x: 8, y: 65, z: 8 }, block)],
+                &mut Vec::new(),
+            );
+            assert!(
+                state.entities.slot_of(frame).is_some(),
+                "{frame_type} on {support}"
+            );
+        }
+    }
+}
+
+#[test]
+fn frame_and_redstone_dust_can_share_cell_in_either_order() {
+    for dust_first in [true, false] {
+        let (mut state, actor) = fixture();
+        state.world.set_block(7, 64, 8, state.registry.states.stone);
+        state.world.fold_overlay();
+        let dust = state
+            .registry
+            .blocks
+            .block(&Identifier::parse("minecraft:redstone_wire").unwrap())
+            .unwrap()
+            .default
+            .0;
+        if dust_first {
+            state.world.set_block(7, 65, 8, dust);
+            state.world.fold_overlay();
+        }
+        let frame = place(&mut state, actor, "minecraft:item_frame");
+        if !dust_first {
+            state.players.get_mut(&actor).unwrap().inventory.slots[0] =
+                item(&state, "minecraft:redstone", 1);
+            run_tick(
+                &mut state,
+                &[PlayerInput::UseItemOn {
+                    connection: ConnectionId(1),
+                    hand: Hand::Main,
+                    position: BlockPos { x: 7, y: 64, z: 8 },
+                    face: 1,
+                    cursor: [0.5, 1.0, 0.5],
+                    sequence: 2,
+                }],
+            );
+        }
+        assert_eq!(
+            state.world.block_at(7, 65, 8),
+            Some(dust),
+            "dust_first={dust_first}"
+        );
+        assert!(
+            state.entities.slot_of(frame).is_some(),
+            "dust_first={dust_first}"
+        );
+    }
+}

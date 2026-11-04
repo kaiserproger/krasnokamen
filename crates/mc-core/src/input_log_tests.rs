@@ -122,7 +122,9 @@ fn replay(state: &mut TickState, log: &ParsedLog) -> Result<(), String> {
                     // Replayed sessions are already authenticated (no auth gate).
                     LoggedInput::Uncovered { kind, .. }
                         if kind == AUTH_COMMAND || kind == LOCKED_SESSION_TEXT => {}
-                    LoggedInput::Uncovered { kind, connection } => {
+                    LoggedInput::Uncovered {
+                        kind, connection, ..
+                    } => {
                         return Err(format!(
                             "tick {tick}: uncovered `{kind}` input from {connection:?}"
                         ));

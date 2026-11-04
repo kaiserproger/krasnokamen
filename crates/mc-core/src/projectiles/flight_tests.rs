@@ -93,6 +93,41 @@ fn weak_arrow_removes_fresh_armor_stand() {
 }
 
 #[test]
+fn weak_trident_removes_fresh_armor_stand() {
+    let (mut state, player, centre) = setup();
+    let stand_type = state
+        .registry
+        .entity_types
+        .id_of(&Identifier::parse("minecraft:armor_stand").unwrap())
+        .unwrap();
+    let stand = state.spawn_mob(stand_type, [centre[0] + 2.0, centre[1], centre[2]], 20.0);
+    let owner = state
+        .entities
+        .row(state.entities.slot_of(player).unwrap())
+        .uuid;
+    let trident = state
+        .registry
+        .items
+        .id_of(&Identifier::parse("minecraft:trident").unwrap())
+        .unwrap();
+    let mut record = ProjectileState::new(
+        ProjectileKind::Trident,
+        Some(owner),
+        mc_data::ItemStack::new(trident, 1),
+    );
+    record.damage = 1.0;
+    launch(
+        &mut state,
+        record,
+        [centre[0], centre[1] + 0.7, centre[2]],
+        [3.0, 0.0, 0.0],
+    )
+    .unwrap();
+    run_tick(&mut state, &[]);
+    assert!(state.entities.slot_of(stand).is_none());
+}
+
+#[test]
 fn flight_hits_first_body_and_commits_punch_along_horizontal_flight() {
     let (mut state, player, centre) = setup();
     let cow = state

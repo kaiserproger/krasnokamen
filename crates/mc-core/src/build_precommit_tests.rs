@@ -276,6 +276,24 @@ fn assert_committed(state: &mut TickState, output: &TickOutput, edits: &[BuildEd
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn consumed_authorization_log_keeps_original_input_and_planning_tick() {
+    let (mut state, actor) = fixture(None);
+    held(&mut state, actor, "dirt", 3);
+    let (gateway, _boundary, mut endpoint) = hooked(&mut state);
+    let source = place();
+    let planning_tick = state.tick;
+    let (admitted, _) = keep(&mut state, &gateway, &mut endpoint, source.clone()).await;
+    run_tick(&mut state, std::slice::from_ref(&admitted));
+    let logged = crate::input_log::logged(admitted, &[]).unwrap();
+    let json = serde_json::to_value(logged).unwrap();
+    assert_eq!(
+        json["Uncovered"]["input"],
+        serde_json::to_value(source).unwrap()
+    );
+    assert_eq!(json["Uncovered"]["planning_tick"], planning_tick);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn hook_free_gateway_is_the_unchanged_direct_native_path() {
     let (mut state, actor) = fixture(None);
     held(&mut state, actor, "dirt", 3);
