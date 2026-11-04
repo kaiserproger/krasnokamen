@@ -202,6 +202,7 @@ pub(super) fn encode_one<B: BufMut>(
     }
     buf.write_varint(id);
     match id {
+        ids::CHICKEN_VARIANT => buf.write_varint(registry_id("chicken_variant", string(&value)?)?),
         ids::CUSTOM_DATA => {
             if !matches!(value, Tag::Compound(_)) {
                 return Err(invalid());
@@ -361,6 +362,7 @@ pub(super) fn decode<B: Buf>(
     depth: usize,
 ) -> Result<Option<(String, Tag)>, CodecError> {
     let value = match id {
+        ids::CHICKEN_VARIANT => Tag::String(registry_name("chicken_variant", buf.read_varint()?)?),
         ids::WRITABLE_BOOK_CONTENT | ids::WRITTEN_BOOK_CONTENT => {
             book::decode(buf, id == ids::WRITTEN_BOOK_CONTENT)?
         }

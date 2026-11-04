@@ -2175,6 +2175,9 @@ fn map_extra(index: u8, value: &mc_core::boundary::EntityDataValue) -> WireEntit
         mc_core::boundary::EntityDataValue::PaintingVariant(value) => {
             WireEntityDataValue::PaintingVariant { index, value }
         }
+        mc_core::boundary::EntityDataValue::ChickenVariant(value) => {
+            WireEntityDataValue::ChickenVariant { index, value }
+        }
         mc_core::boundary::EntityDataValue::WeatheringCopper(value) => {
             WireEntityDataValue::WeatheringCopper { index, value }
         }

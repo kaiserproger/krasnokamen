@@ -21,10 +21,12 @@ pub(super) struct Hittable {
     deployed_candidate: bool,
     min: [f64; 3],
     max: [f64; 3],
+    item: bool,
 }
 
-fn hittables(state: &TickState, bodies: &mut Vec<Hittable>) {
+fn hittables(state: &TickState, bodies: &mut Vec<Hittable>, current_is_hook: bool) {
     bodies.clear();
+    let include_items = current_is_hook || crate::projectiles::active_hook_present(state);
     bodies.extend(state.entities.slots().filter_map(|slot| {
         let body = state.entities.body(slot);
         let row = state.entities.row(slot);
@@ -40,9 +42,7 @@ fn hittables(state: &TickState, bodies: &mut Vec<Hittable>) {
                 EntityKind::Mob { .. } => {
                     body.movement != crate::blueprint::MovementClass::Projectile
                 }
-                // Fishing hooks retrieve dropped items (vanilla hook-vs-item
-                // collision); every other projectile passes through them.
-                EntityKind::Item { .. } => crate::projectiles::active_hook_present(state),
+                EntityKind::Item { .. } => include_items,
                 EntityKind::ExperienceOrb { .. } => false,
             };
         hittable.then(|| {
@@ -50,6 +50,7 @@ fn hittables(state: &TickState, bodies: &mut Vec<Hittable>) {
             Hittable {
                 id: body.id,
                 uuid: row.uuid,
+                item: matches!(body.kind, EntityKind::Item { .. }),
                 deployed_candidate: crate::armor_stand::is_stand(state, slot),
                 min: [pos[0] - body.half_width, pos[1], pos[2] - body.half_width],
                 max: [
@@ -70,6 +71,7 @@ fn hittables(state: &TickState, bodies: &mut Vec<Hittable>) {
                 bodies.push(Hittable {
                     id: part,
                     uuid,
+                    item: false,
                     deployed_candidate: false,
                     min,
                     max,
@@ -302,7 +304,11 @@ pub(super) fn run(
         let record = &mut *boxed;
         record.age = record.age.saturating_add(1);
         if record.kind != ProjectileKind::EyeOfEnder && !have_hittables {
-            hittables(state, &mut bodies);
+            hittables(
+                state,
+                &mut bodies,
+                record.kind == ProjectileKind::FishingHook,
+            );
             have_hittables = true;
         }
         let gone = step(state, intents, id, record, &bodies);
@@ -474,6 +480,7 @@ fn step(
         loop {
             let victim = bodies
                 .iter()
+                .filter(|body| !body.item || record.kind == ProjectileKind::FishingHook)
                 .filter(|body| Some(body.uuid) != record.owner && !record.hit.contains(&body.uuid))
                 .filter(|body| {
                     owner.is_none_or(|owner| {

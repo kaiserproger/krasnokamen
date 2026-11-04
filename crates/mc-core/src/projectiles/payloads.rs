@@ -1028,6 +1028,7 @@ fn pearl(
     Arc::make_mut(&mut state.entities.row_mut(slot).appearance).shared_flags &= !1;
     let connection = player.connection;
     let rotation = state.entities.rot(slot);
+    let owner_position = state.entities.pos(slot);
     crate::mounts::dismount(state, owner);
     state.entities.set_pos(slot, position);
     state.entities.set_ground(slot, false);
@@ -1039,17 +1040,20 @@ fn pearl(
     if state.players.contains_key(&owner)
         && state.difficulty != crate::survival::Difficulty::Peaceful
         && crate::command_rules::boolean(state, crate::command_rules::BoolRule::SPAWN_MOBS)
+        && crate::command_rules::boolean(state, crate::command_rules::BoolRule::SPAWN_MONSTERS)
     {
-        let mut rng =
-            crate::natural_spawn::Rng(state.entities.row(slot).uuid.as_u128() as u64 ^ state.tick);
+        let seed = state
+            .entities
+            .slot_of(id)
+            .map_or(0, |slot| state.entities.row(slot).uuid.as_u128() as u64);
+        let mut rng = crate::natural_spawn::Rng(seed ^ state.tick);
         if rng.below(20) == 0
             && let Some(type_id) = state
                 .registry
                 .entity_types
                 .id_of(&mc_data::Identifier::parse("minecraft:endermite").expect("endermite id"))
         {
-            let before = state.entities.pos(slot);
-            let mite = state.spawn_mob(type_id, before, 4.0);
+            let mite = state.spawn_mob(type_id, owner_position, 4.0);
             state.projectiles.spawned.push(mite);
             touch(state, mite);
         }
@@ -1121,19 +1125,31 @@ fn hatch(
     } else {
         1
     };
-    // Blue eggs hatch cold (snowy) chicks, brown eggs warm (jungle) chicks;
-    // ordinary eggs hatch temperate chicks (vanilla egg-variant hatching).
-    let variant = {
-        let name = state
-            .registry
-            .items
-            .name_of(record.stack.item_id)
-            .map(|id| id.as_str());
-        match name {
-            Some("minecraft:blue_egg") => Some("cold"),
-            Some("minecraft:brown_egg") => Some("warm"),
-            _ => None,
+    // The item component overrides the vanilla egg's default variant.
+    let component = record
+        .stack
+        .extended()
+        .preserved_components
+        .iter()
+        .find(|component| component.name.trim_start_matches('!') == "minecraft:chicken/variant");
+    let variant = match component {
+        Some(component) if component.name.starts_with('!') => None,
+        Some(component) => {
+            let mut bytes = component.value.as_slice();
+            match mc_nbt::read_network_value(&mut bytes) {
+                Ok(mc_nbt::Tag::String(name)) if bytes.is_empty() => {
+                    mc_data::Identifier::parse(name).ok().and_then(|name| {
+                        mc_data::required_registry_entry_id("chicken_variant", &name)
+                    })
+                }
+                _ => None,
+            }
         }
+        None => match super::item_name(state, &record.stack) {
+            Some("minecraft:blue_egg") => Some(0),
+            Some("minecraft:brown_egg") => Some(2),
+            _ => None,
+        },
     };
     let Some(type_id) = state
         .registry
@@ -1145,21 +1161,15 @@ fn hatch(
     for _ in 0..count {
         let child = state.spawn_mob(type_id, position, 4.0);
         crate::entity_life::make_child(state, child);
-        // Chicken variant is entity-data index 3 (local 26.1.2 javap: cold
-        // chicks from blue eggs, warm from brown eggs, temperate otherwise).
-        if let (Some(variant), Some(slot)) = (variant, state.entities.slot_of(child)) {
-            let data = match variant {
-                "cold" => 2,
-                "warm" => 1,
-                _ => 0,
-            };
+        // Chicken's first own accessor follows AgeableMob.DATA_BABY_ID (16).
+        if let (Some(data), Some(slot)) = (variant, state.entities.slot_of(child)) {
             let appearance = std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance);
-            if let Some((_, value)) = appearance.extra.iter_mut().find(|(at, _)| *at == 3) {
-                *value = crate::boundary::EntityDataValue::VarInt(data);
+            if let Some((_, value)) = appearance.extra.iter_mut().find(|(at, _)| *at == 17) {
+                *value = crate::boundary::EntityDataValue::ChickenVariant(data);
             } else {
                 appearance
                     .extra
-                    .push((3, crate::boundary::EntityDataValue::VarInt(data)));
+                    .push((17, crate::boundary::EntityDataValue::ChickenVariant(data)));
             }
             state.appearance_changed.push(child);
         }

@@ -786,6 +786,11 @@ pub enum EntityDataValue {
         index: u8,
         value: u32,
     },
+    /// 26.1.2 serializer 30: chicken variant registry holder reference.
+    ChickenVariant {
+        index: u8,
+        value: u32,
+    },
     /// CopperGolem enum serializers, javap EntityDataSerializers 26.1.2:
     /// state = 37, weathering = 38; both use VarInt ordinal codecs.
     CopperGolemState {
@@ -905,6 +910,10 @@ impl PartialEq for EntityDataValue {
                 Self::PaintingVariant { value: left, .. },
                 Self::PaintingVariant { value: right, .. },
             ) => left == right,
+            (
+                Self::ChickenVariant { value: left, .. },
+                Self::ChickenVariant { value: right, .. },
+            ) => left == right,
             (Self::Byte { value: left, .. }, Self::Byte { value: right, .. }) => left == right,
             (
                 Self::CopperGolemState { value: left, .. },
@@ -1008,6 +1017,7 @@ impl EntityDataValue {
         match self {
             Self::Byte { index, .. }
             | Self::PaintingVariant { index, .. }
+            | Self::ChickenVariant { index, .. }
             | Self::CopperGolemState { index, .. }
             | Self::WeatheringCopper { index, .. }
             | Self::Int { index, .. }
@@ -1038,6 +1048,7 @@ impl EntityDataValue {
     pub const fn serializer_id(&self) -> i32 {
         match self {
             Self::PaintingVariant { .. } => 34,
+            Self::ChickenVariant { .. } => 30,
             Self::Byte { .. } => ENTITY_DATA_BYTE_SERIALIZER_ID,
             Self::CopperGolemState { .. } => 37,
             Self::WeatheringCopper { .. } => 38,
@@ -1071,6 +1082,12 @@ impl EntityDataValue {
         buf.write_u8(self.index());
         buf.write_varint(self.serializer_id());
         match self {
+            Self::ChickenVariant { value, .. } => {
+                buf.write_varint(
+                    i32::try_from(*value)
+                        .map_err(|_| CodecError::NotSupported("chicken variant id out of range"))?,
+                );
+            }
             Self::PaintingVariant { value, .. } => {
                 let wire = i32::try_from(*value)
                     .ok()
@@ -1307,6 +1324,16 @@ impl EntityDataValue {
                     EffectParticle::decode,
                 )?,
             },
+            30 => {
+                let value = buf.read_varint()?;
+                if value < 0 {
+                    return Err(CodecError::NotSupported("negative chicken variant id"));
+                }
+                Self::ChickenVariant {
+                    index,
+                    value: value as u32,
+                }
+            }
             34 => {
                 let wire = buf.read_varint()?;
                 if wire <= 0 {

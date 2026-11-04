@@ -71,18 +71,26 @@ pub(crate) fn geometry_for(
     if !rot[0].is_finite() || !rot[1].is_finite() {
         return None;
     }
-    let pitch_deg = f64::from(rot[1]) + if potion { -20.0 } else { 0.0 };
-    let (yaw, pitch) = (f64::from(rot[0]).to_radians(), pitch_deg.to_radians());
+    let (yaw, pitch) = (
+        f64::from(rot[0]).to_radians(),
+        f64::from(rot[1]).to_radians(),
+    );
+    let vertical_pitch = (f64::from(rot[1]) + if potion { -20.0 } else { 0.0 }).to_radians();
     let direction = [
         -f64::from(mth::sin(yaw)) * f64::from(mth::cos(pitch)),
-        -f64::from(mth::sin(pitch)),
+        -f64::from(mth::sin(vertical_pitch)),
         f64::from(mth::cos(yaw)) * f64::from(mth::cos(pitch)),
     ];
-    // Vanilla eye origin (eyeY - 0.1); pose-aware height, not a fixed 1.52.
+    // Projectile.shoot normalizes the rotation vector before scaling.
+    let magnitude = direction
+        .iter()
+        .map(|value| value * value)
+        .sum::<f64>()
+        .sqrt();
     let eye =
         pos[1] + crate::tick::player_eye_height(state.entities.row(slot).appearance.pose) - 0.1;
     let origin = [pos[0], eye, pos[2]];
-    let mut velocity = direction.map(|v| v * speed);
+    let mut velocity = direction.map(|v| v * (speed / magnitude));
     // Inherit shooter motion: full XZ drift while grounded, Y only airborne.
     let motion = state.entities.vel(slot).map(|v| v / 20.0);
     let airborne = !state.entities.ground(slot);

@@ -72,6 +72,11 @@ fn nbt(value: &Tag) -> Vec<u8> {
 }
 
 #[test]
+fn chicken_variant_item_component_roundtrips_registry_id() {
+    fixture("minecraft:chicken/variant", text("minecraft:warm"), vec![2]);
+}
+
+#[test]
 fn copied_shield_base_color_roundtrips_all_dyes() {
     for (id, color) in mc_data::stations::DYE_COLORS.iter().enumerate() {
         fixture("minecraft:base_color", text(color), vec![id as u8]);
@@ -415,7 +420,6 @@ const UNSUPPORTED: &[&str] = &[
     "minecraft:cat/sound_variant",
     "minecraft:cat/variant",
     "minecraft:chicken/sound_variant",
-    "minecraft:chicken/variant",
     "minecraft:consumable",
     "minecraft:cow/sound_variant",
     "minecraft:cow/variant",

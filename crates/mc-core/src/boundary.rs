@@ -652,6 +652,7 @@ pub enum EntityDataValue {
         profession: i32,
         level: i32,
     },
+    ChickenVariant(u32),
 }
 
 /// Everything that changed in one tick, in commit order within each list.

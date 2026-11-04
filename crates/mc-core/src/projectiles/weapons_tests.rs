@@ -688,17 +688,19 @@ fn gliding_rocket_attaches_consumes_survival_rocket_and_grounded_stays_free() {
 
 #[test]
 fn blue_egg_throws_as_ordinary_egg_projectile_and_debits() {
-    // EGG-VARIANT-THROW through the item-use path: a blue egg launches an
-    // Egg-kind projectile (cold variant) and debits one item.
-    let (mut state, actor, _) = super::super::flight_tests::setup();
-    state.players.get_mut(&actor).unwrap().inventory.slots[0] = stack(&state, "blue_egg", 1);
-    assert!(use_item(&mut state, actor, Hand::Main));
-    let kinds: Vec<_> = projectiles(&state).iter().map(|r| r.kind).collect();
-    assert!(
-        kinds.contains(&ProjectileKind::Egg),
-        "blue egg must launch an Egg projectile, got {kinds:?}"
-    );
-    assert!(state.players[&actor].inventory.slots[0].is_empty());
+    for name in ["blue_egg", "brown_egg"] {
+        let (mut state, actor, _) = super::super::flight_tests::setup();
+        let original = stack(&state, name, 1);
+        state.players.get_mut(&actor).unwrap().inventory.slots[0] = original.clone();
+        assert!(use_item(&mut state, actor, Hand::Main));
+        let shots = projectiles(&state);
+        assert!(
+            shots
+                .iter()
+                .any(|shot| shot.kind == ProjectileKind::Egg && shot.stack == original)
+        );
+        assert!(state.players[&actor].inventory.slots[0].is_empty());
+    }
 }
 
 #[test]
@@ -708,6 +710,8 @@ fn thrown_snowball_inherits_shooter_motion_and_pose_eye_height() {
     // pose eye height rather than a fixed offset.
     let (mut state, actor, _) = super::super::flight_tests::setup();
     let slot = state.entities.slot_of(actor).unwrap();
+    std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).pose = 3;
+    let origin = state.entities.pos(slot);
     state.entities.set_vel(slot, [10.0, 0.0, 0.0]);
     state.entities.set_ground(slot, true);
     state.players.get_mut(&actor).unwrap().inventory.slots[0] = stack(&state, "snowball", 1);
@@ -728,8 +732,29 @@ fn thrown_snowball_inherits_shooter_motion_and_pose_eye_height() {
     // Grounded: full XZ motion inherited (10 b/s -> entity vel x = 10.0);
     // base gives 0.0 here.
     let vel = state.entities.vel(ball);
+    assert!((state.entities.pos(ball)[1] - (origin[1] + 0.3)).abs() < 1e-6);
     assert!(
         (vel[0] - 10.0).abs() < 1e-9,
         "snowball must inherit shooter motion, got {vel:?}"
     );
+}
+
+#[test]
+fn thrown_potions_use_upward_pitch_offset() {
+    for name in ["splash_potion", "lingering_potion"] {
+        let (mut state, actor, _) = super::super::flight_tests::setup();
+        let slot = state.entities.slot_of(actor).unwrap();
+        state.entities.set_rot(slot, 0.0, 0.0);
+        state.entities.set_ground(slot, true);
+        state.entities.set_vel(slot, [0.0; 3]);
+        state.players.get_mut(&actor).unwrap().inventory.slots[0] = stack(&state, name, 1);
+        assert!(use_item(&mut state, actor, Hand::Main));
+        let id = *state.projectiles.spawned.last().unwrap();
+        let velocity = state.entities.vel(state.entities.slot_of(id).unwrap());
+        let ratio = velocity[1] / velocity[2];
+        assert!(
+            (ratio - 0.342_020_143_3).abs() < 0.0002,
+            "{name}: {velocity:?}"
+        );
+    }
 }

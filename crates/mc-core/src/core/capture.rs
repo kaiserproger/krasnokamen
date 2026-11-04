@@ -30,6 +30,17 @@ pub(crate) fn appearance_from_vanilla_entity(
             ("CustomNameVisible", mc_nbt::Tag::Byte(value)) => {
                 image.custom_name_visible = *value != 0;
             }
+            ("variant", mc_nbt::Tag::String(name)) if record.id == "minecraft:chicken" => {
+                if let Ok(id) = mc_data::Identifier::parse(name.as_str())
+                    && let Some(variant) =
+                        mc_data::required_registry_entry_id("chicken_variant", &id)
+                {
+                    image.extra.push((
+                        17,
+                        crate::journal::EntityDataValueImage::ChickenVariant(variant),
+                    ));
+                }
+            }
             ("Pumpkin", mc_nbt::Tag::Byte(value)) if record.id == "minecraft:snow_golem" => {
                 image.extra.push((
                     crate::entity_life::SNOW_GOLEM_PUMPKIN_INDEX,
@@ -277,6 +288,23 @@ pub(super) fn entity_capture_record(
         extra_fields.push((
             "IsBaby".into(),
             mc_nbt::Tag::Byte(i8::from(row.appearance.baby)),
+        ));
+    }
+    if name == "minecraft:chicken"
+        && let Some(variant) =
+            row.appearance
+                .extra
+                .iter()
+                .find_map(|(index, value)| match (index, value) {
+                    (17, crate::boundary::EntityDataValue::ChickenVariant(id)) => {
+                        mc_data::required_registry_entry("chicken_variant", *id)
+                    }
+                    _ => None,
+                })
+    {
+        extra_fields.push((
+            "variant".into(),
+            mc_nbt::Tag::String(variant.as_str().into()),
         ));
     }
     extra_fields.extend(

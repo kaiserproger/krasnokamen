@@ -17,3 +17,21 @@ fn painting_variant_holder_wire_roundtrip() {
     );
     assert!(ClientboundSetEntityData::decode(&mut [17, 9, 34, 0, 255].as_slice()).is_err());
 }
+
+#[test]
+fn chicken_variant_holder_wire_roundtrip() {
+    let packet = ClientboundSetEntityData {
+        entity_id: 17,
+        values: vec![EntityDataValue::ChickenVariant {
+            index: 17,
+            value: 2,
+        }],
+    };
+    let mut bytes = Vec::new();
+    packet.encode(&mut bytes).unwrap();
+    assert_eq!(bytes, [17, 17, 30, 2, 255]);
+    assert_eq!(
+        ClientboundSetEntityData::decode(&mut bytes.as_slice()).unwrap(),
+        packet
+    );
+}

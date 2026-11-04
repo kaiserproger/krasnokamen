@@ -46,9 +46,10 @@ title = "Player-thrown pearls never spawn endermites, removing the ordinary surv
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PEARL-ENDERMITE-SPAWN"
-regression = ["cargo:mc-core:projectiles::payloads::tests::pearl_landing_spawns_endermite_on_winning_roll"]
+regression = ["cargo:mc-core:projectiles::payloads::tests::pearl_landing_spawns_endermite_on_winning_roll", "cargo:mc-core:projectiles::payloads::tests::pearl_endermite_respects_spawning_rules"]
+failing_first = "reported"
 
 [[bug]]
 id = "EGG-VARIANT-THROW"
@@ -56,9 +57,10 @@ title = "Blue and brown eggs cannot be thrown by players: item-use projectile di
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#EGG-VARIANT-THROW"
-regression = ["cargo:mc-core:projectiles::weapons::tests::blue_egg_throws_as_ordinary_egg_projectile_and_debits"]
+regression = ["cargo:mc-core:projectiles::weapons::tests::blue_egg_throws_as_ordinary_egg_projectile_and_debits", "cargo:mc-core:projectiles::payloads::tests::variant_eggs_hatch_chicken_with_variant_metadata"]
+failing_first = "reported"
 
 [[bug]]
 id = "THROWABLE-LAUNCH-GEOMETRY"
@@ -66,9 +68,10 @@ title = "Hand-thrown projectiles always originate1.52 blocks above feet regardle
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#THROWABLE-LAUNCH-GEOMETRY"
-regression = ["cargo:mc-core:projectiles::weapons::tests::thrown_snowball_inherits_shooter_motion_and_pose_eye_height"]
+regression = ["cargo:mc-core:projectiles::weapons::tests::thrown_snowball_inherits_shooter_motion_and_pose_eye_height", "cargo:mc-core:projectiles::weapons::tests::thrown_potions_use_upward_pitch_offset"]
+failing_first = "reported"
 
 [[bug]]
 id = "THROWABLE-ZERO-DAMAGE-HITS"
@@ -76,9 +79,10 @@ title = "Snowballs directly knock Survival players back despite Java26.1.2 immun
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#THROWABLE-ZERO-DAMAGE-HITS"
-regression = ["cargo:mc-core:projectiles::payloads::tests::snowball_breaks_end_crystal_through_zero_damage_path"]
+regression = ["cargo:mc-core:projectiles::payloads::tests::snowball_breaks_end_crystal_through_zero_damage_path", "cargo:mc-core:projectiles::payloads::tests::zero_damage_throwables_do_not_knock_back_survival_player", "cargo:mc-core:projectiles::payloads::tests::zero_damage_throwables_provoke_zombified_piglin"]
+failing_first = "reported"
 
 [[bug]]
 id = "WATER-BOTTLE-IMPACT"
@@ -556,9 +560,10 @@ title = "Fishing rods cannot hook/retrieve a dropped item: the shared projectile
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FISHING-ITEM-HOOK"
-regression = ["cargo:mc-core:projectiles::fishing::tests::hooked_item_reels_with_impulse_and_costs_three_durability"]
+regression = ["cargo:mc-core:projectiles::fishing::tests::hooked_item_reels_with_impulse_and_costs_three_durability", "cargo:mc-core:projectiles::flight_tests::arrow_passes_dropped_item_while_fishing_hook_exists"]
+failing_first = "reported"
 
 [[bug]]
 id = "FISHING-BOBBER-BUOYANCY"

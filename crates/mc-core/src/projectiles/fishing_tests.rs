@@ -249,9 +249,26 @@ fn hooked_item_reels_with_impulse_and_costs_three_durability() {
         ItemStack::new(cobble, 1),
     );
     let hook_slot = state.entities.slot_of(id).unwrap();
-    let mut record = state.entities.row_mut(hook_slot).projectile.take().unwrap();
-    impact(&mut state, id, &mut record, Some(drop), pos);
-    state.entities.row_mut(hook_slot).projectile = Some(record);
+    state
+        .entities
+        .set_pos(hook_slot, [pos[0] + 2.0, pos[1] + 0.1, pos[2]]);
+    state.entities.set_vel(hook_slot, [60.0, 0.0, 0.0]);
+    let mut intents = Vec::new();
+    super::super::flight::run(&mut state, &mut intents, std::iter::once(id));
+    let hook_slot = state.entities.slot_of(id).unwrap();
+    let record = state.entities.row(hook_slot).projectile.as_ref().unwrap();
+    let ProjectileData::Fishing(fishing) = &record.data else {
+        panic!("fishing state");
+    };
+    assert_eq!(
+        fishing.hooked,
+        Some(
+            state
+                .entities
+                .row(state.entities.slot_of(drop).unwrap())
+                .uuid
+        )
+    );
     use_item(&mut state, actor, Hand::Main);
     assert!(state.entities.vel(state.entities.slot_of(drop).unwrap())[0] < 0.0);
     assert_eq!(state.players[&actor].inventory.slots[0].damage, Some(3));

@@ -688,6 +688,9 @@ pub(super) fn restore_data_value(
         crate::journal::EntityDataValueImage::PaintingVariant(v) => {
             crate::boundary::EntityDataValue::PaintingVariant(*v)
         }
+        crate::journal::EntityDataValueImage::ChickenVariant(v) => {
+            crate::boundary::EntityDataValue::ChickenVariant(*v)
+        }
         crate::journal::EntityDataValueImage::VillagerData {
             kind,
             profession,

@@ -1556,16 +1556,21 @@ fn pearl_landing_spawns_endermite_on_winning_roll() {
         .entities
         .row(state.entities.slot_of(owner).unwrap())
         .uuid;
-    let tick = (1_u64..500)
-        .find(|tick| crate::natural_spawn::Rng(owner_uuid.as_u128() as u64 ^ tick).below(20) == 0)
-        .expect("winning tick");
-    state.tick = tick;
+    let original_pos = state.entities.pos(state.entities.slot_of(owner).unwrap());
     let record = ProjectileState::new(
         ProjectileKind::EnderPearl,
         Some(owner_uuid),
         item(&state, "minecraft:ender_pearl"),
     );
     let (id, mut record) = launch_record(&mut state, record, [0.0, 201.0, 0.0]);
+    let seed = state
+        .entities
+        .row(state.entities.slot_of(id).unwrap())
+        .uuid
+        .as_u128() as u64;
+    state.tick = (1_u64..500)
+        .find(|tick| crate::natural_spawn::Rng(seed ^ tick).below(20) == 0)
+        .expect("winning tick");
     let mut intents = Vec::new();
     assert!(impact(
         &mut state,
@@ -1583,6 +1588,194 @@ fn pearl_landing_spawns_endermite_on_winning_roll() {
             .any(|spawned| entity_name(&state, *spawned) == Some("minecraft:endermite")),
         "winning pearl roll must spawn an endermite"
     );
+    let mite = state
+        .projectiles
+        .spawned
+        .iter()
+        .copied()
+        .find(|spawned| entity_name(&state, *spawned) == Some("minecraft:endermite"))
+        .unwrap();
+    assert_eq!(
+        state.entities.pos(state.entities.slot_of(mite).unwrap()),
+        original_pos
+    );
+}
+
+#[test]
+fn pearl_endermite_respects_spawning_rules() {
+    for rule in ["spawn_mobs", "spawn_monsters"] {
+        let (mut state, owner) = fixture();
+        let owner_uuid = state
+            .entities
+            .row(state.entities.slot_of(owner).unwrap())
+            .uuid;
+        state.gamerules.insert(rule.into(), "false".into());
+        let record = ProjectileState::new(
+            ProjectileKind::EnderPearl,
+            Some(owner_uuid),
+            item(&state, "minecraft:ender_pearl"),
+        );
+        let (id, mut record) = launch_record(&mut state, record, [0.0, 201.0, 0.0]);
+        let seed = state
+            .entities
+            .row(state.entities.slot_of(id).unwrap())
+            .uuid
+            .as_u128() as u64;
+        state.tick = (1_u64..500)
+            .find(|tick| crate::natural_spawn::Rng(seed ^ tick).below(20) == 0)
+            .unwrap();
+        let mut intents = Vec::new();
+        impact(
+            &mut state,
+            &mut intents,
+            id,
+            &mut record,
+            None,
+            [5.0, 201.0, 0.0],
+        );
+        assert!(
+            !state
+                .projectiles
+                .spawned
+                .iter()
+                .any(|id| entity_name(&state, *id) == Some("minecraft:endermite")),
+            "{rule}"
+        );
+        assert_eq!(
+            state.entities.pos(state.entities.slot_of(owner).unwrap()),
+            [5.0, 201.0, 0.0]
+        );
+    }
+}
+
+#[test]
+fn variant_eggs_hatch_chicken_with_variant_metadata() {
+    for (name, override_variant, expected) in [
+        ("minecraft:blue_egg", None, 0),
+        ("minecraft:brown_egg", None, 2),
+        ("minecraft:blue_egg", Some("minecraft:warm"), 2),
+    ] {
+        let (mut state, _) = fixture();
+        let mut stack = item(&state, name);
+        if let Some(variant) = override_variant {
+            let mut value = Vec::new();
+            mc_nbt::write_network_value(&mut value, &mc_nbt::Tag::String(variant.into())).unwrap();
+            stack.extended_mut().preserved_components.push(
+                mc_data::item_stack::PreservedItemComponent {
+                    name: "minecraft:chicken/variant".into(),
+                    value,
+                    baseline: None,
+                },
+            );
+        }
+        let record = ProjectileState::new(ProjectileKind::Egg, None, stack);
+        let (id, mut record) = launch_record(&mut state, record, [0.0, 201.0, 0.0]);
+        let uuid = state.entities.row(state.entities.slot_of(id).unwrap()).uuid;
+        state.tick = (1..1000)
+            .find(|tick| random(uuid.as_u128() as u64 ^ tick).is_multiple_of(8))
+            .unwrap();
+        let mut intents = Vec::new();
+        impact(
+            &mut state,
+            &mut intents,
+            id,
+            &mut record,
+            None,
+            [0.0, 201.0, 0.0],
+        );
+        let chicken = state
+            .projectiles
+            .spawned
+            .iter()
+            .copied()
+            .find(|spawned| entity_name(&state, *spawned) == Some("minecraft:chicken"))
+            .expect("hatched chicken");
+        let appearance = &state
+            .entities
+            .row(state.entities.slot_of(chicken).unwrap())
+            .appearance;
+        assert!(
+            !appearance.extra.iter().any(|(index, _)| *index == 3),
+            "must not corrupt custom-name visibility"
+        );
+        assert!(appearance.extra.iter().any(|(index, value)| *index == 17 && matches!(value, crate::boundary::EntityDataValue::ChickenVariant(v) if *v == expected)));
+        let uuid = state
+            .entities
+            .row(state.entities.slot_of(chicken).unwrap())
+            .uuid;
+        let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+        let saved = chunks
+            .values()
+            .flat_map(|chunk| &chunk.entities)
+            .find(|entity| entity.uuid == uuid)
+            .unwrap();
+        let restored = crate::core::appearance_from_vanilla_entity(saved);
+        assert!(restored.extra.iter().any(|(index, value)| *index == 17 && matches!(value, crate::journal::EntityDataValueImage::ChickenVariant(v) if *v == expected)));
+    }
+}
+
+#[test]
+fn zero_damage_throwables_do_not_knock_back_survival_player() {
+    for (kind, name) in [
+        (ProjectileKind::Snowball, "minecraft:snowball"),
+        (ProjectileKind::Egg, "minecraft:egg"),
+    ] {
+        let (mut state, player) = fixture();
+        let player_slot = state.entities.slot_of(player).unwrap();
+        let initial = [2.0, 3.0, 4.0];
+        state.entities.set_vel(player_slot, initial);
+        let record = ProjectileState::new(kind, None, item(&state, name));
+        let (id, mut record) = launch_record(&mut state, record, [0.0, 201.0, 0.0]);
+        let mut intents = Vec::new();
+        impact(
+            &mut state,
+            &mut intents,
+            id,
+            &mut record,
+            Some(player),
+            [10.0, 201.0, 0.0],
+        );
+        assert_eq!(
+            state.entities.vel(state.entities.slot_of(player).unwrap()),
+            initial
+        );
+        assert!(damage_to(&intents, player).is_empty());
+    }
+}
+
+#[test]
+fn zero_damage_throwables_provoke_zombified_piglin() {
+    for (kind, name) in [
+        (ProjectileKind::Snowball, "minecraft:snowball"),
+        (ProjectileKind::Egg, "minecraft:egg"),
+    ] {
+        let (mut state, owner) = fixture();
+        let target = mob(&mut state, "minecraft:zombified_piglin", [2.0, 201.0, 0.0]);
+        let owner_uuid = state
+            .entities
+            .row(state.entities.slot_of(owner).unwrap())
+            .uuid;
+        let record = ProjectileState::new(kind, Some(owner_uuid), item(&state, name));
+        let (id, mut record) = launch_record(&mut state, record, [0.0, 201.0, 0.0]);
+        let mut intents = Vec::new();
+        impact(
+            &mut state,
+            &mut intents,
+            id,
+            &mut record,
+            Some(target),
+            [2.0, 201.0, 0.0],
+        );
+        assert_eq!(
+            state
+                .hostile
+                .targets
+                .get(&target)
+                .map(|(target, _)| target.0),
+            Some(owner)
+        );
+        assert!(damage_to(&intents, target).is_empty());
+    }
 }
 
 #[test]

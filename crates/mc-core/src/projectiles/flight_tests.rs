@@ -251,6 +251,40 @@ fn player_arrow_damage_is_not_scaled_by_peaceful_difficulty() {
 }
 
 #[test]
+fn arrow_passes_dropped_item_while_fishing_hook_exists() {
+    let (mut state, player, centre) = setup();
+    let owner = state
+        .entities
+        .row(state.entities.slot_of(player).unwrap())
+        .uuid;
+    let hook = ProjectileState::new(ProjectileKind::FishingHook, Some(owner), ItemStack::EMPTY);
+    launch(
+        &mut state,
+        hook,
+        [centre[0], centre[1] + 5.0, centre[2]],
+        [0.0; 3],
+    )
+    .unwrap();
+    let stack = arrow_stack(&state);
+    crate::tick::spawn_item_entity(
+        &mut state,
+        [centre[0] + 2.0, centre[1], centre[2]],
+        stack.clone(),
+    );
+    let arrow = launch(
+        &mut state,
+        ProjectileState::new(ProjectileKind::Arrow, Some(owner), stack),
+        [centre[0], centre[1] + 0.1, centre[2]],
+        [4.0, 0.0, 0.0],
+    )
+    .unwrap();
+    let mut intents = Vec::new();
+    super::flight::run(&mut state, &mut intents, std::iter::once(arrow));
+    let slot = state.entities.slot_of(arrow).expect("arrow passes item");
+    assert!(state.entities.pos(slot)[0] > centre[0] + 3.0);
+}
+
+#[test]
 fn loyalty_returns_the_retained_worn_trident_once_and_projects_no_physics() {
     let (mut state, player, centre) = setup();
     let owner_slot = state.entities.slot_of(player).unwrap();

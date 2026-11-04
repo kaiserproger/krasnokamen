@@ -53,6 +53,7 @@ pub const ITEM_COMPONENT_CODECS: &[(&str, i32)] = &[
     ("minecraft:cooking_fuel", 85),
     ("minecraft:brewing_fuel", 86),
     ("minecraft:mob_visibility", 87),
+    ("minecraft:chicken/variant", 104),
     ("minecraft:provides_pottery_pattern", 117),
     ("minecraft:sign_text_front", 118),
     ("minecraft:sign_text_back", 119),
@@ -60,6 +61,7 @@ pub const ITEM_COMPONENT_CODECS: &[(&str, i32)] = &[
     ("minecraft:cushion/color", 121),
 ];
 /// Wire ids of the codec-backed components, named so encoders never carry bare numbers.
+pub const CHICKEN_VARIANT: i32 = 104;
 pub const CUSTOM_DATA: i32 = 0;
 pub const MAX_DAMAGE: i32 = 2;
 pub const DAMAGE: i32 = 3;
