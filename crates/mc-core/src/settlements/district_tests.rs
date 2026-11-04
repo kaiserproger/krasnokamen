@@ -1348,3 +1348,66 @@ fn smithy_workstation_counts_as_working_institution() {
             .contains("building unavailable")
     );
 }
+
+#[test]
+fn only_a_towns_registered_furnace_workstation_is_owned_for_tending() {
+    let mut state = state();
+    floor(&mut state);
+    let at = [31, 201, 4];
+    place_furnace(&mut state, at);
+    state.block_entities.insert(
+        (at[0], at[1], at[2]),
+        crate::tick::BlockEntityState {
+            slots: vec![mc_data::ItemStack::EMPTY; 3],
+            furnace: Some(Default::default()),
+        },
+    );
+    ensure(&mut state);
+    let (token, revision) = survey_bounds(&mut state, "owner", [30, 201, 3], [31, 201, 5]);
+    let forge = smithy(
+        &mut state,
+        "owner",
+        &token,
+        revision,
+        "tender-forge",
+        [30, 201, 4],
+        at,
+    );
+    let id = town(&mut state, "tender-town", [8, 201, 8], 48);
+    assert!(
+        crate::villager::smelting::owned_furnaces(&state, id)
+            .next()
+            .is_none(),
+        "registration alone must not authorize a settlement"
+    );
+    do_plan(
+        &mut state,
+        id,
+        1,
+        "owner",
+        "none",
+        0,
+        vec![worksite(&forge, "solaris:smithy")],
+    )
+    .unwrap();
+    assert!(state.settlements.get(id).unwrap().buildings.is_empty());
+    assert_eq!(
+        crate::villager::smelting::owned_furnaces(&state, id).collect::<Vec<_>>(),
+        vec![at]
+    );
+    let other = town(&mut state, "other-tender-town", [8, 201, 8], 48);
+    assert!(
+        crate::villager::smelting::owned_furnaces(&state, other)
+            .next()
+            .is_none()
+    );
+    state
+        .world
+        .set_block(at[0], at[1], at[2], state.registry.states.air);
+    assert!(
+        crate::villager::smelting::owned_furnaces(&state, id)
+            .next()
+            .is_none(),
+        "a stale registered point is not a live furnace"
+    );
+}

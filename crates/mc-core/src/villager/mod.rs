@@ -35,6 +35,9 @@ mod mining_tests;
 pub(crate) mod shepherd;
 #[cfg(test)]
 mod shepherd_tests;
+pub(crate) mod smelting;
+#[cfg(test)]
+mod smelting_tests;
 pub(crate) mod soldier;
 pub(crate) use generated::generated_uuid;
 #[cfg(test)]
@@ -379,6 +382,8 @@ pub struct VillagerState {
     /// Durable extraction cursors share the entity's inventory/WAL after-image.
     pub(crate) mining_progress: mining::Progress,
     pub(crate) lumber_progress: lumber::Progress,
+    /// A furnace load/delivery shares the real carry's durable post-image.
+    pub(crate) smelting: Option<smelting::Task>,
     pub(crate) soldier: Option<crate::settlements::army::Soldier>,
     pub food_level: i32,
     /// Vanilla Age: negative baby growth, positive breeding cooldown.
@@ -468,6 +473,7 @@ impl Default for VillagerState {
             inventory: std::array::from_fn(|_| None),
             mining_progress: mining::Progress::default(),
             lumber_progress: lumber::Progress::default(),
+            smelting: None,
             soldier: None,
             food_level: 0,
             age: 0,

@@ -218,6 +218,7 @@ pub(super) fn worker_slot(
             crate::villager::VillagerProfession::Builder
                 | crate::villager::VillagerProfession::Soldier
         ) || v.soldier.is_some()
+            || v.smelting.is_some()
     }) {
         return Err(Failure::Busy);
     }

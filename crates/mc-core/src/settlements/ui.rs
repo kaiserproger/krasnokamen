@@ -1974,6 +1974,8 @@ fn source_reason(lang: Lang, reason: Option<super::construction::SourceReason>) 
         (Lang::Ru, Some(SourceReason::Farmer)) => "нет фермера",
         (Lang::En, Some(SourceReason::Shearer)) => "no available resident",
         (Lang::Ru, Some(SourceReason::Shearer)) => "нет свободного жителя",
+        (Lang::En, Some(SourceReason::Furnace)) => "needs a settlement-owned furnace",
+        (Lang::Ru, Some(SourceReason::Furnace)) => "нужна печь поселения",
         (Lang::En, Some(SourceReason::Shears)) => "needs shears: 2 iron ingots",
         (Lang::Ru, Some(SourceReason::Shears)) => "нужны ножницы: 2 железных слитка",
         (Lang::En, Some(SourceReason::Sheep)) => "no sheep of the required color",

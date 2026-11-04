@@ -142,6 +142,66 @@ fn wool_requires_shears_or_two_real_ingots() {
         .inventory[0] = Some(mc_data::ItemStack::new(iron, 2));
     assert!(can_produce(&state, id, wool, &[]));
 }
+#[test]
+fn wool_smelting_requires_an_owned_live_furnace() {
+    use crate::settlements::inventory::{Endpoint, Image};
+    use mc_data::ItemStack;
+    let mut state = state();
+    let id = settle(&mut state);
+    worker(&mut state, id, VillagerProfession::None);
+    sheep(&mut state, [8.5, 201.0, 8.5], 0);
+    let wool = item(&state, "minecraft:white_wool");
+    let raw = item(&state, "minecraft:raw_iron");
+    let coal = item(&state, "minecraft:coal");
+    let images = vec![Image {
+        endpoint: Endpoint::Container {
+            dimension: "minecraft:overworld".into(),
+            position: [1, 201, 1],
+        },
+        slots: vec![ItemStack::new(raw, 2), ItemStack::new(coal, 1)],
+        fence: mc_script::ScriptInventoryFence::try_new(
+            1,
+            "0000000000000000000000000000000000000000000000000000000000000000".into(),
+        )
+        .unwrap(),
+    }];
+    let furnace = crate::settlements::allocator::tests::block(&state, "minecraft:furnace", &[]);
+    state.world.set_block(3, 201, 3, furnace);
+    state.block_entities.insert(
+        (3, 201, 3),
+        crate::tick::BlockEntityState {
+            slots: vec![ItemStack::EMPTY; 3],
+            furnace: Some(Default::default()),
+        },
+    );
+    assert_eq!(
+        missing_explanation(&state, id, wool, &images),
+        Some((wool, SourceReason::Furnace))
+    );
+    certify(&mut state, id, BuildingKind::House);
+    assert!(can_produce(&state, id, wool, &images));
+    let entity = state.block_entities.get_mut(&(3, 201, 3)).unwrap();
+    entity.slots[0] = ItemStack::new(raw, 2);
+    entity.slots[1] = ItemStack::new(coal, 1);
+    let empty_images = Vec::new();
+    assert!(
+        can_produce(&state, id, wool, &empty_images),
+        "input already in furnace remains a source"
+    );
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .buildings
+        .values_mut()
+        .next()
+        .unwrap()
+        .natural_zone = true;
+    assert!(
+        !can_produce(&state, id, wool, &images),
+        "natural zones do not own furnaces"
+    );
+}
 
 #[test]
 fn unemployed_resident_with_shears_supplies_wool_without_a_workshop() {

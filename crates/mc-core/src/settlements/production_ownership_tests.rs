@@ -16,8 +16,12 @@ fn publish_policy(world: &mut TickState, town: SettlementId, policy: State) {
 }
 
 #[test]
-fn builder_and_soldier_roles_refuse_native_production_start_in_both_interfaces() {
-    for profession in [Profession::Builder, Profession::Soldier] {
+fn exclusive_worker_roles_and_furnace_carry_refuse_native_production_start() {
+    for (profession, tending) in [
+        (Profession::Builder, false),
+        (Profession::Soldier, false),
+        (Profession::None, true),
+    ] {
         let (mut world, town, body, worker, table, stand_at, worksite) = setup();
         let slot = world.entities.slot_of(body).unwrap();
         world
@@ -28,6 +32,18 @@ fn builder_and_soldier_roles_refuse_native_production_start_in_both_interfaces()
             .unwrap()
             .data
             .profession = profession;
+        if tending {
+            world
+                .entities
+                .row_mut(slot)
+                .villager
+                .as_mut()
+                .unwrap()
+                .smelting = Some(crate::villager::smelting::Task {
+                furnace: [8, 201, 8],
+                phase: crate::villager::smelting::Phase::Load,
+            });
+        }
         let before = carry(&world, body);
         let mut policy = State::default();
         let start_request = || Request::Start {

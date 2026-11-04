@@ -1306,6 +1306,47 @@ fn projects_screen_keeps_every_order_button_above_the_status_lines() {
 }
 
 #[test]
+fn projects_show_localized_missing_owned_furnace_for_house_wool() {
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    prep_projects_site(&mut state, id);
+    let worker = villager(&mut state, [8.5, 201.0, 8.5]);
+    let entity = state.entities.body(worker).id;
+    crate::settlements::bind(&mut state, id, entity).unwrap();
+    let sheep = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:sheep").unwrap())
+        .unwrap();
+    state.spawn_mob(sheep, [8.5, 201.0, 8.5], 8.0);
+    let item = |name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap()
+    };
+    let raw = item("minecraft:raw_iron");
+    let coal = item("minecraft:coal");
+    let logs = item("minecraft:oak_log");
+    let chest = state.block_entities.get_mut(&(1, 201, 1)).unwrap();
+    chest.slots[0] = mc_data::ItemStack::new(raw, 2);
+    chest.slots[1] = mc_data::ItemStack::new(coal, 1);
+    chest.slots[2] = mc_data::ItemStack::new(logs, 64);
+    state.settlements.get_mut(id).unwrap().pending_order =
+        Some(crate::settlements::construction::OwnerOrder {
+            blueprint: "house".into(),
+            level: 1,
+            building: None,
+        });
+    let english = click(&mut state, id, "projects", &[]);
+    assert!(format!("{english:?}").contains("needs a settlement-owned furnace"));
+    set_locale(&mut state, "ru_ru");
+    let russian = click(&mut state, id, "project_status", &[]);
+    assert!(format!("{russian:?}").contains("нужна печь поселения"));
+}
+
+#[test]
 fn pending_order_is_visible_in_projects_and_status_and_only_owner_can_cancel() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);

@@ -19,8 +19,9 @@
 //! * `<stem>_log` needs a bound adult Lumberjack plus a certified LumberCamp;
 //! * crops/seeds need a bound adult Farmer plus a certified Farmer workshop;
 //! * `<color>_wool` needs an adult unemployed resident or shepherd, real
-//!   shears (or two iron ingots), and a loaded adult sheep of that color.
-//!   A sheared sheep still counts: native grazing regrows its wool.
+//!   shears, two ingots, or raw iron and fuel with an owned live furnace,
+//!   and a loaded adult sheep of that color. A sheared sheep still counts:
+//!   native grazing regrows its wool.
 //!
 //! Scans are bounded: one resident pass via the chunk-local
 //! [`residents`](super::residents) index and one settlement-bounded chunk-index
@@ -56,6 +57,9 @@ struct Caps {
     farmer: bool,
     shearer: bool,
     shears: bool,
+    furnace: bool,
+    smeltable_iron: i64,
+    fuel: bool,
     iron: i64,
     mine: bool,
     camp: bool,
@@ -106,6 +110,7 @@ pub(crate) enum SourceReason {
     Farm,
     Farmer,
     Shearer,
+    Furnace,
     Shears,
     Sheep,
     Unknown,
@@ -145,6 +150,14 @@ pub(super) fn missing_explanation(
                 SourceReason::Farmer
             } else if path.ends_with("_wool") && !caps.shearer {
                 SourceReason::Shearer
+            } else if path.ends_with("_wool")
+                && !caps.shears
+                && caps.iron < 2
+                && caps.iron + caps.smeltable_iron >= 2
+                && caps.fuel
+                && !caps.furnace
+            {
+                SourceReason::Furnace
             } else if path.ends_with("_wool") && !caps.shears && caps.iron < 2 {
                 SourceReason::Shears
             } else if path.ends_with("_wool") {
@@ -165,6 +178,9 @@ fn caps(state: &TickState, id: SettlementId, record: &SettlementRecord, images: 
         shearer: false,
         shears: false,
         iron: 0,
+        furnace: false,
+        smeltable_iron: 0,
+        fuel: false,
         mine: false,
         camp: false,
         farm: false,
@@ -178,6 +194,17 @@ fn caps(state: &TickState, id: SettlementId, record: &SettlementRecord, images: 
         .registry
         .items
         .id_of(&mc_data::Identifier::parse("minecraft:iron_ingot").expect("identifier"));
+    let raw_iron = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:raw_iron").expect("identifier"));
+    let is_fuel = |stack: &mc_data::ItemStack| {
+        crate::inventory::furnace::is_fuel(
+            &state.registry.item_rules(),
+            mc_data::recipes::CookingKind::Furnace,
+            stack,
+        )
+    };
     for stack in images.iter().flat_map(|image| &image.slots) {
         if Some(stack.item_id) == shears && stack.count > 0 {
             caps.shears = true;
@@ -185,6 +212,10 @@ fn caps(state: &TickState, id: SettlementId, record: &SettlementRecord, images: 
         if Some(stack.item_id) == iron {
             caps.iron += i64::from(stack.count.max(0));
         }
+        if Some(stack.item_id) == raw_iron {
+            caps.smeltable_iron += i64::from(stack.count.max(0));
+        }
+        caps.fuel |= is_fuel(stack);
     }
     let mut max_carried_iron = 0;
     for slot in residents(state, id) {
@@ -194,6 +225,17 @@ fn caps(state: &TickState, id: SettlementId, record: &SettlementRecord, images: 
         };
         if !body.alive || v.settlement != Some(id) || v.age < 0 || v.conversion_time.is_some() {
             continue;
+        }
+        if v.smelting.is_some() {
+            for stack in v.inventory.iter().flatten() {
+                if Some(stack.item_id) == raw_iron {
+                    caps.smeltable_iron += i64::from(stack.count.max(0));
+                }
+                if Some(stack.item_id) == iron {
+                    caps.iron += i64::from(stack.count.max(0));
+                }
+                caps.fuel |= is_fuel(stack);
+            }
         }
         match v.data.profession {
             VillagerProfession::Miner => caps.miner = true,
@@ -206,7 +248,7 @@ fn caps(state: &TickState, id: SettlementId, record: &SettlementRecord, images: 
                     if Some(stack.item_id) == shears && stack.count > 0 {
                         caps.shears = true;
                     }
-                    if Some(stack.item_id) == iron {
+                    if Some(stack.item_id) == iron && v.smelting.is_none() {
                         carried_iron += i64::from(stack.count.max(0));
                     }
                 }
@@ -216,6 +258,27 @@ fn caps(state: &TickState, id: SettlementId, record: &SettlementRecord, images: 
         }
     }
     caps.iron += max_carried_iron;
+    let mut furnaces = crate::villager::smelting::owned_furnaces(state, id).peekable();
+    caps.furnace = furnaces.peek().is_some();
+    for [x, y, z] in furnaces {
+        let Some(entity) = state.block_entities.get(&(x, y, z)) else {
+            continue;
+        };
+        if let Some(stack) = entity.slots.first()
+            && Some(stack.item_id) == raw_iron
+        {
+            caps.smeltable_iron += i64::from(stack.count.max(0));
+        }
+        if let Some(stack) = entity.slots.get(1) {
+            caps.fuel |= is_fuel(stack);
+        }
+        caps.fuel |= entity.furnace.as_ref().is_some_and(|f| f.lit_remaining > 0);
+        if let Some(stack) = entity.slots.get(2)
+            && Some(stack.item_id) == iron
+        {
+            caps.iron += i64::from(stack.count.max(0));
+        }
+    }
     for building in record.buildings.values() {
         match building.kind {
             BuildingKind::Mine => caps.mine = true,
@@ -328,6 +391,83 @@ fn farmer_raw(path: &str) -> bool {
     )
 }
 
+/// Whether a bill has an unfilled wool ingredient in its canonical grid
+/// recipe. Counts real stock, including partial wool stacks.
+pub(super) fn needs_shears(
+    state: &TickState,
+    id: SettlementId,
+    bill: &[(u32, u32)],
+    images: &[Image],
+) -> bool {
+    let Some(record) = state.settlements.get(id) else {
+        return false;
+    };
+    if super::super::construction_crafting::can_fund(state, bill, images) {
+        return false;
+    }
+    if caps(state, id, record, images).shears {
+        return false;
+    }
+    for &(item, count) in bill {
+        let have = |id| -> u64 {
+            images
+                .iter()
+                .flat_map(|image| &image.slots)
+                .filter(|stack| stack.item_id == id)
+                .map(|stack| stack.count.max(0) as u64)
+                .sum()
+        };
+        let missing = u64::from(count).saturating_sub(have(item));
+        if missing == 0 {
+            continue;
+        }
+        if super::super::construction_crafting::can_fund(state, &[(item, count)], images) {
+            continue;
+        }
+        if state
+            .registry
+            .items
+            .name_of(item)
+            .is_some_and(|name| name.namespace() == "minecraft" && name.path().ends_with("_wool"))
+        {
+            return true;
+        }
+        for recipe in state.registry.recipes.iter().filter(|recipe| {
+            is_grid(recipe)
+                && recipe.id == recipe.result.item
+                && result_identity(state, recipe).is_some_and(|(result, _)| result == item)
+        }) {
+            let Some(ingredients) = expanded(recipe) else {
+                continue;
+            };
+            let Some((_, output)) = result_identity(state, recipe) else {
+                continue;
+            };
+            let batches = missing.div_ceil(output as u64);
+            for (_, wool) in state.registry.items.iter().filter(|(name, _)| {
+                name.namespace() == "minecraft" && name.path().ends_with("_wool")
+            }) {
+                let per_batch = ingredients
+                    .iter()
+                    .flatten()
+                    .filter(|ingredient| {
+                        mc_data::recipes::ingredient_accepts_item(
+                            &state.registry.items,
+                            &state.registry.tags,
+                            wool,
+                            ingredient,
+                        )
+                    })
+                    .count() as u64;
+                if per_batch > 0 && have(wool) < batches.saturating_mul(per_batch) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 fn raw_producible(state: &TickState, caps: &Caps, item: u32) -> Option<bool> {
     let name = state.registry.items.name_of(item)?;
     if !name.as_str().starts_with("minecraft:") {
@@ -346,7 +486,11 @@ fn raw_producible(state: &TickState, caps: &Caps, item: u32) -> Option<bool> {
     let color = path.strip_suffix("_wool")?;
     let index = DYE_COLORS.iter().position(|dyed| *dyed == color)?;
     Some(
-        caps.shearer && (caps.shears || caps.iron >= 2) && caps.sheep_colors & (1u16 << index) != 0,
+        caps.shearer
+            && (caps.shears
+                || caps.iron >= 2
+                || (caps.furnace && caps.fuel && caps.iron + caps.smeltable_iron >= 2))
+            && caps.sheep_colors & (1u16 << index) != 0,
     )
 }
 

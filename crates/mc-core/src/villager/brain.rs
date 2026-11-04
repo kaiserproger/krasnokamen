@@ -945,6 +945,8 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             let mut worker_exact = false;
             let worker_target = if merchant_busy || awaiting_profession {
                 None
+            } else if let Some(target) = super::smelting::work(state, slot, &mut v) {
+                target
             } else {
                 match v.data.profession {
                     Profession::Miner => super::mining::work(state, slot, &mut v, changes),

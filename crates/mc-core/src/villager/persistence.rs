@@ -408,6 +408,7 @@ pub(crate) fn journal_eq(left: &VillagerState, right: &VillagerState) -> bool {
         conversion_player,
         mining_progress,
         lumber_progress,
+        smelting,
         soldier,
     )
 }
@@ -471,6 +472,7 @@ pub(crate) fn journal_image(state: &VillagerState) -> VillagerState {
         conversion_player: state.conversion_player,
         mining_progress: state.mining_progress.clone(),
         lumber_progress: state.lumber_progress.clone(),
+        smelting: state.smelting,
         soldier: state.soldier.clone(),
     }
 }
@@ -754,6 +756,9 @@ pub(crate) fn villager_to_fields(
     }
     if let Some(tag) = progress_to_tag(&state.lumber_progress, "SolarisLumberProgress")? {
         runtime.push(("SolarisLumberProgress".into(), tag));
+    }
+    if let Some(tag) = progress_to_tag(&state.smelting, "SolarisSmelting")? {
+        runtime.push(("SolarisSmelting".into(), tag));
     }
     if let Some(tag) = progress_to_tag(&state.soldier, "SolarisSoldier")? {
         runtime.push(("SolarisSoldier".into(), tag));
@@ -1143,6 +1148,7 @@ pub(crate) fn villager_from_fields(
     }
     state.mining_progress = progress_from_tag(runtime, "SolarisMiningProgress")?;
     state.lumber_progress = progress_from_tag(runtime, "SolarisLumberProgress")?;
+    state.smelting = progress_from_tag(runtime, "SolarisSmelting")?;
     state.soldier = progress_from_tag(runtime, "SolarisSoldier")?;
     if field(fields, "ConversionTime")?.is_some() {
         state.conversion_time = Some(integer(fields, "ConversionTime", -1)?);

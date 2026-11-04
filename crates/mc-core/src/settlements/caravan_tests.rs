@@ -420,6 +420,43 @@ fn run(
 }
 
 #[test]
+fn caravan_admission_preserves_an_active_tenders_carry() {
+    let mut f = fixture();
+    stock(&mut f.state, SRC_CHEST, "minecraft:bread", 3);
+    let slot = f.state.entities.slot_of(f.carrier).unwrap();
+    let raw = f
+        .state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:raw_iron").unwrap())
+        .unwrap();
+    let worker = f.state.entities.row_mut(slot).villager.as_mut().unwrap();
+    worker.inventory[0] = Some(ItemStack::new(raw, 2));
+    worker.smelting = Some(crate::villager::smelting::Task {
+        furnace: [8, 201, 8],
+        phase: crate::villager::smelting::Phase::Load,
+    });
+    let before = worker.inventory.clone();
+    let request = open(&f, "tender", 3, None);
+    let mut policy = State::default();
+    assert_eq!(
+        execute(&mut f.state, f.settlement, OWNER, &mut policy, request),
+        Err(Failure::Busy)
+    );
+    assert!(policy.shipments.is_empty());
+    assert_eq!(
+        f.state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory,
+        before
+    );
+}
+
+#[test]
 fn happy_path_conserves_commodity_via_real_body_poses() {
     let mut f = fixture();
     stock(&mut f.state, SRC_CHEST, "minecraft:bread", 3);

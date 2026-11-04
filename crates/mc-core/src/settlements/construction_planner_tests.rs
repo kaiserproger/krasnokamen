@@ -19,6 +19,91 @@ fn certificate(record: &mut SettlementRecord, kind: BuildingKind, level: u8, nat
         },
     );
 }
+#[test]
+fn iron_demand_tracks_open_house_and_real_shears_or_wool() {
+    let (mut state, id, worker) = fixture();
+    state
+        .entities
+        .row_mut(worker)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::None;
+    state.settlements.get_mut(id).unwrap().pending_order = Some(OwnerOrder {
+        blueprint: "house".into(),
+        level: 1,
+        building: None,
+    });
+    assert_eq!(iron_demand(&state, id, None), 2);
+    state
+        .entities
+        .row_mut(worker)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::Builder;
+    assert_eq!(
+        iron_demand(&state, id, None),
+        2,
+        "demand does not require an eligible resident"
+    );
+    state
+        .entities
+        .row_mut(worker)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::None;
+    let wool = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:white_wool").unwrap())
+        .unwrap();
+    state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[0] = mc_data::ItemStack::new(wool, 1);
+    assert_eq!(
+        iron_demand(&state, id, None),
+        2,
+        "partial bed wool still needs shears"
+    );
+    state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[0] = mc_data::ItemStack::new(wool, 3);
+    assert_eq!(
+        iron_demand(&state, id, None),
+        0,
+        "the wool bill is already satisfied"
+    );
+    state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[0] = mc_data::ItemStack::EMPTY;
+    let shears = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:shears").unwrap())
+        .unwrap();
+    state
+        .entities
+        .row_mut(worker)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(shears, 1));
+    assert_eq!(
+        iron_demand(&state, id, None),
+        0,
+        "a usable tool removes the iron target"
+    );
+    let detached = state.entities.row_mut(worker).villager.take().unwrap();
+    assert_eq!(
+        iron_demand(&state, id, None),
+        2,
+        "detached tool is not visible in the resident index"
+    );
+    assert_eq!(
+        iron_demand(&state, id, Some(&detached)),
+        0,
+        "the current worker's shears stop excess smelting"
+    );
+}
 
 #[test]
 fn autonomous_needs_cover_every_authored_kind_and_ignore_natural_zones() {

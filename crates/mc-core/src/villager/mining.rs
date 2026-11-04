@@ -120,7 +120,11 @@ pub(super) fn deposit_with_protected(
     v: &mut VillagerState,
     protected: [u32; 8],
 ) -> Option<BlockPos> {
-    if v.inventory.iter().all(Option::is_none) {
+    if !v.inventory.iter().zip(protected).any(|(stack, held)| {
+        stack
+            .as_ref()
+            .is_some_and(|stack| stack.count > 0 && stack.count as u32 > held)
+    }) {
         return None;
     }
     let settlement = v.settlement?;

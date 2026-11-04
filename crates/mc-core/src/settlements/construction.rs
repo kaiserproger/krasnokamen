@@ -1556,6 +1556,74 @@ pub(crate) struct WaitingNeed {
     pub(crate) no_source: Option<SourceReason>,
 }
 
+/// Current bounded construction target, before subtracting the iron pipeline.
+/// A pending owner order takes priority, then an active project, then the
+/// largest single autonomous candidate (not the sum of speculative builds).
+pub(crate) fn iron_demand(
+    state: &TickState,
+    id: SettlementId,
+    detached: Option<&crate::villager::VillagerState>,
+) -> u32 {
+    let Some(record) = state.settlements.get(id) else {
+        return 0;
+    };
+    let Some(iron) = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:iron_ingot").expect("identifier"))
+    else {
+        return 0;
+    };
+    let shears_id = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:shears").expect("identifier"));
+    let detached_shears = detached.is_some_and(|villager| {
+        villager
+            .inventory
+            .iter()
+            .flatten()
+            .any(|stack| Some(stack.item_id) == shears_id && stack.count > 0)
+    });
+    let images = executor::source_images(state, id);
+    let demand = |bill: &[(u32, u32)]| {
+        let shears = !detached_shears && availability::needs_shears(state, id, bill, &images);
+        let direct = bill
+            .iter()
+            .filter(|(item, _)| *item == iron)
+            .fold(0u32, |sum, (_, count)| sum.saturating_add(*count));
+        direct.saturating_add(if shears { 2 } else { 0 })
+    };
+    if let Some(order) = &record.pending_order {
+        return blueprints::get(&state.registry, &order.blueprint)
+            .and_then(|blueprint| blueprint.level(order.level))
+            .map_or(0, |level| demand(&level.materials));
+    }
+    if let Some(project) = &record.project {
+        return executor::status(state, id, &project.structure)
+            .ok()
+            .map_or(0, |snapshot| {
+                let bill: Vec<_> = snapshot
+                    .remaining
+                    .iter()
+                    .filter_map(|material| {
+                        let name = mc_data::Identifier::parse(&material.resource).ok()?;
+                        let item = state.registry.items.id_of(&name)?;
+                        Some((item, u32::try_from(material.quantity).unwrap_or(u32::MAX)))
+                    })
+                    .collect();
+                demand(&bill)
+            });
+    }
+    let catalog = blueprints::all(&state.registry);
+    candidate_kinds(state, record, &images)
+        .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
+        .filter_map(|blueprint| blueprint.level(1))
+        .map(|level| demand(&level.materials))
+        .max()
+        .unwrap_or(0)
+}
+
 /// Whether the planner can fund at least one of its current candidates.
 pub(crate) fn has_funded_candidate(state: &TickState, id: SettlementId) -> bool {
     let Some(record) = state.settlements.get(id) else {
