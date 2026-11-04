@@ -1151,11 +1151,15 @@ fn hatch(
                 _ => None,
             }
         }
-        None => match super::item_name(state, &record.stack) {
-            Some("minecraft:blue_egg") => Some(0),
-            Some("minecraft:brown_egg") => Some(2),
-            _ => None,
-        },
+        None => {
+            let name = match super::item_name(state, &record.stack) {
+                Some("minecraft:blue_egg") => Some("minecraft:cold"),
+                Some("minecraft:brown_egg") => Some("minecraft:warm"),
+                _ => None,
+            };
+            name.and_then(|name| mc_data::Identifier::parse(name).ok())
+                .and_then(|name| mc_data::required_registry_entry_id("chicken_variant", &name))
+        }
     };
     let Some(type_id) = state
         .registry
@@ -1167,15 +1171,20 @@ fn hatch(
     for _ in 0..count {
         let child = state.spawn_mob(type_id, position, 4.0);
         crate::entity_life::make_child(state, child);
-        // Chicken's first own accessor follows AgeableMob.DATA_BABY_ID (16).
+        // Chicken variant follows both AgeableMob baby and age-lock accessors.
         if let (Some(data), Some(slot)) = (variant, state.entities.slot_of(child)) {
             let appearance = std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance);
-            if let Some((_, value)) = appearance.extra.iter_mut().find(|(at, _)| *at == 17) {
+            if let Some((_, value)) = appearance
+                .extra
+                .iter_mut()
+                .find(|(at, _)| *at == crate::blueprint::CHICKEN_VARIANT_DATA_INDEX)
+            {
                 *value = crate::boundary::EntityDataValue::ChickenVariant(data);
             } else {
-                appearance
-                    .extra
-                    .push((17, crate::boundary::EntityDataValue::ChickenVariant(data)));
+                appearance.extra.push((
+                    crate::blueprint::CHICKEN_VARIANT_DATA_INDEX,
+                    crate::boundary::EntityDataValue::ChickenVariant(data),
+                ));
             }
             state.appearance_changed.push(child);
         }

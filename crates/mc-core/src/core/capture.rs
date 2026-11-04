@@ -36,7 +36,7 @@ pub(crate) fn appearance_from_vanilla_entity(
                         mc_data::required_registry_entry_id("chicken_variant", &id)
                 {
                     image.extra.push((
-                        17,
+                        crate::blueprint::CHICKEN_VARIANT_DATA_INDEX,
                         crate::journal::EntityDataValueImage::ChickenVariant(variant),
                     ));
                 }
@@ -296,9 +296,10 @@ pub(super) fn entity_capture_record(
                 .extra
                 .iter()
                 .find_map(|(index, value)| match (index, value) {
-                    (17, crate::boundary::EntityDataValue::ChickenVariant(id)) => {
-                        mc_data::required_registry_entry("chicken_variant", *id)
-                    }
+                    (
+                        &crate::blueprint::CHICKEN_VARIANT_DATA_INDEX,
+                        crate::boundary::EntityDataValue::ChickenVariant(id),
+                    ) => mc_data::required_registry_entry("chicken_variant", *id),
                     _ => None,
                 })
     {

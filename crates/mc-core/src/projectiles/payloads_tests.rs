@@ -1655,7 +1655,7 @@ fn variant_eggs_hatch_chicken_with_variant_metadata() {
         ("minecraft:brown_egg", None, 2),
         ("minecraft:blue_egg", Some("minecraft:warm"), 2),
     ] {
-        let (mut state, _) = fixture();
+        let (mut state, owner) = fixture();
         let mut stack = item(&state, name);
         if let Some(variant) = override_variant {
             let mut value = Vec::new();
@@ -1698,7 +1698,22 @@ fn variant_eggs_hatch_chicken_with_variant_metadata() {
             !appearance.extra.iter().any(|(index, _)| *index == 3),
             "must not corrupt custom-name visibility"
         );
-        assert!(appearance.extra.iter().any(|(index, value)| *index == 17 && matches!(value, crate::boundary::EntityDataValue::ChickenVariant(v) if *v == expected)));
+        assert!(appearance.extra.iter().any(|(index, value)| *index == 18 && matches!(value, crate::boundary::EntityDataValue::ChickenVariant(v) if *v == expected)));
+        let dandelion = item(&state, "minecraft:golden_dandelion");
+        state.players.get_mut(&owner).unwrap().inventory.slots[0] = dandelion;
+        assert!(crate::golden_dandelion::interact(
+            &mut state,
+            owner,
+            chicken,
+            crate::boundary::Hand::Main
+        ));
+        let appearance = &state
+            .entities
+            .row(state.entities.slot_of(chicken).unwrap())
+            .appearance;
+        assert!(appearance.extra.iter().any(|(index, value)| *index == 17
+            && matches!(value, crate::boundary::EntityDataValue::Boolean(true))));
+        assert!(appearance.extra.iter().any(|(index, value)| *index == 18 && matches!(value, crate::boundary::EntityDataValue::ChickenVariant(v) if *v == expected)));
         let uuid = state
             .entities
             .row(state.entities.slot_of(chicken).unwrap())
@@ -1708,9 +1723,40 @@ fn variant_eggs_hatch_chicken_with_variant_metadata() {
             .values()
             .flat_map(|chunk| &chunk.entities)
             .find(|entity| entity.uuid == uuid)
-            .unwrap();
-        let restored = crate::core::appearance_from_vanilla_entity(saved);
-        assert!(restored.extra.iter().any(|(index, value)| *index == 17 && matches!(value, crate::journal::EntityDataValueImage::ChickenVariant(v) if *v == expected)));
+            .unwrap()
+            .clone();
+        let image = crate::journal::EntityStateImage::from_record(&state.registry, &saved).unwrap();
+        let replay = crate::journal::ReplayEntity {
+            uuid: saved.uuid.to_string(),
+            type_id: state.registry.entity_type_id(&saved.id).unwrap(),
+            pos: saved.pos,
+            vel: saved.motion.map(|v| v * 20.0),
+            yaw: saved.yaw,
+            pitch: saved.pitch,
+            ground: saved.on_ground,
+            health: saved.health,
+            alive: true,
+            age: image.age,
+            breed_cooldown: image.breed_cooldown,
+            pickup_delay: 0,
+            item: None,
+            appearance: crate::core::appearance_from_vanilla_entity(&saved),
+            active_effects: Default::default(),
+            villager: None,
+            projectile: None,
+            state: image,
+            tick: state.tick,
+        };
+        let slot = state.entities.slot_of(chicken).unwrap();
+        state.remove_entity(slot);
+        crate::core::restore_entity(&mut state, chicken.0, &replay).unwrap();
+        let appearance = &state
+            .entities
+            .row(state.entities.slot_of(chicken).unwrap())
+            .appearance;
+        assert!(appearance.extra.iter().any(|(index, value)| *index == 17
+            && matches!(value, crate::boundary::EntityDataValue::Boolean(true))));
+        assert!(appearance.extra.iter().any(|(index, value)| *index == 18 && matches!(value, crate::boundary::EntityDataValue::ChickenVariant(v) if *v == expected)));
     }
 }
 

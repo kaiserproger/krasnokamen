@@ -635,6 +635,8 @@ fn category(name: &str) -> Option<MobCategory> {
 /// Sheep wool entity data index (color id, `0x10` = sheared); the edge's
 /// `mc_protocol` `SHEEP_ENTITY_DATA_WOOL_INDEX` is the wire evidence.
 pub const SHEEP_WOOL_DATA_INDEX: u8 = 18;
+/// Chicken variant accessor; checked against the protocol index at the edge.
+pub const CHICKEN_VARIANT_DATA_INDEX: u8 = 18;
 
 /// Dye colors by id, as the loot tables name them (`minecraft:sheep/color`).
 pub const DYE_COLORS: [&str; 16] = [

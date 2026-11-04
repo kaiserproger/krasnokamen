@@ -23,13 +23,13 @@ fn chicken_variant_holder_wire_roundtrip() {
     let packet = ClientboundSetEntityData {
         entity_id: 17,
         values: vec![EntityDataValue::ChickenVariant {
-            index: 17,
+            index: crate::packets::play::CHICKEN_VARIANT_DATA_INDEX,
             value: 2,
         }],
     };
     let mut bytes = Vec::new();
     packet.encode(&mut bytes).unwrap();
-    assert_eq!(bytes, [17, 17, 30, 2, 255]);
+    assert_eq!(bytes, [17, 18, 30, 2, 255]);
     assert_eq!(
         ClientboundSetEntityData::decode(&mut bytes.as_slice()).unwrap(),
         packet

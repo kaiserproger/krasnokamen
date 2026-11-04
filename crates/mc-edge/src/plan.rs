@@ -2151,6 +2151,10 @@ const _: () = assert!(
     mc_core::blueprint::SHEEP_WOOL_DATA_INDEX
         == mc_protocol::packets::play::SHEEP_ENTITY_DATA_WOOL_INDEX
 );
+const _: () = assert!(
+    mc_core::blueprint::CHICKEN_VARIANT_DATA_INDEX
+        == mc_protocol::packets::play::CHICKEN_VARIANT_DATA_INDEX
+);
 
 // The core writes the sleeping position at the protocol's own index.
 const _: () = assert!(
