@@ -239,6 +239,45 @@ fn first_solid(
     }
     Ok(first)
 }
+fn water_hit_face(
+    state: &TickState,
+    pos: [f64; 3],
+    velocity: [f64; 3],
+    hit: crate::boundary::BlockPos,
+    time: f64,
+) -> Option<[i32; 3]> {
+    let id = state.world.block_at(hit.x, hit.y, hit.z)?;
+    let boxes = state.registry.collision_boxes.get(id as usize)?;
+    let offset = [f64::from(hit.x), f64::from(hit.y), f64::from(hit.z)];
+    for collision_box in boxes {
+        let bounds = collision_box.as_blocks();
+        let lower = std::array::from_fn(|axis| offset[axis] + bounds[axis]);
+        let upper = std::array::from_fn(|axis| offset[axis] + bounds[axis + 3]);
+        if segment_enters(pos, velocity, lower, upper) != Some(time) {
+            continue;
+        }
+        let mut best = f64::NEG_INFINITY;
+        let mut face = [0; 3];
+        for axis in 0..3 {
+            if velocity[axis].abs() < 1.0e-9 {
+                continue;
+            }
+            let entry = if velocity[axis] > 0.0 {
+                lower[axis]
+            } else {
+                upper[axis]
+            };
+            let near = (entry - pos[axis]) / velocity[axis];
+            if near > best {
+                best = near;
+                face = [0; 3];
+                face[axis] = if velocity[axis] > 0.0 { -1 } else { 1 };
+            }
+        }
+        return Some(face);
+    }
+    None
+}
 
 /// Physical melee shares native block shapes and refuses unloaded segments.
 pub(crate) fn clear_segment(state: &TickState, start: [f64; 3], end: [f64; 3]) -> bool {
@@ -713,6 +752,14 @@ fn step(
             return false;
         }
         if !record.kind.arrow() {
+            if matches!(
+                record.kind,
+                ProjectileKind::Potion | ProjectileKind::LingeringPotion
+            ) && super::payloads::is_water_bottle(&record.stack)
+                && let Some(face) = water_hit_face(state, pos, velocity, block_position, t)
+            {
+                super::payloads::water_douse_blocks(state, block_position, face);
+            }
             return super::payloads::impact(state, intents, id, record, None, impact);
         }
         if record.kind != ProjectileKind::Trident

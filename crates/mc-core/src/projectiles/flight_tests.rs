@@ -404,6 +404,203 @@ fn loyalty_keeps_custody_when_inventory_is_full_and_retries_without_duplication(
 }
 
 #[test]
+fn splash_water_douses_nearby_fire_and_candle_without_changing_furnace() {
+    let (mut state, _, centre) = setup();
+    let x = centre[0].floor() as i32 + 3;
+    let y = centre[1] as i32;
+    let z = centre[2].floor() as i32;
+    let fire = state
+        .registry
+        .blocks
+        .block(&Identifier::parse("minecraft:fire").unwrap())
+        .unwrap()
+        .default
+        .0;
+    let lit = |name: &str| {
+        state
+            .registry
+            .blocks
+            .block(&Identifier::parse(name).unwrap())
+            .unwrap()
+            .states
+            .iter()
+            .copied()
+            .find(|id| {
+                state
+                    .registry
+                    .blocks
+                    .by_id(*id)
+                    .unwrap()
+                    .properties
+                    .iter()
+                    .any(|(k, v)| k == "lit" && v == "true")
+            })
+            .unwrap()
+            .0
+    };
+    let candle = lit("minecraft:candle");
+    let furnace = lit("minecraft:furnace");
+    state.world.set_block(x, y, z, state.registry.states.stone);
+    state.world.set_block(x - 1, y, z, fire);
+    state.world.set_block(x - 1, y, z + 1, candle);
+    state.world.set_block(x - 1, y, z - 1, furnace);
+    let item = state
+        .registry
+        .items
+        .id_of(&Identifier::parse("minecraft:splash_potion").unwrap())
+        .unwrap();
+    let mut stack = ItemStack::new(item, 1);
+    stack.extended_mut().potion = Some(Identifier::parse("minecraft:water").unwrap());
+    let record = ProjectileState::new(ProjectileKind::Potion, None, stack);
+    let id = launch(
+        &mut state,
+        record,
+        [centre[0] + 1.0, f64::from(y) + 0.5, centre[2]],
+        [4.0, 0.0, 0.0],
+    )
+    .unwrap();
+    super::flight::run(&mut state, &mut Vec::new(), std::iter::once(id));
+    assert_eq!(
+        state.world.block_at(x - 1, y, z),
+        Some(state.registry.states.air)
+    );
+    let candle = state.world.block_at(x - 1, y, z + 1).unwrap();
+    assert!(
+        state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(candle))
+            .unwrap()
+            .properties
+            .iter()
+            .any(|(k, v)| k == "lit" && v == "false")
+    );
+    assert_eq!(state.world.block_at(x - 1, y, z - 1), Some(furnace));
+}
+
+#[test]
+fn water_bottles_extinguish_the_hit_campfire() {
+    for (kind, item_name) in [
+        (ProjectileKind::Potion, "minecraft:splash_potion"),
+        (
+            ProjectileKind::LingeringPotion,
+            "minecraft:lingering_potion",
+        ),
+    ] {
+        let (mut state, _, centre) = setup();
+        let block = state
+            .registry
+            .blocks
+            .block(&Identifier::parse("minecraft:campfire").unwrap())
+            .unwrap();
+        let lit = block
+            .states
+            .iter()
+            .copied()
+            .find(|id| {
+                let block = state.registry.blocks.by_id(*id).unwrap();
+                block
+                    .properties
+                    .iter()
+                    .any(|(k, v)| k == "lit" && v == "true")
+                    && block
+                        .properties
+                        .iter()
+                        .any(|(k, v)| k == "waterlogged" && v == "false")
+            })
+            .unwrap()
+            .0;
+        let x = centre[0].floor() as i32 + 3;
+        let y = centre[1] as i32;
+        let z = centre[2].floor() as i32;
+        state.world.set_block(x, y, z, lit);
+        let item = state
+            .registry
+            .items
+            .id_of(&Identifier::parse(item_name).unwrap())
+            .unwrap();
+        let mut stack = ItemStack::new(item, 1);
+        stack.extended_mut().potion = Some(Identifier::parse("minecraft:water").unwrap());
+        let record = ProjectileState::new(kind, None, stack);
+        let id = launch(
+            &mut state,
+            record,
+            [f64::from(x) + 3.0, f64::from(y) + 0.25, centre[2]],
+            [-4.0, 0.0, 0.0],
+        )
+        .unwrap();
+        super::flight::run(&mut state, &mut Vec::new(), std::iter::once(id));
+        let current = state.world.block_at(x, y, z).unwrap();
+        let block = state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(current))
+            .unwrap();
+        assert!(
+            block
+                .properties
+                .iter()
+                .any(|(k, v)| k == "lit" && v == "false")
+        );
+    }
+}
+
+#[test]
+fn flaming_arrow_relights_dry_but_not_waterlogged_campfire() {
+    for waterlogged in ["false", "true"] {
+        let (mut state, _, centre) = setup();
+        let block = state
+            .registry
+            .blocks
+            .block(&Identifier::parse("minecraft:campfire").unwrap())
+            .unwrap();
+        let unlit = block
+            .states
+            .iter()
+            .copied()
+            .find(|id| {
+                let state = state.registry.blocks.by_id(*id).unwrap();
+                state
+                    .properties
+                    .iter()
+                    .any(|(k, v)| k == "lit" && v == "false")
+                    && state
+                        .properties
+                        .iter()
+                        .any(|(k, v)| k == "waterlogged" && v == waterlogged)
+            })
+            .unwrap()
+            .0;
+        let x = centre[0].floor() as i32 + 3;
+        let y = centre[1] as i32;
+        let z = centre[2].floor() as i32;
+        state.world.set_block(x, y, z, unlit);
+        let mut record = ProjectileState::new(ProjectileKind::Arrow, None, arrow_stack(&state));
+        record.flame = true;
+        let id = launch(
+            &mut state,
+            record,
+            [f64::from(x) + 3.0, f64::from(y) + 0.25, centre[2]],
+            [-4.0, 0.0, 0.0],
+        )
+        .unwrap();
+        super::flight::run(&mut state, &mut Vec::new(), std::iter::once(id));
+        let current = state.world.block_at(x, y, z).unwrap();
+        let block = state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(current))
+            .unwrap();
+        assert!(block.properties.iter().any(|(k, v)| k == "lit"
+            && v == if waterlogged == "false" {
+                "true"
+            } else {
+                "false"
+            }));
+    }
+}
+
+#[test]
 fn burning_arrow_primes_exact_tnt_cell_once_on_negative_axis_impact() {
     let (mut state, _, centre) = setup();
     let tnt = state

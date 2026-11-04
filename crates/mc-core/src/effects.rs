@@ -688,6 +688,28 @@ pub(crate) fn sync_appearance(
     state.appearance_changed.push(entity);
 }
 
+pub(crate) fn accepts_effect(
+    state: &crate::tick::TickState,
+    slot: crate::entities::EntitySlot,
+    effect: EffectId,
+) -> bool {
+    if !matches!(effect, EffectId::Regeneration | EffectId::Poison) {
+        return true;
+    }
+    let crate::entities::EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
+        return true;
+    };
+    let Some(blueprint) = state.registry.blueprint(type_id) else {
+        return true;
+    };
+    !blueprint.capabilities.inverted_healing
+        && !(effect == EffectId::Poison
+            && matches!(
+                blueprint.name.as_str(),
+                "minecraft:spider" | "minecraft:cave_spider"
+            ))
+}
+
 fn is_living(kind: crate::entities::EntityKind) -> bool {
     match kind {
         crate::entities::EntityKind::Player { .. } => true,
@@ -738,11 +760,12 @@ pub(crate) fn execute_command(
             }
             changed
         } else if let Some(effect) = give {
-            state
-                .entities
-                .row_mut(slot)
-                .active_effects
-                .add(effect.clone())
+            accepts_effect(state, slot, effect.id)
+                && state
+                    .entities
+                    .row_mut(slot)
+                    .active_effects
+                    .add(effect.clone())
         } else {
             !state
                 .entities
@@ -865,6 +888,22 @@ pub(crate) fn run(state: &mut crate::tick::TickState, intents: &mut Vec<crate::i
         } else {
             if state.entities.row(slot).active_effects.entries.is_empty() {
                 continue;
+            }
+            let active = &state.entities.row(slot).active_effects;
+            let reject_regeneration = active.has(EffectId::Regeneration)
+                && !accepts_effect(state, slot, EffectId::Regeneration);
+            let reject_poison =
+                active.has(EffectId::Poison) && !accepts_effect(state, slot, EffectId::Poison);
+            if reject_regeneration || reject_poison {
+                state
+                    .entities
+                    .row_mut(slot)
+                    .active_effects
+                    .entries
+                    .retain(|effect| {
+                        !(reject_regeneration && effect.id == EffectId::Regeneration
+                            || reject_poison && effect.id == EffectId::Poison)
+                    });
             }
             // Equipment/max-health attribute evaluation is the expensive part
             // of this branch; mobs without any equipment or attribute rows keep

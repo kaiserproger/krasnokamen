@@ -958,6 +958,40 @@ fn burning_player_inside_water_cauldron_is_extinguished_for_one_level() {
 }
 
 #[test]
+fn burning_player_melts_powder_snow_cauldron_one_level() {
+    for (level, expected, expected_level) in [
+        ("1", "cauldron", None),
+        ("2", "water_cauldron", Some("1")),
+        ("3", "water_cauldron", Some("2")),
+    ] {
+        let (mut state, entity, pos) = flat_player_fixture();
+        place(&mut state, pos, "powder_snow_cauldron", &[("level", level)]);
+        let slot = state.entities.slot_of(entity).unwrap();
+        state.entities.body_mut(slot).burn_ticks = 100;
+        crate::contact_hazards::run(&mut state, &mut Vec::new());
+        assert_eq!(state.entities.body(slot).burn_ticks, 0);
+        let current = state
+            .world
+            .block_at(pos[0] as i32, pos[1] as i32, pos[2] as i32)
+            .unwrap();
+        let block = state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(current))
+            .unwrap();
+        assert_eq!(block.block.id.path(), expected);
+        if let Some(level) = expected_level {
+            assert!(
+                block
+                    .properties
+                    .iter()
+                    .any(|(key, value)| key == "level" && value == level)
+            );
+        }
+    }
+}
+
+#[test]
 fn lava_cauldron_burns_the_entity_standing_inside() {
     let (mut state, entity, pos) = flat_player_fixture();
     place(&mut state, pos, "lava_cauldron", &[]);

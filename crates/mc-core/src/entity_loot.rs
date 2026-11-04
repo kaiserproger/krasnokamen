@@ -155,6 +155,9 @@ pub(crate) fn accepted_hit(state: &mut TickState, slot: EntitySlot, source: Opti
     let Some(effect) = cave_spider_poison(state.difficulty) else {
         return;
     };
+    if !crate::effects::accepts_effect(state, slot, effect.id) {
+        return;
+    }
     let target = state.entities.body(slot).id;
     if let Some(player) = state.players.get_mut(&target) {
         let connection = player.connection;

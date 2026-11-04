@@ -146,7 +146,7 @@ fn living(state: &TickState, id: EntityId) -> bool {
 /// above the vertical cuboid even when their feet are near the radius edge.
 /// A splash/lingering bottle whose potion contents are water (no base potion,
 /// no custom effects): the vanilla water-impact path.
-fn is_water_bottle(stack: &ItemStack) -> bool {
+pub(super) fn is_water_bottle(stack: &ItemStack) -> bool {
     stack
         .extended()
         .potion
@@ -155,10 +155,7 @@ fn is_water_bottle(stack: &ItemStack) -> bool {
         && stack.extended().potion_custom_effects.is_empty()
 }
 
-/// Vanilla splash-water impact: extinguish burning entities, damage
-/// water-sensitive mobs, rehydrate axolotls, and douse the impacted fire
-/// block (fire, lit campfires, lit candles). Returns after handling; the
-/// projectile is consumed.
+/// Vanilla splash-water entity impact.
 fn water_impact(
     state: &mut TickState,
     intents: &mut Vec<Intent>,
@@ -173,7 +170,9 @@ fn water_impact(
         };
         // Burning entities are doused (fire ticks cleared, shared flame flag
         // removed), matching vanilla splash-water extinguishing.
-        if state.entities.body(slot).burn_ticks > 0 {
+        if distance_sq(position, state.entities.pos(slot)) < 16.0
+            && state.entities.body(slot).burn_ticks > 0
+        {
             state.entities.body_mut(slot).burn_ticks = 0;
             let appearance = std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance);
             appearance.shared_flags &= !1;
@@ -186,7 +185,9 @@ fn water_impact(
             touch(state, target);
         }
         // Water-sensitive mobs (endermen) take splash-water damage.
-        if mob_capabilities(state, target).hurt_by_water {
+        if distance_sq(position, state.entities.pos(slot)) < 16.0
+            && mob_capabilities(state, target).hurt_by_water
+        {
             let velocity = state
                 .entities
                 .slot_of(id)
@@ -198,20 +199,39 @@ fn water_impact(
                     id,
                     target,
                     1.0,
-                    DamageKind::Projectile,
+                    DamageKind::IndirectMagic,
                     owner,
                     velocity,
                 );
             }
         }
     }
-    // Douse the impacted block cell: fire burns out; lit campfires and lit
-    // candles/cakes are snuffed to their unlit state.
-    let cell = crate::boundary::BlockPos {
-        x: position[0].floor() as i32,
-        y: position[1].floor() as i32,
-        z: position[2].floor() as i32,
+}
+
+pub(super) fn water_douse_blocks(
+    state: &mut TickState,
+    hit: crate::boundary::BlockPos,
+    face: [i32; 3],
+) {
+    let front = crate::boundary::BlockPos {
+        x: hit.x + face[0],
+        y: hit.y + face[1],
+        z: hit.z + face[2],
     };
+    for [dx, dz] in [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] {
+        douse_block(
+            state,
+            crate::boundary::BlockPos {
+                x: front.x + dx,
+                y: front.y,
+                z: front.z + dz,
+            },
+        );
+    }
+    douse_block(state, hit);
+}
+
+fn douse_block(state: &mut TickState, cell: crate::boundary::BlockPos) {
     if let Some(current) = state.world.block_at(cell.x, cell.y, cell.z)
         && let Some(block) = state.registry.blocks.by_id(mc_world::BlockStateId(current))
     {
@@ -223,10 +243,15 @@ fn water_impact(
             state
                 .merge_block_writes
                 .push((cell, state.registry.states.air));
-        } else if block
-            .properties
-            .iter()
-            .any(|(key, value)| key == "lit" && value == "true")
+        } else if (matches!(
+            path,
+            "campfire" | "soul_campfire" | "candle" | "candle_cake"
+        ) || path.ends_with("_candle")
+            || path.ends_with("_candle_cake"))
+            && block
+                .properties
+                .iter()
+                .any(|(key, value)| key == "lit" && value == "true")
         {
             let mut properties = block.properties.clone();
             if let Some((_, value)) = properties.iter_mut().find(|(key, _)| key == "lit") {
@@ -376,6 +401,13 @@ fn inverted(state: &TickState, target: EntityId) -> bool {
 }
 
 pub(crate) fn give_effect(state: &mut TickState, target: EntityId, effect: ActiveEffect) {
+    if state
+        .entities
+        .slot_of(target)
+        .is_some_and(|slot| !crate::effects::accepts_effect(state, slot, effect.id))
+    {
+        return;
+    }
     if let Some(player) = state.players.get_mut(&target) {
         let connection = player.connection;
         let changes = player.give_effect(effect);
@@ -498,37 +530,7 @@ fn deliver_effect(
             }
         }
     } else {
-        // Vanilla species immunity: undead reject Regeneration and Poison;
-        // spiders reject Poison. Instant inversion stays in the branch above.
-        if matches!(effect.id, EffectId::Regeneration | EffectId::Poison)
-            && mob_immune_to_effect(state, target, effect.id)
-        {
-            return;
-        }
         give_effect(state, target, effect);
-    }
-}
-/// Vanilla species-specific duration-effect immunity: undead mobs reject
-/// Regeneration and Poison; spiders (incl. cave spiders) reject Poison.
-fn mob_immune_to_effect(state: &TickState, target: EntityId, effect: EffectId) -> bool {
-    let Some(slot) = state.entities.slot_of(target) else {
-        return false;
-    };
-    let crate::entities::EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
-        return false;
-    };
-    let Some(blueprint) = state.registry.blueprint(type_id) else {
-        return false;
-    };
-    let undead = blueprint.capabilities.inverted_healing;
-    let spider = matches!(
-        blueprint.name.as_str(),
-        "minecraft:spider" | "minecraft:cave_spider"
-    );
-    match effect {
-        EffectId::Regeneration => undead,
-        EffectId::Poison => undead || spider,
-        _ => false,
     }
 }
 pub(crate) fn arrow_effects(

@@ -6,9 +6,10 @@ title = "Lingering potions ignore custom effects and potion impact color ignores
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-CUSTOM-PAYLOAD"
 regression = ["cargo:mc-core:projectiles::payloads::tests::lingering_custom_payload_and_impact_color_are_preserved"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "LINGERING-FRIENDLY-PVP"
@@ -38,9 +39,10 @@ title = "Species-specific duration-effect immunity is absent: splash Regeneratio
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-MOB-EFFECT-IMMUNITY"
-regression = ["cargo:mc-core:projectiles::payloads::tests::splash_regeneration_does_not_apply_to_undead", "cargo:mc-core:projectiles::payloads::tests::splash_poison_skips_undead_and_spiders_but_affects_cow"]
+regression = ["cargo:mc-core:projectiles::payloads::tests::splash_regeneration_does_not_apply_to_undead", "cargo:mc-core:projectiles::payloads::tests::splash_poison_skips_undead_and_spiders_but_affects_cow", "cargo:mc-core:effects::tests::effect_command_rejects_poison_and_regeneration_for_undead"]
+failing_first = "reported"
 
 [[bug]]
 id = "PEARL-ENDERMITE-SPAWN"
@@ -92,9 +94,10 @@ title = "Water-bottle impacts omit environmental extinguishing, water-sensitive 
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#WATER-BOTTLE-IMPACT"
-regression = ["cargo:mc-core:projectiles::payloads::tests::splash_water_douses_burning_entity", "cargo:mc-core:projectiles::payloads::tests::water_bottles_damage_endermen_rehydrate_axolotls_and_leave_no_cloud"]
+regression = ["cargo:mc-core:projectiles::payloads::tests::splash_water_douses_burning_entity", "cargo:mc-core:projectiles::payloads::tests::water_bottles_damage_endermen_rehydrate_axolotls_and_leave_no_cloud", "cargo:mc-core:projectiles::flight_tests::splash_water_douses_nearby_fire_and_candle_without_changing_furnace", "cargo:mc-core:projectiles::flight_tests::water_bottles_extinguish_the_hit_campfire"]
+failing_first = "reported"
 
 [[bug]]
 id = "CAULDRON-POWDER-SNOW-BUCKET"
@@ -124,9 +127,10 @@ title = "Powder-snow cauldrons fail to extinguish a burning player and become wa
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAULDRON-CONTACT-EFFECTS"
-regression = []
+regression = ["cargo:mc-core:tick_tests::contact_hazards_tests::burning_player_melts_powder_snow_cauldron_one_level"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "DRIPSTONE-RANDOM-TICK"
@@ -167,9 +171,10 @@ title = "Shooting a dry extinguished campfire with a Flame-bow arrow leaves it u
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAMPFIRE-PROJECTILE-IGNITION"
-regression = []
+regression = ["cargo:mc-core:projectiles::flight_tests::flaming_arrow_relights_dry_but_not_waterlogged_campfire"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "CAMPFIRE-CONTACT-DAMAGE"
@@ -362,9 +367,10 @@ title = "Ordinary splash potions incorrectly affect armor stands: direct Harming
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMOR-STAND-POTION-IMMUNITY"
 regression = ["cargo:mc-core:armor_stand::tests::splash_potion_ignores_stand_but_hits_cow", "cargo:mc-core:projectiles::payloads::tests::splash_harming_and_swiftness_ignore_armor_stand_but_hit_cow"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "ARMOR-STAND-TOOL-WEAR"
@@ -458,9 +464,10 @@ title = "Registered custom foods consume/nourish using their selected ItemFacts 
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CUSTOM-FOOD-CONSUME-EFFECTS"
-regression = []
+regression = ["cargo:mc-core:effects::tests::custom_food_consumption_applies_declared_effect"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "DISPENSER-VEHICLE-PLACEMENT"
@@ -520,7 +527,7 @@ title = "A charged anchor is falsely rejected when the only valid spawn position
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ANCHOR-TOP-RESPAWN"
 regression = ["cargo:mc-core:dimensions::tests::anchor_respawn_can_stand_on_top_when_surrounded"]
 failing_first = "not recorded"
@@ -531,7 +538,7 @@ title = "Using a partially charged anchor with a non-glowstone main hand and glo
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ANCHOR-OFFHAND-CHARGE"
 regression = ["cargo:mc-core:dimensions::tests::anchor_offhand_glowstone_charges_instead_of_exploding"]
 failing_first = "not recorded"
@@ -586,7 +593,7 @@ title = "A non-hostile zombified piglin near a bed incorrectly prevents sleeping
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-MONSTER-ELIGIBILITY"
 regression = ["cargo:mc-core:sleep::tests::peaceful_zombified_piglin_does_not_prevent_sleep"]
 failing_first = "not recorded"
@@ -3101,9 +3108,10 @@ title = "Custom-only and base-plus-custom splash potions fail to apply custom ef
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-CUSTOM-PAYLOAD"
 regression = ["cargo:mc-core:projectiles::payloads::tests::custom_only_splash_applies_custom_effect", "cargo:mc-core:projectiles::payloads::tests::base_plus_custom_splash_applies_both_effects"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "POTION-SPLASH-VERTICAL"
@@ -3111,9 +3119,10 @@ title = "Splash potions affect entities wholly above the permitted vertical volu
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-TARGET-GEOMETRY"
 regression = ["cargo:mc-core:projectiles::payloads::tests::splash_rejects_targets_above_the_vertical_band"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "WATER-SPLASH-ENTITY"
@@ -3121,9 +3130,10 @@ title = "Splash water bottles do not extinguish burning entities."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#WATER-BOTTLE-IMPACT"
 regression = ["cargo:mc-core:projectiles::payloads::tests::splash_water_douses_burning_entity"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "CAULDRON-WATER-LAVA-CONTACT"
@@ -3131,9 +3141,10 @@ title = "Water and lava cauldrons fail to extinguish or burn a player inside the
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAULDRON-CONTACT-EFFECTS"
 regression = ["cargo:mc-core:tick_tests::contact_hazards_tests::burning_player_inside_water_cauldron_is_extinguished_for_one_level", "cargo:mc-core:tick_tests::contact_hazards_tests::lava_cauldron_burns_the_entity_standing_inside"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "COMPOSTER-FLOWER-GRASS"
@@ -3151,9 +3162,10 @@ title = "A harmless small slime near a bed incorrectly prevents sleeping."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-MONSTER-ELIGIBILITY"
 regression = ["cargo:mc-core:sleep::tests::small_slime_does_not_block_sleep"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "BED-OBSTRUCTED-TOP-ONLY"
@@ -3161,9 +3173,10 @@ title = "A bed with an obstructing ceiling over a bed half may incorrectly admit
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "ReviewAcceptanceOpus first-promotion-batch; verify vanilla javap"
-regression = []
+regression = ["cargo:mc-core:sleep::tests::obstruction_above_either_bed_half_prevents_sleep_with_clear_exits"]
+failing_first = "reported"
 
 [[bug]]
 id = "COMMAND-FORK-LIMIT"

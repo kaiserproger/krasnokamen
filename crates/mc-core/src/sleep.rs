@@ -184,12 +184,18 @@ pub(crate) fn use_bed(
             say(state, connection, "You are too far away");
             return true;
         }
-        // Vanilla refuses entry when no wake-up space exists, instead of
-        // leaving the player sealed inside on exit.
-        if bed_exit(state, head, yaw).is_none() {
-            say(state, connection, "This bed is obstructed");
-            return true;
-        }
+    }
+    // Vanilla tests the block above each bed half for suffocation, not
+    // whether a wake-up position exists around the bed.
+    if [clicked, other].into_iter().any(|half| {
+        state
+            .world
+            .block_at(half.x, half.y + 1, half.z)
+            .and_then(|id| state.registry.light.suffocating(id))
+            != Some(false)
+    }) {
+        say(state, connection, "This bed is obstructed");
+        return true;
     }
     if let Some(player) = state.players.get_mut(&entity) {
         player.respawn_point = Some([head.x, head.y, head.z]);

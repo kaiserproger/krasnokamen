@@ -2261,6 +2261,7 @@ fn water_bottles_damage_endermen_rehydrate_axolotls_and_leave_no_cloud() {
     for kind in [ProjectileKind::Potion, ProjectileKind::LingeringPotion] {
         let (mut state, _) = fixture();
         let enderman = mob(&mut state, "minecraft:enderman", [1.0, 201.0, 0.0]);
+        let outside = mob(&mut state, "minecraft:enderman", [3.5, 201.0, 3.5]);
         let axolotl = mob(&mut state, "minecraft:axolotl", [2.0, 201.0, 0.0]);
         let slot = state.entities.slot_of(axolotl).unwrap();
         state.entities.body_mut(slot).air_supply = 1;
@@ -2280,7 +2281,11 @@ fn water_bottles_damage_endermen_rehydrate_axolotls_and_leave_no_cloud() {
             None,
             [0.0, 201.0, 0.0]
         ));
-        assert!(!damage_to(&intents, enderman).is_empty());
+        assert_eq!(
+            damage_to(&intents, enderman),
+            vec![(1.0, DamageKind::IndirectMagic)]
+        );
+        assert!(damage_to(&intents, outside).is_empty());
         assert_eq!(
             state
                 .entities

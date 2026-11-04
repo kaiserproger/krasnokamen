@@ -449,6 +449,21 @@ fn small_slime_does_not_block_sleep() {
 }
 
 #[test]
+fn obstruction_above_either_bed_half_prevents_sleep_with_clear_exits() {
+    for head in [false, true] {
+        let mut rig = Rig::new();
+        rig.state.day_time = NIGHT;
+        let half = if head { rig.head } else { rig.foot };
+        let stone = rig.state.registry.states.stone;
+        rig.state.world.set_block(half.x, half.y + 1, half.z, stone);
+        rig.state.world.fold_overlay();
+        let drains = rig.use_bed(1);
+        assert!(said(&drains, "This bed is obstructed"));
+        assert!(rig.state.sleepers.is_empty());
+    }
+}
+
+#[test]
 fn sealed_bed_refuses_entry_as_obstructed() {
     // BED-OBSTRUCTED-ENTRY: no wake-up space means refused entry.
     let mut rig = Rig::new();

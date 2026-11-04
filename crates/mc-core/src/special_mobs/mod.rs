@@ -508,6 +508,13 @@ pub(crate) fn damage(
     });
 }
 pub(crate) fn effect(state: &mut TickState, target: EntityId, value: ActiveEffect) {
+    if state
+        .entities
+        .slot_of(target)
+        .is_some_and(|slot| !crate::effects::accepts_effect(state, slot, value.id))
+    {
+        return;
+    }
     if let Some(player) = state.players.get_mut(&target) {
         let changes = player.give_effect(value);
         if let Some(conn) = state.connections.entity_connection(target) {

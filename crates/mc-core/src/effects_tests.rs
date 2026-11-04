@@ -25,6 +25,7 @@ impl Data {
             "glass_bottle",
             "suspicious_stew",
             "bowl",
+            "bread",
         ];
         let items = mc_data::items::ItemRegistry::from_report(
             &names
@@ -92,6 +93,54 @@ fn consume(player: &mut PlayerState, data: &Data, stack: ItemStack) -> Vec<Playe
     }
     changes
 }
+#[test]
+fn custom_food_consumption_applies_declared_effect() {
+    use mc_data::food::{ConsumeEffect, ConsumeStatusEffect, FoodEntry};
+    use mc_data::item_components::{CustomItemDefinition, ItemFacts};
+
+    let mut data = Data::new();
+    data.facts = std::mem::take(&mut data.facts)
+        .with_custom_items(
+            [CustomItemDefinition {
+                id: id("example:speed_bread"),
+                carrier: id("minecraft:bread"),
+                name: "Speed bread".into(),
+                crafting_ingredient: None,
+                facts: ItemFacts {
+                    max_stack_size: Some(64),
+                    food: Some(FoodEntry {
+                        food: 5,
+                        saturation: 6.0,
+                        can_always_eat: true,
+                    }),
+                    use_duration_ticks: Some(32),
+                    consume_effects: vec![ConsumeEffect::ApplyEffects {
+                        effects: vec![ConsumeStatusEffect {
+                            id: id("minecraft:speed"),
+                            duration: 600,
+                            amplifier: 0,
+                            ambient: false,
+                            show_particles: true,
+                            show_icon: Some(true),
+                        }],
+                        probability: 1.0,
+                    }],
+                    ..Default::default()
+                },
+            }],
+            &data.items,
+        )
+        .unwrap();
+    let mut stack = data.stack("minecraft:bread");
+    stack.item_model = Some(std::sync::Arc::new(id("example:speed_bread")));
+    let mut player = PlayerState::new(ConnectionId(1), GameMode::Survival);
+    player.vitals.food = 10;
+    let changes = consume(&mut player, &data, stack);
+    assert_eq!(player.vitals.food, 15);
+    assert!(player.inventory.slots[0].is_empty());
+    assert!(changes.iter().any(|change| matches!(change, PlayerChange::MobEffect { effect, .. } if effect.id == EffectId::Speed && effect.duration == 600)));
+}
+
 #[test]
 fn golden_apple_gives_absorption_and_regeneration_and_heals() {
     let data = Data::new();
@@ -336,6 +385,64 @@ fn effect_command_vanilla_syntax_permission_and_tick_execution() {
     command(&mut state, "effect clear @e[type=cow]", 2);
     assert!(state.entities.row(slot).active_effects.entries.is_empty());
 }
+#[test]
+fn effect_command_rejects_poison_and_regeneration_for_undead() {
+    let registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
+    let world = crate::horde_bench::flat_world(&registry);
+    let mut state = crate::tick::TickState::new(registry, world, 1, 4096);
+    crate::tick::run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(1),
+            uuid: uuid::Uuid::new_v4(),
+            name: "Alice".into(),
+            permission_level: 0,
+        }],
+    );
+    let player = state.connections.entity_of(ConnectionId(1)).unwrap();
+    let at = state.entities.pos(state.entities.slot_of(player).unwrap());
+    state.world.ensure_blocking(&state.desired_chunks());
+    let zombie_type = state
+        .registry
+        .entity_types
+        .id_of(&id("minecraft:zombie"))
+        .unwrap();
+    let zombie = state.spawn_mob(zombie_type, [at[0] + 2.0, at[1], at[2]], 10.0);
+    for effect in ["regeneration", "poison"] {
+        let (_, outbox, _) = crate::tick::run_tick(
+            &mut state,
+            &[PlayerInput::Command {
+                connection: ConnectionId(1),
+                command: format!("effect give @e[type=minecraft:zombie] {effect} 10"),
+                permission_level: 2,
+            }],
+        );
+        assert!(outbox.iter().flat_map(|(_, changes)| changes).any(|change|
+            matches!(change, PlayerChange::Chat { message } if message == "No entities were affected")));
+        let slot = state.entities.slot_of(zombie).unwrap();
+        assert!(
+            state.entities.row(slot).active_effects.entries.is_empty(),
+            "{effect} must be rejected"
+        );
+        assert_eq!(state.entities.row(slot).health, 10.0);
+    }
+    let slot = state.entities.slot_of(zombie).unwrap();
+    state
+        .entities
+        .row_mut(slot)
+        .active_effects
+        .add(ActiveEffect::new(EffectId::Regeneration, 100, 0));
+    state
+        .entities
+        .row_mut(slot)
+        .active_effects
+        .add(ActiveEffect::new(EffectId::Poison, 100, 0));
+    crate::tick::run_tick(&mut state, &[]);
+    let slot = state.entities.slot_of(zombie).unwrap();
+    assert!(state.entities.row(slot).active_effects.entries.is_empty());
+    assert_eq!(state.entities.row(slot).health, 10.0);
+}
+
 #[test]
 fn haste_fatigue_melee_and_safe_fall_modifiers() {
     let mut effects = ActiveEffects::default();
