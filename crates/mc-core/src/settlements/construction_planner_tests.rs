@@ -1551,5 +1551,232 @@ fn owner_order_does_not_preempt_after_a_completed_clear_stage() {
     );
 }
 
+#[test]
+fn sole_resource_worker_changes_to_the_missing_housing_material_through_ticks() {
+    use crate::settlements::allocator::tests::block;
+    let (mut state, id, worker) = fixture();
+    let enclosed = worker;
+    state.entities.set_pos(enclosed, [14.5, 201.0, 1.5]);
+    state
+        .entities
+        .row_mut(enclosed)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::None;
+    for x in 13..=15 {
+        for z in 0..=2 {
+            for y in 201..=204 {
+                if x != 14 || z != 1 || y == 204 {
+                    state.world.set_block(x, y, z, state.registry.states.stone);
+                }
+            }
+        }
+    }
+    let worker = super::super::allocator::tests::villager(&mut state, [1.5, 201.0, 2.5]);
+    let entity = state.entities.body(worker).id;
+    super::super::bind(&mut state, id, entity).unwrap();
+    fund(&mut state, "house", 1);
+    let cobble = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:cobblestone").unwrap())
+        .unwrap();
+    for stack in &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots {
+        if stack.item_id == cobble {
+            stack.count = 24;
+        }
+    }
+    for x in 5..=14 {
+        for z in 5..=14 {
+            for y in 190..201 {
+                state.world.set_block(x, y, z, state.registry.states.stone);
+            }
+        }
+    }
+    state
+        .world
+        .set_block(3, 200, 8, block(&state, "minecraft:dirt", &[]));
+    for y in 201..205 {
+        state
+            .world
+            .set_block(3, y, 8, block(&state, "minecraft:oak_log", &[]));
+    }
+    state
+        .world
+        .set_block(3, 205, 8, block(&state, "minecraft:oak_leaves", &[]));
+    state.world.fold_overlay();
+    let camp = buildings::certify_zone(
+        &mut state,
+        id,
+        BuildingKind::LumberCamp,
+        ScriptWorldBounds::new([2, 200, 8], [3, 206, 8]).unwrap(),
+        [2, 201, 8],
+    )
+    .unwrap();
+    buildings::certify_zone(
+        &mut state,
+        id,
+        BuildingKind::Mine,
+        ScriptWorldBounds::new([5, 190, 5], [14, 202, 14]).unwrap(),
+        [6, 201, 6],
+    )
+    .unwrap();
+    let v = state.entities.row_mut(worker).villager.as_mut().unwrap();
+    v.data.profession = Profession::Lumberjack;
+    v.job_site = Some(crate::boundary::BlockPos { x: 2, y: 201, z: 8 });
+    v.job_site_dimension = state.dimension.name().into();
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .buildings
+            .contains_key(&camp)
+    );
+    assert!(matches!(
+        request_build(&mut state, id, "house").unwrap(),
+        OrderOutcome::Queued { .. }
+    ));
+    let mut mined = false;
+    for _ in 0..6000 {
+        let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+        mined |= state
+            .entities
+            .row(worker)
+            .villager
+            .as_ref()
+            .unwrap()
+            .data
+            .profession
+            == Profession::Miner
+            && !output.changes.blocks.is_empty();
+        let delivered = state.block_entities[&(1, 201, 1)]
+            .slots
+            .iter()
+            .filter(|stack| stack.item_id == cobble)
+            .map(|stack| stack.count)
+            .sum::<i32>()
+            >= 43;
+        if mined && (delivered || state.settlements.get(id).unwrap().project.is_some()) {
+            assert_eq!(
+                state
+                    .entities
+                    .row(enclosed)
+                    .villager
+                    .as_ref()
+                    .unwrap()
+                    .data
+                    .profession,
+                Profession::None,
+                "a disconnected adult must not become a phantom miner and exclude the reachable gatherer"
+            );
+            return;
+        }
+    }
+    panic!(
+        "the sole reachable gatherer must mine and deliver the missing stone: mined={mined}, pos={:?}, worker={:?}, stock={:?}",
+        state.entities.pos(worker),
+        state.entities.row(worker).villager,
+        state.block_entities[&(1, 201, 1)].slots,
+    );
+}
+
+#[test]
+fn funded_house_keeps_an_ordinary_recruit_in_the_builder_career() {
+    for profession in [Profession::None, Profession::Mason] {
+        let (mut state, id, worker) = fixture();
+        open_plan(&mut state);
+        fund(&mut state, "house", 1);
+        state
+            .entities
+            .row_mut(worker)
+            .villager
+            .as_mut()
+            .unwrap()
+            .data
+            .profession = profession;
+        request_build(&mut state, id, "house").unwrap();
+        state.tick = PLAN_CADENCE;
+        tick(&mut state);
+        assert_eq!(
+            state
+                .settlements
+                .get(id)
+                .unwrap()
+                .project
+                .as_ref()
+                .unwrap()
+                .borrowed_builder,
+            None,
+            "ordinary recruits take the existing builder career; only resource gatherers are borrowed"
+        );
+        complete(&mut state, id, worker);
+        assert_eq!(
+            state
+                .entities
+                .row(worker)
+                .villager
+                .as_ref()
+                .unwrap()
+                .data
+                .profession,
+            Profession::Builder,
+            "finishing an authored building must not erase an ordinary recruit's builder career"
+        );
+        assert!(!state.plugin_block_writes.is_empty());
+    }
+}
+
+#[test]
+fn funded_house_can_borrow_the_only_untraded_gatherer_as_builder() {
+    let (mut state, id, worker) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "house", 1);
+    state
+        .entities
+        .row_mut(worker)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::Lumberjack;
+    request_build(&mut state, id, "house").unwrap();
+    state.tick = PLAN_CADENCE;
+    tick(&mut state);
+    assert_eq!(
+        state
+            .entities
+            .row(worker)
+            .villager
+            .as_ref()
+            .unwrap()
+            .data
+            .profession,
+        Profession::Builder
+    );
+    let encoded = serde_json::to_vec(state.settlements.get(id).unwrap()).unwrap();
+    let restored: SettlementRecord = serde_json::from_slice(&encoded).unwrap();
+    assert_eq!(
+        restored.project.as_ref().unwrap().borrowed_builder,
+        Some((state.entities.row(worker).uuid, Profession::Lumberjack))
+    );
+    *state.settlements.get_mut(id).unwrap() = restored;
+    complete(&mut state, id, worker);
+    assert_eq!(
+        state
+            .entities
+            .row(worker)
+            .villager
+            .as_ref()
+            .unwrap()
+            .data
+            .profession,
+        Profession::Lumberjack,
+        "an ordered house must release its borrowed gatherer, not permanently strand extraction"
+    );
+}
+
 #[path = "construction_delivery_tests.rs"]
 mod delivery_ownership;

@@ -1657,3 +1657,66 @@ fn seed_100_natural_miner_deposits_cobblestone() {
     }
     panic!("seed 100 miner did not deposit cobblestone");
 }
+
+#[test]
+fn busy_gatherer_can_prove_the_other_natural_source() {
+    use crate::villager::VillagerProfession;
+    let (mut state, chunks) = fixture(
+        vec![BELL],
+        vec![(
+            generated_claim(
+                "minecraft:village/plains/houses/plains_house_1",
+                [0, 201, 0],
+            ),
+            [8.5, 202.0, 6.5],
+            "none".into(),
+        )],
+        vec![[10, 8]],
+    );
+    adopt(&mut state, &chunks);
+    let id = state.settlements.records().next().unwrap().id;
+    super::super::buildings::certify_zone(
+        &mut state,
+        id,
+        BuildingKind::LumberCamp,
+        ScriptWorldBounds::new([10, 201, 8], [11, 207, 8]).unwrap(),
+        [11, 202, 8],
+    )
+    .unwrap();
+    let slot = state
+        .entities
+        .slots()
+        .find(|&slot| state.entities.row(slot).villager.is_some())
+        .unwrap();
+    let uuid = state.entities.row(slot).uuid;
+    let v = state.entities.row_mut(slot).villager.as_mut().unwrap();
+    v.data.profession = VillagerProfession::Lumberjack;
+    v.job_site = Some(BlockPos {
+        x: 11,
+        y: 202,
+        z: 8,
+    });
+    v.job_site_dimension = state.dimension.name().into();
+    let mut candidates = VecDeque::from([NaturalCandidate {
+        kind: BuildingKind::Mine,
+        bounds: ScriptWorldBounds::new([-14, 188, -10], [-2, 203, 4]).unwrap(),
+        entrance: [-14, 202, -9],
+        queued_at: 0,
+        stock_proved: false,
+        after_resident: None,
+    }]);
+    for _ in 0..8 {
+        state.tick += 20;
+        state.tick_budget.reset(state.tick);
+        prove_natural(
+            &mut state,
+            id,
+            &[uuid].into_iter().collect(),
+            &mut candidates,
+        );
+    }
+    assert!(
+        has_kind(&state, id, BuildingKind::Mine),
+        "already staffing the grove must not make the only adult disappear from natural mine admission"
+    );
+}

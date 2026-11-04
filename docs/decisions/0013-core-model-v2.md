@@ -481,6 +481,25 @@ building checks; natural level-one lumber/mining zones bootstrap real material
 production without conjuring a workstation or stock. Subsequent construction
 consumes real storage/carry items, including recipe-derived materials.
 
+With too few employable residents to staff both extraction jobs, the allocator
+may move one untraded, unreserved gatherer to the first missing raw source of
+the current whole bill. It does not add stock or claim an unreachable job.
+Natural source route proofs also admit an already employed gatherer, rather
+than requiring a second unemployed adult. A funded project may borrow such a
+worker as its last builder candidate. The native project records the borrowed
+identity and original profession; completion, preemption or replacement restores
+that profession, including for owner-ordered work, without releasing a permanent
+builder who was not borrowed.
+Ordinary recruits retain the authored Builder career after completing a building;
+only miners and lumberjacks are borrowed from their existing extraction careers.
+
+Bound adults with a reachable unclaimed baby-capable bed may walk to settlement
+storage and withdraw unreserved food through the native inventory fence, enough
+for twelve personal breeding food points. Extraction workers retain that ration
+in addition to production holds. Birth still requires two willing parents and
+an actually reachable free bed; stored food is neither a remote feeding grant
+nor proof of population growth.
+
 The same bounded planner handles autonomous and owned settlements. Repository
 blueprints place actual blocks and consume actual settlement-container items;
 finished geometry goes through the existing building certification authority.

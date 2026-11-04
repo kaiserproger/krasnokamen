@@ -168,6 +168,7 @@ pub(crate) fn start(
             building,
             structure: String::new(),
             ordered: true,
+            borrowed_builder: None,
         },
         "oak",
         0,

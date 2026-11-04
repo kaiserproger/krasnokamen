@@ -110,8 +110,25 @@ pub(super) fn deposit(
     slot: EntitySlot,
     v: &mut VillagerState,
 ) -> Option<BlockPos> {
-    let protected = crate::settlements::economy::protected_carry(state, slot, v);
+    let protected = deposit_protected(state, slot, v);
     deposit_with_protected(state, slot, v, protected)
+}
+
+fn deposit_protected(state: &TickState, slot: EntitySlot, v: &VillagerState) -> [u32; 8] {
+    let mut protected = crate::settlements::economy::protected_carry(state, slot, v);
+    super::brain::retain_food(state, v, &mut protected);
+    protected
+}
+
+pub(super) fn depositable(state: &TickState, slot: EntitySlot, v: &VillagerState) -> bool {
+    v.inventory
+        .iter()
+        .zip(deposit_protected(state, slot, v))
+        .any(|(stack, held)| {
+            stack
+                .as_ref()
+                .is_some_and(|stack| stack.count > held as i32)
+        })
 }
 
 pub(super) fn deposit_with_protected(
@@ -786,7 +803,7 @@ pub(super) fn work(
     }
     if v.mining_progress.returning {
         let target = deposit(state, slot, v);
-        v.mining_progress.returning = v.inventory.iter().any(Option::is_some);
+        v.mining_progress.returning = depositable(state, slot, v);
         return target;
     }
     if !working
@@ -800,7 +817,7 @@ pub(super) fn work(
     let Some(base) = pass_entrance(bounds, entrance, pass) else {
         // Every flight down to the bottom of the zone has been quarried; what
         // the miner still carries goes to storage instead of staying with it.
-        v.mining_progress.returning = v.inventory.iter().any(Option::is_some);
+        v.mining_progress.returning = depositable(state, slot, v);
         return deposit(state, slot, v);
     };
     if staircase(bounds, stair_base(bounds, base, pass), level).is_none() {

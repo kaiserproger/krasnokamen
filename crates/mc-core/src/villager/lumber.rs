@@ -356,8 +356,15 @@ pub(super) fn work(
     // Owned binding snapshot: the borrow of `state` ends before `v` mutates.
     let bound = buildings::building_for_job(state, v)
         .filter(|building| building.kind == buildings::BuildingKind::LumberCamp)
-        .map(|building| (building.id.0, building.revision, building.natural_zone));
-    let Some((id, revision, natural)) = bound else {
+        .map(|building| {
+            (
+                building.id.0,
+                building.revision,
+                building.natural_zone,
+                building.bounds.min,
+            )
+        });
+    let Some((id, revision, natural, source)) = bound else {
         // Unbound or rebound away from the camp: never route to a stale tree.
         drop_target(v);
         return None;
@@ -370,15 +377,14 @@ pub(super) fn work(
         };
         if natural {
             let record = state.settlements.get(v.settlement?)?;
-            let entrance = v.job_site?;
-            // The certified grove is already a known resource source. Start
-            // the same bounded radius sweep there, not at an unloaded corner.
+            // Start at the proved grove footprint, including a trunk west of
+            // its open work point, before advancing through the radius sweep.
             let radius = i64::from(record.radius);
             let side = radius * 2 + 1;
             let x =
-                (i64::from(entrance.x) - i64::from(record.anchor[0]) + radius).clamp(0, side - 1);
+                (i64::from(source[0]) - i64::from(record.anchor[0]) + radius).clamp(0, side - 1);
             let z =
-                (i64::from(entrance.z) - i64::from(record.anchor[2]) + radius).clamp(0, side - 1);
+                (i64::from(source[2]) - i64::from(record.anchor[2]) + radius).clamp(0, side - 1);
             v.lumber_progress.cursor = (x * side + z) as u32;
         }
     }
@@ -401,7 +407,7 @@ pub(super) fn work(
     if v.lumber_progress.returning {
         let target = mining::deposit(state, slot, v);
         v.lumber_progress.stalled_since = 0;
-        v.lumber_progress.returning = v.inventory.iter().any(Option::is_some);
+        v.lumber_progress.returning = mining::depositable(state, slot, v);
         return target;
     }
     if !working

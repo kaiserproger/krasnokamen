@@ -13,6 +13,7 @@ use mc_script::{ScriptStructureState, ScriptWorldBounds};
 #[path = "construction_availability.rs"]
 mod availability;
 pub(crate) use availability::SourceReason;
+pub(crate) use availability::gatherer_for_item;
 
 #[path = "construction_furnace.rs"]
 pub(crate) mod furnace;
@@ -35,6 +36,8 @@ pub struct Project {
     /// unordered (autonomous) project that placed nothing yields to an order.
     #[serde(default)]
     pub ordered: bool,
+    /// Temporary builder identity and original profession, restored on release.
+    pub borrowed_builder: Option<(uuid::Uuid, Profession)>,
 }
 /// The sole pending owner request, stored in the settlement post-image.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -310,16 +313,19 @@ fn claim_slot(state: &TickState, id: SettlementId) -> Result<bool, String> {
 /// Cancel the untouched autonomous project: block stock and builder carry
 /// stay where they are, nothing is debited or placed.
 fn preempt(state: &mut TickState, id: SettlementId) -> Result<(), String> {
-    let Some(handle) = state
+    let Some((handle, borrowed)) = state
         .settlements
         .get(id)
         .and_then(|record| record.project.as_ref())
-        .map(|project| project.structure.clone())
+        .map(|project| (project.structure.clone(), project.borrowed_builder))
     else {
         return Ok(());
     };
     executor::cancel_structure(state, id, &handle)
         .map_err(|_| "Construction admission failed.".to_string())?;
+    if borrowed.is_some() {
+        release_builder(state, id, borrowed);
+    }
     let record = state.settlements.get_mut(id).expect("preempted settlement");
     record.project = None;
     record.revision = record.revision.saturating_add(1);
@@ -683,6 +689,7 @@ fn start_upgrade(
         building: Some(building.id),
         structure: String::new(),
         ordered: true,
+        borrowed_builder: None,
     };
     if preempting {
         preempt(state, id)?;
@@ -1237,6 +1244,7 @@ fn upgrade_project(
                 building: Some(building.id),
                 structure: String::new(),
                 ordered: false,
+                borrowed_builder: None,
             },
             species,
             color,
@@ -1317,6 +1325,7 @@ fn site_project<'a>(
                 building: None,
                 structure: String::new(),
                 ordered: false,
+                borrowed_builder: None,
             };
             if let Some((bounds, mut cells)) = planned_cells(state, &project, "oak")
                 && let Some(bill) = cell_bill(state, &cells)
@@ -1357,6 +1366,7 @@ fn street_site(
         building: None,
         structure: String::new(),
         ordered: false,
+        borrowed_builder: None,
     };
     for tile in &served {
         if let Some(work) = network.road_work(tile)
@@ -1561,6 +1571,12 @@ fn release_trapped_builder(state: &mut TickState, id: SettlementId) -> bool {
     {
         return true;
     }
+    let borrowed = state
+        .settlements
+        .get(id)
+        .and_then(|record| record.project.as_ref())
+        .and_then(|project| project.borrowed_builder)
+        .filter(|(uuid, _)| *uuid == state.entities.row(slot).uuid);
     let released = detach(
         state
             .entities
@@ -1569,6 +1585,19 @@ fn release_trapped_builder(state: &mut TickState, id: SettlementId) -> bool {
             .as_mut()
             .expect("builder incumbent"),
     );
+    if released && let Some((_, profession)) = borrowed {
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .data
+            .profession = profession;
+        let record = state.settlements.get_mut(id).unwrap();
+        record.project.as_mut().unwrap().borrowed_builder = None;
+        record.revision = record.revision.saturating_add(1);
+    }
     crate::villager::sync_appearance(state, slot);
     !released
 }
@@ -1606,15 +1635,18 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
                     if !super::allocator::traded(v)
                         && !matches!(
                             profession,
-                            Profession::Miner
+                            Profession::Farmer
+                                | Profession::Miner
                                 | Profession::Lumberjack
-                                | Profession::Farmer
                                 | Profession::Shepherd
                                 | Profession::Soldier
                                 | Profession::Nitwit
                         ) =>
                 {
                     Some(2)
+                }
+                Profession::Miner | Profession::Lumberjack if !super::allocator::traded(v) => {
+                    Some(3)
                 }
                 _ => None,
             };
@@ -1635,6 +1667,29 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
     else {
         return;
     };
+    // Ordinary recruits keep the authored builder career. Only extraction
+    // workers are loaned to construction and restored on completion.
+    let profession = state
+        .entities
+        .row(slot)
+        .villager
+        .as_ref()
+        .unwrap()
+        .data
+        .profession;
+    let borrowed = match profession {
+        Profession::Miner | Profession::Lumberjack => {
+            Some((state.entities.row(slot).uuid, profession))
+        }
+        _ => None,
+    };
+    if let Some(record) = state.settlements.get_mut(id)
+        && let Some(project) = record.project.as_mut()
+        && project.borrowed_builder != borrowed
+    {
+        project.borrowed_builder = borrowed;
+        record.revision = record.revision.saturating_add(1);
+    }
     let v = state
         .entities
         .row_mut(slot)
@@ -1684,6 +1739,8 @@ pub(crate) fn tick(state: &mut TickState) {
             .is_some_and(|record| record.project.is_some())
         {
             assign_builder(state, id);
+        } else if let Some(profession) = needed_gatherer(state, id) {
+            super::allocator::staff_gatherer(state, id, profession);
         }
     }
     if let Some(id) = selected(state, state.tick / 4)
@@ -1693,6 +1750,29 @@ pub(crate) fn tick(state: &mut TickState) {
             .is_some_and(|record| record.project.is_some())
     {
         crate::villager::building::tick(state, id);
+    }
+}
+
+fn release_builder(
+    state: &mut TickState,
+    id: SettlementId,
+    borrowed: Option<(uuid::Uuid, Profession)>,
+) {
+    let builder = residents(state, id).find(|slot| {
+        let row = state.entities.row(*slot);
+        borrowed.is_none_or(|(uuid, _)| row.uuid == uuid)
+            && row.villager.as_ref().is_some_and(|v| {
+                v.settlement == Some(id) && v.data.profession == Profession::Builder
+            })
+    });
+    if let Some(slot) = builder
+        && let Some(v) = state.entities.row_mut(slot).villager.as_mut()
+        && detach(v)
+    {
+        if let Some((_, profession)) = borrowed {
+            v.data.profession = profession;
+        }
+        crate::villager::sync_appearance(state, slot);
     }
 }
 
@@ -1710,24 +1790,8 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
         return false;
     }
     if project.blueprint == furnace::NAME || layout::infra(&project.blueprint) {
-        // Workstations and street work are temporary employment. Release
-        // their builder so a small town can staff extraction and shearing.
-        let builder = residents(state, id).find(|slot| {
-            state
-                .entities
-                .row(*slot)
-                .villager
-                .as_ref()
-                .is_some_and(|v| {
-                    v.settlement == Some(id) && v.data.profession == Profession::Builder
-                })
-        });
-        if let Some(slot) = builder
-            && let Some(v) = state.entities.row_mut(slot).villager.as_mut()
-            && detach(v)
-        {
-            crate::villager::sync_appearance(state, slot);
-        }
+        // Infrastructure work is temporary employment.
+        release_builder(state, id, project.borrowed_builder);
         let record = state.settlements.get_mut(id).expect("finished settlement");
         if project.blueprint == furnace::NAME {
             record.furnace_workstation = Some(project.structure);
@@ -1760,6 +1824,9 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
     let record = state.settlements.get_mut(id).expect("certified settlement");
     record.project = None;
     record.revision = record.revision.saturating_add(1);
+    if project.borrowed_builder.is_some() {
+        release_builder(state, id, project.borrowed_builder);
+    }
     true
 }
 
@@ -1777,6 +1844,33 @@ pub(crate) struct WaitingNeed {
     pub(crate) total: u64,
     pub(crate) source_item: Option<String>,
     pub(crate) no_source: Option<SourceReason>,
+}
+
+/// Only one real bill drives gathering: an owner order, otherwise the first
+/// autonomous candidate. The shared proof consumes virtual stock once across
+/// the whole bill, so intermediate planks cannot also pay for raw-log cells.
+pub(crate) fn needed_gatherer(state: &TickState, id: SettlementId) -> Option<Profession> {
+    let record = state.settlements.get(id)?;
+    if record.project.is_some() {
+        return None;
+    }
+    let images = executor::source_images(state, id);
+    let (name, level) = if let Some(order) = &record.pending_order {
+        (order.blueprint.as_str(), order.level)
+    } else {
+        let kind = candidate_kinds(state, record, &images).next()?;
+        (
+            blueprints::all(&state.registry)
+                .iter()
+                .find(|blueprint| blueprint.kind == kind)?
+                .id
+                .as_str(),
+            1,
+        )
+    };
+    let level = blueprints::get(&state.registry, name)?.level(level)?;
+    let bill = selected_bill(state, id, &level.materials, &images)?;
+    super::construction_crafting::needed_gatherer(state, &bill, &images)
 }
 
 /// Current bounded construction target, before subtracting the iron pipeline.

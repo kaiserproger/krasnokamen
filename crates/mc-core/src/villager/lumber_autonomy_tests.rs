@@ -167,3 +167,50 @@ fn lumberjack_keeps_reachable_tree_when_brain_path_budget_is_denied() {
     }
     panic!("the retained source must be harvested when the path allowance returns");
 }
+
+#[test]
+fn natural_grove_worker_starts_with_the_certified_tree_behind_its_entrance() {
+    let (mut state, slot, mut resident) = mining_tests::fixture(BuildingKind::LumberCamp);
+    let settlement = resident.settlement.unwrap();
+    state.entities.set_pos(slot, [2.5, 201.0, 3.5]);
+    // Match seed 24: the open work point is east of the actual trunk.
+    // A forward radius sweep from that work point skips the proved source.
+    tree(&mut state, 9, 201, 9);
+    tree(&mut state, 12, 201, 12);
+    let camp = state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .buildings
+        .values_mut()
+        .find(|building| building.kind == BuildingKind::LumberCamp)
+        .unwrap();
+    camp.natural_zone = true;
+    camp.bounds = mc_script::ScriptWorldBounds::new([9, 200, 9], [10, 206, 9]).unwrap();
+    camp.work_points = vec![[10, 201, 9]];
+    resident.settlement = None;
+    resident.job_site = None;
+    resident.data.profession = VillagerProfession::None;
+    state.entities.row_mut(slot).villager = Some(resident);
+    let id = state.entities.body(slot).id;
+    crate::settlements::bind(&mut state, settlement, id).unwrap();
+    state.world.fold_overlay();
+    for _ in 0..240 {
+        state.tick_budget.reset(state.tick);
+        let mut changes = ChangeSet::default();
+        crate::settlements::allocator::tick(&mut state, &mut changes);
+        brain::tick(&mut state, &mut changes);
+        state.tick += 1;
+        let v = state.entities.row(slot).villager.as_ref().unwrap();
+        if v.lumber_progress.has_target {
+            assert_eq!(v.data.profession, VillagerProfession::Lumberjack);
+            assert_eq!(
+                v.lumber_progress.base,
+                [9, 201, 9],
+                "the natural-zone route proof must lead to its actual source, not a later radius tree"
+            );
+            return;
+        }
+    }
+    panic!("the native allocator and brain must acquire the natural grove");
+}

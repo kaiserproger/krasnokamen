@@ -740,16 +740,21 @@ fn prove_natural(
         (body.alive
             && villager.settlement == Some(settlement)
             && villager.age >= 0
-            && villager.job_site.is_none()
-            && villager.data.profession == crate::villager::VillagerProfession::None)
-            .then(|| {
-                (
-                    *uuid,
-                    state.entities.pos(slot),
-                    body.half_width,
-                    body.height,
-                )
-            })
+            && ((villager.job_site.is_none()
+                && villager.data.profession == crate::villager::VillagerProfession::None)
+                || (matches!(
+                    villager.data.profession,
+                    crate::villager::VillagerProfession::Miner
+                        | crate::villager::VillagerProfession::Lumberjack
+                ) && !super::allocator::traded(villager))))
+        .then(|| {
+            (
+                *uuid,
+                state.entities.pos(slot),
+                body.half_width,
+                body.height,
+            )
+        })
     });
     let Some((uuid, start, width, height)) = resident else {
         candidates.pop_front();

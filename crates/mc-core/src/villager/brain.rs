@@ -206,6 +206,14 @@ struct FoodItem {
     farmer_pickup: bool,
 }
 
+fn food_points_for_name(name: &str) -> u8 {
+    match name {
+        "bread" => 4,
+        "carrot" | "potato" | "beetroot" => 1,
+        _ => 0,
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct FoodTable {
     items: std::sync::Weak<mc_data::items::ItemRegistry>,
@@ -221,11 +229,7 @@ impl FoodTable {
         for (_, id) in items.iter() {
             // The reverse map is authoritative, including duplicate protocol IDs.
             let name = items.name_of(id).expect("registered item has a name");
-            let points = match name.path() {
-                "bread" => 4,
-                "carrot" | "potato" | "beetroot" => 1,
-                _ => 0,
-            };
+            let points = food_points_for_name(name.path());
             let farmer_pickup = matches!(name.path(), "wheat" | "wheat_seeds" | "beetroot_seeds");
             if points == 0 && !farmer_pickup {
                 continue;
@@ -750,6 +754,46 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         #[cfg(test)]
         let full_start = std::time::Instant::now();
         let pos = state.entities.pos(slot);
+        let needs_ration = state.entities.row(slot).villager.as_ref().is_some_and(|v| {
+            v.settlement.is_some()
+                && v.home.is_some()
+                && v.age == 0
+                && v.partner.is_none()
+                && !v.sleeping
+                && !merchant_busy
+                && !crate::settlements::economy::worker_reserved(
+                    state,
+                    v.settlement,
+                    state.entities.row(slot).uuid,
+                )
+                && available_food(state, slot, &cache.food, v) < 12
+        });
+        // Reuse the ordinary navigation refresh cadence; while walking to a
+        // storage point keep the destination without rescanning every decision.
+        let resident = state.entities.row(slot).villager.as_ref().unwrap();
+        let storage_route = if needs_ration {
+            resident.navigation_target.filter(|target| {
+                resident.settlement.is_some_and(|settlement| {
+                    crate::settlements::buildings::storage_points(state, settlement)
+                        .contains(&[target.x, target.y, target.z])
+                })
+            })
+        } else {
+            None
+        };
+        let ration_due = needs_ration
+            && (storage_route.is_some_and(|target| {
+                resident.navigation_search_failed || super::mining::near(state, slot, target, 2.5)
+            }) || (storage_route.is_none() && state.tick >= resident.navigation_repath_at));
+        let spare_bed = if ration_due {
+            let mut path = std::mem::take(&mut cache.candidate_path);
+            let found = free_bed(state, &mut cache, slot, &mut path).is_some();
+            path.clear();
+            cache.candidate_path = path;
+            found
+        } else {
+            false
+        };
         let mut v = state.entities.row_mut(slot).villager.take().unwrap();
         let baby = v.age < 0;
         let old_data = v.data;
@@ -1007,6 +1051,18 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                         super::shepherd::work(state, slot, &mut v, changes).unwrap_or(target)
                     }
                 };
+            let food_target = if matches!(v.activity, Activity::Rest | Activity::Panic) {
+                None
+            } else if spare_bed {
+                let food = std::mem::take(&mut cache.food);
+                let target = provision_food(state, &mut cache, slot, &food, &mut v);
+                cache.food = food;
+                target
+            } else if !ration_due {
+                storage_route
+            } else {
+                None
+            };
             let mut short_wander = false;
             let mut exact_target = false;
             let target = if shelter_night {
@@ -1069,6 +1125,8 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 Some(target)
             } else if let Some(partner) = v.partner.and_then(|id| state.entities.slot_of(id)) {
                 Some(at(state.entities.pos(partner)))
+            } else if food_target.is_some() {
+                food_target
             } else if awaiting_profession {
                 job_site
             } else if worker_target.is_some()

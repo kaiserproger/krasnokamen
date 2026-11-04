@@ -24,6 +24,13 @@ const MAX_BATCHES: i32 = 32;
 /// Native container slot cap mirrors the fence ledger (`min(99)`).
 const MAX_SLOT: i32 = 99;
 
+#[derive(Default)]
+struct Work {
+    count: usize,
+    trace: bool,
+    missing_gatherer: Option<crate::villager::VillagerProfession>,
+}
+
 /// Plan post-craft slots in exact image order, guaranteeing one unit of
 /// `item` across the returned images. Returns `None` when stock, recipes or
 /// room cannot cover it. Already-stocked items return unchanged slot clones.
@@ -40,7 +47,7 @@ pub(crate) fn craft(
         return None;
     }
     state.registry.items.name_of(item)?;
-    let mut work = 0usize;
+    let mut work = Work::default();
     if ensure(state, &mut post, &mut work, item, 1, 0) && total(&post, item) >= 1 {
         Some(post)
     } else {
@@ -55,7 +62,7 @@ pub(crate) fn ensure_units(
     item: u32,
     need: i32,
 ) -> bool {
-    let mut work = 0;
+    let mut work = Work::default();
     ensure(state, post, &mut work, item, need, 0)
 }
 
@@ -72,13 +79,31 @@ pub(crate) fn can_fund(
     requirements: &[(u32, u32)],
     images: &[inventory::Image],
 ) -> bool {
+    funding(state, requirements, images, false).0
+}
+
+/// The first missing extraction capability in the same whole-bill proof.
+pub(crate) fn needed_gatherer(
+    state: &TickState,
+    requirements: &[(u32, u32)],
+    images: &[inventory::Image],
+) -> Option<crate::villager::VillagerProfession> {
+    funding(state, requirements, images, true).1
+}
+
+fn funding(
+    state: &TickState,
+    requirements: &[(u32, u32)],
+    images: &[inventory::Image],
+    trace: bool,
+) -> (bool, Option<crate::villager::VillagerProfession>) {
     if requirements
         .iter()
         .map(|(_, count)| u64::from(*count))
         .sum::<u64>()
         > 65_536
     {
-        return false;
+        return (false, None);
     }
     let mut post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
     for (item, count) in requirements {
@@ -87,9 +112,12 @@ pub(crate) fn can_fund(
             // The executor crafts one requested unit per haul. Match that
             // bounded search budget while retaining the shared virtual stock,
             // rather than rejecting a fundable building after many cells.
-            let mut work = 0;
+            let mut work = Work {
+                trace,
+                ..Work::default()
+            };
             if !ensure(state, &mut post, &mut work, *item, 1, 0) {
-                return false;
+                return (false, work.missing_gatherer);
             }
             for stack in post
                 .iter_mut()
@@ -108,7 +136,7 @@ pub(crate) fn can_fund(
             }
         }
     }
-    true
+    (true, None)
 }
 
 /// Simple stock gap for explicit requirements: `(item, still-missing)` in
@@ -286,7 +314,7 @@ fn result_identity(state: &TickState, recipe: &mc_data::recipes::Recipe) -> Opti
 fn ensure(
     state: &TickState,
     post: &mut Vec<Vec<ItemStack>>,
-    work: &mut usize,
+    work: &mut Work,
     target: u32,
     need: i32,
     depth: u8,
@@ -294,13 +322,14 @@ fn ensure(
     if need <= 0 {
         return true;
     }
-    if depth > MAX_DEPTH || *work > MAX_WORK {
+    if depth > MAX_DEPTH || work.count > MAX_WORK {
         return false;
     }
     if total(post, target) >= need {
         return true;
     }
     let deficit = need - total(post, target);
+    let previous_missing = work.missing_gatherer;
     for recipe in state.registry.recipes.iter() {
         if !is_grid(recipe) {
             continue;
@@ -321,14 +350,14 @@ fn ensure(
         let snapshot = post.clone();
         let mut ok = true;
         for _ in 0..batches {
-            *work = work.saturating_add(1);
-            if *work > MAX_WORK {
+            work.count = work.count.saturating_add(1);
+            if work.count > MAX_WORK {
                 ok = false;
                 break;
             }
             for ingredient in &ingredients {
-                *work = work.saturating_add(1);
-                if *work > MAX_WORK {
+                work.count = work.count.saturating_add(1);
+                if work.count > MAX_WORK {
                     ok = false;
                     break;
                 }
@@ -356,12 +385,16 @@ fn ensure(
             }
         }
         if ok && total(post, target) >= need {
+            work.missing_gatherer = previous_missing;
             return true;
         }
         *post = snapshot;
-        if *work > MAX_WORK {
+        if work.count > MAX_WORK {
             return false;
         }
+    }
+    if work.trace && work.missing_gatherer.is_none() {
+        work.missing_gatherer = super::construction::gatherer_for_item(state, target);
     }
     false
 }
@@ -371,16 +404,17 @@ fn ensure(
 fn ensure_ingredient(
     state: &TickState,
     post: &mut Vec<Vec<ItemStack>>,
-    work: &mut usize,
+    work: &mut Work,
     ingredient: &Ingredient,
     depth: u8,
 ) -> bool {
     if take_matching(state, post, ingredient) {
         return true;
     }
-    if depth > MAX_DEPTH || *work > MAX_WORK {
+    if depth > MAX_DEPTH || work.count > MAX_WORK {
         return false;
     }
+    let previous_missing = work.missing_gatherer;
     for recipe in state.registry.recipes.iter() {
         if !is_grid(recipe) {
             continue;
@@ -398,12 +432,25 @@ fn ensure_ingredient(
         }
         let snapshot = post.clone();
         if ensure(state, post, work, id, 1, depth + 1) && take_matching(state, post, ingredient) {
+            work.missing_gatherer = previous_missing;
             return true;
         }
         *post = snapshot;
-        if *work > MAX_WORK {
+        if work.count > MAX_WORK {
             return false;
         }
+    }
+    if work.trace && work.missing_gatherer.is_none() {
+        work.missing_gatherer = state.registry.items.iter().find_map(|(_, item)| {
+            let profession = super::construction::gatherer_for_item(state, item)?;
+            mc_data::recipes::ingredient_accepts_item(
+                &state.registry.items,
+                &state.registry.tags,
+                item,
+                ingredient,
+            )
+            .then_some(profession)
+        });
     }
     false
 }

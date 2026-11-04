@@ -400,6 +400,21 @@ fn log_raw(path: &str) -> bool {
     path.ends_with("_log") && !path.starts_with("stripped_")
 }
 
+/// The existing physical extraction source rules, shared with funding demand.
+pub(crate) fn gatherer_for_item(state: &TickState, item: u32) -> Option<VillagerProfession> {
+    let name = state.registry.items.name_of(item)?;
+    if name.namespace() != "minecraft" {
+        return None;
+    }
+    if mine_raw(name.path()) {
+        Some(VillagerProfession::Miner)
+    } else if log_raw(name.path()) {
+        Some(VillagerProfession::Lumberjack)
+    } else {
+        None
+    }
+}
+
 /// Farmer crop table, mirroring the harvest worker's mature-crop yields.
 fn farmer_raw(path: &str) -> bool {
     matches!(

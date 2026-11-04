@@ -76,6 +76,340 @@ fn typical_village(state: &mut TickState) {
     }
 }
 
+fn stored_food_village(beds: usize) -> (TickState, [EntitySlot; 2], u32) {
+    let mut state = test_state();
+    state.day_time = 3000;
+    let settlement = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "village".into(),
+            "owner".into(),
+            [8, 201, 8],
+            crate::settlements::commands::DEFAULT_RADIUS,
+        )
+        .unwrap();
+    for (x, z) in [(3, 3), (7, 3), (11, 3)].into_iter().take(beds) {
+        bed(&mut state, x, z);
+    }
+    let chest = block(&state, "minecraft:chest", &[]);
+    state.world.set_block(8, 201, 8, chest);
+    let bread = item(&state, "minecraft:bread");
+    let mut slots = vec![ItemStack::EMPTY; 27];
+    slots[0] = ItemStack::new(bread, 6);
+    state.block_entities.insert(
+        (8, 201, 8),
+        crate::tick::BlockEntityState {
+            slots,
+            furnace: None,
+        },
+    );
+    state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .bootstrap_storage = Some([8, 201, 8]);
+    state.world.fold_overlay();
+    let parents = [[6.5, 201.0, 8.5], [10.5, 201.0, 8.5]].map(|pos| {
+        let slot = villager(&mut state, pos);
+        let id = state.entities.body(slot).id;
+        crate::settlements::bind(&mut state, settlement, id).unwrap();
+        slot
+    });
+    (state, parents, bread)
+}
+
+#[test]
+fn bound_workers_breed_from_real_bootstrap_chest_food() {
+    let (mut state, parents, bread) = stored_food_village(3);
+    for _ in 0..6_000 {
+        step(&mut state);
+        if population(&state) > 2 {
+            assert_eq!(state.block_entities[&(8, 201, 8)].slots[0].count, 0);
+            for slot in parents {
+                let parent = state.entities.row(slot).villager.as_ref().unwrap();
+                assert_eq!(food_count(&state, slot, bread), 0);
+                assert_eq!(parent.food_level, 0);
+            }
+            return;
+        }
+    }
+    panic!(
+        "no birth with three beds and six stored loaves; chest={:?}, parents={:?}",
+        state.block_entities[&(8, 201, 8)].slots[0],
+        parents.map(|slot| state.entities.row(slot).villager.as_ref().unwrap())
+    );
+}
+
+#[test]
+fn bound_village_uses_reachable_food_when_nearest_chest_is_blocked() {
+    let (mut state, parents, bread) = stored_food_village(3);
+    let settlement = state
+        .entities
+        .row(parents[0])
+        .villager
+        .as_ref()
+        .unwrap()
+        .settlement
+        .unwrap();
+    let chest = block(&state, "minecraft:chest", &[]);
+    let blocked = state.block_entities.remove(&(8, 201, 8)).unwrap();
+    state.world.set_block(8, 201, 8, state.registry.states.air);
+    state.world.set_block(5, 201, 8, chest);
+    state.block_entities.insert((5, 201, 8), blocked);
+    state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .bootstrap_storage = Some([5, 201, 8]);
+    let mut slots = vec![ItemStack::EMPTY; 27];
+    slots[0] = ItemStack::new(bread, 6);
+    state.world.set_block(13, 201, 8, chest);
+    state.block_entities.insert(
+        (13, 201, 8),
+        crate::tick::BlockEntityState {
+            slots,
+            furnace: None,
+        },
+    );
+    for x in 3..=7 {
+        for z in 6..=10 {
+            if x == 3 || x == 7 || z == 6 || z == 10 {
+                for y in 201..=204 {
+                    state.world.set_block(x, y, z, state.registry.states.stone);
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+    crate::settlements::buildings::certify(
+        &mut state,
+        settlement,
+        crate::settlements::buildings::BuildingKind::Storage,
+        mc_script::ScriptWorldBounds::new([12, 200, 7], [14, 203, 9]).unwrap(),
+    )
+    .unwrap();
+    for (slot, z) in parents.into_iter().zip([8.5, 9.5]) {
+        state.entities.set_pos(slot, [1.5, 201.0, z]);
+    }
+    for _ in 0..6_000 {
+        step(&mut state);
+        if population(&state) > 2 {
+            assert_eq!(state.block_entities[&(5, 201, 8)].slots[0].count, 6);
+            assert_eq!(state.block_entities[&(13, 201, 8)].slots[0].count, 0);
+            return;
+        }
+    }
+    panic!(
+        "no birth with inaccessible nearest chest and reachable stocked storage: parents={:?}, chests={:?} {:?}",
+        parents.map(|slot| state.entities.row(slot).villager.as_ref().unwrap()),
+        state.block_entities[&(5, 201, 8)].slots[0],
+        state.block_entities[&(13, 201, 8)].slots[0]
+    );
+}
+
+#[test]
+fn stored_breeding_food_respects_spare_beds_and_stock_reservations() {
+    use mc_script::{
+        ScriptBlockPosition, ScriptInventoryEndpoint, ScriptInventoryMaterial,
+        ScriptInventoryResourcePlan, ScriptInventoryWorkPortion, ScriptOperation,
+        ScriptOperationRequest, ScriptOwnedInventoryOperation,
+    };
+
+    let (mut no_spare, parents, bread) = stored_food_village(2);
+    let settlement = no_spare
+        .entities
+        .row(parents[0])
+        .villager
+        .as_ref()
+        .unwrap()
+        .settlement
+        .unwrap();
+    no_spare
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .bootstrap_storage = None;
+    for _ in 0..200 {
+        step(&mut no_spare);
+    }
+    assert!(parents.into_iter().all(|slot| {
+        no_spare
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .home
+            .is_some()
+    }));
+    no_spare
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .bootstrap_storage = Some([8, 201, 8]);
+    for _ in 0..1_000 {
+        step(&mut no_spare);
+    }
+    assert_eq!(no_spare.block_entities[&(8, 201, 8)].slots[0].count, 6);
+    assert!(
+        parents
+            .into_iter()
+            .all(|slot| food_count(&no_spare, slot, bread) == 0)
+    );
+
+    let (mut state, parents, bread) = stored_food_village(3);
+    let endpoint = ScriptInventoryEndpoint::Container {
+        dimension: state.dimension.name().into(),
+        position: ScriptBlockPosition::new(8, 201, 8),
+    };
+    let fence = crate::plugin_inventories::load(&state, "breeding-test", &endpoint)
+        .unwrap()
+        .fence;
+    let request = ScriptOperationRequest::try_new(
+        "breeding-reservation",
+        ScriptOperation::Inventory {
+            operation: ScriptOwnedInventoryOperation::Reserve {
+                operation_id: "breeding-reservation".into(),
+                endpoint,
+                resource_plan: ScriptInventoryResourcePlan::new(vec![
+                    ScriptInventoryWorkPortion::new(
+                        1,
+                        vec![ScriptInventoryMaterial::new("minecraft:bread".into(), 3)],
+                    ),
+                ]),
+                expected_revision: fence,
+            },
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        crate::plugin_inventories::execute(&mut state, "breeding-test", &request).failure(),
+        None
+    );
+    for _ in 0..1_000 {
+        step(&mut state);
+    }
+    assert_eq!(population(&state), 2);
+    assert_eq!(state.block_entities[&(8, 201, 8)].slots[0].count, 3);
+    assert_eq!(
+        parents
+            .into_iter()
+            .map(|slot| food_count(&state, slot, bread))
+            .sum::<i32>(),
+        3
+    );
+}
+#[test]
+fn bound_miner_keeps_chest_ration_through_deposit_and_breeds() {
+    let (mut state, parents, bread) = stored_food_village(3);
+    let settlement = state
+        .entities
+        .row(parents[0])
+        .villager
+        .as_ref()
+        .unwrap()
+        .settlement
+        .unwrap();
+    for x in 0..16 {
+        for z in 0..16 {
+            for y in 180..=200 {
+                state.world.set_block(x, y, z, state.registry.states.stone);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    crate::settlements::buildings::certify_zone(
+        &mut state,
+        settlement,
+        crate::settlements::buildings::BuildingKind::Mine,
+        mc_script::ScriptWorldBounds::new([1, 198, 10], [5, 202, 14]).unwrap(),
+        [3, 201, 12],
+    )
+    .unwrap();
+    state
+        .entities
+        .row_mut(parents[0])
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::Miner;
+    state
+        .entities
+        .row_mut(parents[1])
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::Nitwit;
+    state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .bootstrap_storage = None;
+    for _ in 0..1_000 {
+        step(&mut state);
+        if state
+            .entities
+            .row(parents[0])
+            .villager
+            .as_ref()
+            .unwrap()
+            .job_site
+            .is_some()
+        {
+            break;
+        }
+    }
+    assert!(
+        state
+            .entities
+            .row(parents[0])
+            .villager
+            .as_ref()
+            .unwrap()
+            .job_site
+            .is_some(),
+        "miner has allocated mine"
+    );
+    state.day_time = 11_000;
+    state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .bootstrap_storage = Some([8, 201, 8]);
+    let mut assigned = false;
+    for _ in 0..6_000 {
+        step(&mut state);
+        assigned |= state
+            .entities
+            .row(parents[0])
+            .villager
+            .as_ref()
+            .unwrap()
+            .job_site
+            .is_some();
+        if population(&state) > 2 {
+            assert!(assigned, "miner must run with an allocated mine");
+            assert_eq!(state.block_entities[&(8, 201, 8)].slots[0].count, 0);
+            assert_eq!(food_count(&state, parents[0], bread), 0);
+            state.day_time = 3_000;
+            for _ in 0..6_000 {
+                if !step(&mut state).blocks.is_empty() {
+                    return;
+                }
+            }
+            panic!("miner never resumed extraction after its ration and birth");
+        }
+    }
+    panic!(
+        "miner did not breed; assigned={assigned}, miner={:?}, chest={:?}",
+        state.entities.row(parents[0]).villager.as_ref().unwrap(),
+        state.block_entities[&(8, 201, 8)].slots[0]
+    );
+}
+
 #[test]
 fn bound_village_farmers_feed_the_village_and_it_has_births() {
     let mut state = test_state();

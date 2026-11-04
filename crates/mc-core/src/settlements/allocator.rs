@@ -1234,6 +1234,160 @@ fn acquire(
     None
 }
 
+/// A small settlement may have only one reachable employable adult. Keep
+/// existing source workers when both jobs are staffed; otherwise move one
+/// untraded, unreserved gatherer to the real bill's missing source.
+pub(crate) fn staff_gatherer(state: &mut TickState, id: SettlementId, profession: Profession) {
+    let kind = match profession {
+        Profession::Miner => super::buildings::BuildingKind::Mine,
+        Profession::Lumberjack => super::buildings::BuildingKind::LumberCamp,
+        _ => return,
+    };
+    if !state.settlements.get(id).is_some_and(|record| {
+        record
+            .buildings
+            .values()
+            .any(|building| building.kind == kind)
+    }) {
+        return;
+    }
+    let mut candidates = [None; 8];
+    let mut count = 0;
+    for slot in super::construction::residents(state, id) {
+        if !active(state, slot) {
+            continue;
+        }
+        let row = state.entities.row(slot);
+        let v = row.villager.as_ref().unwrap();
+        if v.age < 0 || v.settlement != Some(id) {
+            continue;
+        }
+        // A profession without a claimed job is not a staffed source.
+        if v.job_site.is_some_and(|job| {
+            super::buildings::job_profession(&state.settlements, Some(id), job) == Some(profession)
+        }) {
+            return;
+        }
+        if count < candidates.len()
+            && !traded(v)
+            && !super::economy::worker_reserved(state, Some(id), row.uuid)
+            && (matches!(
+                v.data.profession,
+                Profession::Miner | Profession::Lumberjack
+            ) || (v.data.profession == Profession::None && v.job_site.is_none()))
+        {
+            candidates[count] = Some(slot);
+            count += 1;
+        }
+    }
+    let mut cache = std::mem::take(&mut state.villager_pois);
+    let mut path = std::mem::take(&mut cache.candidate_path);
+    let mut assignment = None;
+    'candidates: for slot in candidates[..count].iter().flatten().copied() {
+        let body = state.entities.body(slot);
+        let (owner, width, height) = (body.id, body.half_width, body.height);
+        let start = state.entities.pos(slot);
+        cache.candidates.clear();
+        for building in state
+            .settlements
+            .get(id)
+            .unwrap()
+            .buildings
+            .values()
+            .filter(|building| building.kind == kind)
+        {
+            for &[x, y, z] in building
+                .work_points
+                .iter()
+                .take(super::buildings::job_slots(kind, building.level))
+            {
+                let poi = Poi {
+                    pos: BlockPos { x, y, z },
+                    kind: PoiKind::Job(profession),
+                };
+                if !cache.claimed(owner, poi)
+                    && state.world.is_active(x.div_euclid(16), z.div_euclid(16))
+                    && state.world.block_at(x, y, z).is_some_and(|block| {
+                        building.natural_zone
+                            || super::buildings::workstation_matches(&state.registry, kind, block)
+                    })
+                {
+                    cache
+                        .candidates
+                        .push((distance(start, centre(poi.pos)), poi));
+                }
+            }
+        }
+        cache
+            .candidates
+            .sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
+        for index in 0..cache.candidates.len().min(5) {
+            let job = cache.candidates[index].1.pos;
+            let from = at(start);
+            let mut ctx = RouteCtx {
+                world: &state.world,
+                registry: &state.registry,
+                dimension: state.dimension,
+                consumer: Consumer::Allocator,
+                budget: &mut state.tick_budget,
+            };
+            let admitted = ctx.admit();
+            let reached = admitted
+                && find_path_ctx(
+                    &mut ctx,
+                    &mut cache,
+                    start,
+                    job,
+                    width,
+                    height,
+                    &mut path,
+                    false,
+                    from.x
+                        .abs_diff(job.x)
+                        .max(from.z.abs_diff(job.z))
+                        .saturating_add(8)
+                        .clamp(48, 512),
+                    from.y.abs_diff(job.y).saturating_add(4).clamp(16, 512),
+                    true,
+                );
+            if reached
+                && path.iter().all(|pos| {
+                    state
+                        .world
+                        .is_active(pos.x.div_euclid(16), pos.z.div_euclid(16))
+                })
+            {
+                assignment = Some((slot, job));
+                break 'candidates;
+            }
+            if !admitted
+                || state
+                    .tick_budget
+                    .allowance(state.dimension, Consumer::Allocator, Kind::PathNode)
+                    == 0
+            {
+                break 'candidates;
+            }
+        }
+    }
+    if let Some((slot, job)) = assignment {
+        let owner = state.entities.body(slot).id;
+        let start = state.entities.pos(slot);
+        let mut v = state.entities.row_mut(slot).villager.take().unwrap();
+        let before = [v.home, v.job_site, v.meeting_point];
+        v.job_site = Some(job);
+        v.job_site_dimension = state.dimension.name().to_owned();
+        v.navigation_target = Some(job);
+        std::mem::swap(&mut v.navigation_path, &mut path);
+        capture_route(state, &mut v, start, true);
+        v.navigation_repath_at = state.tick + 40;
+        cache.update_claims(owner, before, [v.home, v.job_site, v.meeting_point]);
+        state.entities.row_mut(slot).villager = Some(v);
+    }
+    cache.candidate_path = path;
+    state.villager_pois = cache;
+}
+
 /// Rotating acquisition admission over the shared global pool: movement and
 /// birth routes charge the same allowance, and a budget-denied villager keeps
 /// its original retry deadline.

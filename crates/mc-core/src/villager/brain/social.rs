@@ -25,11 +25,17 @@ fn willing_with_production(
     food: &FoodTable,
     v: &VillagerState,
 ) -> bool {
-    if !willing(food, v) {
-        return false;
-    }
+    willing(food, v) && available_food(state, slot, food, v) >= 12
+}
+
+pub(super) fn available_food(
+    state: &TickState,
+    slot: EntitySlot,
+    food: &FoodTable,
+    v: &VillagerState,
+) -> i32 {
     let protected = crate::settlements::economy::protected_carry(state, slot, v);
-    let reserved_food: i32 = v
+    let reserved: i32 = v
         .inventory
         .iter()
         .zip(protected)
@@ -39,7 +45,175 @@ fn willing_with_production(
                 .map(|stack| count as i32 * food_points(food, stack.item_id))
         })
         .sum();
-    total_food(food, v) - reserved_food >= 12
+    total_food(food, v) - reserved
+}
+
+/// Keep a personal breeding ration in addition to production's carry holds.
+pub(in crate::villager) fn retain_food(
+    state: &TickState,
+    v: &VillagerState,
+    protected: &mut [u32; 8],
+) {
+    let mut needed = (12 - v.food_level).max(0);
+    for (stack, held) in v.inventory.iter().zip(protected.iter_mut()) {
+        let Some(stack) = stack else { continue };
+        let points = state
+            .registry
+            .items
+            .name_of(stack.item_id)
+            .map_or(0, |name| i32::from(food_points_for_name(name.path())));
+        if points == 0 || needed == 0 {
+            continue;
+        }
+        let free = (stack.count.max(0) as u32).saturating_sub(*held);
+        let count = free.min(((needed + points - 1) / points) as u32);
+        *held += count;
+        needed = needed.saturating_sub(count as i32 * points);
+    }
+}
+
+/// Take a breeding ration from actual town storage, at interaction range only.
+/// The container authority owns fences, physical double chests and stock holds.
+pub(super) fn provision_food(
+    state: &mut TickState,
+    cache: &mut PoiCache,
+    slot: EntitySlot,
+    food: &FoodTable,
+    v: &mut VillagerState,
+) -> Option<BlockPos> {
+    use crate::settlements::inventory;
+
+    let settlement = v.settlement?;
+    let mut needed = 12 - available_food(state, slot, food, v);
+    if needed <= 0 {
+        return None;
+    }
+    let worker = state.entities.row(slot).uuid;
+    let mut destination = None;
+    for (position, before) in inventory::town_storage(state, settlement) {
+        let Ok(mut free) = inventory::unreserved_stock(state, &before) else {
+            continue;
+        };
+        let pos = BlockPos {
+            x: position[0],
+            y: position[1],
+            z: position[2],
+        };
+        let near = super::super::mining::near(state, slot, pos, 2.5);
+        let original = v.inventory.clone();
+        let mut after = before.slots.clone();
+        let mut remaining = needed;
+        for stack in &mut after {
+            let points = food_points(food, stack.item_id);
+            if stack.is_empty()
+                || points == 0
+                || crate::settlements::economy::defer_output_pickup(
+                    state,
+                    v.settlement,
+                    worker,
+                    stack,
+                )
+            {
+                continue;
+            }
+            let available = free
+                .get(&stack.item_id)
+                .copied()
+                .unwrap_or(0)
+                .min(stack.count as u64) as i32;
+            let count = available.min((remaining + points - 1) / points);
+            if count <= 0 {
+                continue;
+            }
+            let mut moving = stack.clone();
+            moving.count = count;
+            let maximum = state.registry.item_rules().max_stack(&moving);
+            let moved = add_inventory(v, &mut moving, maximum);
+            stack.count -= moved;
+            if stack.count == 0 {
+                *stack = ItemStack::EMPTY;
+            }
+            *free.get_mut(&moving.item_id).expect("available stock") -= moved as u64;
+            remaining -= moved * points;
+            if remaining <= 0 {
+                break;
+            }
+        }
+        if remaining == needed {
+            v.inventory = original;
+            continue;
+        }
+        let distance = distance(state.entities.pos(slot), centre(pos));
+        if !near && destination.is_some_and(|(_, best)| distance >= best) {
+            v.inventory = original;
+            continue;
+        }
+        if !cache.spend_path(state, Consumer::Brain) {
+            v.inventory = original;
+            break;
+        }
+        let from = at(state.entities.pos(slot));
+        let horizontal = from
+            .x
+            .abs_diff(pos.x)
+            .max(from.z.abs_diff(pos.z))
+            .saturating_add(8)
+            .clamp(48, 512);
+        let vertical = from.y.abs_diff(pos.y).saturating_add(4).clamp(16, 512);
+        let body = state.entities.body(slot);
+        let (width, height) = (body.half_width, body.height);
+        let mut path = std::mem::take(&mut cache.candidate_path);
+        let mut ctx = allocator::RouteCtx {
+            world: &state.world,
+            registry: &state.registry,
+            dimension: state.dimension,
+            consumer: Consumer::Brain,
+            budget: &mut state.tick_budget,
+        };
+        let reachable = allocator::find_path_ctx(
+            &mut ctx,
+            cache,
+            state.entities.pos(slot),
+            pos,
+            width,
+            height,
+            &mut path,
+            false,
+            horizontal,
+            vertical,
+            true,
+        );
+        if reachable && !near {
+            std::mem::swap(&mut v.navigation_path, &mut path);
+            v.navigation_target = Some(pos);
+            v.navigation_search_failed = false;
+            allocator::capture_route(state, v, state.entities.pos(slot), true);
+            v.navigation_repath_at = state.tick + 40;
+        }
+        path.clear();
+        cache.candidate_path = path;
+        if !reachable {
+            v.inventory = original;
+            if allocator::nodes_exhausted(state) {
+                break;
+            }
+            continue;
+        }
+        if !near {
+            v.inventory = original;
+            destination = Some((pos, distance));
+            continue;
+        }
+        if inventory::commit(state, vec![inventory::Change { before, after }]).is_err() {
+            v.inventory = original;
+            continue;
+        }
+        needed = remaining;
+        if needed <= 0 {
+            return None;
+        }
+    }
+    destination.map(|(pos, _)| pos)
 }
 pub(super) fn eat_for_birth(food: &FoodTable, v: &mut VillagerState, protected: &[u32; 8]) {
     for (index, slot) in v.inventory.iter_mut().enumerate() {
