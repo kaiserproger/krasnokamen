@@ -39,8 +39,9 @@ Dates are when the lesson was learned (owner time zone, UTC+7).
   stale Loader mixins, NeoForge undeclared channel) were found only by broader
   player-path checks; see the QA protocol introduction and
   [releases](release-and-tags.md).
-- **2026-10-29 — a bare repeated `[approved]` can be dropped as a duplicate;**
-  ask for `[approved] R<n> <sha>` per public step.
+- **2026-10-29 — a bare repeated `[approved]` was once dropped as a duplicate.**
+  Make each public-step request distinct by naming its exact command and SHA;
+  the answer stays exactly `[approved]`, with no suffix.
 - **2026-10-28 — a stray slice `CPUQuota` throttled every build to 2 CPUs for
   two days.** Symptom: host CPU pressure about 80% while `vmstat` shows >40%
   idle. The runner now clears the quota on every call.
