@@ -103,8 +103,7 @@ fn persist<T: Serialize>(path: &Path, entries: &[T]) -> anyhow::Result<()> {
     let mut file = std::fs::File::create(&temporary)?;
     file.write_all(&serde_json::to_vec_pretty(entries)?)?;
     file.sync_all()?;
-    std::fs::rename(temporary, path)?;
-    std::fs::File::open(path.parent().unwrap_or(Path::new(".")))?.sync_all()?;
+    mc_world::atomic_file::replace_file_durable(&temporary, path)?;
     Ok(())
 }
 
@@ -139,8 +138,7 @@ fn persist_whitelist_enabled(dir: &Path, enabled: bool) -> anyhow::Result<()> {
     let mut file = std::fs::File::create(&temporary)?;
     file.write_all(if enabled { "true\n" } else { "false\n" }.as_bytes())?;
     file.sync_all()?;
-    std::fs::rename(temporary, &path)?;
-    std::fs::File::open(dir)?.sync_all()?;
+    mc_world::atomic_file::replace_file_durable(&temporary, &path)?;
     Ok(())
 }
 
