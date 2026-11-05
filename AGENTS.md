@@ -1,7 +1,7 @@
 # Agent Guide — Solaris
 
 Solaris is a Rust Minecraft Java 26.3 server (26.1.2 clients via a retained legacy cache);
-1.0.0-rc.4 "Pauline" is the current 1.0 release candidate.
+1.0.0-rc.5 "Pauline" is the current 1.0 release candidate.
 The current binary is `mc-edge`'s `solaris-v2` over native `mc-core`; v1 is retired.
 `CLAUDE.md` is a symlink to this guide. Owner identity is
 `kaiserproger <kaisergrobe@gmail.com>`; never change Git configuration.

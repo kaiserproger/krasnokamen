@@ -160,10 +160,10 @@ Linux x86-64 and AArch64 binaries are published on
 `curl`, `tar`, a SHA-256 utility and **JDK 25** (used once to extract game data):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.4/install.sh \
-  | SOLARIS_VERSION=v1.0.0-rc.4 bash
+curl -fsSL https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.5/install.sh \
+  | SOLARIS_VERSION=v1.0.0-rc.5 bash
 curl -fsSLo example.toml \
-  https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.4/example.toml
+  https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.5/example.toml
 ```
 
 Solaris does not ship any Mojang files. Before the first start, download the
@@ -222,7 +222,7 @@ python3 -m tools.harness run correctness
 
 More: the [documentation index](docs/README.md), the
 [architecture overview](docs/ARCHITECTURE.md) and the
-[RC4 release notes](docs/releases/v1.0.0-rc.4.md) (upgrading from v0.0.8 is
+[RC5 release notes](docs/releases/v1.0.0-rc.5.md) (upgrading from v0.0.8 is
 covered in the [RC1 notes](docs/releases/v1.0.0-rc.1.md)).
 
 ## License
