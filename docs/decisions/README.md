@@ -29,6 +29,7 @@ summarizes current boundaries.
 | [0018](0018-in-game-computer.md) | Accepted; draft, client QA pending | Operator-only terminal on vanilla carrier blocks and local desktop-capture boundary |
 | [0019](0019-voice-chat.md) | Accepted; draft, real-client QA pending | Proximity voice chat: `solaris:voice` Opus relay between native clients, edge-only |
 | [0020](0020-entity-checkpoints-at-one-million.md) | Accepted; implemented | Incremental entity checkpoints and replay layout for 1M entities |
+| [0021](0021-build-time-and-crate-split.md) | Step 1 accepted and implemented; split pilot designed, not started | Dev/test build time: line-table debuginfo, measured `mc-core` split cost and future plan |
 
 ## Routing
 
@@ -41,6 +42,7 @@ summarizes current boundaries.
 - Mob blueprint capabilities, data-defined mob types and their bounds: 0016.
 - Tick system graph proposal and bounded row-phase prototype: 0017.
 - Current crate ownership, retirement and explicit port/delete decisions: 0013/0014.
+- Build-time profile settings and any future `mc-core` crate split: 0021.
 - Worldgen topology, climate, rivers, caves and feature ownership: 0008; runtime
   storage/recovery constraints remain 0013.
 - Plugin author/operator contract: [PLUGINS.md](../PLUGINS.md) and 0013; 0009
