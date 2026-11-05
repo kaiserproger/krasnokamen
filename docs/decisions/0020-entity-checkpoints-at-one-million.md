@@ -1,8 +1,9 @@
 # ADR 0020 - Entity checkpoints and reopen at one million entities
 
 **Date:** 2026-11-04  
-**Status:** Proposed, amended after committee review. Steps 1–2 implemented
-(2026-11-04, see Implementation); step 3 measurements pending, so not Accepted.
+**Status:** Accepted by the owner on 2026-11-05 on the step-3 measurements below,
+with the strict latency rule failing on the listed regressions and the
+untested items left untested. Steps 1–2 implemented (2026-11-04).
 ADR 0013 "Durability" now describes explicit entity tombstones.  
 **Parent contract:** [0013](0013-core-model-v2.md) (atomic native checkpoints, recovery).
 
@@ -234,7 +235,8 @@ per-run maxima (ms), baseline → candidate.
 - The strict latency pass ("none worse") fails on outliers: two frozen 10k
   paired normal-tick maxima are worse by 0.06 and 0.30 ms, and the worst single
   all-active 100k normal stall rose from 2.79 s to 3.29 s. Not run: the
-  1–2-core profile. Status stays Proposed until the owner rules on these.
+  1–2-core profile, an exact-UUID offline fold after reopen, and a SIGKILL
+  after a committed checkpoint. The owner accepted the ADR with these open.
 
 ## Proof
 

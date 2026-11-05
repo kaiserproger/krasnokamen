@@ -28,7 +28,7 @@ summarizes current boundaries.
 | [0017](0017-tick-system-graph.md) | Proposed graph; one-system prototype | Declared entity-column resources, ordered row execution and deterministic tick barriers |
 | [0018](0018-in-game-computer.md) | Accepted; draft, client QA pending | Operator-only terminal on vanilla carrier blocks and local desktop-capture boundary |
 | [0019](0019-voice-chat.md) | Accepted; draft, real-client QA pending | Proximity voice chat: `solaris:voice` Opus relay between native clients, edge-only |
-| [0020](0020-entity-checkpoints-at-one-million.md) | Proposed; not implemented | Incremental entity checkpoints and replay layout for 1M entities; 0013 Durability stays current until accepted |
+| [0020](0020-entity-checkpoints-at-one-million.md) | Accepted; implemented | Incremental entity checkpoints and replay layout for 1M entities |
 
 ## Routing
 
@@ -37,7 +37,7 @@ summarizes current boundaries.
 - Per-session protocol version translation: 0015.
 - Current state authority, tick/merge, threads, waiting, persistence, shutdown,
   snapshots, plugin intents, block work and tickets: 0013.
-- Proposed 1M checkpoint/reopen redesign: 0020 (not runtime truth until accepted).
+- Incremental entity checkpoints and 1M reopen layout: 0020.
 - Mob blueprint capabilities, data-defined mob types and their bounds: 0016.
 - Tick system graph proposal and bounded row-phase prototype: 0017.
 - Current crate ownership, retirement and explicit port/delete decisions: 0013/0014.
