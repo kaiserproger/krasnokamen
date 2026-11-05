@@ -3440,3 +3440,23 @@ severity = "major"
 status = "open"
 source = "Promote agent finding on client e1b22a5"
 regression = []
+
+[[bug]]
+id = "WORLD-FIRST-START-INTERRUPTED"
+title = "A new world whose first start is stopped before the initial checkpoint can never be opened: Core::open creates native/state.redb before the first global/checkpoint, so the next start is not fresh and fails with 'native global/checkpoint: missing'. The native client's 180 s singleplayer start limit triggers it on slow or busy machines."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "Windows 11 VM, RC5 release build: world 'rc5 world' timed out at 180 s under host load, then 'Server exited during startup' (receipts/WinLease, winvm/shared/rc5-server.log)"
+regression = []
+
+[[bug]]
+id = "WINDOWS-BACKUP-CONVERSION"
+title = "On Windows, offline backup/restore fail reading native/state.redb through a second handle while the same process holds an exclusive LockFileEx on it (error 33); console /backup opens directories unguarded and copies the live redb; world import-anvil/export-anvil/census build relative paths with '\\' and fail validate_relative_path."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "WinFixReview (history://WinFixReview) on RC5 hotfix a76e1e80: mc-edge backup.rs ExclusiveLease, mc-core hot_backup.rs:123-127, world_conversion.rs:673-679, import.rs session.lock skip"
+regression = []
