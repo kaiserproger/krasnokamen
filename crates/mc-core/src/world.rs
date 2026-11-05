@@ -1500,9 +1500,13 @@ impl ChunkCapture {
         let Some(store) = &self.source.native else {
             return Ok(());
         };
+        // A clean chunk can leave residency and be regenerated before this
+        // batch reaches the writer. Keep its first immutable admission image.
+        let mut seen = HashSet::default();
         let bases: Vec<_> = self
             .chunks
             .into_iter()
+            .filter(|captured| seen.insert(captured.pos))
             .map(|captured| Arc::unwrap_or_clone(captured.chunk))
             .collect();
         store

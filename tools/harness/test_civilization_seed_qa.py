@@ -6,6 +6,50 @@ from .backends import civilization_seed_qa as qa
 
 
 class CivilizationEvidenceTests(unittest.TestCase):
+    def test_simulation_wait_uses_scenario_deadline_not_mcp_request_cap(self):
+        with patch("tools.harness.backends.probe_steps.time.monotonic", return_value=100.0):
+            probe = qa.ProbeSteps(Mock(), None, 7200.0, "sprint")
+        with patch("tools.harness.backends.probe_steps.time.monotonic", return_value=300.0):
+            self.assertEqual(probe.remaining(), 120.0)
+            self.assertEqual(probe.remaining(limit=None), 7000.0)
+        with patch("tools.harness.backends.probe_steps.time.monotonic", return_value=7300.0):
+            with self.assertRaisesRegex(TimeoutError, "sprint deadline expired"):
+                probe.remaining(limit=None)
+
+    def test_civilization_sprint_wait_can_outlast_one_mcp_request(self):
+        player = {"player": {"x": 1.0, "y": 70.0, "z": 1.0}}
+        with patch("tools.harness.backends.probe_steps.time.monotonic", return_value=100.0):
+            probe = qa.ProbeSteps(Mock(), None, 7200.0, "sprint")
+        probe.wait = Mock(return_value=player)
+        probe.call = Mock(return_value={})
+
+        def planner(probe, detail, chest, read_container, capture):
+            capture()
+            return {"buildings_now": []}
+
+        def sprint(server, log, ticks, timeout):
+            self.assertEqual(ticks, 300)
+            self.assertEqual(timeout, 7200.0)
+            raise RuntimeError("completion event awaited")
+
+        with patch.object(qa.time, "monotonic", return_value=100.0), \
+             patch.object(qa, "walk_to_village", return_value=player), \
+             patch.object(qa.village, "_send", side_effect=[
+                 ["Settlements: Test."], ["owner=autonomous anchor=[1, 70, 1]"], ["Claimed Test"]]), \
+             patch.object(qa.village, "_recent_chat", side_effect=lambda lines, _: lines), \
+             patch.object(qa.village, "_founding_storage", return_value=(1, 70, 1)), \
+             patch.object(qa.village, "_open_chest", return_value={}), \
+             patch.object(qa, "fund"), patch.object(qa.item_merge, "_console"), \
+             patch.object(qa.native_client, "capture", return_value={"path": "frame.png"}), \
+             patch.object(qa.village, "_planner_status", side_effect=planner), \
+             patch.object(qa.village, "_probe_ecology", return_value={}), \
+             patch.object(qa.village, "_gametime", return_value=0), \
+             patch.object(qa, "building_blocks", return_value=[]), \
+             patch.object(qa, "workstation_blocks", return_value=[]), \
+             patch.object(qa.item_merge, "_sprint", side_effect=sprint):
+            with self.assertRaisesRegex(RuntimeError, "completion event awaited"):
+                qa.scenario(probe, {}, "artifact", Mock(), "server.log", Mock())
+
     def scan(self, buildings, response):
         probe = Mock()
         probe.call.return_value = response

@@ -492,6 +492,14 @@ that profession, including for owner-ordered work, without releasing a permanent
 builder who was not borrowed.
 Ordinary recruits retain the authored Builder career after completing a building;
 only miners and lumberjacks are borrowed from their existing extraction careers.
+Gathering is staffed before autonomous planning. While a real staffed source is
+supplying the priority bill, cheaper autonomous buildings, upgrades and street
+work do not repeatedly borrow it away; unsupported needs still allow other
+funded work. Owner orders and furnace provisioning retain their existing priority.
+Both unfunded housing diagnostics and extraction demand use the same concrete
+wood-family selection as admission: a fully funded family wins, otherwise the
+largest existing partial stock supplies the gathering target. No partial bill
+admits construction, and no oak-only diagnostic overrides available birch.
 
 Bound adults with a reachable unclaimed baby-capable bed may walk to settlement
 storage and withdraw unreserved food through the native inventory fence, enough
@@ -1118,6 +1126,8 @@ Tick `t -> t+1`:
   writer thread (the single native DB writer, ordered with checkpoints), at most one
   batch queued or running; while it runs the world holds up to 1024 more and
   skips saving beyond that (those are generated again when next wanted).
+  A clean chunk can be evicted and regenerated before its pending save; each
+  batch retains its first immutable admission image per chunk position.
   A generated save fills only genuinely absent immutable bases, atomically
   checking imported coverage and gameplay records. It never overwrites imported
   air, checkpointed edits or stored corruption. Native reads compose the

@@ -19,6 +19,173 @@ fn certificate(record: &mut SettlementRecord, kind: BuildingKind, level: u8, nat
         },
     );
 }
+
+#[test]
+fn partial_birch_house_bill_drives_the_same_family_as_funded_construction() {
+    let (mut state, id, worker) = fixture();
+    open_plan(&mut state);
+    let materials = fund(&mut state, "house", 1);
+    let birch_bill = species_bill(&state, &materials, "birch").unwrap();
+    let replacements: Vec<_> = state.block_entities[&(1, 201, 1)]
+        .slots
+        .iter()
+        .map(|stack| {
+            let mut stack = stack.clone();
+            if !stack.is_empty() {
+                stack.item_id = species_item(&state, stack.item_id, "birch").unwrap();
+                if state.registry.items.name_of(stack.item_id).unwrap().path() == "birch_log" {
+                    stack.count = 19;
+                }
+            }
+            stack
+        })
+        .collect();
+    state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots = replacements;
+    assert!(!super::super::construction_crafting::can_fund(
+        &state,
+        &birch_bill,
+        &executor::source_images(&state, id),
+    ));
+    assert!(matches!(
+        request_build(&mut state, id, "house").unwrap(),
+        OrderOutcome::Queued { .. }
+    ));
+    let waiting = waiting(&state, id);
+    let house = waiting
+        .iter()
+        .find(|kind| kind.blueprint == "house")
+        .unwrap();
+    assert!(
+        house
+            .needs
+            .iter()
+            .any(|need| need.item == "minecraft:birch_log")
+    );
+    assert!(
+        house
+            .needs
+            .iter()
+            .all(|need| !need.item.starts_with("minecraft:oak_"))
+    );
+    assert_eq!(needed_gatherer(&state, id), Some(Profession::Lumberjack));
+
+    let birch_log = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:birch_log").unwrap())
+        .unwrap();
+    state
+        .block_entities
+        .get_mut(&(1, 201, 1))
+        .unwrap()
+        .slots
+        .iter_mut()
+        .find(|stack| stack.item_id == birch_log)
+        .unwrap()
+        .count = 36;
+    plan_until_started(&mut state, id);
+    complete(&mut state, id, worker);
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .buildings
+            .values()
+            .any(|building| building.kind == BuildingKind::House)
+    );
+    assert!(state.plugin_block_writes.iter().any(|(pos, _)| {
+        state
+            .world
+            .block_at(pos.x, pos.y, pos.z)
+            .and_then(|block| state.registry.blocks.by_id(mc_world::BlockStateId(block)))
+            .is_some_and(|block| block.block.id.path() == "white_bed")
+    }));
+}
+
+#[test]
+fn optional_lamps_do_not_borrow_the_worker_funding_the_next_house() {
+    use crate::settlements::allocator::tests::block;
+    let (mut state, id, worker) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "storage", 1);
+    request_build(&mut state, id, "storage").unwrap();
+    complete(&mut state, id, worker);
+    state.entities.set_pos(worker, [1.5, 201.0, 2.5]);
+    state
+        .world
+        .set_block(3, 200, 8, block(&state, "minecraft:dirt", &[]));
+    for y in 201..205 {
+        state
+            .world
+            .set_block(3, y, 8, block(&state, "minecraft:birch_log", &[]));
+    }
+    state
+        .world
+        .set_block(3, 205, 8, block(&state, "minecraft:birch_leaves", &[]));
+    state.world.fold_overlay();
+    buildings::certify_zone(
+        &mut state,
+        id,
+        BuildingKind::LumberCamp,
+        ScriptWorldBounds::new([2, 200, 8], [3, 206, 8]).unwrap(),
+        [2, 201, 8],
+    )
+    .unwrap();
+    let v = state.entities.row_mut(worker).villager.as_mut().unwrap();
+    v.data.profession = Profession::Lumberjack;
+    v.job_site = Some(crate::boundary::BlockPos { x: 2, y: 201, z: 8 });
+    v.job_site_dimension = state.dimension.name().into();
+    let stock: Vec<_> = [
+        ("birch_log", 10),
+        ("cobblestone", 64),
+        ("white_wool", 3),
+        ("coal", 1),
+        ("birch_fence", 2),
+        ("torch", 1),
+    ]
+    .into_iter()
+    .map(|(name, count)| {
+        mc_data::ItemStack::new(
+            state
+                .registry
+                .items
+                .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
+                .unwrap(),
+            count,
+        )
+    })
+    .collect();
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    slots.fill(mc_data::ItemStack::EMPTY);
+    slots[..stock.len()].clone_from_slice(&stock);
+    let images = executor::source_images(&state, id);
+    assert_eq!(needed_gatherer(&state, id), Some(Profession::Lumberjack));
+    assert_eq!(
+        street_site(&state, state.settlements.get(id).unwrap(), &images)
+            .expect("a funded optional lamp is genuinely available")
+            .project
+            .blueprint,
+        layout::LAMP
+    );
+    state.tick = PLAN_CADENCE;
+    tick(&mut state);
+    assert!(
+        state.settlements.get(id).unwrap().project.is_none(),
+        "optional infrastructure must not monopolize housing's material worker"
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(worker)
+            .villager
+            .as_ref()
+            .unwrap()
+            .data
+            .profession,
+        Profession::Lumberjack
+    );
+}
 #[test]
 fn iron_demand_tracks_open_house_and_real_shears_or_wool() {
     let (mut state, id, worker) = fixture();

@@ -48,6 +48,11 @@ pass. Unknown profiles, unlaunchable or nonzero commands, and missing
 scenario evidence fail closed with a nonzero exit. Every timeout is failure,
 never success.
 
+`civilization-seed-qa` awaits each console sprint's exact `tick sprint finished`
+event under the remaining scenario deadline, not the 120-second MCP request cap.
+Slow simulation is recorded in sprint TPS and `MC_CORE_PHASE_LOG` phase timings;
+neither elapsed time nor a missing completion is treated as success.
+
 `scene-shot` runs scripted real native-client captures: set `SOLARIS_SERVER_BINARY`,
 `SOLARIS_CLIENT_BINARY`, the native resource environment and `SCENE_SHOT_SCENARIO`
 to a JSON file, then run `python3 -m tools.harness run scene-shot --client native

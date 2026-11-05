@@ -20,11 +20,12 @@ class ProbeSteps:
     def __enter__(self) -> ProbeSteps:
         return self
 
-    def remaining(self) -> float:
+    def remaining(self, *, limit: float | None = 120.0) -> float:
+        """Remaining scenario budget, capped for MCP requests by default."""
         remaining = self.deadline - time.monotonic()
         if remaining < 0.1:
             raise TimeoutError(f"{self.report['id']} deadline expired")
-        return min(remaining, 120.0)
+        return remaining if limit is None else min(remaining, limit)
 
     def call(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         self.remaining()

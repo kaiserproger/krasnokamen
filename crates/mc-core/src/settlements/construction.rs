@@ -332,12 +332,13 @@ fn preempt(state: &mut TickState, id: SettlementId) -> Result<(), String> {
     Ok(())
 }
 
-/// Choose the most available wood species that can fund the complete bill.
-/// Oak is always considered, including when its materials are already crafted.
-fn funded_species<'a>(
+/// Prefer a fully funded wood family, then (for gathering/diagnostics only)
+/// the largest existing partial stock. Admission never accepts a partial bill.
+fn select_species<'a>(
     state: &'a TickState,
     materials: &[(u32, u32)],
     images: &[super::inventory::Image],
+    allow_partial: bool,
 ) -> Option<&'a str> {
     let mut candidates = vec![("oak", 0_i64)];
     for stack in images
@@ -384,10 +385,17 @@ fn funded_species<'a>(
         }
     }
     candidates.sort_unstable_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
-    candidates.into_iter().find_map(|(species, _)| {
-        let bill = species_bill(state, materials, species)?;
-        super::construction_crafting::can_fund(state, &bill, images).then_some(species)
-    })
+    let partial = candidates
+        .first()
+        .map(|(species, _)| *species)
+        .filter(|_| allow_partial);
+    candidates
+        .into_iter()
+        .find_map(|(species, _)| {
+            let bill = species_bill(state, materials, species)?;
+            super::construction_crafting::can_fund(state, &bill, images).then_some(species)
+        })
+        .or(partial)
 }
 
 fn species_item(state: &TickState, item: u32, species: &str) -> Option<u32> {
@@ -529,7 +537,7 @@ fn funded_variant<'a>(
     let (colors, count) = bed_colors(state, id, materials, images);
     colors[..count].iter().copied().find_map(|color| {
         let bill = bed_bill(state, materials, color)?;
-        funded_species(state, &bill, images).map(|species| (species, color))
+        select_species(state, &bill, images, false).map(|species| (species, color))
     })
 }
 
@@ -539,9 +547,25 @@ fn selected_bill<'a>(
     materials: &'a [(u32, u32)],
     images: &[super::inventory::Image],
 ) -> Option<std::borrow::Cow<'a, [(u32, u32)]>> {
+    let bill = selected_bed_bill(state, id, materials, images)?;
+    let species = select_species(state, &bill, images, true)?;
+    if species == "oak" {
+        Some(bill)
+    } else {
+        species_bill(state, &bill, species).map(std::borrow::Cow::Owned)
+    }
+}
+
+/// Iron and wool demand do not depend on a wooden block variant. Keep those
+/// per-brain queries on the bed proof instead of re-funding the entire house.
+fn selected_bed_bill<'a>(
+    state: &TickState,
+    id: SettlementId,
+    materials: &'a [(u32, u32)],
+    images: &[super::inventory::Image],
+) -> Option<std::borrow::Cow<'a, [(u32, u32)]>> {
     let (colors, count) = bed_colors(state, id, materials, images);
-    let color = *colors.get(..count)?.first()?;
-    bed_bill(state, materials, color)
+    bed_bill(state, materials, *colors.get(..count)?.first()?)
 }
 
 /// A real worker load can fund the next building or upgrade before a stack is full.
@@ -1383,7 +1407,7 @@ fn street_site(
         if let Some(mut work) = network.lamp_work(tile)
             && !executor::area_reserved(state, work.bounds)
             && let Some(bill) = cell_bill(state, &work.cells)
-            && let Some(species) = funded_species(state, &bill, images)
+            && let Some(species) = select_species(state, &bill, images, false)
             && apply_species(state, &mut work.cells, species).is_some()
         {
             return Some(FundedSite {
@@ -1416,6 +1440,26 @@ fn plan(state: &mut TickState, id: SettlementId) {
     // Probe one canonical storage image set; an unfundable early autonomous
     // need cannot monopolize the single project slot.
     let images = executor::source_images(state, id);
+    // Do not repeatedly loan the worker supplying the priority bill to cheaper
+    // buildings or streets. Unsupported needs still permit other funded work.
+    if gatherer_demand(state, record, &images).is_some_and(|profession| {
+        self::residents(state, id).any(|slot| {
+            resident_simulated(state, slot)
+                && state.entities.body(slot).alive
+                && state.entities.row(slot).villager.as_ref().is_some_and(|v| {
+                    v.age >= 0
+                        && v.settlement == Some(id)
+                        && v.conversion_time.is_none()
+                        && v.data.profession == profession
+                        && v.job_site.is_some_and(|job| {
+                            buildings::job_profession(&state.settlements, Some(id), job)
+                                == Some(profession)
+                        })
+                })
+        })
+    }) {
+        return;
+    }
     let catalog = blueprints::all(&state.registry);
     let mut funded = [None; AUTONOMOUS_KINDS];
     let mut funded_count = 0;
@@ -1732,6 +1776,9 @@ pub(crate) fn tick(state: &mut TickState) {
     if state.tick.is_multiple_of(PLAN_CADENCE)
         && let Some(id) = selected(state, state.tick / PLAN_CADENCE)
     {
+        if let Some(profession) = needed_gatherer(state, id) {
+            super::allocator::staff_gatherer(state, id, profession);
+        }
         plan(state, id);
         if state
             .settlements
@@ -1739,8 +1786,6 @@ pub(crate) fn tick(state: &mut TickState) {
             .is_some_and(|record| record.project.is_some())
         {
             assign_builder(state, id);
-        } else if let Some(profession) = needed_gatherer(state, id) {
-            super::allocator::staff_gatherer(state, id, profession);
         }
     }
     if let Some(id) = selected(state, state.tick / 4)
@@ -1855,10 +1900,18 @@ pub(crate) fn needed_gatherer(state: &TickState, id: SettlementId) -> Option<Pro
         return None;
     }
     let images = executor::source_images(state, id);
+    gatherer_demand(state, record, &images)
+}
+
+fn gatherer_demand(
+    state: &TickState,
+    record: &SettlementRecord,
+    images: &[super::inventory::Image],
+) -> Option<Profession> {
     let (name, level) = if let Some(order) = &record.pending_order {
         (order.blueprint.as_str(), order.level)
     } else {
-        let kind = candidate_kinds(state, record, &images).next()?;
+        let kind = candidate_kinds(state, record, images).next()?;
         (
             blueprints::all(&state.registry)
                 .iter()
@@ -1869,8 +1922,8 @@ pub(crate) fn needed_gatherer(state: &TickState, id: SettlementId) -> Option<Pro
         )
     };
     let level = blueprints::get(&state.registry, name)?.level(level)?;
-    let bill = selected_bill(state, id, &level.materials, &images)?;
-    super::construction_crafting::needed_gatherer(state, &bill, &images)
+    let bill = selected_bill(state, record.id, &level.materials, images)?;
+    super::construction_crafting::needed_gatherer(state, &bill, images)
 }
 
 /// Current bounded construction target, before subtracting the iron pipeline.
@@ -1914,7 +1967,7 @@ pub(crate) fn iron_demand(
     if let Some(order) = &record.pending_order {
         return blueprints::get(&state.registry, &order.blueprint)
             .and_then(|blueprint| blueprint.level(order.level))
-            .and_then(|level| selected_bill(state, id, &level.materials, &images))
+            .and_then(|level| selected_bed_bill(state, id, &level.materials, &images))
             .map_or(0, |bill| demand(&bill));
     }
     if let Some(project) = &record.project {
@@ -1937,7 +1990,7 @@ pub(crate) fn iron_demand(
     candidate_kinds(state, record, &images)
         .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
         .filter_map(|blueprint| blueprint.level(1))
-        .filter_map(|level| selected_bill(state, id, &level.materials, &images))
+        .filter_map(|level| selected_bed_bill(state, id, &level.materials, &images))
         .map(|bill| demand(&bill))
         .max()
         .unwrap_or(0)
@@ -1974,14 +2027,14 @@ pub(crate) fn wool_demand(state: &TickState, id: SettlementId) -> bool {
     if let Some(order) = &record.pending_order {
         return blueprints::get(&state.registry, &order.blueprint)
             .and_then(|blueprint| blueprint.level(order.level))
-            .and_then(|level| selected_bill(state, id, &level.materials, &images))
+            .and_then(|level| selected_bed_bill(state, id, &level.materials, &images))
             .is_some_and(|bill| availability::needs_wool(state, &bill, &images));
     }
     let catalog = blueprints::all(&state.registry);
     candidate_kinds(state, record, &images)
         .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
         .filter_map(|blueprint| blueprint.level(1))
-        .filter_map(|level| selected_bill(state, id, &level.materials, &images))
+        .filter_map(|level| selected_bed_bill(state, id, &level.materials, &images))
         .any(|bill| availability::needs_wool(state, &bill, &images))
 }
 
@@ -2025,13 +2078,13 @@ pub(crate) fn wool_color(state: &TickState, id: SettlementId) -> Option<u8> {
     }
     if let Some(order) = &record.pending_order {
         let level = blueprints::get(&state.registry, &order.blueprint)?.level(order.level)?;
-        return color_for(&selected_bill(state, id, &level.materials, &images)?);
+        return color_for(&selected_bed_bill(state, id, &level.materials, &images)?);
     }
     let catalog = blueprints::all(&state.registry);
     candidate_kinds(state, record, &images)
         .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
         .filter_map(|blueprint| blueprint.level(1))
-        .filter_map(|level| selected_bill(state, id, &level.materials, &images))
+        .filter_map(|level| selected_bed_bill(state, id, &level.materials, &images))
         .find_map(|bill| color_for(&bill))
 }
 
@@ -2097,15 +2150,7 @@ pub(crate) fn waiting(state: &TickState, id: SettlementId) -> Vec<WaitingKind> {
         if funded_variant(state, id, &level.materials, &images).is_some() {
             continue;
         }
-        let (colors, count) = bed_colors(state, id, &level.materials, &images);
-        let Some(color) = colors
-            .get(..count)
-            .and_then(|colors| colors.first())
-            .copied()
-        else {
-            continue;
-        };
-        let Some(bill) = bed_bill(state, &level.materials, color) else {
+        let Some(bill) = selected_bill(state, id, &level.materials, &images) else {
             continue;
         };
         let mut needs = Vec::new();

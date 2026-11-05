@@ -334,5 +334,8 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
         row["sprint_completions"] = []
         interval = 300 if advanced < 3000 else SPRINT_TICKS
         for _ in range(interval // 300):
-            row["sprint_completions"].append(item_merge._sprint(server, server_log, 300, probe.remaining()))
+            # Simulation throughput is not an MCP request latency. Await this
+            # sprint's exact completion, bounded by the whole scenario deadline.
+            row["sprint_completions"].append(item_merge._sprint(
+                server, server_log, 300, probe.remaining(limit=None)))
             advanced += 300

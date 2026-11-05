@@ -915,14 +915,15 @@ fn funded_mine_without_a_site_does_not_starve_a_legal_mason() {
     let images = executor::source_images(&state, id);
     for name in ["mine", "mason"] {
         assert!(
-            funded_species(
+            select_species(
                 &state,
                 &blueprints::get(&state.registry, name)
                     .unwrap()
                     .level(1)
                     .unwrap()
                     .materials,
-                &images
+                &images,
+                false,
             )
             .is_some()
         );

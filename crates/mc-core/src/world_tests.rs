@@ -581,6 +581,50 @@ fn generated_chunks_persist_without_overwriting_edits() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+fn regenerated_chunk_batch_saves_unique_bases_and_preserves_checkpointed_edit() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut world = test_world(Some(dir.path().to_path_buf()));
+    let repeated = mc_world::ChunkPos { x: 0, z: 0 };
+    let untouched = mc_world::ChunkPos { x: 10, z: 0 };
+    let edited = mc_world::ChunkPos { x: 20, z: 0 };
+    world.ensure_blocking(&wants(&[repeated]));
+    assert!(world.evict_outside(&HashMap::default()).contains(&repeated));
+    // Model the bounded recent cache dropping the evicted chunk before the
+    // pending generated batch is saved, then revisit it through normal loading.
+    drop(world.recent.take(repeated));
+    world.ensure_blocking(&wants(&[repeated, untouched, edited]));
+    let generated = world.take_generated(0).expect("generated chunks queued");
+
+    let dirt = crate::registry::CoreRegistry::load(Some(&world_root()))
+        .expect("registry")
+        .states
+        .dirt;
+    world.set_block(324, 100, 4, dirt);
+    world.fold_overlay();
+    world.flush_dirty(&Default::default()).expect("checkpoint");
+    generated.fill_generated().expect("save regenerated batch");
+    drop(world);
+
+    let reopened = test_world(Some(dir.path().to_path_buf()));
+    for pos in [repeated, untouched] {
+        assert!(
+            reopened
+                .source
+                .load_native(pos)
+                .expect("readable")
+                .is_some(),
+            "generated base for {pos:?} was saved"
+        );
+    }
+    let stored = reopened
+        .source
+        .load_native(edited)
+        .expect("readable")
+        .expect("edited chunk");
+    assert_eq!(stored.get_block(4, 100, 4).map(|block| block.0), Some(dirt));
+}
+
 /// A generated chunk alone lands as an immutable native base.
 #[test]
 fn generated_chunk_fills_its_empty_slot() {
