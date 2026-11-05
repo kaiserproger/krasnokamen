@@ -63,9 +63,8 @@ pass". This page is the release procedure for the four repositories:
 
 ## A pushed tag whose CI failed
 
-Each public step needs its own advisor approval on the exact command; a bare
-repeated `[approved]` may be dropped as a duplicate, so ask for
-`[approved] R<n> <sha>`.
+Each public step needs its own advisor approval: name the exact command and SHA
+in the request; the answer is exactly `[approved]`, with no suffix.
 
 1. Diagnose: `gh run view <run> --json jobs` plus the failed job log (save under
    `.analysis/releases/<tag>/`); `gh release view <tag>` (not found when publish

@@ -43,9 +43,9 @@ in the ignored, owner-maintained `WATCHDOG.yml` (do not edit it). Its policy:
   list of corrections. No `[approved]` without that check.
 - No nitpicking on style or naming without effect on correctness or complexity.
 
-Practice since 2026-10-29: each public step of a multi-step publication gets
-its own approval on the exact command; ask for `[approved] R<n> <sha>` because a
-bare repeated `[approved]` can be dropped as a duplicate (see
+Each public step of a multi-step publication gets its own approval: name the
+exact command and SHA in the request; the advisor answers exactly `[approved]`
+with no suffix (see
 [releases](release-and-tags.md#a-pushed-tag-whose-ci-failed)). An advisor
 lesson (2026-10-24): verify definitions and callers at the pinned commit before
 escalating a worker's "baseline is broken" report.
