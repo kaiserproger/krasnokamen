@@ -18,9 +18,10 @@ import zlib
 from pathlib import Path
 from typing import Any, Callable
 
-LEVEL_CHUNK_WITH_LIGHT = 0x2D
-LIGHT_UPDATE = 0x30
-FORGET_LEVEL_CHUNK = 0x25
+# Local 26.3 reports/packets.json (45 is KeepAlive, not chunk data).
+LEVEL_CHUNK_WITH_LIGHT = 0x2E
+LIGHT_UPDATE = 0x31
+FORGET_LEVEL_CHUNK = 0x26
 LAYER_BYTES = 2048
 MIN_Y = -64
 
@@ -82,13 +83,14 @@ class Reader:
             raise ValueError(f"unknown NBT tag {kind}")
 
 
-def _bits(longs: list[int]) -> list[int]:
-    return [index * 64 + bit for index, word in enumerate(longs) for bit in range(64)
-            if (word & 0xFFFFFFFFFFFFFFFF) >> bit & 1]
+def _bits(values: bytes) -> list[int]:
+    return [index * 8 + bit for index, value in enumerate(values) for bit in range(8)
+            if value >> bit & 1]
 
 
 def read_light(reader: Reader) -> dict[str, Any]:
-    masks = [reader.longs() for _ in range(4)]
+    # Vanilla 26.3 ByteBufCodecs.BIT_SET uses readByteArray/BitSet.valueOf.
+    masks = [reader.byte_array() for _ in range(4)]
     lists = []
     for mask in masks[:2]:
         layers = [reader.byte_array() for _ in range(reader.varint())]

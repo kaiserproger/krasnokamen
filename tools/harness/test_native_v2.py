@@ -114,12 +114,14 @@ class NativeV2ProbeTests(unittest.TestCase):
             entry = scenarios.SCENARIOS[name]
             self.assertEqual(entry.profile, "entities")
             self.assertEqual(entry.scenario_id, name)
-            expected = ("graphical" if name in ("native-v2-p5-humanoid-armor", "native-v2-light-seam",
-                                                "native-v2-radius-full-view", "native-v2-craft-drag",
-                                                "native-v2-settlement-storage", "native-v2-destroyed-chest",
-                                                "native-v2-end-restart", "native-v2-entity-gallery",
-                                                "native-v2-p2-optional-pack", "native-v2-custody-mount-export")
-                        else "tcp")
+            expected = ("graphical" if name.startswith("native-v2-map-") or name in (
+                "native-v2-p5-humanoid-armor", "native-v2-light-seam",
+                "native-v2-radius-full-view", "native-v2-craft-drag",
+                "native-v2-settlement-storage", "native-v2-destroyed-chest",
+                "native-v2-end-restart", "native-v2-entity-gallery",
+                "native-v2-p2-optional-pack", "native-v2-custody-mount-export",
+                "native-v2-cursor-close", "native-v2-banner-placement",
+                "native-v2-snow-golem-shear") else "tcp")
             self.assertEqual(entry.evidence, expected)
 
     def test_p1_catalog_covers_all_five_surfaces(self) -> None:

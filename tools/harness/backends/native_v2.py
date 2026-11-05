@@ -572,6 +572,30 @@ def _destroyed_chest(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     destroyed_chest(steps, origin)
 
 
+def _promotion_banner(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_promotion_items import banner_placement
+
+    banner_placement(steps, origin)
+
+
+def _promotion_mobs(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_promotion_mobs import run
+
+    run(steps, origin, steps.report["id"].removeprefix("native-v2-"))
+
+
+def _promotion_maps(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_promotion_maps import run
+
+    run(steps, origin, steps.report["id"].removeprefix("native-v2-map-"))
+
+
+def _promotion_cursor(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_promotion_items import cursor_close
+
+    cursor_close(steps, origin)
+
+
 def _promotion_world(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_promotion_world import run
 
@@ -585,6 +609,16 @@ def _promotion_custody(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
 
 
 RUNNERS = {
+    "native-v2-map-frame-waypoint": _promotion_maps,
+    "native-v2-map-banner-removal": _promotion_maps,
+    "native-v2-map-locked-banners": _promotion_maps,
+    "native-v2-map-pumpkin-hiding": _promotion_maps,
+    "native-v2-map-terrain-shading": _promotion_maps,
+    "native-v2-map-nether-terrain": _promotion_maps,
+    "native-v2-map-inventory-player-markers": _promotion_maps,
+    "native-v2-banner-placement": _promotion_banner,
+    "native-v2-snow-golem-shear": _promotion_mobs,
+    "native-v2-cursor-close": _promotion_cursor,
     "native-v2-custody-mount-export": _promotion_custody,
     "native-v2-p2-optional-pack": _promotion_custody,
     "native-v2-end-restart": _promotion_world,

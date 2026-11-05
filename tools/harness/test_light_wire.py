@@ -25,15 +25,15 @@ def _varint(value: int) -> bytes:
             return bytes(out)
 
 
-def _longs(bits: list[int]) -> bytes:
-    words = [0] * ((max(bits) // 64 + 1) if bits else 0)
+def _mask(bits: list[int]) -> bytes:
+    values = bytearray((max(bits) // 8 + 1) if bits else 0)
     for bit in bits:
-        words[bit // 64] |= 1 << (bit % 64)
-    return _varint(len(words)) + b"".join(struct.pack(">Q", word) for word in words)
+        values[bit // 8] |= 1 << (bit % 8)
+    return _varint(len(values)) + values
 
 
 def _light(sky: dict[int, bytes], block: dict[int, bytes], empty_sky: list[int] = (), empty_block: list[int] = ()) -> bytes:
-    out = _longs(sorted(sky)) + _longs(sorted(block)) + _longs(list(empty_sky)) + _longs(list(empty_block))
+    out = _mask(sorted(sky)) + _mask(sorted(block)) + _mask(list(empty_sky)) + _mask(list(empty_block))
     for layers in (sky, block):
         out += _varint(len(layers)) + b"".join(_varint(2048) + layers[key] for key in sorted(layers))
     return out
@@ -52,6 +52,14 @@ def _chunk(x: int, z: int, light: bytes) -> bytes:
 
 
 class WireLightTests(unittest.TestCase):
+    def test_native_byte_bitsets_decode_the_actual_received_light_layers(self) -> None:
+        # The native protocol uses byte-array masks, not arrays of Java longs.
+        payload = b"\x01\x04\x00\x01\x08\x00" + _varint(1) + _varint(2048) + _layer(11) + b"\x00"
+        result = light_wire.read_light(light_wire.Reader(payload))
+        self.assertEqual(result["sky"], {2: _layer(11)})
+        self.assertEqual(result["empty_sky"], [3])
+        self.assertEqual(result["block"], {})
+
     def test_chunk_packet_with_block_entity_nbt_decodes_masks_and_layers(self) -> None:
         wire = light_wire.WireLight()
         wire.chunk_packet(_chunk(3, -2, _light({5: _layer(1), 20: _layer(15)}, {5: _layer(7)})))
@@ -82,7 +90,7 @@ class WireLightTests(unittest.TestCase):
         self.assertEqual([event["kind"] for event in wire.events], ["light", "chunk", "forget"])
 
     def test_disagreeing_mask_and_arrays_fail_closed(self) -> None:
-        bad = _longs([1]) + _longs([]) + _longs([]) + _longs([]) + _varint(0) + _varint(0)
+        bad = _mask([1]) + _mask([]) + _mask([]) + _mask([]) + _varint(0) + _varint(0)
         with self.assertRaisesRegex(ValueError, "disagree"):
             light_wire.read_light(light_wire.Reader(bad))
 
@@ -95,6 +103,24 @@ def _frame(packet_id: int, payload: bytes, compressed: bool) -> bytes:
 
 
 class ProxyTests(unittest.TestCase):
+    def test_26_3_play_ids_keep_alive_does_not_decode_as_chunk(self) -> None:
+        # Local 26.3 reports/packets.json: keep_alive 45, chunk 46,
+        # light_update 49, forget_level_chunk 38. Do not derive the fixture
+        # ids from the implementation constants: that concealed the drift.
+        proxy = light_wire.LightWireProxy.__new__(light_wire.LightWireProxy)
+        proxy.lock = threading.Lock()
+        proxy.packet_observer = None
+        wire = light_wire.WireLight()
+        frames = bytearray(
+            _frame(45, struct.pack(">q", 123), False)
+            + _frame(46, _chunk(2, 3, _light({1: _layer(6)}, {})), False)
+            + _frame(49, _varint(2) + _varint(3) + _light({1: _layer(9)}, {}), False)
+            + _frame(38, struct.pack(">q", 2 | (3 << 32)), False))
+        self.assertEqual(proxy._frames(frames, wire, "play", False), ("play", False))
+        self.assertEqual([event["kind"] for event in wire.events], ["chunk", "light", "forget"])
+        self.assertEqual(wire.chunks, {})
+        self.assertEqual(frames, bytearray())
+
     def test_observer_receives_complete_decompressed_packets_in_all_phases(self) -> None:
         proxy = light_wire.LightWireProxy.__new__(light_wire.LightWireProxy)
         proxy.lock = threading.Lock()

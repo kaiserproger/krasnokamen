@@ -248,10 +248,10 @@ title = "A framed home-map waypoint disappears from the traveler's held clone on
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-FRAME-WAYPOINT-PERSISTENCE"
-regression = ["cargo:mc-core:tick_tests::maps_tests::framed_waypoints_survive_nbt_roundtrip", "cargo:mc-core:tick_tests::maps_tests::framed_and_pocket_maps_do_not_explore_until_held"]
-failing_first = "not recorded"
+regression = ["cargo:mc-core:tick_tests::maps_tests::framed_waypoints_survive_nbt_roundtrip", "cargo:mc-core:tick_tests::maps_tests::framed_and_pocket_maps_do_not_explore_until_held", "harness:entities:native-v2-map-frame-waypoint"]
+failing_first = "reported"
 
 [[bug]]
 id = "MAP-BANNER-REMOVAL"
@@ -259,10 +259,10 @@ title = "Destroying a marked banner leaves its waypoint on an unlocked map perma
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-BANNER-REMOVAL"
-regression = ["cargo:mc-core:tick_tests::maps_tests::revisiting_destroyed_banner_removes_its_map_waypoint"]
-failing_first = "not recorded"
+regression = ["cargo:mc-core:tick_tests::maps_tests::revisiting_destroyed_banner_removes_its_map_waypoint", "harness:entities:native-v2-map-banner-removal"]
+failing_first = "reported"
 
 [[bug]]
 id = "MAP-LOCKED-BANNERS"
@@ -270,10 +270,10 @@ title = "A locked map cannot add/remove banner waypoints at all, although lockin
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-LOCKED-BANNERS"
-regression = ["cargo:mc-core:tick_tests::maps_tests::locked_map_can_toggle_banner_waypoint"]
-failing_first = "not recorded"
+regression = ["cargo:mc-core:tick_tests::maps_tests::locked_map_can_toggle_banner_waypoint", "harness:entities:native-v2-map-locked-banners"]
+failing_first = "reported"
 
 [[bug]]
 id = "MAP-PUMPKIN-HIDING"
@@ -281,9 +281,9 @@ title = "Wearing a carved pumpkin does not hide the player's marker from other p
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-PUMPKIN-HIDING"
-regression = ["cargo:mc-core:tick_tests::maps_tests::carved_pumpkin_hides_carrier_marker_from_other_players"]
+regression = ["cargo:mc-core:tick_tests::maps_tests::carved_pumpkin_hides_carrier_marker_from_other_players", "harness:entities:native-v2-map-pumpkin-hiding"]
 failing_first = "reported"
 
 [[bug]]
@@ -292,10 +292,10 @@ title = "Maps render every visible base color at one constant brightness, losing
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-TERRAIN-SHADING"
-regression = ["cargo:mc-core:tick_tests::maps_tests::water_map_pixels_keep_water_color_and_distinguish_depth"]
-failing_first = "not recorded"
+regression = ["cargo:mc-core:tick_tests::maps_tests::water_map_pixels_keep_water_color_and_distinguish_depth", "harness:entities:native-v2-map-terrain-shading"]
+failing_first = "reported"
 
 [[bug]]
 id = "MAP-NETHER-TERRAIN"
@@ -303,10 +303,10 @@ title = "Nether maps use the ordinary top-block sampler, so they map the physica
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-NETHER-TERRAIN"
-regression = ["cargo:mc-core:tick_tests::maps_tests::nether_map_noise_uses_vanilla_colors_not_roof_blocks"]
-failing_first = "not recorded"
+regression = ["cargo:mc-core:tick_tests::maps_tests::nether_map_noise_uses_vanilla_colors_not_roof_blocks", "harness:entities:native-v2-map-nether-terrain"]
+failing_first = "reported"
 
 [[bug]]
 id = "MAP-INVENTORY-PLAYER-MARKERS"
@@ -314,10 +314,10 @@ title = "A teammate carrying a cloned map in an ordinary inventory slot disappea
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-INVENTORY-PLAYER-MARKERS"
-regression = ["cargo:mc-core:tick_tests::maps_tests::inventory_map_markers_include_each_distinct_map_id"]
-failing_first = "not recorded"
+regression = ["cargo:mc-core:tick_tests::maps_tests::inventory_map_markers_include_each_distinct_map_id", "harness:entities:native-v2-map-inventory-player-markers"]
+failing_first = "reported"
 
 [[bug]]
 id = "MAP-FRAME-AUTO-EXPLORE"
@@ -1201,9 +1201,10 @@ title = "Imported chested donkey/mule/llama cargo was decoded into native slots 
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CUSTODY-MOUNT-EXPORT"
-regression = ["cargo:mc-core:world_conversion::roundtrip_tests::imported_mount_cargo_menu_roundtrip_uses_native_contents"]
+regression = ["cargo:mc-core:world_conversion::roundtrip_tests::imported_mount_cargo_menu_roundtrip_uses_native_contents", "harness:entities:native-v2-custody-mount-export"]
+failing_first = "reported"
 
 [[bug]]
 id = "SETBLOCK-SNBT"
@@ -1832,10 +1833,10 @@ title = "Shears on a snow golem do nothing: vanilla `SnowGolem` implements `Shea
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-SNOW-SHEAR"
-regression = ["cargo:mc-core:tick_tests::snow_golem_shearing_is_once_and_survives_checkpoint_and_disk_wal"]
-failing_first = "not recorded"
+regression = ["cargo:mc-core:tick_tests::snow_golem_shearing_is_once_and_survives_checkpoint_and_disk_wal", "harness:entities:native-v2-snow-golem-shear"]
+failing_first = "reported"
 
 [[bug]]
 id = "REDSTONE-WIRE-HOPPER-SUPPORT"
@@ -2432,9 +2433,10 @@ title = "Closing inventory with occupied cursor leaves phantom client cursor"
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-craft-custody-next/REPORT.yaml; baseline graphical failure hunt-craft-custody-next/receipts/20261103T112621-scene-shot-i69ak7dg/result.json"
-regression = ["cargo:mc-core:player::tests::close_publishes_cursor_clear_after_inventory_and_crafting_pickup"]
+regression = ["cargo:mc-core:player::tests::close_publishes_cursor_clear_after_inventory_and_crafting_pickup", "harness:entities:native-v2-cursor-close"]
+failing_first = "reported"
 
 [[bug]]
 id = "HUNT-LEVITATION-REST"
@@ -3061,14 +3063,36 @@ regression = []
 
 [[bug]]
 id = "MODEL-BANNER-PLACEMENT"
-title = "A banner placed from an item with `banner_patterns` is unpatterned in the world: server writes only `{id,x,y,z}` block-entity defaults; no item-component → block-entity transfer (same hole for head `profile`, pot sherds, custom name)"
+title = "A banner placed from an item with `banner_patterns` is unpatterned in the world, and named banners lose their custom names: server writes only `{id,x,y,z}` block-entity defaults without transferring the banner item components."
 area = "client"
 repro = "source"
 severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:29"
+regression = ["cargo:mc-core:block_entity_defaults::tests::patterned_banner_item_use_preserves_layers_in_world_wire_and_journal", "cargo:mc-core:block_entity_defaults::tests::named_unpatterned_banner_retains_custom_name", "harness:entities:native-v2-banner-placement"]
+failing_first = "reported"
+
+[[bug]]
+id = "MODEL-PLACED-HEAD-PROFILE"
+title = "Placed player-head profile appearance remains unverified: the profile reaches block-entity NBT, but the Alex fixture's head is invisible because the native renderer requires a listed player with a verified published skin. A verified listed-profile fixture is required before closing the head portion split from MODEL-BANNER-PLACEMENT."
+area = "client"
+repro = "client"
+severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:29"
-regression = ["cargo:mc-core:block_entity_defaults::tests::patterned_banner_item_use_preserves_layers_in_world_wire_and_journal", "cargo:mc-core:block_entity_defaults::tests::named_unpatterned_banner_retains_custom_name", "cargo:mc-core:block_entity_defaults::tests::placed_head_and_pot_preserve_their_item_components"]
-failing_first = "reported"
+regression = ["cargo:mc-core:block_entity_defaults::tests::placed_head_and_pot_preserve_their_item_components"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "MODEL-PLACED-POT-DECORATIONS"
+title = "Decorated pots placed from an item remain visually plain despite transferred sherd NBT: the server sends sherds.back as an item-id string, while the native pot renderer reads sherds[side][\"id\"]. The pot portion split from MODEL-BANNER-PLACEMENT needs a graphical decoration assertion and a matching one-fix negative control."
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:29"
+regression = ["cargo:mc-core:block_entity_defaults::tests::placed_head_and_pot_preserve_their_item_components"]
+failing_first = "not recorded"
 
 [[bug]]
 id = "MODEL-DYNAMIC-CONTEXT"
@@ -3382,9 +3406,10 @@ title = "In the native client, quick-moving cargo in an ordinary horse/donkey/ll
 area = "client"
 repro = "client"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/Promote/validation/20261104T195352-native-v2-custody-mount-export-4di9p1dx/result.json"
-regression = []
+regression = ["harness:entities:native-v2-custody-mount-export"]
+failing_first = "reported"
 
 [[bug]]
 id = "NATIVE-MAP-MARKERS"

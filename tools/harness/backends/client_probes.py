@@ -77,6 +77,11 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
                 "native-lifecycle": native_lifecycle.REQUIRED_TOOLS}[kind]
     if v2_scenario:
         required = native_v2.REQUIRED_TOOLS
+    promotion_maps = (ctx.scenario_id or "").startswith("native-v2-map-")
+    promotion_actor = ctx.scenario_id in (
+        "native-v2-map-inventory-player-markers", "native-v2-map-pumpkin-hiding")
+    if ctx.scenario_id == "native-v2-cursor-close":
+        required = required | {"minecraft_open_inventory", "client_capture"}
     if ctx.scenario_id == "native-v2-craft-drag":
         required = required | {"minecraft_open_inventory", "client_capture"}
     if ctx.scenario_id == "native-v2-settlement-storage":
@@ -95,7 +100,7 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     if ctx.scenario_id == "java-v2-p5-towns":
         username = "P5Setup"
     operators = [username] if kind != "core-client" else []
-    if ctx.scenario_id == "native-v2-p5-humanoid-armor":
+    if ctx.scenario_id == "native-v2-p5-humanoid-armor" or promotion_actor:
         operators.append("P5ArmorActor")
     config = artifact / "server.toml"
     view_distance, simulation_distance = 4, 4
@@ -136,6 +141,7 @@ seed = 81
     if check:
         return {"mode": "prepared", "client_evidence": evidence}
     server = client_process = xvfb = mcp = wire_trace = None
+    promotion_receipt = None
     peer_process = peer_mcp = peer_log = None
     peer_evidence: dict[str, Any] = {}
     server_log = client_log = display_log = None
@@ -172,12 +178,27 @@ seed = 81
                     port, artifact, pack_receipt.server_packet, pack_receipt.client_packet)
                 client_address = wire_trace.address
                 evidence["native_wire_trace"] = str(pack_receipt.path)
+            elif promotion_maps or ctx.scenario_id == "native-v2-banner-placement":
+                from .native_promotion_wire import PromotionWireReceipt
+
+                report_path = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
+                promotion_receipt = PromotionWireReceipt(report_path, artifact)
+                wire_trace = light_wire.LightWireProxy(port, artifact, promotion_receipt.server_packet)
+                client_address = wire_trace.address
+                evidence["native_wire_trace"] = str(wire_trace.path)
             if ctx.windowed:
                 xvfb, display, display_log = runtime.start_xvfb(artifact)
                 ctx.logs.append(str(artifact / "xvfb.log"))
             client_process, client_log, mcp = native_client.start(
                 ctx, native_client.resolve_binary(ctx), client_address, username, startup_timeout,
                 display=display)
+            if promotion_maps or ctx.scenario_id == "native-v2-banner-placement":
+                def promotion_snapshot() -> dict[str, Any]:
+                    if wire_trace.errors:
+                        raise RuntimeError(f"promotion wire errors: {wire_trace.errors}")
+                    return wire_trace.query(promotion_receipt.snapshot)
+
+                mcp.promotion_wire_receipt = promotion_snapshot
             if ctx.scenario_id == "native-v2-p2-fishing":
                 mcp.p2_wire_trace = wire_trace
             if ctx.scenario_id in (native_light.SCENARIO_ID, "native-v2-radius-full-view"):
@@ -202,12 +223,12 @@ seed = 81
                 from . import native_focus
 
                 native_focus.acquire(display, client_process.pid, startup_timeout)
-            if ctx.scenario_id == "native-v2-p5-humanoid-armor":
+            if ctx.scenario_id == "native-v2-p5-humanoid-armor" or promotion_actor:
                 peer_ctx = replace(ctx, artifact_dir=artifact / "headless-actor",
                                    client_evidence=peer_evidence, windowed=False)
                 evidence["headless_armor_actor"] = peer_evidence
                 peer_process, peer_log, peer_mcp = native_client.start(
-                    peer_ctx, native_client.resolve_binary(peer_ctx), client_address, "P5ArmorActor",
+                    peer_ctx, native_client.resolve_binary(peer_ctx), address, "P5ArmorActor",
                     startup_timeout)
                 peer_mcp.request_timeout_seconds = 130.0
                 peer_mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
