@@ -1,8 +1,9 @@
 # Solaris documentation
 
-Solaris 1.0.0-rc.1 "Pauline" is the release candidate for Solaris 1.0, for
-Minecraft Java 26.1.2. Start with the [project README](../README.md) for
-installation and a source quick start.
+Solaris 1.0.0-rc.4 "Pauline" is the current release candidate for Solaris 1.0,
+for Minecraft Java 26.3 (26.1.2 clients can still join with a retained cache; see
+the [operating guide](OPERATING.md)). Start with the [project README](../README.md)
+for installation and a source quick start.
 
 ## Running and extending Solaris
 

@@ -17,7 +17,7 @@ things the vanilla server is bad at:
   a player and a chest. Only the last few ticks that had not reached the disk
   yet may roll back.
 
-> **Status: Solaris 1.0 "Pauline", release candidate 3 (prerelease).**
+> **Status: Solaris 1.0 "Pauline", release candidate 4 (prerelease).**
 > Adversarial release validation is in progress; required blocked checks are not
 > passes. Not bit-identical to vanilla, and Java mods do not run (see below).
 
@@ -160,10 +160,10 @@ Linux x86-64 and AArch64 binaries are published on
 `curl`, `tar`, a SHA-256 utility and **JDK 25** (used once to extract game data):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.3/install.sh \
-  | SOLARIS_VERSION=v1.0.0-rc.3 bash
+curl -fsSL https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.4/install.sh \
+  | SOLARIS_VERSION=v1.0.0-rc.4 bash
 curl -fsSLo example.toml \
-  https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.3/example.toml
+  https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.4/example.toml
 ```
 
 Solaris does not ship any Mojang files. Before the first start, download the
@@ -222,8 +222,8 @@ python3 -m tools.harness run correctness
 
 More: the [documentation index](docs/README.md), the
 [architecture overview](docs/ARCHITECTURE.md) and the
-[1.0 release notes](docs/releases/v1.0.0-rc.1.md) (upgrading from v0.0.8 is
-covered there).
+[RC4 release notes](docs/releases/v1.0.0-rc.4.md) (upgrading from v0.0.8 is
+covered in the [RC1 notes](docs/releases/v1.0.0-rc.1.md)).
 
 ## License
 

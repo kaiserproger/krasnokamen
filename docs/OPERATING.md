@@ -100,7 +100,7 @@ export SOLARIS_LEGACY_CONTENT_CACHE=/srv/solaris/content/26.1.2
 The server logs `26.1.2 (protocol 775) clients enabled` when loading succeeds.
 A missing or unusable old cache logs the reason and disables 775 logins;
 they receive the incompatible-version disconnect. Canonical 777 clients
-continue to use the 26.3 cache. The rc.1 `content import` command imports
+continue to use the 26.3 cache. The 1.0 `content import` command imports
 26.3 only: retain the old deployment cache rather than trying to recreate it
 with that command. A fresh 26.3-only installation, including native-client
 singleplayer, does not need the legacy cache unless it will admit 775 clients.

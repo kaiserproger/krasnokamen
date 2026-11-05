@@ -1,6 +1,7 @@
 # Agent Guide — Solaris
 
-Solaris is a Rust Minecraft Java 26.1.2 server; 1.0.0-rc.1 "Pauline" is the 1.0 release candidate.
+Solaris is a Rust Minecraft Java 26.3 server (26.1.2 clients via a retained legacy cache);
+1.0.0-rc.4 "Pauline" is the current 1.0 release candidate.
 The current binary is `mc-edge`'s `solaris-v2` over native `mc-core`; v1 is retired.
 `CLAUDE.md` is a symlink to this guide. Owner identity is
 `kaiserproger <kaisergrobe@gmail.com>`; never change Git configuration.
@@ -55,7 +56,7 @@ From the repository root (debug by default):
 
 ```sh
 cargo build -p mc-edge --bin solaris-v2
-cargo run -p mc-edge --bin solaris-v2 -- content import --version 26.1.2 --download
+cargo run -p mc-edge --bin solaris-v2 -- content import --version 26.3 --download
 cargo run -p mc-edge --bin solaris-v2 -- --config example.toml
 python3 -m tools.harness list
 python3 -m tools.harness run test -p mc-core --lib <filter>  # L0: affected scope
