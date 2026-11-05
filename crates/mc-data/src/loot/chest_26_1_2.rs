@@ -587,11 +587,8 @@ fn collect_tables(directory: &Path, base: &Path, out: &mut Vec<Identifier>) -> R
         if entry.file_type().map_err(|e| e.to_string())?.is_dir() {
             collect_tables(&path, base, out)?;
         } else if path.extension().is_some_and(|e| e == "json") {
-            let relative = path
-                .strip_prefix(base)
-                .map_err(|e| e.to_string())?
-                .with_extension("");
-            let name = relative.to_str().ok_or("non-UTF8 loot path")?;
+            let name = crate::resource_path::slash_relative(base, &path.with_extension(""))
+                .ok_or("non-UTF8 loot path")?;
             out.push(Identifier::parse(format!("minecraft:{name}")).map_err(|e| e.to_string())?);
         }
     }

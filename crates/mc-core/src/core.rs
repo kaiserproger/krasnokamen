@@ -471,7 +471,7 @@ impl Core {
         }
         std::fs::create_dir_all(&config.world_dir)
             .map_err(|e| CoreError::Storage(e.to_string()))?;
-        let world_lease = std::fs::File::open(&config.world_dir)
+        let world_lease = mc_world::storage::open_for_lease(&config.world_dir)
             .map_err(|e| CoreError::Storage(e.to_string()))?;
         world_lease.try_lock().map_err(|e| {
             CoreError::Storage(format!(
@@ -486,7 +486,8 @@ impl Core {
                 Ok(entries) => {
                     for entry in entries {
                         let entry = entry.map_err(|e| CoreError::Storage(e.to_string()))?;
-                        if entry.file_name() != "datapacks" {
+                        let name = entry.file_name();
+                        if name != "datapacks" && name != mc_world::storage::WORLD_LEASE_FILE_NAME {
                             return Err(crate::native_checkpoint::import_required(&config));
                         }
                     }

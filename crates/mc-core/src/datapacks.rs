@@ -227,12 +227,8 @@ impl PackSet {
             let mut paths = Vec::new();
             files(&data, &mut paths, 0, &mut visited)?;
             for path in paths {
-                let relative = path
-                    .strip_prefix(&data)
-                    .map_err(|e| e.to_string())?
-                    .to_str()
-                    .ok_or("Non-UTF8 datapack path")?
-                    .to_owned();
+                let relative = mc_data::resource_path::slash_relative(&data, &path)
+                    .ok_or("Non-UTF8 datapack path")?;
                 let (namespace, tail) = relative
                     .split_once('/')
                     .ok_or("Resource must be namespaced")?;

@@ -43,14 +43,16 @@ impl BackupManifest {
     }
 }
 
-/// Core::open locks the directory inode, not the v1 .solaris-world.lock file.
+/// Core::open leases the world through `mc_world::storage::open_for_lease`: the
+/// directory inode on Unix, its `.solaris-world.lock` on Windows.
 /// redb 3 uses the same File::try_lock on state.redb. Locking the raw file also
 /// excludes direct NativeStore users without opening/repairing the database.
 struct ExclusiveLease(File);
 
 impl ExclusiveLease {
     fn acquire(path: &Path) -> Result<Self> {
-        let file = File::open(path).with_context(|| format!("opening {}", path.display()))?;
+        let file = mc_world::storage::open_for_lease(path)
+            .with_context(|| format!("opening {}", path.display()))?;
         file.try_lock().map_err(|error| {
             anyhow::anyhow!(
                 "{} is already leased or cannot be locked: {error}",
@@ -70,7 +72,7 @@ impl Drop for ExclusiveLease {
 fn is_lease_file(path: &Path) -> bool {
     matches!(
         path.file_name().and_then(|name| name.to_str()),
-        Some(".solaris-world.lock" | "session.lock")
+        Some(name) if name == mc_world::storage::WORLD_LEASE_FILE_NAME || name == "session.lock"
     )
 }
 
@@ -115,11 +117,8 @@ fn collect_files(root: &Path, backup: bool) -> Result<BTreeMap<String, PathBuf>>
             if is_lease_file(&path) {
                 continue;
             }
-            let name = path
-                .strip_prefix(root)?
-                .to_str()
-                .with_context(|| format!("non-UTF-8 file name under {}", root.display()))?
-                .to_owned();
+            let name = mc_data::resource_path::slash_relative(root, &path)
+                .with_context(|| format!("non-UTF-8 file name under {}", root.display()))?;
             if backup && name == BACKUP_MANIFEST {
                 continue;
             }
@@ -164,9 +163,12 @@ fn refuse_overlap(source: &Path, destination: &Path) -> Result<()> {
 
 fn require_empty(path: &Path) -> Result<()> {
     match std::fs::read_dir(path) {
-        Ok(mut entries) => {
-            if entries.next().transpose()?.is_some() {
-                bail!("destination is not empty: {}", path.display());
+        Ok(entries) => {
+            // A Windows directory lease is a file inside the directory.
+            for entry in entries {
+                if !is_lease_file(&entry?.path()) {
+                    bail!("destination is not empty: {}", path.display());
+                }
             }
             Ok(())
         }

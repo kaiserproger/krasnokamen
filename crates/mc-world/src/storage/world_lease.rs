@@ -5,9 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::WorldError;
+use super::{WORLD_LEASE_FILE_NAME, WorldError};
 
-const WORLD_LEASE_FILE_NAME: &str = ".solaris-world.lock";
 const WORLD_LEASE_METADATA_MAX_BYTES: usize = 4 * 1024;
 static WORLD_LEASES: OnceLock<Mutex<HashMap<PathBuf, Weak<WorldRootLease>>>> = OnceLock::new();
 

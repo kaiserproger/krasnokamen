@@ -244,7 +244,7 @@ fn convert(
         if !source.is_dir() {
             return Err(fail("source must be a directory"));
         }
-        let lease = File::open(&source).map_err(fail)?;
+        let lease = mc_world::storage::open_for_lease(&source).map_err(fail)?;
         lease.try_lock().map_err(fail)?;
         let _java_lease = if operation == "import-anvil" {
             Some(JavaLease::acquire(&source)?)
@@ -699,8 +699,11 @@ fn hashes(root: &Path) -> Result<BTreeMap<String, String>, CoreError> {
     let mut out = BTreeMap::new();
     for path in files(root)? {
         // Closing any descriptor for this inode releases a process POSIX lease.
-        // Session lock bytes are owner coordination, not convertible world data.
-        if path == Path::new("session.lock") {
+        // Session lock bytes are owner coordination, not convertible world data;
+        // Solaris's own lease file is locked (unreadable) on Windows.
+        if path == Path::new("session.lock")
+            || path == Path::new(mc_world::storage::WORLD_LEASE_FILE_NAME)
+        {
             continue;
         }
         let mut input = File::open(root.join(&path)).map_err(fail)?;

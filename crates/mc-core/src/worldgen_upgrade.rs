@@ -41,7 +41,7 @@ fn contract(config: &CoreConfig, revision: u32) -> Result<NativeGenerationContra
 /// refused worlds are not written. A repeated upgrade writes no contract.
 pub fn upgrade_worldgen_revision(config: &CoreConfig) -> Result<WorldgenUpgrade, CoreError> {
     let storage = |error: mc_world::native::NativeError| CoreError::Storage(error.to_string());
-    let lease = std::fs::File::open(&config.world_dir)
+    let lease = mc_world::storage::open_for_lease(&config.world_dir)
         .map_err(|e| CoreError::Storage(format!("world {}: {e}", config.world_dir.display())))?;
     lease.try_lock().map_err(|e| {
         CoreError::Storage(format!(
