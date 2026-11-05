@@ -51,6 +51,12 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 
+# Line tables keep file:line in panics and backtraces; full debuginfo cost about a
+# third of a cold mc-core compile (55 s -> 38 s, .analysis/codex-logs/build-time/).
+# The test profile inherits this, so test and dev builds use one setting.
+[profile.dev]
+debug = "line-tables-only"
+
 # The debug server compiles deployed Wasm components at startup. Keep Solaris
 # crates debuggable, but optimize every third-party dependency (Wasmtime,
 # wasmparser, serde_json, ...): with six deployed packages an unoptimized-deps
@@ -66,12 +72,6 @@ opt-level = 3
 
 [profile.dev.package.regalloc2]
 opt-level = 3
-
-[profile.test]
-debug = 1
-
-[profile.test.package."*"]
-debug = 0
 
 # Density-graph evaluation and noise loops also run during debug-server startup.
 # Optimize worldgen while keeping the rest of the development server debuggable.

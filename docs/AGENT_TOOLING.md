@@ -201,18 +201,20 @@ A cap only protects the session if the run fits in free machine memory:
 `MemoryMax` + 1 GiB, naming the knob to change. That refusal is not
 acceptance evidence. Prefix heavy Cargo with `env RUSTC_WRAPPER=`: the global
 `~/.cargo` sccache wrapper otherwise compiles outside the mem-run scope.
+Keep one Cargo environment for every build on the shared host and run Cargo
+only through the runner: a plain `cargo build` after a runner build of the same
+tree rebuilt the workspace for 84 s (the runner sets `CARGO_INCREMENTAL`), and
+any `CARGO_PROFILE_*` override is a separate profile. The dev/test profiles
+already use line-table debuginfo, so no per-command debuginfo override is needed.
 Full `run test` / `run correctness` run beside other work with a 12G cap; the
 runner's watchdog freezes build-only commands while memory is short and thaws
 them later, and `-x` is reserved for quiet measurement windows:
 
 ```sh
 # Full workspace gate.
-tools/dev/mem-run.sh -m 12G env RUSTC_WRAPPER= CARGO_BUILD_JOBS=6 \
-  CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
-  python3 -m tools.harness run test
+tools/dev/mem-run.sh -m 12G env RUSTC_WRAPPER= python3 -m tools.harness run test
 # Focused/per-crate work retains the smaller shared scope.
-tools/dev/mem-run.sh -m 8G env RUSTC_WRAPPER= CARGO_BUILD_JOBS=6 \
-  CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
+tools/dev/mem-run.sh -m 8G env RUSTC_WRAPPER= \
   cargo test -p mc-core --lib entity_state_persistence_tests
 ```
 
