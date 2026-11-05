@@ -142,7 +142,7 @@ fn pregenerate_refuses_a_zero_radius_without_creating_the_world() {
 fn pregenerate_refuses_a_world_that_a_running_server_holds() {
     let (dir, config) = fresh_world(42);
     Core::open(config.clone()).expect("fresh world").shutdown();
-    let world = std::fs::File::open(&config.world_dir).unwrap();
+    let world = mc_world::storage::open_for_lease(&config.world_dir).unwrap();
     world.try_lock().expect("test holds the world lease");
     let error = pregenerate(&config, &PregenerateRequest::new(16), &mut no_progress)
         .expect_err("leased world")

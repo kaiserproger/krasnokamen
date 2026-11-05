@@ -133,7 +133,7 @@ fn empty_target_directory_lease_blocks_restore() {
     let target = root.path().join("target");
     std::fs::create_dir(&target).unwrap();
     // Exactly the directory-inode lease held by Core::open, no v1 lock file.
-    let lease = File::open(&target).unwrap();
+    let lease = mc_world::storage::open_for_lease(&target).unwrap();
     lease.try_lock().unwrap();
     let error = run_restore(&backup, &target).unwrap_err();
     assert!(error.to_string().contains("leased"), "{error:#}");

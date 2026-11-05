@@ -20,7 +20,7 @@ use mc_nbt::Tag;
 use mc_world::native::NativeReadOnlyStore;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, File};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 const SCOPE: &str = "pinned native checkpoint only: entities are the stored table incl. nested \
@@ -122,7 +122,7 @@ fn census(
     if !source.is_dir() {
         return Err(fail("source must be a directory"));
     }
-    let lease = File::open(&source).map_err(fail)?;
+    let lease = mc_world::storage::open_for_lease(&source).map_err(fail)?;
     lease.try_lock().map_err(fail)?;
     receipt.input_hashes = hashes(&source)?;
     let mut config = config.clone();

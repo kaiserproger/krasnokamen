@@ -115,7 +115,7 @@ pub fn pregenerate(
     let spawn = core.world_spawn();
     let registry = Arc::clone(core.registry());
     core.shutdown();
-    let lease = std::fs::File::open(&config.world_dir).map_err(storage)?;
+    let lease = mc_world::storage::open_for_lease(&config.world_dir).map_err(storage)?;
     lease.try_lock().map_err(|error| {
         storage(format!(
             "world {} is already leased (is the server running?): {error}",

@@ -53,7 +53,7 @@ struct StoppedWorld {
 }
 
 fn stopped_world(config: &CoreConfig) -> Result<StoppedWorld, CoreError> {
-    let lease = std::fs::File::open(&config.world_dir)
+    let lease = mc_world::storage::open_for_lease(&config.world_dir)
         .map_err(|e| storage(format!("world {}: {e}", config.world_dir.display())))?;
     lease.try_lock().map_err(|e| {
         storage(format!(

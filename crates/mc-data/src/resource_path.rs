@@ -14,6 +14,23 @@ use thiserror::Error;
 
 use crate::Identifier;
 
+/// `path` below `root` as a `/`-separated resource path on every platform.
+///
+/// `Path::to_str` keeps the host separator, so on Windows a walked
+/// `chests\abandoned_mineshaft` is not a resource path. `None` when `path` is
+/// not below `root` or a component is not UTF-8.
+#[must_use]
+pub fn slash_relative(root: &Path, path: &Path) -> Option<String> {
+    let mut out = String::new();
+    for component in path.strip_prefix(root).ok()?.components() {
+        if !out.is_empty() {
+            out.push('/');
+        }
+        out.push_str(component.as_os_str().to_str()?);
+    }
+    Some(out)
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ResourcePath {
     relative: PathBuf,

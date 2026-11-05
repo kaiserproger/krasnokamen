@@ -339,12 +339,37 @@ pub(crate) fn read_config(root: &Path, limits: &PluginLimits) -> Result<String, 
     read_config_text(file, limits.text_bytes)
 }
 
-#[cfg(not(unix))]
-pub(crate) fn read_config(_root: &Path, _limits: &PluginLimits) -> Result<String, String> {
-    Err("secure package config.toml reads are unsupported on this platform".to_owned())
+/// Windows has no descriptor-relative open; the final component is opened
+/// without following a reparse point (symlink or junction) and must be a
+/// regular file. The package directory itself is operator-owned.
+#[cfg(windows)]
+pub(crate) fn read_config(root: &Path, limits: &PluginLimits) -> Result<String, String> {
+    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+    let file = match std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(root.join("config.toml"))
+    {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(error) => return Err(format!("cannot open package config.toml: {error}")),
+    };
+    let metadata = file.metadata().map_err(|error| error.to_string())?;
+    if !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err("config.toml must be a regular file".to_owned());
+    }
+    if metadata.len() > limits.text_bytes as u64 {
+        return Err(format!(
+            "config.toml exceeds the {} byte bound",
+            limits.text_bytes
+        ));
+    }
+    read_config_text(file, limits.text_bytes)
 }
 
-#[cfg(unix)]
 fn read_config_text(reader: impl std::io::Read, limit: usize) -> Result<String, String> {
     use std::io::Read;
 

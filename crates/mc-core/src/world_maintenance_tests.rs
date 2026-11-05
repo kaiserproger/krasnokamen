@@ -94,7 +94,7 @@ fn maintenance_refuses_a_missing_world_and_a_leased_one() {
     let dir = world_dir("mc-core-prune-leased");
     let config = config(&dir, 3);
     Core::open(config.clone()).expect("fresh world").shutdown();
-    let world = std::fs::File::open(&config.world_dir).unwrap();
+    let world = mc_world::storage::open_for_lease(&config.world_dir).unwrap();
     world.try_lock().expect("test holds the world lease");
     let error = compact_world(&config).expect_err("leased").to_string();
     assert!(error.contains("already leased"), "{error}");

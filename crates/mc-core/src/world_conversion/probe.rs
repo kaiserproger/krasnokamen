@@ -17,7 +17,7 @@ use crate::{CoreConfig, CoreError};
 use mc_world::native::{NativeEntitySnapshot, NativeReadOnlyStore};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::fs::{self, File};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 const SCOPE: &str = "pinned native checkpoint only: requested block states and their typed container \
@@ -135,7 +135,7 @@ fn probe(
     if !source.is_dir() {
         return Err(fail("source must be a directory"));
     }
-    let lease = File::open(&source).map_err(fail)?;
+    let lease = mc_world::storage::open_for_lease(&source).map_err(fail)?;
     lease.try_lock().map_err(fail)?;
     receipt.input_hashes = hashes(&source)?;
     let mut config = config.clone();
