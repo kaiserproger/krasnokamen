@@ -22,7 +22,7 @@ async function handle(c) {
       await ensure();
       await page.waitForFunction(
         () => document.documentElement.classList.contains('noVNC_connected'),
-        { timeout: c.timeout || 300000 });
+        null, { timeout: c.timeout || 300000 });
       return { ok: true };
     case 'shot': {
       await ensure();
