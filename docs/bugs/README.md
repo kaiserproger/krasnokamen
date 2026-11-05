@@ -60,9 +60,9 @@ The `entities` profile includes windowed native-client probes:
   toggle, inventory clone tracking, pumpkin hiding, terrain shading and Nether
   terrain repros. Read-only receipts reconstruct the graphical viewer's exact
   map packets; screenshots still require review, especially marker visibility.
-- `native-v2-axolotl-play-dead` and `native-v2-potion-custom-impact` fail closed
-  when their original effect, target-release or graphical-impact requirements
-  remain unproven. Their registration does not promote their ledger rows.
+- Axolotl play-dead and potion custom-impact probes are unregistered prototypes
+  (receipts in `receipts/Promote2`); they cannot be run from the harness, and
+  `AXOLOTL-PLAY-DEAD` and `POTION-CUSTOM-PAYLOAD` stay open.
 
 `MODEL-BANNER-PLACEMENT` covers the banner symptom only. The profiled-head
 fixture still needs a verified listed player's published skin
@@ -73,6 +73,12 @@ Neither open split is closed by the banner's wire or screenshot assertions.
 The shared native wire observer uses the pinned 26.3 packet IDs and vanilla
 `ByteBufCodecs.BIT_SET` byte-array masks. Heightmap long arrays are a different
 field. KeepAlive is not chunk data.
+
+Client-tier scenarios run the native client at `SOLARIS_CLIENT_ROOT` (default:
+the sibling `solaris-client` checkout). The P2, mount-kind and map-marker
+promotions were gated with client branch `pauline/client-post-rc4` (`e1b22a5`);
+the released client `5d34e88` lacks those fixes, so point `SOLARIS_CLIENT_ROOT`
+at a checkout of that branch or later.
 
 Only promote a row after recording its fixed-build and failing pre-fix
 receipts. Repeat timing-variable probes at least three times. A probe's

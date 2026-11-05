@@ -617,11 +617,11 @@ failing_first = "not recorded"
 
 [[bug]]
 id = "BED-OBSTRUCTED-ENTRY"
-title = "A bed with no valid wake-up space is accepted; leaving it clears sleeping pose but leaves the player's position inside the sealed bed area when exit resolution returns None. Vanilla refuses entry as obstructed."
+title = "A bed with no valid wake-up space is accepted; leaving it clears sleeping pose but leaves the player's position inside the sealed bed area when exit resolution returns None. The row's 'vanilla refuses entry' premise is unverified (vanilla 26.3 bedBlocked checks suffocation above the halves, not exit availability), and the listed test blocks above both halves, so it proves the headroom check, not this symptom."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "fixed"
+status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-OBSTRUCTED-ENTRY"
 regression = ["cargo:mc-core:sleep::tests::sealed_bed_refuses_entry_as_obstructed"]
 failing_first = "not recorded"
@@ -1293,7 +1293,7 @@ area = "client"
 repro = "source"
 severity = "blocker"
 status = "fixed"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P2"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P2; fixed in client branch pauline/client-post-rc4 (5153cc4, gate run with that client), not in released client 5d34e88"
 regression = ["cargo:mc-edge:configuration::tests::optional_pack_decline_completes_configuration", "harness:entities:native-v2-p2-optional-pack"]
 
 [[bug]]
@@ -3085,7 +3085,7 @@ failing_first = "not recorded"
 
 [[bug]]
 id = "MODEL-PLACED-POT-DECORATIONS"
-title = "Decorated pots placed from an item remain visually plain despite transferred sherd NBT: the server sends sherds.back as an item-id string, while the native pot renderer reads sherds[side][\"id\"]. The pot portion split from MODEL-BANNER-PLACEMENT needs a graphical decoration assertion and a matching one-fix negative control."
+title = "Decorated pots placed from an item remain visually plain: the native pot renderer (src/entities/render_blocks/surfaces.rs:143-146) reads only the sherds[side] {id: ...} form, but vanilla 26.3 PotDecorations accepts both that form and a bare item-id string, and the server sends the string form. Needs both forms read and a graphical decoration assertion with a one-fix negative control."
 area = "client"
 repro = "client"
 severity = "major"
