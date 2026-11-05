@@ -137,5 +137,5 @@ This decision was made on the express instruction of the project
 owner during the M1.g.4 wire-validation work, after the runtime probe
 verified three Play-state IDs and the remaining unverified ones were
 diagnosed as practically unobservable in a reasonable capture window.
-The owner's exact phrasing: "Может просто вытащишь код пакетов и сети
-из ванилы напрямую?"
+The owner's exact phrasing (translated from Russian): "Maybe you could just
+pull the packet and network code straight out of vanilla?"

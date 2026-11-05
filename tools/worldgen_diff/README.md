@@ -10,7 +10,7 @@ Prerequisites: Python 3.11+, NumPy, Pillow, Java 25+, a locally obtained Mojang
 content cache, or saved worlds. Run from the repository root:
 
 ```sh
-/home/kaiserroman/solaris/.analysis/tools/mem-run.sh -m 6G \
+/home/kaiserroman/solaris/tools/dev/mem-run.sh -m 6G \
   python3 -m tools.worldgen_diff \
   --server-bin /absolute/path/to/release/solaris-v2 \
   --vanilla-jar /home/kaiserroman/solaris/.analysis/server.jar \
@@ -83,7 +83,7 @@ Builds go through the shared memory wrapper, not a measurement lane. On the
 coordinator's approved measurement GO:
 
 ```sh
-/home/kaiserroman/solaris/.analysis/tools/mem-run.sh -m 6G \
+/home/kaiserroman/solaris/tools/dev/mem-run.sh -m 6G \
   python3 -m tools.worldgen_diff.profile \
   --before /absolute/path/to/before-test \
   --after /absolute/path/to/after-test \
@@ -110,7 +110,7 @@ a second generation mode.
 Collect a sampling profile from the same frozen executable separately:
 
 ```sh
-/home/kaiserroman/solaris/.analysis/tools/mem-run.sh -m 6G \
+/home/kaiserroman/solaris/tools/dev/mem-run.sh -m 6G \
   perf record -F 199 -e cycles:u -g --call-graph dwarf,32768 \
   -o .analysis/worldgen-diff/before.perf -- \
   /absolute/path/to/before-test --ignored --exact \

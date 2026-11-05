@@ -77,7 +77,7 @@ houses, workshops, storage, mines and camps from real materials; villagers take
 building, mining and lumber jobs, keep their work across nights, raise an army
 and trade through a settlement economy. Players claim and manage a settlement
 through server-driven dialogs, with no client mod. See the short
-[player guide (English / Русский)](docs/SETTLEMENTS_GUIDE.md), or
+[player guide](docs/SETTLEMENTS_GUIDE.md), or
 `/settlement guide` and `/help settlement` in game.
 
 ## Native client

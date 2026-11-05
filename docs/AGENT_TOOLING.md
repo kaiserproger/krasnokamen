@@ -207,11 +207,11 @@ them later, and `-x` is reserved for quiet measurement windows:
 
 ```sh
 # Full workspace gate.
-.analysis/tools/mem-run.sh -m 12G env RUSTC_WRAPPER= CARGO_BUILD_JOBS=6 \
+tools/dev/mem-run.sh -m 12G env RUSTC_WRAPPER= CARGO_BUILD_JOBS=6 \
   CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
   python3 -m tools.harness run test
 # Focused/per-crate work retains the smaller shared scope.
-.analysis/tools/mem-run.sh -m 8G env RUSTC_WRAPPER= CARGO_BUILD_JOBS=6 \
+tools/dev/mem-run.sh -m 8G env RUSTC_WRAPPER= CARGO_BUILD_JOBS=6 \
   CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
   cargo test -p mc-core --lib entity_state_persistence_tests
 ```
@@ -603,7 +603,7 @@ Deterministic imported-city functional fixture (no throughput or performance
 verdict). Keep all third-party archives, worlds, census/plan payloads, and
 receipts in ignored `.analysis/`; never commit map or Mojang bytes. Large
 scans take Main's GO like the import itself; heavy ones run inside an ordinary
-`.analysis/tools/mem-run.sh -m 6G` scope.
+`tools/dev/mem-run.sh -m 6G` scope.
 
 ```sh
 python3 -m tools.coreperf.constantinople census --world CANONICAL_ANVIL_EXPORT \
