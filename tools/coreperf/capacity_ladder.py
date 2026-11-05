@@ -6,7 +6,7 @@ samples from the dashboard's /load-metrics stream. Reuses the catalog-load
 session, config and login-window machinery; adds per-window phase, thread-CPU,
 memory and network accounting plus an optional perf capture of the server.
 
-Run it through `.analysis/tools/mem-run.sh -p` (see docs/performance/PLAYER_CAPACITY.md).
+Run it through `tools/dev/mem-run.sh -p` (see docs/performance/PLAYER_CAPACITY.md).
 It measures; it never classifies a capacity claim beyond the operator thresholds.
 """
 from __future__ import annotations

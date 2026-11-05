@@ -8,7 +8,7 @@ installation and a source quick start.
 
 - [Operating guide](OPERATING.md): configuration, content, console, backups and world conversion.
 - [Migration from vanilla or Paper](MIGRATION.md): configuration mapping, offline import, preservation limits and rollback.
-- [Settlements player guide](SETTLEMENTS_GUIDE.md) (English / Русский): `/settlement guide`, villager jobs and membership.
+- [Settlements player guide](SETTLEMENTS_GUIDE.md): `/settlement guide`, villager jobs and membership.
 - [Server-driven dialogs](DIALOGS.md): `show_dialog` UI API and where clicks arrive.
 - [Plugins](PLUGINS.md): Wasmtime package deployment and authoring.
 - [Solaris Loader](SOLARIS_LOADER.md): optional client adapters and client bundles.
@@ -32,6 +32,7 @@ installation and a source quick start.
 
 - [Contributing](../CONTRIBUTING.md) and [agent working rules](../AGENTS.md).
 - [Agent tooling and harness](AGENT_TOOLING.md): commands, profiles and prerequisites.
+- [Development playbooks and lessons](development/README.md): heavy-command runner, worktrees, gates, releases, test server, client QA.
 - [Agent Constitution](AGENT_CONSTITUTION.md) (binding for every agent), [definition of done](DEFINITION_OF_DONE.md) and [break-it QA protocol](QA_AGENT_PROTOCOL.md): breaker role, attack matrix, gate hygiene.
 - [Quirk and farm parity gate](QUIRK_PARITY.md): vanilla-oracle proof that player-relied quirks and farm rates are preserved.
 - [Vanilla compatibility matrix](COMPATIBILITY.md): 26.1.2 mechanics coverage per area.

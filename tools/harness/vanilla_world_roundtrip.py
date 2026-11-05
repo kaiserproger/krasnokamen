@@ -124,7 +124,7 @@ def main():
         home.mkdir()
         shutil.copyfile(args.eula_file, home / "eula.txt")
         world = home / "world"
-        runner = ROOT / ".analysis/tools/mem-run.sh"
+        runner = ROOT / "tools/dev/mem-run.sh"
 
         def v2(phase, native, anvil):
             command = [str(runner), "-x", "-m", "8G", "env", "CARGO_BUILD_JOBS=6",

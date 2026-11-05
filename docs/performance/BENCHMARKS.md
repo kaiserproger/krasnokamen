@@ -56,7 +56,7 @@ Results go to a new `.analysis/bench/<UTC>-<command>-<pid>/` (`--out` to choose;
 `result.json`, `result.md`, `build-receipt.json`, per-run receipts under `runs/` (the full
 `tools.coreperf.profiles` receipt: `samples.jsonl`, bot reports, server config, logs).
 
-On the shared agent host wrap any invocation in `.analysis/tools/mem-run.sh -m 8G` for a smoke, or
+On the shared agent host wrap any invocation in `tools/dev/mem-run.sh -m 8G` for a smoke, or
 get Main's GO and use `-x` for a real window (the bench then sees all CPUs; under the shared lane
 it only sees `0-7`). The memory-capped server/fixture scopes are created with `systemd-run
 --scope`; pass `--slice solaris-heavy.slice` on the shared host so they count in that slice.
@@ -237,7 +237,7 @@ Receipts in the `pauline/weakhw-login` worktree:
 Run it under the memory-capped shared lane:
 
 ```sh
-M=/home/kaiserroman/solaris/.analysis/tools/mem-run.sh
+M=/home/kaiserroman/solaris/tools/dev/mem-run.sh
 $M -m 8G python3 -m tools.bench weak-hw --smoke --slice solaris-heavy.slice
 $M -m 8G python3 -m tools.bench scaling --smoke --cpu-mode logical,physical --slice solaris-heavy.slice
 $M -m 8G python3 -m tools.bench worldgen --smoke --cores 1,2

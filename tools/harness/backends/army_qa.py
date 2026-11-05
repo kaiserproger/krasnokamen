@@ -768,9 +768,9 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext,
     _press(probe, "Close")
     main_L1 = _open_dialog(probe)
     probe.check("dialog_back_L1", (main_L1["screen"].get("title") or "").startswith("Settlement"))
-    армии = _press(probe, "Army")
-    probe.check("army_two_recruited", (армии["screen"].get("title") or "").startswith("Army"))
-    blines = _body(армии).splitlines()
+    army_screen = _press(probe, "Army")
+    probe.check("army_two_recruited", (army_screen["screen"].get("title") or "").startswith("Army"))
+    blines = _body(army_screen).splitlines()
     detail["army_list_L1"] = blines
     live_roster = _re.findall(r"\b([0-9a-f]{8})\b", "\n".join(blines))
     probe.check("army_L1_dialog_shows_both", {u[:8] for u in recruited} <= set(live_roster))
@@ -790,7 +790,7 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext,
     # compare against the pre-press roster captured BEFORE this press: the
     # post-click blank generation differs from the settled note page, and a
     # body-diff against the press return would wedge on identical pages.
-    st_pre = _body(армии)
+    st_pre = _body(army_screen)
     st_ref = _press(probe, "Recruit soldier")
     refused = _bwait(probe, lambda s: s["screen"].get("class") == DIALOG and (s["screen"].get("title") or "").startswith("Army")
         and _body(s) != st_pre and ("No " in _body(s) or "Recruited " in _body(s)),

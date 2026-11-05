@@ -36,6 +36,9 @@ logs/
 # Local CodeGraph index. Derived from source; regenerate with `codegraph init`.
 /.codegraph/
 
+# tools/dev/winqa dependencies (npm install --prefix tools/dev/winqa).
+/tools/dev/winqa/node_modules/
+
 # Agent/runtime scratch and generated local launch state.
 /.ai-bridge/
 /.codex/

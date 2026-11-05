@@ -174,7 +174,7 @@ PY
 ```
 
 On the shared agent host, wrap builds in
-`/home/kaiserroman/solaris/.analysis/tools/mem-run.sh -m 4G` and use the assigned
+`/home/kaiserroman/solaris/tools/dev/mem-run.sh -m 4G` and use the assigned
 target directory (raise the cap only after an observed OOM). Do not compile during somebody else's measurement window.
 
 ### One command per profile
@@ -196,7 +196,7 @@ python3 -m tools.coreperf.profiles villager-heavy "${COMMON[@]}"
 Fixture preparation uses the harness's memory guard, so execute these commands
 inside a bounded cgroup. On the shared host, request Main's **GO**, then prefix
 **each** command with
-`/home/kaiserroman/solaris/.analysis/tools/mem-run.sh -x -p -m 6G`.
+`/home/kaiserroman/solaris/tools/dev/mem-run.sh -x -p -m 6G`.
 On another Linux host use the same runner or an equivalent bounded cgroup,
 record the cap and run without competing builds/tests. The published affinity
 is server logical CPUs `0-7`, bots `8-11`; override `--server-cpus` and

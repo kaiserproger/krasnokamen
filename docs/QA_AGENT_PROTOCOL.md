@@ -191,6 +191,6 @@ token is machine-consumed by the CodexPro overlay; never report a noted defect a
 ## Windows-guest driver
 
 Windows-guest QA (noVNC) uses the single persistent headless-page driver described in
-`/run/media/kaiserroman/games/solaris-work/winqa/RECIPE.md`: `waitconn` until the page
+`tools/dev/winqa/RECIPE.md`: `waitconn` until the page
 shows the `noVNC_connected` class, send one JSON request line per `id` over `proc://`,
 match each reply by `id` with `read`, and never `wait` on the forever-running daemon.

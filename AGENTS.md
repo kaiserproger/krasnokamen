@@ -13,6 +13,8 @@ The current binary is `mc-edge`'s `solaris-v2` over native `mc-core`; v1 is reti
 - `sdk/rust/`: independent Rust guest SDK workspace; `tools/harness/`: canonical validation.
 - `example.toml`: normal config; `playable.toml`: harness survival config.
 - [Documentation index](docs/README.md), [architecture](docs/ARCHITECTURE.md), [ADRs](docs/decisions/README.md).
+- Development playbooks and lessons (heavy commands, worktrees, gates, releases, test server, QA, committee)
+  live in [docs/development](docs/development/README.md); read the page for the task at hand.
 - Resume from ignored `.analysis/MEMORY.md` and the active queue, then only the named route/source.
   Code, tests, config and runtime evidence override memory; archives and `.ai-bridge/` are not startup context.
 
@@ -64,7 +66,8 @@ python3 -m tools.harness run correctness                  # L2: major phase/code
 ```
 
 - On the shared owner machine, wrap heavy Cargo/harness/Gradle commands in
-  `.analysis/tools/mem-run.sh -m 6G env RUSTC_WRAPPER= <command> ...` for focused work
+  `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER= <command> ...`
+  for focused work — always Main's copy by absolute path, never a worktree's or sibling repo's own
   (no slots or queue: every command starts at once; heavy-watchdog pauses plain cargo builds under real
   memory pressure and resumes them later, never tests/servers/harness runs; ≤12G each; the global sccache
   wrapper otherwise compiles outside the cap). Full `test`/`correctness` use `-m 12G`. `-p` is serialized
