@@ -1,0 +1,85 @@
+[package]
+name = "solaris-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Own workspace: excluded from the root workspace so CI/L2 never build it.
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+bytes = "1"
+uuid = "1"
+mc-protocol = { path = "../crates/mc-protocol" }
+mc-nbt = { path = "../crates/mc-nbt" }
+mc-data = { path = "../crates/mc-data" }
+mc-loader = { path = "../crates/mc-loader" }
+mc-edge = { path = "../crates/mc-edge", optional = true }
+mc-core = { path = "../crates/mc-core", optional = true }
+
+[features]
+# Edge-side targets pull mc-core/wasmtime: rustc needs >10 GB to compile mc-core
+# with coverage instrumentation at opt-level 1+, so they are opt-in and built
+# with `--dev` (see fuzz/README.md).
+edge = ["dep:mc-edge", "dep:mc-core"]
+
+[profile.release]
+debug = "line-tables-only"
+
+# The `--dev` build used for the edge target keeps the decode crates fast.
+[profile.dev.package.mc-protocol]
+opt-level = 3
+
+[profile.dev.package.mc-nbt]
+opt-level = 3
+
+[profile.dev.package.mc-data]
+opt-level = 3
+
+[[bin]]
+name = "frame_stream"
+path = "fuzz_targets/frame_stream.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "packets_pre_play"
+path = "fuzz_targets/packets_pre_play.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "packets_play"
+path = "fuzz_targets/packets_play.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "loader_wire"
+path = "fuzz_targets/loader_wire.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "nbt"
+path = "fuzz_targets/nbt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "edge_play"
+path = "fuzz_targets/edge_play.rs"
+required-features = ["edge"]
+test = false
+doc = false
+bench = false
