@@ -1289,7 +1289,8 @@ fn native_checkpoint_staging_dimensions_are_not_a_world() {
     let records = globals(0);
     store.initialize_dimensions(&records["dimensions"]).unwrap();
     assert!(store.read_checkpoint().is_err());
-    assert!(store.initialize_dimensions(&records["dimensions"]).is_err());
+    // A first start stopped before its initial checkpoint installs it again.
+    store.initialize_dimensions(&records["dimensions"]).unwrap();
     let (blocks, items) = registries();
     let air = blocks
         .block(&mc_data::Identifier::parse("minecraft:air").unwrap())
@@ -1302,6 +1303,7 @@ fn native_checkpoint_staging_dimensions_are_not_a_world() {
         crate::ChunkGeometry::new(0, 256).unwrap(),
     );
     store.import_chunk(1, &chunk, &blocks, &items).unwrap();
+    assert!(store.initialize_dimensions(&records["dimensions"]).is_err());
     commit(&store, 0, 0, &records, &[], &[]).unwrap();
     assert!(
         store

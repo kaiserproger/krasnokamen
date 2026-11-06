@@ -698,8 +698,11 @@ impl NativeStore {
 }
 
 impl NativeStore {
-    /// Install geometry in an unpublished converter staging DB before bulk imports.
-    /// This does not constitute a recoverable world checkpoint.
+    /// Install geometry in an unpublished converter staging DB before bulk imports,
+    /// or in a new world before its initial checkpoint. This does not constitute a
+    /// recoverable world checkpoint. Installing the identical descriptor again is
+    /// allowed until a checkpoint commits: a first start that stopped before its
+    /// initial checkpoint repeats this step.
     pub fn initialize_dimensions(&self, record: &NativeDomainRecord) -> Result<(), NativeError> {
         geometry(record, 0)?;
         if record.captured_tick != 0 {
@@ -713,7 +716,14 @@ impl NativeStore {
         db(tx.set_durability(redb::Durability::Immediate))?;
         {
             let mut global = db(tx.open_table(GLOBAL))?;
-            if db(global.get("checkpoint"))?.is_some() || db(global.get("dimensions"))?.is_some() {
+            if db(global.get("checkpoint"))?.is_some() {
+                return Err(failure("dimensions", "descriptor already initialized"));
+            }
+            let installed = db(global.get("dimensions"))?.map(|record| record.value().to_vec());
+            if installed
+                .as_ref()
+                .is_some_and(|installed| *installed != bytes)
+            {
                 return Err(failure("dimensions", "descriptor already initialized"));
             }
             for definition in [super::IMPORTED, super::METADATA, super::OVERLAYS] {
@@ -730,9 +740,18 @@ impl NativeStore {
                     "cannot install geometry over gameplay",
                 ));
             }
-            db(global.insert("dimensions", bytes.as_slice()))?;
+            if installed.is_none() {
+                db(global.insert("dimensions", bytes.as_slice()))?;
+            }
         }
         db(tx.commit())
+    }
+
+    /// Whether any checkpoint has committed to this store.
+    pub fn has_checkpoint(&self) -> Result<bool, NativeError> {
+        let tx = db(self.database.begin_read())?;
+        let global = db(tx.open_table(GLOBAL))?;
+        Ok(db(global.get("checkpoint"))?.is_some())
     }
 
     pub fn commit_checkpoint(

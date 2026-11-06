@@ -2156,6 +2156,14 @@ it disappears, so `/forceload remove` cannot be resurrected by a stale image.
   dual-write, or automatic historical-schema migration. Imported coverage,
   including all-air chunks, wins over generation; only genuinely absent
   coverage may generate. Stored read/identity/version failures fail closed.
+- **First start of a new world.** `Core::open` writes and fsyncs
+  `<world>/.solaris-first-start` before anything else, creates the store as
+  `native/state.redb.new` and renames it to `state.redb` once redb has committed
+  it, then removes the marker after the initial checkpoint is durable. A start
+  that finds the marker repeats the first start on what the stopped one left
+  (re-installing the identical dimension descriptor is allowed until a
+  checkpoint commits; a leftover `.redb.new` is replaced). A store without a
+  checkpoint and without the marker still fails closed.
 - **Journal.** Batches of whole ticks, each framed with its tick range, length
   and checksum. Writers fsync a `.bin.tmp` file before atomically publishing
   its `.bin` name; crash-left unpublished `.tmp` files are ignored. Any

@@ -41,9 +41,10 @@ fn failed_native_transaction_keeps_previous_world_and_wal_without_dirty_ack() {
     let previous = manifest.clone();
     let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
     writer.append(manifest.tick + 1, 2, &[]).unwrap();
-    *FAIL_CHECKPOINT_AFTER_REGIONS
+    FAIL_CHECKPOINT_AFTER_REGIONS
         .lock()
-        .expect("precommit failure hook") = Some(directory.path().to_path_buf());
+        .expect("precommit failure hook")
+        .push(directory.path().to_path_buf());
     let error = write_checkpoint(
         directory.path(),
         &job,
@@ -826,4 +827,71 @@ fn imported_bee_hive_release_checkpoints_after_kill_and_unload() {
     assert!(restored.entities.slot_of_uuid(summoned_uuid).is_some());
     assert!(restored.entities.slot_of_uuid_any(bee_uuid).is_none());
     assert!(restored.entities.slot_of_uuid_any(cow_uuid).is_none());
+}
+
+#[test]
+fn first_start_stopped_before_its_initial_checkpoint_reopens_as_a_new_world() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    FAIL_CHECKPOINT_AFTER_REGIONS
+        .lock()
+        .expect("hook")
+        .push(directory.path().to_path_buf());
+    let Err(error) = Core::open(config.clone()) else {
+        panic!("the first start fails its initial checkpoint");
+    };
+    assert_eq!(error.to_string(), "storage: injected checkpoint failure");
+    assert!(directory.path().join("native/state.redb").exists());
+    assert!(directory.path().join(FIRST_START_MARKER).exists());
+
+    Core::open(config.clone())
+        .expect("the interrupted new world opens")
+        .shutdown();
+    Core::open(config)
+        .expect("and reopens as a normal world")
+        .shutdown();
+}
+
+#[test]
+fn first_start_stopped_before_its_store_exists_reopens_as_a_new_world() {
+    // What a start stopped right after the marker, or inside redb's creation of
+    // the temporary store, leaves behind.
+    for partial_store in [false, true] {
+        let directory = tempfile::tempdir().unwrap();
+        let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+        std::fs::write(directory.path().join(FIRST_START_MARKER), b"").unwrap();
+        if partial_store {
+            std::fs::create_dir_all(directory.path().join("native")).unwrap();
+            std::fs::write(directory.path().join("native/state.redb.new"), b"").unwrap();
+        }
+        Core::open(config.clone())
+            .expect("the interrupted new world opens")
+            .shutdown();
+        assert!(!directory.path().join(FIRST_START_MARKER).exists());
+        assert!(!directory.path().join("native/state.redb.new").exists());
+        Core::open(config)
+            .expect("and reopens as a normal world")
+            .shutdown();
+    }
+}
+
+#[test]
+fn store_without_checkpoint_from_anything_but_an_interrupted_first_start_stays_refused() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    std::fs::create_dir_all(directory.path().join("native")).unwrap();
+    drop(
+        mc_world::native::NativeStore::create(
+            &directory.path().join("native/state.redb"),
+            crate::native_checkpoint::native_identity(&config),
+        )
+        .unwrap(),
+    );
+    let Err(error) = Core::open(config) else {
+        panic!("refused");
+    };
+    assert!(
+        error.to_string().contains("global/checkpoint: missing"),
+        "{error}"
+    );
 }

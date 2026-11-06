@@ -584,7 +584,10 @@ fn capture_failures_and_stale_acks_keep_full_custody() {
     let expected = full_image(&world.state);
     let (shutdown, shutdown_done) = world.capture();
     let tick = shutdown.tick;
-    *FAIL_CHECKPOINT_AFTER_REGIONS.lock().unwrap() = Some(world.config.world_dir.clone());
+    FAIL_CHECKPOINT_AFTER_REGIONS
+        .lock()
+        .unwrap()
+        .push(world.config.world_dir.clone());
     let failed = world.commit(failing, &failing_done);
     assert!(failed.is_none(), "injected commit failure");
     acknowledge_checkpoint(&mut world.state, failed);
@@ -853,8 +856,10 @@ fn randomized_custody_matches_full_capture_at_every_fence() {
             // Failed commit: nothing written, nothing cleared.
             1 => {
                 let (job, done) = world.capture();
-                *FAIL_CHECKPOINT_AFTER_REGIONS.lock().unwrap() =
-                    Some(world.config.world_dir.clone());
+                FAIL_CHECKPOINT_AFTER_REGIONS
+                    .lock()
+                    .unwrap()
+                    .push(world.config.world_dir.clone());
                 assert!(world.commit(job, &done).is_none());
             }
             // Crash after a durable commit, before its ACK.

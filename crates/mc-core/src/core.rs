@@ -100,11 +100,17 @@ use mc_world::ChunkGenerator;
 /// Tick period: 20 TPS.
 pub const TICK_PERIOD: std::time::Duration = std::time::Duration::from_millis(50);
 
-/// Per-world fault injection at the frozen native checkpoint's pre-commit gate.
-/// No native records or dirty acknowledgements are published on this failure.
+/// Written before anything else of a new world and removed once its initial
+/// checkpoint is durable. A start that finds it repeats the first start on what
+/// the stopped one left; no player can have joined that world yet.
+const FIRST_START_MARKER: &str = ".solaris-first-start";
+
+/// Per-world fault injection at the frozen native checkpoint's pre-commit gate:
+/// the next commit for each armed world fails once. No native records or dirty
+/// acknowledgements are published on this failure.
 #[cfg(test)]
-pub static FAIL_CHECKPOINT_AFTER_REGIONS: std::sync::Mutex<Option<std::path::PathBuf>> =
-    std::sync::Mutex::new(None);
+pub static FAIL_CHECKPOINT_AFTER_REGIONS: std::sync::Mutex<Vec<std::path::PathBuf>> =
+    std::sync::Mutex::new(Vec::new());
 
 /// Per-world test delay inside the native checkpoint commit (after the WAL gate).
 #[cfg(test)]
@@ -497,8 +503,10 @@ impl Core {
             ))
         })?;
         let path = config.world_dir.join("native/state.redb");
-        let fresh = !path.exists();
-        if fresh {
+        let first_start = config.world_dir.join(FIRST_START_MARKER);
+        let resumed = first_start.exists();
+        let fresh = resumed || !path.exists();
+        if fresh && !resumed {
             match std::fs::read_dir(&config.world_dir) {
                 Ok(entries) => {
                     for entry in entries {
@@ -572,19 +580,41 @@ impl Core {
                 .as_ref()
                 .map(|runtime| runtime.boundary.clone()),
         );
-        if fresh {
-            std::fs::create_dir_all(path.parent().expect("native DB parent"))
+        if fresh && !resumed {
+            std::fs::File::create(&first_start)
+                .and_then(|marker| marker.sync_all())
+                .and_then(|()| mc_world::atomic_file::sync_parent_dir(&first_start))
                 .map_err(|e| CoreError::Storage(e.to_string()))?;
         }
         let identity = crate::native_checkpoint::native_identity(&config);
-        let store = Arc::new(
-            if fresh {
-                mc_world::native::NativeStore::create(&path, identity)
-            } else {
-                mc_world::native::NativeStore::open(&path, identity)
+        if fresh && !path.exists() {
+            // Created under a temporary name and renamed once redb has committed
+            // it, so `state.redb` is never a partly written file. A temporary
+            // file found here was left by a stopped first start and never
+            // became the world's store.
+            let creating = path.with_extension("redb.new");
+            let refuse = |e: std::io::Error| CoreError::Storage(e.to_string());
+            std::fs::create_dir_all(path.parent().expect("native DB parent")).map_err(refuse)?;
+            match std::fs::remove_file(&creating) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(refuse(e)),
+                _ => {}
             }
-            .map_err(|e| crate::native_checkpoint::open_refusal(&config, &path, e))?,
+            drop(
+                mc_world::native::NativeStore::create(&creating, identity)
+                    .map_err(|e| crate::native_checkpoint::open_refusal(&config, &creating, e))?,
+            );
+            std::fs::rename(&creating, &path).map_err(refuse)?;
+            mc_world::atomic_file::sync_parent_dir(&path).map_err(refuse)?;
+        }
+        let store = Arc::new(
+            mc_world::native::NativeStore::open(&path, identity)
+                .map_err(|e| crate::native_checkpoint::open_refusal(&config, &path, e))?,
         );
+        // Stopped between the initial checkpoint and removing the marker.
+        let fresh = fresh
+            && !store
+                .has_checkpoint()
+                .map_err(|e| CoreError::Storage(e.to_string()))?;
         #[cfg(test)]
         crate::native_checkpoint::tests::register_store(&config, &store)?;
         let (mut tick_state, mut root_manifest, salt_minted) = recover_tick_state(
@@ -658,6 +688,11 @@ impl Core {
                 &mut writer,
                 &mut root_manifest,
             )?;
+        }
+        if resumed || fresh {
+            std::fs::remove_file(&first_start)
+                .and_then(|()| mc_world::atomic_file::sync_parent_dir(&first_start))
+                .map_err(|e| CoreError::Storage(e.to_string()))?;
         }
         crate::plugin::start_events(&mut tick_state)?;
         if !plugin_packages.is_empty() {
