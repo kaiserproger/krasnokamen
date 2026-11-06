@@ -895,3 +895,31 @@ fn store_without_checkpoint_from_anything_but_an_interrupted_first_start_stays_r
         "{error}"
     );
 }
+
+#[test]
+fn start_waits_for_the_previous_server_to_release_the_world() {
+    // A singleplayer client relaunched at once starts a server while the
+    // previous one still holds the world on its way out.
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    let previous = mc_world::storage::open_for_lease(directory.path()).unwrap();
+    previous.lock().unwrap();
+    let (events, event) = std::sync::mpsc::channel();
+    WORLD_LEASE_WAITING
+        .lock()
+        .unwrap()
+        .push((directory.path().to_path_buf(), events.clone()));
+    let opening = std::thread::spawn(move || {
+        let opened = Core::open(config);
+        let _ = events.send(if opened.is_ok() { "opened" } else { "refused" });
+        opened
+    });
+    assert_eq!(event.recv().unwrap(), "waiting");
+    drop(previous);
+    assert_eq!(event.recv().unwrap(), "opened");
+    WORLD_LEASE_WAITING
+        .lock()
+        .unwrap()
+        .retain(|(dir, _)| dir != directory.path());
+    opening.join().unwrap().unwrap().shutdown();
+}
