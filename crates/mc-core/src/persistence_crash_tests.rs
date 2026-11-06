@@ -191,7 +191,10 @@ fn crash_child() {
     let mut manifest = read_manifest(&config).unwrap();
     let expected = match boundary.as_str() {
         "checkpoint_regions" => {
-            *FAIL_CHECKPOINT_AFTER_REGIONS.lock().unwrap() = Some(directory.clone());
+            FAIL_CHECKPOINT_AFTER_REGIONS
+                .lock()
+                .unwrap()
+                .push(directory.clone());
             "storage: injected checkpoint failure"
         }
         "checkpoint_committed" => {

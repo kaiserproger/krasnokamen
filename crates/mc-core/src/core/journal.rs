@@ -904,12 +904,13 @@ pub(super) fn commit_checkpoint(
         panic!("injected native writer panic");
     }
     #[cfg(test)]
-    if FAIL_CHECKPOINT_AFTER_REGIONS
-        .lock()
-        .ok()
-        .and_then(|mut armed| armed.take_if(|dir| *dir == _world_dir))
-        .is_some()
-    {
+    if FAIL_CHECKPOINT_AFTER_REGIONS.lock().is_ok_and(|mut armed| {
+        armed
+            .iter()
+            .position(|dir| dir == _world_dir)
+            .map(|index| armed.remove(index))
+            .is_some()
+    }) {
         return Err(CoreError::Storage("injected checkpoint failure".to_owned()));
     }
     let dimensions = crate::dimensions::checkpoint::images(&job.dimensions, job.tick);

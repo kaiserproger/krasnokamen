@@ -2621,7 +2621,10 @@ fn torn_checkpoint_publishes_nothing() {
         // Arm the failure for THIS world dir, then force the only
         // checkpoint via shutdown: prepared chunks must not publish a
         // partial native checkpoint or permit WAL pruning.
-        *FAIL_CHECKPOINT_AFTER_REGIONS.lock().expect("hook") = Some(dir.clone());
+        FAIL_CHECKPOINT_AFTER_REGIONS
+            .lock()
+            .expect("hook")
+            .push(dir.clone());
         core.shutdown();
         assert_eq!(
             crate::native_checkpoint::tests::read_manifest(&CoreConfig::new(dir.clone(), 11))
