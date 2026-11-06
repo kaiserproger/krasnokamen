@@ -2561,7 +2561,10 @@ geometry and packets are unchanged. Geometry remains shared across dimensions:
 nonzero legacy centers yield different Nether centers after vanilla's /8 split
 and still fail closed. Import receipts list that known gap explicitly.
 
-Native runtime and converters share an exclusive directory lease. Anvil import
+Native runtime and converters share an exclusive directory lease. The runtime
+waits up to 30 s for a lease held elsewhere (a previous server still
+checkpointing on its way out) before refusing; converters and offline
+maintenance refuse at once. Anvil import
 also holds a read-only POSIX record lock on Java's `session.lock`, interoperating
 with `FileChannel.tryLock`; it never rewrites lock bytes. Reserved
 `.solaris-conversion-*` staging paths, including symlink aliases, refuse runtime

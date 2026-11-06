@@ -105,6 +105,19 @@ pub const TICK_PERIOD: std::time::Duration = std::time::Duration::from_millis(50
 /// the stopped one left; no player can have joined that world yet.
 const FIRST_START_MARKER: &str = ".solaris-first-start";
 
+/// How long a start waits for another process to release the world. A
+/// singleplayer client relaunched at once starts its server while the previous
+/// one is still checkpointing on its way out; a world held for longer is
+/// refused as before.
+const WORLD_LEASE_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Test rendezvous: senders registered for a world dir receive `"waiting"`
+/// when `Core::open` starts waiting for that world's lease.
+#[cfg(test)]
+pub(crate) static WORLD_LEASE_WAITING: std::sync::Mutex<
+    Vec<(std::path::PathBuf, std::sync::mpsc::Sender<&'static str>)>,
+> = std::sync::Mutex::new(Vec::new());
+
 /// Per-world fault injection at the frozen native checkpoint's pre-commit gate:
 /// the next commit for each armed world fails once. No native records or dirty
 /// acknowledgements are published on this failure.
@@ -475,6 +488,48 @@ pub(crate) fn end_terrain(
         .map_err(|err| CoreError::Worldgen(err.to_string()))
 }
 
+/// Lease the world directory. A world leased elsewhere is waited for up to
+/// [`WORLD_LEASE_WAIT`], then refused.
+fn lock_world_lease(world_dir: &std::path::Path) -> Result<std::fs::File, CoreError> {
+    let refuse = |e: &dyn std::fmt::Display| {
+        CoreError::Storage(format!(
+            "world {} is already leased: {e}",
+            world_dir.display()
+        ))
+    };
+    let lease = mc_world::storage::open_for_lease(world_dir)
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+    match lease.try_lock() {
+        Ok(()) => return Ok(lease),
+        Err(std::fs::TryLockError::WouldBlock) => {}
+        Err(std::fs::TryLockError::Error(e)) => return Err(refuse(&e)),
+    }
+    tracing::info!(target: "mc_core::lease", world = %world_dir.display(), "world is in use; waiting for its holder to exit");
+    #[cfg(test)]
+    for (dir, waiting) in WORLD_LEASE_WAITING.lock().expect("lease hook").iter() {
+        if dir == world_dir {
+            let _ = waiting.send("waiting");
+        }
+    }
+    // The blocking lock runs on its own thread so the wait is bounded; after a
+    // timeout that thread's late lock is released when its send fails.
+    let (locked_tx, locked) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("world-lease".into())
+        .spawn(move || {
+            let _ = locked_tx.send(lease.lock().map(|()| lease));
+        })
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+    match locked.recv_timeout(WORLD_LEASE_WAIT) {
+        Ok(Ok(lease)) => Ok(lease),
+        Ok(Err(e)) => Err(refuse(&e)),
+        Err(_) => Err(refuse(&format_args!(
+            "still held after {} s",
+            WORLD_LEASE_WAIT.as_secs()
+        ))),
+    }
+}
+
 impl Core {
     /// Open the world: build registries, recover the journal, spawn the tick
     /// and journal threads.
@@ -494,14 +549,7 @@ impl Core {
         }
         std::fs::create_dir_all(&config.world_dir)
             .map_err(|e| CoreError::Storage(e.to_string()))?;
-        let world_lease = mc_world::storage::open_for_lease(&config.world_dir)
-            .map_err(|e| CoreError::Storage(e.to_string()))?;
-        world_lease.try_lock().map_err(|e| {
-            CoreError::Storage(format!(
-                "world {} is already leased: {e}",
-                config.world_dir.display()
-            ))
-        })?;
+        let world_lease = lock_world_lease(&config.world_dir)?;
         let path = config.world_dir.join("native/state.redb");
         let first_start = config.world_dir.join(FIRST_START_MARKER);
         let resumed = first_start.exists();
