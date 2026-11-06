@@ -3460,3 +3460,13 @@ severity = "major"
 status = "open"
 source = "WinFixReview (history://WinFixReview) on RC5 hotfix a76e1e80: mc-edge backup.rs ExclusiveLease, mc-core hot_backup.rs:123-127, world_conversion.rs:673-679, import.rs session.lock skip"
 regression = []
+
+[[bug]]
+id = "SP-RELAUNCH-LEASE-RACE"
+title = "Native client exit does not wait for the singleplayer server it is stopping: the old solaris-v2 keeps checkpointing for a few seconds after the client process ends, so relaunching the client and pressing Play on the same world at once can fail with 'world ... is already leased' (Server exited during startup). Pressing Play again after the old server exits works. Present in RC4 and RC5."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "RC5 pre-tag breaker receipts/breaker-rc5-pretag-20261106 (interrupted-var2 refused 1/2; lease-rc4/lease-rc5 old server outlived client 1.6 s / 3.8 s; lease_retry_check.sh: retry after exit listens)"
+regression = []
