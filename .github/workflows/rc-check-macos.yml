@@ -1,0 +1,43 @@
+# Pre-tag release-candidate check on macOS (there is no local Mac): push the
+# candidate commit to `rc-check/<tag>`, save the log, delete the branch. See
+# docs/development/release-and-tags.md "Core release cut".
+name: RC check (macOS)
+
+on:
+  push:
+    branches: ["rc-check/**"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+
+jobs:
+  macos:
+    name: mc-core and mc-world lib tests (macOS)
+    runs-on: macos-15
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.143
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - run: uname -a && sw_vers && git rev-parse HEAD HEAD:crates
+      - name: Import the canonical 26.3 content cache as local test data (never redistributed)
+        run: |
+          set -euo pipefail
+          XDG_DATA_HOME="$RUNNER_TEMP/xdg" cargo run --locked -p mc-edge --bin solaris-v2 -- content import --version 26.3 --download
+          rm -rf data/vanilla
+          mkdir -p data
+          cp -a "$RUNNER_TEMP/xdg/solaris/content/26.3" data/vanilla
+      # The CI short-run profile skips the tests over 3 s (.config/nextest.toml).
+      - name: mc-core and mc-world lib tests
+        run: cargo nextest run --locked --profile ci -p mc-core -p mc-world --lib

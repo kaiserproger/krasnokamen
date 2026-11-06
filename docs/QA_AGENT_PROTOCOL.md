@@ -94,6 +94,10 @@ A gate counts as evidence only when all of these hold:
 - Run `loader-live` on advertised Loader platforms and `title-connect` on the
   native client when the candidate affects them. Audit release claims against
   receipts; a missing platform or environment is blocked coverage, not a pass.
+- macOS has no local machine: the pre-tag macOS evidence is the
+  `rc-check/<tag>` CI run of the core tests
+  ([releases](development/release-and-tags.md#core-release-cut)). It covers no
+  client or package; claim neither.
 
 ### After publication, before announcement: distribution smoke
 

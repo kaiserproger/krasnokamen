@@ -3,8 +3,8 @@
 Authorization rules are in [AGENTS.md](../../AGENTS.md) (no commit, push, tag
 or publication without explicit owner authorization) and in
 [review committee and breaker](review-committee-and-breaker.md) (every public
-step also needs the advisor's exact `[approved]`). The breaker passes before the
-tag and before the announcement are in the
+step also needs the advisor's `[approved <ID>]` on the request with that ID).
+The breaker passes before the tag and before the announcement are in the
 [break-it QA protocol](../QA_AGENT_PROTOCOL.md) "Release-candidate breaker
 pass". This page is the release procedure for the four repositories:
 `kaiserproger/solaris` (core), `solaris-client`, `solaris-loader` and
@@ -27,6 +27,15 @@ pass". This page is the release procedure for the four repositories:
    Vanilla data loads at runtime from the content cache: no compile-time
    `include_str!` of `data/vanilla`, and every production or bench registry load
    passes a `vanilla_data_dir` (`CoreRegistry::load(None)` is test-only).
+   **macOS:** there is no local Mac. Push the candidate commit to
+   `rc-check/<tag>` (a public step: it needs `[approved <ID>]`, together with
+   the branch deletion afterwards); `.github/workflows/rc-check-macos.yml` runs
+   the `mc-core` and `mc-world` lib tests (nextest `ci` profile, which skips
+   tests over 3 s) on `macos-15` with the 26.3 content cache. Pass = a green
+   run whose log prints the candidate SHA; save the log
+   under `.analysis/releases/<tag>/`, then `git push origin --delete
+   rc-check/<tag>`. This covers core tests only; the notes must not claim a
+   macOS client or package run.
 3. **Siblings first.** Rebuild every shipped `plugin.wasm` against the current
    WIT. Commit and push `solaris-default-plugins` and `solaris-loader` before
    core, then update `SOLARIS_PLUGINS_REVISION` / `SOLARIS_LOADER_REVISION` in
@@ -47,7 +56,12 @@ pass". This page is the release procedure for the four repositories:
    validation boundary. Before writing QA results into the notes, check each
    run's attributes in its own receipt, not the agent's summary (an RC4 Windows
    soak summary implied fresh profiles; only two of three runs had them). Keep
-   a cause "likely" unless the mechanism was instrumented.
+   a cause "likely" unless the mechanism was instrumented. Before the approval
+   request, write `.analysis/releases/<tag>/claims.md`: every claim of the notes
+   with its receipt path and run count. State counts ("3 of 3 runs"), never
+   "always"; a claim about another version ("RC4 behaves the same") needs the
+   same scenario run on that version; an advertised platform without a run is
+   named as not run. (RC5: three of four advisor rejections were such claims.)
 6. **Receipt.** `.analysis/releases/<tag>/receipt.yaml`: every gate with its
    receipt path, scope notes and `not_run` items.
 7. **Commit, tag, push** (authorized only). Stage nothing local-only
@@ -63,8 +77,10 @@ pass". This page is the release procedure for the four repositories:
 
 ## A pushed tag whose CI failed
 
-Each public step needs its own advisor approval: name the exact command and SHA
-in the request; the answer is exactly `[approved]`, with no suffix.
+Each public step needs its own advisor approval. Give the request an ID (for
+example `RC5-PUB-3`) and name the exact commands and SHA; the answer is
+`[approved <ID>]`. A bare `[approved]` or another request's ID is not approval:
+answers can arrive many turns late (2026-11-07).
 
 1. Diagnose: `gh run view <run> --json jobs` plus the failed job log (save under
    `.analysis/releases/<tag>/`); `gh release view <tag>` (not found when publish
