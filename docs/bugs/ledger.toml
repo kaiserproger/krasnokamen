@@ -3468,5 +3468,5 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "RC5 pre-tag breaker receipts/breaker-rc5-pretag-20261106/report.yaml (P1; interrupted-var2 refused 1/2 exact attempts; lease-rc4/lease-rc5 timings). Server fix on the RC5 hotfix branch: Core::open waits up to 30 s for the lease."
+source = "RC5 pre-tag breaker receipts/breaker-rc5-pretag-20261106/report.yaml (P1; interrupted-var2 refused 1/2 exact attempts; lease-rc4/lease-rc5 timings). Fixed in code by Core::open waiting up to 30 s for the lease (RC5 f29c3d62, main d1360198; cargo test start_waits_for_the_previous_server_to_release_the_world); breaker re-attack report-r2.yaml held 3/3 per branch with real clients. Stays open until a canonical real-client harness scenario covers it."
 regression = []
