@@ -13,6 +13,8 @@ mod bundle_tests;
 mod click;
 #[cfg(test)]
 mod click_tests;
+#[cfg(test)]
+mod conservation_tests;
 mod craft_stations;
 #[cfg(test)]
 mod craft_stations_tests;

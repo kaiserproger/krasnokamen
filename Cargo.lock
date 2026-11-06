@@ -1737,6 +1737,7 @@ dependencies = [
  "mc-world",
  "mc-worldgen",
  "parking_lot",
+ "proptest",
  "rayon",
  "redb",
  "rustc-hash 2.1.3",

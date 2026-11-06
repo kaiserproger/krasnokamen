@@ -174,6 +174,16 @@ concurrency decision, build first with `cargo test -p PACKAGE --test BINARY
 --no-run`, run only that executable in its own mem-run scope, and read
 `memory.stat` anonymous versus file pages.
 
+Inventory conservation property: `inventory::conservation_tests` in `mc-core`
+(proptest, random client operation sequences from one or two players through
+`run_tick`; item totals must never change). It runs 64 cases by default
+(about 80 s in a debug build, most of it loading the vanilla catalog);
+`PROPTEST_CASES=3000 cargo test -p mc-core --lib
+inventory::conservation_tests -- --nocapture` runs the long form (about 13 min)
+and prints the per-operation coverage table. A failure prints the shrunk
+operation sequence; turn it into a deterministic regression test (shrunk
+cases are not persisted).
+
 ## Resource bounds
 
 `run` and `client` put the whole invocation into one bounded systemd user
