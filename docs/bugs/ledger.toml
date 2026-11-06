@@ -3463,10 +3463,10 @@ regression = []
 
 [[bug]]
 id = "SP-RELAUNCH-LEASE-RACE"
-title = "Native client exit does not wait for the singleplayer server it is stopping: the old solaris-v2 keeps checkpointing for a few seconds after the client process ends, so relaunching the client and pressing Play on the same world at once can fail with 'world ... is already leased' (Server exited during startup). Pressing Play again after the old server exits works. Present in RC4 and RC5."
+title = "After Save & Quit, the native client's process can end while its singleplayer server is still checkpointing (old server alive 1.6 s after RC4 client exit, 3.8 s after RC5); relaunching the client and pressing Play on the same world at once was refused once with 'world ... is already leased' (Server exited during startup). Not reproduced on RC4; Play after the refusal was not exercised."
 area = "gameplay"
 repro = "manual"
-severity = "minor"
+severity = "major"
 status = "open"
-source = "RC5 pre-tag breaker receipts/breaker-rc5-pretag-20261106 (interrupted-var2 refused 1/2; lease-rc4/lease-rc5 old server outlived client 1.6 s / 3.8 s; lease_retry_check.sh: retry after exit listens)"
+source = "RC5 pre-tag breaker receipts/breaker-rc5-pretag-20261106/report.yaml (P1; interrupted-var2 refused 1/2 exact attempts; lease-rc4/lease-rc5 timings). Server fix on the RC5 hotfix branch: Core::open waits up to 30 s for the lease."
 regression = []
