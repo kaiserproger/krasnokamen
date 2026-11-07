@@ -136,9 +136,7 @@ def collect_prerequisites(platform: str) -> dict[str, Any]:
     }
 
 
-def run(ctx: ProfileContext) -> dict[str, Any]:
-    from .. import runtime
-
+def validate_args(ctx: ProfileContext) -> str:
     platform = ctx.platform or _flag_value(ctx.extra_args, "--platform")
     if platform not in PLATFORMS:
         raise RuntimeError(
@@ -147,6 +145,13 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         )
     if ctx.client != "java":
         raise ValueError("dh-gate requires the actual Java client, not the native client")
+    return platform
+
+
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    from .. import runtime
+
+    platform = validate_args(ctx)
     prereqs = collect_prerequisites(platform)
     (ctx.artifact_dir / "dh-prerequisites.json").write_text(
         json.dumps(prereqs, indent=2, sort_keys=True) + "\n"

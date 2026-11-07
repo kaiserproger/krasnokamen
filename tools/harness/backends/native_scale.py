@@ -22,7 +22,7 @@ from .client_probes import _server_binary, run_core_subset
 from .gameplay import require_tools
 
 
-def run(ctx: Any) -> dict[str, Any]:
+def validate_args(ctx: Any) -> tuple[argparse.Namespace, float]:
     parser = argparse.ArgumentParser(prog="native-scale")
     parser.add_argument("--native-count", type=int, choices=(1, 5, 10), default=1)
     parser.add_argument("--bots", type=int, choices=(0, 50, 200), default=0)
@@ -32,7 +32,10 @@ def run(ctx: Any) -> dict[str, Any]:
     parser.add_argument("--max-rss-mib", type=int, default=4096)
     parser.add_argument("--bots-binary", type=Path, default=Path(os.environ.get(
         "SOLARIS_BOTS_BINARY", str(runtime.REPO_ROOT / "target/release/player-scale-bots"))))
-    args = parser.parse_args(ctx.extra_args)
+    try:
+        args = parser.parse_args(ctx.extra_args)
+    except SystemExit as error:
+        raise ValueError("invalid native-scale arguments") from error
     if ctx.client != "native" or ctx.platform is not None or ctx.plugins_dir is not None:
         raise ValueError("native-scale requires --client native without Loader/plugins")
     if getattr(ctx, "windowed", False):
@@ -46,6 +49,11 @@ def run(ctx: Any) -> dict[str, Any]:
     timeout = 300 if ctx.timeout_seconds is None else ctx.timeout_seconds
     if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("timeout must be finite and positive")
+    return args, timeout
+
+
+def run(ctx: Any) -> dict[str, Any]:
+    args, timeout = validate_args(ctx)
     if not os.environ.get("SOLARIS_HARNESS_CPU_SCOPE"):
         raise RuntimeError("native-scale must run through the memory-capped harness runner")
     artifact = ctx.artifact_dir
@@ -271,10 +279,12 @@ directory = {json.dumps(str(artifact / "plugins"))}
                 require_tools(mcp.list_tools(), {"minecraft_wait_ticks", "minecraft_wait_for_play", "minecraft_observe",
                     "minecraft_send_chat", "minecraft_wait_for_state_change", "minecraft_press_inputs"}, "native-scale")
                 mcp.request_timeout_seconds = 130
-                play = mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": remaining()})
-                if not play.get("in_play"):
-                    raise RuntimeError("native did not enter Play")
-                chat = run_core_subset(mcp, child.artifact_dir, remaining())
+                with runtime.phase("join"):
+                    play = mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": remaining()})
+                    if not play.get("in_play"):
+                        raise RuntimeError("native did not enter Play")
+                with runtime.phase("scenario"):
+                    chat = run_core_subset(mcp, child.artifact_dir, remaining())
                 state = mcp.call_tool("minecraft_observe")
                 metrics = scale.proc_sample(proc.pid)
                 startup_seconds = (time.monotonic_ns() - launched) / 1e9

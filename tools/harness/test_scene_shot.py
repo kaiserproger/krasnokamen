@@ -11,6 +11,32 @@ from tools.harness.backends import scene_shot
 
 
 class SceneShotTests(unittest.TestCase):
+    def test_server_identity_is_recorded_at_launch(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifact = root / 'artifact'
+            artifact.mkdir()
+            binary = root / 'server'
+            binary.write_bytes(b'scene-server')
+            binary.chmod(0o755)
+            (root / 'playable.toml').write_text(
+                (scene_shot.runtime.REPO_ROOT / 'playable.toml').read_text())
+            ctx = scene_shot.ProfileContext(artifact, client='native', windowed=True)
+            (root / 'template').mkdir()
+            env = {'SOLARIS_SERVER_BINARY': str(binary), 'XDG_DATA_HOME': str(root / 'xdg')}
+            from tools.harness import preflight
+            with patch.dict('os.environ', env), patch.object(scene_shot.runtime, 'REPO_ROOT', root), \
+                    patch.object(scene_shot, 'prepare_operator_fixture'), \
+                    patch.object(preflight, 'client_template', return_value=root / 'template'), \
+                    patch.object(scene_shot.subprocess, 'Popen', side_effect=RuntimeError('launch stopped')):
+                with self.assertRaisesRegex(RuntimeError, 'launch stopped'):
+                    scene_shot.run(ctx, scenario={'steps': []})
+            self.assertEqual(ctx.commands[0][0], str(binary))
+            self.assertEqual(ctx.client_evidence['server_binary_path'], str(binary))
+            self.assertEqual(ctx.client_evidence['server_binary_sha256'],
+                             hashlib.sha256(b'scene-server').hexdigest())
+
     def test_scenario_username(self):
         self.assertEqual(scene_shot.scene_username({}), "SceneShot")
         self.assertEqual(scene_shot.scene_username({"username": "Other_Player"}), "Other_Player")

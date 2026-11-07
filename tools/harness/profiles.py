@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from .runtime import AGENT_ROOT, REPO_ROOT, start_xvfb, stop_process
+from .runtime import AGENT_ROOT, REPO_ROOT, ChildExited, PHASES, start_xvfb, stop_process, tag_failure
 
 BACKENDS = REPO_ROOT / "tools" / "harness" / "backends"
 DEFAULT_PLUGINS_ROOT = REPO_ROOT.parent / "solaris-default-plugins"
@@ -63,6 +63,7 @@ def _run_command(
     *,
     cwd: Path | None = None,
     env: dict[str, str] | None = None,
+    phase_name: str | None = None,
 ) -> dict[str, Any]:
     """Capture command output and preserve evidence even when launch or waiting fails."""
     log_path = ctx.artifact_dir / log_name
@@ -107,9 +108,13 @@ def _run_command(
         flush=True,
     )
     if returncode != 0:
-        raise RuntimeError(
-            f"{' '.join(str(part) for part in argv)} exited {returncode}; see {log_path}"
+        error = ChildExited(
+            f"{' '.join(str(part) for part in argv)} exited {returncode}; see {log_path}",
+            returncode, log_path,
         )
+        if phase_name:
+            error.failure_phase = phase_name
+        raise error
     return {"duration_seconds": duration_seconds}
 
 
@@ -149,7 +154,7 @@ def _server_binary(ctx: ProfileContext, log_name: str = "server-build.log") -> P
         env.setdefault("CARGO_BUILD_JOBS", "3")
         _run_command(
             ["cargo", "build", "--locked", "--bin", "solaris-v2", "-p", "mc-edge"],
-            ctx, log_name, env=env,
+            ctx, log_name, env=env, phase_name="server_start",
         )
         target = Path(env.get("CARGO_TARGET_DIR", str(REPO_ROOT / "target")))
         binary = (target if target.is_absolute() else REPO_ROOT / target) / "debug" / "solaris-v2"
@@ -255,7 +260,7 @@ def run_regressions(ctx: ProfileContext) -> dict[str, Any]:
 
 
 def run_correctness(ctx: ProfileContext) -> dict[str, Any]:
-    """The four L2 gates: fmt, clippy, code-health, then the test suite."""
+    """The L2 gates: regressions, fmt, clippy, code-health, then the test suite."""
     details: dict[str, Any] = {}
     _merge_details(details, run_regressions(ctx))
     _merge_details(details, run_fmt(ctx))
@@ -513,9 +518,7 @@ def run_native_scale(ctx: ProfileContext) -> dict[str, Any]:
     return native_scale.run(ctx)
 
 
-def run_loader_live(ctx: ProfileContext) -> dict[str, Any]:
-    from . import loader
-
+def validate_loader_live_args(ctx: ProfileContext) -> str:
     platform = ctx.platform or _flag_value(ctx.extra_args, "--platform")
     if platform not in LOADER_PLATFORMS:
         raise RuntimeError(
@@ -526,6 +529,13 @@ def run_loader_live(ctx: ProfileContext) -> dict[str, Any]:
         raise ValueError("loader-live requires --server-bin and --plugins-dir")
     if ctx.scenario_id is None:
         raise ValueError("loader-live requires a named scenario")
+    return platform
+
+
+def run_loader_live(ctx: ProfileContext) -> dict[str, Any]:
+    from . import loader
+
+    platform = validate_loader_live_args(ctx)
     from .backends.gameplay import prepare_operator_fixture
 
     prepare_operator_fixture(ctx, [loader.USERNAMES[platform]])
@@ -579,12 +589,12 @@ def _run_client_backend(
     argv: list[str], ctx: ProfileContext, log_name: str, *, env: dict[str, str]
 ) -> dict[str, Any]:
     if not any(mode in argv for mode in ("--run", "--real-client", "--all")):
-        return _run_command(argv, ctx, log_name, env=env)
+        return _run_command(argv, ctx, log_name, env=env, phase_name=None)
     xvfb, display, display_log = start_xvfb(ctx.artifact_dir)
     try:
         env["DISPLAY"] = display
         env.pop("WAYLAND_DISPLAY", None)
-        result = _run_command(argv, ctx, log_name, env=env)
+        result = _run_command(argv, ctx, log_name, env=env, phase_name=None)
         result["display"] = display
         return result
     finally:
@@ -715,12 +725,22 @@ def run_constantinople(ctx: ProfileContext) -> dict[str, Any]:
 
 
 def run_seed_review(ctx: ProfileContext) -> dict[str, Any]:
-    details = _run_command(
-        ["python3", "-m", "tools.harness.backends.seed_review"] + ctx.extra_args,
-        ctx,
-        "seed-review.log",
-        env=_backend_env(ctx),
-    )
+    try:
+        details = _run_command(
+            ["python3", "-m", "tools.harness.backends.seed_review"] + ctx.extra_args,
+            ctx,
+            "seed-review.log",
+            env=_backend_env(ctx),
+        )
+    except ChildExited as error:
+        result_path = ctx.artifact_dir / "seed-review" / "result.json"
+        try:
+            failure_phase = json.loads(result_path.read_text()).get("failure_phase")
+        except (OSError, ValueError, AttributeError):
+            failure_phase = None
+        if failure_phase in PHASES:
+            tag_failure(error, failure_phase)
+        raise
     details["mode"] = "prepared" if _prepared_mode(ctx.extra_args) else "run"
     return details
 
@@ -739,7 +759,7 @@ def run_seed_contact_sheet(ctx: ProfileContext) -> dict[str, Any]:
 
 def run_bucket_resync(ctx: ProfileContext) -> dict[str, Any]:
     details = _run_client_backend(
-        ["bash", str(BACKENDS / "bucket_resync.sh")] + ctx.extra_args,
+        ["bash", str(BACKENDS / "bucket_resync.sh")] + (ctx.extra_args or ["--real-client"]),
         ctx,
         "bucket-resync.log",
         env=_backend_env(ctx),
@@ -1040,6 +1060,97 @@ PROFILES: dict[str, dict[str, Any]] = {
         "run": run_bucket_resync,
     },
 }
+
+# Prerequisites are declared per profile rather than inferred from scope.
+# Keys are unconditional, native-client-only, Java-client-only, and native
+# windowed requirements respectively.  Empty tuples are explicit declarations.
+_NONE = ((), (), (), ())
+_NATIVE = (("server_binary",), ("client_binary", "client_data"), (),
+           ("windowed_assets", "xvfb"))
+_NATIVE_BUILD = (("optional_server_binary",), ("client_binary", "client_data"), (),
+                 ("windowed_assets", "xvfb"))
+_SHARED_BUILD = (("optional_server_binary",), ("client_binary", "client_data"),
+                 ("loader", "xvfb"), ("windowed_assets", "xvfb"))
+_SHARED = (("server_binary",), ("client_binary", "client_data"),
+           ("loader", "xvfb"), ("windowed_assets", "xvfb"))
+PROFILE_PREREQUISITES = {
+    "regressions": _NONE,
+    # The regression runner builds and pins its own server before sub-runs.
+    "regressions-client": _NONE,
+    "harness-check": _NONE,
+    "correctness": _NONE,
+    "fmt": _NONE,
+    "clippy": _NONE,
+    "code-health": _NONE,
+    "test": _NONE,
+    "build": _NONE,
+    "java": (("loader",), (), (), ()),
+    "fixture-check": _NONE,
+    "standard-pack": (("plugins_root",), (), (), ()),
+    "installer": _NONE,
+    "survival": _SHARED_BUILD,
+    "title-connect": _NATIVE,
+    "singleplayer-regressions": _NATIVE,
+    "village-qa": _NATIVE,
+    "village-autonomy-qa": _NATIVE,
+    "civilization-seed-qa": _NATIVE,
+    "village-owner-order-qa": _NATIVE,
+    "scene-shot": _SHARED,
+    "settlement-map-qa": _SHARED,
+    "claim-only-qa": _NATIVE,
+    "buildings-qa": _NATIVE,
+    "army-qa": _NATIVE,
+    "autocraft-qa": _NATIVE,
+    "dialogs": _NATIVE,
+    "admin-commands": _NATIVE,
+    "anti-xray": _NATIVE,
+    "composter-chance": _NATIVE,
+    "block-log": _NATIVE,
+    "chisel": _NATIVE,
+    "core-client": _SHARED_BUILD,
+    "inventory": _SHARED_BUILD,
+    "entities": _SHARED_BUILD,
+    "native-lifecycle": _SHARED_BUILD,
+    "logical-native": _NATIVE_BUILD,
+    "native-scale": _NATIVE_BUILD,
+    "pause-empty": (("optional_server_binary",), (), (), ()),
+    "item-merge": (("optional_server_binary",), (), (), ()),
+    "graves": (("optional_server_binary", "plugins_dir"), (), (), ()),
+    "loader-live": (("server_binary", "loader", "xvfb", "plugins_dir"), (), (), ()),
+    "dh-gate": (("server_binary", "loader", "xvfb"), (), (), ()),
+    "regression": ((), (), ("regression_client",), ()),
+    "playable": ((), (), ("regression_client",), ()),
+    "replay": ((), (), ("regression_client",), ()),
+    "oracle": _NONE,
+    "oracle-check": _NONE,
+    "quirk-parity": _NONE,
+    "catalog-load": _NONE,
+    "constantinople": _NONE,
+    "seed-review": (("optional_server_binary", "seed_review_client"), (), (), ()),
+    "seed-contact-sheet": _NONE,
+    "bucket-resync": (("regression_client",), (), (), ()),
+}
+if PROFILES.keys() != PROFILE_PREREQUISITES.keys():
+    raise RuntimeError("every harness profile must declare its prerequisites")
+for _name, _spec in PROFILES.items():
+    _spec["prerequisites"] = PROFILE_PREREQUISITES[_name]
+
+
+def prerequisites(spec: dict[str, Any], ctx: ProfileContext) -> frozenset[str]:
+    common, native, java, windowed = spec["prerequisites"]
+    needs = set((*common, *(native if ctx.client == "native" else java),
+                 *(windowed if ctx.client == "native" and ctx.windowed else ())))
+    if "regression_client" in needs:
+        needs.remove("regression_client")
+        if "--check" in ctx.extra_args:
+            needs.add("loader")
+        elif not any(flag in ctx.extra_args for flag in ("--prepare", "--validate-run", "--help", "-h")):
+            needs.update(("loader", "xvfb"))
+    if "seed_review_client" in needs:
+        needs.remove("seed_review_client")
+        if "--check" not in ctx.extra_args:
+            needs.update(("loader", "xvfb"))
+    return frozenset(needs)
 
 
 def list_profiles() -> dict[str, dict[str, str]]:
