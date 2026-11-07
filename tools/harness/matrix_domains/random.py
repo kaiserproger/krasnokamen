@@ -33,12 +33,14 @@ def stock(stacks):
 
 def invariant_checks(observed):
     """Pure oracle boundary, also used for harness-level negative controls."""
-    return [Check('no_server_error', observed['running'] and not observed['errors'], observed['errors']),
-            Check('conservation', observed['resources'] == observed['sources'], observed),
-            Check('legal_action', not observed['refusals'] and observed['progress'], observed['refusals']),
-            Check('observer_authority', observed['observer'] == observed['authority'],
-                  {'observer': observed['observer'], 'authority': observed['authority']}),
-            Check('recovery_atomic_durable', observed['recovery_ok'], observed.get('recovery'))]
+    checks = [Check('no_server_error', observed['running'] and not observed['errors'], observed['errors']),
+              Check('conservation', observed['resources'] == observed['sources'], observed),
+              Check('legal_action', not observed['refusals'] and observed['progress'], observed['refusals']),
+              Check('observer_authority', observed['observer'] == observed['authority'],
+                    {'observer': observed['observer'], 'authority': observed['authority']})]
+    if observed.get('recovery') is not None:
+        checks.append(Check('recovery_atomic_durable', observed['recovery_ok'], observed['recovery']))
+    return checks
 
 
 def mutate_observation(observed, fault):
@@ -53,7 +55,15 @@ def mutate_observation(observed, fault):
     elif fault == 'observer_authority':
         observed['observer']['container']['minecraft:dirt'] = -1
     elif fault == 'recovery_atomic_durable':
-        observed['recovery_ok'] = False
+        recovery = observed.get('recovery')
+        if recovery is not None:
+            recovered = recovery['recovered_image']
+            inventory = recovered['inventories'][recovery['actor_index']]
+            inventory['minecraft:dirt'] = inventory.get('minecraft:dirt', 0) + 1
+            observed['recovery_ok'] = recovery_matches(
+                recovery['expected_committed_image'], recovered,
+                recovery['actor_index'], recovery['cursor'])
+            recovery['exact_post_image'] = observed['recovery_ok']
     elif fault is not None:
         raise ValueError('unknown observation fault: ' + fault)
     return observed
@@ -243,6 +253,7 @@ def _recover(ctx, actor):
     ctx.state['recovery_ok'] = exact
     ctx.state['recovery'] = {'published_after_ack': published, 'last_ack': last_ack,
                              'expected_committed_image': expected, 'cursor': cursor,
+                             'actor_index': ctx.clients.index(actor),
                              'recovered_image': after['authority'], 'exact_post_image': exact,
                              'kill': killed}
 
