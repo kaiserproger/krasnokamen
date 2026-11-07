@@ -63,7 +63,12 @@ pub(crate) fn start(
     }
     state.debug_profiler.start_tick = Some(state.tick);
     state.debug_profiler.start_nanos = Some(wall_nanos());
-    crate::command_execution::success_feedback(state, connection, "commands.debug.started", Vec::new());
+    crate::command_execution::success_feedback(
+        state,
+        connection,
+        "commands.debug.started",
+        Vec::new(),
+    );
     CommandResult::Success(0)
 }
 
