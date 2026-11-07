@@ -187,7 +187,7 @@ def observe(ctx):
 def setup(ctx):
     if len(ctx.clients) < 2:
         raise ValueError('random scenarios require an independent observer')
-    ctx.state.update(sources={'earth': 0, 'wood': 0}, source_events=[], touched=[], checks=[], steps=[])
+    ctx.state.update(sources={'earth': 0, 'wood': 0}, source_events=[], sink_events=[], checks=[], steps=[], touched=[])
     for index, client in enumerate(ctx.clients):
         client.teleport_to(30.5 + index, 80, 30.5)
     ctx.server.ensure_loaded_callback = ctx.clients[-1].ensure_loaded
@@ -338,6 +338,7 @@ def _action(ctx, step):
         else:
             ctx.server.command(f'setblock {position[0]} 80 {position[2]} dirt')
             ctx.state['sources']['earth'] += 1
+            ctx.state['source_events'].append({'block': list(position), 'item': 'minecraft:dirt', 'count': 1})
             actor.wait_until(lambda: actor.read_block_state(position)['block_id'] == 'minecraft:dirt',
                              description='received declared block source')
             _mine(actor, position)
