@@ -3623,3 +3623,14 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T163619-protocol-matrix-3xalnot6/result.json"
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "SCENARIO-VANILLA-CRAFT-ACK"
+title = "Differential seed 19 completes the Solaris crafting action but times out waiting for an inventory transition on vanilla; the adapter or protocol cause is unclassified."
+area = "harness"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T172634-matrix-random-u9k17kiz/result.json"
+regression = []
+failing_first = "reported"
