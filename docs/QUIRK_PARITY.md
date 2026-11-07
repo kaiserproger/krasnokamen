@@ -18,7 +18,9 @@ Receipts: `DIR/receipt.json` (per scenario `status`: `pass`, `fail`,
 `known-divergence`, `findings` for fuzz; diffs, vanilla self-check failures,
 wall times), `DIR/vanilla-results.json`, `DIR/solaris/receipt.json` and the
 `vanilla.log` / `solaris.log` of every run. The harness profile `quirk-parity`
-(`tools/harness/profiles.py`) wraps the same module.
+(`tools/harness/profiles.py`) wraps the same module. Seeded scenario generation
+lives in `tools/harness/quirk_parity/seeded.py`; the command-line options above
+retain their existing names.
 
 ## How a scenario runs
 
