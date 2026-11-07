@@ -95,6 +95,10 @@ Gradle's separately configured cache is not isolated by this setting.
 ## Matrix runner status
 
 `protocol-matrix`, `native-matrix`, and `java-matrix` share the matrix adapters.
+Adapter guidance: [matrix domains](../tools/harness/matrix_domains/README.md),
+[containers](../tools/harness/matrix_domains/containers.md), and
+[platform coverage](../tools/harness/matrix_domains/platform.md).
+
 The true-vanilla Java lane is blocked: the current Loader Java agent premain
 does not install lifecycle or packet hooks, so the client state-change event
 does not arrive. The attempted row and its failure are recorded locally at
