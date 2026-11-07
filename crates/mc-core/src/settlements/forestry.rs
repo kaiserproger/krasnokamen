@@ -10,15 +10,92 @@ use crate::tick::TickState;
 // Covers the largest legal settlement, with room for boundary chunks. Old
 // towns may evict immutable evidence; they can request it again when evaluated.
 const CACHE_CHUNKS: usize = 1_156;
+const CACHE_BYTES: usize = 64 * 1024 * 1024;
 const QUEUED_CHUNKS: usize = 32;
 
-type Generated = (ChunkPos, Chunk, u128);
+type Generated = (ChunkPos, Option<Evidence>, u128);
+
+fn tree_name(name: &str) -> bool {
+    name.ends_with("_leaves") || (name.ends_with("_log") && !name.starts_with("stripped_"))
+}
+
+fn tree_states(blocks: &mc_world::BlockRegistry) -> Vec<bool> {
+    blocks
+        .states()
+        .map(|definition| tree_name(definition.block.id.path()))
+        .collect()
+}
+
+/// Only tree cells can authorize clearing; all other generated states are
+/// represented by air. Positions are ordered by y, x, z for binary search.
+struct Evidence {
+    min_y: i32,
+    max_y: i32,
+    cells: Vec<(u32, u32)>,
+}
+
+impl Evidence {
+    fn from_chunk(chunk: &Chunk, tree_states: &[bool]) -> Self {
+        let geometry = chunk.geometry();
+        let mut cells = Vec::new();
+        let is_tree = |id: BlockStateId| tree_states.get(id.0 as usize).copied().unwrap_or(false);
+        for (section_index, section) in chunk.sections.iter().enumerate() {
+            if !section.palette().map_or_else(
+                || is_tree(section.get(0, 0, 0)),
+                |palette| palette.iter().copied().any(is_tree),
+            ) {
+                continue;
+            }
+            for y in 0..16 {
+                for x in 0..16 {
+                    for z in 0..16 {
+                        let id = section.get(x, y, z);
+                        if is_tree(id) {
+                            let index = section_index as u32 * 4096
+                                + u32::from(y) * 256
+                                + u32::from(x) * 16
+                                + u32::from(z);
+                            cells.push((index, id.0));
+                        }
+                    }
+                }
+            }
+        }
+        cells.shrink_to_fit();
+        Self {
+            min_y: geometry.min_y(),
+            max_y: geometry.max_y(),
+            cells,
+        }
+    }
+
+    fn bytes(&self) -> usize {
+        std::mem::size_of::<Self>() + self.cells.capacity() * std::mem::size_of::<(u32, u32)>()
+    }
+
+    fn block(&self, at: [i32; 3], air: u32) -> Option<u32> {
+        if !(self.min_y..self.max_y).contains(&at[1]) {
+            return None;
+        }
+        let index = ((at[1] - self.min_y) as u32 * 256)
+            + (at[0].rem_euclid(16) as u32 * 16)
+            + at[2].rem_euclid(16) as u32;
+        Some(
+            self.cells
+                .binary_search_by_key(&index, |&(index, _)| index)
+                .map_or(air, |position| self.cells[position].1),
+        )
+    }
+}
 
 #[derive(Default)]
 pub(crate) struct Cache {
-    ready: HashMap<ChunkPos, Chunk>,
+    ready: HashMap<ChunkPos, Evidence>,
+    bytes: usize,
     order: VecDeque<ChunkPos>,
     pending: HashSet<ChunkPos>,
+    misses: u64,
+    denied: HashSet<ChunkPos>,
     worker: Option<(mpsc::SyncSender<ChunkPos>, mpsc::Receiver<Generated>)>,
     trusted: Option<bool>,
 }
@@ -34,20 +111,33 @@ impl std::fmt::Debug for Cache {
 }
 
 impl Cache {
+    pub(super) fn misses(&self) -> u64 {
+        self.misses
+    }
+
     fn block(&mut self, state: &TickState, at: [i32; 3]) -> Option<u32> {
         if !*self.trusted.get_or_insert_with(|| generator_known(state)) {
             return None;
         }
         if self.worker.is_none() {
-            let generator = state.world.generator();
+            let source = state.world.chunk_source();
             let (send, requests) = mpsc::sync_channel::<ChunkPos>(QUEUED_CHUNKS);
             let (results, receive) = mpsc::sync_channel(QUEUED_CHUNKS);
             let spawn = std::thread::Builder::new()
                 .name("settlement-forest".into())
                 .spawn(move || {
+                    let tree_states = tree_states(&source.registry);
                     while let Ok(pos) = requests.recv() {
                         let started = std::time::Instant::now();
-                        let chunk = generator.generate(pos);
+                        let trusted = source.native.as_ref().is_none_or(|store| {
+                            store.generator_owns_baseline(source.dimension, pos).unwrap_or_else(|error| {
+                                tracing::error!(x = pos.x, z = pos.z, %error, "forest baseline provenance read failed");
+                                false
+                            })
+                        });
+                        let chunk = trusted.then(|| {
+                            Evidence::from_chunk(&source.generator.generate(pos), &tree_states)
+                        });
                         if results
                             .send((pos, chunk, started.elapsed().as_micros()))
                             .is_err()
@@ -66,11 +156,21 @@ impl Cache {
         let (send, receive) = self.worker.as_ref().expect("forest worker");
         while let Ok((pos, chunk, micros)) = receive.try_recv() {
             self.pending.remove(&pos);
-            if self.ready.len() == CACHE_CHUNKS
+            let Some(chunk) = chunk else {
+                if self.denied.len() >= CACHE_CHUNKS {
+                    self.denied.clear();
+                }
+                self.denied.insert(pos);
+                continue;
+            };
+            while (self.ready.len() >= CACHE_CHUNKS || self.bytes + chunk.bytes() > CACHE_BYTES)
                 && let Some(oldest) = self.order.pop_front()
             {
-                self.ready.remove(&oldest);
+                if let Some(old) = self.ready.remove(&oldest) {
+                    self.bytes -= old.bytes();
+                }
             }
+            self.bytes += chunk.bytes();
             tracing::debug!(
                 x = pos.x,
                 z = pos.z,
@@ -85,14 +185,12 @@ impl Cache {
             z: at[2].div_euclid(16),
         };
         if let Some(chunk) = self.ready.get(&pos) {
-            return chunk
-                .get_block(
-                    at[0].rem_euclid(16) as u8,
-                    at[1],
-                    at[2].rem_euclid(16) as u8,
-                )
-                .map(|id| id.0);
+            return chunk.block(at, state.registry.states.air);
         }
+        if self.denied.contains(&pos) {
+            return None;
+        }
+        self.misses = self.misses.saturating_add(1);
         if !self.pending.contains(&pos) {
             match send.try_send(pos) {
                 Ok(()) => {
@@ -109,15 +207,26 @@ impl Cache {
     }
 }
 
-/// Startup already rejects a native generation-contract mismatch. Imported
-/// Anvil templates have no authenticated Solaris generator identity, so they
-/// cannot authorize clearing, even when individual cells happen to match.
+/// Native startup validates the full contract. Imported and older baselines
+/// also require per-chunk generator provenance before they can be cleared.
 fn generator_known(state: &TickState) -> bool {
-    let Some(record) = state.native_globals.get("level_metadata") else {
-        return state.world.chunk_source().native.is_none();
+    if state.world.chunk_source().native.is_none() {
+        return state
+            .native_globals
+            .get("level_metadata")
+            .is_none_or(|record| {
+                matches!(crate::native_checkpoint::decode_tag(record, "level_metadata"),
+                Ok(mc_nbt::Tag::Compound(fields)) if fields.is_empty())
+            });
+    }
+    let Some(record) = state.native_globals.get("generation") else {
+        return false;
     };
-    matches!(crate::native_checkpoint::decode_tag(record, "level_metadata"),
-        Ok(mc_nbt::Tag::Compound(fields)) if fields.is_empty())
+    let Ok(contract) = serde_json::from_slice::<serde_json::Value>(&record.payload) else {
+        return false;
+    };
+    contract["base"]["seed"].as_i64() == Some(state.world.seed())
+        && contract["base"]["revision"].as_u64() == Some(u64::from(mc_worldgen::WORLDGEN_REVISION))
 }
 
 pub(crate) fn tree(state: &TickState, block: u32) -> bool {
@@ -125,22 +234,86 @@ pub(crate) fn tree(state: &TickState, block: u32) -> bool {
         .registry
         .blocks
         .by_id(BlockStateId(block))
-        .is_some_and(|definition| {
-            let name = definition.block.id.path();
-            name.ends_with("_leaves") || (name.ends_with("_log") && !name.starts_with("stripped_"))
-        })
+        .is_some_and(|definition| tree_name(definition.block.id.path()))
 }
 
-/// Lumberjack roots are durable. The conservative crown envelope includes
-/// branched and giant grown trees, not just the original sapling column.
+/// A planted root protects its trunk and a bounded crown, not the whole
+/// settlement column. Unknown/unloaded cells remain protected.
 fn planted(state: &TickState, at: [i32; 3]) -> bool {
     state.settlements.records().any(|record| {
         record.planted_trees.iter().any(|root| {
-            at[0].abs_diff(root[0]) <= 8
-                && at[2].abs_diff(root[2]) <= 8
-                && (0..=384).contains(&(i64::from(at[1]) - i64::from(root[1])))
+            let dx = at[0].abs_diff(root[0]);
+            let dz = at[2].abs_diff(root[2]);
+            if dx > 4 || dz > 4 || at[1] < root[1] || at[1] - root[1] > 64 {
+                return false;
+            }
+            if dx <= 1 && dz <= 1 {
+                return true;
+            }
+            let low = root[1].max(at[1] - 8);
+            let high = (root[1] + 64)
+                .min(at[1] + 8)
+                .min(state.world.geometry().max_y() - 1);
+            for y in low..=high {
+                let Some(id) = state.world.physics_block_at(root[0], y, root[2]) else {
+                    return true;
+                };
+                if state
+                    .registry
+                    .blocks
+                    .by_id(BlockStateId(id))
+                    .is_some_and(|block| {
+                        let name = block.block.id.path();
+                        name.ends_with("_log") || name.ends_with("_sapling")
+                    })
+                {
+                    return true;
+                }
+            }
+            false
         })
     })
+}
+
+/// Retire vanished roots only when their whole possible trunk is loaded.
+pub(super) fn retire_missing(state: &mut TickState) {
+    if !state.tick.is_multiple_of(20) {
+        return;
+    }
+    let mut removed = Vec::new();
+    for record in state.settlements.records() {
+        for &root in &record.planted_trees {
+            let mut missing = true;
+            for y in root[1]..=(root[1] + 64).min(state.world.geometry().max_y() - 1) {
+                let Some(id) = state.world.physics_block_at(root[0], y, root[2]) else {
+                    missing = false;
+                    break;
+                };
+                if state
+                    .registry
+                    .blocks
+                    .by_id(BlockStateId(id))
+                    .is_some_and(|block| {
+                        let name = block.block.id.path();
+                        name.ends_with("_log") || name.ends_with("_sapling")
+                    })
+                {
+                    missing = false;
+                    break;
+                }
+            }
+            if missing {
+                removed.push((record.id, root));
+            }
+        }
+    }
+    for (id, root) in removed {
+        if let Some(record) = state.settlements.get_mut(id)
+            && record.planted_trees.remove(&root)
+        {
+            record.revision = record.revision.saturating_add(1);
+        }
+    }
 }
 
 pub(crate) fn clearable(state: &TickState, at: [i32; 3]) -> bool {
@@ -163,13 +336,34 @@ pub(crate) fn clearable(state: &TickState, at: [i32; 3]) -> bool {
     {
         return false;
     }
-    state
+    let generated = state
         .settlements
         .forest
         .lock()
         .expect("forest cache poisoned")
-        .block(state, at)
-        == Some(block)
+        .block(state, at);
+    let Some(generated) = generated else {
+        return false;
+    };
+    if generated == block {
+        return true;
+    }
+    let Some(actual) = state.registry.blocks.by_id(BlockStateId(block)) else {
+        return false;
+    };
+    let Some(baseline) = state.registry.blocks.by_id(BlockStateId(generated)) else {
+        return false;
+    };
+    actual.block.id == baseline.block.id
+        && actual.block.id.path().ends_with("_leaves")
+        && actual.properties.len() == baseline.properties.len()
+        && actual.properties.iter().all(|(key, value)| {
+            key == "distance"
+                || baseline
+                    .properties
+                    .iter()
+                    .any(|(other, expected)| other == key && expected == value)
+        })
 }
 
 pub(crate) fn drops(

@@ -32,6 +32,7 @@ pub mod startup;
 pub(crate) mod ui;
 pub(crate) mod ui_text;
 pub(crate) fn tick(state: &mut TickState, changes: &mut crate::boundary::ChangeSet) -> u64 {
+    forestry::retire_missing(state);
     let elapsed = allocator::tick(state, changes);
     construction::tick(state);
     army::tick(state);

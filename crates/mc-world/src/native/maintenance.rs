@@ -84,6 +84,28 @@ fn chunk_of(key: &[u8]) -> Result<(u32, i32, i32), NativeError> {
 }
 
 impl NativeStore {
+    /// Whether this chunk's baseline is known to come from the native generator.
+    /// Missing baselines are generated on demand; imported and legacy baselines
+    /// without provenance are deliberately not trusted.
+    pub fn generator_owns_baseline(
+        &self,
+        dimension: u32,
+        pos: crate::ChunkPos,
+    ) -> Result<bool, NativeError> {
+        let transaction = db(self.database.begin_read())?;
+        let key = super::chunk_key(dimension, pos);
+        let imported = db(transaction.open_table(IMPORTED))?;
+        if db(imported.get(key.as_slice()))?.is_none() {
+            return Ok(true);
+        }
+        let generated = match transaction.open_table(GENERATED) {
+            Ok(table) => table,
+            Err(redb::TableError::TableDoesNotExist(_)) => return Ok(false),
+            Err(error) => return Err(NativeError::Database(error.into())),
+        };
+        Ok(db(generated.get(key.as_slice()))?.is_some())
+    }
+
     /// Forget chunks outside the keep rectangle whose baseline the Solaris
     /// generator created (listed in `GENERATED`) and that still equal it: no
     /// overlay sections, no persistent entity rows (including tombstones of

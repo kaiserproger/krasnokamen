@@ -140,7 +140,9 @@ fn warm(state: &TickState, at: [i32; 3]) {
     while cache.block(state, at).is_none() {
         let (pos, chunk, micros) = cache.worker.as_ref().unwrap().1.recv().unwrap();
         cache.pending.remove(&pos);
-        cache.ready.insert(pos, chunk);
+        let evidence = chunk.expect("trusted forest fixture");
+        cache.bytes += evidence.bytes();
+        cache.ready.insert(pos, evidence);
         cache.order.push_back(pos);
         eprintln!("forest evidence chunk ({}, {}): {micros} us", pos.x, pos.z);
     }
@@ -269,6 +271,262 @@ fn natural_forest_lot_and_access_are_felled_into_storage_before_construction() {
     );
 }
 
+#[test]
+fn updated_leaf_distance_remains_clearable_without_ignoring_other_properties() {
+    let (mut state, id, builder, _, root, _) = forest();
+    let at = [root[0], root[1] + 4, root[2]];
+    let original = state.world.block_at(at[0], at[1], at[2]).unwrap();
+    let pos = crate::boundary::BlockPos {
+        x: at[0],
+        y: at[1],
+        z: at[2],
+    };
+    crate::leaves::schedule(&mut state, pos, original);
+    let active = state.world.chunks().map(|chunk| chunk.pos).collect();
+    state.world.set_active_chunks(active, state.tick);
+    for _ in 0..4 {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    let updated = state.world.block_at(at[0], at[1], at[2]).unwrap();
+    assert_ne!(
+        original, updated,
+        "the real scheduled leaf tick changed distance"
+    );
+    assert!(clearable(&state, at));
+    let persistent =
+        crate::farming::with_prop(&state.registry.blocks, updated, "persistent", "true").unwrap();
+    state.world.set_block(at[0], at[1], at[2], persistent);
+    assert!(
+        !clearable(&state, at),
+        "persistent player leaves are not natural"
+    );
+    state.world.set_block(at[0], at[1], at[2], updated);
+    fund(&mut state, "storage", 1);
+    construction::request_build(&mut state, id, "storage").unwrap();
+    complete(&mut state, id, builder);
+    assert!(state.settlements.get(id).unwrap().project.is_none());
+}
+
+#[test]
+fn vanished_planted_tree_releases_old_crown_after_replant_elsewhere() {
+    let (mut state, id, _, _, root, _) = forest();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let crown = [root[0] + 1, root[1] + 4, root[2]];
+    assert!(!clearable(&state, crown));
+    for y in root[1]..root[1] + 4 {
+        state
+            .world
+            .set_block(root[0], y, root[2], state.registry.states.air);
+    }
+    state.tick = 20;
+    retire_missing(&mut state);
+    assert!(
+        !state
+            .settlements
+            .get(id)
+            .unwrap()
+            .planted_trees
+            .contains(&root)
+    );
+    let new_root = [30, 201, 30];
+    let sapling = block(&state, "minecraft:birch_sapling", &[]);
+    state
+        .world
+        .set_block(new_root[0], new_root[1], new_root[2], sapling);
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(new_root);
+    assert!(planted(&state, new_root));
+    assert!(clearable(&state, crown));
+}
+
+#[test]
+fn forest_evidence_evicts_before_exceeding_payload_budget() {
+    let (state, _, _, _, _, _) = forest();
+    let (requests, _queued) = mpsc::sync_channel(2);
+    let (results, received) = mpsc::sync_channel(2);
+    let first = ChunkPos { x: 0, z: 0 };
+    let second = ChunkPos { x: 1, z: 0 };
+    let evidence = || Evidence {
+        min_y: -64,
+        max_y: 320,
+        cells: Vec::with_capacity(CACHE_BYTES / 16 + 16),
+    };
+    results.send((first, Some(evidence()), 0)).unwrap();
+    results.send((second, Some(evidence()), 0)).unwrap();
+    let mut cache = Cache {
+        worker: Some((requests, received)),
+        trusted: Some(true),
+        ..Default::default()
+    };
+    assert_eq!(
+        cache.block(&state, [16, 80, 0]),
+        Some(state.registry.states.air)
+    );
+    assert!(!cache.ready.contains_key(&first));
+    assert!(cache.ready.contains_key(&second));
+    assert!(cache.bytes <= CACHE_BYTES);
+}
+
+#[test]
+fn owner_order_waits_for_delayed_forest_evidence_then_starts() {
+    let (mut state, id, _, project, _, _) = forest();
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let size = blueprint.footprint(blueprints::Rotation::from_quarter_turns(project.rotation));
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    for x in -16..32 {
+        for z in -16..32 {
+            let selected = (project.origin[0]..project.origin[0] + i32::from(size[0])).contains(&x)
+                && (project.origin[2]..project.origin[2] + i32::from(size[2])).contains(&z);
+            if !selected && layout::cell(anchor, x, z) == layout::Cell::Lot && (x, z) != (1, 1) {
+                for y in 201..=216 {
+                    state.world.set_block(x, y, z, state.registry.states.stone);
+                }
+            }
+        }
+    }
+    fund(&mut state, "storage", 1);
+    let (requests, queued) = mpsc::sync_channel(QUEUED_CHUNKS);
+    let (results, received) = mpsc::sync_channel(QUEUED_CHUNKS);
+    state.settlements.forest = Default::default();
+    state.settlements.forest.lock().unwrap().worker = Some((requests, received));
+    assert!(matches!(
+        construction::request_build(&mut state, id, "storage").unwrap(),
+        construction::OrderOutcome::Queued { .. }
+    ));
+    assert!(state.settlements.get(id).unwrap().pending_order.is_some());
+    let active = state.world.chunks().map(|chunk| chunk.pos).collect();
+    state.world.set_active_chunks(active, state.tick);
+    let generator = state.world.generator();
+    for _ in 0..512 {
+        while let Ok(pos) = queued.try_recv() {
+            let evidence = Evidence::from_chunk(
+                &generator.generate(pos),
+                &tree_states(&state.registry.blocks),
+            );
+            results.send((pos, Some(evidence), 0)).unwrap();
+        }
+        state.tick += 4;
+        construction::tick(&mut state);
+        if state.settlements.get(id).unwrap().project.is_some() {
+            break;
+        }
+    }
+    let record = state.settlements.get(id).unwrap();
+    assert!(record.pending_order.is_none());
+    assert_eq!(record.project.as_ref().unwrap().origin, project.origin);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "manual cold/warm worldgen cache measurement"]
+fn measure_seed24_forest_cache() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = crate::CoreConfig::new(directory.path().to_path_buf(), 24);
+    crate::Core::open(config.clone()).unwrap().shutdown();
+    let state =
+        crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
+            .unwrap();
+    let rss = || -> u64 {
+        std::fs::read_to_string("/proc/self/status")
+            .unwrap()
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("VmRSS:")?
+                    .split_whitespace()
+                    .next()?
+                    .parse::<u64>()
+                    .ok()
+            })
+            .unwrap()
+            * 1024
+    };
+    let before = rss();
+    let started = std::time::Instant::now();
+    for x in 7..11 {
+        for z in -15..-11 {
+            warm(&state, [x * 16, 80, z * 16]);
+        }
+    }
+    let cold = started.elapsed();
+    let after = rss();
+    let started = std::time::Instant::now();
+    for x in 7..11 {
+        for z in -15..-11 {
+            warm(&state, [x * 16, 80, z * 16]);
+        }
+    }
+    let cache_bytes = state.settlements.forest.lock().unwrap().bytes;
+    eprintln!(
+        "seed24 16 chunks: cold={cold:?} warm={:?} rss_delta={} bytes evidence={cache_bytes} bytes",
+        started.elapsed(),
+        after.saturating_sub(before)
+    );
+}
+
+#[test]
+fn real_core_reopen_trusts_native_contract_and_rejects_imported_chunk() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = crate::CoreConfig::new(directory.path().to_path_buf(), 24);
+    crate::Core::open(config.clone()).unwrap().shutdown();
+    crate::Core::open(config.clone()).unwrap().shutdown();
+    let state =
+        crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
+            .unwrap();
+    assert!(
+        generator_known(&state),
+        "native level.dat epoch must not disable clearing"
+    );
+    let source = state.world.chunk_source();
+    let pos = ChunkPos { x: 500, z: 500 };
+    let imported = source.generator.generate(pos);
+    source
+        .native
+        .as_ref()
+        .unwrap()
+        .import_chunk(0, &imported, &state.registry.blocks, &state.registry.items)
+        .unwrap();
+    assert!(
+        !source
+            .native
+            .as_ref()
+            .unwrap()
+            .generator_owns_baseline(0, pos)
+            .unwrap()
+    );
+    drop(source);
+    drop(state);
+    crate::Core::open(config.clone()).unwrap().shutdown();
+    let mut state =
+        crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
+            .unwrap();
+    assert!(
+        !state
+            .world
+            .chunk_source()
+            .native
+            .as_ref()
+            .unwrap()
+            .generator_owns_baseline(0, pos)
+            .unwrap()
+    );
+    let record = state.native_globals.get_mut("generation").unwrap();
+    let mut contract: serde_json::Value = serde_json::from_slice(&record.payload).unwrap();
+    contract["base"]["revision"] = serde_json::json!(mc_worldgen::WORLDGEN_REVISION + 1);
+    record.payload = serde_json::to_vec(&contract).unwrap();
+    assert!(
+        !generator_known(&state),
+        "mismatched generation contract fails closed"
+    );
+}
 #[test]
 fn player_log_under_natural_canopy_is_protected_with_empty_or_expired_history() {
     let (mut state, _, _, _, root, _) = forest();
@@ -538,4 +796,338 @@ fn disabled_block_history_protects_natural_forest_near_a_live_player() {
         ],
     );
     assert!(clearable(&state, root));
+}
+
+fn checkpoint_forest(state: &mut TickState, config: &crate::CoreConfig) {
+    use crate::native_checkpoint::{encode_entities, encode_players, record, refresh_metadata};
+    use mc_world::native::NativeCheckpoint;
+    let store = crate::native_checkpoint::tests::fixture_store(config).unwrap();
+    let tick = state.tick;
+    let (players, captured, block_entities) = crate::core::checkpoint_data_for(state, tick);
+    let entities = encode_entities(
+        crate::dimensions::Dimension::Overworld,
+        &captured,
+        &state.registry.items,
+        tick,
+    )
+    .unwrap();
+    let players = encode_players(players.iter(), &state.registry.items, tick).unwrap();
+    let capture = state.world.capture_dirty(&block_entities);
+    let written = capture.written();
+    let mut image = store.read_checkpoint().unwrap();
+    let mut manifest: crate::journal::CheckpointManifest =
+        serde_json::from_slice(&image.globals["checkpoint"].payload).unwrap();
+    manifest.tick = tick;
+    for child in manifest.dimensions.values_mut() {
+        child.tick = tick;
+    }
+    image
+        .globals
+        .extend(crate::settlements::persistence::checkpoint_rows(state, tick).unwrap());
+    image.globals.insert(
+        "plugins".into(),
+        record(tick, serde_json::to_vec(&state.plugins).unwrap()),
+    );
+    image.globals.insert(
+        "checkpoint".into(),
+        record(tick, serde_json::to_vec(&manifest).unwrap()),
+    );
+    refresh_metadata(&mut image.globals, &manifest).unwrap();
+    for global in image.globals.values_mut() {
+        global.captured_tick = tick;
+    }
+    store
+        .commit_checkpoint_stream(
+            NativeCheckpoint {
+                tick,
+                previous_tick: image.tick,
+                chunks: &[],
+                entities: &[],
+                players: &players,
+                globals: &image.globals,
+            },
+            |write| {
+                capture
+                    .visit_native(|snapshot| {
+                        write(snapshot)
+                            .map_err(|error| crate::config::CoreError::Storage(error.to_string()))
+                    })
+                    .map_err(|error| mc_world::native::NativeError::Source(error.to_string()))
+            },
+            entities.iter().map(Ok),
+            &state.registry.blocks,
+            &state.registry.items,
+        )
+        .unwrap();
+    state.world.mark_flushed(&written);
+}
+
+// Drive only navigation; construction itself advances in run_tick.
+fn guide_builder(state: &mut TickState, slot: crate::entities::EntitySlot) {
+    let mut villager = state.entities.row_mut(slot).villager.take().unwrap();
+    let target =
+        crate::villager::building::work(state, slot, &mut villager, &mut Default::default());
+    state.entities.row_mut(slot).villager = Some(villager);
+    if let Some(target) = target {
+        let pos = target.pos;
+        let z = if target.exact { pos.z } else { pos.z + 1 };
+        let y = if state
+            .world
+            .block_at(pos.x, pos.y, z)
+            .is_some_and(|id| id != state.registry.states.air)
+        {
+            pos.y + 1
+        } else {
+            pos.y
+        };
+        state.entities.set_pos(
+            slot,
+            [f64::from(pos.x) + 0.5, f64::from(y), f64::from(z) + 0.5],
+        );
+    }
+}
+
+#[test]
+fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = crate::CoreConfig::new(directory.path().to_path_buf(), 42);
+    let (mut state, id, builder, _, _, access) = forest();
+    let generator = state.world.generator();
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    state.world = crate::world::ChunkWorld::new_native(
+        42,
+        store,
+        0,
+        Arc::clone(&generator),
+        &state.registry,
+        BlockStateId(state.registry.states.air),
+        [8, 201, 8],
+        mc_world::OVERWORLD_GEOMETRY,
+    );
+    let wanted = rustc_hash::FxHashMap::from_iter(
+        (-1..=1).flat_map(|x| (-1..=1).map(move |z| (ChunkPos { x, z }, 0))),
+    );
+    state.world.ensure_blocking(&wanted);
+    fund(&mut state, "storage", 1);
+    construction::request_build(&mut state, id, "storage").unwrap();
+    let builder_uuid = state.entities.row(builder).uuid;
+    state.entities.row_mut(builder).controls.no_ai = true;
+    let baseline = count(&state, "minecraft:birch_log");
+    let chest = state.world.block_at(1, 201, 1).unwrap();
+    state.world.set_block(1, 201, 1, state.registry.states.air);
+    state.world.set_block(1, 201, 1, chest);
+    state
+        .world
+        .mark_block_entity_dirty(crate::boundary::BlockPos { x: 1, y: 201, z: 1 });
+    for pos in wanted.keys().copied() {
+        state
+            .tickets
+            .insert(format!("forest-{}-{}", pos.x, pos.z), (pos, 0));
+    }
+    state.refresh_active_chunks(state.tick);
+    let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    let _ = crate::core::journal_entries_for_tick(&mut state, &output);
+    checkpoint_forest(&mut state, &config);
+    let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).unwrap();
+    let mut previous_tick = state.tick;
+    for _ in 0..2000 {
+        if count(&state, "minecraft:birch_log") >= baseline + 2 {
+            break;
+        }
+        guide_builder(&mut state, builder);
+        let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        writer
+            .append(previous_tick + 1, output.tick, &entries)
+            .unwrap();
+        previous_tick = output.tick;
+    }
+    let checkpoint_stock = count(&state, "minecraft:birch_log");
+    assert!(checkpoint_stock >= baseline + 2 && checkpoint_stock < baseline + 8);
+    writer.flush().unwrap();
+    checkpoint_forest(&mut state, &config);
+    let checkpoint_tick = state.tick;
+    let checkpoint_cursor = crate::plugin_structures::settlement_builds::status(
+        &state,
+        id,
+        &state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .unwrap()
+            .structure,
+    )
+    .unwrap()
+    .completed_work_units;
+    let mut unsealed = None;
+    for _ in 0..2000 {
+        guide_builder(&mut state, builder);
+        let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        if count(&state, "minecraft:birch_log") > checkpoint_stock {
+            unsealed = Some((output.tick, entries));
+            break;
+        }
+        writer
+            .append(previous_tick + 1, output.tick, &entries)
+            .unwrap();
+        previous_tick = output.tick;
+    }
+    let (tail_tick, entries) = unsealed.expect("another physical log was felled");
+    let mut before =
+        crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
+            .unwrap();
+    let wanted = rustc_hash::FxHashMap::from_iter(
+        (-1..=1).flat_map(|x| (-1..=1).map(move |z| (ChunkPos { x, z }, 0))),
+    );
+    before.world.ensure_blocking(&wanted);
+    crate::tick::sync_chunk_block_entities(&mut before);
+    assert!(
+        before.block_entities.contains_key(&(1, 201, 1)),
+        "chest block={:?} loaded={}",
+        before.world.block_at(1, 201, 1),
+        before.world.has_chunk(0, 0)
+    );
+    assert_eq!(
+        count(&before, "minecraft:birch_log"),
+        checkpoint_stock,
+        "unsealed cut cannot credit storage"
+    );
+    assert!(before.tick >= checkpoint_tick && before.tick < tail_tick);
+    let felled: Vec<_> = entries
+        .iter()
+        .filter_map(|entry| match entry {
+            crate::journal::JournalEntry::Block { pos, state }
+                if *state == before.registry.states.air
+                    && before
+                        .world
+                        .block_at(pos[0], pos[1], pos[2])
+                        .is_some_and(|id| tree(&before, id)) =>
+            {
+                Some(*pos)
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !felled.is_empty(),
+        "the unsealed batch contains the physical tree cut"
+    );
+    let before_project = before
+        .settlements
+        .get(id)
+        .unwrap()
+        .project
+        .as_ref()
+        .unwrap();
+    let before_cursor =
+        crate::plugin_structures::settlement_builds::status(&before, id, &before_project.structure)
+            .unwrap()
+            .completed_work_units;
+    drop(before);
+    writer
+        .append(previous_tick + 1, tail_tick, &entries)
+        .unwrap();
+    writer.flush().unwrap();
+    let expected_stock = count(&state, "minecraft:birch_log");
+    let expected_cursor = crate::plugin_structures::settlement_builds::status(
+        &state,
+        id,
+        &state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .unwrap()
+            .structure,
+    )
+    .unwrap()
+    .completed_work_units;
+    assert!(expected_cursor > checkpoint_cursor);
+    assert!(
+        before_cursor < expected_cursor,
+        "the unsealed cut cannot advance the cursor"
+    );
+    drop(writer);
+    drop(state);
+    let mut restored =
+        crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
+            .unwrap();
+    let wanted = rustc_hash::FxHashMap::from_iter(
+        (-1..=1).flat_map(|x| (-1..=1).map(move |z| (ChunkPos { x, z }, 0))),
+    );
+    restored.world.ensure_blocking(&wanted);
+    crate::tick::sync_chunk_block_entities(&mut restored);
+    for pos in wanted.keys().copied() {
+        restored
+            .tickets
+            .insert(format!("forest-{}-{}", pos.x, pos.z), (pos, 0));
+    }
+    restored.refresh_active_chunks(restored.tick);
+    // The disk fixture uses the synthetic generator above; production recovery
+    // recreates the configured real generator. Supply that fixture's exact
+    // evidence while exercising the real checkpoint and WAL owners.
+    let mut cache = restored.settlements.forest.lock().unwrap();
+    cache.trusted = Some(true);
+    let kinds = tree_states(&restored.registry.blocks);
+    for pos in wanted.keys().copied() {
+        let evidence = Evidence::from_chunk(&generator.generate(pos), &kinds);
+        cache.bytes += evidence.bytes();
+        cache.ready.insert(pos, evidence);
+        cache.order.push_back(pos);
+    }
+    drop(cache);
+    assert_eq!(count(&restored, "minecraft:birch_log"), expected_stock);
+    for pos in felled {
+        assert_eq!(
+            restored.world.block_at(pos[0], pos[1], pos[2]),
+            Some(restored.registry.states.air)
+        );
+    }
+    let project = restored
+        .settlements
+        .get(id)
+        .unwrap()
+        .project
+        .as_ref()
+        .unwrap();
+    assert_eq!(
+        crate::plugin_structures::settlement_builds::status(&restored, id, &project.structure)
+            .unwrap()
+            .completed_work_units,
+        expected_cursor
+    );
+    let builder = restored.entities.slot_of_uuid(builder_uuid).unwrap();
+    for _ in 0..10_000 {
+        if restored.settlements.get(id).unwrap().project.is_none() {
+            break;
+        }
+        if count(&restored, "minecraft:birch_log") == baseline + 8 {
+            break;
+        }
+        guide_builder(&mut restored, builder);
+        crate::tick::run_tick(&mut restored, &[]);
+    }
+    assert_eq!(count(&restored, "minecraft:birch_log"), baseline + 8);
+    for _ in 0..36_000 {
+        if restored.settlements.get(id).unwrap().project.is_none() {
+            break;
+        }
+        guide_builder(&mut restored, builder);
+        crate::tick::run_tick(&mut restored, &[]);
+    }
+    assert!(
+        restored.settlements.get(id).unwrap().project.is_none(),
+        "status={:?} day={} builder={:?}",
+        construction::project_status(&restored, id),
+        restored.day_time,
+        restored.entities.row(builder).villager
+    );
+    assert_eq!(
+        restored.world.block_at(access[0], access[1], access[2]),
+        Some(restored.registry.states.air)
+    );
 }

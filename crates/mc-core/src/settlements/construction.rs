@@ -156,7 +156,11 @@ fn submit_order(
             record.pending_order = None;
             Ok(OrderOutcome::Started)
         }
-        Err(reason) if reason == "Busy." || reason.starts_with("not enough:") => {
+        Err(reason)
+            if reason == "Busy."
+                || reason.starts_with("not enough:")
+                || reason == "waiting for forest evidence" =>
+        {
             let record = state
                 .settlements
                 .get_mut(id)
@@ -669,6 +673,12 @@ fn start_build(
     // A direct owner request searches once for immediate admission. Retried
     // pending work shares the autonomous planner's bounded, resumable scan.
     let (start, attempts) = planning_cursor.map_or((0, u32::MAX), |cursor| (cursor, SITE_ATTEMPTS));
+    let forest_misses = state
+        .settlements
+        .forest
+        .lock()
+        .expect("forest cache poisoned")
+        .misses();
     let (site, cursor) = site_project(
         state,
         record,
@@ -678,6 +688,17 @@ fn start_build(
         &images,
     );
     let Some(mut site) = site else {
+        if planning_cursor.is_none()
+            && state
+                .settlements
+                .forest
+                .lock()
+                .expect("forest cache poisoned")
+                .misses()
+                != forest_misses
+        {
+            return Err("waiting for forest evidence".into());
+        }
         if planning_cursor.is_some() {
             let record = state.settlements.get_mut(id).expect("planned settlement");
             record.construction_cursor = cursor;
