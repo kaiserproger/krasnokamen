@@ -283,7 +283,8 @@ class JavaClientsTests(unittest.TestCase):
         payload = json.loads(self._group_text())
         self.assertFalse(payload["passed"])
         self.assertIn("did not enter Play", payload["error"])
-        self.assertEqual(len(payload["clients"]), 1)  # fail-fast, no unused JVMs
+        self.assertGreaterEqual(len(payload["clients"]), 1)
+        self.assertLessEqual(len(payload["clients"]), 2)  # parallel workers may already be launched
         for entry in payload["clients"]:
             self.assertIsNone(entry["play"])
         self.assertNotIn("token", self._group_text())
@@ -293,7 +294,8 @@ class JavaClientsTests(unittest.TestCase):
             self.assertTrue(handle.closed)
         self.assertTrue(self.xvfb_log.closed)
         self.assertIn(self.xvfb_proc, self.stopped)
-        self.assertEqual(len([proc for proc in self.stopped if proc is not self.xvfb_proc]), 1)
+        self.assertEqual(len([proc for proc in self.stopped if proc is not self.xvfb_proc]),
+                         len(payload["clients"]))
 
     def test_partial_launch_failure_writes_receipt_and_cleans_siblings(self) -> None:
         self._start_patches()

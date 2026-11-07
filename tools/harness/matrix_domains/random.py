@@ -250,7 +250,15 @@ def _recover(ctx, actor):
 def _mine(actor, position):
     actor.look_at(position[0] + .5, position[1] + .5, position[2] + .5)
     sequence = actor.break_block(position, phase='start')
-    actor.wait_until(lambda: (actor.snapshot().get('block_ack_sequence') or -1) >= sequence,
+    if type(sequence) is not int:
+        raise MissingCapability('block_ack_sequence')
+    def acknowledged():
+        snapshot = actor.snapshot()
+        if 'block_ack_sequence' not in snapshot:
+            raise MissingCapability('snapshot:block_ack_sequence')
+        value = snapshot['block_ack_sequence']
+        return type(value) is int and value >= sequence
+    actor.wait_until(acknowledged,
                      description='mining start admitted')
     # SetTime is periodic. Its cached value can predate StartDestroyBlock by
     # almost one interval, so first cross a fresh packet before measuring hold.

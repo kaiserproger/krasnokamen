@@ -10,12 +10,22 @@ from unittest.mock import patch
 
 from .backends import matrix_random
 
-from .matrix_domains.random import invariant_checks, mutate_observation, stock, _published, setup, recovery_matches
+from .matrix_domains.random import invariant_checks, mutate_observation, stock, _published, setup, recovery_matches, _mine
 from .quirk_parity.fuzz import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_ACTIONS,
                                 shrink_player_scenario, failure_identity)
 
 
 class RandomMatrixTests(unittest.TestCase):
+    def test_mining_waits_for_exact_ack_including_sequence_zero(self):
+        snapshots = iter([{'block_ack_sequence': None}, {'block_ack_sequence': 0}])
+        actor = SimpleNamespace(look_at=lambda *args: None, break_block=lambda *args, **kwargs: 0,
+                                snapshot=lambda: next(snapshots), wait_ticks=lambda count: None)
+        def wait(predicate, **kwargs):
+            self.assertFalse(predicate())
+            self.assertTrue(predicate())
+        actor.wait_until = wait
+        _mine(actor, (1, 2, 3))
+
     def test_ddmin_keeps_exact_failure_and_reduces_parameters(self):
         row = player_scenario(1, 40, 4)
         row['actions'][27]['verb'] = 'craft'
