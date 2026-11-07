@@ -347,6 +347,70 @@ fn creative_slot_echo_of_lossy_pot_components_keeps_authoritative_stack() {
                 expected,
                 "{peer} {case}: cursor return must restore every canonical component"
             );
+            for end in ["drop", "close", "full_refresh", "cursor_refresh"] {
+                writer.inventory_polyfills.lock().clear_slots();
+                writer.clientbound(100, &body).unwrap().unwrap();
+                reader.serverbound(frame(98, &[0, 36, 0])).unwrap().unwrap();
+                match end {
+                    "drop" => {
+                        let dropped = reader
+                            .serverbound(frame(98, &[255, 255, 1, 10, 0, 0]))
+                            .unwrap()
+                            .unwrap();
+                        let mut expected_drop = expected.clone();
+                        expected_drop[..2].copy_from_slice(&[255, 255]);
+                        assert_eq!(dropped.body.as_ref(), expected_drop);
+                        let again = reader
+                            .serverbound(frame(98, &[255, 255, 1, 10, 0, 0]))
+                            .unwrap()
+                            .unwrap();
+                        assert_eq!(again.body.as_ref(), &[255, 255, 1, 10, 0, 0]);
+                    }
+                    "close" => {
+                        play::serverbound_body(&mut reader, "container_close", &[0]).unwrap();
+                    }
+                    "full_refresh" => {
+                        let mut snapshot = vec![0, 0, 46];
+                        snapshot.resize(50, 0); // 46 empty slots and empty carried stack
+                        play::clientbound_body(&mut writer, "container_set_content", &snapshot)
+                            .unwrap();
+                    }
+                    "cursor_refresh" => {
+                        play::clientbound_body(&mut writer, "set_cursor_item", &[0]).unwrap();
+                    }
+                    _ => unreachable!(),
+                }
+                let after = reader
+                    .serverbound(frame(98, &[0, 37, 1, 10, 0, 0]))
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(
+                    after.body.as_ref(),
+                    &[0, 37, 1, 10, 0, 0],
+                    "{peer} {case} {end}: stale provenance"
+                );
+            }
+            for source in ["container_set_content", "set_cursor_item"] {
+                writer.inventory_polyfills.lock().clear_slots();
+                let cursor = if source == "container_set_content" {
+                    let mut snapshot = vec![0, 0, 46];
+                    snapshot.resize(49, 0);
+                    snapshot.extend_from_slice(&body[1..]);
+                    snapshot
+                } else {
+                    body[1..].to_vec()
+                };
+                play::clientbound_body(&mut writer, source, &cursor).unwrap();
+                let returned = reader
+                    .serverbound(frame(98, &[0, 37, 1, 10, 0, 0]))
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(
+                    returned.body.as_ref(),
+                    expected,
+                    "{peer} {case}: {source} carried image"
+                );
+            }
         }
     }
 }
@@ -392,4 +456,36 @@ fn creative_named_stack_preserves_outer_component_delimiter() {
     assert_eq!(translated.body.as_ref(), expected);
     creative[7] = 14;
     assert!(reader.serverbound(frame(98, &creative)).is_err());
+}
+
+#[test]
+fn creative_unknown_removed_component_names_id_and_source_protocol() {
+    use super::items::Components;
+    use super::tables::IdMap;
+    use mc_protocol::codec::WriteMc;
+    for peer in [775, 776] {
+        let mut reader = session();
+        let tables = &mut Arc::get_mut(&mut reader.profile).unwrap().tables;
+        tables.formats.lower = peer;
+        tables.items = IdMap::by_name([("stone", 10)], [("stone", 1)], |_| None);
+        tables.component_shapes = Components::new(&[], &["minecraft:custom_name".into()]);
+        reader.phase = Phase::Play;
+        for id in [-1, 1, 9999] {
+            let mut body = vec![0, 36, 1, 1, 0, 1];
+            body.write_varint(id);
+            let error = format!("{:#}", reader.serverbound(frame(98, &body)).unwrap_err());
+            assert!(
+                error.contains(&format!("unknown removed component {id}")),
+                "{error}"
+            );
+            assert!(error.contains(&format!("protocol {peer}")), "{error}");
+        }
+        // The source knows this component but the target does not: an explicit
+        // omitted representation is not an unknown/negative source id.
+        let translated = reader
+            .serverbound(frame(98, &[0, 36, 1, 1, 0, 1, 0]))
+            .unwrap()
+            .unwrap();
+        assert_eq!(translated.body.as_ref(), &[0, 36, 1, 10, 0, 0]);
+    }
 }

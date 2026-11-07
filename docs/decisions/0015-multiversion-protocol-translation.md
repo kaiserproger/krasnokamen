@@ -214,8 +214,24 @@ reserializes a stack. Echo matching accounts for component order and that
 measured default, rather than comparing a trusted clientbound byte image.
 An empty creative write retains the old lossy image as client-cursor provenance;
 returning that unchanged projection restores the saved canonical stack, even
-after an authoritative empty-slot refresh. Actual changed projections are
-translated normally; arbitrary creative edits are not component-preservation proof.
+after an authoritative empty-slot refresh. A negative-slot drop restores that
+canonical stack once and consumes the provenance. Closing the container clears
+the provenance; full inventory and explicit cursor snapshots replace it with
+their authoritative carried image. Actual changed projections are translated
+normally; arbitrary creative edits are not component-preservation proof.
+
+This is presentation provenance, **not authoritative creative cursor custody**.
+Local `javap -p -c net.minecraft.server.network.ServerGamePacketListenerImpl`
+from the measured 26.1.2 and 26.3 server jars shows
+`handleSetCreativeModeSlot`: slots 1–45 call `inventoryMenu.getSlot(...).setByPlayer`
+and broadcast changes, negative slots call `ServerPlayer.drop`, and neither
+branch assigns the server menu's carried stack. The 26.1.2 client
+`AbstractContainerMenu.removed` also returns immediately for non-`ServerPlayer`.
+Thus picking up and disconnecting loses the client-only creative cursor in
+vanilla. Closing with that cursor does not create a server-owned return.
+Creative can mint stacks; the translator must not invent survival-style custody
+or restore an old image after a close/drop. The measurements are reproducible
+with the jar hashes and capture commands below; Mojang bytecode remains local.
 
 `mc-data::legacy_26_1_2` remains a durable-record migration owner, and
 `enchanting_26_1_2` remains protocol-neutral gameplay; neither is a session

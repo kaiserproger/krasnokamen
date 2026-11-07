@@ -131,6 +131,14 @@ impl Components {
             .ok()
             .and_then(|id| source.get(id).copied().flatten())
     }
+
+    fn contains(&self, to: To, id: i32) -> bool {
+        let source = match to {
+            To::Legacy => &self.canonical,
+            To::Canonical => &self.legacy,
+        };
+        usize::try_from(id).is_ok_and(|id| id < source.len())
+    }
 }
 
 fn map(ids: &IdMap, to: To, id: i32) -> Option<i32> {
@@ -290,7 +298,16 @@ fn patch_framed(
     let mut kept_removed = 0;
     let mut removed_ids = Vec::new();
     for _ in 0..removed {
-        if let Some(target) = map(&t.components, to, r.read_varint()?) {
+        let id = r.read_varint()?;
+        let protocol = match to {
+            To::Legacy => t.formats.upper,
+            To::Canonical => t.formats.lower,
+        };
+        ensure!(
+            t.component_shapes.contains(to, id),
+            "unknown removed component {id} in protocol {protocol}"
+        );
+        if let Some(target) = map(&t.components, to, id) {
             removed_ids.write_varint(target);
             kept_removed += 1;
         } else {

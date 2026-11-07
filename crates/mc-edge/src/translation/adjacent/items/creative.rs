@@ -11,13 +11,14 @@ pub struct Images {
 
 pub enum Update<'a> {
     Echo,
-    Restore(&'a [u8]),
+    Restore(std::borrow::Cow<'a, [u8]>),
     Translate,
 }
 
 impl Images {
     pub fn clear_slots(&mut self) {
         self.slots.clear();
+        self.carried = None;
     }
 
     pub fn observe(&mut self, slot: i16, image: Option<Image>) {
@@ -28,7 +29,19 @@ impl Images {
         }
     }
 
+    pub fn observe_cursor(&mut self, image: Option<Image>) {
+        self.carried = image;
+    }
+
     pub fn update<'a>(&'a mut self, t: &Tables, slot: i16, wire: &[u8]) -> Result<Update<'a>> {
+        if slot < 0 {
+            if let Some(image) = self.carried.take()
+                && image.matches(t, wire)?
+            {
+                return Ok(Update::Restore(std::borrow::Cow::Owned(image.canonical)));
+            }
+            return Ok(Update::Translate);
+        }
         if !(5..=45).contains(&slot) {
             return Ok(Update::Translate);
         }
@@ -37,7 +50,9 @@ impl Images {
         {
             let image = self.carried.take().expect("matching carried image");
             self.carried = self.slots.insert(slot, image);
-            return Ok(Update::Restore(&self.slots[&slot].canonical));
+            return Ok(Update::Restore(std::borrow::Cow::Borrowed(
+                &self.slots[&slot].canonical,
+            )));
         }
         if let Some(image) = self.slots.get(&slot)
             && image.matches(t, wire)?

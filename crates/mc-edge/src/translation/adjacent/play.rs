@@ -336,7 +336,7 @@ fn translate_clientbound<'a>(
                     &mut w,
                 )?;
             }
-            items::stack(t, To::Legacy, &mut r, &mut w)?;
+            inventory_stack(session, Some(-1), &mut r, &mut w)?;
         }
         "container_set_slot" => {
             let window = r.read_varint()?;
@@ -346,7 +346,7 @@ fn translate_clientbound<'a>(
             w.write_i16(slot);
             inventory_stack(session, (window == 0).then_some(slot), &mut r, &mut w)?;
         }
-        "set_cursor_item" => items::stack(t, To::Legacy, &mut r, &mut w)?,
+        "set_cursor_item" => inventory_stack(session, Some(-1), &mut r, &mut w)?,
         "set_player_inventory" => {
             let slot = r.read_varint()?;
             w.write_varint(slot);
@@ -449,6 +449,10 @@ pub(super) fn serverbound_body<'a>(
     let mut r = body;
     let mut w = Vec::new();
     match name.strip_prefix("minecraft:").unwrap_or(name) {
+        "container_close" => {
+            session.inventory_polyfills.lock().clear_slots();
+            return Ok(Some(Cow::Borrowed(body)));
+        }
         "swing" if t.formats.upper >= 777 => {
             let hand = r.read_varint()?;
             ensure!((0..=1).contains(&hand), "invalid swing hand");
@@ -510,7 +514,7 @@ pub(super) fn serverbound_body<'a>(
                 items::creative::Update::Echo => return Ok(None),
                 items::creative::Update::Restore(canonical) => {
                     w.write_i16(slot);
-                    w.extend_from_slice(canonical);
+                    w.extend_from_slice(canonical.as_ref());
                     return Ok(Some(Cow::Owned(w)));
                 }
                 items::creative::Update::Translate => {}
@@ -560,7 +564,7 @@ fn inventory_stack(
     let start = w.len();
     let canonical = *r;
     let lossy = items::stack_with_loss(&session.profile.tables, To::Legacy, r, w)?;
-    if let Some(slot @ 5..=45) = slot {
+    if let Some(slot @ (-1 | 5..=45)) = slot {
         let image = if lossy {
             Some(items::creative::Image::new(
                 &session.profile.tables,
@@ -570,7 +574,12 @@ fn inventory_stack(
         } else {
             None
         };
-        session.inventory_polyfills.lock().observe(slot, image);
+        let mut images = session.inventory_polyfills.lock();
+        if slot == -1 {
+            images.observe_cursor(image);
+        } else {
+            images.observe(slot, image);
+        }
     }
     Ok(())
 }
