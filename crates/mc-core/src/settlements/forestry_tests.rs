@@ -310,12 +310,24 @@ fn updated_leaf_distance_remains_clearable_without_ignoring_other_properties() {
 #[test]
 fn vanished_planted_tree_releases_old_crown_after_replant_elsewhere() {
     let (mut state, id, _, _, root, _) = forest();
+    let log = state.world.block_at(root[0], root[1], root[2]).unwrap();
+    for y in root[1]..root[1] + 4 {
+        state
+            .world
+            .set_block(root[0], y, root[2], state.registry.states.air);
+    }
+    let sapling = block(&state, "minecraft:birch_sapling", &[]);
+    state.world.set_block(root[0], root[1], root[2], sapling);
     state
         .settlements
         .get_mut(id)
         .unwrap()
         .planted_trees
         .insert(root);
+    assert!(planted(&state, root), "the recorded sapling is protected");
+    for y in root[1]..root[1] + 4 {
+        state.world.set_block(root[0], y, root[2], log);
+    }
     let crown = [root[0] + 1, root[1] + 4, root[2]];
     assert!(!clearable(&state, crown));
     for y in root[1]..root[1] + 4 {
@@ -346,6 +358,22 @@ fn vanished_planted_tree_releases_old_crown_after_replant_elsewhere() {
         .insert(new_root);
     assert!(planted(&state, new_root));
     assert!(clearable(&state, crown));
+}
+
+#[test]
+fn planted_tree_does_not_reserve_a_separate_nearby_natural_trunk() {
+    let (mut state, id, _, _, _, _) = forest();
+    let root = [0, 201, 0];
+    let neighbor = [6, 201, 0];
+    grown_world(&mut state, vec![root, neighbor], "birch");
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    assert!(!clearable(&state, root));
+    assert!(clearable(&state, neighbor));
 }
 
 #[test]
@@ -486,8 +514,31 @@ fn real_core_reopen_trusts_native_contract_and_rejects_imported_chunk() {
         "native level.dat epoch must not disable clearing"
     );
     let source = state.world.chunk_source();
-    let pos = ChunkPos { x: 500, z: 500 };
-    let imported = source.generator.generate(pos);
+    let kinds = tree_states(&state.registry.blocks);
+    let mut sites = Vec::new();
+    for x in 7..11 {
+        for z in -15..-11 {
+            let pos = ChunkPos { x, z };
+            let chunk = source.generator.generate(pos);
+            let evidence = Evidence::from_chunk(&chunk, &kinds);
+            if let Some(&(index, _)) = evidence.cells.first() {
+                let at = [
+                    x * 16 + ((index % 256) / 16) as i32,
+                    evidence.min_y + (index / 256) as i32,
+                    z * 16 + (index % 16) as i32,
+                ];
+                sites.push((pos, chunk, at));
+                if sites.len() == 2 {
+                    break;
+                }
+            }
+        }
+        if sites.len() == 2 {
+            break;
+        }
+    }
+    let (native_pos, _, native_at) = sites.pop().expect("second natural tree chunk");
+    let (pos, imported, imported_at) = sites.pop().expect("imported natural tree chunk");
     source
         .native
         .as_ref()
@@ -517,6 +568,26 @@ fn real_core_reopen_trusts_native_contract_and_rejects_imported_chunk() {
             .unwrap()
             .generator_owns_baseline(0, pos)
             .unwrap()
+    );
+    state
+        .world
+        .ensure_blocking(&[(pos, 0), (native_pos, 0)].into_iter().collect());
+    assert!(!clearable(&state, imported_at));
+    {
+        let mut cache = state.settlements.forest.lock().unwrap();
+        let (received, evidence, _) = cache.worker.as_ref().unwrap().1.recv().unwrap();
+        assert_eq!(received, pos);
+        assert!(
+            evidence.is_none(),
+            "imported baseline cannot authorize clearing"
+        );
+        cache.pending.remove(&received);
+        cache.denied.insert(received);
+    }
+    warm(&state, native_at);
+    assert!(
+        clearable(&state, native_at),
+        "real native world tree is clearable after reopen"
     );
     let record = state.native_globals.get_mut("generation").unwrap();
     let mut contract: serde_json::Value = serde_json::from_slice(&record.payload).unwrap();

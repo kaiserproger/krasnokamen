@@ -3714,4 +3714,23 @@ severity = "major"
 status = "open"
 source = "Seed-24 .analysis/validation/20261107T163639-civilization-seed-qa-uo17691i/result.json: 185 house lots, none free; diagnostic civsim3-mixed-load-site-diagnosis.log. Owner authorized physical natural-forest site preparation, 2026-11-08."
 failing_first = "reported"
-regression = ["cargo:mc-core:settlements::forestry::tests::natural_forest_lot_and_access_are_felled_into_storage_before_construction", "cargo:mc-core:settlements::forestry::tests::player_log_under_natural_canopy_is_protected_with_empty_or_expired_history", "cargo:mc-core:settlements::forestry::tests::grown_lumberjack_tree_stays_protected_after_settlement_checkpoint_recovery", "cargo:mc-core:settlements::forestry::tests::imported_world_without_matching_generator_identity_clears_nothing", "cargo:mc-core:settlements::forestry::tests::identical_replacement_after_history_expiry_is_felled_and_conserved", "cargo:mc-core:settlements::forestry::tests::retained_player_placement_vetoes_an_identical_worldgen_log", "cargo:mc-core:settlements::forestry::tests::full_storage_refuses_felling_without_losing_or_duplicating_the_log", "cargo:mc-core:settlements::forestry::tests::protected_crown_above_access_headroom_stays_while_the_building_finishes", "cargo:mc-core:settlements::forestry::tests::disabled_block_history_protects_natural_forest_near_a_live_player", "cargo:mc-core:villager::lumber_tests::lumberjack_routes_then_cuts_full_trunk_and_replants_matching_sapling", "cargo:mc-core:settlements::forestry::tests::updated_leaf_distance_remains_clearable_without_ignoring_other_properties", "cargo:mc-core:settlements::forestry::tests::vanished_planted_tree_releases_old_crown_after_replant_elsewhere", "cargo:mc-core:settlements::forestry::tests::owner_order_waits_for_delayed_forest_evidence_then_starts", "cargo:mc-core:settlements::forestry::tests::real_core_reopen_trusts_native_contract_and_rejects_imported_chunk", "cargo:mc-core:settlements::forestry::tests::forest_evidence_evicts_before_exceeding_payload_budget", "cargo:mc-core:settlements::forestry::tests::forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops", "cargo:mc-world:native::maintenance::tests::forest_evidence_rejects_imported_but_accepts_generated_and_missing_baselines"]
+regression = [
+  "cargo:mc-core:settlements::forestry::tests::natural_forest_lot_and_access_are_felled_into_storage_before_construction",
+  "cargo:mc-core:settlements::forestry::tests::player_log_under_natural_canopy_is_protected_with_empty_or_expired_history",
+  "cargo:mc-core:settlements::forestry::tests::grown_lumberjack_tree_stays_protected_after_settlement_checkpoint_recovery",
+  "cargo:mc-core:settlements::forestry::tests::imported_world_without_matching_generator_identity_clears_nothing",
+  "cargo:mc-core:settlements::forestry::tests::identical_replacement_after_history_expiry_is_felled_and_conserved",
+  "cargo:mc-core:settlements::forestry::tests::retained_player_placement_vetoes_an_identical_worldgen_log",
+  "cargo:mc-core:settlements::forestry::tests::full_storage_refuses_felling_without_losing_or_duplicating_the_log",
+  "cargo:mc-core:settlements::forestry::tests::protected_crown_above_access_headroom_stays_while_the_building_finishes",
+  "cargo:mc-core:settlements::forestry::tests::disabled_block_history_protects_natural_forest_near_a_live_player",
+  "cargo:mc-core:villager::lumber_tests::lumberjack_routes_then_cuts_full_trunk_and_replants_matching_sapling",
+  "cargo:mc-core:settlements::forestry::tests::updated_leaf_distance_remains_clearable_without_ignoring_other_properties",
+  "cargo:mc-core:settlements::forestry::tests::vanished_planted_tree_releases_old_crown_after_replant_elsewhere",
+  "cargo:mc-core:settlements::forestry::tests::planted_tree_does_not_reserve_a_separate_nearby_natural_trunk",
+  "cargo:mc-core:settlements::forestry::tests::owner_order_waits_for_delayed_forest_evidence_then_starts",
+  "cargo:mc-core:settlements::forestry::tests::real_core_reopen_trusts_native_contract_and_rejects_imported_chunk",
+  "cargo:mc-core:settlements::forestry::tests::forest_evidence_evicts_before_exceeding_payload_budget",
+  "cargo:mc-core:settlements::forestry::tests::forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops",
+  "cargo:mc-world:native::maintenance::tests::forest_evidence_rejects_imported_but_accepts_generated_and_missing_baselines",
+]
