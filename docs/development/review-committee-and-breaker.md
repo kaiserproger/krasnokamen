@@ -10,37 +10,42 @@ the agent runtime's user agent directory as Markdown files with frontmatter
 
 ## Advisor (watchdog)
 
-The executing agent runs under an independent architecture advisor configured
-in the ignored, owner-maintained `WATCHDOG.yml` (do not edit it). Its policy:
+The executing agent runs under an independent advisor configured in the
+ignored, owner-maintained `WATCHDOG.yml` (rewritten on the owner's request,
+2026-11-07). Its policy:
 
-- **Job:** stop over-engineering in time, not write the solution. Priorities:
-  correctness, then diagnosability, then simplicity, then performance.
-- **Stops the executor when it:** adds a new worker, queue, state, retry,
-  reconciler or abstraction without clear need; creates a second source of
-  truth or a second execution path; treats a local bug with a new mechanism
-  instead of simplifying the existing one; invents a domain invariant without
-  confirmed business semantics; widens scope or adds speculative edge cases;
-  relies on unit tests where real database or concurrency semantics are needed.
-- **Before any new mechanism it demands answers to:** which invariant does it
-  protect; why the existing mechanism does not fit; what it replaces; can it be
-  simpler. A mechanism that removes nothing is suspect by default. Existing
-  services and abstractions may be superfluous too: no anchoring on the current
-  architecture. Intervene at the architectural fork, not after hundreds of lines.
-- **Verdicts:** `STOP` (wrong direction; give the minimal correction), `WARN`
-  (acceptable but adds complexity), `OK`.
-- **Severity by consequence, not tone:** `blocker` when not fixing it now causes
-  harm: a wrong fact or status already reached the owner (swapped numbers, PASS
-  instead of BLOCKED, wrong cause); an action would kill or break what the owner
-  left running; loss of data or work; burning usage limits (a looping agent,
-  extra agents, parallel edits of one file); violating a direct owner order or
-  AGENTS.md. Every `STOP` is a blocker. `concern`: needless complexity or
-  inefficiency without immediate harm. `nit`: minor.
+- **Job:** the executor does the right thing the simple way and tells the owner
+  nothing false. Priorities: correctness, then diagnosability, then simplicity,
+  then performance; the owner's order of ordinary play, plugin API, measured
+  performance, rare edges. The owner's orders in the current conversation
+  outrank the file and the advisor's opinion.
+- **Acts, not only stops:** it has almost all of the executor's tools. It
+  checks claims against current files before advising, since notes arrive
+  late. It fixes small factual errors in docs or notes itself and says so. It
+  messages a subagent directly (`write agent://<id>`) or kills a looping or
+  duplicate one (`write proc://<id>/kill`). For production code it gives the
+  exact `file:line` correction instead of editing.
+- **STOP** only when irreversible harm is happening or imminent and it cannot
+  prevent it itself: loss of data or work, killing what the owner left
+  running, publication without owner authorization, violating a direct owner
+  order or AGENTS.md, a wrong fact or status already sent to the owner. Every
+  STOP names the minimal correction.
+- **Against over-engineering:** it intervenes at the fork when the executor
+  adds a worker, queue, state, retry, reconciler, abstraction or flag without
+  need, a second source of truth or execution path, a new mechanism for a
+  local bug, an invented invariant, widened scope, or a unit test where real
+  concurrency, disk or client semantics are needed. It demands the invariant,
+  why the existing mechanism does not fit, what the new one replaces and
+  whether it can be simpler.
 - **Publication (owner, 2026-11-07):** the advisor issues no `[approved]` and
   approves no publication. Every publication (push, tag, release, deploy,
-  GitHub comment, message to third parties) needs the owner's authorization;
-  publishing without it is a blocker. Before a release tag Main runs the two
-  release reviewers below.
-- No nitpicking on style or naming without effect on correctness or complexity.
+  GitHub comment, message to third parties) needs only the owner's
+  authorization. Before a release tag Main runs the two release reviewers
+  below.
+- **Severity by consequence:** `blocker` for the STOP cases and for burning
+  usage limits (looping or extra agents, parallel edits of one file);
+  `concern` for needless complexity without immediate harm; `nit` for minor
+  points. No style or naming notes without effect on correctness.
 
 An advisor lesson (2026-10-24): verify definitions and callers at the pinned
 commit before escalating a worker's "baseline is broken" report.
