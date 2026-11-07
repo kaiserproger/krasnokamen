@@ -1,0 +1,271 @@
+count_unit: subjects; executed_in_ledger is overlapping distinct subject count of latest pass|fail entries, not
+  an exclusive implementation class
+complete_definition: Full subject-specific act + oracle clauses written; missing real driver capabilities still
+  block, and shared matrix concurrency/context clauses are separately guarded. Complete does not mean runnable or
+  passed.
+before:
+  advancements_stats:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 4
+    real_but_partial: 1
+    executed_in_ledger: 0
+  block_log:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 5
+    real_but_partial: 0
+    executed_in_ledger: 0
+  computer:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 6
+    real_but_partial: 3
+    executed_in_ledger: 0
+  loader_content:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 4
+    real_but_partial: 3
+    executed_in_ledger: 0
+  monitor:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 3
+    real_but_partial: 1
+    executed_in_ledger: 0
+  plugins:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 19
+    real_but_partial: 4
+    executed_in_ledger: 0
+  resource_packs:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 5
+    real_but_partial: 0
+    executed_in_ledger: 0
+  scoreboard_teams:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 5
+    real_but_partial: 2
+    executed_in_ledger: 1
+  sculk_trials:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 5
+    real_but_partial: 2
+    executed_in_ledger: 0
+  ui_presentation:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 8
+    real_but_partial: 0
+    executed_in_ledger: 0
+  voice:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 5
+    real_but_partial: 1
+    executed_in_ledger: 0
+partial_before:
+  advancements_stats.statistics_request: Distance counter only checks increase, not exact action-derived displacement.
+  plugins.audit_queries: No actor placement event is generated/checked.
+  plugins.auth_register_login: Locked actor build/damage refusal not exercised.
+  plugins.essentials_homes: Per-player isolation not checked.
+  plugins.towns_create_info: Member information not asserted.
+  scoreboard_teams.objectives_display: Only first client observed, not all clients.
+  scoreboard_teams.teams_membership: Tab-list color not asserted.
+  computer.screen_share_audio: Revocation audio suppression not checked.
+  computer.screen_share_refusals: Budget overflow, malformed close, unloaded monitor clauses omitted.
+  computer.screen_share_to_others: ACTIVE/DEMAND, looking-away STOP0, close STOP1 and leave STOP3 omitted.
+  loader_content.custom_items_render: Texture/no-carrier observations omitted.
+  loader_content.optional_bundle_vanilla: No-manifest observation omitted.
+  loader_content.permission_prompt_cache: Allowed download and SHA verification omitted.
+  monitor.monitor_give_place_break: Stack-64 item contract not checked.
+  voice.native_proximity_voice: Relayed eye position not checked.
+  sculk_trials.calibrated_sensor: No positive selected-frequency activation check.
+  sculk_trials.warden_behaviour: Sniff and projectile anger not checked.
+executed_rows_before:
+  advancements_stats: 0
+  block_log: 0
+  computer: 0
+  loader_content: 0
+  monitor: 0
+  plugins: 0
+  resource_packs: 0
+  scoreboard_teams: 1
+  sculk_trials: 0
+  ui_presentation: 0
+  voice: 0
+after:
+  advancements_stats:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 4
+    real_but_partial: 1
+    executed_in_ledger: 1
+  block_log:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 5
+    real_but_partial: 0
+    executed_in_ledger: 1
+  computer:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 6
+    real_but_partial: 3
+    executed_in_ledger: 2
+  loader_content:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 5
+    real_but_partial: 2
+    executed_in_ledger: 0
+  monitor:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 4
+    real_but_partial: 0
+    executed_in_ledger: 0
+  plugins:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 22
+    real_but_partial: 1
+    executed_in_ledger: 2
+  resource_packs:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 5
+    real_but_partial: 0
+    executed_in_ledger: 0
+  scoreboard_teams:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 6
+    real_but_partial: 1
+    executed_in_ledger: 1
+  sculk_trials:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 5
+    real_but_partial: 2
+    executed_in_ledger: 0
+  ui_presentation:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 8
+    real_but_partial: 0
+    executed_in_ledger: 1
+  voice:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 5
+    real_but_partial: 1
+    executed_in_ledger: 0
+resolved_clauses:
+- loader_content.permission_prompt_cache
+- monitor.monitor_give_place_break
+- plugins.audit_queries
+- plugins.essentials_homes
+- plugins.towns_create_info
+- scoreboard_teams.objectives_display
+partial_after:
+  advancements_stats.statistics_request:
+    remaining_clause: Distance counter only checks increase, not exact action-derived displacement.
+    missing_capabilities:
+    - client:move_physics
+    - snapshot:movement_path
+  plugins.auth_register_login:
+    remaining_clause: Locked building/item retention is now checked; locked damage needs received entity health
+      and authoritative attack admission (unavailable).
+    missing_capabilities:
+    - snapshot:auth.locked
+    - attack_admission_receipt
+  scoreboard_teams.teams_membership:
+    remaining_clause: Tab-list color not asserted.
+    missing_capabilities:
+    - snapshot:tab_list
+  computer.screen_share_audio:
+    remaining_clause: Revocation audio suppression not checked.
+    missing_capabilities:
+    - client:screen_share_send_audio
+    - snapshot:screen_share.audio_count
+  computer.screen_share_refusals:
+    remaining_clause: Budget overflow, malformed close, unloaded monitor clauses omitted.
+    missing_capabilities:
+    - client:screen_share_send_invalid
+    - snapshot:screen_share.active
+  computer.screen_share_to_others:
+    remaining_clause: ACTIVE/DEMAND, looking-away STOP0, close STOP1 and leave STOP3 omitted.
+    missing_capabilities:
+    - client:screen_share_request
+    - snapshot:screen_share
+  loader_content.custom_items_render:
+    remaining_clause: Texture/no-carrier observations omitted.
+    missing_capabilities:
+    - client:item_texture
+  loader_content.optional_bundle_vanilla:
+    remaining_clause: No-manifest observation omitted.
+    missing_capabilities:
+    - snapshot:configuration_payloads
+  voice.native_proximity_voice:
+    remaining_clause: Relayed eye position not checked.
+    missing_capabilities:
+    - snapshot:voice.last_audio.eye_position
+  sculk_trials.calibrated_sensor:
+    remaining_clause: No positive selected-frequency activation check.
+    missing_capabilities:
+    - client:block_state_trace
+  sculk_trials.warden_behaviour:
+    remaining_clause: Sniff and projectile anger not checked.
+    missing_capabilities:
+    - snapshot:entities.anger
+    - snapshot:entities.sniffing
+    - client:move_physics
+matrix_rows_current: 134
+checkpoint_commit: 66cc7f25
+correction_commit: 794c8ff5
+executed_rows_after:
+  advancements_stats: 1
+  block_log: 1
+  computer: 2
+  loader_content: 0
+  monitor: 0
+  plugins: 2
+  resource_packs: 0
+  scoreboard_teams: 1
+  sculk_trials: 0
+  ui_presentation: 1
+  voice: 0
+ledger_snapshot_entries:
+- id: pw:scoreboard_teams.scoreboard_persistence/protocol_bot/creative/the_end/peaceful/N8/slow_reader_backpressure/hot_backup_during_action/op_4
+  status: fail
+  run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomPlatform/20261024T033212-protocol-matrix-3v515gmj
+- id: pw:ui_presentation.nameplates_labels/native_linux/spectator/the_nether/normal/1/normal/steady/op_4
+  status: fail
+  run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/RunNative/20261024T041330-native-matrix-87e0kytf/a185a5b313a6524f
+- id: pw:advancements_stats.advancement_tabs_seen/native_linux/creative/the_nether/hard/2/duplicate_login/clean_restart_mid_action/op_3
+  status: fail
+  run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/RunNative/20261024T041330-native-matrix-87e0kytf/4cce1c2621440a6a
+- id: bl:computer.screen_share_to_others/native_linux/survival/overworld/normal/2/normal/steady/non_op_0
+  status: fail
+  run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/RunNative/20261024T041330-native-matrix-87e0kytf/1e410c47b16a1348
+- id: bl:computer.screen_share_refusals/native_linux/survival/overworld/normal/2/normal/steady/non_op_0
+  status: fail
+  run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/RunNative/20261024T041330-native-matrix-87e0kytf/5bae7d1004d3c351
+- id: tr.dupe.restart_after_interaction:plugins.economy_money_pay/native_linux/survival/overworld/normal/2/normal/clean_restart_mid_action/non_op_0
+  status: fail
+  run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/RunNative/20261024T041330-native-matrix-87e0kytf/5a1c61b087b5bab8
+- id: tr.dupe.restart_after_interaction:plugins.graves_custody/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+  status: fail
+  run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/RunNative/20261024T041330-native-matrix-87e0kytf/c4ae04b3bbec174a
+- id: tr.dupe.restart_after_interaction:block_log.co_rollback/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/op_3
+  status: fail
+  run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/RunNative/20261024T041330-native-matrix-87e0kytf/f70db2f285d16a29
+runtime_boundary: Supplemental towns and monitor pass; exact monitor N2 row cancelled before mem-run admission under
+  Main compile-priority freeze; no ledger entry fabricated.

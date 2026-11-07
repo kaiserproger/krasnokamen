@@ -282,7 +282,7 @@ impl ChunkWorld {
             entry.insert(error);
         }
     }
-    /// Quarantine invalid resident metadata without losing checkpoint custody.
+    /// Quarantine invalid resident metadata: the chunk is unloaded and never rewritten.
     /// Clears a live `active` flag at this mutation boundary with the same
     /// frozen-boundary authority as [`Self::refresh_active_clock`]
     /// deactivation, so the single debt flag in [`Self::is_active`] never
@@ -298,9 +298,12 @@ impl ChunkWorld {
         self.light.remove(pos);
         self.published = None;
         self.generated.retain(|captured| captured.pos != pos);
+        // Unsaved container edits stay in `block_entity_dirty` and edited
+        // sections in `dirty_sections`: they decline the next checkpoint
+        // (capture's quarantine step counts them); a chunk refused as freshly
+        // loaded has none and is skipped.
         self.dirty.remove(&pos);
-        self.dirty_sections.remove(&pos);
-        self.dirty_absent.insert(pos);
+        self.dirty_absent.remove(&pos);
         if was_resident {
             self.active_revision += 1;
             self.poi_revisions.insert(pos);
@@ -406,6 +409,7 @@ impl ChunkWorld {
             chunks: std::mem::take(&mut self.generated),
             deferred: HashMap::default(),
             load_error: None,
+            refused: Vec::new(),
             generated_bases: true,
         })
     }

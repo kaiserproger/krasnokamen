@@ -1,0 +1,489 @@
+schema: solaris-world-adapter-index/1
+domain: redstone
+note:
+  Documentation index only; execution is the shared Python Adapter interface, not a YAML DSL. Registration is
+  not coverage. Original matrix contexts and all oracle clauses remain acceptance obligations.
+subjects_specified: 17
+matrix_rows: 23
+adapter_path: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py
+subjects:
+  - id: redstone.wire_power_levels
+    matrix_ids:
+      - bl:redstone.wire_power_levels/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:7-17
+    actions:
+      callable: tools.harness.matrix_domains.redstone.wire_power_levels
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:7-17
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Redstone_Dust#Power
+        - https://minecraft.wiki/w/Redstone_Lamp
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: redstone.torch_inversion_burnout
+    matrix_ids:
+      - bl:redstone.torch_inversion_burnout/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:20-37
+    actions:
+      callable: tools.harness.matrix_domains.redstone.torch_inversion_burnout
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:20-37
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Redstone_Torch
+        - https://minecraft.wiki/w/Redstone_Torch#Burnout
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - block_updates
+    server_gap_evidence: []
+  - id: redstone.repeater_delay_lock
+    matrix_ids:
+      - bl:redstone.repeater_delay_lock/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:40-57
+    actions:
+      callable: tools.harness.matrix_domains.redstone.repeater_delay_lock
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:40-57
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Redstone_Repeater
+        - https://minecraft.wiki/w/Redstone_Repeater#Signal_locking
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: redstone.comparator_modes
+    matrix_ids:
+      - pw:redstone.comparator_modes/neoforge_solaris_loader/adventure/overworld/easy/1/duplicate_login/crash_kill9_wal_replay/op_4
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/redstone/containers.rs
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:60-106
+    actions:
+      callable: tools.harness.matrix_domains.redstone.comparator_modes
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:60-106
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Redstone_Comparator#Containers
+        - https://minecraft.wiki/w/Redstone_Comparator#Measure_block_state
+        - https://minecraft.wiki/w/Redstone_Comparator#Subtract_signal_strength
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: redstone.pressure_plates_buttons
+    matrix_ids:
+      - pw:redstone.pressure_plates_buttons/fabric_svc/creative/overworld/easy/2/normal/hot_backup_during_action/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:132-174
+    actions:
+      callable: tools.harness.matrix_domains.redstone.pressure_plates_buttons
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:132-174
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Button
+        - https://minecraft.wiki/w/Pressure_Plate
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: redstone.observer_pulse
+    matrix_ids:
+      - pw:redstone.observer_pulse/forge_solaris_loader/adventure/overworld/hard/N8/slow_reader_backpressure/clean_restart_mid_action/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:177-189
+    actions:
+      callable: tools.harness.matrix_domains.redstone.observer_pulse
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:177-189
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Observer
+        - https://minecraft.wiki/w/Observer#Behavior
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - block_updates
+    server_gap_evidence: []
+  - id: redstone.piston_push_pull
+    matrix_ids:
+      - pw:redstone.piston_push_pull/fabric_solaris_loader/survival/the_end/hard/2/slow_reader_backpressure/hot_backup_during_action/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/redstone/piston.rs
+      - crates/mc-core/src/redstone/piston_motion.rs
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:192-216
+    actions:
+      callable: tools.harness.matrix_domains.redstone.piston_push_pull
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:192-216
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Piston
+        - https://minecraft.wiki/w/Piston#Limitations
+        - https://minecraft.wiki/w/Piston#Pushing_blocks
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: redstone.slime_honey_flying_machine
+    matrix_ids:
+      - bl:redstone.slime_honey_flying_machine/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/redstone/piston.rs
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:219-230
+    actions:
+      callable: tools.harness.matrix_domains.redstone.slime_honey_flying_machine
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:219-230
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Honey_Block#Pistons
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: redstone.quasi_connectivity
+    matrix_ids:
+      - pw:redstone.quasi_connectivity/vanilla_java_26_1_2/spectator/the_nether/easy/N8/malformed_or_stale_packet/pause_when_empty_resume/op_3
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/quirk_parity_tests.rs
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:233-238
+    actions:
+      callable: tools.harness.matrix_domains.redstone.quasi_connectivity
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:233-238
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Quasi-connectivity
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: redstone.dispenser_behaviours
+    matrix_ids:
+      - pw:redstone.dispenser_behaviours/native_linux/survival/overworld/hard/1/reconnect_mid_action/save_all_checkpoint/op_1
+      - tr.dupe.two_players_take_same_tick:redstone.dispenser_behaviours/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.destroy_during_interaction:redstone.dispenser_behaviours/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.restart_after_interaction:redstone.dispenser_behaviours/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/redstone/dispenser_blocks.rs
+      - crates/mc-core/src/redstone/dispenser_equipment.rs
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:241-313
+    actions:
+      callable: tools.harness.matrix_domains.redstone.dispenser_behaviours
+      optional_client_verbs:
+        - close_container
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:241-313
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Dispenser#Usage
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: redstone.hopper_chains
+    matrix_ids:
+      - pw:redstone.hopper_chains/protocol_bot/adventure/overworld/peaceful/2/malformed_or_stale_packet/pause_when_empty_resume/non_op_0
+      - tr.dupe.two_players_take_same_tick:redstone.hopper_chains/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.destroy_during_interaction:redstone.hopper_chains/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.restart_after_interaction:redstone.hopper_chains/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/redstone/containers.rs
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:316-357
+    actions:
+      callable: tools.harness.matrix_domains.redstone.hopper_chains
+      optional_client_verbs:
+        - close_container
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:316-357
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Hopper#Furnaces
+        - https://minecraft.wiki/w/Hopper#Redstone_component
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - menu.slots
+    server_gap_evidence: []
+  - id: redstone.rails_powered_detector_activator
+    matrix_ids:
+      - bl:redstone.rails_powered_detector_activator/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/redstone/rails.rs
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:360-372
+    actions:
+      callable: tools.harness.matrix_domains.redstone.rails_powered_detector_activator
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:360-372
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Activator_Rail
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: redstone.daylight_target_bulb_lamp
+    matrix_ids:
+      - pw:redstone.daylight_target_bulb_lamp/native_windows/creative/the_end/peaceful/2/normal/hot_backup_during_action/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:375-400
+    actions:
+      callable: tools.harness.matrix_domains.redstone.daylight_target_bulb_lamp
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:375-400
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Daylight_Detector
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: redstone.sculk_sensor_signal
+    matrix_ids:
+      - bl:redstone.sculk_sensor_signal/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/sculk.rs
+      - crates/mc-core/src/vibration.rs
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:403-442
+    actions:
+      callable: tools.harness.matrix_domains.redstone.sculk_sensor_signal
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:403-442
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Sculk_Sensor
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: redstone.trapped_chest_note_door_power
+    matrix_ids:
+      - bl:redstone.trapped_chest_note_door_power/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:445-464
+    actions:
+      callable: tools.harness.matrix_domains.redstone.trapped_chest_note_door_power
+      optional_client_verbs:
+        - close_container
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:445-464
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Door
+        - https://minecraft.wiki/w/Note_Block
+        - https://minecraft.wiki/w/TNT
+        - https://minecraft.wiki/w/Trapped_Chest
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: redstone.command_block
+    matrix_ids:
+      - pw:redstone.command_block/fabric_distant_horizons/spectator/the_nether/normal/N8/slow_reader_backpressure/steady/op_3
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/command_blocks.rs
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:467-484
+    actions:
+      callable: tools.harness.matrix_domains.redstone.command_block
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:467-484
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Command_Block
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: redstone.update_order_quirks
+    matrix_ids:
+      - bl:redstone.update_order_quirks/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/quirk_parity_tests.rs
+      - crates/mc-core/src/redstone/mod.rs
+      - crates/mc-core/src/redstone/signal.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:487-512
+    actions:
+      callable: tools.harness.matrix_domains.redstone.update_order_quirks
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/redstone.py:487-512
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Tutorial:Block_and_item_duplication#TNT_duplication
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []

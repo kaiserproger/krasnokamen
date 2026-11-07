@@ -1,0 +1,1444 @@
+kind: adapter-capability-request-inventory
+not_a_runner_or_dsl: true
+interpretation:
+  Requests, not a claim all are missing. Real drivers must expose observations or raise MissingCapability.
+  Local helpers implement inventory/entity operations from received snapshots.
+known_missing_common:
+  - same_tick_admission_fence
+  - concurrent_subject_actors
+  - fixture:plugin_package:harness-trapping-guest
+published_common:
+  "Merged shared43ad340d: actual received identity, cumulative chat events across reconnect, standard
+  verbs, server.reconfigure, auth automation, stack components, entities/xp/effects. Local helpers implement entity/radius/block-grid
+  reads and actual block-delta baseline waits. Concurrency and rich graphical/custom-channel observations still
+  require real driver support."
+requests:
+  fixture:computer:
+    - subject: computer.carrier
+      call: p.fixture(ctx, 'computer', enabled=enabled, local_only=True, backend=backend)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:10
+  fixture:loader_bundle:
+    - subject: loader_content.bundle_handshake_cache
+      call: p.fixture(ctx, 'loader_bundle', package='chisel', cache='empty')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:9
+    - subject: loader_content.required_bundle_vanilla_refused
+      call: p.fixture(ctx, 'loader_bundle', package='chisel', required=True)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:32
+    - subject: loader_content.permission_prompt_cache
+      call: p.fixture(ctx, 'loader_bundle', package='chisel', required=False, cache='empty')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:40
+    - subject: loader_content.custom_items_render
+      call: p.fixture(ctx, 'loader_bundle', package='chisel')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:73
+    - subject: loader_content.stale_bundle_update
+      call: p.fixture(ctx, 'loader_bundle', package='chisel', revision='A')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:83
+    - subject: loader_content.stale_bundle_update
+      call: p.fixture(ctx, 'loader_bundle', package='chisel', revision='B')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:87
+  fixture:loader_view:
+    - subject: loader_content.loader_view_request
+      call: p.fixture(ctx, 'loader_view', package='solaris-towns')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:66
+  fixture:monitor_row:
+    - subject: computer.screen_share_to_others
+      call: p.fixture(ctx, 'monitor_row', width=2, height=1, source='synthetic_xvfb', host_capture=False)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:76
+    - subject: computer.screen_share_refusals
+      call: p.fixture(ctx, 'monitor_row', width=1, height=1, source='synthetic_xvfb', host_capture=False)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:93
+    - subject: computer.screen_share_audio
+      call:
+        "p.fixture(ctx, 'monitor_row', width=1, height=1, source='synthetic_xvfb', host_capture=False,\n     \
+        \                   audio='synthetic_opus', sink='agents-null')"
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:109
+  fixture:native_screen_owner:
+    - subject: computer.screen_share_non_native_clients
+      call: p.fixture(ctx, 'native_screen_owner', source='synthetic_xvfb', host_capture=False)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:133
+  fixture:native_voice:
+    - subject: voice.native_proximity_voice
+      call:
+        "p.fixture(ctx, 'native_voice', enabled=True, range_blocks=48,\n                      source='synthetic_opus',\
+        \ sink='agents-null')"
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:55
+    - subject: voice.native_voice_listen_and_state
+      call:
+        "p.fixture(ctx, 'native_voice', enabled=enabled, range_blocks=48,\n                          source='synthetic_opus',\
+        \ sink='agents-null')"
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:82
+  fixture:native_voice_speaker:
+    - subject: voice.voice_non_native_invisible
+      call: p.fixture(ctx, 'native_voice_speaker', source='synthetic_opus', sink='agents-null')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:101
+  fixture:plugin_invalid_startup:
+    - subject: plugins.plugin_startup_fail_closed
+      call: p.fixture(ctx,'plugin_invalid_startup',case=case,isolated=True)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:415
+  fixture:resource_pack:
+    - subject: resource_packs.negotiate
+      call:
+        "p.fixture(ctx, 'resource_pack', required=required, broken=broken,\n                           prompt=prompt,\
+        \ asset_marker='matrix-purple-checker')"
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:10
+  fixture:server_dialog:
+    - subject: ui_presentation.server_dialogs
+      call: p.fixture(ctx,'server_dialog',fields={'text':'initial','slider':5,'checkbox':False})
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:90
+  fixture:settlement_label:
+    - subject: ui_presentation.nameplates_labels
+      call: p.fixture(ctx,'settlement_label',name='Matrix Settlement')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:108
+  fixture:svc_clients:
+    - subject: voice.svc_client_join_without_server
+      call: p.fixture(ctx,'svc_clients',server_bridge=False,audio='synthetic',sink='agents-null')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:10
+    - subject: voice.proximity_voice
+      call: p.fixture(ctx,'svc_clients',server_bridge=True,audio='synthetic',sink='agents-null',max_distance=48)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:21
+    - subject: voice.group_voice
+      call: p.fixture(ctx,'svc_clients',server_bridge=True,audio='synthetic',sink='agents-null')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:36
+  fixture:synthetic_xvfb_window:
+    - subject: computer.desktop_capture_local
+      call:
+        "p.fixture(ctx, 'synthetic_xvfb_window', pattern='matrix-26520', host_capture=False,\n               \
+        \          environment={'WAYLAND_DISPLAY': None, 'PIPEWIRE_NODE': 'agents-null'})"
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:63
+  fixture:vanilla_raid:
+    - subject: ui_presentation.bossbar_entities
+      call: p.fixture(ctx,'vanilla_raid',center=(x,y,z))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:35
+  method:dialog_submission:
+    - subject: ui_presentation.server_dialogs
+      call: p.method(ctx.server,'dialog_submission')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:95
+  method:fixture_action:
+    - subject: voice.voice_non_native_invisible
+      call: p.method(ctx.server, 'fixture_action')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:103
+  method:plugin_status:
+    - subject: plugins.plugin_trap_isolation
+      call: p.method(ctx.server,'plugin_status')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:428
+  method:reconfigure:
+    - subject: plugins.deploy
+      call: p.method(ctx.server, 'reconfigure')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:16
+  method:set_auto_auth:
+    - subject: plugins.deploy
+      call: p.method(actor, 'set_auto_auth', 'client')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:63
+  observe:advancements.definitions:
+    - subject: advancements_stats.earn_advancements
+      call: p.observe(ctx,'advancements.definitions')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:44
+    - subject: advancements_stats.earn_advancements
+      call: p.observe(ctx,'advancements.definitions')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:44
+  observe:advancements.progress:
+    - subject: advancements_stats.granted
+      call: p.observe(ctx,'advancements.progress')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:12
+    - subject: advancements_stats.granted
+      call: p.observe(ctx,'advancements.progress')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:12
+    - subject: advancements_stats.earn_advancements
+      call: p.observe(ctx,'advancements.progress')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:40
+    - subject: advancements_stats.advancement_location
+      call: p.observe(ctx, 'advancements.progress')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:107
+    - subject: advancements_stats.advancement_location
+      call: p.observe(ctx, 'advancements.progress')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:107
+  observe:advancements.selected_tab:
+    - subject: advancements_stats.advancement_tabs_seen
+      call: p.observe(ctx,'advancements.selected_tab')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:53
+  observe:advancements.toasts:
+    - subject: advancements_stats.earn_advancements
+      call: p.observe(ctx,'advancements.toasts')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:43
+    - subject: advancements_stats.earn_advancements
+      call: p.observe(ctx,'advancements.toasts')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:43
+    - subject: advancements_stats.advancement_tabs_seen
+      call: p.observe(ctx,'advancements.toasts')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:50
+    - subject: advancements_stats.advancement_tabs_seen
+      call: p.observe(ctx,'advancements.toasts')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:50
+  observe:auth.locked:
+    - subject: plugins.auth_register_login
+      call: p.observe(ctx,'auth.locked')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:302
+    - subject: plugins.auth_register_login
+      call: p.observe(ctx,'auth.locked')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:302
+    - subject: plugins.auth_register_login
+      call: p.observe(ctx,'auth.locked')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:302
+    - subject: plugins.auth_register_login
+      call: p.observe(ctx,'auth.locked')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:302
+    - subject: plugins.auth_session_timeout
+      call: p.observe(ctx,'auth.locked')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:330
+  observe:bossbars:
+    - subject: ui_presentation.bossbar_custom
+      call: p.observe(ctx,'bossbars')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:16
+    - subject: ui_presentation.bossbar_custom
+      call: p.observe(ctx,'bossbars')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:16
+    - subject: ui_presentation.bossbar_custom
+      call: p.observe(ctx,'bossbars')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:16
+  observe:capture.frame_count:
+    - subject: computer.desktop_capture_local
+      call: p.observe(ctx, 'capture.frame_count')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:66
+  observe:capture.running:
+    - subject: computer.desktop_capture_local
+      call: p.observe(ctx, 'capture.running')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:71
+  observe:capture.server_bytes:
+    - subject: computer.desktop_capture_local
+      call: p.observe(ctx, 'capture.server_bytes')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:69
+  observe:computer.session:
+    - subject: computer.terminal_session_close
+      call: p.observe(ctx, 'computer.session')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:45
+  observe:connection.disconnect_reason:
+    - subject: loader_content.required_bundle_vanilla_refused
+      call: p.observe(ctx, 'connection.disconnect_reason')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:35
+    - subject: loader_content.permission_prompt_cache
+      call: p.observe(ctx, 'connection.disconnect_reason')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:46
+    - subject: resource_packs.pack_decline_required
+      call: p.observe(ctx, 'connection.disconnect_reason')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:43
+  observe:connection.phase:
+    - subject: computer.screen_share_refusals
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:104
+    - subject: computer.screen_share_refusals
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:104
+    - subject: computer.screen_share_non_native_clients
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:139
+    - subject: loader_content.optional_bundle_vanilla
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:27
+    - subject: loader_content.required_bundle_vanilla_refused
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:34
+    - subject: loader_content.permission_prompt_cache
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:45
+    - subject: loader_content.permission_prompt_cache
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:45
+    - subject: monitor.monitor_other_clients_fallback
+      call: p.observe(ctx,'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:49
+    - subject: monitor.monitor_other_clients_fallback
+      call: p.observe(ctx,'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:49
+    - subject: plugins.auth_session_timeout
+      call: p.observe(ctx,'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:332
+    - subject: plugins.auth_session_timeout
+      call: p.observe(ctx,'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:332
+    - subject: plugins.auth_session_timeout
+      call: p.observe(ctx,'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:332
+    - subject: plugins.chisel_loader_bundle
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:362
+    - subject: plugins.chisel_loader_bundle
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:362
+    - subject: resource_packs.pack_accept
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:24
+    - subject: resource_packs.pack_decline_optional
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:32
+    - subject: resource_packs.pack_decline_required
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:42
+    - subject: resource_packs.pack_download_fail
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:53
+    - subject: resource_packs.pack_prompt_text
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:63
+    - subject: voice.svc_client_join_without_server
+      call: p.observe(ctx,'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:12
+    - subject: voice.native_voice_listen_and_state
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:97
+    - subject: voice.voice_non_native_invisible
+      call: p.observe(ctx, 'connection.phase')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:107
+  observe:custom_payloads:
+    - subject: computer.terminal_disabled_vanilla_iron
+      call: p.observe(ctx, 'custom_payloads')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:53
+    - subject: computer.terminal_disabled_vanilla_iron
+      call: p.observe(ctx, 'custom_payloads')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:53
+    - subject: computer.screen_share_non_native_clients
+      call: p.observe(ctx, 'custom_payloads')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:138
+    - subject: voice.voice_non_native_invisible
+      call: p.observe(ctx, 'custom_payloads')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:106
+  observe:damage_events:
+    - subject: sculk_trials.warden_behaviour
+      call: p.observe(ctx,'damage_events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:104
+  observe:death_messages:
+    - subject: scoreboard_teams.team_options
+      call: p.observe(ctx, 'death_messages')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:110
+    - subject: scoreboard_teams.team_options
+      call: p.observe(ctx, 'death_messages')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:110
+  observe:effects:
+    - subject: sculk_trials.shrieker_warden_summon
+      call: p.observe(ctx, 'effects')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:78
+    - subject: sculk_trials.shrieker_warden_summon
+      call: p.observe(ctx, 'effects')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:78
+  observe:entities:
+    - subject: sculk_trials.defeat_waves
+      call: p.observe(ctx,'entities')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:133
+  observe:entity_events:
+    - subject: sculk_trials.defeat_waves
+      call: p.observe(ctx,'entity_events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:130
+    - subject: sculk_trials.defeat_waves
+      call: p.observe(ctx,'entity_events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:130
+    - subject: sculk_trials.defeat_waves
+      call: p.observe(ctx,'entity_events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:130
+    - subject: sculk_trials.defeat_waves
+      call: p.observe(ctx,'entity_events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:130
+  observe:entity_id:
+    - subject: scoreboard_teams.criteria_auto
+      call: p.observe(ctx, 'entity_id', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:65
+    - subject: scoreboard_teams.team_options
+      call: p.observe(ctx, 'entity_id', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:101
+    - subject: scoreboard_teams.team_options
+      call: p.observe(ctx, 'entity_id', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:101
+    - subject: ui_presentation.entity_glow_invisibility
+      call: p.observe(ctx,'entity_id',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:116
+    - subject: ui_presentation.entity_glow_invisibility
+      call: p.observe(ctx,'entity_id',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:116
+    - subject: ui_presentation.entity_glow_invisibility
+      call: p.observe(ctx,'entity_id',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:116
+  observe:events:
+    - subject: block_log.co_inspect
+      call: p.observe(ctx,'events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:43
+    - subject: block_log.co_inspect
+      call: p.observe(ctx,'events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:43
+    - subject: block_log.co_inspect
+      call: p.observe(ctx,'events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:43
+    - subject: block_log.co_lookup
+      call: p.observe(ctx,'events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:50
+    - subject: block_log.co_history_restart
+      call: p.observe(ctx,'events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:82
+    - subject: plugins.essentials_msg_reply
+      call: p.observe(ctx,'events',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:159
+    - subject: plugins.essentials_msg_reply
+      call: p.observe(ctx,'events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:164
+    - subject: plugins.essentials_msg_reply
+      call: p.observe(ctx,'events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:164
+    - subject: plugins.essentials_msg_reply
+      call: p.observe(ctx,'events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:164
+    - subject: plugins.essentials_msg_reply
+      call: p.observe(ctx,'events',2)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:166
+    - subject: plugins.essentials_msg_reply
+      call: p.observe(ctx,'events',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:159
+    - subject: plugins.audit_queries
+      call: p.observe(ctx,'events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:270
+    - subject: plugins.auth_register_login
+      call: p.observe(ctx,'events',actor)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:323
+    - subject: plugins.graves_owner_protection
+      call: p.observe(ctx,'events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:408
+    - subject: plugins.plugin_trap_isolation
+      call: p.observe(ctx,'events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:432
+    - subject: resource_packs.pack_decline_optional
+      call: p.observe(ctx, 'events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:34
+    - subject: voice.svc_client_join_without_server
+      call: p.observe(ctx,'events')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:15
+  observe:food:
+    - subject: scoreboard_teams.criteria_auto
+      call: p.observe(ctx, "food")
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:60
+  observe:health:
+    - subject: scoreboard_teams.criteria_auto
+      call: p.observe(ctx, "health")
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:59
+    - subject: scoreboard_teams.team_options
+      call: p.observe(ctx, 'health', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:100
+    - subject: scoreboard_teams.team_options
+      call: p.observe(ctx, 'health', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:100
+  observe:held_item.damage:
+    - subject: plugins.chisel_conversion
+      call: p.observe(ctx,'held_item.damage')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:346
+    - subject: plugins.chisel_conversion
+      call: p.observe(ctx,'held_item.damage')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:346
+  observe:hud.actionbar:
+    - subject: ui_presentation.title_actionbar
+      call: p.observe(ctx,'hud.actionbar')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:49
+  observe:hud.subtitle:
+    - subject: ui_presentation.title_actionbar
+      call: p.observe(ctx,'hud.subtitle')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:46
+  observe:hud.title:
+    - subject: ui_presentation.title_actionbar
+      call: p.observe(ctx,'hud.title')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:45
+  observe:hud.title_times:
+    - subject: ui_presentation.title_actionbar
+      call: p.observe(ctx,'hud.title_times')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:47
+    - subject: ui_presentation.title_actionbar
+      call: p.observe(ctx,'hud.title_times')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:47
+  observe:hud.title_visible:
+    - subject: ui_presentation.title_actionbar
+      call: p.observe(ctx,'hud.title_visible')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:51
+    - subject: ui_presentation.title_actionbar
+      call: p.observe(ctx,'hud.title_visible')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:51
+  observe:inventory:
+    - subject: monitor.monitor_give_place_break
+      call: p.observe(ctx,'inventory')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:16
+    - subject: plugins.graves_custody
+      call: p.observe(ctx,'inventory')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:376
+    - subject: sculk_trials.warden_behaviour
+      call: p.observe(ctx,'inventory')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:96
+  observe:last_collision.player_blocked:
+    - subject: scoreboard_teams.team_options
+      call: p.observe(ctx, 'last_collision.player_blocked')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:107
+  observe:loader.active_packages:
+    - subject: loader_content.optional_bundle_vanilla
+      call: p.observe(ctx, 'loader.active_packages')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:28
+    - subject: loader_content.permission_prompt_cache
+      call: p.observe(ctx, 'loader.active_packages')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:44
+    - subject: loader_content.permission_prompt_cache
+      call: p.observe(ctx, 'loader.active_packages')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:44
+    - subject: loader_content.permission_prompt_cache
+      call: p.observe(ctx, 'loader.active_packages')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:44
+    - subject: monitor.monitor_native_bundle_render
+      call: p.observe(ctx,'loader.active_packages')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:39
+    - subject: monitor.monitor_native_bundle_render
+      call: p.observe(ctx,'loader.active_packages')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:39
+    - subject: monitor.monitor_other_clients_fallback
+      call: p.observe(ctx,'loader.active_packages')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:50
+  observe:loader.bundle:
+    - subject: loader_content.bundle_handshake_cache
+      call: p.observe(ctx, 'loader.bundle')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:11
+    - subject: loader_content.bundle_handshake_cache
+      call: p.observe(ctx, 'loader.bundle')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:11
+  observe:loader.bundle.download_count:
+    - subject: loader_content.permission_prompt_cache
+      call: p.observe(ctx, 'loader.bundle.download_count')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:58
+    - subject: loader_content.permission_prompt_cache
+      call: p.observe(ctx, 'loader.bundle.download_count')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:58
+    - subject: loader_content.stale_bundle_update
+      call: p.observe(ctx, 'loader.bundle.download_count')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:91
+  observe:loader.bundle.sha256:
+    - subject: loader_content.permission_prompt_cache
+      call: p.observe(ctx, 'loader.bundle.sha256')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:57
+    - subject: loader_content.stale_bundle_update
+      call: p.observe(ctx, 'loader.bundle.sha256')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:85
+    - subject: loader_content.stale_bundle_update
+      call: p.observe(ctx, 'loader.bundle.sha256')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:85
+  observe:loader.prompt_count:
+    - subject: loader_content.permission_prompt_cache
+      call: p.observe(ctx, 'loader.prompt_count')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:50
+    - subject: loader_content.permission_prompt_cache
+      call: p.observe(ctx, 'loader.prompt_count')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:50
+  observe:loader.view.data:
+    - subject: loader_content.loader_view_request
+      call: p.observe(ctx, 'loader.view.data')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:69
+  observe:loader.view.id:
+    - subject: loader_content.loader_view_request
+      call: p.observe(ctx, 'loader.view.id')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:68
+  observe:menu.kind:
+    - subject: plugins.graves_owner_protection
+      call: p.observe(ctx,'menu.kind')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:404
+    - subject: plugins.graves_owner_protection
+      call: p.observe(ctx,'menu.kind',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:410
+  observe:menu.result.count:
+    - subject: advancements_stats.recipe_unlocks
+      call: p.observe(ctx,'menu.result.count')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:69
+  observe:menu.result.item_id:
+    - subject: advancements_stats.recipe_unlocks
+      call: p.observe(ctx,'menu.result.item_id')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:68
+  observe:menu.slots:
+    - subject: block_log.grief
+      call: p.observe(ctx, 'menu.slots', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:22
+    - subject: block_log.grief
+      call: p.observe(ctx, 'menu.slots', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:22
+    - subject: block_log.grief
+      call: p.observe(ctx,'menu.slots')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:31
+    - subject: block_log.co_rollback
+      call: p.observe(ctx, 'menu.slots')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:62
+    - subject: plugins.graves_custody
+      call: p.observe(ctx,'menu.slots')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:383
+  observe:resource_pack:
+    - subject: resource_packs.negotiate
+      call: p.observe(ctx, 'resource_pack')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:13
+  observe:scoreboard.displays:
+    - subject: scoreboard_teams.objectives_display
+      call: p.observe(ctx, 'scoreboard.displays', index)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:16
+    - subject: scoreboard_teams.objectives_display
+      call: p.observe(ctx, 'scoreboard.displays', index)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:16
+    - subject: scoreboard_teams.scoreboard_persistence
+      call: p.observe(ctx, 'scoreboard.displays')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:137
+  observe:scoreboard.scores:
+    - subject: scoreboard_teams.objectives_display
+      call: p.observe(ctx, 'scoreboard.scores', index)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:18
+  observe:screen.kind:
+    - subject: computer.terminal_disabled_vanilla_iron
+      call: p.observe(ctx, 'screen.kind')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:57
+    - subject: plugins.towns_protection
+      call: p.observe(ctx,'screen.kind',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:221
+    - subject: plugins.graves_owner_protection
+      call: p.observe(ctx,'screen.kind',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:398
+  observe:screen_share.active:
+    - subject: computer.screen_share_refusals
+      call: p.observe(ctx, 'screen_share.active')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:103
+  observe:screen_share.audio_count:
+    - subject: computer.screen_share_audio
+      call: p.observe(ctx, 'screen_share.audio_count', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:121
+    - subject: computer.screen_share_audio
+      call: p.observe(ctx, 'screen_share.audio_count', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:121
+    - subject: computer.screen_share_audio
+      call: p.observe(ctx, 'screen_share.audio_count', 2)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:126
+  observe:screen_share.audio_dropped:
+    - subject: computer.screen_share_audio
+      call: p.observe(ctx, 'screen_share.audio_dropped')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:129
+    - subject: computer.screen_share_audio
+      call: p.observe(ctx, 'screen_share.audio_dropped')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:129
+  observe:screen_share.frame_count:
+    - subject: computer.screen_share_to_others
+      call: p.observe(ctx, 'screen_share.frame_count', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:78
+    - subject: computer.screen_share_to_others
+      call: p.observe(ctx, 'screen_share.frame_count', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:78
+  observe:screen_share.input_forwarded:
+    - subject: computer.screen_share_to_others
+      call: p.observe(ctx, 'screen_share.input_forwarded')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:88
+  observe:screen_share.last_audio:
+    - subject: computer.screen_share_audio
+      call: p.observe(ctx, 'screen_share.last_audio', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:116
+  observe:screen_share.request_id:
+    - subject: computer.screen_share_to_others
+      call: p.observe(ctx, 'screen_share.request_id')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:80
+    - subject: computer.screen_share_to_others
+      call: p.observe(ctx, 'screen_share.request_id')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:80
+    - subject: computer.screen_share_audio
+      call: p.observe(ctx, 'screen_share.request_id')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:113
+  observe:screen_share.stopped:
+    - subject: computer.screen_share_to_others
+      call: p.observe(ctx, 'screen_share.stopped', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:87
+  observe:shop.in_market:
+    - subject: plugins.basic_economy_shop
+      call: p.observe(ctx,'shop.in_market')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:292
+    - subject: plugins.basic_economy_shop
+      call: p.observe(ctx,'shop.in_market')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:292
+  observe:shop.offer:
+    - subject: plugins.basic_economy_shop
+      call: p.observe(ctx,'shop.offer')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:280
+  observe:shop.zone:
+    - subject: plugins.basic_economy_shop
+      call: p.observe(ctx,'shop.zone')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:290
+  observe:statistics:
+    - subject: advancements_stats.statistics_request
+      call: p.observe(ctx,'statistics')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:74
+    - subject: advancements_stats.statistics_request
+      call: p.observe(ctx,'statistics')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:74
+    - subject: advancements_stats.statistics_request
+      call: p.observe(ctx,'statistics')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:74
+  observe:svc.connected:
+    - subject: voice.svc_client_join_without_server
+      call: p.observe(ctx,'svc.connected')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:13
+  observe:svc.received_frames:
+    - subject: voice.proximity_voice
+      call: p.observe(ctx,'svc.received_frames',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:25
+    - subject: voice.proximity_voice
+      call: p.observe(ctx,'svc.received_frames',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:25
+    - subject: voice.proximity_voice
+      call: p.observe(ctx,'svc.received_frames',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:25
+    - subject: voice.group_voice
+      call: p.observe(ctx,'svc.received_frames',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:42
+    - subject: voice.group_voice
+      call: p.observe(ctx,'svc.received_frames',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:42
+    - subject: voice.group_voice
+      call: p.observe(ctx,'svc.received_frames',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:42
+    - subject: voice.group_voice
+      call: p.observe(ctx,'svc.received_frames',2)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:45
+  observe:tab_list:
+    - subject: ui_presentation.tab_list
+      call: p.observe(ctx,'tab_list')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:75
+    - subject: ui_presentation.tab_list
+      call: p.observe(ctx,'tab_list')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:75
+    - subject: ui_presentation.tab_list
+      call: p.observe(ctx,'tab_list')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:75
+    - subject: ui_presentation.tab_list
+      call: p.observe(ctx,'tab_list')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:75
+    - subject: ui_presentation.tab_list
+      call: p.observe(ctx,'tab_list')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:75
+    - subject: ui_presentation.tab_list
+      call: p.observe(ctx,'tab_list')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:75
+    - subject: ui_presentation.tab_list
+      call: p.observe(ctx,'tab_list')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:75
+    - subject: ui_presentation.tab_list
+      call: p.observe(ctx,'tab_list')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:75
+    - subject: ui_presentation.tab_list
+      call: p.observe(ctx,'tab_list')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:75
+    - subject: ui_presentation.tab_list
+      call: p.observe(ctx,'tab_list')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:75
+  observe:teams:
+    - subject: scoreboard_teams.teams_membership
+      call: p.observe(ctx, 'teams')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:83
+    - subject: scoreboard_teams.teams_membership
+      call: p.observe(ctx, 'teams')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:83
+    - subject: scoreboard_teams.teams_membership
+      call: p.observe(ctx, 'teams')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:83
+    - subject: scoreboard_teams.team_options
+      call: p.observe(ctx, 'teams')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:98
+    - subject: scoreboard_teams.scoreboard_persistence
+      call: p.observe(ctx, 'teams')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:138
+  observe:uuid:
+    - subject: computer.screen_share_to_others
+      call: p.observe(ctx, 'uuid', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:86
+    - subject: plugins.perm_check_node
+      call: p.observe(ctx,"uuid")
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:84
+    - subject: plugins.essentials_spawn_warps
+      call: p.observe(ctx,"uuid")
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:123
+    - subject: plugins.economy_money_pay
+      call: p.observe(ctx,'uuid',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:171
+    - subject: plugins.economy_admin
+      call: p.observe(ctx,'uuid')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:187
+    - subject: plugins.audit_queries
+      call: p.observe(ctx,'uuid')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:256
+    - subject: plugins.audit_queries
+      call: p.observe(ctx,'uuid')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:256
+    - subject: plugins.plugin_storage_persistence
+      call: p.observe(ctx,'uuid',1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:440
+    - subject: voice.native_proximity_voice
+      call: p.observe(ctx, 'uuid')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:63
+  observe:voice.audio_count:
+    - subject: voice.native_proximity_voice
+      call: p.observe(ctx, 'voice.audio_count', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:68
+    - subject: voice.native_proximity_voice
+      call: p.observe(ctx, 'voice.audio_count')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:66
+    - subject: voice.native_proximity_voice
+      call: p.observe(ctx, 'voice.audio_count', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:68
+    - subject: voice.native_proximity_voice
+      call: p.observe(ctx, 'voice.audio_count', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:68
+    - subject: voice.native_voice_listen_and_state
+      call: p.observe(ctx, 'voice.audio_count', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:88
+    - subject: voice.native_voice_listen_and_state
+      call: p.observe(ctx, 'voice.audio_count', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:88
+  observe:voice.last_audio:
+    - subject: voice.native_proximity_voice
+      call: p.observe(ctx, 'voice.last_audio', 1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:62
+  observe:voice.state:
+    - subject: voice.native_voice_listen_and_state
+      call: p.observe(ctx, 'voice.state')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:84
+  observe:voice.state_count:
+    - subject: voice.native_voice_listen_and_state
+      call: p.observe(ctx, 'voice.state_count')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:85
+  rich_action:attack_until_dead:
+    - subject: advancements_stats.earn_advancements
+      call: p.rich_action(ctx,'attack_until_dead',entity)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:32
+    - subject: advancements_stats.statistics_request
+      call: p.rich_action(ctx,'attack_until_dead',p.rich_action(ctx,'find_entity','minecraft:pig'))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:82
+    - subject: plugins.audit_queries
+      call: p.rich_action(ctx,'attack_until_dead',entity)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:266
+    - subject: scoreboard_teams.criteria_auto
+      call: p.rich_action(ctx, 'attack_until_dead', p.observe(ctx, 'entity_id', 1))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:65
+    - subject: sculk_trials.sculk_catalyst_spread
+      call: p.rich_action(ctx, 'attack_until_dead', p.rich_action(ctx, 'find_entity', 'minecraft:zombie'))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:55
+    - subject: sculk_trials.defeat_waves
+      call: p.rich_action(ctx,'attack_until_dead',mob['id'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:141
+  rich_action:block_model:
+    - subject: computer.screen_share_non_native_clients
+      call: p.rich_action(ctx, 'block_model', monitor['anchor'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:140
+    - subject: monitor.monitor_native_bundle_render
+      call: p.rich_action(ctx,'block_model',(x+2,y,z))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:41
+    - subject: monitor.monitor_other_clients_fallback
+      call: p.rich_action(ctx,'block_model',(x+2,y,z))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:51
+  rich_action:block_state_trace:
+    - subject: sculk_trials.sculk_sensor
+      call: p.rich_action(ctx, 'block_state_trace', pos, property='sculk_sensor_phase', ticks=50)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:22
+    - subject: sculk_trials.sculk_sensor
+      call: p.rich_action(ctx, 'block_state_trace', pos, property='sculk_sensor_phase', ticks=50)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:22
+    - subject: sculk_trials.calibrated_sensor
+      call: p.rich_action(ctx, 'block_state_trace', pos, property='sculk_sensor_phase', ticks=40)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:41
+    - subject: sculk_trials.calibrated_sensor
+      call: p.rich_action(ctx, 'block_state_trace', pos, property='sculk_sensor_phase', ticks=40)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:41
+    - subject: sculk_trials.trial_spawner_waves
+      call:
+        "p.rich_action(ctx, 'block_state_trace', pos,\n                          property='trial_spawner_state',\
+        \ ticks=36001)"
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:180
+  rich_action:break_block:
+    - subject: advancements_stats.earn_advancements
+      call: p.rich_action(ctx,'break_block',(x+2,y,z))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:21
+    - subject: advancements_stats.recipe_unlocks
+      call: p.rich_action(ctx,'break_block',(x+2,y,z))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:63
+    - subject: advancements_stats.statistics_request
+      call: p.rich_action(ctx,'break_block',(x+2,y,z))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:79
+    - subject: block_log.grief
+      call: p.rich_action(ctx, 'break_block', pos)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:12
+    - subject: computer.screen_share_refusals
+      call: p.rich_action(ctx, 'break_block', tuple(monitor['anchor']))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:102
+    - subject: monitor.monitor_give_place_break
+      call: p.rich_action(ctx,'break_block',(x,y,z))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:26
+    - subject: monitor.monitor_other_clients_fallback
+      call: p.rich_action(ctx,'break_block',(x+2,y,z))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:52
+    - subject: plugins.audit_queries
+      call: p.rich_action(ctx,'break_block',(x+2,y,z))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:249
+    - subject: plugins.graves_owner_protection
+      call: p.rich_action(ctx,'break_block',tuple(pos),index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:399
+  rich_action:capture_texture_marker:
+    - subject: computer.desktop_capture_local
+      call: p.rich_action(ctx, 'capture_texture_marker')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:68
+  rich_action:click_screen_button:
+    - subject: ui_presentation.server_dialogs
+      call: p.rich_action(ctx,'click_screen_button','submit')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:94
+  rich_action:close_container:
+    - subject: advancements_stats.advancement_tabs_seen
+      call: p.rich_action(ctx,'close_container')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:54
+    - subject: block_log.grief
+      call: p.rich_action(ctx, 'close_container', index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:28
+    - subject: block_log.grief
+      call: p.rich_action(ctx, 'close_container')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:33
+    - subject: block_log.co_rollback
+      call: p.rich_action(ctx, 'close_container')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:65
+    - subject: plugins.basic_economy_shop
+      call: p.rich_action(ctx,'close_container')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:282
+    - subject: plugins.basic_economy_shop
+      call: p.rich_action(ctx,'close_container')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:282
+    - subject: plugins.graves_owner_protection
+      call: p.rich_action(ctx,'close_container')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:405
+  rich_action:collect_nearby_items:
+    - subject: plugins.audit_queries
+      call: p.rich_action(ctx,'collect_nearby_items')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:262
+  rich_action:command_tree_for_permission:
+    - subject: plugins.plugin_command_tree
+      call: p.rich_action(ctx,'command_tree_for_permission',level)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:453
+  rich_action:computer_input:
+    - subject: computer.terminal_open_op4
+      call: p.rich_action(ctx, 'computer_input', 1, 'matrix-echo-26520')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:22
+  rich_action:computer_open:
+    - subject: computer.terminal_open_op4
+      call: p.rich_action(ctx, 'computer_open', pos, session=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:20
+    - subject: computer.terminal_session_close
+      call: p.rich_action(ctx, 'computer_open', pos, session=2)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:41
+  rich_action:computer_refusal_probe:
+    - subject: computer.terminal_refusals
+      call: p.rich_action(ctx, 'computer_refusal_probe', pos, identity=reason)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:32
+  rich_action:computer_revoke_session:
+    - subject: computer.terminal_session_close
+      call: p.rich_action(ctx, 'computer_revoke_session', revoke, pos)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:44
+  rich_action:craft_recipe:
+    - subject: plugins.audit_queries
+      call: p.rich_action(ctx,'craft_recipe','minecraft:oak_planks')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:260
+  rich_action:dropped_item_model:
+    - subject: loader_content.custom_items_render
+      call: p.rich_action(ctx, 'dropped_item_model', 'chisel:chisel')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:79
+  rich_action:entity_bossbar:
+    - subject: ui_presentation.bossbar_entities
+      call: p.rich_action(ctx,'entity_bossbar',entity)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:28
+    - subject: ui_presentation.bossbar_entities
+      call: p.rich_action(ctx,'entity_bossbar',entity)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:28
+    - subject: ui_presentation.bossbar_entities
+      call: p.rich_action(ctx,'entity_bossbar',entity)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:28
+  rich_action:entity_count:
+    - subject: sculk_trials.sculk_catalyst_spread
+      call: p.rich_action(ctx, 'entity_count', 'minecraft:experience_orb')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:60
+    - subject: sculk_trials.shrieker_warden_summon
+      call: p.rich_action(ctx, 'entity_count', 'minecraft:warden')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:77
+    - subject: sculk_trials.shrieker_warden_summon
+      call: p.rich_action(ctx, 'entity_count', 'minecraft:warden')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:77
+  rich_action:entity_effect_rendered:
+    - subject: ui_presentation.entity_glow_invisibility
+      call: p.rich_action(ctx,'entity_effect_rendered',p.observe(ctx,'entity_id',1),effect)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:118
+  rich_action:entity_exists:
+    - subject: sculk_trials.warden_behaviour
+      call: p.rich_action(ctx, 'entity_exists', quiet)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:114
+  rich_action:entity_label:
+    - subject: ui_presentation.nameplates_labels
+      call: p.rich_action(ctx,'entity_label',entity)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:103
+    - subject: ui_presentation.nameplates_labels
+      call: p.rich_action(ctx,'entity_label',cow)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:107
+    - subject: ui_presentation.nameplates_labels
+      call: p.rich_action(ctx,'entity_label',settlement['entity_id'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:109
+  rich_action:entity_metadata_flags:
+    - subject: ui_presentation.entity_glow_invisibility
+      call: p.rich_action(ctx,'entity_metadata_flags',p.observe(ctx,'entity_id',1))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:116
+    - subject: ui_presentation.entity_glow_invisibility
+      call: p.rich_action(ctx,'entity_metadata_flags',p.observe(ctx,'entity_id',1))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:116
+  rich_action:entity_render_visible:
+    - subject: scoreboard_teams.team_options
+      call: p.rich_action(ctx, 'entity_render_visible', p.observe(ctx, 'entity_id', 1))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:109
+  rich_action:entity_state:
+    - subject: plugins.towns_protection
+      call: p.rich_action(ctx,'entity_state',pig)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:228
+    - subject: plugins.towns_protection
+      call: p.rich_action(ctx,'entity_state',pig)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:228
+    - subject: sculk_trials.warden_behaviour
+      call: p.rich_action(ctx, 'entity_state', warden)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:87
+    - subject: sculk_trials.warden_behaviour
+      call: p.rich_action(ctx, 'entity_state', warden)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:87
+    - subject: sculk_trials.warden_behaviour
+      call: p.rich_action(ctx, 'entity_state', warden)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:87
+  rich_action:find_entity:
+    - subject: advancements_stats.earn_advancements
+      call: p.rich_action(ctx,'find_entity','minecraft:zombie')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:31
+    - subject: advancements_stats.earn_advancements
+      call: p.rich_action(ctx,'find_entity','minecraft:wolf')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:37
+    - subject: advancements_stats.statistics_request
+      call: p.rich_action(ctx,'find_entity','minecraft:pig')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:82
+    - subject: plugins.towns_protection
+      call: p.rich_action(ctx,'find_entity','minecraft:pig',index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:227
+    - subject: plugins.audit_queries
+      call: p.rich_action(ctx,'find_entity','minecraft:cow')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:264
+    - subject: sculk_trials.sculk_catalyst_spread
+      call: p.rich_action(ctx, 'find_entity', 'minecraft:zombie')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:55
+    - subject: sculk_trials.warden_behaviour
+      call: p.rich_action(ctx, 'find_entity', 'minecraft:warden')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:84
+    - subject: sculk_trials.warden_behaviour
+      call: p.rich_action(ctx, 'find_entity', 'minecraft:warden')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:84
+    - subject: ui_presentation.bossbar_entities
+      call: p.rich_action(ctx,'find_entity',mob)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:27
+    - subject: ui_presentation.nameplates_labels
+      call: p.rich_action(ctx,'find_entity','minecraft:pig')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:102
+    - subject: ui_presentation.nameplates_labels
+      call: p.rich_action(ctx,'find_entity','minecraft:cow')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:105
+  rich_action:held_item_model:
+    - subject: loader_content.custom_items_render
+      call: p.rich_action(ctx, 'held_item_model')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:77
+  rich_action:interact_entity:
+    - subject: advancements_stats.earn_advancements
+      call: p.rich_action(ctx,'interact_entity',wolf)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:39
+    - subject: plugins.audit_queries
+      call: p.rich_action(ctx,'interact_entity',entity)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:265
+  rich_action:item_display_name:
+    - subject: monitor.monitor_native_bundle_render
+      call: p.rich_action(ctx,'item_display_name','solaris:monitor')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:40
+  rich_action:item_entities_in_radius:
+    - subject: plugins.graves_custody
+      call: p.rich_action(ctx,'item_entities_in_radius',tuple(pos),4)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:386
+  rich_action:item_model:
+    - subject: loader_content.custom_items_render
+      call: p.rich_action(ctx, 'item_model', 'chisel:chisel')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:75
+  rich_action:last_chat_component:
+    - subject: ui_presentation.tellraw_components
+      call: p.rich_action(ctx,'last_chat_component')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:65
+  rich_action:loader_asset_marker:
+    - subject: loader_content.stale_bundle_update
+      call: p.rich_action(ctx, 'loader_asset_marker')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:92
+  rich_action:loader_permission_policy:
+    - subject: loader_content.permission_prompt_cache
+      call: "p.rich_action(ctx, 'loader_permission_policy', {'register_items': False, 'load_assets': False})"
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:41
+    - subject: loader_content.permission_prompt_cache
+      call: "p.rich_action(ctx, 'loader_permission_policy', {'register_items': True, 'load_assets': True})"
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:53
+  rich_action:loader_reset_permission_decision:
+    - subject: loader_content.permission_prompt_cache
+      call: p.rich_action(ctx, 'loader_reset_permission_decision')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:52
+  rich_action:loader_view_request:
+    - subject: loader_content.loader_view_request
+      call: p.rich_action(ctx, 'loader_view_request', view['id'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:67
+  rich_action:local_capture_consent:
+    - subject: computer.desktop_capture_local
+      call: p.rich_action(ctx, 'local_capture_consent', isolated['window_id'], allow=False)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:65
+    - subject: computer.desktop_capture_local
+      call: p.rich_action(ctx, 'local_capture_consent', isolated['window_id'], allow=True)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:67
+  rich_action:local_capture_stop:
+    - subject: computer.desktop_capture_local
+      call: p.rich_action(ctx, 'local_capture_stop')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:70
+  rich_action:locate_biome:
+    - subject: advancements_stats.advancement_location
+      call: p.rich_action(ctx,'locate_biome','minecraft:deep_dark')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:100
+  rich_action:locate_structure:
+    - subject: advancements_stats.advancement_location
+      call: p.rich_action(ctx,'locate_structure','minecraft:fortress')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:96
+  rich_action:monitor_screen_face:
+    - subject: monitor.monitor_native_bundle_render
+      call: p.rich_action(ctx,'monitor_screen_face',(x+2,y,z))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:42
+  rich_action:move:
+    - subject: advancements_stats.statistics_request
+      call: p.rich_action(ctx,'move',forward=1,ticks=20)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:80
+    - subject: sculk_trials.sculk_sensor
+      call: p.rich_action(ctx, 'move', forward=1, ticks=4)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:21
+    - subject: sculk_trials.sculk_sensor
+      call: p.rich_action(ctx, 'move', forward=-1, ticks=4)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:28
+    - subject: sculk_trials.shrieker_warden_summon
+      call: p.rich_action(ctx, 'move', forward=.1, ticks=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:70
+    - subject: sculk_trials.warden_behaviour
+      call: p.rich_action(ctx, 'move', forward=1, ticks=20)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:85
+  rich_action:nameplate_visible:
+    - subject: scoreboard_teams.team_options
+      call: p.rich_action(ctx, 'nameplate_visible', p.client(ctx, 1).name)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:105
+  rich_action:open_advancements:
+    - subject: advancements_stats.advancement_tabs_seen
+      call: p.rich_action(ctx,'open_advancements',tab)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:52
+  rich_action:operator_plugin_command:
+    - subject: plugins.perm_check_node
+      call: p.rich_action(ctx,'operator_plugin_command',f'perm user {p.observe(ctx,"uuid")} set member')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:84
+    - subject: plugins.essentials_spawn_warps
+      call: p.rich_action(ctx,'operator_plugin_command',f'perm user {p.observe(ctx,"uuid")} set guest')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:123
+  rich_action:place_recipe:
+    - subject: advancements_stats.recipe_unlocks
+      call: p.rich_action(ctx,'place_recipe','minecraft:oak_planks')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:67
+  rich_action:plugin_command_as_nonop:
+    - subject: plugins.economy_admin
+      call: p.rich_action(ctx,'plugin_command_as_nonop',f'econadmin set {uuid} 100',index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:192
+  rich_action:raid_bossbar:
+    - subject: ui_presentation.bossbar_entities
+      call: p.rich_action(ctx,'raid_bossbar',raid['id'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:36
+  rich_action:read_blocks:
+    - subject: sculk_trials.sculk_catalyst_spread
+      call: p.rich_action(ctx, 'read_blocks', (x-8,y-1,z-8), (x+8,y-1,z+8))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:57
+  rich_action:read_recipe_book:
+    - subject: advancements_stats.recipe_unlocks
+      call: p.rich_action(ctx,'read_recipe_book')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:65
+  rich_action:read_resource_pack_prompt:
+    - subject: resource_packs.pack_prompt_text
+      call: p.rich_action(ctx, 'read_resource_pack_prompt')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:61
+  rich_action:reconnect_profile:
+    - subject: loader_content.optional_bundle_vanilla
+      call: p.rich_action(ctx, 'reconnect_profile', 'vanilla_26_1_2')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:26
+    - subject: loader_content.required_bundle_vanilla_refused
+      call: p.rich_action(ctx, 'reconnect_profile', 'vanilla_26_1_2')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:33
+    - subject: plugins.chisel_loader_bundle
+      call: p.rich_action(ctx, 'reconnect_profile', 'vanilla_26_1_2')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:359
+    - subject: voice.svc_client_join_without_server
+      call: p.rich_action(ctx,'reconnect_profile','fabric_svc')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:11
+  rich_action:reconnect_with_resource_pack_policy:
+    - subject: resource_packs.negotiate
+      call: p.rich_action(ctx, 'reconnect_with_resource_pack_policy', policy)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:12
+  rich_action:reply_keepalive:
+    - subject: ui_presentation.tab_list
+      call: p.rich_action(ctx,'reply_keepalive',index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:79
+  rich_action:request_statistics:
+    - subject: advancements_stats.statistics_request
+      call: p.rich_action(ctx,'request_statistics')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:73
+    - subject: advancements_stats.statistics_request
+      call: p.rich_action(ctx,'request_statistics')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:73
+    - subject: advancements_stats.statistics_request
+      call: p.rich_action(ctx,'request_statistics')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:73
+  rich_action:resource_asset_marker:
+    - subject: resource_packs.pack_accept
+      call: p.rich_action(ctx, 'resource_asset_marker')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:25
+  rich_action:resource_pack_choose:
+    - subject: resource_packs.pack_prompt_text
+      call: p.rich_action(ctx, 'resource_pack_choose', 'decline')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:62
+  rich_action:respawn:
+    - subject: plugins.essentials_back
+      call: p.rich_action(ctx,'respawn')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:138
+    - subject: plugins.audit_queries
+      call: p.rich_action(ctx,'respawn')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:268
+    - subject: plugins.graves_custody
+      call: p.rich_action(ctx,'respawn')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:379
+    - subject: plugins.graves_owner_protection
+      call: p.rich_action(ctx,'respawn')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:401
+    - subject: scoreboard_teams.criteria_auto
+      call: p.rich_action(ctx, 'respawn')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:63
+  rich_action:screen_share_answer:
+    - subject: computer.screen_share_to_others
+      call: p.rich_action(ctx, 'screen_share_answer', p.observe(ctx, 'screen_share.request_id'), False)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:80
+    - subject: computer.screen_share_to_others
+      call: p.rich_action(ctx, 'screen_share_answer', p.observe(ctx, 'screen_share.request_id'), True)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:83
+    - subject: computer.screen_share_audio
+      call: p.rich_action(ctx, 'screen_share_answer', p.observe(ctx, 'screen_share.request_id'), True)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:113
+  rich_action:screen_share_marker:
+    - subject: computer.screen_share_to_others
+      call: p.rich_action(ctx, 'screen_share_marker', index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:85
+  rich_action:screen_share_open:
+    - subject: computer.screen_share_to_others
+      call: p.rich_action(ctx, 'screen_share_open', monitor['id'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:77
+    - subject: computer.screen_share_refusals
+      call: p.rich_action(ctx, 'screen_share_open', monitor['id'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:101
+    - subject: computer.screen_share_audio
+      call: p.rich_action(ctx, 'screen_share_open', monitor['id'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:111
+  rich_action:screen_share_request:
+    - subject: computer.screen_share_to_others
+      call: p.rich_action(ctx, 'screen_share_request', monitor['id'], index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:79
+    - subject: computer.screen_share_to_others
+      call: p.rich_action(ctx, 'screen_share_request', monitor['id'], index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:79
+    - subject: computer.screen_share_audio
+      call: p.rich_action(ctx, 'screen_share_request', monitor['id'], index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:112
+  rich_action:screen_share_revoke:
+    - subject: computer.screen_share_to_others
+      call: p.rich_action(ctx, 'screen_share_revoke', monitor['id'], p.observe(ctx, 'uuid', 1))
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:86
+  rich_action:screen_share_send_audio:
+    - subject: computer.screen_share_audio
+      call: p.rich_action(ctx, 'screen_share_send_audio', monitor['id'], sequence=1, marker='matrix-tone')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:115
+    - subject: computer.screen_share_audio
+      call: p.rich_action(ctx, 'screen_share_send_audio', monitor['id'], sequence=2, marker='matrix-hidden-tone')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:122
+  rich_action:screen_share_send_audio_burst:
+    - subject: computer.screen_share_audio
+      call: p.rich_action(ctx, 'screen_share_send_audio_burst', monitor['id'], count=200)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:127
+  rich_action:screen_share_send_invalid:
+    - subject: computer.screen_share_refusals
+      call: p.rich_action(ctx, 'screen_share_send_invalid', monitor['id'], case)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:98
+  rich_action:select_inventory_item:
+    - subject: advancements_stats.earn_advancements
+      call: p.rich_action(ctx,'select_inventory_item','minecraft:wooden_pickaxe')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:19
+    - subject: advancements_stats.earn_advancements
+      call: p.rich_action(ctx,'select_inventory_item','minecraft:bone')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:36
+    - subject: advancements_stats.statistics_request
+      call: p.rich_action(ctx,'select_inventory_item','minecraft:iron_pickaxe')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:77
+    - subject: loader_content.custom_items_render
+      call: p.rich_action(ctx, 'select_inventory_item', 'chisel:chisel')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:76
+    - subject: monitor.monitor_give_place_break
+      call: p.rich_action(ctx,'select_inventory_item','solaris:monitor')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:19
+    - subject: monitor.monitor_plain_terracotta_not_placeable
+      call: p.rich_action(ctx,'select_inventory_item','minecraft:black_glazed_terracotta')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:69
+    - subject: plugins.towns_protection
+      call: p.rich_action(ctx,'select_inventory_item','minecraft:stone',index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:214
+    - subject: plugins.towns_protection
+      call: p.rich_action(ctx,'select_inventory_item','minecraft:flint_and_steel',index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:223
+    - subject: plugins.towns_protection
+      call: p.rich_action(ctx,'select_inventory_item','minecraft:stone',index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:214
+    - subject: plugins.audit_queries
+      call: p.rich_action(ctx, 'select_inventory_item', 'minecraft:stone')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:252
+    - subject: plugins.auth_register_login
+      call: p.rich_action(ctx, 'select_inventory_item', 'minecraft:stone')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:305
+    - subject: plugins.chisel_conversion
+      call: p.rich_action(ctx,'select_inventory_item','chisel:chisel')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:342
+    - subject: sculk_trials.calibrated_sensor
+      call: p.rich_action(ctx, 'select_inventory_item', 'minecraft:stone')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:39
+    - subject: sculk_trials.warden_behaviour
+      call: p.rich_action(ctx, 'select_inventory_item', 'minecraft:snowball')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:89
+    - subject: sculk_trials.trial
+      call: p.rich_action(ctx, 'select_inventory_item', 'minecraft:zombie_spawn_egg')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:122
+  rich_action:send_custom_payload:
+    - subject: voice.native_voice_listen_and_state
+      call: p.rich_action(ctx, 'send_custom_payload', 'solaris:voice', payload)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:95
+  rich_action:set_screen_input:
+    - subject: ui_presentation.server_dialogs
+      call: p.rich_action(ctx,'set_screen_input','text','matrix')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:91
+    - subject: ui_presentation.server_dialogs
+      call: p.rich_action(ctx,'set_screen_input','slider',7)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:92
+    - subject: ui_presentation.server_dialogs
+      call: p.rich_action(ctx,'set_screen_input','checkbox',True)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:93
+  rich_action:svc_create_group:
+    - subject: voice.group_voice
+      call: p.rich_action(ctx,'svc_create_group','matrix-private',password='matrix26520')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:37
+  rich_action:svc_flush_frame_boundary:
+    - subject: voice.proximity_voice
+      call: p.rich_action(ctx,'svc_flush_frame_boundary')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:30
+    - subject: voice.group_voice
+      call: p.rich_action(ctx,'svc_flush_frame_boundary')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:49
+  rich_action:svc_join_group:
+    - subject: voice.group_voice
+      call: p.rich_action(ctx,'svc_join_group',group,password='matrix26520',index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:38
+  rich_action:svc_leave_group:
+    - subject: voice.group_voice
+      call: p.rich_action(ctx,'svc_leave_group',index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:46
+  rich_action:svc_send_test_frame:
+    - subject: voice.proximity_voice
+      call: p.rich_action(ctx,'svc_send_test_frame',fixture['pcm_marker'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:24
+    - subject: voice.proximity_voice
+      call: p.rich_action(ctx,'svc_send_test_frame',fixture['pcm_marker']+'-far')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:29
+    - subject: voice.group_voice
+      call: p.rich_action(ctx,'svc_send_test_frame',fixture['pcm_marker'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:41
+    - subject: voice.group_voice
+      call: p.rich_action(ctx,'svc_send_test_frame',fixture['pcm_marker']+'-left')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:48
+  rich_action:travel_dimension:
+    - subject: advancements_stats.earn_advancements
+      call: p.rich_action(ctx,'travel_dimension','minecraft:the_nether')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:25
+    - subject: advancements_stats.earn_advancements
+      call: p.rich_action(ctx,'travel_dimension','minecraft:the_end')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:27
+    - subject: advancements_stats.earn_advancements
+      call: p.rich_action(ctx,'travel_dimension','minecraft:overworld')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:29
+    - subject: advancements_stats.advancement_location
+      call: p.rich_action(ctx,'travel_dimension','minecraft:the_nether')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:95
+    - subject: advancements_stats.advancement_location
+      call: p.rich_action(ctx,'travel_dimension','minecraft:overworld')
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:99
+    - subject: voice.native_proximity_voice
+      call: p.rich_action(ctx, 'travel_dimension', 'minecraft:the_nether', index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:72
+  rich_action:use_item:
+    - subject: sculk_trials.warden_behaviour
+      call: p.rich_action(ctx, 'use_item', hand='main', ticks=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:91
+  rich_action:voice_listen:
+    - subject: voice.native_proximity_voice
+      call: p.rich_action(ctx, 'voice_listen', True)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:57
+    - subject: voice.native_proximity_voice
+      call: p.rich_action(ctx, 'voice_listen', True, index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:58
+    - subject: voice.native_voice_listen_and_state
+      call: p.rich_action(ctx, 'voice_listen', listening, index=1)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:87
+  rich_action:voice_send_audio:
+    - subject: voice.native_proximity_voice
+      call: p.rich_action(ctx, 'voice_send_audio', sequence=1, opus=audio['opus'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:61
+    - subject: voice.native_proximity_voice
+      call: p.rich_action(ctx, 'voice_send_audio', sequence=2, opus=audio['opus'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:69
+    - subject: voice.native_proximity_voice
+      call: p.rich_action(ctx, 'voice_send_audio', sequence=3, opus=audio['opus'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:74
+    - subject: voice.native_voice_listen_and_state
+      call: p.rich_action(ctx, 'voice_send_audio', sequence=10, opus=audio['opus'])
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:89
+  rich_action:walk_through_player:
+    - subject: scoreboard_teams.team_options
+      call: p.rich_action(ctx, 'walk_through_player', p.client(ctx, 1).name)
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:106
+remaining_partial_oracle_capabilities:
+  advancements_stats.statistics_request:
+    - client:move_physics
+    - snapshot:movement_path
+  plugins.auth_register_login:
+    - snapshot:auth.locked
+    - attack_admission_receipt
+  scoreboard_teams.teams_membership:
+    - snapshot:tab_list
+  computer.screen_share_audio:
+    - client:screen_share_send_audio
+    - snapshot:screen_share.audio_count
+  computer.screen_share_refusals:
+    - client:screen_share_send_invalid
+    - snapshot:screen_share.active
+  computer.screen_share_to_others:
+    - client:screen_share_request
+    - snapshot:screen_share
+  loader_content.custom_items_render:
+    - client:item_texture
+  loader_content.optional_bundle_vanilla:
+    - snapshot:configuration_payloads
+  voice.native_proximity_voice:
+    - snapshot:voice.last_audio.eye_position
+  sculk_trials.calibrated_sensor:
+    - client:block_state_trace
+  sculk_trials.warden_behaviour:
+    - snapshot:entities.anger
+    - snapshot:entities.sniffing
+    - client:move_physics
+adapter_revision: 794c8ff5

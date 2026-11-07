@@ -2534,6 +2534,49 @@ fn destroyed_open_chest_rejects_extract_and_insert_clicks() {
     }
 }
 
+/// The wire race itself: the destroying command and the stale container click
+/// arrive in the same tick's input batch (one TCP read), so the click runs
+/// before any later commit and must find the viewer already closed.
+#[test]
+fn destroying_command_and_stale_click_in_one_input_batch_never_duplicate_or_discard() {
+    for (insert, destroy) in [
+        (false, "setblock 10 150 8 air destroy"),
+        (true, "setblock 10 150 8 air destroy"),
+        (false, "fill 10 150 8 10 150 8 air destroy"),
+        (true, "fill 10 150 8 10 150 8 air destroy"),
+    ] {
+        let (mut state, alice, _) = worlds();
+        let mut click = open_diamond_chest(&mut state, 1);
+        if insert {
+            state.block_entities.get_mut(&(10, 150, 8)).unwrap().slots[0] =
+                mc_data::ItemStack::EMPTY;
+            let diamond = diamond_id(&state);
+            state.players.get_mut(&alice).unwrap().inventory.slots[9] =
+                mc_data::ItemStack::new(diamond, 5);
+            if let PlayerInput::ContainerClick { slot, .. } = &mut click {
+                *slot = 27;
+            }
+        }
+        crate::tick::run_tick(
+            &mut state,
+            &[
+                PlayerInput::Command {
+                    connection: ConnectionId(1),
+                    command: destroy.into(),
+                    permission_level: 2,
+                },
+                click,
+            ],
+        );
+        assert!(
+            state.players[&alice].open.is_none(),
+            "{destroy} insert={insert}"
+        );
+        // Whichever of the two inputs ran first, the five diamonds exist exactly once.
+        assert_eq!(diamonds(&state, alice), 5, "{destroy} insert={insert}");
+    }
+}
+
 #[test]
 fn rejoin_child_dimension_keeps_initial_client_locale() {
     for (dimension, split, include_view) in [

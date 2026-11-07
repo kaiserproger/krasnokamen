@@ -1,0 +1,246 @@
+schema: solaris-world-adapter-index/1
+domain: weather_time
+note:
+  Documentation index only; execution is the shared Python Adapter interface, not a YAML DSL. Registration is
+  not coverage. Original matrix contexts and all oracle clauses remain acceptance obligations.
+subjects_specified: 8
+matrix_rows: 11
+adapter_path: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py
+subjects:
+  - id: weather_time.weather_cycle
+    matrix_ids:
+      - pw:weather_time.weather_cycle/protocol_bot/survival/overworld/normal/N8/normal/clean_restart_mid_action/op_4
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/weather.rs
+      - crates/mc-core/src/weather_lightning.rs
+      - crates/mc-core/src/weather_surface.rs
+      - crates/mc-core/src/sleep.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:25-37
+    actions:
+      callable: tools.harness.matrix_domains.weather_time.weather_cycle
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:25-37
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Weather
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - weather
+    server_gap_evidence: []
+  - id: weather_time.lightning_effects
+    matrix_ids:
+      - pw:weather_time.lightning_effects/fabric_svc/spectator/overworld/normal/N8/reconnect_mid_action/hot_backup_during_action/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/weather_lightning.rs
+      - crates/mc-core/src/weather.rs
+      - crates/mc-core/src/weather_surface.rs
+      - crates/mc-core/src/sleep.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:40-62
+    actions:
+      callable: tools.harness.matrix_domains.weather_time.lightning_effects
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:40-62
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Creeper#Charged_creeper
+        - https://minecraft.wiki/w/Lightning#Effects_on_mobs
+        - https://minecraft.wiki/w/Lightning_Rod
+        - https://minecraft.wiki/w/Mooshroom
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: weather_time.snow_ice_accumulation
+    matrix_ids:
+      - pw:weather_time.snow_ice_accumulation/native_linux/spectator/overworld/normal/1/reconnect_mid_action/save_all_checkpoint/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/weather_surface.rs
+      - crates/mc-core/src/weather.rs
+      - crates/mc-core/src/weather_lightning.rs
+      - crates/mc-core/src/sleep.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:65-78
+    actions:
+      callable: tools.harness.matrix_domains.weather_time.snow_ice_accumulation
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:65-78
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Ice#Post-generation
+        - https://minecraft.wiki/w/Snow#Natural_generation
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - biome
+    server_gap_evidence: []
+  - id: weather_time.rain_effects
+    matrix_ids:
+      - pw:weather_time.rain_effects/fabric_distant_horizons/adventure/overworld/peaceful/1/normal/clean_restart_mid_action/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/weather.rs
+      - crates/mc-core/src/weather_lightning.rs
+      - crates/mc-core/src/weather_surface.rs
+      - crates/mc-core/src/sleep.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:81-93
+    actions:
+      callable: tools.harness.matrix_domains.weather_time.rain_effects
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:81-93
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Cauldron#Filling_with_water
+        - https://minecraft.wiki/w/Rain
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: weather_time.no_weather_nether_end
+    matrix_ids:
+      - pw:weather_time.no_weather_nether_end/fabric_solaris_loader/creative/the_nether/hard/1/malformed_or_stale_packet/crash_kill9_wal_replay/op_1
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/weather.rs
+      - crates/mc-core/src/weather_lightning.rs
+      - crates/mc-core/src/weather_surface.rs
+      - crates/mc-core/src/sleep.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:96-100
+    actions:
+      callable: tools.harness.matrix_domains.weather_time.no_weather_nether_end
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:96-100
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Weather
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - weather.precipitation
+    server_gap_evidence: []
+  - id: weather_time.day_night_cycle
+    matrix_ids:
+      - pw:weather_time.day_night_cycle/vanilla_java_26_1_2/adventure/the_end/peaceful/2/duplicate_login/steady/op_3
+      - pw:weather_time.day_night_cycle/native_windows/survival/the_nether/easy/1/slow_reader_backpressure/save_all_checkpoint/op_4
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/weather.rs
+      - crates/mc-core/src/weather_lightning.rs
+      - crates/mc-core/src/weather_surface.rs
+      - crates/mc-core/src/sleep.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:103-114
+    actions:
+      callable: tools.harness.matrix_domains.weather_time.day_night_cycle
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:103-114
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Daylight_cycle
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: weather_time.sleep_skip_night
+    matrix_ids:
+      - pw:weather_time.sleep_skip_night/forge_solaris_loader/creative/overworld/peaceful/2/duplicate_login/clean_restart_mid_action/op_1
+      - tr.disconnect_x_transient_state.reconnect_mid_action:weather_time.sleep_skip_night/native_linux/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_transient_state.duplicate_login:weather_time.sleep_skip_night/protocol_bot/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/sleep.rs
+      - crates/mc-core/src/weather.rs
+      - crates/mc-core/src/weather_lightning.rs
+      - crates/mc-core/src/weather_surface.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:117-133
+    actions:
+      callable: tools.harness.matrix_domains.weather_time.sleep_skip_night
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:117-133
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Bed#Sleeping
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - weather.raining
+    server_gap_evidence: []
+  - id: weather_time.sleep_refused
+    matrix_ids:
+      - pw:weather_time.sleep_refused/neoforge_solaris_loader/creative/overworld/hard/2/normal/pause_when_empty_resume/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/sleep.rs
+      - crates/mc-core/src/weather.rs
+      - crates/mc-core/src/weather_lightning.rs
+      - crates/mc-core/src/weather_surface.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:136-149
+    actions:
+      callable: tools.harness.matrix_domains.weather_time.sleep_refused
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/weather_time.py:136-149
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Bed#Sleeping
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - pose
+    server_gap_evidence: []

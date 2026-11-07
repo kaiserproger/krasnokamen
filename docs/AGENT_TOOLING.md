@@ -92,6 +92,27 @@ inside that client's game directory. Forge's home-derived Minecraft assets
 therefore use that private directory; provision assets there when needed.
 Gradle's separately configured cache is not isolated by this setting.
 
+## Matrix runner status
+
+`protocol-matrix`, `native-matrix`, and `java-matrix` share the matrix adapters.
+Adapter guidance: [matrix domains](../tools/harness/matrix_domains/README.md),
+[containers](../tools/harness/matrix_domains/containers.md), and
+[platform coverage](../tools/harness/matrix_domains/platform.md).
+
+The true-vanilla Java lane is blocked: the current Loader Java agent premain
+does not install lifecycle or packet hooks, so the client state-change event
+does not arrive. The attempted row and its failure are recorded locally at
+`/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T133737-java-matrix-bam34j27/result.json`.
+This is a harness instrumentation blocker, not a passing Java gameplay check.
+`matrix-random` is experimental and is not yet a multiplayer concurrency or
+recovery acceptance gate. Its current actions are sequential; the protocol
+driver has no concurrent admission hook with per-input server-tick receipts.
+Its inventory comparisons use each owning client's received inventory, not an
+independent observer of other players' private inventories. A seed specifies
+actions, not network ordering. Do not infer replay determinism or crash
+atomicity without the corresponding real-server receipts.
+
+
 ## Profiles and scenarios
 
 Do not copy the catalog into prose; ask the harness:
@@ -246,6 +267,39 @@ Inventory conservation property: `inventory::conservation_tests` in `mc-core`
 -- --nocapture` runs the long form (about 13 min) and prints the per-operation
 coverage table. A failure prints the shrunk operation sequence; turn it into a
 deterministic regression test (shrunk cases are not persisted).
+
+### Bot scenario matrix
+
+`protocol-matrix`, `java-matrix` and `native-matrix` use the same
+`matrix_api.Adapter(setup, act, oracle)` contract and `matrix_execution` context
+boundaries. The profiles, not a standalone runner, own processes and receipts;
+`ProtocolServer` launches through `runtime.start_server`. Missing verbs and
+observations raise `MissingCapability` and never count as passing coverage.
+
+The frozen combinatorial specs and generator live in
+`tools/harness/matrix_specs/` (`gen_matrix.py`, `subjects*.py`, `domains/`,
+`matrix.yaml`, `MATRIX_FREEZE.json`). The frozen matrix describes the historical
+26.1.2 cells; its recorded source heads are provenance, not current coverage.
+Keep mutable ledger JSONL, copied live plugins and run directories outside Git,
+by default in `/run/media/kaiserroman/games/solaris-work/scenarios/`.
+`SOLARIS_MATRIX_DATA` changes that root; `SCENARIO_LEDGER` changes the ledger.
+Generation reads this checkout and sibling repositories selected by
+`SOLARIS_WORK_ROOT`. A changed frozen id set requires explicit `--refreeze`.
+
+For a protocol adapter probe, use the pinned release binary and the current
+26.3 content cache; its version metadata selects the wire protocol:
+
+```sh
+python3 -m tools.harness run protocol-matrix --server-bin "$SOLARIS_SERVER_BINARY" --vanilla-data /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla --subject block_place.full_block
+```
+
+Select a frozen protocol row with `--matrix tools/harness/matrix_specs/matrix.yaml
+--matrix-id ID` instead of `--subject`. Java uses `--matrix`, `--id`,
+`--ledger`, `--data-dir`; native uses `--client native --windowed --matrix`,
+`--only-id`, `--ledger`, `--run-root`. Both graphical lanes require
+`--plugins-dir` and the private hardware-free `tools/harness/screen_audio_graph.sh`
+wrapper. On the owner host wrap every run in Main's absolute
+`tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER=` invocation.
 
 Optional CRAP measurement: `cargo-llvm-cov` and `cargo-crap` measure line
 coverage and cyclomatic complexity per function on one source tree. Retain the

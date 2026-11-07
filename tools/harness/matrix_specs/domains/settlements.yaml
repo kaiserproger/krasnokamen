@@ -1,0 +1,2395 @@
+schema: solaris-domain-spec-1
+domain: settlements
+minecraft_version: 26.1.2
+executable_interface: tools/harness/matrix_api.py; plain Python adapters; this YAML is specification only, not an
+  interpreter/runner
+server_source_root: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/
+vanilla_data_root: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/
+query_capabilities:
+  data_get_entity: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_blocks.rs:245-259
+    (absent in original frozen server; DataCommands implementation pending)
+  data_get_block: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_blocks.rs:282-287
+    (only command-block NBT in original frozen server)
+  execute_store: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_context.rs:473
+  execute_if_entity: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_context.rs:217
+  execute_if_block: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_context.rs:218-230
+  settlement_economy_snapshot: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:84-104
+    (only aggregate status counts exposed, not job/quote/payroll/shipment fields)
+context_contract:
+- Driver applies every matrix context factor before setup.
+- Do not override selected mode,dimension,op level,difficulty in fixtures; explicit tested difficulty transition
+  is action.
+- Every real adapter invokes ctx.boundary once after acknowledgement.
+- Only live receipt checks establish coverage; presence of spec or adapter never sets pass.
+- Random-spawn observation with no positive sample remains inconclusive unless fixture proves every admission precondition.
+- Fixtures use Y200 outside full-set shop auto-open Y60..100; driver residency is fenced by actual received chunks.
+subjects:
+- subject: settlements.create
+  scenario_ids:
+  - bl:settlements.create/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  actions:
+  - command: settlement create MatrixNew 24
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: authoritative_state
+    query: settlement info MatrixNew
+    operator: regex
+    expected: MatrixNew \| owner=.* radius=24 members=0 revision=1
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1240-1546
+  - name: persisted_state
+    query: settlement info MatrixNew after restart
+    operator: equals
+    expected: captured post-action state
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/persistence.rs
+  - name: unauthorized_write
+    query: same mutation from separate nonowner nonop; authoritative query after
+    operator: equals
+    expected: before unauthorized attempt
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1337-1546
+  required_capabilities:
+  - clean_restart
+  - client_command_feedback
+  - multi_client_2
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: tools/harness/matrix_domains/settlements.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+  adapter_guarantees:
+  - Exact operation authorization denial for mutation subjects
+  - Independent authoritative state
+  - Explicit save/restart state equality even for steady rows
+  - Resident UUID presence after bind/unbind restart
+- subject: settlements.list
+  scenario_ids:
+  - bl:settlements.list/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  actions:
+  - command: settlement list
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: authoritative_state
+    query: settlement list
+    operator: regex
+    expected: 'Settlements: .*MatrixTown'
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1240-1546
+  - name: persisted_state
+    query: settlement list after restart
+    operator: equals
+    expected: captured post-action state
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/persistence.rs
+  - name: unauthorized_write
+    query: same mutation from separate nonowner nonop; authoritative query after
+    operator: equals
+    expected: before unauthorized attempt
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1337-1546
+  required_capabilities:
+  - clean_restart
+  - client_command_feedback
+  - multi_client_2
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: tools/harness/matrix_domains/settlements.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+  adapter_guarantees:
+  - Exact operation authorization denial for mutation subjects
+  - Independent authoritative state
+  - Explicit save/restart state equality even for steady rows
+  - Resident UUID presence after bind/unbind restart
+- subject: settlements.info
+  scenario_ids:
+  - bl:settlements.info/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  actions:
+  - command: settlement info MatrixTown
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: authoritative_state
+    query: settlement info MatrixTown
+    operator: regex
+    expected: MatrixTown \| owner=.* radius=48 members=1 revision=\d+
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1240-1546
+  - name: persisted_state
+    query: settlement info MatrixTown after restart
+    operator: equals
+    expected: captured post-action state
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/persistence.rs
+  - name: unauthorized_write
+    query: same mutation from separate nonowner nonop; authoritative query after
+    operator: equals
+    expected: before unauthorized attempt
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1337-1546
+  required_capabilities:
+  - clean_restart
+  - client_command_feedback
+  - multi_client_2
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: tools/harness/matrix_domains/settlements.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+  adapter_guarantees:
+  - Exact operation authorization denial for mutation subjects
+  - Independent authoritative state
+  - Explicit save/restart state equality even for steady rows
+  - Resident UUID presence after bind/unbind restart
+- subject: settlements.rename
+  scenario_ids:
+  - bl:settlements.rename/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  actions:
+  - command: settlement rename MatrixTown MatrixRenamed
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: authoritative_state
+    query: settlement info MatrixRenamed
+    operator: regex
+    expected: MatrixRenamed \| owner=.* radius=48 members=1
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1240-1546
+  - name: persisted_state
+    query: settlement info MatrixRenamed after restart
+    operator: equals
+    expected: captured post-action state
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/persistence.rs
+  - name: unauthorized_write
+    query: same mutation from separate nonowner nonop; authoritative query after
+    operator: equals
+    expected: before unauthorized attempt
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1337-1546
+  required_capabilities:
+  - clean_restart
+  - client_command_feedback
+  - multi_client_2
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: tools/harness/matrix_domains/settlements.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+  adapter_guarantees:
+  - Exact operation authorization denial for mutation subjects
+  - Independent authoritative state
+  - Explicit save/restart state equality even for steady rows
+  - Resident UUID presence after bind/unbind restart
+- subject: settlements.remove
+  scenario_ids:
+  - bl:settlements.remove/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  actions:
+  - command: settlement remove MatrixTown
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: authoritative_state
+    query: settlement info MatrixTown
+    operator: regex
+    expected: Settlement not found\.
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1240-1546
+  - name: persisted_state
+    query: settlement info MatrixTown after restart
+    operator: equals
+    expected: captured post-action state
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/persistence.rs
+  - name: unauthorized_write
+    query: same mutation from separate nonowner nonop; authoritative query after
+    operator: equals
+    expected: before unauthorized attempt
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1337-1546
+  required_capabilities:
+  - clean_restart
+  - client_command_feedback
+  - multi_client_2
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: tools/harness/matrix_domains/settlements.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+  adapter_guarantees:
+  - Exact operation authorization denial for mutation subjects
+  - Independent authoritative state
+  - Explicit save/restart state equality even for steady rows
+  - Resident UUID presence after bind/unbind restart
+- subject: settlements.bind
+  scenario_ids:
+  - pw:settlements.bind/protocol_bot/creative/the_end/hard/2/malformed_or_stale_packet/steady/op_3
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  actions:
+  - command: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: authoritative_state
+    query: settlement info MatrixTown
+    operator: regex
+    expected: members=1
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1240-1546
+  - name: persisted_state
+    query: settlement info MatrixTown after restart
+    operator: equals
+    expected: captured post-action state
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/persistence.rs
+  - name: unauthorized_write
+    query: same mutation from separate nonowner nonop; authoritative query after
+    operator: equals
+    expected: before unauthorized attempt
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1337-1546
+  required_capabilities:
+  - clean_restart
+  - client_command_feedback
+  - multi_client_2
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: tools/harness/matrix_domains/settlements.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+  adapter_guarantees:
+  - Exact operation authorization denial for mutation subjects
+  - Independent authoritative state
+  - Explicit save/restart state equality even for steady rows
+  - Resident UUID presence after bind/unbind restart
+- subject: settlements.unbind
+  scenario_ids:
+  - bl:settlements.unbind/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  actions:
+  - command: settlement unbind 12345678-1234-1234-1234-123456789abc
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: authoritative_state
+    query: settlement info MatrixTown
+    operator: regex
+    expected: members=0
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1240-1546
+  - name: persisted_state
+    query: settlement info MatrixTown after restart
+    operator: equals
+    expected: captured post-action state
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/persistence.rs
+  - name: unauthorized_write
+    query: same mutation from separate nonowner nonop; authoritative query after
+    operator: equals
+    expected: before unauthorized attempt
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1337-1546
+  required_capabilities:
+  - clean_restart
+  - client_command_feedback
+  - multi_client_2
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: tools/harness/matrix_domains/settlements.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+  adapter_guarantees:
+  - Exact operation authorization denial for mutation subjects
+  - Independent authoritative state
+  - Explicit save/restart state equality even for steady rows
+  - Resident UUID presence after bind/unbind restart
+- subject: settlements.production
+  scenario_ids:
+  - bl:settlements.production/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  actions:
+  - command: settlement production MatrixTown status
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: authoritative_state
+    query: settlement production MatrixTown status
+    operator: regex
+    expected: 'Production: jobs=0 completed=0 cancelled=0'
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1240-1546
+  - name: persisted_state
+    query: settlement production MatrixTown status after restart
+    operator: equals
+    expected: captured post-action state
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/persistence.rs
+  - name: unauthorized_write
+    query: same mutation from separate nonowner nonop; authoritative query after
+    operator: equals
+    expected: before unauthorized attempt
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1337-1546
+  required_capabilities:
+  - clean_restart
+  - client_command_feedback
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: tools/harness/matrix_domains/settlements.py
+  status: adapter_requires_live_validation
+  adapter_completeness: registered_stub
+  remaining_oracle_clauses:
+  - Complete family operation cycle and conservation; setup blocks rather than passing from an empty status.
+- subject: settlements.commerce
+  scenario_ids:
+  - bl:settlements.commerce/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  actions:
+  - command: settlement commerce MatrixTown status
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: authoritative_state
+    query: settlement commerce MatrixTown status
+    operator: regex
+    expected: 'Commerce: quotes=0 mandates=0'
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1240-1546
+  - name: persisted_state
+    query: settlement commerce MatrixTown status after restart
+    operator: equals
+    expected: captured post-action state
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/persistence.rs
+  - name: unauthorized_write
+    query: same mutation from separate nonowner nonop; authoritative query after
+    operator: equals
+    expected: before unauthorized attempt
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1337-1546
+  required_capabilities:
+  - clean_restart
+  - client_command_feedback
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: tools/harness/matrix_domains/settlements.py
+  status: adapter_requires_live_validation
+  adapter_completeness: registered_stub
+  remaining_oracle_clauses:
+  - Complete family operation cycle and conservation; setup blocks rather than passing from an empty status.
+- subject: settlements.payroll
+  scenario_ids:
+  - bl:settlements.payroll/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  actions:
+  - command: settlement payroll MatrixTown status
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: authoritative_state
+    query: settlement payroll MatrixTown status
+    operator: regex
+    expected: 'Payroll: employments=0'
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1240-1546
+  - name: persisted_state
+    query: settlement payroll MatrixTown status after restart
+    operator: equals
+    expected: captured post-action state
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/persistence.rs
+  - name: unauthorized_write
+    query: same mutation from separate nonowner nonop; authoritative query after
+    operator: equals
+    expected: before unauthorized attempt
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1337-1546
+  required_capabilities:
+  - clean_restart
+  - client_command_feedback
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: tools/harness/matrix_domains/settlements.py
+  status: adapter_requires_live_validation
+  adapter_completeness: registered_stub
+  remaining_oracle_clauses:
+  - Complete family operation cycle and conservation; setup blocks rather than passing from an empty status.
+- subject: settlements.caravan
+  scenario_ids:
+  - pw:settlements.caravan/fabric_distant_horizons/survival/overworld/normal/N8/reconnect_mid_action/save_all_checkpoint/op_2
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  actions:
+  - command: settlement caravan MatrixTown status
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: authoritative_state
+    query: settlement caravan MatrixTown status
+    operator: regex
+    expected: 'Caravan: shipments=0'
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1240-1546
+  - name: persisted_state
+    query: settlement caravan MatrixTown status after restart
+    operator: equals
+    expected: captured post-action state
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/persistence.rs
+  - name: unauthorized_write
+    query: same mutation from separate nonowner nonop; authoritative query after
+    operator: equals
+    expected: before unauthorized attempt
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1337-1546
+  required_capabilities:
+  - clean_restart
+  - client_command_feedback
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: tools/harness/matrix_domains/settlements.py
+  status: adapter_requires_live_validation
+  adapter_completeness: registered_stub
+  remaining_oracle_clauses:
+  - Complete family operation cycle and conservation; setup blocks rather than passing from an empty status.
+- subject: settlements.production_start
+  scenario_ids:
+  - bl:settlements.production_start/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - verb: certify_building
+    id: workshop
+    kind: workshop
+    bounds:
+    - - 2
+      - 79
+      - -2
+    - - 6
+      - 83
+      - 2
+  - verb: stock_recipe_inputs
+    recipe: minecraft:oak_planks
+    count: 1
+  - console: setblock 4 200 0 crafting_table
+  - note: Native recipe solaris-settlements:oak_planks revision1 requires1 oak_log and wooden_axe with1 durability;
+      output4 oak_planks; duration200 ticks. Supply resident carry/equipment through real item transfer, not invented
+      production state.
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/startup_recipes.json:1-37
+  actions:
+  - command: settlement production MatrixTown start 1 12345678-1234-1234-1234-123456789abc solaris-settlements:oak_planks
+      1 workshop 4,80,0 3,80,0
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: production.jobs["1"].paused'
+    operator: equals
+    expected: null
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/production.rs:50-78
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/production.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.production_pause
+  scenario_ids:
+  - bl:settlements.production_pause/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - verb: certify_building
+    id: workshop
+    kind: workshop
+    bounds:
+    - - 2
+      - 79
+      - -2
+    - - 6
+      - 83
+      - 2
+  - verb: stock_recipe_inputs
+    recipe: minecraft:oak_planks
+    count: 1
+  - console: settlement production MatrixTown start 1 12345678-1234-1234-1234-123456789abc solaris-settlements:oak_planks
+      1 workshop 4,80,0 3,80,0
+  - console: setblock 4 200 0 crafting_table
+  - note: Native recipe solaris-settlements:oak_planks revision1 requires1 oak_log and wooden_axe with1 durability;
+      output4 oak_planks; duration200 ticks. Supply resident carry/equipment through real item transfer, not invented
+      production state.
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/startup_recipes.json:1-37
+  actions:
+  - command: settlement production MatrixTown pause 1
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: production.jobs["1"].paused'
+    operator: equals
+    expected: paused
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/production.rs:50-78
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/production.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.production_resume
+  scenario_ids:
+  - bl:settlements.production_resume/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - verb: certify_building
+    id: workshop
+    kind: workshop
+    bounds:
+    - - 2
+      - 79
+      - -2
+    - - 6
+      - 83
+      - 2
+  - verb: stock_recipe_inputs
+    recipe: minecraft:oak_planks
+    count: 1
+  - console: settlement production MatrixTown start 1 12345678-1234-1234-1234-123456789abc solaris-settlements:oak_planks
+      1 workshop 4,80,0 3,80,0
+  - console: settlement production MatrixTown pause 1
+  - console: setblock 4 200 0 crafting_table
+  - note: Native recipe solaris-settlements:oak_planks revision1 requires1 oak_log and wooden_axe with1 durability;
+      output4 oak_planks; duration200 ticks. Supply resident carry/equipment through real item transfer, not invented
+      production state.
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/startup_recipes.json:1-37
+  actions:
+  - command: settlement production MatrixTown resume 1
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: production.jobs["1"].paused'
+    operator: equals
+    expected: null
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/production.rs:50-78
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/production.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.production_cancel
+  scenario_ids:
+  - bl:settlements.production_cancel/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - verb: certify_building
+    id: workshop
+    kind: workshop
+    bounds:
+    - - 2
+      - 79
+      - -2
+    - - 6
+      - 83
+      - 2
+  - verb: stock_recipe_inputs
+    recipe: minecraft:oak_planks
+    count: 1
+  - console: settlement production MatrixTown start 1 12345678-1234-1234-1234-123456789abc solaris-settlements:oak_planks
+      1 workshop 4,80,0 3,80,0
+  - console: setblock 4 200 0 crafting_table
+  - note: Native recipe solaris-settlements:oak_planks revision1 requires1 oak_log and wooden_axe with1 durability;
+      output4 oak_planks; duration200 ticks. Supply resident carry/equipment through real item transfer, not invented
+      production state.
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/startup_recipes.json:1-37
+  actions:
+  - command: settlement production MatrixTown cancel 1
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: production.jobs["1"].cancelled'
+    operator: equals
+    expected: true
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/production.rs:50-78
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/production.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.commerce_quote
+  scenario_ids:
+  - bl:settlements.commerce_quote/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  actions:
+  - command: settlement commerce MatrixTown quote 1 container:4,80,0 container:8,80,0 0 4 2
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: commerce.quotes contains key "1"'
+    operator: equals
+    expected: true
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs:27-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.commerce_accept
+  scenario_ids:
+  - bl:settlements.commerce_accept/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - console: settlement commerce MatrixTown quote 1 container:4,80,0 container:8,80,0 0 4 2
+  actions:
+  - command: settlement commerce MatrixTown accept 1
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: commerce.completed_quote'
+    operator: equals
+    expected: 1
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs:27-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.commerce_cancel
+  scenario_ids:
+  - bl:settlements.commerce_cancel/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - console: settlement commerce MatrixTown quote 1 container:4,80,0 container:8,80,0 0 4 2
+  actions:
+  - command: settlement commerce MatrixTown cancel 1
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: commerce.completed_quote'
+    operator: equals
+    expected: 1
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs:27-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.commerce_reserve
+  scenario_ids:
+  - bl:settlements.commerce_reserve/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  actions:
+  - command: settlement commerce MatrixTown reserve 1 1 container:8,80,0 container:10,80,0 container:12,80,0 2
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: commerce.mandates["1"].state'
+    operator: equals
+    expected: escrowed
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs:27-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.commerce_payout
+  scenario_ids:
+  - bl:settlements.commerce_payout/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - console: settlement commerce MatrixTown reserve 1 1 container:8,80,0 container:10,80,0 container:12,80,0 2
+  - verb: deliver_shipment
+    id: '1'
+  actions:
+  - command: settlement commerce MatrixTown payout 1
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: commerce.settled_mandate'
+    operator: equals
+    expected: 1
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs:27-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.payroll_employ
+  scenario_ids:
+  - bl:settlements.payroll_employ/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  actions:
+  - command: settlement payroll MatrixTown employ 1 12345678-1234-1234-1234-123456789abc container:8,80,0 2 200
+      20
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: commerce.employments["1"].active'
+    operator: equals
+    expected: true
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs:27-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.payroll_stop
+  scenario_ids:
+  - bl:settlements.payroll_stop/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - console: settlement payroll MatrixTown employ 1 12345678-1234-1234-1234-123456789abc container:8,80,0 2 200
+      20
+  actions:
+  - command: settlement payroll MatrixTown stop 1
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: commerce.employments["1"].active'
+    operator: equals
+    expected: false
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs:27-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.payroll_dismiss
+  scenario_ids:
+  - bl:settlements.payroll_dismiss/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - console: settlement payroll MatrixTown employ 1 12345678-1234-1234-1234-123456789abc container:8,80,0 2 200
+      20
+  - console: settlement payroll MatrixTown stop 1
+  - console: settlement payroll MatrixTown pay 1
+    when: earned>paid; requires mature employment and funded treasury
+  actions:
+  - command: settlement payroll MatrixTown dismiss 1
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: commerce.ended_employment'
+    operator: equals
+    expected: 1
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs:27-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.payroll_pay
+  scenario_ids:
+  - bl:settlements.payroll_pay/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - console: settlement payroll MatrixTown employ 1 12345678-1234-1234-1234-123456789abc container:8,80,0 2 200
+      20
+  - verb: wait_ticks
+    ticks: 200
+    clock: dashboard.simulation_tick
+  actions:
+  - command: settlement payroll MatrixTown pay 1
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: commerce.employments["1"].paid'
+    operator: equals
+    expected: 2
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs:27-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commerce.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.caravan_open
+  scenario_ids:
+  - pw:settlements.caravan_open/fabric_solaris_loader/creative/overworld/peaceful/2/normal/hot_backup_during_action/op_3
+  - tr.restart_x_inventory.clean_restart_mid_action:settlements.caravan_open/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+  - tr.restart_x_inventory.crash_kill9_wal_replay:settlements.caravan_open/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+  - tr.restart_x_inventory.hot_backup_during_action:settlements.caravan_open/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  actions:
+  - command: settlement caravan MatrixTown open 1 12345678-1234-1234-1234-123456789abc source 4,80,0 destination
+      12,80,0 0 4 1200 4,80,0;8,80,0;12,80,0
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: caravan.shipments["1"].status'
+    operator: equals
+    expected: loading
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/caravan.rs:58-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/caravan.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.caravan_pickup
+  scenario_ids:
+  - bl:settlements.caravan_pickup/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - console: settlement caravan MatrixTown open 1 12345678-1234-1234-1234-123456789abc source 4,80,0 destination
+      12,80,0 0 4 1200 4,80,0;8,80,0;12,80,0
+  actions:
+  - command: settlement caravan MatrixTown pickup 1
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: caravan.shipments["1"].loaded'
+    operator: equals
+    expected: true
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/caravan.rs:58-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/caravan.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.caravan_unload
+  scenario_ids:
+  - bl:settlements.caravan_unload/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - console: settlement caravan MatrixTown open 1 12345678-1234-1234-1234-123456789abc source 4,80,0 destination
+      12,80,0 0 4 1200 4,80,0;8,80,0;12,80,0
+  - console: settlement caravan MatrixTown pickup 1
+  - verb: wait_ticks
+    ticks: 1200
+    clock: dashboard.simulation_tick
+    until: carrier at destination
+  actions:
+  - command: settlement caravan MatrixTown unload 1
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: caravan.shipments["1"].status'
+    operator: equals
+    expected: delivered
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/caravan.rs:58-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/caravan.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.caravan_cancel
+  scenario_ids:
+  - pw:settlements.caravan_cancel/forge_solaris_loader/creative/the_nether/hard/N8/malformed_or_stale_packet/hot_backup_during_action/op_4
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - console: settlement caravan MatrixTown open 1 12345678-1234-1234-1234-123456789abc source 4,80,0 destination
+      12,80,0 0 4 1200 4,80,0;8,80,0;12,80,0
+  actions:
+  - command: settlement caravan MatrixTown cancel 1
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: caravan.shipments["1"].status'
+    operator: equals
+    expected: cancelled
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/caravan.rs:58-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/caravan.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.caravan_block
+  scenario_ids:
+  - pw:settlements.caravan_block/neoforge_solaris_loader/adventure/the_end/easy/2/slow_reader_backpressure/hot_backup_during_action/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: setblock 4 200 0 chest
+  - console: setblock 8 200 0 chest
+  - console: setblock 10 200 0 chest
+  - console: setblock 12 200 0 chest
+  - console: item replace block 4 80 0 container.0 with stone 8
+  - console: item replace block 8 80 0 container.0 with emerald 20
+  - verb: certify_building
+    id: source
+    kind: storage
+    bounds:
+    - - 4
+      - 80
+      - 0
+    - - 4
+      - 80
+      - 0
+  - verb: certify_building
+    id: destination
+    kind: storage
+    bounds:
+    - - 12
+      - 80
+      - 0
+    - - 12
+      - 80
+      - 0
+  - console: settlement caravan MatrixTown open 1 12345678-1234-1234-1234-123456789abc source 4,80,0 destination
+      12,80,0 0 4 1200 4,80,0;8,80,0;12,80,0
+  actions:
+  - command: settlement caravan MatrixTown block 1 test_block
+  oracle:
+  - name: state_transition
+    query: 'authoritative native settlement snapshot: caravan.shipments["1"].blocked'
+    operator: equals
+    expected: test_block
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/caravan.rs:58-120
+  - name: conservation
+    query: sum relevant chest,carry,inventory item counts before/after
+    operator: equals
+    expected: initial totals, except authored recipe consumption/output
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/caravan.rs
+  - name: repeat_fence
+    query: repeat same idempotent terminal operation; item totals and revision
+    operator: equals
+    expected: post-first-operation state; error if non-idempotent operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  - name: nonowner_fenced
+    query: operation by nonowner nonop; state/inventory snapshot
+    operator: equals
+    expected: before unauthorized operation
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:1515-1546
+  required_capabilities:
+  - building_certificate_fixture
+  - data_get_block
+  - data_get_entity
+  - multi_client_2
+  - settlement_economy_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:106-219
+  server_gap:
+  - QUERY-ENTITY-DATA
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.army
+  scenario_ids:
+  - pw:settlements.army/fabric_svc/adventure/overworld/normal/1/reconnect_mid_action/clean_restart_mid_action/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: settlement army recruit
+  actions:
+  - command: settlement army order all guard
+  - console: summon zombie 6 200 0
+  - verb: wait_ticks
+    ticks: 600
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: soldier_count
+    query: settlement army list
+    operator: regex
+    expected: soldier
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/army.rs
+  - name: defense
+    query: zombie Health after attack
+    operator: less_than
+    expected: initial Health
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/army.rs
+  required_capabilities:
+  - resident_job_query
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/army.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.autonomy_growth
+  scenario_ids:
+  - pw:settlements.autonomy_growth/vanilla_java_26_1_2/spectator/the_nether/easy/N8/normal/pause_when_empty_resume/op_1
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - console: locate structure minecraft:village_plains
+  - verb: teleport_to
+    position: located village
+  actions:
+  - verb: wait_ticks
+    ticks: 24000
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: adoption
+    query: settlement info
+    operator: regex
+    expected: owner=autonomous
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/autonomy.rs
+  - name: growth
+    query: building count after native autonomous interval
+    operator: greater_than
+    expected: initial count
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/autonomy.rs
+  - name: claim_fence
+    query: autonomy-owned job after claim
+    operator: equals
+    expected: cancelled or reauthorized to new owner
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/autonomy.rs
+  required_capabilities:
+  - autonomous_village_fixture
+  - settlement_building_query
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/autonomy.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.claim
+  scenario_ids:
+  - bl:settlements.claim/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - verb: setup
+    reference: settlements.autonomy_growth
+  actions:
+  - command: settlement claim
+  oracle:
+  - name: owned
+    query: settlement info
+    operator: regex
+    expected: owner=${actor_uuid}
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs:300-338
+  - name: fenced
+    query: claim by second nonop actor
+    operator: equals
+    expected: ownership unchanged
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs:300-338
+  required_capabilities:
+  - autonomous_village_fixture
+  - multi_client_2
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/commands.rs:300-338
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.building
+  scenario_ids:
+  - pw:settlements.building/native_windows/creative/overworld/hard/2/slow_reader_backpressure/crash_kill9_wal_replay/op_4
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - verb: build_shell
+    kind: house
+    bounds:
+    - - 2
+      - 79
+      - 2
+    - - 8
+      - 84
+      - 8
+    beds: 2
+  actions:
+  - command: settlement building certify house 2 79 2 8 84 8
+  - command: settlement building list
+  oracle:
+  - name: certificate
+    query: settlement building list
+    operator: contains
+    expected: house
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/building_commands.rs
+  - name: geometry
+    query: certificate occupied bounds
+    operator: equals
+    expected:
+    - - 2
+      - 79
+      - 2
+    - - 8
+      - 84
+      - 8
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/building_commands.rs
+  required_capabilities:
+  - building_certificate_query
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/building_commands.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.build
+  scenario_ids:
+  - pw:settlements.build/native_linux/survival/overworld/peaceful/1/duplicate_login/hot_backup_during_action/op_2
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - verb: stock_blueprint
+    blueprint: house
+    container:
+    - 4
+    - 80
+    - 0
+  - verb: assign_builder
+    uuid: 12345678-1234-1234-1234-123456789abc
+  actions:
+  - command: settlement build house
+  - verb: wait_ticks
+    ticks: 24000
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: geometry
+    query: each block in chosen native house blueprint
+    operator: equals
+    expected: blueprints.rs house definitions
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/construction.rs
+  - name: stock
+    query: storage item debit
+    operator: equals
+    expected: blueprint material counts
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/construction.rs
+  - name: certificate
+    query: settlement building list
+    operator: contains
+    expected: house
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/construction.rs
+  required_capabilities:
+  - construction_project_query
+  - data_get_block
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/construction.rs
+  server_gap:
+  - QUERY-BLOCK-DATA
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.relocate
+  scenario_ids:
+  - bl:settlements.relocate/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - verb: certify_two_houses
+    households: 1
+    capacity_each: 2
+  actions:
+  - command: settlement relocate MatrixTown household1 destination
+  oracle:
+  - name: household
+    query: all household member bed claims
+    operator: equals
+    expected: destination beds
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/households.rs
+  - name: old_released
+    query: old home beds claimed count
+    operator: equals
+    expected: 0
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/households.rs
+  required_capabilities:
+  - household_bed_query
+  - household_identity_query
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/households.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.guide
+  scenario_ids:
+  - bl:settlements.guide/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  actions:
+  - command: settlement guide
+  oracle:
+  - name: dialog
+    query: received dialog title/body
+    operator: contains
+    expected: settlement
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/ui.rs
+  - name: state_preserved
+    query: settlement info before/after
+    operator: equals
+    expected: same
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/ui.rs
+  required_capabilities:
+  - dialog_observation
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/ui.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.menu
+  scenario_ids:
+  - bl:settlements.menu/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  actions:
+  - command: settlement menu
+  oracle:
+  - name: dialog
+    query: received dialog actions
+    operator: contains
+    expected: create/info/production page links
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/ui.rs
+  - name: state_preserved
+    query: settlement info before/after
+    operator: equals
+    expected: same
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/ui.rs
+  required_capabilities:
+  - dialog_observation
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/ui.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: settlements.persistence_restart
+  scenario_ids:
+  - bl:settlements.persistence_restart/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {UUID:"12345678-1234-1234-1234-123456789abc"}
+  - console: settlement bind MatrixTown 12345678-1234-1234-1234-123456789abc
+  - verb: certify_two_houses
+    households: 1
+    capacity_each: 2
+  - verb: setup_active_economy
+    job: '1'
+    shipment: '1'
+  actions:
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: roundtrip
+    query: authoritative settlement registry,households,buildings,economy UUID keyed snapshot
+    operator: equals
+    expected: pre-save snapshot
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/persistence.rs
+  required_capabilities:
+  - clean_restart
+  - settlement_snapshot
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/persistence.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
