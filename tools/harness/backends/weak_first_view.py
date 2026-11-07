@@ -53,13 +53,15 @@ def run(ctx: ProfileContext) -> dict:
     config, _, port = catalog_load.config(args, artifact, world, 1, operators=False)
     command = [*common.scope_prefix(args.memory, "solaris-heavy.slice"), "--",
                "taskset", "-c", args.server_cpus, str(server), "--config", str(config), "--no-console"]
+    server_index = len(ctx.commands)
     ctx.commands.append(command)
+    ctx.exits.append(None)
     ctx.cwds.append(str(runtime.REPO_ROOT))
     with server.open("rb") as executable:
         ctx.client_evidence["server_binary_sha256"] = hashlib.file_digest(executable, "sha256").hexdigest()
     ctx.client_evidence["server_binary_path"] = str(server)
-    root = artifact / "client-data"
-    root.mkdir()
+    root = artifact / "client-data" / "solaris-client"
+    root.mkdir(parents=True)
     source = native_client._client_root()
     for name in ("facts", "mojang", "resources", "assets", "data"):
         path = source / name
@@ -67,7 +69,7 @@ def run(ctx: ProfileContext) -> dict:
             (root / name).symlink_to(path, target_is_directory=path.is_dir())
     for name in ("home", "cache", "config"):
         (artifact / name).mkdir()
-    env = {"SOLARIS_CLIENT_ROOT": str(root), "ALSOFT_DRIVERS": "null",
+    env = {"SOLARIS_CLIENT_ROOT": str(root), "XDG_DATA_HOME": str(root.parent), "ALSOFT_DRIVERS": "null",
            "HOME": str(artifact / "home"), "XDG_CACHE_HOME": str(artifact / "cache"),
            "XDG_CONFIG_HOME": str(artifact / "config"),
            "LIBGL_ALWAYS_SOFTWARE": "1", "VK_DRIVER_FILES": "/usr/share/vulkan/icd.d/lvp_icd.json",
@@ -111,7 +113,7 @@ def run(ctx: ProfileContext) -> dict:
         runtime.stop_process(process, timeout_seconds=180)
         runtime.stop_process(xvfb)
         if process is not None:
-            ctx.exits.append(process.returncode)
+            ctx.exits[server_index] = process.returncode
         if world.exists():
             shutil.rmtree(world)
         for name, value in previous.items():
