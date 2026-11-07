@@ -3609,7 +3609,7 @@ area = "harness"
 repro = "source"
 severity = "major"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T170731-matrix-random-4x_c80x4/result.json; regression: tools/harness/test_protocol_input_verbs.py EncodingTests.test_break_block_sends_start_then_stop_with_sequence"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/FuzzE2E/analysis/.analysis/validation/20261107T170731-matrix-random-4x_c80x4/result.json; replay on pin 79c0db4aa0b4: /run/media/kaiserroman/games/solaris-work/receipts/ScenarioCampaign/mining/20261107T192223-matrix-random-vsgc93hl/result.json; encoding regression: tools/harness/test_protocol_input_verbs.py EncodingTests.test_break_block_sends_start_then_stop_with_sequence"
 regression = []
 failing_first = "reported"
 

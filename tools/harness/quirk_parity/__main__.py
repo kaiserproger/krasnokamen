@@ -19,7 +19,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import compare, seeded as fuzz
+from . import compare, seeded
 from .vanilla import DEFAULT_JAR, MEM_RUN, REPO_ROOT, VanillaError, VanillaOracle
 
 SCENARIO_DIR = Path(__file__).with_name("scenarios")
@@ -219,9 +219,9 @@ def rate_group_verdict(group: str, variants: list[dict], vanilla: dict, solaris:
 
 
 def fuzz_verdict(scenario: dict, vanilla: dict, solaris: dict, entry: dict, reasons: list) -> dict:
-    """Fuzz gate: every vanilla duplication cell must match; other cell diffs are findings."""
+    """Seeded scenario gate: vanilla duplication cells must match; other diffs are findings."""
     diff = compare.compare_scenario(scenario, vanilla, solaris)
-    dupes = fuzz.dupe_cells(scenario, vanilla)
+    dupes = seeded.dupe_cells(scenario, vanilla)
     diverging: dict[int, list[str]] = {}
     for phase, cells in diff["phases"].items():
         for index in cells.get("cells", {}):
@@ -255,7 +255,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--java", default="java")
     parser.add_argument("--fuzz-seed", type=int, action="append", default=[])
     parser.add_argument("--fuzz-cells", type=int, default=64)
-    parser.add_argument("--fuzz-style", choices=sorted(fuzz.PALETTES) + ["bud", "slime3d", "timing"], default="mixed")
+    parser.add_argument("--fuzz-style", choices=sorted(seeded.PALETTES) + ["bud", "slime3d", "timing"], default="mixed")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--vanilla-only", action="store_true")
     mode.add_argument("--solaris-only", action="store_true")
@@ -271,9 +271,9 @@ def main(argv: list[str] | None = None) -> int:
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     scenarios = load_scenarios(args.scenario, args.family) if (args.scenario or args.family or not args.fuzz_seed) else []
-    scenarios += [fuzz.timing_scenario(seed, args.fuzz_cells) if args.fuzz_style == "timing"
-                  else fuzz.bud_scenario(seed, args.fuzz_cells, "slime3d" if args.fuzz_style == "slime3d" else "line") if args.fuzz_style in ("bud", "slime3d")
-                  else fuzz.fuzz_scenario(seed, args.fuzz_cells, args.fuzz_style) for seed in args.fuzz_seed]
+    scenarios += [seeded.timing_scenario(seed, args.fuzz_cells) if args.fuzz_style == "timing"
+                  else seeded.bud_scenario(seed, args.fuzz_cells, "slime3d" if args.fuzz_style == "slime3d" else "line") if args.fuzz_style in ("bud", "slime3d")
+                  else seeded.fuzz_scenario(seed, args.fuzz_cells, args.fuzz_style) for seed in args.fuzz_seed]
     if not scenarios:
         print("no scenarios selected", file=sys.stderr)
         return 2
