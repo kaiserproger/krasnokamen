@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from . import native_client
-from .menu_observer import log_custody, observe_menu
+from .menu_observer import holds, log_custody, observe_menu
 from .native_craft_drag import Pointer, center, count
 from .native_v2 import _echo
 from .probe_steps import ProbeSteps, container_slot
@@ -70,7 +70,7 @@ def run(steps: ProbeSteps, artifact: Path, owned_window: dict[str, Any]) -> None
                     and closed_server["carried"]["count"] == 0)
         steps.check("native_drag_matches_vanilla_cursor", carried)
         steps.check("native_drag_up_server_keeps_cursor",
-                    up_server["carried"] == {"item": "minecraft:oak_log", "count": 1})
+                    holds(up_server["carried"], "minecraft:oak_log", 1))
         from . import drag_variants
 
         drag_variants.run(steps, pointer, center,

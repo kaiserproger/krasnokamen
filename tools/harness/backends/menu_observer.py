@@ -34,6 +34,11 @@ def observe_menu(steps: ProbeSteps, label: str) -> dict[str, Any]:
     return image
 
 
+def holds(stack: dict[str, Any] | None, item: str, count: int) -> bool:
+    # The probe also reports `components`; drag gates judge only item and count.
+    return stack is not None and stack.get("item") == item and stack.get("count") == count
+
+
 def log_custody(image: dict[str, Any]) -> int:
     # Slot 0 is the virtual crafting result, not an owned item stack.
     stacks = [image["carried"], *image["slots"][1:]]

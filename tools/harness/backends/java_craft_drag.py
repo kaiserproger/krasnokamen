@@ -7,7 +7,7 @@ from typing import Any
 
 from . import java_p5
 from .native_craft_drag import Pointer
-from .menu_observer import log_custody, observe_menu
+from .menu_observer import holds, log_custody, observe_menu
 from .native_v2 import _echo, _prepare
 from .probe_steps import ProbeSteps, container_slot, item_count
 
@@ -62,7 +62,7 @@ def run(client: Any, artifact: Path, timeout: float, *, paced: bool = False) -> 
                 fast_server = observe_menu(steps, "java_unfenced_drag_up")
                 steps.check("java_unfenced_server_conserves_log",
                             log_custody(fast_server) == 1
-                            and fast_server["carried"] == {"item": "minecraft:oak_log", "count": 1})
+                            and holds(fast_server["carried"], "minecraft:oak_log", 1))
                 steps.call("minecraft_close_screen")
                 _echo(steps, "java_unfenced_closed_ordered")
                 steps.fixture("clear @s")
@@ -100,7 +100,7 @@ def run(client: Any, artifact: Path, timeout: float, *, paced: bool = False) -> 
             up_server = observe_menu(steps, "java_drag_up")
             steps.check("java_drag_up_server_conserves_log", log_custody(up_server) == 1)
             steps.check("java_drag_up_server_keeps_cursor",
-                        up_server["carried"] == {"item": "minecraft:oak_log", "count": 1})
+                        holds(up_server["carried"], "minecraft:oak_log", 1))
             moved = _echo(steps, "java_craft_drag_ordered")
             java_p5.capture(steps, "java-craft-drag-after")
             carried = (moved["container"]["carried"].get("item_id") == "minecraft:oak_log"

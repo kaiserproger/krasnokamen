@@ -2,7 +2,7 @@
 import json
 import unittest
 
-from .backends.menu_observer import observe_menu
+from .backends.menu_observer import holds, observe_menu
 
 
 class MenuObserverTests(unittest.TestCase):
@@ -30,3 +30,10 @@ class MenuObserverTests(unittest.TestCase):
         steps = Steps()
         self.assertEqual(observe_menu(steps, "test"), new)
         self.assertEqual(steps.report["server_menu_snapshots"]["test"], new)
+
+    def test_holds_ignores_reported_components(self):
+        stack = {"item": "minecraft:oak_log", "count": 1, "components": {"minecraft:custom_name": "x"}}
+        self.assertTrue(holds(stack, "minecraft:oak_log", 1))
+        self.assertFalse(holds(stack, "minecraft:oak_log", 2))
+        self.assertFalse(holds({"item": None, "count": 0, "components": {}}, "minecraft:oak_log", 1))
+        self.assertFalse(holds(None, "minecraft:oak_log", 1))
