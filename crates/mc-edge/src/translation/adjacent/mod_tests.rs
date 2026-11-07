@@ -318,6 +318,10 @@ fn creative_slot_echo_of_lossy_pot_components_keeps_authoritative_stack() {
                 reader.serverbound(frame(98, &echo)).unwrap().is_none(),
                 "{peer} {case}: a lossy component echo must not replace the authoritative pot"
             );
+            let duplicate_default = [
+                0, 36, 1, 10, 2, 0, 0, 5, 4, 11, 11, 11, 11, 0, 5, 4, 11, 11, 11, 11,
+            ];
+            assert!(reader.serverbound(frame(98, &duplicate_default)).is_err());
             // Vanilla elides the four-brick default when it reserializes its
             // projected pot. This is still the same lossy server-owned stack.
             let normalized = [0, 36, 1, 10, 0, 0];
@@ -345,4 +349,47 @@ fn creative_slot_echo_of_lossy_pot_components_keeps_authoritative_stack() {
             );
         }
     }
+}
+
+#[test]
+fn creative_named_stack_preserves_outer_component_delimiter() {
+    use super::items::Components;
+    use super::tables::IdMap;
+
+    let mut reader = session();
+    let tables = &mut Arc::get_mut(&mut reader.profile).unwrap().tables;
+    tables.items = IdMap::by_name([("stone", 10)], [("stone", 1)], |_| None);
+    tables.components = IdMap::by_name([("custom_name", 9)], [("custom_name", 6)], |_| None);
+    let canonical = (0..10)
+        .map(|id| {
+            if id == 9 {
+                "minecraft:custom_name".to_owned()
+            } else {
+                String::new()
+            }
+        })
+        .collect::<Vec<_>>();
+    let legacy = (0..7)
+        .map(|id| {
+            if id == 6 {
+                "minecraft:custom_name".to_owned()
+            } else {
+                String::new()
+            }
+        })
+        .collect::<Vec<_>>();
+    tables.component_shapes = Components::new(&canonical, &legacy);
+    reader.phase = Phase::Play;
+    // Same measured framing as the real 775 creative write captured by the
+    // graphical gate: id, byte length, network-NBT string.
+    let mut creative = vec![0, 36, 1, 1, 1, 0, 6, 15];
+    mc_nbt::write_network_value(&mut creative, &mc_nbt::Tag::String("Protocol Pot".into()))
+        .unwrap();
+    let translated = reader.serverbound(frame(98, &creative)).unwrap().unwrap();
+    let mut expected = vec![0, 36, 1, 10, 1, 0, 9, 15];
+    mc_nbt::write_network_value(&mut expected, &mc_nbt::Tag::String("Protocol Pot".into()))
+        .unwrap();
+    assert_eq!(translated.body.as_ref(), expected);
+    creative[7] = 14;
+    assert!(reader.serverbound(frame(98, &creative)).is_err());
 }

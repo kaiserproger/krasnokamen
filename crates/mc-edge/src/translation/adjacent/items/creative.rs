@@ -110,8 +110,16 @@ impl Image {
             "component count"
         );
         let mut matched = 0;
+        let mut seen = [0; MAX_LIST as usize * 2];
+        let mut seen_count = 0;
         for _ in 0..added {
             let id = r.read_varint()?;
+            ensure!(
+                !seen[..seen_count].contains(&id),
+                "duplicate creative component"
+            );
+            seen[seen_count] = id;
+            seen_count += 1;
             let value = component(&mut r)?;
             if default_pot(t, self.item, id, value)? {
                 continue;
@@ -129,7 +137,14 @@ impl Image {
             return Ok(false);
         }
         for _ in 0..removed {
-            if !self.removed.contains(&r.read_varint()?) {
+            let id = r.read_varint()?;
+            ensure!(
+                !seen[..seen_count].contains(&id),
+                "duplicate creative component"
+            );
+            seen[seen_count] = id;
+            seen_count += 1;
+            if !self.removed.contains(&id) {
                 return Ok(false);
             }
         }
