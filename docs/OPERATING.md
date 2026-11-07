@@ -286,15 +286,18 @@ Minecraft presentation profile; protocol-16 agreement alone is not a client
 compatibility pass. Client acceptance status is in
 [COMPATIBILITY.md](COMPATIBILITY.md).
 
-Terrain is sampled off-tick and read-only from real native block, biome and
-light columns; the server never sends the seed, the density program or
+Terrain is sampled off-tick, without simulation residency or native writes, from
+the latest committed chunks (resident, then committed-but-unflushed edits, then
+the stored native image); the server never sends the seed, the density program or
 seed-derived noise tables, and the same anti-xray policy as vanilla
 presentation applies. Requests use the authoritative player position, dimension
 and world border. Per player: 2 requests per second, 2 outstanding sections,
 4 MiB pending DTO budget, 500 KB/s; globally 8 pending sections, a 64 MiB
 encoded cache, 2000 KB/s, on the shared `[lod]` worker lane (never a second
-pool). Absent native coverage is reported as an error, never as generated
-terrain or air. Live edits are pushed to negotiated clients through a bounded
+pool). Coverage that was genuinely never stored is generated on that worker
+through the normal load-or-generate path (so pregenerating avoids the cost);
+corrupt stored coverage fails closed with an error and is never replaced by
+generated terrain or air. Live edits are pushed to negotiated clients through a bounded
 dirty queue (8192 leaves) that alternates with ordinary requests so building
 cannot starve initial sync.
 
