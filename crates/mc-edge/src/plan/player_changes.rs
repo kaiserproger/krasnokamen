@@ -10,7 +10,7 @@ use mc_data::item_stack::ItemStack;
 use mc_protocol::codec::Identifier;
 use mc_protocol::packets::play::{
     AttributeId, AttributeModifierOperation, BlockChangedAck, BlockUpdate, BossOperation,
-    ClientboundAwardStats, ClientboundBlockEntityData, ClientboundBlockEvent, ClientboundBossEvent,
+    ClientboundAwardStats, ClientboundBlockEvent, ClientboundBossEvent,
     ClientboundChangeDifficulty, ClientboundClearDialog, ClientboundClearTitles,
     ClientboundContainerClose, ClientboundContainerSetContent, ClientboundContainerSetData,
     ClientboundContainerSetSlot, ClientboundCooldown, ClientboundCustomPayload,
@@ -39,11 +39,7 @@ pub fn plan_player_changes(
     changes: &[PlayerChange],
     viewer: &mut ViewerState,
 ) -> Vec<PlannedPacket> {
-    let mut out = Vec::new();
-    for change in changes {
-        plan_change(change, viewer, &mut out);
-    }
-    out
+    plan_routed_player_changes(changes, viewer)
 }
 
 /// Route world-backed updates through the snapshot planner instead of the
@@ -475,71 +471,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                 },
             );
         }
-        PlayerChange::BlockEntityData {
-            position,
-            block_entity_type,
-            nbt,
-            ..
-        } => {
-            push_reliable(
-                out,
-                conn,
-                &ClientboundBlockEntityData {
-                    position: pack_block_pos(position.x, position.y, position.z),
-                    block_entity_type: *block_entity_type as i32,
-                    nbt: if [
-                        mc_data::block_entity_kinds::BlockEntityKind::Chest.protocol_id(),
-                        mc_data::block_entity_kinds::BlockEntityKind::TrappedChest.protocol_id(),
-                        mc_data::block_entity_kinds::BlockEntityKind::Barrel.protocol_id(),
-                    ]
-                    .contains(block_entity_type)
-                    {
-                        mc_nbt::Tag::Compound(Vec::new())
-                    } else if [
-                        mc_data::block_entity_kinds::BlockEntityKind::Furnace.protocol_id(),
-                        mc_data::block_entity_kinds::BlockEntityKind::Smoker.protocol_id(),
-                        mc_data::block_entity_kinds::BlockEntityKind::BlastFurnace.protocol_id(),
-                    ]
-                    .contains(block_entity_type)
-                    {
-                        match nbt {
-                            mc_nbt::Tag::Compound(fields) => mc_nbt::Tag::Compound(
-                                fields
-                                    .iter()
-                                    .filter(|(key, _)| key != "Items")
-                                    .cloned()
-                                    .collect(),
-                            ),
-                            _ => nbt.clone(),
-                        }
-                    } else if *block_entity_type
-                        == mc_data::block_entity_kinds::BlockEntityKind::DecoratedPot.protocol_id()
-                    {
-                        match nbt {
-                            mc_nbt::Tag::Compound(fields) => mc_nbt::Tag::Compound(
-                                fields
-                                    .iter()
-                                    .filter(|(key, _)| {
-                                        !matches!(
-                                            key.as_str(),
-                                            "item" | "LootTable" | "LootTableSeed"
-                                        )
-                                    })
-                                    .cloned()
-                                    .collect(),
-                            ),
-                            _ => nbt.clone(),
-                        }
-                    } else {
-                        nbt.clone()
-                    },
-                },
-            );
-            let chunk = (position.x.div_euclid(16), position.z.div_euclid(16));
-            if viewer.loaded_chunks.contains_key(&chunk) {
-                viewer.block_entity_updates.insert(chunk);
-            }
-        }
+        PlayerChange::BlockEntityData { .. } => unreachable!("routed before planning"),
         PlayerChange::BlockEvent {
             position,
             block,

@@ -60,10 +60,7 @@ use mc_nbt::Tag;
 use thiserror::Error;
 
 use crate::block::BlockRegistry;
-use crate::chunk::{
-    BIOME_VOLUME, BiomeSection, BlockPos, Chunk, FurnaceBlockEntity, LIGHT_LAYER_BYTES,
-    SECTION_COUNT,
-};
+use crate::chunk::{BIOME_VOLUME, BiomeSection, BlockPos, Chunk, LIGHT_LAYER_BYTES, SECTION_COUNT};
 use crate::light::{ChunkLight, LightLayer};
 use crate::section::SECTION_DIM;
 use crate::section::{ChunkSection, PackedBitArray, SECTION_VOLUME};
@@ -127,34 +124,15 @@ fn project_opaque_block_entity(
         return None;
     }
     let nbt = match type_name.as_str() {
-        "minecraft:chest"
-        | "minecraft:trapped_chest"
-        | "minecraft:barrel"
-        | "minecraft:hopper"
-        | "minecraft:dispenser"
-        | "minecraft:dropper" => Tag::Compound(Vec::new()),
-        "minecraft:furnace"
-        | "minecraft:smoker"
-        | "minecraft:blast_furnace"
-        | "minecraft:brewing_stand"
-        | "minecraft:shulker_box"
-        | "minecraft:crafter"
-        | "minecraft:chiseled_bookshelf" => {
-            let Tag::Compound(mut fields) = strip_persistent_block_entity_fields(tag) else {
-                return None;
-            };
-            fields.retain(|(key, _)| key != "Items");
-            Tag::Compound(fields)
-        }
         "minecraft:decorated_pot" => {
-            let Tag::Compound(mut fields) = strip_persistent_block_entity_fields(tag) else {
+            let Tag::Compound(mut fields) = tag else {
                 return None;
             };
             // Unlike vanilla, do not disclose pot contents or unopened loot to clients.
-            fields
-                .retain(|(key, _)| !matches!(key.as_str(), "item" | "LootTable" | "LootTableSeed"));
+            fields.retain(|(key, _)| key == "sherds");
             Tag::Compound(fields)
         }
+        "minecraft:mob_spawner" => spawner_client_update_tag(tag),
         "minecraft:brushable_block" => {
             let revealed = chunk
                 .get_block(
@@ -175,13 +153,6 @@ fn project_opaque_block_entity(
                 Tag::Compound(Vec::new())
             }
         }
-        "minecraft:lectern" => {
-            let Tag::Compound(mut fields) = strip_persistent_block_entity_fields(tag) else {
-                return None;
-            };
-            fields.retain(|(key, _)| key != "Book");
-            Tag::Compound(fields)
-        }
         "minecraft:trial_spawner" => {
             let active = chunk
                 .get_block(
@@ -201,23 +172,262 @@ fn project_opaque_block_entity(
             };
             trial_spawner_update_tag(&fields, active)
         }
-        "minecraft:vault" => {
-            let Tag::Compound(fields) = tag else {
-                return None;
-            };
-            let shared = fields
-                .into_iter()
-                .find(|(key, _)| key == "shared_data")
-                .map_or_else(|| Tag::Compound(Vec::new()), |(_, value)| value);
-            Tag::Compound(vec![("shared_data".into(), shared)])
-        }
-        _ => strip_persistent_block_entity_fields(tag),
+        "minecraft:vault" => vault_client_update_tag(tag),
+        _ => public_block_entity_update_tag(type_name.as_str(), tag),
     };
     Some(BlockEntityWireRecord {
         pos,
         type_name,
         nbt,
     })
+}
+
+/// Project vault data using `VaultSharedData`'s client codec fields.
+#[must_use]
+pub fn vault_client_update_tag(tag: Tag) -> Tag {
+    let Tag::Compound(fields) = tag else {
+        return Tag::Compound(Vec::new());
+    };
+    let shared = fields
+        .into_iter()
+        .find(|(key, _)| key == "shared_data")
+        .map_or_else(|| Tag::Compound(Vec::new()), |(_, value)| value);
+    let Tag::Compound(mut shared) = shared else {
+        return Tag::Compound(Vec::new());
+    };
+    shared.retain(|(key, _)| {
+        matches!(
+            key.as_str(),
+            "display_item" | "connected_players" | "connected_particles_range"
+        )
+    });
+    Tag::Compound(vec![("shared_data".into(), Tag::Compound(shared))])
+}
+
+/// Project block-entity fields saved by vanilla's `saveCustomOnly` update tags.
+#[must_use]
+pub fn public_block_entity_update_tag(kind: &str, tag: Tag) -> Tag {
+    let allowed: &[&str] = match kind {
+        "minecraft:sign" | "minecraft:hanging_sign" => {
+            &["allow_op_features", "front_text", "back_text", "is_waxed"]
+        }
+        "minecraft:beacon" => &["primary_effect", "secondary_effect", "Levels", "CustomName"],
+        "minecraft:banner" => &["patterns", "CustomName", "components"],
+        "minecraft:conduit" => &["Target"],
+        "minecraft:creaking_heart" => &["creaking"],
+        "minecraft:skull" => &["profile", "note_block_sound", "custom_name"],
+        "minecraft:structure_block" => &[
+            "name",
+            "author",
+            "metadata",
+            "posX",
+            "posY",
+            "posZ",
+            "sizeX",
+            "sizeY",
+            "sizeZ",
+            "rotation",
+            "mirror",
+            "mode",
+            "ignoreEntities",
+            "strict",
+            "powered",
+            "showair",
+            "showboundingbox",
+            "integrity",
+            "seed",
+        ],
+        "minecraft:jigsaw" => &[
+            "name",
+            "target",
+            "pool",
+            "final_state",
+            "joint",
+            "placement_priority",
+            "selection_priority",
+        ],
+        "minecraft:piston" => &["blockState", "facing", "progress", "extending", "source"],
+        "minecraft:test_block" => &["mode", "message", "powered"],
+        "minecraft:test_instance_block" => &["data", "errors"],
+        "minecraft:end_gateway" => &["Age", "exit_portal", "ExactTeleport"],
+        "minecraft:campfire" => &["Items"],
+        "minecraft:shelf" => &["Items", "align_items_to_bottom"],
+        "minecraft:brushable_block" => &["item", "hit_direction"],
+        "minecraft:trial_spawner" => &["spawn_data", "next_mob_spawns_at"],
+        _ => return Tag::Compound(Vec::new()),
+    };
+    let Tag::Compound(mut fields) = tag else {
+        return Tag::Compound(Vec::new());
+    };
+    fields.retain(|(key, _)| allowed.contains(&key.as_str()));
+    if kind == "minecraft:banner" {
+        fields.retain_mut(|(key, value)| {
+            if key == "components" {
+                let Tag::Compound(components) = value else {
+                    return false;
+                };
+                components.retain(|(name, _)| {
+                    Identifier::parse(name)
+                        .ok()
+                        .and_then(|id| mc_data::data_component_types_26_1_2::id(&id))
+                        .is_some()
+                });
+                return true;
+            }
+            if key != "patterns" {
+                return true;
+            }
+            let Tag::List(layers) = value else {
+                return false;
+            };
+            layers.elements.retain_mut(|layer| {
+                let Tag::Compound(fields) = layer else {
+                    return false;
+                };
+                fields.retain(|(name, _)| matches!(name.as_str(), "pattern" | "color"));
+                true
+            });
+            true
+        });
+    }
+    if kind == "minecraft:piston" {
+        fields.retain_mut(|(key, value)| {
+            if key != "blockState" {
+                return true;
+            }
+            let Tag::Compound(state) = value else {
+                return false;
+            };
+            state.retain(|(name, _)| matches!(name.as_str(), "Name" | "Properties"));
+            true
+        });
+    }
+    if matches!(kind, "minecraft:sign" | "minecraft:hanging_sign") {
+        fields.retain_mut(|(key, value)| {
+            if !matches!(key.as_str(), "front_text" | "back_text") {
+                return true;
+            }
+            let Tag::Compound(text) = value else {
+                return false;
+            };
+            text.retain(|(name, _)| {
+                matches!(
+                    name.as_str(),
+                    "messages" | "filtered_messages" | "color" | "has_glowing_text"
+                )
+            });
+            true
+        });
+    }
+    if kind == "minecraft:test_instance_block" {
+        fields.retain_mut(|(key, value)| match (key.as_str(), value) {
+            ("data", Tag::Compound(data)) => {
+                data.retain(|(name, _)| {
+                    matches!(
+                        name.as_str(),
+                        "test"
+                            | "size"
+                            | "rotation"
+                            | "ignore_entities"
+                            | "status"
+                            | "error_message"
+                    )
+                });
+                true
+            }
+            ("errors", Tag::List(errors)) => {
+                errors.elements.retain_mut(|error| {
+                    let Tag::Compound(marker) = error else {
+                        return false;
+                    };
+                    marker.retain(|(name, _)| matches!(name.as_str(), "pos" | "text"));
+                    true
+                });
+                true
+            }
+            _ => false,
+        });
+    }
+    if kind == "minecraft:trial_spawner" {
+        fields.retain_mut(|(key, value)| key != "spawn_data" || filter_spawn_data(value));
+    }
+    Tag::Compound(fields)
+}
+
+/// Project a spawner's saved data to the fields in vanilla's update tag.
+#[must_use]
+pub fn spawner_client_update_tag(tag: Tag) -> Tag {
+    let Tag::Compound(mut fields) = tag else {
+        return Tag::Compound(Vec::new());
+    };
+    fields.retain_mut(|(key, value)| {
+        matches!(
+            key.as_str(),
+            "Delay"
+                | "MinSpawnDelay"
+                | "MaxSpawnDelay"
+                | "SpawnCount"
+                | "MaxNearbyEntities"
+                | "RequiredPlayerRange"
+                | "SpawnRange"
+                | "SpawnData"
+        ) && (key != "SpawnData" || filter_spawn_data(value))
+    });
+    Tag::Compound(fields)
+}
+
+fn filter_spawn_data(value: &mut Tag) -> bool {
+    let Tag::Compound(fields) = value else {
+        return false;
+    };
+    fields.retain_mut(|(key, value)| match key.as_str() {
+        "entity" => matches!(value, Tag::Compound(_)),
+        "custom_spawn_rules" | "equipment" => {
+            let Tag::Compound(nested) = value else {
+                return false;
+            };
+            let allowed: &[&str] = if key == "custom_spawn_rules" {
+                &["block_light_limit", "sky_light_limit"]
+            } else {
+                &["loot_table", "slot_drop_chances"]
+            };
+            nested.retain(|(field, _)| allowed.contains(&field.as_str()));
+            if key == "custom_spawn_rules" {
+                for (_, range) in nested {
+                    if let Tag::Compound(fields) = range {
+                        fields.retain(|(name, _)| {
+                            matches!(name.as_str(), "min_inclusive" | "max_inclusive")
+                        });
+                    }
+                }
+            } else {
+                for (name, value) in nested {
+                    if name == "slot_drop_chances"
+                        && let Tag::Compound(slots) = value
+                    {
+                        slots.retain(|(slot, _)| {
+                            matches!(
+                                slot.as_str(),
+                                "mainhand"
+                                    | "offhand"
+                                    | "feet"
+                                    | "legs"
+                                    | "chest"
+                                    | "head"
+                                    | "body"
+                                    | "saddle"
+                            )
+                        });
+                    }
+                }
+            }
+            true
+        }
+        _ => false,
+    });
+    fields
+        .iter()
+        .any(|(key, value)| key == "entity" && matches!(value, Tag::Compound(_)))
 }
 
 /// Project only the block entity at `pos`, using the same policy as chunk packets.
@@ -227,11 +437,11 @@ pub fn client_block_entity(
     registry: &BlockRegistry,
     pos: BlockPos,
 ) -> Option<BlockEntityWireRecord> {
-    if let Some(furnace) = chunk.furnaces.get(&pos) {
+    if chunk.furnaces.contains_key(&pos) {
         return Some(BlockEntityWireRecord {
             pos,
             type_name: furnace_block_entity_type_for_block(chunk, registry, pos),
-            nbt: furnace_update_tag(furnace),
+            nbt: Tag::Compound(Vec::new()),
         });
     }
     if chunk.chests.contains_key(&pos) {
@@ -282,12 +492,12 @@ pub fn client_block_entities(
 
     let mut furnaces: Vec<_> = chunk.furnaces.iter().collect();
     furnaces.sort_by_key(|(pos, _)| (pos.x, pos.y, pos.z));
-    for (pos, furnace) in furnaces {
+    for (pos, _) in furnaces {
         let type_name = furnace_block_entity_type_for_block(chunk, registry, *pos);
         records.push(BlockEntityWireRecord {
             pos: *pos,
             type_name,
-            nbt: furnace_update_tag(furnace),
+            nbt: Tag::Compound(Vec::new()),
         });
     }
 
@@ -348,7 +558,10 @@ pub fn trial_spawner_update_tag(fields: &[(String, Tag)], active: bool) -> Tag {
         output.push(("next_mob_spawns_at".into(), Tag::Long(timer)));
     }
     if let Some((_, spawn)) = fields.iter().find(|(name, _)| name == "spawn_data") {
-        output.push(("spawn_data".into(), spawn.clone()));
+        let mut spawn = spawn.clone();
+        if filter_spawn_data(&mut spawn) {
+            output.push(("spawn_data".into(), spawn));
+        }
     }
     Tag::Compound(output)
 }
@@ -404,29 +617,6 @@ fn block_entity_type_name(tag: &Tag) -> Option<Identifier> {
     })
 }
 
-fn strip_persistent_block_entity_fields(tag: Tag) -> Tag {
-    let Tag::Compound(fields) = tag else {
-        return tag;
-    };
-    Tag::Compound(
-        fields
-            .into_iter()
-            .filter(|(key, _)| {
-                !matches!(
-                    key.as_str(),
-                    "id" | "x"
-                        | "y"
-                        | "z"
-                        | "CookingTimes"
-                        | "CookingTotalTimes"
-                        | "solaris_cooking_remaining"
-                        | "solaris_cooking_total"
-                )
-            })
-            .collect(),
-    )
-}
-
 fn furnace_block_entity_type_for_block(
     chunk: &Chunk,
     registry: &BlockRegistry,
@@ -469,21 +659,6 @@ fn chest_block_entity_type_for_block(
         })
         .unwrap_or(BlockEntityKind::Chest);
     Identifier::parse(kind.vanilla_id()).unwrap()
-}
-
-fn furnace_update_tag(furnace: &FurnaceBlockEntity) -> Tag {
-    Tag::Compound(vec![
-        (
-            "lit_time_remaining".into(),
-            Tag::Short(furnace.burn_remaining),
-        ),
-        ("lit_total_time".into(), Tag::Short(furnace.burn_total)),
-        (
-            "cooking_time_spent".into(),
-            Tag::Short(furnace.cook_progress),
-        ),
-        ("cooking_total_time".into(), Tag::Short(furnace.cook_total)),
-    ])
 }
 
 /// Absolute positions of every bed half in the chunk, section by section.
@@ -882,3 +1057,11 @@ mod palette_tests;
 #[cfg(test)]
 #[path = "wire_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "wire_privacy_tests.rs"]
+mod privacy_tests;
+
+#[cfg(test)]
+#[path = "wire_registry_privacy_tests.rs"]
+mod registry_privacy_tests;

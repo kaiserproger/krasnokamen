@@ -498,29 +498,29 @@ fn weather_fades_match_threshold_state_and_duplicate_snapshot_ordering() {
     assert_eq!(
         weather_events(&plan_player_changes(
             &[change(true, 0.19, 0.0)],
-            &mut viewer
+            &mut viewer,
         )),
         vec![(7, 0.19)]
     );
     assert_eq!(
         weather_events(&plan_player_changes(
             &[change(true, 0.20, 0.0)],
-            &mut viewer
+            &mut viewer,
         )),
         vec![(7, 0.20), (1, 0.0), (7, 0.20), (8, 0.0)]
     );
     assert_eq!(
         weather_events(&plan_player_changes(
             &[change(true, 0.21, 0.01)],
-            &mut viewer
+            &mut viewer,
         )),
         vec![(7, 0.21), (8, 0.01)]
     );
-    assert!(plan_player_changes(&[change(false, 0.21, 0.01)], &mut viewer).is_empty());
+    assert!(plan_player_changes(&[change(false, 0.21, 0.01)], &mut viewer,).is_empty());
     assert_eq!(
         weather_events(&plan_player_changes(
             &[change(false, 0.19, 0.0)],
-            &mut viewer
+            &mut viewer,
         )),
         vec![(7, 0.19), (8, 0.0), (2, 0.0), (7, 0.19), (8, 0.0)]
     );
@@ -559,7 +559,7 @@ fn complete_weather_ramps_keep_exact_f32_levels_and_one_state_event_per_threshol
         assert_eq!(
             weather_events(&plan_player_changes(
                 &[change(true, rain, thunder)],
-                &mut viewer
+                &mut viewer,
             )),
             vec![(8, thunder)]
         );
@@ -585,7 +585,7 @@ fn complete_weather_ramps_keep_exact_f32_levels_and_one_state_event_per_threshol
         assert_eq!(
             weather_events(&plan_player_changes(
                 &[change(false, rain, thunder)],
-                &mut viewer
+                &mut viewer,
             )),
             expected
         );

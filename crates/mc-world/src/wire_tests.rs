@@ -967,10 +967,7 @@ fn decorated_pot_26_3_chunk_projects_old_sherds_as_named_templates() {
             "pot contents must not disclose {key}"
         );
     }
-    assert_eq!(
-        mc_data::item_nbt::field(fields, "custom_public_field"),
-        Some(&Tag::String("visible".into()))
-    );
+    assert!(mc_data::item_nbt::field(fields, "custom_public_field").is_none());
     assert_eq!(
         chunk.block_entities[&pos], bytes,
         "wire projection cannot mutate native custody"

@@ -156,7 +156,7 @@ fn opaque_container_types_do_not_disclose_items_in_encoded_chunks() {
 }
 
 #[test]
-fn furnace_chunk_packets_hide_items_but_keep_timers_and_persistence() {
+fn furnace_chunk_packets_hide_items_and_timers_but_keep_persistence() {
     use mc_nbt::{ListTag, Tag, tag_type};
     use mc_protocol::frame::{Compression, encode_frame, try_decode_frame};
     use mc_protocol::packets::play::LevelChunkWithLight;
@@ -255,10 +255,18 @@ fn furnace_chunk_packets_hide_items_but_keep_timers_and_persistence() {
         (5, "smoker"),
         (6, "blast_furnace"),
     ] {
+        let pos = BlockPos { x, y: 64, z: 0 };
+        assert_eq!(
+            mc_world::wire::client_block_entity(&chunk, &blocks, pos)
+                .unwrap()
+                .nbt,
+            Tag::Compound(Vec::new()),
+            "{kind} at {x}"
+        );
         let record = decoded
             .block_entities
             .iter()
-            .find(|record| record.packed_xz == x << 4 && record.y == 64)
+            .find(|record| record.packed_xz == (x as u8) << 4 && record.y == 64)
             .unwrap();
         assert_eq!(
             record.type_id,
@@ -269,33 +277,12 @@ fn furnace_chunk_packets_hide_items_but_keep_timers_and_persistence() {
         let Tag::Compound(fields) = &record.nbt else {
             panic!("compound update");
         };
-        assert!(
-            !fields.iter().any(|(key, _)| key == "Items"),
-            "{kind} at {x}"
-        );
-        assert!(
-            fields
-                .iter()
-                .any(|(key, value)| key == "lit_time_remaining" && *value == Tag::Short(71))
-        );
-        if x <= 3 {
-            for (key, value) in [
-                ("lit_total_time", 100),
-                ("cooking_time_spent", 12),
-                ("cooking_total_time", 200),
-            ] {
-                assert!(
-                    fields
-                        .iter()
-                        .any(|(k, v)| k == key && *v == Tag::Short(value))
-                );
-            }
-        }
+        assert!(fields.is_empty(), "{kind} at {x}");
     }
 }
 
 #[test]
-fn opaque_inventory_chunk_packets_hide_items_but_keep_public_fields() {
+fn opaque_inventory_chunk_packets_hide_saved_fields_and_preserve_persistence() {
     use mc_nbt::{ListTag, Tag, tag_type};
     use mc_protocol::packets::play::LevelChunkWithLight;
     use mc_world::chunk::BlockPos;
@@ -312,38 +299,14 @@ fn opaque_inventory_chunk_packets_hide_items_but_keep_public_fields() {
         Identifier::parse("minecraft:plains").unwrap(),
     );
     let fixtures = [
-        (4, "lectern", vec![("Page".into(), Tag::Int(3))]),
-        (
-            1,
-            "brewing_stand",
-            vec![
-                ("BrewTime".into(), Tag::Short(17)),
-                ("Fuel".into(), Tag::Byte(8)),
-            ],
-        ),
-        (
-            2,
-            "shulker_box",
-            vec![("CustomName".into(), Tag::String("private box".into()))],
-        ),
-        (
-            3,
-            "crafter",
-            vec![
-                (
-                    "disabled_slots".into(),
-                    Tag::List(ListTag {
-                        element_type: tag_type::INT,
-                        elements: vec![Tag::Int(1), Tag::Int(4)],
-                    }),
-                ),
-                ("triggered".into(), Tag::Byte(1)),
-            ],
-        ),
-        (5, "chiseled_bookshelf", Vec::new()),
+        (4, "lectern"),
+        (1, "brewing_stand"),
+        (2, "shulker_box"),
+        (3, "crafter"),
+        (5, "chiseled_bookshelf"),
     ];
     let mut stored = Vec::new();
-    for (x, kind, public) in &fixtures {
+    for (x, kind) in &fixtures {
         let item = Tag::Compound(vec![
             (
                 "id".into(),
@@ -369,11 +332,10 @@ fn opaque_inventory_chunk_packets_hide_items_but_keep_public_fields() {
                 }),
             )
         };
-        let mut fields = vec![
+        let fields = vec![
             ("id".into(), Tag::String(format!("minecraft:{kind}"))),
             secret,
         ];
-        fields.extend(public.clone());
         let mut bytes = Vec::new();
         mc_nbt::write_network(&mut bytes, &Tag::Compound(fields)).unwrap();
         let pos = BlockPos { x: *x, y: 64, z: 0 };
@@ -393,7 +355,7 @@ fn opaque_inventory_chunk_packets_hide_items_but_keep_public_fields() {
     let mut body = Vec::new();
     packet.encode(&mut body).unwrap();
     let decoded = LevelChunkWithLight::decode(&mut bytes::Bytes::from(body)).unwrap();
-    for (x, kind, public) in fixtures {
+    for (x, kind) in fixtures {
         let record = decoded
             .block_entities
             .iter()
@@ -405,7 +367,7 @@ fn opaque_inventory_chunk_packets_hide_items_but_keep_public_fields() {
                 .id_of(&Identifier::parse(format!("minecraft:{kind}")).unwrap())
                 .unwrap() as i32
         );
-        assert_eq!(record.nbt, Tag::Compound(public), "{kind}");
+        assert_eq!(record.nbt, Tag::Compound(Vec::new()), "{kind}");
     }
     for (pos, bytes) in stored {
         assert_eq!(

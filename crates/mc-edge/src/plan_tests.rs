@@ -2303,7 +2303,7 @@ fn unseen_chunk_window_completes_before_continuously_stale_repairs() {
 }
 
 #[test]
-fn reliable_public_block_entity_update_covers_chunk_revision_without_full_resend() {
+fn block_entity_change_schedules_snapshot_without_full_resend() {
     with_cache(|cache| {
         let (pos, chunk) = chunk_at(0, 0);
         let mut viewer = viewer_at(1, [0.5, 64.0, 0.5]);
@@ -2325,8 +2325,12 @@ fn reliable_public_block_entity_update_covers_chunk_revision_without_full_resend
             }],
             &mut viewer,
         );
-        assert_eq!(packets.len(), 1);
-        assert!(packets[0].reliable);
+        assert!(packets.is_empty());
+        assert!(
+            viewer
+                .pending_block_entities
+                .contains(&mc_world::chunk::BlockPos { x: 1, y: 64, z: 1 })
+        );
         let after = output(vec![(pos, chunk)], Vec::new(), ChangeSet::default());
         assert!(
             plan_viewer(&after, &mut viewer, 0, cache)
@@ -2433,7 +2437,7 @@ fn arrow_entity_data_carries_no_health() {
 }
 
 #[test]
-fn sign_editor_installs_block_before_opening_and_text_uses_vanilla_entity_type() {
+fn sign_editor_installs_block_before_opening_without_raw_entity_packet() {
     let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
     let position = mc_core::boundary::BlockPos { x: 9, y: 64, z: 8 };
     let packets = plan_player_changes(
@@ -2456,18 +2460,9 @@ fn sign_editor_installs_block_before_opening_and_text_uses_vanilla_entity_type()
         vec![
             BlockUpdate::ID,
             mc_protocol::packets::play::ClientboundOpenSignEditor::ID,
-            mc_protocol::packets::play::ClientboundBlockEntityData::ID,
         ]
     );
     assert!(packets.iter().all(|p| p.reliable));
-    let bytes = body_of(&packets[2]);
-    let text =
-        mc_protocol::packets::play::ClientboundBlockEntityData::decode(&mut &bytes[..]).unwrap();
-    assert_eq!(text.block_entity_type, 7);
-    assert_eq!(
-        text.position,
-        pack_block_pos(position.x, position.y, position.z)
-    );
 }
 
 #[test]
@@ -2497,7 +2492,7 @@ fn accepted_combat_motion_is_reliable_self_only_and_uses_wire_tick_units() {
 }
 
 #[test]
-fn campfire_items_sync_is_reliable_and_targets_only_its_viewer() {
+fn campfire_items_sync_schedules_projected_snapshot_for_loaded_viewer() {
     let position = mc_core::boundary::BlockPos { x: 9, y: 64, z: 8 };
     let nbt = mc_nbt::Tag::Compound(vec![(
         "Items".into(),
@@ -2512,35 +2507,20 @@ fn campfire_items_sync_is_reliable_and_targets_only_its_viewer() {
     )]);
     let change = PlayerChange::BlockEntityData {
         position,
-        block_entity_type: 33,
+        block_entity_type: mc_data::block_entity_kinds::BlockEntityKind::Campfire.protocol_id(),
         nbt: nbt.clone(),
     };
-    let packets = plan_player_changes(
-        std::slice::from_ref(&change),
-        &mut viewer_at(1, [8.0, 64.0, 8.0]),
-    );
-    assert_eq!(packets.len(), 1);
-    assert!(packets[0].reliable);
-    assert_eq!(
-        packets[0].id,
-        mc_protocol::packets::play::ClientboundBlockEntityData::ID
-    );
-    let body = body_of(&packets[0]);
-    let decoded =
-        mc_protocol::packets::play::ClientboundBlockEntityData::decode(&mut &body[..]).unwrap();
-    assert_eq!(decoded.block_entity_type, 33);
-    assert_eq!(
-        decoded.position,
-        pack_block_pos(position.x, position.y, position.z)
-    );
-    assert_eq!(decoded.nbt, nbt);
+    let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
+    viewer.loaded_chunks.insert((0, 0), 0);
+    let packets = plan_player_changes(std::slice::from_ref(&change), &mut viewer);
+    assert!(packets.is_empty());
+    assert!(viewer.pending_block_entities.contains(&position));
 }
 
 #[test]
-fn shelf_items_sync_uses_native_type_thirty_nine_and_slot_byte() {
+fn shelf_items_sync_schedules_projected_snapshot_for_loaded_viewer() {
     use mc_data::block_entity_kinds::BlockEntityKind;
     use mc_nbt::{ListTag, Tag, tag_type};
-    use mc_protocol::packets::play::ClientboundBlockEntityData;
     let position = mc_core::boundary::BlockPos {
         x: 192,
         y: 78,
@@ -2565,20 +2545,11 @@ fn shelf_items_sync_uses_native_type_thirty_nine_and_slot_byte() {
         block_entity_type: BlockEntityKind::Shelf.protocol_id(),
         nbt: nbt.clone(),
     };
-    let packets = plan_player_changes(
-        std::slice::from_ref(&change),
-        &mut viewer_at(1, [192.0, 78.0, -446.0]),
-    );
-    assert_eq!(packets.len(), 1);
-    assert!(packets[0].reliable);
-    assert_eq!(packets[0].id, ClientboundBlockEntityData::ID);
-    let body = body_of(&packets[0]);
-    let mut cursor = &body[..];
-    let decoded = ClientboundBlockEntityData::decode(&mut cursor).unwrap();
-    assert!(cursor.is_empty(), "native packet has no trailing fields");
-    assert_eq!(decoded.block_entity_type, 39);
-    assert_eq!(decoded.position, pack_block_pos(192, 78, -446));
-    assert_eq!(decoded.nbt, nbt);
+    let mut viewer = viewer_at(1, [192.0, 78.0, -446.0]);
+    viewer.loaded_chunks.insert((12, -28), 0);
+    let packets = plan_player_changes(std::slice::from_ref(&change), &mut viewer);
+    assert!(packets.is_empty());
+    assert!(viewer.pending_block_entities.contains(&position));
 }
 
 #[test]
@@ -3068,8 +3039,8 @@ fn bell_ring_maps_animation_and_vanilla_positional_sound() {
 }
 
 #[test]
-fn hanging_sign_editor_and_type_eight_nbt_use_native_packets_in_order() {
-    use mc_protocol::packets::play::{ClientboundBlockEntityData, ClientboundOpenSignEditor};
+fn hanging_sign_editor_uses_native_packets_in_order_without_raw_entity_packet() {
+    use mc_protocol::packets::play::ClientboundOpenSignEditor;
     let position = mc_core::boundary::BlockPos { x: 1, y: 200, z: 2 };
     let nbt = mc_nbt::Tag::Compound(vec![("is_waxed".into(), mc_nbt::Tag::Byte(0))]);
     let changes = [
@@ -3085,15 +3056,11 @@ fn hanging_sign_editor_and_type_eight_nbt_use_native_packets_in_order() {
         },
     ];
     let packets = plan_player_changes(&changes, &mut viewer_at(7, [0.0; 3]));
-    assert_eq!(packets.len(), 3);
+    assert_eq!(packets.len(), 2);
     assert_eq!(packets[0].id, BlockUpdate::ID);
     let editor = ClientboundOpenSignEditor::decode(&mut body_of(&packets[1])).unwrap();
     assert!(editor.is_front_text);
     assert_eq!(editor.position, pack_block_pos(1, 200, 2));
-    let text = ClientboundBlockEntityData::decode(&mut body_of(&packets[2])).unwrap();
-    assert_eq!(text.position, editor.position);
-    assert_eq!(text.block_entity_type, 8);
-    assert_eq!(text.nbt, nbt);
 }
 
 #[test]

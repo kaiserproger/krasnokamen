@@ -28,6 +28,16 @@ Run `python3 -m tools.harness run regressions` on every integration and
 client-surface fix and before release. The independent breaker in
 `../QA_AGENT_PROTOCOL.md` remains a release requirement.
 
+## Block-entity packet privacy
+
+Chunk records and block-entity update packets must expose only the relevant
+vanilla update-tag fields, not saved container contents, loot seeds, commands,
+bees or unrelated components. Open container menus have their own viewer-scoped
+content packets. Decorated pots intentionally withhold their item and loot data
+even where vanilla sends it. The `mc-world` wire privacy and registry tests and
+the `mc-edge` direct-packet tests cover the fields in their fixtures; they do not
+establish exhaustive coverage of every nested value or every real-client path.
+
 ## Native promotion probes
 
 The `entities` profile includes windowed native-client probes:
