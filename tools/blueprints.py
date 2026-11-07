@@ -5,7 +5,7 @@
     tools/blueprints.py materials [id ...]     # item totals and base-resource totals per level
     tools/blueprints.py preview [id ...]       # isometric PNGs under .analysis/codex-logs/millenaire/blueprints/
 
-Blueprint files live in crates/mc-core/assets/blueprints/*.json (format: docs/SETTLEMENTS_GUIDE.md).
+Blueprint files live in crates/mc-core/assets/blueprints/*.json (docs/settlements/construction.md#blueprint-files).
 The authoritative gate is the Rust test `settlements::blueprints` (certification of every level);
 `check` only catches authoring mistakes without building the workspace.
 """
@@ -25,9 +25,9 @@ WOOD_PARTS = ("planks", "log", "stairs", "slab", "fence", "fence_gate", "door", 
 PLAIN = {
     "chest", "barrel", "crafting_table", "composter", "ladder", "torch", "wall_torch", "cobblestone",
     "cobblestone_wall", "cobblestone_stairs", "cobblestone_slab", "furnace", "hay_block", "wheat",
-    "farmland", "dirt", "stonecutter", "smithing_table", "fletching_table",
+    "farmland", "dirt", "stonecutter", "smithing_table", "fletching_table", "loom",
 }
-STATIONS = {"stonecutter", "smithing_table", "fletching_table"}
+STATIONS = {"stonecutter", "smithing_table", "fletching_table", "loom"}
 FREE_HALVES = (("half", "upper"), ("part", "head"))
 
 
