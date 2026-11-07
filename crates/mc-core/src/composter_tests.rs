@@ -30,7 +30,9 @@ pub(crate) fn data_dir() -> std::path::PathBuf {
 }
 
 pub(crate) fn fixture(start: u8) -> (TickState, EntityId) {
-    let registry = Arc::new(CoreRegistry::load(Some(&data_dir())).unwrap());
+    static REGISTRY: std::sync::LazyLock<Arc<CoreRegistry>> =
+        std::sync::LazyLock::new(|| Arc::new(CoreRegistry::load(Some(&data_dir())).unwrap()));
+    let registry = Arc::clone(&REGISTRY);
     let world = ChunkWorld::new(
         42,
         Arc::new(EmptyWorld(registry.states.air)),
@@ -596,6 +598,8 @@ fn creative_composter_fill_retains_reserved_input() {
 #[test]
 fn omitted_java_flowers_compost_and_grass_block_does_not() {
     // First layer from empty always succeeds; later layers are chance-gated.
+    let (mut state, entity) = fixture(0);
+    let empty = state.world.block_at(POS.x, POS.y, POS.z).unwrap();
     for flower in [
         "red_tulip",
         "orange_tulip",
@@ -606,14 +610,16 @@ fn omitted_java_flowers_compost_and_grass_block_does_not() {
         "azure_bluet",
         "lily_of_the_valley",
     ] {
-        let (mut state, entity) = fixture(0);
+        state.world.set_block(POS.x, POS.y, POS.z, empty);
+        state.world.fold_overlay();
         give(&mut state, entity, flower, 1, Hand::Main);
         let _ = run_tick(&mut state, &[use_input(0, Hand::Main)]);
         assert_eq!(level(&state, POS), Some(1), "{flower} composts");
         assert!(state.players[&entity].inventory.slots[0].is_empty());
     }
     // Java: grass blocks compost on Bedrock only: the level never rises.
-    let (mut state, entity) = fixture(0);
+    state.world.set_block(POS.x, POS.y, POS.z, empty);
+    state.world.fold_overlay();
     give(&mut state, entity, "grass_block", 1, Hand::Main);
     let _ = run_tick(&mut state, &[use_input(0, Hand::Main)]);
     assert_eq!(level(&state, POS), Some(0), "grass never composts");

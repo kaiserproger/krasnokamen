@@ -373,7 +373,11 @@ fn replay_from_checkpoint_copy_reproduces_original_state() {
     const TICKS: u64 = 120;
     let original_dir = temp_dir("original");
     let replay_dir = temp_dir("replay");
-    let config = CoreConfig::new(original_dir.clone(), 42);
+    let mut config = CoreConfig::new(original_dir.clone(), 42);
+    // The script walks across chunk boundaries; it does not require a
+    // production-sized view or simulation radius.
+    config.view_distance = 2;
+    config.simulation_distance = 2;
     // Fresh world: the clean shutdown leaves its checkpoint.
     let core = Core::open(config.clone()).expect("create world");
     core.shutdown();
@@ -405,7 +409,8 @@ fn replay_from_checkpoint_copy_reproduces_original_state() {
     assert_eq!(parsed.end_tick, Some(start + TICKS));
     assert!(parsed.ticks.len() > 20, "{} records", parsed.ticks.len());
 
-    let replay_config = CoreConfig::new(replay_dir.clone(), 42);
+    let mut replay_config = config.clone();
+    replay_config.world_dir = replay_dir.clone();
     let mut copy = open_world_state(&replay_config);
     replay(&mut copy, &parsed).expect("replay");
     assert_eq!(canonical(&copy), original);
@@ -416,7 +421,9 @@ fn replay_from_checkpoint_copy_reproduces_original_state() {
         gapped.ticks.remove(&(start + 41)).is_some(),
         "fill tick logged"
     );
-    let mut other = open_world_state(&CoreConfig::new(gapped_dir.clone(), 42));
+    let mut gapped_config = config.clone();
+    gapped_config.world_dir = gapped_dir.clone();
+    let mut other = open_world_state(&gapped_config);
     replay(&mut other, &gapped).expect("replay without the fill");
     assert_ne!(canonical(&other), original);
     let _ = std::fs::remove_dir_all(gapped_dir);

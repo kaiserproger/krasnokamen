@@ -460,7 +460,9 @@ impl mc_world::ChunkGenerator for GrassWorld {
 }
 
 fn grass_state(west_biome: &'static str, east_biome: &'static str) -> TickState {
-    let registry = Arc::new(CoreRegistry::load(None).expect("registry"));
+    static REGISTRY: std::sync::LazyLock<Arc<CoreRegistry>> =
+        std::sync::LazyLock::new(|| Arc::new(CoreRegistry::load(None).expect("registry")));
+    let registry = Arc::clone(&REGISTRY);
     let generator: Arc<dyn mc_world::ChunkGenerator> = Arc::new(GrassWorld {
         air: registry.states.air,
         grass: registry.states.grass_block,
