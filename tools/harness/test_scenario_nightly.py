@@ -25,6 +25,7 @@ class ScenarioNightlyTests(unittest.TestCase):
             self.assertEqual(record['seed'], 7)
             self.assertEqual(record['command'], 'run --seed 7')
             self.assertEqual(record['tree'], payload['tree'])
+            self.assertFalse(record['original_receipt_retained'])
             self.assertEqual(record['receipt_sha256'], hashlib.sha256(receipt.read_bytes()).hexdigest())
 
     def test_prune_old_campaigns_without_touching_current_or_unrelated(self):
