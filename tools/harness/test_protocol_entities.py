@@ -65,6 +65,12 @@ class ProtocolEntitiesTests(unittest.TestCase):
         absolute = varint(7) + varint(0) + struct.pack('>dddff', 4.0, 5.0, 6.0, 0.0, 0.0) + bytes([1])
         self.assertTrue(tracker.consume(0x23, absolute), tracker.snapshot())
         self.assertEqual(tracker.snapshot()['entities'][0]['position'], [4.0, 5.0, 6.0])
+        stepped_absolute = (varint(7) + varint(1) + varint(2)
+                            + struct.pack('>ddd', 7.0, 8.0, 9.0) + varint(1)
+                            + struct.pack('>ddd', 10.0, 11.0, 12.0) + varint(2)
+                            + struct.pack('>ff', 0.0, 0.0) + bytes([1]))
+        self.assertTrue(tracker.consume(0x23, stepped_absolute), tracker.snapshot())
+        self.assertEqual(tracker.snapshot()['entities'][0]['position'], [10.0, 11.0, 12.0])
         self.assertFalse(tracker.consume(0x35, varint(7) + varint(2)))
         self.assertEqual(tracker.snapshot()['unavailable'], 'bad_movement_step_count')
 

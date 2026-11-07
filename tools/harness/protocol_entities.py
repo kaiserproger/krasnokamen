@@ -525,9 +525,18 @@ class ProtocolEntities:
         cur = _Cursor(raw)
         entity_id = cur.varint()
         if self._protocol == 777:
-            if cur.varint() != 0:
+            path_type = cur.varint()
+            if path_type == 0:
+                position = [cur.f64(), cur.f64(), cur.f64()]
+            elif path_type == 1:
+                count = cur.varint()
+                if count < 1 or count > cur.remaining() // 25:
+                    raise _DecodeError('bad_position_step_count')
+                for _ in range(count):
+                    position = [cur.f64(), cur.f64(), cur.f64()]
+                    cur.varint()
+            else:
                 raise _DecodeError('unsupported_position_path')
-            position = [cur.f64(), cur.f64(), cur.f64()]
         else:
             position = [cur.f64(), cur.f64(), cur.f64()]
             cur.take(24)
