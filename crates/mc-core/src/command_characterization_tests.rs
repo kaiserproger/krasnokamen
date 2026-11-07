@@ -108,18 +108,20 @@ fn difficulty_query_store_returns_numeric_result_after_feedback() {
         vec![
             query_feedback,
             PlayerChange::Scoreboard {
-                event: crate::scoreboard::ScoreboardEvent::Score {
+                events: vec![crate::scoreboard::ScoreboardEvent::Score {
                     owner: "result".into(),
                     objective: "oracle".into(),
                     score: 3,
-                },
+                }]
+                .into(),
             },
             PlayerChange::Scoreboard {
-                event: crate::scoreboard::ScoreboardEvent::Score {
+                events: vec![crate::scoreboard::ScoreboardEvent::Score {
                     owner: "success".into(),
                     objective: "oracle".into(),
                     score: 1,
-                },
+                }]
+                .into(),
             },
         ]
     );

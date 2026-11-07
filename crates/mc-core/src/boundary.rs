@@ -840,7 +840,7 @@ pub enum PlayerChange {
         air: i32,
     },
     Scoreboard {
-        event: crate::scoreboard::ScoreboardEvent,
+        events: std::sync::Arc<[crate::scoreboard::ScoreboardEvent]>,
     },
     /// Global online roster; entity visibility remains dimension-local.
     Roster {

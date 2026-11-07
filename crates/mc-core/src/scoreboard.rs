@@ -351,8 +351,14 @@ pub fn permits_player_damage(state: &TickState, attacker: EntityId, victim: Enti
     }
 }
 pub fn sync_join(state: &mut TickState, connection: ConnectionId) {
-    for event in state.scoreboard.snapshot_events() {
-        state.push_player(connection, PlayerChange::Scoreboard { event });
+    let events = state.scoreboard.snapshot_events();
+    if !events.is_empty() {
+        state.push_player(
+            connection,
+            PlayerChange::Scoreboard {
+                events: events.into(),
+            },
+        );
     }
 }
 fn publish(state: &mut TickState, events: Vec<ScoreboardEvent>) {
@@ -360,22 +366,21 @@ fn publish(state: &mut TickState, events: Vec<ScoreboardEvent>) {
         return;
     }
     state.scoreboard_dirty = true;
+    let events: std::sync::Arc<[ScoreboardEvent]> = events.into();
     let connections: Vec<_> = state.connections.all_connections().collect();
-    for event in events {
-        for connection in &connections {
-            state.push_player(
-                *connection,
-                PlayerChange::Scoreboard {
-                    event: event.clone(),
-                },
-            );
-        }
-        if state.dimension_globals.active {
-            state
-                .dimension_globals
-                .broadcasts
-                .push(crate::dimensions::globals::Broadcast::Scoreboard(event));
-        }
+    for connection in connections {
+        state.push_player(
+            connection,
+            PlayerChange::Scoreboard {
+                events: events.clone(),
+            },
+        );
+    }
+    if state.dimension_globals.active {
+        state
+            .dimension_globals
+            .broadcasts
+            .push(crate::dimensions::globals::Broadcast::Scoreboard(events));
     }
 }
 

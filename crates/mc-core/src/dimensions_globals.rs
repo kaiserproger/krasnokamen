@@ -21,7 +21,7 @@ pub(crate) enum Broadcast {
         members: std::collections::BTreeSet<String>,
         content: mc_nbt::Tag,
     },
-    Scoreboard(crate::scoreboard::ScoreboardEvent),
+    Scoreboard(Arc<[crate::scoreboard::ScoreboardEvent]>),
     BossBar {
         players: Vec<uuid::Uuid>,
         id: uuid::Uuid,
@@ -91,8 +91,8 @@ fn relay(world: &mut TickState, event: &Broadcast) {
                 );
             }
         }
-        Broadcast::Scoreboard(event) => queue_each(world, || PlayerChange::Scoreboard {
-            event: event.clone(),
+        Broadcast::Scoreboard(events) => queue_each(world, || PlayerChange::Scoreboard {
+            events: events.clone(),
         }),
         Broadcast::BossBar {
             players,

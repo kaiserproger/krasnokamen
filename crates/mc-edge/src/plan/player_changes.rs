@@ -226,7 +226,23 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                 }],
             },
         ),
-        PlayerChange::Scoreboard { event, .. } => push_scoreboard_event(out, conn, event.clone()),
+        PlayerChange::Scoreboard { events } => {
+            let start = out.len();
+            for event in events.iter() {
+                push_scoreboard_event(out, conn, event.clone());
+            }
+            if out.len() > start + 1 {
+                let len = out[start..].iter().map(|packet| packet.data.len()).sum();
+                let mut frames = bytes::BytesMut::with_capacity(len);
+                let mut packet = out.remove(start);
+                frames.extend_from_slice(&packet.data);
+                for next in out.drain(start..) {
+                    frames.extend_from_slice(&next.data);
+                }
+                packet.data = frames.freeze();
+                out.push(packet);
+            }
+        }
         PlayerChange::Roster {
             players, removed, ..
         } => {

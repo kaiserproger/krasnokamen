@@ -369,7 +369,7 @@ fn scoreboard_survives_core_checkpoint_and_recovery_and_syncs_rejoining_viewer()
     for _ in 0..100 {
         rx.blocking_recv().expect("live core tick");
         let changes = core.try_drain_outbox();
-        applied |= changes.iter().flat_map(|(_, queue)| queue).any(|change| matches!(change, PlayerChange::Scoreboard { event: ScoreboardEvent::Display { slot: 1, objective }, .. } if objective == "wins"));
+        applied |= changes.iter().flat_map(|(_, queue)| queue).any(|change| matches!(change, PlayerChange::Scoreboard { events } if events.iter().any(|event| matches!(event, ScoreboardEvent::Display { slot: 1, objective } if objective == "wins"))));
         if applied {
             break;
         }
@@ -417,9 +417,9 @@ fn scoreboard_survives_core_checkpoint_and_recovery_and_syncs_rejoining_viewer()
     let (drained, _) = join_and_drain(&restored, ConnectionId(71), 2);
     let events: Vec<_> = drained[&ConnectionId(71)]
         .iter()
-        .filter_map(|change| match change {
-            PlayerChange::Scoreboard { event, .. } => Some(event),
-            _ => None,
+        .flat_map(|change| match change {
+            PlayerChange::Scoreboard { events } => events.as_ref(),
+            _ => &[],
         })
         .collect();
     assert!(events.iter().any(|event| matches!(event, ScoreboardEvent::Score { owner, objective, score: 42 } if owner == "probe" && objective == "wins")));

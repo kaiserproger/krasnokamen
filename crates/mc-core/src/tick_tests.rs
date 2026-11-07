@@ -6944,6 +6944,100 @@ fn scoreboard_trigger_requires_enable_and_relocks_without_affecting_admin_scores
     assert!(crate::commands::parse("scoreboard players enable Alice probe", false).is_err());
 }
 
+fn seed_large_scoreboard(state: &mut TickState, count: usize) {
+    state.scoreboard.objectives.insert(
+        "bulk".into(),
+        crate::scoreboard::Objective {
+            criteria: "dummy".into(),
+            display_name: "bulk".into(),
+        },
+    );
+    for i in 0..count {
+        state
+            .scoreboard
+            .scores
+            .entry(format!("holder{i:04}"))
+            .or_default()
+            .insert("bulk".into(), crate::scoreboard::Score::default());
+    }
+}
+
+fn assert_bulk_scores(
+    state: &TickState,
+    drains: &[(ConnectionId, Vec<crate::boundary::PlayerChange>)],
+    connection: ConnectionId,
+    count: usize,
+    value: i32,
+) {
+    assert!(
+        state.connections.entity_of(connection).is_some(),
+        "player disconnected"
+    );
+    let changes = &drains
+        .iter()
+        .find(|(id, _)| *id == connection)
+        .expect("outbox")
+        .1;
+    assert!(
+        !changes
+            .iter()
+            .any(|change| matches!(change, crate::boundary::PlayerChange::Disconnect { .. }))
+    );
+    let actual: std::collections::BTreeSet<_> = changes
+        .iter()
+        .flat_map(|change| match change {
+            crate::boundary::PlayerChange::Scoreboard { events } => events.as_ref(),
+            _ => &[],
+        })
+        .filter_map(|event| match event {
+            crate::scoreboard::ScoreboardEvent::Score {
+                owner,
+                objective,
+                score,
+            } if objective == "bulk" && *score == value => Some(owner.clone()),
+            _ => None,
+        })
+        .collect();
+    let expected: std::collections::BTreeSet<_> =
+        (0..count).map(|i| format!("holder{i:04}")).collect();
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn scoreboard_bulk_join_does_not_overflow() {
+    let mut state = test_state();
+    seed_large_scoreboard(&mut state, 600);
+    let (_, drains, _) = run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(9),
+            uuid: uuid::Uuid::new_v4(),
+            name: "Viewer".into(),
+            permission_level: 0,
+        }],
+    );
+    assert_bulk_scores(&state, &drains, ConnectionId(9), 600, 0);
+}
+
+#[test]
+fn scoreboard_bulk_command_does_not_overflow() {
+    let mut state = test_state();
+    join(&mut state, 1, "Alice");
+    join(&mut state, 2, "Bob");
+    seed_large_scoreboard(&mut state, 601);
+    let (_, drains, _) = run_tick(
+        &mut state,
+        &[PlayerInput::Command {
+            connection: ConnectionId(1),
+            command: "scoreboard players set * bulk 7".into(),
+            permission_level: 4,
+        }],
+    );
+    for connection in [ConnectionId(1), ConnectionId(2)] {
+        assert_bulk_scores(&state, &drains, connection, 601, 7);
+    }
+}
+
 #[test]
 fn scoreboard_command_operations_and_join_snapshot_are_authoritative() {
     let (mut state, player, _) = flat_player_fixture();
@@ -6975,9 +7069,9 @@ fn scoreboard_command_operations_and_join_snapshot_are_authoritative() {
         .iter()
         .filter(|(connection, _)| *connection == ConnectionId(9))
         .flat_map(|(_, changes)| changes)
-        .filter_map(|change| match change {
-            crate::boundary::PlayerChange::Scoreboard { event, .. } => Some(event),
-            _ => None,
+        .flat_map(|change| match change {
+            crate::boundary::PlayerChange::Scoreboard { events } => events.as_ref(),
+            _ => &[],
         })
         .collect();
     assert!(events.iter().any(|event| matches!(event, crate::scoreboard::ScoreboardEvent::Display { slot: 1, objective } if objective == "wins")));

@@ -43,11 +43,12 @@ fn feedback(key: &str, difficulty: &str) -> PlayerChange {
 
 fn score(owner: &str, value: i32) -> PlayerChange {
     PlayerChange::Scoreboard {
-        event: ScoreboardEvent::Score {
+        events: vec![ScoreboardEvent::Score {
             owner: owner.into(),
             objective: "oracle".into(),
             score: value,
-        },
+        }]
+        .into(),
     }
 }
 

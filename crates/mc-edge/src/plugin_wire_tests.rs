@@ -99,6 +99,7 @@ enum WireEvent {
     Block(BlockUpdate),
     Ack(BlockChangedAck),
     Disconnect(String),
+    Score(mc_protocol::packets::play::ClientboundSetScore),
 }
 
 struct WireClient {
@@ -386,6 +387,9 @@ impl WireClient {
                         }
                         BlockUpdate::ID => Some(WireEvent::Block(exact(frame.body))),
                         BlockChangedAck::ID => Some(WireEvent::Ack(exact(frame.body))),
+                        mc_protocol::packets::play::ClientboundSetScore::ID => {
+                            Some(WireEvent::Score(exact(frame.body)))
+                        }
                         PlayDisconnect::ID => {
                             let reason = exact::<PlayDisconnect>(frame.body).reason_nbt;
                             Some(WireEvent::Disconnect(format!("{reason:?}")))
@@ -1522,6 +1526,74 @@ async fn start_minimal_server(
     let address = listener.local_addr().unwrap();
     let task = tokio::spawn(serve(listener, server));
     (core, address, task)
+}
+
+fn scoreboard_bulk_real_tcp(seed_before_join: bool) {
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .thread_stack_size(16 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let directory = TestDirectory::new();
+            let (core, address, task) =
+                start_minimal_server(&directory, "scoreboard-wire", |_| {}, |_| {}).await;
+            let _running = RunningCore(Arc::clone(&core));
+            async fn console(core: &Core, text: String) {
+                let (command, done) = mc_core::command_console::ConsoleCommand::new(text);
+                assert!(core.submit(mc_core::boundary::PlayerInput::ConsoleCommand(command)));
+                tokio::time::timeout(DEADLINE, done).await.unwrap().unwrap();
+            }
+            console(&core, "scoreboard objectives add bulk dummy".into()).await;
+            if seed_before_join {
+                for i in 0..601 {
+                    console(&core, format!("scoreboard players set holder{i:04} bulk 0")).await;
+                }
+            }
+            let manifest = mc_loader::LoaderManifest::from_script_bundles(core.plugin_client_bundles()).unwrap();
+            let mut first = WireClient::connect(address, "ScoreWireOne", &manifest).await;
+            async fn scores(client: &mut WireClient, value: i32) {
+                let mut owners = BTreeSet::new();
+                for _ in 0..601 {
+                    let WireEvent::Score(score) = client.matching("bulk score", |event| {
+                        matches!(event, WireEvent::Score(score) if score.objective == "bulk" && score.score == value)
+                    }).await else { unreachable!() };
+                    assert!(owners.insert(score.owner));
+                }
+                assert_eq!(owners, (0..601).map(|i| format!("holder{i:04}")).collect());
+            }
+            if seed_before_join {
+                scores(&mut first, 0).await;
+            }
+            let mut second = WireClient::connect(address, "ScoreWireTwo", &manifest).await;
+            if !seed_before_join {
+                for i in 0..601 {
+                    console(&core, format!("scoreboard players set holder{i:04} bulk 0")).await;
+                }
+                scores(&mut first, 0).await;
+            }
+            scores(&mut second, 0).await;
+            console(&core, "scoreboard players set * bulk 7".into()).await;
+            scores(&mut first, 7).await;
+            scores(&mut second, 7).await;
+            drop(first);
+            drop(second);
+            core.shutdown();
+            task.abort();
+        });
+}
+
+#[test]
+#[ignore = "real TCP server gate; needs the native content cache"]
+fn scoreboard_bulk_real_tcp_join() {
+    scoreboard_bulk_real_tcp(true);
+}
+
+#[test]
+#[ignore = "real TCP server gate; needs the native content cache"]
+fn scoreboard_bulk_real_tcp_live_update() {
+    scoreboard_bulk_real_tcp(false);
 }
 
 #[test]

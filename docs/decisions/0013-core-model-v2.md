@@ -45,7 +45,10 @@ native writer workers handle disk I/O and checkpoint commits. Bounded FIFO
 journal admission waits under pressure; accepted batches are neither dropped
 nor reordered. A dead journal stops the core. Reliable per-player results are
 ordered and bounded; exhaustion disconnects rather than silently discarding
-results. World fanout may reconcile to a newer snapshot. See
+results. Bulk producers such as the scoreboard join snapshot and one scoreboard
+publication send one ordered batch per connection, and the edge queues its
+frames as one item, so a large scoreboard does not hit the bound. World fanout
+may reconcile to a newer snapshot. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
 ## Persistence and recovery

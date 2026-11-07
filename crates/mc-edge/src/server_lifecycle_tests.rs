@@ -1,5 +1,82 @@
 use super::*;
 
+fn bulk_score_changes() -> Vec<mc_core::boundary::PlayerChange> {
+    vec![mc_core::boundary::PlayerChange::Scoreboard {
+        events: (0..601)
+            .map(|i| mc_core::scoreboard::ScoreboardEvent::Score {
+                owner: format!("holder{i:04}"),
+                objective: "bulk".into(),
+                score: 7,
+            })
+            .collect::<Vec<_>>()
+            .into(),
+    }]
+}
+
+fn assert_bulk_frames(bytes: bytes::Bytes) {
+    use mc_protocol::packets::{Packet, play::ClientboundSetScore};
+    let mut bytes = bytes::BytesMut::from(bytes.as_ref());
+    for i in 0..601 {
+        let frame = mc_protocol::frame::try_decode_frame(
+            &mut bytes,
+            mc_protocol::frame::Compression::Threshold(256),
+        )
+        .unwrap()
+        .expect("score frame");
+        assert_eq!(frame.id, ClientboundSetScore::ID);
+        let score = ClientboundSetScore::decode(&mut frame.body.clone()).unwrap();
+        assert_eq!(score.owner, format!("holder{i:04}"));
+        assert_eq!(score.objective, "bulk");
+        assert_eq!(score.score, 7);
+    }
+    assert!(bytes.is_empty());
+}
+
+#[test]
+fn scoreboard_bulk_join_replay_fits_reliable_queue() {
+    let registry = ConnectionRegistry::new();
+    let id = registry.joining_id();
+    let entity = mc_core::boundary::EntityId(1);
+    let mut changes = vec![mc_core::boundary::PlayerChange::Joined {
+        entity,
+        dimension: Default::default(),
+        position: [0.0; 3],
+        yaw: 0.0,
+        pitch: 0.0,
+        game_mode: 0,
+    }];
+    changes.extend(bulk_score_changes());
+    assert!(registry.handles_or_stash(id, &mut changes).is_none());
+    let (reliable_tx, mut reliable_rx) = mpsc::channel(crate::fanout::OUTBOUND_QUEUE_BOUND);
+    let (world_tx, _world_rx) = mpsc::channel(crate::fanout::OUTBOUND_QUEUE_BOUND);
+    let stashed = registry
+        .register(
+            id,
+            ConnectionHandles {
+                reliable_tx,
+                world_tx,
+            },
+        )
+        .unwrap();
+    let mut viewer = crate::plan::ViewerState::new(id, entity, [0.0; 3]);
+    replay_join_tail(&registry, id, stashed, &mut viewer).expect("bulk join replay");
+    assert_bulk_frames(reliable_rx.try_recv().expect("queued join batch"));
+    assert!(reliable_rx.try_recv().is_err());
+}
+
+#[test]
+fn scoreboard_bulk_live_updates_fit_reliable_queue() {
+    let id = ConnectionId(1);
+    let mut viewer = crate::plan::ViewerState::new(id, mc_core::boundary::EntityId(1), [0.0; 3]);
+    let packets = crate::plan::plan_player_changes(&bulk_score_changes(), &mut viewer);
+    let (tx, mut rx) = mpsc::channel(crate::fanout::OUTBOUND_QUEUE_BOUND);
+    for packet in packets {
+        tx.try_send(packet.data).expect("bulk live reliable queue");
+    }
+    assert_bulk_frames(rx.try_recv().expect("queued live batch"));
+    assert!(rx.try_recv().is_err());
+}
+
 #[test]
 fn removed_registration_fails_join_replay_without_panicking() {
     let registry = ConnectionRegistry::new();

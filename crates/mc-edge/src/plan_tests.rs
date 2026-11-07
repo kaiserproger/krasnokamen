@@ -416,20 +416,22 @@ fn scoreboard_objective_sidebar_is_reliable_and_viewer_scoped() {
     use mc_protocol::packets::play::{ClientboundSetDisplayObjective, ClientboundSetObjective};
     let changes = [
         PlayerChange::Scoreboard {
-            event: ScoreboardEvent::Objective {
+            events: vec![ScoreboardEvent::Objective {
                 name: "health".into(),
                 method: 0,
                 objective: Some(Objective {
                     criteria: "health".into(),
                     display_name: "Health".into(),
                 }),
-            },
+            }]
+            .into(),
         },
         PlayerChange::Scoreboard {
-            event: ScoreboardEvent::Display {
+            events: vec![ScoreboardEvent::Display {
                 slot: 1,
                 objective: "health".into(),
-            },
+            }]
+            .into(),
         },
     ];
     let packets = plan_player_changes(&changes, &mut viewer_at(7, [0.0; 3]));
