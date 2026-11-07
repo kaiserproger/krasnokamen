@@ -126,6 +126,17 @@ impl Client {
         self.compression
     }
 
+    /// Raw packet boundary for report-driven version-specific oracle captures.
+    pub async fn write_raw(&mut self, id: i32, body: &[u8]) -> Result<()> {
+        let framed = encode_frame(id, body, self.compression)?;
+        self.stream.write_all(&framed).await?;
+        Ok(())
+    }
+
+    pub fn set_compression(&mut self, compression: Compression) {
+        self.compression = compression;
+    }
+
     pub async fn write_packet<P: Packet>(&mut self, packet: &P) -> Result<()> {
         let mut body = BytesMut::new();
         packet.encode(&mut body)?;
