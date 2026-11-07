@@ -1,7 +1,6 @@
 """Physical creative-inventory echoes of a lossy decorated-pot projection."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +36,7 @@ def run(client: Any, artifact: Path, timeout: float) -> dict[str, Any]:
         steps.check("one_authoritative_fixture_pot", holds(canonical, POT, 1))
         components = canonical["components"]
         steps.check("fixture_outer_custom_name",
-                    json.loads(components["custom_name"]) == {"text": "Protocol Pot"})
+                    components["custom_name"] == "Protocol Pot")
         preserved = components["components"]["preserved_components"]
         decorations = next(row for row in preserved if row["name"] == "minecraft:pot_decorations")
         reader = Reader(bytes(decorations["value"]))
