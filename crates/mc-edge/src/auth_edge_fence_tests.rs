@@ -51,6 +51,8 @@ fn fixture(require_plugin_login: bool) -> (EdgeServer, std::path::PathBuf) {
         loader_required: false,
         lod: None,
         dh: None,
+        computer_processes: Arc::new(tokio::sync::Semaphore::new(4)),
+        operator_updates: tokio::sync::Mutex::new(()),
         screens: Default::default(),
         voice: Default::default(),
     };

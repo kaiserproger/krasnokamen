@@ -87,7 +87,8 @@ async fn computer_bridge_keeps_session_and_passes_input_literally() {
         working_directory: PathBuf::from("/tmp"),
         ..ComputerConfig::default()
     };
-    let mut child = spawn(&cfg).unwrap().unwrap();
+    let permits = Arc::new(Semaphore::new(cfg.max_processes));
+    let mut child = spawn(&cfg, &permits).unwrap().unwrap();
     for text in ["hello agent\n", "$(touch /not-a-command); λ\n"] {
         child.input.write_all(text.as_bytes()).await.unwrap();
         let mut output = vec![0; text.len()];
@@ -97,11 +98,48 @@ async fn computer_bridge_keeps_session_and_passes_input_literally() {
             .unwrap();
         assert_eq!(output, text.as_bytes());
     }
-    child._child.start_kill().unwrap();
-    tokio::time::timeout(Duration::from_secs(2), child._child.wait())
+    drop(child);
+    let permit = tokio::time::timeout(Duration::from_secs(2), permits.acquire())
         .await
         .unwrap()
         .unwrap();
+    drop(permit);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn computer_process_limit_is_shared_and_released() {
+    let cfg = ComputerConfig {
+        command: vec!["/bin/cat".into()],
+        working_directory: PathBuf::from("/tmp"),
+        max_processes: 1,
+        ..ComputerConfig::default()
+    };
+    let permits = Arc::new(Semaphore::new(cfg.max_processes));
+    let mut child = spawn(&cfg, &permits).unwrap();
+    assert!(matches!(spawn(&cfg, &permits), Err(SpawnError::Limit)));
+    // The Open and Close paths both stop/reap before returning a slot.
+    stop_process(&mut child).await.unwrap();
+    child = spawn(&cfg, &permits).unwrap();
+    stop_process(&mut child).await.unwrap();
+    let replacement = spawn(&cfg, &permits).unwrap().unwrap();
+    drop(replacement);
+    let permit = tokio::time::timeout(Duration::from_secs(2), permits.acquire())
+        .await
+        .unwrap()
+        .unwrap();
+    drop(permit);
+    let child = spawn(&cfg, &permits).unwrap().unwrap();
+    drop(child);
+    let echo = ComputerConfig {
+        command: vec![],
+        ..cfg
+    };
+    assert!(
+        spawn(&echo, &Arc::new(Semaphore::new(0)))
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]

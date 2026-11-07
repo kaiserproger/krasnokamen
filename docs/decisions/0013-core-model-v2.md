@@ -57,6 +57,13 @@ frames as one item, so a large scoreboard does not hit the bound. World fanout
 may reconcile to a newer snapshot. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
+Operator changes reserve the whole authoritative input batch before changing
+edge-owned operator state. An async mutex serializes these changes, and the
+reserved snapshot and live permission update are sent without an intervening
+await. Queue saturation therefore waits for capacity rather than polling or
+publishing an older operator snapshot after a newer one. If the core stops
+while waiting, the operator mutation is not applied.
+
 ## Persistence and recovery
 
 Native redb state and the tick WAL are the only serving authority; Anvil is

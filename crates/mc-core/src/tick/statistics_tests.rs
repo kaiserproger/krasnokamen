@@ -3,6 +3,123 @@ use crate::boundary::{EntityId, Hand, PlayerChange};
 use mc_data::statistics::{CustomStat, StatType};
 
 #[test]
+fn pickup_publishes_only_changed_slots_for_active_menu() {
+    for menu in [None, Some(crate::inventory::MenuKind::CraftingTable)] {
+        let (mut state, entity, pos) = flat_player_fixture();
+        let apple = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:apple").unwrap())
+            .unwrap();
+        let player = state.players.get_mut(&entity).unwrap();
+        player.inventory.slots[0] = mc_data::ItemStack::new(apple, 63);
+        if let Some(kind) = menu {
+            player.open = Some(crate::inventory::Menu::new(7, kind));
+        }
+        state.outbox.clear();
+        let dropped =
+            crate::tick::spawn_item_entity(&mut state, pos, mc_data::ItemStack::new(apple, 3));
+        let item = state.entities.slot_of(dropped).unwrap();
+        let collector = state.entities.slot_of(entity).unwrap();
+        state.merge_pickups.push((item, collector, 3));
+        state.commit_merge_effects();
+        let changes = &state.outbox[&ConnectionId(1)];
+        let slots: Vec<_> = changes
+            .iter()
+            .filter_map(|change| match change {
+                PlayerChange::MenuSlot {
+                    window, slot, item, ..
+                } => Some((*window, *slot, item.as_ref().map(|stack| stack.count))),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            slots,
+            if menu.is_some() {
+                vec![(7, 37, Some(64)), (7, 38, Some(2))]
+            } else {
+                vec![(0, 36, Some(64)), (0, 37, Some(2))]
+            }
+        );
+        assert!(
+            !changes
+                .iter()
+                .any(|change| matches!(change, PlayerChange::MenuContents { .. }))
+        );
+    }
+}
+
+#[test]
+fn pickup_into_offhand_syncs_inventory_with_or_without_open_chest() {
+    for chest in [false, true] {
+        let (mut state, entity, pos) = flat_player_fixture();
+        let apple = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:apple").unwrap())
+            .unwrap();
+        let player = state.players.get_mut(&entity).unwrap();
+        player.inventory.slots[crate::inventory::OFF_HAND] = mc_data::ItemStack::new(apple, 63);
+        if chest {
+            player.open = Some(crate::inventory::Menu::new(
+                7,
+                crate::inventory::MenuKind::Chest { rows: 3 },
+            ));
+        }
+        state.outbox.clear();
+        let dropped =
+            crate::tick::spawn_item_entity(&mut state, pos, mc_data::ItemStack::new(apple, 1));
+        let item = state.entities.slot_of(dropped).unwrap();
+        let collector = state.entities.slot_of(entity).unwrap();
+        state.merge_pickups.push((item, collector, 1));
+        state.commit_merge_effects();
+        let changes = &state.outbox[&ConnectionId(1)];
+        if chest {
+            assert!(changes.iter().any(|change| matches!(change,
+                PlayerChange::MenuContents { window: 0, slots, .. }
+                if slots[45].as_ref().is_some_and(|stack| stack.count == 64))));
+        } else {
+            assert!(changes.iter().any(|change| matches!(change,
+                PlayerChange::MenuSlot { window: 0, slot: 45, item: Some(stack), .. }
+                if stack.count == 64)));
+            assert!(
+                !changes
+                    .iter()
+                    .any(|change| matches!(change, PlayerChange::MenuContents { .. }))
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "pickup flood timing; run in the perf lane"]
+fn pickup_flood_micro() {
+    let (mut state, entity, pos) = flat_player_fixture();
+    let apple = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:apple").unwrap())
+        .unwrap();
+    let collector = state.entities.slot_of(entity).unwrap();
+    let count: usize = std::env::var("PICKUP_COUNT")
+        .map(|value| value.parse().expect("PICKUP_COUNT must be an integer"))
+        .unwrap_or(10_000);
+    let start = std::time::Instant::now();
+    for _ in 0..count {
+        state.players.get_mut(&entity).unwrap().inventory.slots[0] = mc_data::ItemStack::EMPTY;
+        let dropped =
+            crate::tick::spawn_item_entity(&mut state, pos, mc_data::ItemStack::new(apple, 1));
+        let item = state.entities.slot_of(dropped).unwrap();
+        state.merge_pickups.push((item, collector, 1));
+        state.commit_merge_effects();
+        state.outbox.clear();
+    }
+    println!(
+        "PICKUP_FLOOD count={count} total_ns={}",
+        start.elapsed().as_nanos()
+    );
+}
+#[test]
 fn statistics_movement_uses_accepted_centimeters_and_modes() {
     let (mut state, entity, pos) = flat_player_fixture();
     let move_to = |position| PlayerInput::Move {

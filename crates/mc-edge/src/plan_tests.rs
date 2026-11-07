@@ -3704,3 +3704,43 @@ fn filled_map_slot_update_is_planned_for_the_client() {
         );
     });
 }
+
+#[test]
+#[ignore = "wire size measurement"]
+fn pickup_inventory_wire_sizes() {
+    with_cache(|_| {
+        let id = ConnectionId(3);
+        let apple = mc_data::items::solaris_required_items()
+            .id_of(&mc_data::Identifier::parse("minecraft:apple").unwrap())
+            .unwrap();
+        let stack = mc_data::ItemStack::new(apple, 1);
+        for filled in [1, 36] {
+            let mut slots = vec![None; 46];
+            for item in slots.iter_mut().skip(9).take(filled) {
+                *item = Some(stack.clone());
+            }
+            let full = PlayerChange::MenuContents {
+                window: 0,
+                state_id: 1,
+                slots,
+                cursor: None,
+            };
+            let delta = PlayerChange::MenuSlot {
+                window: 0,
+                state_id: 1,
+                slot: 36,
+                item: Some(stack.clone()),
+            };
+            let mut viewer = ViewerState::new(id, EntityId(41), [8.0, 64.0, 8.0]);
+            let full_bytes: usize = plan_player_changes(&[full], &mut viewer)
+                .iter()
+                .map(|packet| packet.data.len())
+                .sum();
+            let slot_bytes: usize = plan_player_changes(&[delta], &mut viewer)
+                .iter()
+                .map(|packet| packet.data.len())
+                .sum();
+            println!("PICKUP_WIRE filled={filled} full_bytes={full_bytes} slot_bytes={slot_bytes}");
+        }
+    });
+}

@@ -9,7 +9,7 @@ use serde::Deserialize;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     process::{Child, ChildStdin, ChildStdout},
-    sync::mpsc,
+    sync::{OwnedSemaphorePermit, Semaphore, mpsc},
 };
 
 use crate::server::EdgeServer;
@@ -27,6 +27,8 @@ pub struct ComputerConfig {
     /// Empty selects built-in echo. Otherwise executable + literal arguments.
     pub command: Vec<String>,
     pub working_directory: PathBuf,
+    /// Maximum concurrent direct bridge processes across the server.
+    pub max_processes: usize,
 }
 impl Default for ComputerConfig {
     fn default() -> Self {
@@ -35,11 +37,16 @@ impl Default for ComputerConfig {
             local_only: true,
             command: Vec::new(),
             working_directory: PathBuf::from("."),
+            max_processes: 4,
         }
     }
 }
 impl ComputerConfig {
     pub(crate) fn validate(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.max_processes <= Semaphore::MAX_PERMITS,
+            "computer.max_processes exceeds the semaphore limit"
+        );
         if self.enabled && !self.command.is_empty() {
             anyhow::ensure!(
                 std::path::Path::new(&self.command[0]).is_absolute(),
@@ -181,14 +188,57 @@ fn target_dimension(
 }
 
 struct Process {
-    _child: Child,
+    child: Option<Child>,
     input: ChildStdin,
     output: ChildStdout,
+    permit: Option<OwnedSemaphorePermit>,
 }
-fn spawn(cfg: &ComputerConfig) -> anyhow::Result<Option<Process>> {
+
+impl Process {
+    async fn stop(&mut self) -> std::io::Result<()> {
+        let child = self.child.as_mut().expect("process child");
+        let _ = child.start_kill();
+        child.wait().await?;
+        self.child.take();
+        self.permit.take();
+        Ok(())
+    }
+}
+
+async fn stop_process(process: &mut Option<Process>) -> std::io::Result<()> {
+    if let Some(mut child) = process.take() {
+        child.stop().await?;
+    }
+    Ok(())
+}
+
+impl Drop for Process {
+    fn drop(&mut self) {
+        let Some(mut child) = self.child.take() else {
+            return;
+        };
+        let permit = self.permit.take().expect("process permit");
+        let _ = child.start_kill();
+        tokio::spawn(async move {
+            let _permit = permit;
+            let _ = child.wait().await;
+        });
+    }
+}
+
+#[derive(Debug)]
+enum SpawnError {
+    Limit,
+    Launch(std::io::Error),
+}
+
+fn spawn(cfg: &ComputerConfig, permits: &Arc<Semaphore>) -> Result<Option<Process>, SpawnError> {
     let Some(program) = cfg.command.first() else {
         return Ok(None);
     };
+    let permit = Arc::clone(permits)
+        .try_acquire_owned()
+        .map_err(|_| SpawnError::Limit)?;
     let mut child = tokio::process::Command::new(program)
         .args(&cfg.command[1..])
         .current_dir(&cfg.working_directory)
@@ -196,11 +246,13 @@ fn spawn(cfg: &ComputerConfig) -> anyhow::Result<Option<Process>> {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true)
-        .spawn()?;
+        .spawn()
+        .map_err(SpawnError::Launch)?;
     Ok(Some(Process {
         input: child.stdin.take().expect("piped stdin"),
         output: child.stdout.take().expect("piped stdout"),
-        _child: child,
+        child: Some(child),
+        permit: Some(permit),
     }))
 }
 
@@ -289,14 +341,14 @@ async fn run(
                         if let Some(current) = target
                             && (!allowed(server, id, peer) || target_dimension(&tick, entity, current.at, carrier) != Some(current.dimension))
                         {
-                            process = None; target = None; pending_utf8.clear();
+                            stop_process(&mut process).await?; target = None; pending_utf8.clear();
                             reply(server, id, current.session, 2, "Computer access ended (permission, block or reach changed).")?;
                         }
                         latest = Some(tick);
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
                         latest = None;
-                        process = None;
+                        stop_process(&mut process).await?;
                         pending_utf8.clear();
                         if let Some(current) = target.take() {
                             reply(server, id, current.session, 2, "Computer closed: native state publication was missed.")?;
@@ -309,24 +361,28 @@ async fn run(
                 let Some(request) = request else { return Ok(()); };
                 let session = request.session();
                 if !allowed(server, id, peer) {
-                    process = None; target = None; pending_utf8.clear();
+                    stop_process(&mut process).await?; target = None; pending_utf8.clear();
                     reply(server, id, session, 2, "Computer requires an unlocked level-4 operator and an allowed authenticated connection.")?;
                     continue;
                 }
                 match request {
                     Request::Open { at, .. } => {
-                        process = None; target = None; pending_utf8.clear();
+                        stop_process(&mut process).await?;
+                        target = None; pending_utf8.clear();
                         let dimension = latest.as_ref().and_then(|tick| target_dimension(tick, entity, at, carrier));
                         let Some(dimension) = dimension else {
                             reply(server, id, session, 2, "Use a nearby loaded iron block; native player state must be available.")?;
                             continue;
                         };
-                        match spawn(&server.cfg.computer) {
+                        match spawn(&server.cfg.computer, &server.computer_processes) {
                             Ok(child) => {
                                 process = child; target = Some(Target { session, at, dimension });
                                 reply(server, id, session, 0, "Computer connected. Plain text lines; Escape closes the process.")?;
                             }
-                            Err(error) => {
+                            Err(SpawnError::Limit) => {
+                                reply(server, id, session, 2, "Computer process limit reached.")?;
+                            }
+                            Err(SpawnError::Launch(error)) => {
                                 tracing::warn!(%error, "computer bridge launch failed");
                                 reply(server, id, session, 2, "Configured bridge could not start; consult the server operator.")?;
                             }
@@ -335,7 +391,7 @@ async fn run(
                     Request::Input { text, .. } => {
                         let valid = target.is_some_and(|t| t.session == session && latest.as_ref().and_then(|tick| target_dimension(tick, entity, t.at, carrier)) == Some(t.dimension));
                         if !valid {
-                            process = None; target = None; pending_utf8.clear();
+                            stop_process(&mut process).await?; target = None; pending_utf8.clear();
                             reply(server, id, session, 2, "No active computer session.")?;
                             continue;
                         }
@@ -345,7 +401,7 @@ async fn run(
                                 child.input.write_all(b"\n").await
                             }).await;
                             if !matches!(sent, Ok(Ok(()))) {
-                                process = None; target = None; pending_utf8.clear();
+                                stop_process(&mut process).await?; target = None; pending_utf8.clear();
                                 reply(server, id, session, 2, "Bridge input closed or timed out.")?;
                             }
                         } else {
@@ -354,7 +410,7 @@ async fn run(
                     }
                     Request::Close { .. } => {
                         if target.is_some_and(|t| t.session == session) {
-                            process = None; target = None; pending_utf8.clear();
+                            stop_process(&mut process).await?; target = None; pending_utf8.clear();
                             reply(server, id, session, 2, "Computer closed.")?;
                         }
                     }
@@ -363,7 +419,7 @@ async fn run(
             output = async { match &mut process { Some(child) => child.output.read(&mut buffer).await, None => std::future::pending().await } } => {
                 let Some(current) = target else { continue; };
                 if !allowed(server, id, peer) {
-                    process = None; target = None; pending_utf8.clear();
+                    stop_process(&mut process).await?; target = None; pending_utf8.clear();
                     reply(server, id, current.session, 2, "Computer permission revoked.")?;
                     continue;
                 }
@@ -379,7 +435,7 @@ async fn run(
                     }
                     _ => {
                         if !pending_utf8.is_empty() { reply(server, id, current.session, 1, &String::from_utf8_lossy(&pending_utf8))?; }
-                        process = None; target = None; pending_utf8.clear();
+                        stop_process(&mut process).await?; target = None; pending_utf8.clear();
                         reply(server, id, current.session, 2, "Bridge exited or closed stdout.")?;
                     }
                 }

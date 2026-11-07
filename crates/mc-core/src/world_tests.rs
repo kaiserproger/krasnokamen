@@ -1466,6 +1466,34 @@ fn physics_reader_matches_direct_reads_across_columns_and_overlay() {
 }
 
 #[test]
+#[ignore = "dense-herd reader microbenchmark; run in perf lane"]
+fn physics_reader_dense_herd_micro() {
+    let mut world = test_world(None);
+    world.ensure_blocking(&wants(&[mc_world::ChunkPos { x: 0, z: 0 }]));
+    let entities = 100_000;
+    let mut expected = None;
+    for shared in [true, false, true, false] {
+        let reader = world.physics_reader();
+        let start = std::time::Instant::now();
+        let mut sum = 0_u64;
+        for index in 0..entities {
+            let fresh = world.physics_reader();
+            let reader = if shared { &reader } else { &fresh };
+            let x = (index % 14 + 1) as i32;
+            let z = (index / 14 % 14 + 1) as i32;
+            for (dx, y, dz) in [(0, 63, 0), (0, 64, 0), (1, 64, 0), (0, 65, 1)] {
+                sum = sum.wrapping_add(u64::from(reader.block_at(x + dx, y, z + dz).unwrap()));
+            }
+        }
+        let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+        assert_eq!(*expected.get_or_insert(sum), sum);
+        println!(
+            "PHYSICS_READER shared={shared} entities={entities} ms={elapsed:.3} checksum={sum}"
+        );
+    }
+}
+
+#[test]
 fn physics_reader_section_cache_survives_transitions_and_vertical_extremes() {
     let mut world = test_world(None);
     world.ensure_blocking(&wants(&[

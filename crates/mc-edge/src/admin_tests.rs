@@ -44,6 +44,8 @@ fn fixture() -> (EdgeServer, std::path::PathBuf) {
         loader_required: false,
         lod: None,
         dh: None,
+        computer_processes: Arc::new(tokio::sync::Semaphore::new(4)),
+        operator_updates: tokio::sync::Mutex::new(()),
         screens: Default::default(),
         voice: Default::default(),
     };
@@ -92,6 +94,34 @@ async fn receive(rx: &mut mpsc::Receiver<bytes::Bytes>) -> mc_protocol::frame::R
     let mut connection = crate::connection::Connection::new(reader);
     connection.set_compression(mc_protocol::frame::Compression::Threshold(256));
     connection.read_frame_play().await.unwrap()
+}
+
+#[tokio::test]
+async fn operator_updates_wait_for_capacity_before_mutating() {
+    use std::future::Future;
+    let (server, dir) = fixture();
+    let (operator, _operator_rx) = register(&server, "Operator", true);
+    let (_alex, _alex_rx) = register(&server, "Alex", false);
+    let uuid = crate::crypto::offline_uuid("Alex");
+    let held = server.hub.reserve_inputs(4096).await.unwrap();
+    let command = server.handle_admin_command(operator, "op Alex");
+    tokio::pin!(command);
+    let deop = server.handle_admin_command(operator, "deop Alex");
+    tokio::pin!(deop);
+    std::future::poll_fn(|cx| {
+        assert!(command.as_mut().poll(cx).is_pending());
+        assert!(deop.as_mut().poll(cx).is_pending());
+        std::task::Poll::Ready(())
+    })
+    .await;
+    assert_eq!(server.admin.level(uuid), 0);
+    drop(held);
+    assert!(command.await.unwrap());
+    assert_eq!(server.admin.level(uuid), 4);
+    assert!(deop.await.unwrap());
+    assert_eq!(server.admin.level(uuid), 0);
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[tokio::test]

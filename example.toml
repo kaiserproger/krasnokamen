@@ -166,6 +166,8 @@ range_blocks = 48
 # Right-click iron blocks with the explicitly enabled Fabric computer client.
 # Level-4 operators only. Never expose a privileged host shell.
 enabled = false
+# Maximum simultaneously running direct bridge processes; zero disables spawning.
+max_processes = 4
 local_only = true
 # Empty = built-in echo. Use a sandboxed, line-oriented agent adapter to opt in:
 command = []

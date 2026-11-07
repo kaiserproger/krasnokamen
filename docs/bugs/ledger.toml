@@ -3496,3 +3496,36 @@ status = "open"
 source = "Same RC5 Windows VM smoke as SP-START-TIMEOUT-SLOW-MACHINE (Play #3); the session was stopped without seeing the overlay clear. Software rendering may be the whole cause."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "CORE-PICKUP-FULL-INVENTORY"
+title = "Every successful pickup republishes the full player inventory instead of the changed active-menu slots"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "External critique of 4d32f28, crates/mc-core/src/tick/merge.rs pickup commit"
+repro = "source"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "EDGE-OP-QUEUE-POLL"
+title = "Operator permission updates poll and clone while the authoritative queue is full"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "External critique of 4d32f28, crates/mc-edge/src/server.rs op/deop admission"
+repro = "source"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "EDGE-COMPUTER-PROCESS-UNCAPPED"
+title = "Enabled computer bridge has no server-wide concurrent process cap"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "External critique of 4d32f28, crates/mc-edge/src/computer.rs bridge launch"
+repro = "source"
+regression = []
+failing_first = "not recorded"

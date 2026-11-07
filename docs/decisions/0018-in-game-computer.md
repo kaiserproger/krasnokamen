@@ -38,8 +38,12 @@ input is never interpolated into argv or a shell command. `working_directory`
 is explicit. To use an agent CLI, configure its line-oriented adapter inside an
 OS/container sandbox under a dedicated unprivileged account. Solaris does not
 claim that spawning a child automatically creates a sandbox. Do not point it at
-a privileged host shell. Child stderr is not disclosed. Session limits and pipe
-backpressure are bounded; close/disconnect/revocation kills the direct child.
+a privileged host shell. Child stderr is not disclosed. The server-wide
+`max_processes` cap defaults to four direct bridge processes (zero disables
+process spawning; echo does not consume a slot). A slot is held until the
+direct child has exited; capacity exhaustion refuses the open. This is not a
+CPU, memory, or descendant-process limit: enforce those in the sandbox.
+Pipe backpressure is bounded; close/disconnect/revocation kills the direct child.
 Sandbox launchers must supervise/reap their own descendants. No transcript or
 process state is persisted. A block removed, dimension change, loss of reach,
 auth lock or deop closes the session on native publication.

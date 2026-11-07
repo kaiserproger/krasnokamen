@@ -772,7 +772,13 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
         ("anti_xray", &["overworld", "nether"]),
         (
             "computer",
-            &["enabled", "local_only", "command", "working_directory"],
+            &[
+                "enabled",
+                "local_only",
+                "command",
+                "working_directory",
+                "max_processes",
+            ],
         ),
         ("voice", &["enabled", "range_blocks"]),
         (

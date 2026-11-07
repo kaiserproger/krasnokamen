@@ -10,7 +10,9 @@ use mc_data::statistics::{CustomStat, StatType};
 
 use crate::boundary::{ClickMode, ConnectionId, Hand, PlayerChange};
 use crate::commands::{self, Command, GameMode};
-use crate::inventory::{ClickOutcome, ItemRules, Menu, MenuKind, OFF_HAND, PlayerInventory};
+use crate::inventory::{
+    ClickOutcome, ItemRules, Menu, MenuKind, OFF_HAND, PlayerInventory, SlotRef,
+};
 use crate::survival::Vitals;
 
 pub(crate) use reservations::NativeToolWearPlan;
@@ -1484,6 +1486,29 @@ impl PlayerState {
             .into_iter()
             .map(|(slot, item)| slot_change(menu, slot, &item))
             .collect()
+    }
+
+    /// Publish only changed pickup slots visible in the active menu.
+    pub(crate) fn pickup_changes(&mut self, changed: u64) -> Vec<PlayerChange> {
+        let offhand_needs_image = self.open.is_some() && changed & (1 << OFF_HAND) != 0;
+        let mut changes = Vec::new();
+        let menu = self.open.as_mut().unwrap_or(&mut self.inventory_menu);
+        for slot in 0..menu.kind.slot_count() {
+            let Some(SlotRef::Inventory(index)) = menu.kind.slot(slot) else {
+                continue;
+            };
+            if changed & (1 << index) == 0 {
+                continue;
+            }
+            if changes.is_empty() {
+                menu.state_id = (menu.state_id + 1) & 0x7FFF;
+            }
+            changes.push(slot_change(menu, slot, &self.inventory.slots[index]));
+        }
+        if offhand_needs_image {
+            changes.push(self.inventory_contents());
+        }
+        changes
     }
 
     /// Re-image this viewer's open container menu against the authoritative

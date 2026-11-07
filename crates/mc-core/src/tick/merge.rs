@@ -706,11 +706,15 @@ impl TickState {
                 let rules = self.registry.item_rules();
                 let mut moving = stack.full_stack();
                 let before = moving.count;
-                player.inventory.add(&rules, &mut moving);
+                let mut changed = 0_u64;
+                player
+                    .inventory
+                    .add_tracking(&rules, &mut moving, |slot| changed |= 1 << slot);
                 let taken = before - moving.count;
                 if taken == 0 {
                     continue;
                 }
+                let slot_changes = player.pickup_changes(changed);
                 if taken > 0 {
                     player
                         .statistics
@@ -750,12 +754,10 @@ impl TickState {
                         Some(collector_id),
                     );
                 }
-                // Slot sync for the collector's inventory.
-                if let Some(connection) = self.connections.by_entity.get(&collector_id).copied()
-                    && let Some(player) = self.players.get(&collector_id)
-                {
-                    let burst = player.inventory_contents();
-                    self.push_player(connection, burst);
+                if let Some(connection) = self.connections.by_entity.get(&collector_id).copied() {
+                    for change in slot_changes {
+                        self.push_player(connection, change);
+                    }
                 }
             }
             // No inventory (mob collector or despawned slot): the entity is

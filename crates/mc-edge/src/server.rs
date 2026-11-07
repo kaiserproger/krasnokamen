@@ -75,10 +75,6 @@ use pump::*;
 /// Next-connection-id counter start (1-based; 0 is reserved as "none").
 const FIRST_CONNECTION_ID: u64 = 1;
 
-/// How many consecutive `submit() == false` sheds before the connection is
-/// dropped for backpressure (prevents one wedged client spinning forever).
-const MAX_SUBMIT_SHEDS: u32 = 64;
-
 /// Per-Play-packet-id token buckets. Paper's packet limiter is permissive for
 /// normal clients; these defaults retain that headroom while bounding one
 /// packet type independently of all other client traffic.
@@ -282,6 +278,8 @@ pub struct EdgeServer {
     pub(crate) dh: Option<Arc<crate::dh::Service>>,
     /// `solaris:screen` relay (ADR 0018 "Screen sharing").
     pub(crate) screens: crate::screen_service::Service,
+    operator_updates: tokio::sync::Mutex<()>,
+    pub(crate) computer_processes: Arc<tokio::sync::Semaphore>,
     /// `solaris:voice` proximity relay (ADR 0019).
     pub(crate) voice: crate::voice_service::Service,
 }
@@ -432,6 +430,7 @@ impl EdgeServer {
                 crate::dh::Service::new(&hub, &cfg, workers).map(Arc::new)
             })
             .transpose()?;
+        let computer_processes = Arc::new(tokio::sync::Semaphore::new(cfg.computer.max_processes));
         let legacy = crate::legacy::Profile::discover(&data);
         Ok(Self {
             admin,
@@ -447,6 +446,8 @@ impl EdgeServer {
             loader_required,
             lod,
             dh,
+            operator_updates: tokio::sync::Mutex::new(()),
+            computer_processes,
             screens: Default::default(),
             voice,
             recipes,
@@ -1021,161 +1022,149 @@ impl EdgeServer {
             }
             return Ok(true);
         }
-        let result =
-            if root == "ban-ip" || root == "pardon-ip" {
-                let valid_word = target.bytes().all(|byte| {
-                    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'+' | b'.' | b'_')
-                });
-                let ip = if valid_word {
-                    target
-                        .parse::<std::net::Ipv4Addr>()
-                        .ok()
-                        .map(std::net::IpAddr::V4)
-                        .or_else(|| {
-                            if root == "ban-ip" {
-                                live.as_ref().map(|session| session.3)
-                            } else {
-                                None
-                            }
-                        })
-                } else {
-                    None
-                };
-                if let Some(ip) = ip {
-                    let ip_text = ip.to_string();
-                    let already_banned = self.admin.bans().1.iter().any(|entry| entry == &ip_text);
-                    if already_banned == (root == "ban-ip") {
-                        self.feedback(id, "Command failed: no applicable IP address")?;
-                        return Ok(true);
-                    }
-                    let result = self.admin.ban_ip(
-                        &ip_text,
-                        &source,
-                        if reason.is_empty() {
-                            "Banned by an operator."
+        let result = if root == "ban-ip" || root == "pardon-ip" {
+            let valid_word = target.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'+' | b'.' | b'_')
+            });
+            let ip = if valid_word {
+                target
+                    .parse::<std::net::Ipv4Addr>()
+                    .ok()
+                    .map(std::net::IpAddr::V4)
+                    .or_else(|| {
+                        if root == "ban-ip" {
+                            live.as_ref().map(|session| session.3)
                         } else {
-                            &reason
-                        },
-                        root == "ban-ip",
-                    );
-                    if result.is_ok() && root == "ban-ip" {
-                        for (other, _) in self.connections.snapshot() {
-                            if self.admin.has_ip(other, ip) {
-                                self.kick(
+                            None
+                        }
+                    })
+            } else {
+                None
+            };
+            if let Some(ip) = ip {
+                let ip_text = ip.to_string();
+                let already_banned = self.admin.bans().1.iter().any(|entry| entry == &ip_text);
+                if already_banned == (root == "ban-ip") {
+                    self.feedback(id, "Command failed: no applicable IP address")?;
+                    return Ok(true);
+                }
+                let result = self.admin.ban_ip(
+                    &ip_text,
+                    &source,
+                    if reason.is_empty() {
+                        "Banned by an operator."
+                    } else {
+                        &reason
+                    },
+                    root == "ban-ip",
+                );
+                if result.is_ok() && root == "ban-ip" {
+                    for (other, _) in self.connections.snapshot() {
+                        if self.admin.has_ip(other, ip) {
+                            self.kick(
                                 other,
                                 serde_json::json!({"translate":"multiplayer.disconnect.ip_banned"}),
                             )?;
-                            }
                         }
                     }
-                    result
-                } else {
-                    self.feedback(id, "Invalid IP address")?;
-                    return Ok(true);
                 }
+                result
             } else {
-                // A locked session never reaches here: the fence above
-                // returns `Ok(false)`. Username targeting stays as-is so
-                // unlocked operators and the console can manage offline-mode
-                // and not-yet-joined names.
-                let profile = live
-                    .as_ref()
-                    .map(|s| (s.1, s.2.clone()))
-                    .or_else(|| self.admin.profile(target))
-                    .or_else(|| {
-                        (!self.cfg.auth.online_mode)
-                            .then(|| (crate::crypto::offline_uuid(target), target.into()))
-                    });
-                let Some((uuid, name)) = profile else {
-                    self.feedback(id, "Unknown player")?;
-                    return Ok(true);
-                };
-                match root {
-                    "op" | "deop" => {
-                        let result = self.admin.set_op(uuid, &name, root == "op");
-                        if result.is_ok() {
-                            let snapshot = PlayerInput::SpawnProtectionOperators {
+                self.feedback(id, "Invalid IP address")?;
+                return Ok(true);
+            }
+        } else {
+            // A locked session never reaches here: the fence above
+            // returns `Ok(false)`. Username targeting stays as-is so
+            // unlocked operators and the console can manage offline-mode
+            // and not-yet-joined names.
+            let profile = live
+                .as_ref()
+                .map(|s| (s.1, s.2.clone()))
+                .or_else(|| self.admin.profile(target))
+                .or_else(|| {
+                    (!self.cfg.auth.online_mode)
+                        .then(|| (crate::crypto::offline_uuid(target), target.into()))
+                });
+            let Some((uuid, name)) = profile else {
+                self.feedback(id, "Unknown player")?;
+                return Ok(true);
+            };
+            match root {
+                "op" | "deop" => {
+                    let _guard = self.operator_updates.lock().await;
+                    let mut permits = self.hub.reserve_inputs(2).await.map_err(|_| {
+                        anyhow::anyhow!("authoritative operator update queue stopped")
+                    })?;
+                    let result = self.admin.set_op(uuid, &name, root == "op");
+                    if result.is_ok() {
+                        permits.next().expect("reserved operator snapshot").send(
+                            PlayerInput::SpawnProtectionOperators {
                                 operators: self.admin.operator_ids(),
-                            };
-                            let mut sheds = 0;
-                            while !self.hub.submit(snapshot.clone()) {
-                                sheds += 1;
-                                anyhow::ensure!(
-                                    sheds < MAX_SUBMIT_SHEDS,
-                                    "spawn protection operator snapshot queue is full"
-                                );
-                                tokio::task::yield_now().await;
-                            }
-                        }
-                        if result.is_ok()
-                            && let Some((other, _, _, _)) = live
-                        {
-                            let permission = PlayerInput::PermissionLevel {
+                            },
+                        );
+                    }
+                    if result.is_ok()
+                        && let Some((other, _, _, _)) =
+                            self.admin.find(target).filter(|entry| entry.1 == uuid)
+                    {
+                        permits.next().expect("reserved permission update").send(
+                            PlayerInput::PermissionLevel {
                                 connection: other,
                                 level: self.admin.level(uuid),
-                            };
-                            let mut permission_sheds = 0;
-                            while !self.hub.submit(permission.clone()) {
-                                permission_sheds += 1;
-                                if permission_sheds >= MAX_SUBMIT_SHEDS {
-                                    self.kick(other, serde_json::json!({
-                                    "text": "Authoritative permission update admission failed"
-                                }))?;
-                                    anyhow::bail!("authoritative permission update queue is full");
-                                }
-                                tokio::task::yield_now().await;
-                            }
-                            self.send(
-                                other,
-                                &crate::command_tree::tree(
-                                    self.admin.level(uuid),
-                                    self.hub.plugin_commands(),
-                                ),
-                            )?;
-                        }
-                        result
+                            },
+                        );
+                        self.send(
+                            other,
+                            &crate::command_tree::tree(
+                                self.admin.level(uuid),
+                                self.hub.plugin_commands(),
+                            ),
+                        )?;
                     }
-                    "mute" | "unmute" => {
-                        let result = self.admin.mute_player(
-                            uuid,
-                            &name,
-                            &source,
+                    result
+                }
+                "mute" | "unmute" => {
+                    let result = self.admin.mute_player(
+                        uuid,
+                        &name,
+                        &source,
+                        if reason.is_empty() {
+                            "Muted by an operator."
+                        } else {
+                            &reason
+                        },
+                        duration,
+                        root == "mute",
+                    );
+                    if result.is_ok()
+                        && root == "mute"
+                        && let Some((other, _, _, _)) = live
+                    {
+                        self.feedback(other, "You have been muted.")?;
+                    }
+                    result
+                }
+                "warn" => {
+                    let Some((other, _, _, _)) = live else {
+                        self.feedback(id, "No player was found")?;
+                        return Ok(true);
+                    };
+                    self.feedback(
+                        other,
+                        &format!(
+                            "[Warned] {}",
                             if reason.is_empty() {
-                                "Muted by an operator."
+                                "Follow the server rules."
                             } else {
                                 &reason
-                            },
-                            duration,
-                            root == "mute",
-                        );
-                        if result.is_ok()
-                            && root == "mute"
-                            && let Some((other, _, _, _)) = live
-                        {
-                            self.feedback(other, "You have been muted.")?;
-                        }
-                        result
-                    }
-                    "warn" => {
-                        let Some((other, _, _, _)) = live else {
-                            self.feedback(id, "No player was found")?;
-                            return Ok(true);
-                        };
-                        self.feedback(
-                            other,
-                            &format!(
-                                "[Warned] {}",
-                                if reason.is_empty() {
-                                    "Follow the server rules."
-                                } else {
-                                    &reason
-                                }
-                            ),
-                        )
-                    }
-                    _ => unreachable!(),
+                            }
+                        ),
+                    )
                 }
-            };
+                _ => unreachable!(),
+            }
+        };
         match result {
             Ok(()) => {
                 let expiry = match duration {

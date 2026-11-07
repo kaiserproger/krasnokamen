@@ -162,6 +162,15 @@ impl PlayerInventory {
     /// hand, then 0-35), else fill the first empty slot of 0-35; repeat while
     /// it makes progress. What does not fit stays in `stack`.
     pub fn add(&mut self, rules: &ItemRules<'_>, stack: &mut ItemStack) {
+        self.add_tracking(rules, stack, |_| {});
+    }
+
+    pub(crate) fn add_tracking(
+        &mut self,
+        rules: &ItemRules<'_>,
+        stack: &mut ItemStack,
+        mut changed: impl FnMut(usize),
+    ) {
         while !stack.is_empty() {
             let before = stack.count;
             let max = rules.max_stack(stack).min(CONTAINER_MAX_STACK);
@@ -183,6 +192,7 @@ impl PlayerInventory {
             if stack.count == before {
                 return;
             }
+            changed(index);
         }
         *stack = ItemStack::EMPTY;
     }

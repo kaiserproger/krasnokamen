@@ -970,6 +970,17 @@ impl Core {
             }
         }
     }
+    /// Reserve a batch before changing edge-owned operator state.
+    /// Waiting is push-woken and cancellation leaves the state unchanged.
+    pub async fn reserve_inputs(
+        &self,
+        count: usize,
+    ) -> Result<
+        tokio::sync::mpsc::PermitIterator<'_, PlayerInput>,
+        tokio::sync::mpsc::error::SendError<()>,
+    > {
+        self.inner.input_tx.reserve_many(count).await
+    }
 
     /// Subscribe to tick outputs. Bounded broadcast; laggards see `Lagged`
     /// and skip to the latest snapshot (world state is skippable). After the

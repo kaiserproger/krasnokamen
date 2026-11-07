@@ -778,12 +778,20 @@ fn parallel_row_prep_matches_the_serial_prep_including_rare_fixups() {
 }
 
 #[test]
-#[ignore = "algorithm-level release timing; requires Main's exclusive perf GO"]
+#[ignore = "algorithm-level release timing; run in the perf lane"]
 fn parallel_row_prep_algorithm_micro() {
-    const ROWS: usize = 100_000;
-    const ITERATIONS: usize = 20;
+    let rows: usize = std::env::var("PREP_ROWS")
+        .map(|value| value.parse().expect("PREP_ROWS must be an integer"))
+        .unwrap_or(100_000);
+    let iterations: usize = std::env::var("PREP_ITERATIONS")
+        .map(|value| value.parse().expect("PREP_ITERATIONS must be an integer"))
+        .unwrap_or(20);
+    println!(
+        "PREP_MICRO size_of_read_row={}",
+        std::mem::size_of::<ReadRow>()
+    );
     let (mut state, _) = resting_cow();
-    while state.entities.len() < ROWS {
+    while state.entities.len() < rows {
         let index = state.entities.len();
         let id = state.spawn_mob(
             state.registry.cow_type_id,
@@ -794,7 +802,7 @@ fn parallel_row_prep_algorithm_micro() {
         state.entities.set_vel(slot, [0.0, -0.08, 0.0]);
     }
     state.entities.prepare_motion_hints(&state.registry);
-    let periods: Vec<u8> = (0..ROWS).map(|index| [1, 2, 4][index % 3]).collect();
+    let periods: Vec<u8> = (0..rows).map(|index| [1, 2, 4][index % 3]).collect();
     let env = PrepEnv {
         targets_empty: true,
         villagers_empty: true,
@@ -813,7 +821,7 @@ fn parallel_row_prep_algorithm_micro() {
     .enumerate()
     {
         let mut total = std::time::Duration::ZERO;
-        for _ in 0..ITERATIONS {
+        for _ in 0..iterations {
             out.rows.clear();
             out.specials.clear();
             out.resting.clear();
@@ -830,7 +838,7 @@ fn parallel_row_prep_algorithm_micro() {
         }
         let digest = format!("{:?}|{:?}", out.rows, out.resting);
         assert_eq!(*expected.get_or_insert(digest.clone()), digest);
-        elapsed[leg] = total.as_secs_f64() * 1e3 / ITERATIONS as f64;
+        elapsed[leg] = total.as_secs_f64() * 1e3 / iterations as f64;
         println!(
             "PREP_MICRO leg={leg} {label} ms={:.3} rows={} resting={}",
             elapsed[leg],
@@ -842,7 +850,7 @@ fn parallel_row_prep_algorithm_micro() {
         "{}",
         serde_json::json!({
             "scope": "algorithm-level prepare_rows, not whole-tick",
-            "rows": ROWS,
+            "rows": rows,
             "order": "B,A,B,A",
             "parallel_ms": (elapsed[0] + elapsed[2]) / 2.0,
             "serial_ms": (elapsed[1] + elapsed[3]) / 2.0,
