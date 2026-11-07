@@ -1654,7 +1654,7 @@ struct ContainerCustody {
 }
 
 impl ContainerCustody {
-    fn assert(&self, state: &TickState, base: Option<&mc_world::Chunk>) {
+    fn assert(&self, state: &TickState, base: Option<&mc_world::Chunk>, phase: &str) {
         let mut total = 0;
         for ((pos, kind), expected) in [(TRANSFER_POS, self.case.name), (NEIGHBOUR_POS, "chest")]
             .into_iter()
@@ -1666,14 +1666,23 @@ impl ContainerCustody {
                 .map(|record| record.slots.clone())
                 .unwrap_or_else(|| {
                     native_container_slots(
-                        base.expect("unloaded neighbour still belongs to the base"),
+                        base.unwrap_or_else(|| {
+                            panic!(
+                                "{phase}: {} custody missing {kind} at {pos:?}",
+                                self.case.name
+                            )
+                        }),
                         pos,
                         kind,
                         expected.len(),
                         &state.registry,
                     )
                 });
-            assert_eq!(&actual, expected, "{}: {kind} at {pos:?}", self.case.name);
+            assert_eq!(
+                &actual, expected,
+                "{phase}: {} custody {kind} at {pos:?}",
+                self.case.name
+            );
             total += actual.iter().map(|stack| stack.count.max(0)).sum::<i32>();
         }
         let player = state
@@ -1692,14 +1701,18 @@ impl ContainerCustody {
             });
         assert_eq!(
             player, self.player,
-            "{}: full player inventory",
+            "{phase}: {} full player inventory",
             self.case.name
         );
         total += player.iter().map(|stack| stack.count.max(0)).sum::<i32>();
-        assert_eq!(total, self.total, "{}: total custody", self.case.name);
+        assert_eq!(
+            total, self.total,
+            "{phase}: {} total custody",
+            self.case.name
+        );
     }
 
-    fn assert_stored(&self, world: &World) {
+    fn assert_stored(&self, world: &World, phase: &str) {
         let source = world.state.world.chunk_source();
         let state = &world.state;
         let chunk = source.load_native(CONTAINER_CHUNK).unwrap().unwrap();
@@ -1708,8 +1721,15 @@ impl ContainerCustody {
             .into_iter()
             .zip(&self.slots)
         {
+            if kind == "chest" {
+                assert!(
+                    chunk.chests.contains_key(&pos),
+                    "{phase}: {} durable chest custody missing at {pos:?}",
+                    self.case.name
+                );
+            }
             let actual = native_container_slots(&chunk, pos, kind, slots.len(), &state.registry);
-            assert_eq!(actual, *slots, "{}: durable {kind}", self.case.name);
+            assert_eq!(actual, *slots, "{phase}: {} durable {kind}", self.case.name);
             total += actual.iter().map(|stack| stack.count.max(0)).sum::<i32>();
         }
         let player = crate::native_checkpoint::tests::read_player(
@@ -1720,7 +1740,7 @@ impl ContainerCustody {
         .unwrap();
         assert_eq!(
             player.inventory, self.player,
-            "{}: durable player",
+            "{phase}: {} durable player",
             self.case.name
         );
         total += player
@@ -1730,7 +1750,7 @@ impl ContainerCustody {
             .sum::<i32>();
         assert_eq!(
             total, self.total,
-            "{}: durable total custody",
+            "{phase}: {} durable total custody",
             self.case.name
         );
     }
@@ -1740,17 +1760,21 @@ impl ContainerCustody {
             &replay.block_entities[&(TRANSFER_POS.x, TRANSFER_POS.y, TRANSFER_POS.z)].slots;
         assert_eq!(
             transferred, &self.slots[0],
-            "{}: WAL container",
+            "replay: {} WAL container",
             self.case.name
         );
         let neighbour = native_container_slots(base, NEIGHBOUR_POS, "chest", 27, registry);
         assert_eq!(
             neighbour, self.slots[1],
-            "{}: untouched base neighbour",
+            "replay: {} untouched base neighbour",
             self.case.name
         );
         let player = &replay.players[&CONTAINER_PLAYER.to_string()].inventory;
-        assert_eq!(player, &self.player, "{}: WAL player", self.case.name);
+        assert_eq!(
+            player, &self.player,
+            "replay: {} WAL player",
+            self.case.name
+        );
         assert_eq!(
             transferred
                 .iter()
@@ -1759,7 +1783,7 @@ impl ContainerCustody {
                 .map(|stack| stack.count.max(0))
                 .sum::<i32>(),
             self.total,
-            "{}: WAL and base total custody",
+            "replay: {} WAL and base total custody",
             self.case.name
         );
     }
@@ -1963,14 +1987,14 @@ fn container_transfer_fixture(
         },
     };
     world.tick(|_| {});
-    expected.assert(&world.state, None);
+    expected.assert(&world.state, None, "fixture");
     world.checkpoint();
-    expected.assert(&world.state, None);
-    expected.assert_stored(&world);
+    expected.assert(&world.state, None, "fixture checkpoint");
+    expected.assert_stored(&world, "fixture checkpoint");
     // Journal checkpoint-generated owner metadata before the base fence.
     world.tick(|_| {});
     world.checkpoint();
-    expected.assert(&world.state, None);
+    expected.assert(&world.state, None, "fixture checkpoint");
     let use_on = |face, cursor| PlayerInput::UseItemOn {
         connection: ConnectionId(1),
         position: TRANSFER_POS,
@@ -1991,10 +2015,10 @@ fn container_transfer_fixture(
             expected.player[0] = expected.slots[0][1].clone();
             expected.slots[0][1] = mc_data::ItemStack::EMPTY;
         }
-        expected.assert(&world.state, None);
+        expected.assert(&world.state, None, "fixture interaction");
     } else {
         world.run(&[use_on(1, [0.5; 3])]);
-        expected.assert(&world.state, None);
+        expected.assert(&world.state, None, "fixture interaction");
         let first = if case.name == "brewing_stand" { 3 } else { 0 };
         for (index, count) in [(first, 2), (case.size - 1, 9)] {
             let menu = world.state.players[&entity].open.as_ref().expect(case.name);
@@ -2022,13 +2046,13 @@ fn container_transfer_fixture(
                 case.name
             );
             expected.player.clone_from(player);
-            expected.assert(&world.state, None);
+            expected.assert(&world.state, None, "fixture interaction");
         }
     }
     world.run(&[PlayerInput::Leave {
         connection: ConnectionId(1),
     }]);
-    expected.assert(&world.state, None);
+    expected.assert(&world.state, None, "fixture leave");
     (world, expected)
 }
 
@@ -2038,6 +2062,153 @@ fn hydrate_container_chunk(world: &mut World) {
         .world
         .ensure_blocking(&[(CONTAINER_CHUNK, 0)].into_iter().collect());
     crate::tick::sync_chunk_block_entities(&mut world.state);
+}
+
+#[test]
+fn chiseled_bookshelf_old_save_interaction_preserves_all_books() {
+    use crate::boundary::{ConnectionId, Hand, PlayerInput};
+
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world
+        .state
+        .world
+        .ensure_blocking(&[(CONTAINER_CHUNK, 0)].into_iter().collect());
+    let block = crate::crafter::tests::block(
+        &world.state,
+        "chiseled_bookshelf",
+        &[
+            ("facing", "south"),
+            ("slot_0_occupied", "true"),
+            ("slot_1_occupied", "true"),
+            ("slot_2_occupied", "true"),
+        ],
+    );
+    world
+        .state
+        .world
+        .set_block(TRANSFER_POS.x, TRANSFER_POS.y, TRANSFER_POS.z, block);
+    world.state.world.fold_overlay();
+    let book = mc_data::ItemStack::new(
+        world
+            .state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:book").unwrap())
+            .unwrap(),
+        1,
+    );
+    let mut slots = vec![mc_data::ItemStack::EMPTY; 6];
+    slots[..3].fill(book.clone());
+    let mut fields = vec![
+        (
+            "id".into(),
+            mc_nbt::Tag::String("minecraft:chiseled_bookshelf".into()),
+        ),
+        ("x".into(), mc_nbt::Tag::Int(TRANSFER_POS.x)),
+        ("y".into(), mc_nbt::Tag::Int(TRANSFER_POS.y)),
+        ("z".into(), mc_nbt::Tag::Int(TRANSFER_POS.z)),
+    ];
+    mc_data::storage_blocks::encode_items(&mut fields, &slots, &world.state.registry.items);
+    let mut bytes = Vec::new();
+    mc_nbt::write_network(&mut bytes, &mc_nbt::Tag::Compound(fields)).unwrap();
+    world
+        .state
+        .world
+        .set_opaque_block_entity(TRANSFER_POS, Some(bytes));
+    world.tick(|_| {});
+    world.checkpoint();
+    let config = world.config.clone();
+    drop(world);
+
+    let mut world = World::open(config.clone());
+    assert!(
+        world
+            .state
+            .block_entities
+            .get(&(TRANSFER_POS.x, TRANSFER_POS.y, TRANSFER_POS.z))
+            .is_none(),
+        "no live or WAL shelf custody before hydration"
+    );
+    world.run(&[PlayerInput::Join {
+        connection: ConnectionId(1),
+        uuid: CONTAINER_PLAYER,
+        name: "custody".into(),
+        permission_level: 0,
+    }]);
+    let entity = world.state.connections.entity_of(ConnectionId(1)).unwrap();
+    let entity_slot = world.state.entities.slot_of(entity).unwrap();
+    world
+        .state
+        .entities
+        .set_pos(entity_slot, [34.5, 200.0, 42.5]);
+    hydrate_container_chunk(&mut world);
+    let use_on = |x| PlayerInput::UseItemOn {
+        connection: ConnectionId(1),
+        position: TRANSFER_POS,
+        hand: Hand::Main,
+        face: 3,
+        cursor: [x, 0.75, 0.5],
+        sequence: 1,
+    };
+    world.run(&[use_on(0.1)]);
+    slots[0] = mc_data::ItemStack::EMPTY;
+    assert_eq!(
+        world
+            .state
+            .block_entities
+            .get(&(TRANSFER_POS.x, TRANSFER_POS.y, TRANSFER_POS.z))
+            .unwrap()
+            .slots,
+        slots,
+        "interaction: taking preserves other shelf slots"
+    );
+    assert_eq!(
+        world.state.players[&entity].inventory.slots[0], book,
+        "interaction: player took book"
+    );
+    world.run(&[use_on(0.1)]);
+    slots[0] = book;
+    assert_eq!(
+        world
+            .state
+            .block_entities
+            .get(&(TRANSFER_POS.x, TRANSFER_POS.y, TRANSFER_POS.z))
+            .unwrap()
+            .slots,
+        slots,
+        "interaction: inserting restores shelf slots"
+    );
+    assert!(world.state.players[&entity].inventory.slots[0].is_empty());
+    world.run(&[PlayerInput::Leave {
+        connection: ConnectionId(1),
+    }]);
+    world.checkpoint();
+    drop(world);
+
+    let mut world = World::open(config);
+    hydrate_container_chunk(&mut world);
+    let actual = &world
+        .state
+        .block_entities
+        .get(&(TRANSFER_POS.x, TRANSFER_POS.y, TRANSFER_POS.z))
+        .unwrap()
+        .slots;
+    assert_eq!(actual, &slots, "restart: all six shelf slots");
+    let player = &world.state.offline_players[&CONTAINER_PLAYER].inventory;
+    assert!(
+        player.iter().all(mc_data::ItemStack::is_empty),
+        "restart: player inventory"
+    );
+    assert_eq!(
+        actual
+            .iter()
+            .chain(player)
+            .map(|item| item.count.max(0))
+            .sum::<i32>(),
+        3,
+        "restart: total book custody"
+    );
 }
 
 fn container_replay_checkpoint(case: ContainerCase, refused: bool) {
@@ -2139,7 +2310,7 @@ fn container_replay_checkpoint(case: ContainerCase, refused: bool) {
                     .world
                     .has_chunk(CONTAINER_CHUNK.x, CONTAINER_CHUNK.z)
             );
-            expected.assert(&reopened.state, Some(&valid));
+            expected.assert(&reopened.state, Some(&valid), "replay");
             let (work_tx, work_rx) = journal_work_channel();
             let (done_tx, _done_rx) = std::sync::mpsc::channel();
             let log = checkpoint_log(|| {
@@ -2153,7 +2324,7 @@ fn container_replay_checkpoint(case: ContainerCase, refused: bool) {
                     ));
                     assert!(work_rx.try_recv().is_err());
                     assert_eq!(read_manifest(&config).unwrap().tick, committed);
-                    expected.assert(&reopened.state, Some(&valid));
+                    expected.assert(&reopened.state, Some(&valid), "refused checkpoint");
                 }
             });
             let declines: Vec<_> = log
@@ -2191,20 +2362,20 @@ fn container_replay_checkpoint(case: ContainerCase, refused: bool) {
         "{}: actual unloaded versus opaque replay path",
         case.name
     );
-    expected.assert(&reopened.state, Some(&valid));
+    expected.assert(&reopened.state, Some(&valid), "replay");
     reopened.checkpoint();
-    expected.assert(&reopened.state, None);
-    expected.assert_stored(&reopened);
+    expected.assert_stored(&reopened, "checkpoint");
+    expected.assert(&reopened.state, None, "checkpoint");
     drop(reopened);
     // Two further restarts, with a checkpoint between them, must retain every
     // slot of both owners and the entire offline player inventory.
     for _ in 0..2 {
         let mut reopened = World::open(config.clone());
         hydrate_container_chunk(&mut reopened);
-        expected.assert(&reopened.state, None);
+        expected.assert(&reopened.state, None, "restart hydration");
         reopened.checkpoint();
-        expected.assert(&reopened.state, None);
-        expected.assert_stored(&reopened);
+        expected.assert_stored(&reopened, "restart checkpoint");
+        expected.assert(&reopened.state, None, "restart checkpoint");
     }
 }
 

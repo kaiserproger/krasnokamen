@@ -3634,3 +3634,15 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T172634-matrix-random-u9k17kiz/result.json"
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "CHISELED-BOOKSHELF-RESTART-DATA-LOSS"
+title = "Books in a chiseled bookshelf disappear on interaction after restart"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "RC5 review of fe965d1c; contributing factors and failed defenses: docs/architecture/persistence.md#quarantined-chunks."
+regression = ["cargo:mc-core:core::checkpoint_custody_tests::chiseled_bookshelf_old_save_interaction_preserves_all_books"]
+failing_first = "not recorded"
+fix_commit = "fe965d1c"
