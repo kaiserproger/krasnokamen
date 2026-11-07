@@ -165,8 +165,8 @@ class ChangedGateTests(unittest.TestCase):
         self.assertEqual((entry["runs"], entry["negative_control"]), (1, True))
 
     def test_shared_backend_with_a_scenario_runs_the_scenario(self):
-        found = gates(build(["tools/harness/backends/native_craft_drag.py"]))
-        self.assertIn(f"{PY} scenario native-v2-craft-drag --client native --windowed", found)
+        found = gates(build(["tools/harness/backends/native_craft_drag_paced.py"]))
+        self.assertIn(f"{PY} scenario native-v2-craft-drag-paced --client native --windowed", found)
 
     def test_unmapped_backend_prints_the_choices(self):
         found = gates(build(["tools/harness/backends/not_a_gate_engine.py"]))
