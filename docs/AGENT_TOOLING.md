@@ -100,6 +100,14 @@ does not install lifecycle or packet hooks, so the client state-change event
 does not arrive. The attempted row and its failure are recorded locally at
 `/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T133737-java-matrix-bam34j27/result.json`.
 This is a harness instrumentation blocker, not a passing Java gameplay check.
+`matrix-random` is experimental and is not yet a multiplayer concurrency or
+recovery acceptance gate. Its current actions are sequential; the protocol
+driver has no concurrent admission hook with per-input server-tick receipts.
+Its inventory comparisons use each owning client's received inventory, not an
+independent observer of other players' private inventories. A seed specifies
+actions, not network ordering. Do not infer replay determinism or crash
+atomicity without the corresponding real-server receipts.
+
 
 ## Profiles and scenarios
 
