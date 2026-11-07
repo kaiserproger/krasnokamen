@@ -1878,7 +1878,10 @@ fn sniffer_eggs_hatch_into_baby_sniffers() {
     let end = state.tick + 30_000;
     for _ in 0..3 {
         let due = crate::tick_tests::warp_to_block_tick(&mut state, pos);
-        assert!(due < end, "sniffer egg deadline exceeded the original limit");
+        assert!(
+            due < end,
+            "sniffer egg deadline exceeded the original limit"
+        );
         run(&mut state, 1);
         let babies = state
             .entities
