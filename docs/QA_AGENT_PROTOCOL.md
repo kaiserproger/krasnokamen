@@ -25,8 +25,10 @@ writing to a file on the games disk when audio must be recorded).
   gets the change, the claims (commit message, release notes, ADR text) and this
   protocol, not the builder's test plan. It does not edit production code.
 - **Main** routes findings back to the builder and decides on release. A change
-  that touches player-visible behaviour is not pushed to `main`, and a release
-  candidate is not tagged, until a breaker has reported on it.
+  that touches player-visible behaviour is not accepted (no `fixed` ledger row,
+  no release-ready claim), and a release candidate is not tagged, until a
+  breaker has reported on it. Pushing unaccepted work to `main` is allowed
+  ([owner contract](development/owner-contract.md)).
 
 Use a normal player's/admin's expectations and vanilla 26.3 evidence
 (minecraft.wiki, `javap`) where vanilla applies. For Solaris-specific features,

@@ -152,7 +152,9 @@ python3 -m tools.harness list
 - Actual-client surfaces need actual-client gates (graphical Minecraft under
   Xvfb, exact scenario and evidence) and a separate breaker under the
   [break-it QA protocol](docs/QA_AGENT_PROTOCOL.md): an attack-matrix pass with
-  reproduced, severity-ranked findings before a push to `main` or a release tag.
+  reproduced, severity-ranked findings before a bug row becomes `fixed`, a
+  surface is called accepted or a release is tagged. Pushes to `main` follow the
+  commit-often rule (owner, 2026-11-07) and wait for neither.
   A happy-path gate alone is not acceptance. New or changed gates need a
   negative control, no pre-existing pass, every new branch on a real client, and
   at least 3 runs when variable. Say whether owner testing (PrismLauncher 26.1.2)
