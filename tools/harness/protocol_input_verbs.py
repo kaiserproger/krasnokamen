@@ -2,7 +2,7 @@
 
 Mixin for ``ProtocolMatrixClient`` (imported by the parent; this module never
 imports the client, so there is no import cycle). Every verb writes a real
-26.1.2 serverbound packet encoded from local ``mc-protocol``/``mc-domain``
+26.3 serverbound packet encoded from local ``mc-protocol``/``mc-domain``
 source evidence, then a ``ClientTickEnd`` (``0x0D``) frame. Completion is never
 claimed here: outcomes are observed separately via ``snapshot``/server query.
 
@@ -10,8 +10,9 @@ Packet evidence (all IDs/fields from the local repo, not memory):
 
 - ``ServerboundPlayerAction`` ``0x29``: VarInt action, i64 packed pos, VarInt
   direction, VarInt sequence; actions ``StartDestroyBlock=0``,
-  ``AbortDestroyBlock=1``, ``StopDestroyBlock=2``, ``DropAllItems=3``,
-  ``DropItem=4``, ``ReleaseUseItem=5``, ``SwapItemWithOffhand=6``
+  ``ChangeDestroyDirection=1``, ``AbortDestroyBlock=2``, ``StopDestroyBlock=3``,
+  ``DropAllItems=4``, ``DropItem=5``, ``ReleaseUseItem=6``,
+  ``SwapItemWithOffhand=7``, ``Stab=8``
   (``crates/mc-protocol/src/packets/play/interaction.rs`` ``PlayerActionKind``,
   ``impl Packet for ServerboundPlayerAction``).
 - Direction ordinals ``down=0 up=1 north=2 south=3 west=4 east=5``
