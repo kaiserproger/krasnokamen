@@ -91,6 +91,29 @@ The `entities` profile includes windowed native-client probes:
 - `native-v2-destroyed-chest`: records visible menu closure and custody after
   chest destruction. The MCP refusal to click an already-closed menu is not
   a stale server-packet test; this probe alone cannot close HS-1.
+- `native-v2-destroyed-chest-race`: the HS-1 packet race. A second headless client populates the
+  Nether so commands run through the shared (multi-world) path. In six rounds per branch the
+  extraction or deposit click is issued right behind the destroying command, before the client has
+  seen the menu close, with the simulation frozen. Whichever the server handles first, the one
+  diamond must remain exactly once (inventory or ground) and the menu must be closed; a branch
+  whose click never left the client fails the run. Custody is read from the final inventory and
+  ground items, not from a server reply.
+- `native-v2-duplicate-login`: a second headless native client of the same offline account
+  joins while the first is in Play. The second reaches Play with the same player and exactly
+  one diamond, the first leaves Play, and the first client's re-login replaces the second.
+- `native-v2-auth-budget`: the shipping `solaris-auth` package behind the native login gate.
+  `/register`, and after a reconnect `/login`, run while the server's plugin worker thread shares
+  one core with seven CPU hogs (the descheduling of a loaded host), so Argon2 takes several
+  times its idle wall time. The plugin's reply must arrive and ordinary chat, refused while
+  locked, must then be echoed. The unfixed host retires the plugin and kicks the player.
+- `native-v2-corrupt-block-entities`: a jukebox, sculk shrieker, crafter, oak shelf, conduit and
+  beacon, each alone in its own chunk, are saved, exported to Anvil, corrupted by one field in
+  the exported copy, imported again and loaded beside the rejoining player. Crafter, shelf and
+  conduit records get a foreign block entity id because the importer validates them by id and
+  would refuse the import. The server must refuse exactly the five undecodable chunks (one error
+  naming each record), never panic, keep ticking past the beacon's 80-tick pass and keep the
+  player's own chunk. The beacon record is decodable by construction: that fixture is the
+  runtime-path control and must not be refused.
 - `native-v2-cursor-close`: pick up exactly three apples, close and reopen both
   ordinary inventory and crafting table, and require an empty received cursor
   before any repair click while retaining exactly three inventory apples.

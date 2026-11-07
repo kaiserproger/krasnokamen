@@ -53,7 +53,11 @@ nor reordered. A dead journal stops the core. Reliable per-player results are
 ordered and bounded; exhaustion disconnects rather than silently discarding
 results. Bulk producers such as the scoreboard join snapshot and one scoreboard
 publication send one ordered batch per connection, and the edge queues its
-frames as one item, so a large scoreboard does not hit the bound. World fanout
+frames as one item, so a large scoreboard does not hit the bound. Chat and
+system-message lines are bounded at their source (the sender's spam budget, the
+command sequence budget), so a connection's trailing run of them compacts into
+one `TextBurst` entry at the cap instead of disconnecting a recipient, and the
+edge queues the burst's frames as one item. World fanout
 may reconcile to a newer snapshot. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
