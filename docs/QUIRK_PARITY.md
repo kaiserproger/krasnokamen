@@ -94,44 +94,22 @@ Solaris divergence is either fixed with a regression test (small fix) or
 recorded as `known_divergence` with an exact repro in the receipt/report.
 Mojang bytes never enter Git: the jar and worlds stay under `.analysis/`.
 
-## Findings (26.1.2 oracle, 2026-10-22)
+## Known divergences
 
-Fixed in Solaris with regression tests (each proven by a vanilla-vs-Solaris gate run):
+The tracked scenarios mark these divergences and contain their exact repros:
 
-| area | divergence found | fix |
-|---|---|---|
-| quasi-connectivity | pistons/droppers/dispensers ignored the block-above rule and a piston was powered through its own face | `redstone::piston_powered` (every side except the push face + QC through the block above); dispenser/dropper QC; still only reacts on a neighbour update (BUD) |
-| sugar cane / cactus | grew a segment on every random tick (6.5x vanilla) | `plant_rules::vertical_plant_growth_edits` ages `age` 0..15 and only age 15 extends the stalk, as `SugarCaneBlock`/`CactusBlock.randomTick` |
-| crops | night stopped growth: Solaris used the sky-darkened brightness (wheat 0.31x vanilla over 3 days) | crops/stems/bamboo gate on `raw_brightness` (= `getRawBrightness(pos, 0)`); spawning and saplings keep the darkened value |
-| chicken eggs | `egg_interval` was an arithmetic progression of sequential ids (first eggs clustered early, +6% eggs) | SplitMix roll over `nextInt(6000)+6000` |
-| mob fall damage | mobs never took fall damage (kill chambers did not kill) | `mob_fall::after_move` accumulates the drop (incl. the landing move) and owes `ceil(d-3)`; `#fall_damage_immune`, flyers, swimmers, water/climbables, slow falling/levitation excluded |
-| player fall damage | the landing packet's own drop was not counted | `PlayerState::fall` adds `dy < 0` before the ground test (`Entity.checkFallDamage`) |
-| iron golem loot | the simulated golem blueprint carried no loot table (no ingots/poppies) | blueprint falls back to the catalog's `entities/<name>` table |
-| /summon | villager `VillagerData` and item entities (`Item`, `PickupDelay`, `Age`, `Motion`) were refused | accepted (validated by the existing villager/item parsers) |
-| console `tp <player>` | panicked the tick thread (`executor survived teleport`) | falls back to the player's own dimension |
+- [TNT duper](../tools/harness/quirk_parity/scenarios/tnt-duper-found-bud.json):
+  instant piston movement lacks vanilla's moving-piston window.
+- [TNT destroy-list](../tools/harness/quirk_parity/scenarios/tnt-bud-push-destroy-list.json):
+  fluid and waterlogging differ around the push.
+- [Mob kill chamber](../tools/harness/quirk_parity/scenarios/farm-mob-kill-chamber.json)
+  and [gold farm](../tools/harness/quirk_parity/scenarios/farm-gold-nuggets.json):
+  airborne wander can move mobs off the collection pad.
+- [Villager breeder](../tools/harness/quirk_parity/scenarios/farm-villager-breeder.json):
+  farmer harvest cadence differs.
 
-Gate results (`g7`/`g8` receipts): `qc-piston-bud`, `farm-crop-wheat`, `farm-crop-cane`,
-`farm-chicken-eggs`, `farm-iron-golem` pass; the player diagonal-sprint gate passes
-(0 corrections both sides).
-
-Known divergences (marked `known_divergence` in the scenario, reported not failing, stale marker fails):
-
-* `tnt-duper-found-bud`: TNT duplication needs vanilla's `moving_piston` window; Solaris pistons move
-  blocks instantly, so the three oracle-found BUD cells (vanilla: 1 TNT built -> 2 primed) end with 1.
-  Architectural (piston movement model). Same root for carpet/rail dupers.
-* `tnt-bud-push-destroy-list`: TNT outcome matches; flowing-water/waterlogged state of the removed
-  destroy-list neighbours differs (fluid tick order around the push).
-* `farm-mob-kill-chamber`, `farm-gold-nuggets`: idle-wander drive is applied while a mob is airborne, so
-  one skeleton per wave drifts onto the glass rim and its drops never reach a hopper (~101 of ~128 bones;
-  vanilla 123). Loot, fall damage and hopper pickup match (100-tick waves: 123 bones).
-* `farm-villager-breeder`: farmer harvest is ~2.4x vanilla (35 vs 14.8 carrots per work day).
-* quasi-connectivity of dispensers/droppers has no oracle scenario yet.
-
-Harness notes: Solaris draws are a pure function of (entity id, tick), so `quirk_parity_tests` burns a
-seed-dependent run of wire ids per `seeds` variant (otherwise every seed replays one sample);
-`--vanilla-results PATH` reuses a previous run's vanilla oracle output (the oracle is the slow half);
-Solaris polls every reactive cell once after chunk hydration, so scenarios that must stay un-updated
-(BUD) set `settle_ticks` before placing their power sources.
+A stale `known_divergence` marker fails once Solaris matches. See also the
+[native test driver](../crates/mc-core/src/quirk_parity_tests.rs).
 
 ## Native block interaction regressions (26.1.2)
 

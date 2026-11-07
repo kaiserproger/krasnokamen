@@ -6,6 +6,39 @@
 `source`, `repro` (`manual`, `client`, `cargo`, `source`) and
 `regression`. Historical reports are not proof of the current candidate.
 
+## Filing a bug
+
+Copy a `[[bug]]` block in `ledger.toml` and fill in every required field:
+
+```toml
+[[bug]]
+id = "AREA-SHORT-SYMPTOM"
+title = "Describe the observable failure"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Repo-relative report or plain description"
+repro = "manual"
+regression = []
+failing_first = "not recorded"
+```
+
+- `id`: unique, stable uppercase hyphenated symptom identifier; `title`: concise symptom.
+- `area`: `gameplay`, `client`, or `harness`, assigned at filing and not changed by fixers.
+- `severity`: `blocker`, `major`, or `minor`; `status`: file as `open`.
+- `source`: repo-relative location or plain description, not an owner-local path.
+- `repro`: `manual`, `client`, `cargo`, or `source`, according to the original report.
+- `regression`: a list of green `cargo:<crate>:<exact test path>` or
+  `harness:<profile>:<scenario>` checks; initially it may be empty.
+- `repro_check` is optional: a nonempty string or list of nonempty strings for
+  known-red reproducers, kept out of the green regression gate.
+- `failing_first` is optional and, when present, is `reported` or `not recorded`;
+  report the actual pre-fix evidence, never infer it from a passing test.
+
+The phase reviewer checks the original symptom, failing-first and fixed-build
+evidence before promoting a row to `fixed`; fixers do not self-promote based
+only on an implementation or an unrelated green check.
+
 Add a failing-first check for a fix. `cargo:<crate>:<exact test path>` names
 an exact test; `harness:<profile>:<scenario>` names an existing runnable
 scenario. Every green Cargo check in `regression`, even for an open row,
@@ -70,9 +103,9 @@ The `entities` profile includes windowed native-client probes:
   toggle, inventory clone tracking, pumpkin hiding, terrain shading and Nether
   terrain repros. Read-only receipts reconstruct the graphical viewer's exact
   map packets; screenshots still require review, especially marker visibility.
-- Axolotl play-dead and potion custom-impact probes are unregistered prototypes
-  (receipts in `receipts/Promote2`); they cannot be run from the harness, and
-  `AXOLOTL-PLAY-DEAD` and `POTION-CUSTOM-PAYLOAD` stay open.
+- Axolotl play-dead and potion custom-impact probes are unregistered prototypes;
+  they cannot be run from the harness, and `AXOLOTL-PLAY-DEAD` and
+  `POTION-CUSTOM-PAYLOAD` stay open.
 
 `MODEL-BANNER-PLACEMENT` covers the banner symptom only. The profiled-head
 fixture still needs a verified listed player's published skin

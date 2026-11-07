@@ -280,26 +280,15 @@ structure) stream, in piece order, before the decor that follows in that order.
 A template that reaches no container and a plan that reaches no feature never
 touch the stream at all.
 
-The seeding is pinned against numbers read out of the real 26.1.2 classes
-(`.analysis/codex-logs/village-decor-random/`), not restated from the formula:
-seed 4242 at chunk (427, 0) gives the decoration seed 3 979 914 027 210 390 498,
-and `village_plains`'s index 22 at step 4 then draws
-−5 071 117 971 071 978 252 — the value the tests assert.
+The seeding is pinned by tests against numbers read from the real 26.1.2
+classes: seed 4242 at chunk (427, 0) gives decoration seed
+3 979 914 027 210 390 498, and `village_plains`'s index 22 at step 4 draws
+−5 071 117 971 071 978 252.
 
 The features themselves are the data-driven executor's: their types, states,
 tokens, noise and placement modifiers come from the derived cache, resolved by
 reference from the pool entries the closure reaches, and anything outside that
 closure fails the startup load by name.
-
-## Retired `settlement_profile` integration
-
-The v1 server selected vanilla villages, a plugin settlement plan or the
-`plains_village_prototype` composite through `[data].settlement_profile`.
-That configuration and its v1 composition path are deleted by ADR 0014.
-They are not supported native server keys; unknown settings warn and are ignored.
-The shared structure/template library's existence does not restore that operator
-selection API. Current native plugin startup declarations must pass the actual
-deployment validation described in [PLUGINS.md](PLUGINS.md).
 
 ## Declared divergence: terrain adaptation
 
@@ -498,76 +487,19 @@ ordering assumption this page makes.
 
 ## Village inhabitants
 
-**Integration-era note:** the geometry/marker description below records the
-shared library's v1 handoff. The v1 stream-time adopter was deleted in Phase 5;
-this section is not a native-runtime spawn/restart acceptance claim.
+Village templates author entity markers alongside pieces; the generator transforms
+their positions and clips them to the generated chunk. Native
+[`generated.rs`](../crates/mc-core/src/villager/generated.rs) adopts markers
+when chunks are loaded. A claim yields a deterministic UUID; the claim and
+entity share journal/checkpoint transactions, so reloading or death cannot
+duplicate an adopted inhabitant. Unknown entity types, missing blueprints or
+unrecognized villager kind/profession are not adopted.
 
-A village's houses carry their population in the *template*, not in the pool: a
-house's `minecraft:bottom` jigsaw points at `minecraft:village/<type>/villagers`,
-whose elements are `legacy_single_pool_element`s over the one-block templates
-`village/<type>/villagers/{unemployed,nitwit,baby}`. Each of those templates
-authors one entity in its NBT `entities` list — a `minecraft:villager` with its
-`VillagerData` (`type`, `profession`, `level`) and `Age`, a `blockPos` and a
-double `pos`.
-
-Solaris reads that list and places the villagers the way vanilla's
-`StructureTemplate.placeEntities` does: the entity's `blockPos` goes through the
-piece's block transform, and it is dropped when the transformed block is outside
-the chunk being filled — the same per-chunk box the piece's blocks are clipped to,
-so an entity that belongs to the neighbouring chunk is placed when *that* chunk
-is generated. The double `pos` goes through `transform(Vec3, ...)`, which mirrors
-with `1.0 - coordinate` and carries the `+ 1` term in the rotated branches; the
-yaw is `entity.rotate(rotation) + entity.mirror(mirror) - entity.getYRot()` on the
-yaw the template authored (`Rotation[0]`), and the pitch is the entity's own
-(`Rotation[1]`), which vanilla never rotates. Those functions are pinned against
-the real 26.1.2 classes (`crates/mc-worldgen/src/village_piece_tests.rs`), and so
-are the templates' own values: the adult villager templates author
-`Rotation = [48.821632, 0.0]` and `Age = 0`, the baby templates
-`Rotation = [0.0, -25.827711]` and `Age = -21359`.
-
-The placement does not spawn an entity at generation time. It writes a **chunk
-inhabitant marker** (the `SolarisSettlementInhabitants` entry in the chunk's
-extras, `mc_world::SettlementInhabitantMarker`), which is the core's one
-generation-to-runtime handoff in the historical v1 integration: when streamed,
-the now-deleted `mc-net` adopter resolved each marker against the registry — types
-`plains`/`desert`/`savanna`/`snow`/`taiga` and the professions `none`/`nitwit` —
-and spawns the villager, with its authored `Age` (a negative `Age` selects the
-baby brain schedule), the yaw its placement computed and the pitch its template
-authored (clamped the way `Entity.setXRot` clamps it: `clamp(pitch % 360, -90,
-90)`). The marker's claim
-(`<pool element>@<piece x>:<piece y>:<piece z>#<entity index>`) is the villager's
-identity in place of the `UUID` vanilla strips from the template: it seeds a
-deterministic UUID and prevents a second spawn when the chunk is streamed again.
-Restarting the server does not respawn a villager whose claim is already known.
-
-The village lane spawns **villagers only**. A village also authors the
-meeting-point iron golem, the animal pens' livestock, their cats, a desert camel,
-a butcher shop's animals, an armour stand and the zombie villagers of the
-weight-1 zombie town centres; those need their own entity state and spawn path,
-so they are not placed, and startup reports exactly which ids the loaded closure
-reaches (`village_piece_mobs_other_than_villagers_are_not_spawned`) rather than
-leaving them silently absent.
-
-The templates author **no POIs** for their villagers, and vanilla's own
-behaviour — a villager claiming a bed, a workstation or the bell from the blocks
-around it — is not modelled here. A marker therefore carries the core's existing
-answer for that case (`default_villager_pois`, the shape the runtime already
-applies to a villager with no brain state): the entity's own placed position is
-its home, its meeting point, and the job site of a working profession. So a
-generated village's villagers rest and gather where they were placed rather than
-claiming the bed or workstation next to them, and the templates' two professions
-(`none` and `nitwit`) work nowhere at all. That is a divergence from vanilla — the
-shape of a village day survives, the POIs are the placement rather than the
-furniture — not a reading of the template.
-
-A village **baby** does carry one home-shaped field: the core's entity storage
-contract requires a baby to name the home it was born into
-(`villager_population_state_is_valid`), and a generated village has no settlement
-home to name, so the baby records its own placement claim (the same string as the
-villager's identity) as that home. It is not a settlement home claim and no
-settlement site can be blocked by it — the two claim shapes never collide — but an
-operator reading `entities.dat` will see a village baby whose home is its
-placement rather than a bed.
+Villager markers retain type, profession, level, age and orientation; native
+adoption initializes the schedule and trades. Other blueprint-backed generated
+entities also use this claim path. Creature-generation claims are consumed
+without spawning when mob spawning is disabled. See the
+[native adoption regressions](../crates/mc-core/src/villager/generated_tests.rs).
 
 ## World identity and reusing a world
 

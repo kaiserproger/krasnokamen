@@ -23,8 +23,7 @@ printf 'eula=true\n' > .analysis/vanilla-physics-server/eula.txt
 ```
 
 Minecraft 26.1.2 is built for Java classfile 69. If the default `java` is older
-than 25, use a local Java 25 runtime explicitly, for example
-`~/.sdkman/candidates/java/25.0.3-graal/bin/java`.
+than 25, select a local Java 25 runtime explicitly.
 
 Solaris comparison server, from a second shell:
 
