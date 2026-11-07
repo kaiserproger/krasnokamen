@@ -118,7 +118,7 @@ pub(crate) const SETTLEMENT_GUIDE: &str = concat!(
     "7. /settlement commerce Oak status — emerald trades and escrow (quote/accept/cancel/reserve/payout).\n",
     "8. /settlement payroll Oak status — funded worker contracts (employ/stop/dismiss/pay).\n",
     "9. /settlement caravan Oak status — physical deliveries (open/pickup/unload/cancel/block).\n",
-    "Action syntax: /help settlement <domain> Oak. Short bilingual guide: docs/SETTLEMENTS_GUIDE.md",
+    "Action syntax: /help settlement <domain> Oak. Guide: docs/SETTLEMENTS_GUIDE.md",
 );
 
 // Native economy uses compact endpoint/coordinate/route tokens (":" / "," /

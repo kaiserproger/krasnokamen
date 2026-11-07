@@ -2,7 +2,8 @@
 
 How Solaris is developed on the owner's machine: procedures, pitfalls and
 lessons that used to live only in agent skills, prompts and local memory.
-Rules come first from [AGENTS.md](../../AGENTS.md), the
+Rules come first from [AGENTS.md](../../AGENTS.md) (with the verbatim
+[owner contract](owner-contract.md)), the
 [Agent Constitution](../AGENT_CONSTITUTION.md),
 [AGENT_TOOLING.md](../AGENT_TOOLING.md), the
 [break-it QA protocol](../QA_AGENT_PROTOCOL.md) and the
@@ -16,12 +17,16 @@ newest rule and says what it replaced.
 
 | You are about to... | Read |
 |---|---|
+| add or change a vanilla gameplay feature | [Adding a feature](adding-a-feature.md) |
+| change packets or protocol handling | [Protocol changes](protocol-changes.md) |
 | run Cargo, Gradle or the harness, or wonder why a command is slow, frozen or killed | [Heavy commands, memory and disk](heavy-commands-and-memory.md) |
 | create a worktree, deliver a patch, integrate a branch, freeze a build | [Worktrees, patches and integration](worktrees-and-integration.md) |
 | launch, brief, message or recover agents | [Running agents](agent-fleet.md) |
 | run or add a real-client gate, compare against vanilla, smoke a server with a client | [Real-client gates in practice](real-client-gates.md) |
 | debug a failing live gate or plugin | [Triage of failing live gates](live-gate-triage.md) |
 | measure performance or profile | [Performance windows and profiling](performance-windows-and-profiling.md) |
+| run protocol-bot load against a release server | [Catalog load](catalog-load.md) |
+| run the imported-city functional fixture | [Constantinople fixture](constantinople-fixture.md) |
 | cut a core, client or Loader release, or fix a failed tag | [Releases and tags](release-and-tags.md) |
 | deploy to or collect metrics from the public test server | [Public test server operations](test-server-ops.md) |
 | test the Windows or macOS client | [Windows and macOS client QA](windows-and-macos-client-qa.md) |
@@ -32,11 +37,12 @@ newest rule and says what it replaced.
 
 ## Conventions on these pages
 
-- `<work>` is the owner's games-disk work root,
+- `<work>` is the owner host's work root,
   `/run/media/kaiserroman/games/solaris-work` (AGENTS.md), holding the sibling
   checkouts (`solaris`, `solaris-client`, `solaris-loader`,
   `solaris-default-plugins`), agent worktrees `wt/`, build outputs `targets/`
-  and agent receipts `receipts/`.
+  and agent receipts `receipts/`. Pages written for the owner host say so;
+  elsewhere use your own paths.
 - Developer scripts are tracked under `tools/dev/` (the runner `mem-run.sh`, its
   `heavy-watchdog.py`, `scene-slot.sh`, `instrumentation-guard.py`, the
   test-server scripts in `tools/dev/test-server/` and the Windows-guest driver
@@ -44,5 +50,6 @@ newest rule and says what it replaced.
 - The public test server is addressed through `SOLARIS_TEST_HOST`; its address,
   SSH access and all credentials are held by the owner and never written here.
 - Local run state (cursor, queues, receipts, committee answers, logs) stays in
-  ignored `.analysis/`; it is not documentation and is not startup context.
+  ignored `.analysis/`; it is optional, not documentation and not startup
+  context. A handoff goes through [running agents](agent-fleet.md#handoff-across-context-loss-or-to-another-person).
 - Agent roles are named, models are not: the owner chooses them.

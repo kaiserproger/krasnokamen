@@ -38,6 +38,6 @@ jobs:
           rm -rf data/vanilla
           mkdir -p data
           cp -a "$RUNNER_TEMP/xdg/solaris/content/26.3" data/vanilla
-      # The CI short-run profile skips the tests over 3 s (.config/nextest.toml).
+      # The CI short-run profile excludes the fixed slow-test name list in .config/nextest.toml.
       - name: mc-core and mc-world lib tests
         run: cargo nextest run --locked --profile ci -p mc-core -p mc-world --lib

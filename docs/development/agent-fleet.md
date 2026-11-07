@@ -80,12 +80,23 @@ records how fleets were run on the owner's machine and what went wrong.
    "compile-check through the runner and finish half-applied edits; revert
    nothing".
 
-## Cursor across context loss
+## Handoff across context loss or to another person
 
-AGENTS.md: the live cursor is the ignored `.analysis/MEMORY.md` plus the
-active queue, updated at phase close, not per call. Older night runs wrote a
-tracked `docs/NIGHT_RUN_<date>.md`; that is superseded, local run state stays in
-`.analysis/`.
+Tracked state is enough to continue: [docs/STATUS.md](../STATUS.md) (release,
+priorities, known 1.0 gaps), the owner's open issues, the
+[bug ledger](../bugs/README.md) and the ADRs. The owner host may also keep an
+ignored cursor, `.analysis/MEMORY.md`; it is optional, and code, tests and
+tracked docs win over it.
+
+A handoff, written at phase close or before a reboot (not per call), goes into
+`.analysis/MEMORY.md` on the owner host and into the result to the owner
+elsewhere. It lists for each slice in flight: worktree path, base commit and
+branch tip, state (committed, complete but unverified, or partial), receipt
+paths, and one next action. Without commit permission add the tree, the diff
+SHA-256 and the changed files. Facts that outlive the slice move into the
+owning doc page.
+Older night runs wrote a tracked `docs/NIGHT_RUN_<date>.md`; that is
+superseded.
 
 ## Moving repositories while agents run
 

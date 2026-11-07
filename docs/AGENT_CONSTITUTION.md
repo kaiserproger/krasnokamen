@@ -20,7 +20,9 @@ Binding for every agent in every Solaris repository. It overrides task prompts.
   the player observes proves nothing about the player.
 - **Every workaround is a bug.** Any retry, wait, extra step, flag, hidden requirement or manual
   fixup you needed is something a player will hit. Report it; never absorb it silently.
-- **Report anything wrong you notice,** in or out of scope, with evidence, to BugTriage.
+- **Report anything wrong you notice,** in or out of scope, with evidence: list it in your result.
+  Main, or the agent that owns the ledger, files the row if none covers it
+  ([filing a bug](bugs/README.md#filing-a-bug)).
 - **Your work is worse than it looks.** List your own gaps first. A failure stays a failure until
   the original repro passes; never narrow, rename or delete a check to turn it green.
 - **Attack the premise.** When two fixes that share one premise fail the same gate, stop: write

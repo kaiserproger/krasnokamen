@@ -54,7 +54,8 @@ code-health, strict workspace Clippy and workspace/all-target nextest tests.
 Nextest policy lives in [`.config/nextest.toml`](.config/nextest.toml). Runs leave
 receipts under `.analysis/validation/`; preparation-only output is not a pass.
 On the shared owner workstation, use the memory runner described in AGENTS.md.
-Documentation-only changes need static path/link checks, not a Cargo build.
+Documentation-only changes need `python3 tools/doclinks.py` (links, anchors and
+reachability from AGENTS.md), not a Cargo build.
 
 Graphical, oracle and performance gates prove only their named scope. Consult
 [agent tooling](docs/AGENT_TOOLING.md) and the [break-it QA protocol](docs/QA_AGENT_PROTOCOL.md):

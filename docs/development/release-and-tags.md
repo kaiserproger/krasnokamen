@@ -29,13 +29,13 @@ pass". This page is the release procedure for the four repositories:
    passes a `vanilla_data_dir` (`CoreRegistry::load(None)` is test-only).
    **macOS:** there is no local Mac. Push the candidate commit to
    `rc-check/<tag>` and delete the branch afterwards;
-   `.github/workflows/rc-check-macos.yml` runs
-   the `mc-core` and `mc-world` lib tests (nextest `ci` profile, which excludes a
-   fixed name list from an old slow-test run, not every test over 3 s) on `macos-15` with the 26.3 content cache. Pass = a green
-   run whose log prints the candidate SHA; save the log
-   under `.analysis/releases/<tag>/`, then `git push origin --delete
-   rc-check/<tag>`. This covers core tests only; the notes must not claim a
-   macOS client or package run.
+   `.github/workflows/rc-check-macos.yml` runs the `mc-core` and `mc-world` lib
+   tests (nextest `ci` profile, which excludes a fixed list of tests that were
+   slow in one old run) on `macos-15` with the 26.3 content cache. Pass = a
+   green run whose log prints the candidate SHA; save the log under
+   `.analysis/releases/<tag>/`, then `git push origin --delete rc-check/<tag>`.
+   This covers core tests only; the notes must not claim a macOS client or
+   package run.
 3. **Siblings first.** Rebuild every shipped `plugin.wasm` against the current
    WIT. Commit and push `solaris-default-plugins` and `solaris-loader` before
    core, then update `SOLARIS_PLUGINS_REVISION` / `SOLARIS_LOADER_REVISION` in

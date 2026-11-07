@@ -152,9 +152,10 @@ A stabilization milestone is done only when:
 Real-client gates are driven by the harness, which runs the actual client under
 an MCP-controlled automation agent and records join/rejoin, movement, block
 edits, inventory and container actions, combat, death/respawn, save/restart and
-screenshots or structured observations tied to the server run. The profile
-catalog and receipts are in [AGENT_TOOLING.md](AGENT_TOOLING.md#native-client-gameplay)
-and the procedure and traps in
+screenshots or structured observations tied to the server run. Profiles and
+receipts are in [AGENT_TOOLING.md](AGENT_TOOLING.md#profiles-and-scenarios)
+(`python3 -m tools.harness list` and `explain` are authoritative) and the
+procedure and traps in
 [real-client gates](development/real-client-gates.md). Manual PrismLauncher
 play is owner-run. Headless mocks and protocol-only bots are harness evidence,
 not client/manual evidence.

@@ -3472,3 +3472,25 @@ status = "fixed"
 source = "RC5 pre-tag breaker receipts/breaker-rc5-pretag-20261106/report.yaml (P1; interrupted-var2 refused 1/2 exact attempts; lease-rc4/lease-rc5 timings). Fixed by Core::open waiting up to 30 s for the lease (RC5 f29c3d62, main d1360198); breaker re-attack report-r2.yaml held 3/3 per branch with real clients."
 regression = ["cargo:mc-core:core::native_checkpoint_crash_tests::start_waits_for_the_previous_server_to_release_the_world", "harness:singleplayer-regressions:native-sp-relaunch-lease-race"]
 failing_first = "reported"
+
+[[bug]]
+id = "SP-START-TIMEOUT-SLOW-MACHINE"
+title = "On a slow machine, singleplayer Play on a new world fails with 'Server did not start in time' (fixed 180 s limit in solaris-client singleplayer.rs) while the server is still generating spawn; pressing Play again resumes the first start and works."
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "Main's smoke of the published RC5 Windows zip, 2026-11-07: 4-core Windows 11 VM with software rendering (WARP; the client used about 3000 s CPU and starved the server). Play #1 and #2 timed out; Play #3, with the client minimized, had the server listening after 36 s. Not tried on hardware with a GPU."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "SP-PREPARING-TERRAIN-STUCK-SLOW-MACHINE"
+title = "After entering a new singleplayer world on a slow machine, the 'Preparing terrain and light' overlay stayed over the already rendered world for minutes while the server kept running and checkpointing."
+area = "client"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "Same RC5 Windows VM smoke as SP-START-TIMEOUT-SLOW-MACHINE (Play #3); the session was stopped without seeing the overlay clear. Software rendering may be the whole cause."
+regression = []
+failing_first = "reported"

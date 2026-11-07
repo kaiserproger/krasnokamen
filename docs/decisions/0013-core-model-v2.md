@@ -2,6 +2,12 @@
 
 **Status:** Accepted. This is the governing core model; [ADR 0014](0014-v1-core-retirement.md) retires v1.
 
+This page keeps the decision and its binding rules; domain contracts live in
+[docs/architecture](../architecture/). The previous 319 KB version, with
+per-feature implementation notes and their history, is in Git:
+`git show b24ee531:docs/decisions/0013-core-model-v2.md`. Code and tests win
+over that text; use it only to recover why a feature was built a certain way.
+
 ## Decision
 
 Use one native authoritative tick and a single cross-domain recovery boundary.
