@@ -238,8 +238,9 @@ python3 -m tools.harness list
 
 - Main commits often and pushes `main` (owner, 2026-11-07): small Conventional
   Commits per integrated slice, not one giant commit every two days; a commit
-  that is not yet green may land on `main`. Workers never commit; Main
-  integrates their patches. Tags, releases and publication still need the
+  that is not yet green may land on `main`. Workers commit only on their own
+  worktree branch, never on `main` and never pushed; Main merges or applies
+  their work. Tags, releases and publication still need the
   owner's explicit authorization, and every release tag first gets two read-only
   release reviewers ([release reviewers](docs/development/review-committee-and-breaker.md#release-reviewers-owner-2026-11-07)).
   Preserve hooks and signing. Commit `Cargo.lock` only for a concrete dependency
