@@ -180,6 +180,8 @@ class LifecycleGuardTests(unittest.TestCase):
             root = Path(tmp)
             (root / "vanilla").mkdir()
             server = _harness(tmp)
+            server.run_dir.mkdir(parents=True)
+            server.log_path.write_text("checkpoint committed tick=7\n")
             calls: list[str] = []
             old = SimpleNamespace(
                 pid=11,
@@ -206,6 +208,7 @@ class LifecycleGuardTests(unittest.TestCase):
                     "old_pid": 11,
                     "new_pid": 13,
                     "old_exit": -9,
+                    "published_prefix_before_kill": 7,
                     "same_world_dir": str(server.world_dir),
                     "same_config": str(server.config_path),
                     "same_binary": str(server.binary),
