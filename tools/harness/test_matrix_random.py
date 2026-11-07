@@ -18,6 +18,11 @@ from .quirk_parity.fuzz import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_A
 
 
 class RandomMatrixTests(unittest.TestCase):
+    def test_differential_rejects_planted_inventory_divergence(self):
+        state = {'inventories': [{}], 'container': {}, 'blocks': {}}
+        self.assertTrue(player.compare_player_states(state, state)['passed'])
+        self.assertFalse(player.compare_player_states(state, state, fault=True)['passed'])
+
     def test_vanilla_game_time_fence_parses_actual_feedback(self):
         oracle = object.__new__(player.VanillaMatrixServer)
         oracle.query = lambda _: 'System chat: The game time is 642 tick(s)'
