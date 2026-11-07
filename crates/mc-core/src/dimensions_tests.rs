@@ -377,21 +377,37 @@ fn dimensional_teleport_success_obeys_player_feedback_rule() {
     let (_, drains) = command(&mut state, 1, "tp @s 10 150 10");
     let slot = state.entities.slot_of(alice).unwrap();
     assert_eq!(state.entities.pos(slot)[0], 10.0);
-    assert!(!drains.iter().flat_map(|(_, changes)| changes).any(|change|
-        translation(change, "commands.teleport.success.location.single")));
+    assert!(
+        !drains
+            .iter()
+            .flat_map(|(_, changes)| changes)
+            .any(|change| translation(change, "commands.teleport.success.location.single"))
+    );
     let (_, drains) = command(&mut state, 1, r#"title @s title {"text":"Visible"}"#);
-    assert!(drains.iter().flat_map(|(_, changes)| changes).any(|change|
-        matches!(change, PlayerChange::Title(_))));
-    assert!(!drains.iter().flat_map(|(_, changes)| changes).any(|change|
-        translation(change, "commands.title.show.title.single")));
+    assert!(
+        drains
+            .iter()
+            .flat_map(|(_, changes)| changes)
+            .any(|change| matches!(change, PlayerChange::Title(_)))
+    );
+    assert!(
+        !drains
+            .iter()
+            .flat_map(|(_, changes)| changes)
+            .any(|change| translation(change, "commands.title.show.title.single"))
+    );
     let (_, drains) = command(&mut state, 1, "spawnpoint @s 9 150 9");
     assert_eq!(state.players[&alice].respawn_point, Some([9, 150, 9]));
     assert!(!drains.iter().flat_map(|(_, changes)| changes).any(|change|
         matches!(change, PlayerChange::Chat { message } if message.contains("Set spawn point"))));
     command(&mut state, 1, "gamerule send_command_feedback true");
     let (_, drains) = command(&mut state, 1, "tp @s 11 150 10");
-    assert!(drains.iter().flat_map(|(_, changes)| changes).any(|change|
-        translation(change, "commands.teleport.success.location.single")));
+    assert!(
+        drains
+            .iter()
+            .flat_map(|(_, changes)| changes)
+            .any(|change| translation(change, "commands.teleport.success.location.single"))
+    );
 }
 
 #[test]

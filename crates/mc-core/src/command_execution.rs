@@ -92,7 +92,6 @@ pub(crate) fn accepts_success(state: &TickState, connection: ConnectionId) -> bo
         )
 }
 
-
 pub(crate) fn error(state: &mut TickState, connection: ConnectionId, message: impl Into<String>) {
     state.push_player(
         connection,
@@ -389,7 +388,11 @@ pub(crate) fn execute(
             } else {
                 ("many", vec![text(ids.len()), label])
             };
-            let send = if count == 0 { feedback } else { success_feedback };
+            let send = if count == 0 {
+                feedback
+            } else {
+                success_feedback
+            };
             send(
                 state,
                 connection,
