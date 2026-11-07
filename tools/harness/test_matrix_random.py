@@ -119,6 +119,8 @@ class RandomMatrixTests(unittest.TestCase):
                          stock([{'item_id': 'minecraft:oak_planks', 'count': 8}]))
         self.assertNotEqual(stock([{'item_id': 'minecraft:oak_log', 'count': 2}]),
                             stock([{'item_id': 'minecraft:oak_planks', 'count': 9}]))
+        self.assertEqual(stock([{'item_id': 'minecraft:diamond', 'count': 1}]),
+                         {'minecraft:diamond': 1})
 
     def test_published_wal_fence_checks_framing_checksum_and_tick(self):
         with tempfile.TemporaryDirectory() as directory:

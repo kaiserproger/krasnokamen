@@ -25,9 +25,8 @@ WEIGHT = {'minecraft:dirt': ('earth', 1), 'minecraft:oak_log': ('wood', 4),
 def stock(stacks):
     result = Counter()
     for stack in stacks:
-        if stack['item_id'] in WEIGHT:
-            resource, weight = WEIGHT[stack['item_id']]
-            result[resource] += weight * stack['count']
+        resource, weight = WEIGHT.get(stack['item_id'], (stack['item_id'], 1))
+        result[resource] += weight * stack['count']
     return result
 
 
