@@ -146,6 +146,59 @@ fn step(state: &mut TickState) -> ChangeSet {
 }
 
 #[test]
+fn exhausted_spare_bed_search_does_not_starve_a_lumber_delivery() {
+    use crate::settlements::buildings::BuildingKind;
+    let (mut state, slot, mut worker) =
+        super::super::mining_tests::fixture(BuildingKind::LumberCamp);
+    state.entities.set_pos(slot, [2.5, 201.0, 3.5]);
+    let home = bed(&mut state, 5, 3);
+    bed(&mut state, 14, 14);
+    super::super::mining_tests::storage(&mut state, &worker, [12, 201, 12]);
+    let logs = item(&state, "minecraft:birch_log");
+    worker.home = Some(home);
+    worker.inventory[0] = Some(ItemStack::new(logs, 5));
+    worker.lumber_progress.returning = true;
+    state.entities.row_mut(slot).villager = Some(worker);
+    state.world.fold_overlay();
+    state.day_time = 9_000;
+    state.tick = 20;
+    state.tick_budget.reset(state.tick);
+    let mut changes = ChangeSet::default();
+    crate::settlements::allocator::tick(&mut state, &mut changes);
+    let mut cache = std::mem::take(&mut state.villager_pois);
+    set_node_allowance(&mut state, 5);
+    let mut path = Vec::new();
+    let spare = free_bed(&mut state, &mut cache, slot, &mut path);
+    assert!(
+        spare.is_none() && crate::settlements::allocator::nodes_exhausted(&state),
+        "the spare-bed search must exhaust this tick's node allowance: spare={spare:?}, path={path:?}, home={:?}, remaining={}, poi_chunks={}",
+        state.entities.row(slot).villager.as_ref().unwrap().home,
+        state.tick_budget.remaining(Kind::PathNode),
+        cache.chunks.len()
+    );
+    state.villager_pois = cache;
+
+    for _ in 0..1_200 {
+        state.tick_budget.reset(state.tick);
+        crate::settlements::allocator::tick(&mut state, &mut changes);
+        set_node_allowance(&mut state, 5);
+        tick(&mut state, &mut changes);
+        state.tick += 1;
+        if state.block_entities[&(12, 201, 12)]
+            .slots
+            .iter()
+            .any(|stack| stack.item_id == logs && stack.count == 5)
+        {
+            return;
+        }
+    }
+    panic!(
+        "a repeatedly deferred bed search must not prevent the real worker from delivering its logs: {:?}",
+        state.entities.row(slot).villager
+    );
+}
+
+#[test]
 fn resident_inactive_brain_freezes_age_and_poi_acquisition_until_activation() {
     let mut state = test_state();
     bed(&mut state, 8, 8);

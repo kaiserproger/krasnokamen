@@ -10,6 +10,8 @@ Each parent must be an adult, awake, not panicking, and willing: at least 12 ava
 
 A birth needs an unclaimed, reachable bed with space for a baby, within the settlement's housing scope. A parent's own bed cannot be the spare bed. Villagers can share food with nearby villagers who are short; sharing also respects production reservations.
 
+Ration and spare-bed searches have their own 40-tick cadence. A search that exhausts the shared path budget cannot immediately repeat on every tick and starve the resident's work or delivery route.
+
 ## Farming
 
 A settlement-bound farmer needs a job in a certified Farmer workshop to harvest; a saved Farmer profession alone is not enough. While working, awake farmers harvest mature wheat, carrots, potatoes and beetroot and replant them. The complete yield must fit in the farmer's inventory. Farming also requires the villager-farming mob-griefing rule.

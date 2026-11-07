@@ -434,6 +434,9 @@ pub struct VillagerState {
     /// Earliest tick of this resident's next shear attempt.
     #[serde(skip)]
     pub(crate) shepherd_at: u64,
+    /// Earliest tick for another breeding-ration and spare-bed search.
+    #[serde(skip)]
+    pub(crate) ration_at: u64,
     /// Resumable certified-farm sweep and selected crop, owned by the tick.
     #[serde(skip)]
     pub(crate) harvest_progress: harvest::Progress,
@@ -505,6 +508,7 @@ impl Default for VillagerState {
             opened_doors: Vec::new(),
             harvest_at: 0,
             shepherd_at: 0,
+            ration_at: 0,
             harvest_progress: harvest::Progress::default(),
             poi_validation: crate::settlements::allocator::PoiValidation::default(),
             trade_work: None,
