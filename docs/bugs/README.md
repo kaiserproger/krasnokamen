@@ -258,9 +258,10 @@ field. KeepAlive is not chunk data.
 
 The operator-only `/debug menu` probe replies privately with one
 `SOLARIS_MENU` JSON line containing the current container ID, carried stack,
-and every menu slot. Each stack reports its item identifier and count; an
-empty stack has a null item and zero count. The image comes from server-owned
-menu and backing storage, not client prediction. If the backing state cannot be
+and every menu slot. Each nonempty stack reports its item identifier, count and
+complete serialized stack data under `components`; an empty stack has a null
+item, zero count and null components. The image comes from server-owned menu
+and backing storage, not client prediction. If the backing state cannot be
 resolved, the command reports an error rather than inventing empty slots.
 The craft-drag probes use ordered replies after pointer press, movement, release
 and menu close; the crafting result slot is virtual and excluded from custody
