@@ -1318,7 +1318,10 @@ fn opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal()
     let committed = world.manifest.tick;
     let source = world.state.world.chunk_source();
     let store = Arc::clone(source.native.as_ref().unwrap());
-    let valid = source.load_native(chunk).unwrap().expect("checkpointed chunk");
+    let valid = source
+        .load_native(chunk)
+        .unwrap()
+        .expect("checkpointed chunk");
     let base = source.resolve_base(chunk).unwrap();
     let registry = Arc::clone(&world.state.registry);
 
@@ -1347,7 +1350,10 @@ fn opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal()
             ("y".into(), Tag::Int(at.y)),
             ("z".into(), Tag::Int(at.z)),
             ("CookingTimes".into(), Tag::IntArray(vec![0; 4])),
-            ("CookingTotalTimes".into(), Tag::IntArray(vec![600, 0, 0, 0])),
+            (
+                "CookingTotalTimes".into(),
+                Tag::IntArray(vec![600, 0, 0, 0]),
+            ),
         ]),
     )
     .unwrap();
@@ -1385,7 +1391,10 @@ fn opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal()
             .iter()
             .any(|image| image.chunk == [chunk.x, chunk.z] && !image.ticks.is_empty());
         (
-            replay.opaque_block_entities.get(&(at.x, at.y, at.z)).cloned(),
+            replay
+                .opaque_block_entities
+                .get(&(at.x, at.y, at.z))
+                .cloned(),
             scheduled,
         )
     };
@@ -1483,4 +1492,140 @@ fn opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal()
         beef,
         "the campfire's beef reached the store"
     );
+}
+
+/// A container post-image can be recovered without loading its chunk. If that
+/// chunk is unreadable, a checkpoint must not prune the only durable image.
+#[test]
+fn container_replay_into_unloadable_chunk_declines_checkpoint_and_keeps_wal() {
+    use mc_nbt::Tag;
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let at = crate::boundary::BlockPos {
+        x: 40,
+        y: 100,
+        z: 40,
+    };
+    let chunk = mc_world::ChunkPos { x: 2, z: 2 };
+    world.tick(|state| {
+        state
+            .world
+            .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+        let chest = state
+            .registry
+            .blocks
+            .block(&mc_data::Identifier::parse("minecraft:chest").unwrap())
+            .unwrap()
+            .default
+            .0;
+        state.world.set_block(at.x, at.y, at.z, chest);
+        state.world.fold_overlay();
+    });
+    world.checkpoint();
+    let committed = world.manifest.tick;
+    let source = world.state.world.chunk_source();
+    let store = Arc::clone(source.native.as_ref().unwrap());
+    let valid = source.load_native(chunk).unwrap().unwrap();
+    let base = source.resolve_base(chunk).unwrap();
+    let registry = Arc::clone(&world.state.registry);
+    let diamond = mc_data::ItemStack::new(
+        registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+            .unwrap(),
+        1,
+    );
+    let tick = world.state.tick + 1;
+    world
+        .writer
+        .append(
+            tick,
+            tick,
+            &[JournalEntry::BlockEntity {
+                pos: [at.x, at.y, at.z],
+                slots: vec![diamond.clone(); 27],
+                furnace: None,
+                tick,
+            }],
+        )
+        .unwrap();
+    let config = world.config.clone();
+    drop(world);
+
+    let mut corrupt = valid.clone();
+    let conduit = mc_world::BlockPos { x: at.x + 1, ..at };
+    let mut record = Vec::new();
+    mc_nbt::write_network(
+        &mut record,
+        &Tag::Compound(vec![
+            ("id".into(), Tag::String("minecraft:conduit".into())),
+            ("x".into(), Tag::Int(conduit.x)),
+            ("y".into(), Tag::Int(conduit.y)),
+            ("z".into(), Tag::Int(conduit.z)),
+            ("Target".into(), Tag::IntArray(vec![1, 2, 3])),
+        ]),
+    )
+    .unwrap();
+    corrupt.block_entities.insert(conduit, record);
+    store
+        .apply_offline_snapshot(
+            source.dimension,
+            &base,
+            &mut corrupt,
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
+    assert!(source.load_native(chunk).is_err());
+
+    let mut reopened = World::open(config.clone());
+    assert!(!reopened.state.world.has_chunk(chunk.x, chunk.z));
+    assert_eq!(
+        reopened
+            .state
+            .block_entities
+            .get(&(at.x, at.y, at.z))
+            .unwrap()
+            .slots[0],
+        diamond
+    );
+    reopened.tick(|_| {});
+    let (work_tx, _work_rx) = journal_work_channel();
+    let (done_tx, _done_rx) = std::sync::mpsc::channel();
+    let tick = reopened.state.tick;
+    assert!(
+        !start_checkpoint(&mut reopened.state, &work_tx, &done_tx, tick),
+        "checkpoint must decline the unreadable container's WAL image"
+    );
+    assert!(reopened.state.world.load_error(chunk).is_some());
+    assert_eq!(read_manifest(&config).unwrap().tick, committed);
+    drop(reopened);
+    let replay = crate::native_checkpoint::recover_with_reader(
+        &config,
+        Arc::clone(&registry),
+        store.checkpoint_reader().unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        replay.dimensions[&Dimension::Overworld].block_entities[&(at.x, at.y, at.z)].slots[0],
+        diamond
+    );
+
+    let mut repaired = valid;
+    store
+        .apply_offline_snapshot(
+            source.dimension,
+            &base,
+            &mut repaired,
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
+    let mut reopened = World::open(config);
+    reopened.tick(|_| {});
+    reopened.checkpoint();
+    let saved = source.load_native(chunk).unwrap().unwrap();
+    assert_eq!(saved.chests[&at].slots[0].item_id, diamond.item_id);
+    assert_eq!(saved.chests[&at].slots[0].count, diamond.count);
 }
