@@ -1318,7 +1318,10 @@ fn opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal()
     let committed = world.manifest.tick;
     let source = world.state.world.chunk_source();
     let store = Arc::clone(source.native.as_ref().unwrap());
-    let valid = source.load_native(chunk).unwrap().expect("checkpointed chunk");
+    let valid = source
+        .load_native(chunk)
+        .unwrap()
+        .expect("checkpointed chunk");
     let base = source.resolve_base(chunk).unwrap();
     let registry = Arc::clone(&world.state.registry);
 
@@ -1347,7 +1350,10 @@ fn opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal()
             ("y".into(), Tag::Int(at.y)),
             ("z".into(), Tag::Int(at.z)),
             ("CookingTimes".into(), Tag::IntArray(vec![0; 4])),
-            ("CookingTotalTimes".into(), Tag::IntArray(vec![600, 0, 0, 0])),
+            (
+                "CookingTotalTimes".into(),
+                Tag::IntArray(vec![600, 0, 0, 0]),
+            ),
         ]),
     )
     .unwrap();
@@ -1385,7 +1391,10 @@ fn opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal()
             .iter()
             .any(|image| image.chunk == [chunk.x, chunk.z] && !image.ticks.is_empty());
         (
-            replay.opaque_block_entities.get(&(at.x, at.y, at.z)).cloned(),
+            replay
+                .opaque_block_entities
+                .get(&(at.x, at.y, at.z))
+                .cloned(),
             scheduled,
         )
     };

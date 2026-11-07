@@ -918,7 +918,12 @@ fn refusing_a_resident_chunk_keeps_custody_of_folded_block_edits() {
     let biome = mc_data::Identifier::parse("minecraft:plains").unwrap();
     let pos = ChunkPos { x: 0, z: 0 };
     store
-        .import_chunk(0, &Chunk::empty(pos, air, biome), &registry.blocks, &registry.items)
+        .import_chunk(
+            0,
+            &Chunk::empty(pos, air, biome),
+            &registry.blocks,
+            &registry.items,
+        )
         .unwrap();
     let generated = Arc::new(AtomicUsize::new(0));
     let source = source(
