@@ -12,7 +12,8 @@ from .native_p1 import _aim, _inventory, _rows
 from .native_v2 import _block, _click, _echo, _open, _point, _prepare, _set, _use
 from .probe_steps import ProbeSteps, container_slot, item_count
 
-SCENARIO_IDS = frozenset({"java-v2-p5-parity", "java-v2-p5-towns", "java-v2-p5-cursor"})
+SCENARIO_IDS = frozenset({"java-v2-p5-parity", "java-v2-p5-towns", "java-v2-p5-cursor",
+                          "java-v2-p5-craft-drag", "java-v2-p5-craft-drag-paced"})
 REQUIRED_TOOLS = frozenset({
     "minecraft_observe", "minecraft_wait_for_state_change", "minecraft_send_chat",
     "minecraft_read_block", "minecraft_wait_for_block_state", "minecraft_use_item_on",

@@ -1132,6 +1132,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
                 .hostile
                 .targets
                 .insert(state.entities.body(write.slot).id, target);
+            crate::hostile::set_zombie_aggressive(state, write.slot, true);
         }
         let attack_cooldown = raw
             .iter()

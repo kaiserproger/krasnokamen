@@ -82,6 +82,51 @@ fn chat_contains(state: &TickState, text: &str) -> bool {
 }
 
 #[test]
+fn debug_menu_reports_authoritative_inventory_through_command_path() {
+    let (mut state, alice, _) = fixture();
+    let log = state.registry.items.id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap()).unwrap();
+    let diamond = state.registry.items.id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap()).unwrap();
+    let player = state.players.get_mut(&alice).unwrap();
+    player.inventory_menu.grid[0] = mc_data::ItemStack::new(log, 2);
+    player.inventory_menu.carried = mc_data::ItemStack::new(log, 3);
+    player.inventory.slots[0] = mc_data::ItemStack::new(diamond, 4);
+    let (_, outbox, _) = crate::tick::run_tick(&mut state, &[PlayerInput::Command {
+        connection: ConnectionId(1),
+        command: "debug menu".into(),
+        permission_level: 4,
+    }]);
+    let messages: Vec<_> = outbox.iter().flat_map(|(connection, changes)| {
+        changes.iter().filter_map(move |change| match change {
+            PlayerChange::Chat { message } if *connection == ConnectionId(1) => message.strip_prefix("SOLARIS_MENU "),
+            _ => None,
+        })
+    }).collect();
+    assert_eq!(messages.len(), 1, "{outbox:?}");
+    let image: serde_json::Value = serde_json::from_str(messages[0]).unwrap();
+    assert_eq!(image["container_id"], 0);
+    assert_eq!(image["carried"], serde_json::json!({"item":"minecraft:oak_log","count":3}));
+    assert_eq!(image["slots"].as_array().unwrap().len(), 46);
+    assert_eq!(image["slots"][1], serde_json::json!({"item":"minecraft:oak_log","count":2}));
+    assert_eq!(image["slots"][36], serde_json::json!({"item":"minecraft:diamond","count":4}));
+    let (_, redirected, _) = crate::tick::run_tick(&mut state, &[PlayerInput::Command {
+        connection: ConnectionId(1),
+        command: "execute as Bob run debug menu".into(),
+        permission_level: 4,
+    }]);
+    let answer = redirected.iter().flat_map(|(connection, changes)| {
+        changes.iter().filter_map(move |change| match change {
+            PlayerChange::Chat { message } if *connection == ConnectionId(1) =>
+                message.strip_prefix("SOLARIS_MENU "),
+            _ => None,
+        })
+    }).next().expect("issuing player receives the menu");
+    let redirected_image: serde_json::Value = serde_json::from_str(answer).unwrap();
+    assert_eq!(redirected_image["slots"][1], image["slots"][1]);
+    assert_eq!(redirected_image["carried"], image["carried"]);
+    assert!(crate::commands::parse("debug menu", false).is_err());
+}
+
+#[test]
 fn worldborder_commands_update_live_tick_state() {
     let (mut state, alice, _) = fixture();
     command(&mut state, alice, "worldborder set 100");

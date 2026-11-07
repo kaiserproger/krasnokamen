@@ -256,6 +256,17 @@ The shared native wire observer uses the pinned 26.3 packet IDs and vanilla
 `ByteBufCodecs.BIT_SET` byte-array masks. Heightmap long arrays are a different
 field. KeepAlive is not chunk data.
 
+The operator-only `/debug menu` probe replies privately with one
+`SOLARIS_MENU` JSON line containing the current container ID, carried stack,
+and every menu slot. Each stack reports its item identifier and count; an
+empty stack has a null item and zero count. The image comes from server-owned
+menu and backing storage, not client prediction. If the backing state cannot be
+resolved, the command reports an error rather than inventing empty slots.
+The craft-drag probes use ordered replies after pointer press, movement, release
+and menu close; the crafting result slot is virtual and excluded from custody
+totals. The paced Java and native probes also check right-button pickup and
+release outside the menu. Screenshots remain necessary for visual review.
+
 Client-tier scenarios run the native client at `SOLARIS_CLIENT_ROOT` (default:
 the sibling `solaris-client` checkout). The P2, mount-kind and map-marker
 promotions were gated with client branch `pauline/client-post-rc4` (`e1b22a5`);
