@@ -15,7 +15,7 @@ without that review, and pushing, tagging and publishing releases are owner
 actions. Make each commit a revertible Conventional Commit and leave hooks and
 signing alone. Coding agents running on the owner's host follow AGENTS.md
 instead: they do not commit, push or merge without the owner's explicit
-authorization, and they use the host's shared build slots.
+authorization, and they follow the host's memory-runner and target-directory rules.
 
 ## Prerequisites
 
