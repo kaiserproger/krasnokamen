@@ -1,5 +1,6 @@
 """Seed reproducibility and independent fault controls for every invariant."""
 import copy
+import json
 from pathlib import Path
 import struct
 import tempfile
@@ -28,6 +29,8 @@ class RandomMatrixTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'stop after configuration'):
                     player.run_player_script(ctx, player_scenario(7, 1, 2), jar, root)
             self.assertEqual(server.call_args.kwargs['properties']['white-list'], 'false')
+            settings = json.loads(server.call_args.kwargs['properties']['generator-settings'])
+            self.assertEqual(settings['layers'], [{'height': 1, 'block': 'minecraft:stone'}])
 
     def test_mining_waits_for_exact_ack_including_sequence_zero(self):
         snapshots = iter([{'block_ack_sequence': None}, {'block_ack_sequence': 0}])
