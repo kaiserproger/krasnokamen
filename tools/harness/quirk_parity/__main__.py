@@ -19,7 +19,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import compare, fuzz
+from . import compare, seeded as fuzz
 from .vanilla import DEFAULT_JAR, MEM_RUN, REPO_ROOT, VanillaError, VanillaOracle
 
 SCENARIO_DIR = Path(__file__).with_name("scenarios")

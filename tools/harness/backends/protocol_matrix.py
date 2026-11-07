@@ -158,13 +158,13 @@ def run(ctx, *, random_mode=False):
         adapter_error = None
         profile_contract = {}
         if random_mode:
-            from ..quirk_parity.fuzz import player_scenario
+            from ..quirk_parity.seeded import player_scenario
             row = json.loads(args.script.read_text()) if args.script else player_scenario(
                 args.seed, args.steps, args.bots, differential=args.differential)
             if args.differential and args.vanilla_jar is None:
                 raise ValueError('--differential requires an ignored 26.3 --vanilla-jar')
             if args.differential:
-                from ..quirk_parity.fuzz import DETERMINISTIC_ACTIONS
+                from ..quirk_parity.seeded import DETERMINISTIC_ACTIONS
                 if any(step['verb'] not in DETERMINISTIC_ACTIONS for step in row['actions']):
                     raise ValueError('differential replay contains a non-deterministic domain')
             if row['subject'] != 'random.seeded':

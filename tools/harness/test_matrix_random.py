@@ -13,7 +13,7 @@ from .backends import matrix_random
 from .quirk_parity import player
 
 from .matrix_domains.random import invariant_checks, mutate_observation, stock, _published, setup, recovery_matches, _mine, _exact_slots, _action
-from .quirk_parity.fuzz import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_ACTIONS,
+from .quirk_parity.seeded import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_ACTIONS,
                                 shrink_player_scenario, failure_identity)
 
 

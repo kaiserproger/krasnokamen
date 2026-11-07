@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 from .. import runtime
-from ..quirk_parity.fuzz import failure_identity, shrink_player_scenario
+from ..quirk_parity.seeded import failure_identity, shrink_player_scenario
 from .protocol_matrix import run as run_protocol_matrix
 
 
