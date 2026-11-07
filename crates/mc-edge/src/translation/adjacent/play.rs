@@ -29,6 +29,18 @@ pub(super) fn clientbound_body<'a>(
     name: &str,
     body: &'a [u8],
 ) -> Result<Option<Cow<'a, [u8]>>> {
+    let upgrades = session.profile.tables.formats.upgrades();
+    match translate_clientbound(session, name, body)? {
+        Some(body) if upgrades => Ok(Some(super::upgrade::clientbound(name, body)?)),
+        other => Ok(other),
+    }
+}
+
+fn translate_clientbound<'a>(
+    session: &mut Session,
+    name: &str,
+    body: &'a [u8],
+) -> Result<Option<Cow<'a, [u8]>>> {
     let t = &session.profile.tables;
     let mut r = body;
     let mut w = Vec::new();
@@ -62,7 +74,7 @@ pub(super) fn clientbound_body<'a>(
         }
         "block_update" => {
             w.write_i64(r.read_i64()?);
-            w.write_varint(state(t, r.read_varint()?));
+            w.write_varint(state(t, r.read_varint()?)?);
         }
         "section_blocks_update" => {
             w.write_i64(r.read_i64()?);
@@ -70,7 +82,7 @@ pub(super) fn clientbound_body<'a>(
             w.write_varint(n);
             for _ in 0..n {
                 let entry = r.read_varlong()?;
-                let id = state(t, (entry >> 12) as i32);
+                let id = state(t, (entry >> 12) as i32)?;
                 w.write_varlong((i64::from(id) << 12) | (entry & 0xFFF));
             }
         }
@@ -81,11 +93,7 @@ pub(super) fn clientbound_body<'a>(
                 return Ok(None);
             };
             w.write_varint(kind);
-            if t.formats.upper >= 777 {
-                copy_block_entity_nbt(native_kind, &mut r, &mut w)?;
-            } else {
-                copy_nbt(&mut r, &mut w)?;
-            }
+            copy_block_entity_nbt(t, native_kind, &mut r, &mut w)?;
         }
         "block_event" => {
             w.write_i64(r.read_i64()?);
@@ -99,7 +107,7 @@ pub(super) fn clientbound_body<'a>(
             w.write_i64(r.read_i64()?);
             let data = r.read_i32()?;
             w.write_i32(if event == LEVEL_EVENT_BLOCK_BREAK {
-                state(t, data)
+                state(t, data)?
             } else {
                 data
             });
@@ -131,7 +139,7 @@ pub(super) fn clientbound_body<'a>(
             }
             let data = r.read_varint()?;
             w.write_varint(if kind == t.falling_block {
-                state(t, data)
+                state(t, data)?
             } else {
                 data
             });
@@ -267,6 +275,8 @@ pub(super) fn clientbound_body<'a>(
             }
             if t.formats.upper >= 777 {
                 r.read_bool()?;
+            } else if t.formats.upgrades() {
+                w.write_bool(false);
             }
         }
         "sound" | "sound_entity" => {
@@ -431,6 +441,11 @@ pub(super) fn serverbound_body<'a>(
     body: &'a [u8],
 ) -> Result<Option<Cow<'a, [u8]>>> {
     let t = &session.profile.tables;
+    if t.formats.upgrades()
+        && let Some(body) = super::upgrade::serverbound(name, body)?
+    {
+        return Ok(Some(Cow::Owned(body)));
+    }
     let mut r = body;
     let mut w = Vec::new();
     match name.strip_prefix("minecraft:").unwrap_or(name) {
@@ -532,25 +547,15 @@ fn serverbound(session: &mut Session, name: &str, body: &[u8]) -> Result<Option<
     serverbound_body(session, name, body).map(|body| body.map(Cow::into_owned))
 }
 
-/// Record only lossy item-id substitutions, not ordinary legacy stacks.
+/// Save the exact peer image whenever any part of the stack lost information.
 fn inventory_stack(
     session: &Session,
     slot: Option<i16>,
     r: &mut &[u8],
     w: &mut Vec<u8>,
 ) -> Result<()> {
-    let t = &session.profile.tables;
-    let mut peek = *r;
-    let count = peek.read_varint()?;
-    let lossy = if count > 0 {
-        let item = peek.read_varint()?;
-        let legacy = t.items.get(item).unwrap_or(1);
-        t.items.back(legacy) != Some(item)
-    } else {
-        false
-    };
     let start = w.len();
-    items::stack(t, To::Legacy, r, w)?;
+    let lossy = items::stack_with_loss(&session.profile.tables, To::Legacy, r, w)?;
     if let Some(slot @ 5..=45) = slot {
         let mut polyfills = session.inventory_polyfills.lock();
         if lossy {
@@ -581,8 +586,13 @@ fn resolve(t: Teleport, pose: Option<([f64; 3], [f32; 2])>) -> ([f64; 3], [f32; 
     (position, rotation)
 }
 
-fn state(t: &Tables, id: i32) -> i32 {
-    t.block_states.get(id).unwrap_or(1)
+fn state(t: &Tables, id: i32) -> Result<i32> {
+    t.block_states.get(id).with_context(|| {
+        format!(
+            "unknown block-state {id} in protocol {} -> {}",
+            t.formats.upper, t.formats.lower
+        )
+    })
 }
 
 /// `ItemCost`: item id, count, exact component predicate (Solaris sends none).
@@ -635,7 +645,7 @@ fn login(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
 /// `CommonPlayerSpawnInfo`: 26.3 game modes are VarInt + optional VarInt
 /// (0 none, id + 1); 26.1.2 writes byte + byte (-1 none).
 fn spawn_info(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
-    w.write_varint(r.read_varint()?);
+    w.write_varint(t.registry_id("dimension_type", r.read_varint()?)?);
     copy_identifier(r, w)?;
     w.write_i64(r.read_i64()?);
     if t.formats.upper >= 777 {
@@ -645,6 +655,12 @@ fn spawn_info(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
         let previous = r.read_varint()?;
         ensure!((0..=4).contains(&previous), "previous game mode {previous}");
         w.write_i8(previous as i8 - 1);
+    } else if t.formats.lower >= 777 {
+        let mode = r.read_u8()?;
+        let previous = r.read_i8()?;
+        ensure!(mode <= 3 && (-1..=3).contains(&previous), "776 game modes");
+        w.write_varint(i32::from(mode));
+        w.write_varint(i32::from(previous) + 1);
     } else {
         w.write_u8(r.read_u8()?);
         w.write_i8(r.read_i8()?);
@@ -693,11 +709,7 @@ fn chunk(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
         let native_kind = r.read_varint()?;
         let kind = t.block_entities.get(native_kind);
         let mut nbt = Vec::new();
-        if t.formats.upper >= 777 {
-            copy_block_entity_nbt(native_kind, r, &mut nbt)?;
-        } else {
-            copy_nbt(r, &mut nbt)?;
-        }
+        copy_block_entity_nbt(t, native_kind, r, &mut nbt)?;
         if let Some(kind) = kind {
             out.write_u8(xz);
             out.write_i16(y);
@@ -715,8 +727,11 @@ fn chunk(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
 /// PotDecorations changed from an ordered item-id list to a named template
 /// record. Only this typed field is downgraded; custom data and stored contents
 /// must never be recursively rewritten.
-fn copy_block_entity_nbt(kind: i32, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
-    if kind != mc_data::block_entity_kinds::BlockEntityKind::DecoratedPot.protocol_id() as i32 {
+fn copy_block_entity_nbt(t: &Tables, kind: i32, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
+    if Some(kind) != t.decorated_pot {
+        return copy_nbt(r, w);
+    }
+    if t.formats.upper < 777 && t.formats.lower < 777 {
         return copy_nbt(r, w);
     }
     let mut tag = mc_nbt::read_network(r)?;
@@ -724,6 +739,30 @@ fn copy_block_entity_nbt(kind: i32, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()
         bail!("decorated pot block entity must be a compound");
     };
     if let Some((_, value)) = fields.iter_mut().find(|(key, _)| key == "sherds") {
+        if t.formats.upgrades() {
+            let mc_nbt::Tag::List(items) = value else {
+                bail!("776 decorated pot sherds must be an item-id list");
+            };
+            ensure!(items.elements.len() <= 4, "pot sherd count");
+            let mut sides = Vec::with_capacity(4);
+            for (index, side) in ["back", "left", "right", "front"].into_iter().enumerate() {
+                let item = match items.elements.get(index) {
+                    Some(mc_nbt::Tag::String(item)) => item.as_str(),
+                    None => "minecraft:brick",
+                    Some(_) => bail!("pot sherd must be an item identifier"),
+                };
+                sides.push((
+                    side.to_owned(),
+                    mc_nbt::Tag::Compound(vec![
+                        ("id".into(), mc_nbt::Tag::String(item.into())),
+                        ("count".into(), mc_nbt::Tag::Int(1)),
+                    ]),
+                ));
+            }
+            *value = mc_nbt::Tag::Compound(sides);
+            mc_nbt::write_network(w, &tag)?;
+            return Ok(());
+        }
         let mc_nbt::Tag::Compound(sides) = value else {
             bail!("canonical decorated pot sherds must be a named template record");
         };
@@ -754,6 +793,23 @@ fn copy_block_entity_nbt(kind: i32, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()
 /// 26.3 ByteBufCodecs.BIT_SET uses little-endian byte arrays; 26.1.2
 /// FriendlyByteBuf.writeBitSet uses a big-endian long array instead.
 fn light_data(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
+    if t.formats.upgrades() {
+        for _ in 0..4 {
+            let count = r.read_varint()?;
+            ensure!((0..=4096).contains(&count), "light mask long count");
+            let mut bytes = Vec::with_capacity(count as usize * 8);
+            for _ in 0..count {
+                bytes.extend_from_slice(&r.read_i64()?.to_le_bytes());
+            }
+            while bytes.last() == Some(&0) {
+                bytes.pop();
+            }
+            w.write_byte_array(&bytes)?;
+        }
+        w.extend_from_slice(r);
+        *r = &[];
+        return Ok(());
+    }
     if t.formats.upper < 777 {
         w.extend_from_slice(r);
         *r = &[];
@@ -858,7 +914,7 @@ fn particle_options(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<bool> 
     let mut payload = Vec::new();
     match name.strip_prefix("minecraft:").unwrap_or(name) {
         "block" | "block_marker" | "falling_dust" | "dust_pillar" | "block_crumble" => {
-            payload.write_varint(state(t, r.read_varint()?));
+            payload.write_varint(state(t, r.read_varint()?)?);
         }
         "dust" => {
             payload.write_i32(r.read_i32()?);
@@ -953,10 +1009,10 @@ fn metadata_value(t: &Tables, serializer: i32, r: &mut &[u8], w: &mut Vec<u8>) -
                 w.write_uuid(r.read_uuid()?);
             }
         }
-        14 => w.write_varint(state(t, r.read_varint()?)),
+        14 => w.write_varint(state(t, r.read_varint()?)?),
         15 => {
             let id = r.read_varint()?;
-            w.write_varint(if id == 0 { 0 } else { state(t, id - 1) + 1 });
+            w.write_varint(if id == 0 { 0 } else { state(t, id - 1)? + 1 });
         }
         16 => return particle_options(t, r, w),
         17 => {
@@ -988,7 +1044,7 @@ fn metadata_value(t: &Tables, serializer: i32, r: &mut &[u8], w: &mut Vec<u8>) -
         34 => {
             let holder = r.read_varint()?;
             ensure!(holder != 0, "inline painting variant");
-            w.write_varint(holder);
+            w.write_varint(t.registry_id("painting_variant", holder - 1)? + 1);
         }
         39 => {
             for _ in 0..3 {

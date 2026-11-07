@@ -10,6 +10,11 @@ fn session() -> Session {
     test_session(Tables {
         block_states: IdMap::by_name([("a", 0), ("b", 9)], [("a", 0), ("b", 4)], |_| None),
         items: IdMap::by_name([("stick", 10)], [("stick", 3)], |_| None),
+        registry_ids: [(
+            "dimension_type".into(),
+            IdMap::by_name([("overworld", 0)], [("overworld", 0)], |_| None),
+        )]
+        .into(),
         ..Tables::default()
     })
 }
@@ -384,6 +389,11 @@ fn sign_editor_translates_text_slot_to_front_flag() {
 fn block_entity_payload_and_respawn_tail_are_consumed() {
     let mut s = test_session(Tables {
         block_entities: IdMap::by_name([("chest", 7)], [("chest", 1)], |_| None),
+        registry_ids: [(
+            "dimension_type".into(),
+            IdMap::by_name([("overworld", 0)], [("overworld", 0)], |_| None),
+        )]
+        .into(),
         ..Tables::default()
     });
     let mut body = Vec::new();
@@ -417,6 +427,7 @@ fn decorated_pot_26_3_update_and_chunk_downgrade_named_templates() {
             [("decorated_pot", 42)],
             |_| None,
         ),
+        decorated_pot: Some(native_kind),
         ..Tables::default()
     });
     let tag = Tag::Compound(vec![
@@ -668,5 +679,56 @@ fn spectator_entity_option_is_added_only_at_the_775_to_776_boundary() {
             .unwrap()
             .unwrap(),
         [0]
+    );
+}
+
+#[test]
+fn unknown_block_state_is_not_a_documented_polyfill() {
+    let mut body = Vec::new();
+    body.write_i64(0);
+    body.write_varint(123456);
+    let error = clientbound(&mut session(), "minecraft:block_update", &body)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("unknown block-state 123456"), "{error}");
+    assert!(error.contains("777 -> 775"), "{error}");
+}
+
+#[test]
+fn dimension_and_painting_ids_follow_names_when_orders_differ() {
+    let mut s = session();
+    let t = &mut std::sync::Arc::get_mut(&mut s.profile).unwrap().tables;
+    t.registry_ids.insert(
+        "dimension_type".into(),
+        IdMap::by_name(
+            [("overworld", 0), ("nether", 1)],
+            [("nether", 0), ("overworld", 1)],
+            |_| None,
+        ),
+    );
+    t.registry_ids.insert(
+        "painting_variant".into(),
+        IdMap::by_name(
+            [("earth", 0), ("wind", 1)],
+            [("wind", 0), ("earth", 1)],
+            |_| None,
+        ),
+    );
+    let mut spawn = vec![0];
+    spawn.write_string("minecraft:overworld", 32767).unwrap();
+    spawn.write_i64(42);
+    spawn.extend([1, 0, 0, 0, 0, 0, 63]);
+    let mut output = Vec::new();
+    spawn_info(t, &mut spawn.as_slice(), &mut output).unwrap();
+    assert_eq!(
+        output[0], 1,
+        "dimension_type follows overworld, not ordinal zero"
+    );
+    let mut output = Vec::new();
+    assert!(metadata_value(t, 34, &mut &[1][..], &mut output).unwrap());
+    assert_eq!(
+        output,
+        [2],
+        "holder offset surrounds the named painting mapping"
     );
 }

@@ -374,11 +374,18 @@ impl IdMap {
     }
 }
 
-/// Layout endpoints, independent of the core's canonical version.
+/// Codec source/target releases. `upper`/`lower` name the default downgrade
+/// orientation; an upgrade profile is rebuilt from opposite source reports.
 #[derive(Debug, Clone, Copy)]
 pub struct Formats {
     pub upper: i32,
     pub lower: i32,
+}
+
+impl Formats {
+    pub fn upgrades(self) -> bool {
+        self.upper < self.lower
+    }
 }
 
 impl Default for Formats {
@@ -407,12 +414,15 @@ pub struct Tables {
     /// Canonical entity type -> metadata policy (absent = same layout).
     pub entity_metadata: HashMap<i32, Metadata>,
     pub block_entities: IdMap,
+    pub decorated_pot: Option<i32>,
     pub sounds: IdMap,
     pub particles: IdMap,
     pub components: IdMap,
     pub attributes: IdMap,
     pub argument_types: IdMap,
     pub argument_names: Vec<String>,
+    pub slot_display_names: Vec<String>,
+    pub recipe_display_names: Vec<String>,
     /// Other built-in and synced registry ids used by components and displays.
     pub registry_ids: HashMap<String, IdMap>,
     pub biomes: IdMap,
@@ -539,6 +549,10 @@ impl Tables {
             entities,
             entity_metadata,
             block_entities: registry("minecraft:block_entity_type", &none)?,
+            decorated_pot: canonical
+                .registry("minecraft:block_entity_type")?
+                .get("minecraft:decorated_pot")
+                .map(|entry| entry.protocol_id),
             sounds: registry("minecraft:sound_event", &none)?,
             particles: registry("minecraft:particle_type", &none)?,
             components: registry("minecraft:data_component_type", &none)?,
@@ -547,6 +561,8 @@ impl Tables {
                 (name == "team_color").then(|| "color".into())
             })?,
             argument_names: names_by_id(canonical.registry("minecraft:command_argument_type")?),
+            slot_display_names: names_by_id(canonical.registry("minecraft:slot_display")?),
+            recipe_display_names: names_by_id(canonical.registry("minecraft:recipe_display")?),
             registry_ids: {
                 let mut ids = HashMap::new();
                 for name in [
@@ -581,8 +597,21 @@ impl Tables {
         })
     }
 
-    /// Slime metadata changed in 26.2, not 26.3. Never rewrite it twice
-    /// while composing 777 -> 776 -> 775.
+    pub fn registry_id(&self, registry: &str, id: i32) -> Result<i32> {
+        self.registry_ids
+            .get(registry)
+            .and_then(|ids| ids.get(id))
+            .with_context(|| {
+                format!(
+                    "unmapped {registry} id {id} in {} -> {}",
+                    self.formats.upper, self.formats.lower
+                )
+            })
+    }
+
+    /// Both measured 26.2/26.3 hierarchies are Entity(8), LivingEntity(7),
+    /// Mob(1), AgeableMob(2), AbstractCubeMob.ID_SIZE(18). In 26.1.2 Slime
+    /// extends Mob directly and owns ID_SIZE(16). Rewrite only 776 -> 775.
     pub fn configure_metadata(&mut self, upper: &Reports) -> Result<()> {
         if self.formats.lower >= 776 {
             self.entity_metadata

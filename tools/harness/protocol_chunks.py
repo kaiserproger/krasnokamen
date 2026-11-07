@@ -1,4 +1,4 @@
-"""Received 26.1/26.3 palettes, matching mc-edge/src/legacy/chunk.rs.
+"""Received 26.1/26.3 palettes, matching mc-edge/src/translation/adjacent/chunk.rs.
 
 Keep compact palettes rather than allocating one Python object per block. The
 caller must supply the actual dimension minimum Y; an unknown dimension never

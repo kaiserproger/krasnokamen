@@ -6,6 +6,7 @@ mod displays;
 pub(super) mod items;
 mod play;
 pub(super) mod tables;
+mod upgrade;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -28,6 +29,7 @@ use tables::{PacketNames, Tables};
 /// snapshots are owned by the version profile in the parent module.
 pub struct Profile {
     tables: Tables,
+    upgrade: Option<Arc<Profile>>,
 }
 
 impl Profile {
@@ -41,7 +43,23 @@ impl Profile {
         let mut tables = Tables::new(&upper_reports, &lower_reports, &upper_data, &lower_data)?;
         tables.formats = tables::Formats { upper, lower };
         tables.configure_metadata(&upper_reports)?;
-        Ok(Self { tables })
+        let upgrade = if (upper, lower) == (777, 776) {
+            // Build the opposite mapping from source snapshots, never by
+            // inverting a nearest/polyfilled forward entry.
+            let mut tables = Tables::new(&lower_reports, &upper_reports, &lower_data, &upper_data)?;
+            tables.formats = tables::Formats {
+                upper: lower,
+                lower: upper,
+            };
+            tables.configure_metadata(&lower_reports)?;
+            Some(Arc::new(Self {
+                tables,
+                upgrade: None,
+            }))
+        } else {
+            None
+        };
+        Ok(Self { tables, upgrade })
     }
 }
 
@@ -92,6 +110,25 @@ impl Session {
         }
     }
 
+    fn orient(&mut self, direction: super::Direction) -> Result<()> {
+        if direction == super::Direction::Up
+            && self.profile.tables.formats.upper > self.profile.tables.formats.lower
+        {
+            self.profile = Arc::clone(
+                self.profile
+                    .upgrade
+                    .as_ref()
+                    .context("no measured upgrade codec for this adjacent pair")?,
+            );
+        }
+        anyhow::ensure!(
+            (direction == super::Direction::Down)
+                == (self.profile.tables.formats.upper > self.profile.tables.formats.lower),
+            "a protocol step cannot change traversal direction during a session"
+        );
+        Ok(())
+    }
+
     pub fn split_box(&self) -> Box<dyn super::StepSession> {
         Box::new(self.split())
     }
@@ -131,7 +168,22 @@ impl Session {
                 self.phase
             )
         })?;
-        let Some(legacy_id) = names.legacy_id(play::legacy_name(name)) else {
+        let target_name = if profile.tables.formats.upgrades() {
+            upgrade::clientbound_name(name, &frame.body)?
+        } else {
+            play::legacy_name(name)
+        };
+        let Some(legacy_id) = names.legacy_id(target_name) else {
+            anyhow::ensure!(
+                matches!(
+                    name,
+                    "minecraft:add_transient_block" | "minecraft:post_effects"
+                ),
+                "missing target packet {} -> {} {:?} {name} id {id:#04x}",
+                profile.tables.formats.upper,
+                profile.tables.formats.lower,
+                self.phase
+            );
             return Ok(None);
         };
         match self.phase {
@@ -182,6 +234,7 @@ impl Session {
             )
         })?;
         let canonical_name = match name {
+            "minecraft:punch" if profile.tables.formats.upgrades() => "minecraft:swing",
             "minecraft:swing" if profile.tables.formats.upper >= 777 => "minecraft:punch",
             "minecraft:spectate_entity" => "minecraft:spectator_action",
             other => other,
@@ -193,9 +246,12 @@ impl Session {
             (Phase::Play, "minecraft:configuration_acknowledged") => Some(Phase::Configuration),
             _ => None,
         };
-        let Some(canonical) = canonical else {
-            return Ok(None);
-        };
+        let canonical = canonical.with_context(|| {
+            format!(
+                "missing target packet {} -> {} {:?} {name} id {:#04x}",
+                profile.tables.formats.lower, profile.tables.formats.upper, self.phase, frame.id
+            )
+        })?;
         if self.phase == Phase::Play {
             match play::serverbound_body(self, name, &frame.body).with_context(|| {
                 format!(
@@ -240,10 +296,7 @@ impl super::StepSession for Session {
         direction: super::Direction,
         frame: RawFrame,
     ) -> Result<Option<RawFrame>> {
-        anyhow::ensure!(
-            direction == super::Direction::Down,
-            "this measured step has no clientbound upgrade codec"
-        );
+        self.orient(direction)?;
         self.clientbound_frame(frame)
     }
 
@@ -252,10 +305,7 @@ impl super::StepSession for Session {
         direction: super::Direction,
         frame: RawFrame,
     ) -> Result<Option<RawFrame>> {
-        anyhow::ensure!(
-            direction == super::Direction::Down,
-            "this measured step has no serverbound downgrade codec"
-        );
+        self.orient(direction)?;
         self.serverbound(frame)
     }
 
@@ -266,12 +316,18 @@ impl super::StepSession for Session {
 
 #[cfg(test)]
 pub(super) fn test_profile(tables: Tables) -> Arc<Profile> {
-    Arc::new(Profile { tables })
+    Arc::new(Profile {
+        tables,
+        upgrade: None,
+    })
 }
 
 #[cfg(test)]
 fn test_session(tables: Tables) -> Session {
-    Session::new(Arc::new(Profile { tables }))
+    Session::new(Arc::new(Profile {
+        tables,
+        upgrade: None,
+    }))
 }
 
 #[cfg(test)]

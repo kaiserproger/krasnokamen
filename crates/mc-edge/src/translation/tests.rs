@@ -5,8 +5,8 @@ use mc_protocol::codec::{ReadMc, WriteMc};
 
 const PACKETS: &str = r#"{
  "login":{"clientbound":{"minecraft:login_finished":{"protocol_id":2}},"serverbound":{"minecraft:login_acknowledged":{"protocol_id":3}}},
- "configuration":{"clientbound":{"minecraft:finish_configuration":{"protocol_id":3}},"serverbound":{"minecraft:finish_configuration":{"protocol_id":3}}},
- "play":{"clientbound":{"minecraft:login":{"protocol_id":1},"minecraft:block_update":{"protocol_id":9},"minecraft:light_update":{"protocol_id":10}},"serverbound":{"minecraft:keep_alive":{"protocol_id":5}}}
+ "configuration":{"clientbound":{"minecraft:finish_configuration":{"protocol_id":3},"minecraft:registry_data":{"protocol_id":7}},"serverbound":{"minecraft:finish_configuration":{"protocol_id":3}}},
+ "play":{"clientbound":{"minecraft:login":{"protocol_id":1},"minecraft:block_update":{"protocol_id":9},"minecraft:light_update":{"protocol_id":10}},"serverbound":{"minecraft:keep_alive":{"protocol_id":5},"minecraft:set_creative_mode_slot":{"protocol_id":57},"minecraft:accept_teleportation":{"protocol_id":45}}}
 }"#;
 
 fn measured_step(upper: i32, lower: i32, from_state: u32, to_state: u32) -> Step {
@@ -236,6 +236,8 @@ fn endpoint(root: &Path, version: Version) {
         "data_component_type",
         "attribute",
         "command_argument_type",
+        "slot_display",
+        "recipe_display",
     ] {
         registries.insert(format!("minecraft:{name}"), json!({"entries":{"minecraft:stone":{"protocol_id":0},"minecraft:brick":{"protocol_id":1}}}));
     }
@@ -411,4 +413,118 @@ fn unchanged_bodies_and_login_uuid_trimming_retain_frame_storage_across_steps() 
         .unwrap();
     assert_eq!(translated.body.as_ptr(), pointer);
     assert_eq!(translated.body.as_ref(), &[8; 8]);
+}
+
+#[test]
+fn production_factory_upgrades_776_to_777_through_login_configuration_and_play() {
+    use serde_json::json;
+    let dir = tempfile::tempdir().unwrap();
+    let upper = dir.path().join("777");
+    let lower = dir.path().join("776");
+    endpoint(&upper, SUPPORTED[2]);
+    endpoint(&lower, SUPPORTED[1]);
+    write_json(
+        &lower,
+        "reports/blocks.json",
+        json!({"minecraft:stone":{"states":[{"id":7,"default":true}]}}),
+    );
+    write_json(
+        &upper,
+        "reports/blocks.json",
+        json!({"minecraft:stone":{"states":[{"id":1,"default":true}]},"minecraft:cinnabar":{"states":[{"id":9,"default":true}]}}),
+    );
+    let mut registries: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(upper.join("reports/registries.json")).unwrap())
+            .unwrap();
+    registries["minecraft:item"]["entries"]["minecraft:cinnabar"] = json!({"protocol_id":2});
+    write_json(&upper, "reports/registries.json", registries);
+    let snapshot = dir.path().join("777-776");
+    snapshots::install(&upper, &lower, &snapshot, SUPPORTED[2], SUPPORTED[1]).unwrap();
+    let production = Arc::new(adjacent::Profile::load(&snapshot, 777, 776).unwrap());
+    let mut session = session(
+        vec![Step {
+            upper: 777,
+            lower: 776,
+            factory: Box::new(production),
+        }],
+        776,
+        777,
+    );
+    assert_eq!(
+        session.clientbound(2, &[4; 36]).unwrap().unwrap().1,
+        [4; 36]
+    );
+    session.serverbound(frame(3, &[])).unwrap().unwrap();
+    assert_eq!(
+        session.clientbound(7, &[1, 2, 3]).unwrap().unwrap().1,
+        [1, 2, 3]
+    );
+    session.clientbound(3, &[]).unwrap().unwrap();
+    session.serverbound(frame(3, &[])).unwrap().unwrap();
+
+    let mut prefix = Vec::new();
+    prefix.write_i32(7);
+    prefix.write_bool(false);
+    prefix.write_varint(0);
+    for value in [20, 10, 6] {
+        prefix.write_varint(value);
+    }
+    prefix.extend([0, 1, 0]);
+    prefix.write_varint(0);
+    prefix.write_string("minecraft:overworld", 32767).unwrap();
+    prefix.write_i64(42);
+    let mut old_login = prefix.clone();
+    old_login.extend([1, 255, 0, 0, 0, 0, 63, 0, 0]);
+    let mut new_login = prefix;
+    new_login.extend([1, 0, 0, 0, 0, 0, 63, 0, 0]);
+    assert_eq!(
+        session.clientbound(1, &old_login).unwrap().unwrap().1,
+        new_login
+    );
+    let mut update = vec![0; 8];
+    update.write_varint(7);
+    let translated = session.clientbound(9, &update).unwrap().unwrap().1;
+    assert_eq!(translated, [0, 0, 0, 0, 0, 0, 0, 0, 1]);
+
+    let mut light = vec![0, 0, 1];
+    light.write_i64(1);
+    light.extend([0, 0, 0, 0, 0]);
+    assert_eq!(
+        session.clientbound(10, &light).unwrap().unwrap().1,
+        [0, 0, 1, 1, 0, 0, 0, 0, 0]
+    );
+    let mut teleport = vec![11];
+    for _ in 0..3 {
+        teleport.write_f64(0.0);
+    }
+    for _ in 0..2 {
+        teleport.write_f32(0.0);
+    }
+    assert_eq!(
+        session
+            .serverbound(frame(45, &teleport))
+            .unwrap()
+            .unwrap()
+            .body
+            .as_ref(),
+        [11]
+    );
+    let mut unavailable_item = vec![0, 36, 1, 2, 0, 0];
+    let error = session
+        .serverbound(frame(57, &unavailable_item))
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("unmapped item id"),
+        "a 777-only cinnabar must never become the 776 stone polyfill"
+    );
+    unavailable_item[3] = 0;
+    assert_eq!(
+        session
+            .serverbound(frame(57, &unavailable_item))
+            .unwrap()
+            .unwrap()
+            .body
+            .as_ref(),
+        unavailable_item
+    );
 }

@@ -42,20 +42,27 @@ fn ingredient(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
 fn slot(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>, depth: usize) -> Result<()> {
     ensure!(depth <= 16, "slot display depth");
     let kind = r.read_varint()?;
-    w.write_varint(kind); // slot_display registration order is unchanged
-    match kind {
-        0 | 1 => {}
-        4 => item(t, r, w)?,
-        5 => items::template(t, To::Legacy, r, w)?,
-        6 => {
+    w.write_varint(t.registry_id("slot_display", kind)?);
+    let name = t
+        .slot_display_names
+        .get(kind as usize)
+        .context("unknown slot display")?;
+    match name.as_str() {
+        "minecraft:empty" | "minecraft:any_fuel" => {}
+        "minecraft:item" => item(t, r, w)?,
+        "minecraft:item_stack" => items::template(t, To::Legacy, r, w)?,
+        "minecraft:tag" => {
             // Native 26.3 TagSlotDisplay uses HolderSet(ITEM); 26.1.2 uses
             // a bare tag identifier. Solaris emits only named tag sets.
             if t.formats.upper >= 777 {
                 ensure!(r.read_varint()? == 0, "direct recipe tag display");
             }
+            if t.formats.lower >= 777 {
+                w.write_varint(0);
+            }
             string(r, w)?;
         }
-        10 => {
+        "minecraft:composite" => {
             for _ in 0..count(r, w)? {
                 slot(t, r, w, depth + 1)?;
             }
@@ -66,10 +73,14 @@ fn slot(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>, depth: usize) -> Result<()> 
 }
 fn recipe(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
     let kind = r.read_varint()?;
-    w.write_varint(kind); // recipe_display registration order is unchanged
-    match kind {
-        0 | 1 => {
-            if kind == 1 {
+    w.write_varint(t.registry_id("recipe_display", kind)?);
+    let name = t
+        .recipe_display_names
+        .get(kind as usize)
+        .context("unknown recipe display")?;
+    match name.as_str() {
+        "minecraft:crafting_shapeless" | "minecraft:crafting_shaped" => {
+            if name == "minecraft:crafting_shaped" {
                 w.write_varint(r.read_varint()?);
                 w.write_varint(r.read_varint()?);
             }
@@ -79,7 +90,7 @@ fn recipe(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
             slot(t, r, w, 0)?;
             slot(t, r, w, 0)?;
         }
-        2 => {
+        "minecraft:furnace" => {
             for _ in 0..4 {
                 slot(t, r, w, 0)?;
             }
@@ -192,6 +203,7 @@ fn advancements(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
         }
         let display = r.read_bool()?;
         w.write_bool(display);
+        let mut coordinates = [0.0; 2];
         if display {
             copy_nbt(r, w)?;
             copy_nbt(r, w)?;
@@ -203,8 +215,7 @@ fn advancements(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
                 string(r, w)?;
             }
             if t.formats.upper < 777 {
-                w.write_f32(r.read_f32()?);
-                w.write_f32(r.read_f32()?);
+                coordinates = [r.read_f32()?, r.read_f32()?];
             }
         }
         let mut requirements = Vec::new();
@@ -215,14 +226,17 @@ fn advancements(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
         }
         requirements.write_bool(r.read_bool()?);
         if t.formats.upper >= 777 {
-            let x = r.read_f32()?;
-            let y = r.read_f32()?;
-            if display {
-                w.write_f32(x);
-                w.write_f32(y);
-            }
+            coordinates = [r.read_f32()?, r.read_f32()?];
+        }
+        if t.formats.lower < 777 && display {
+            w.write_f32(coordinates[0]);
+            w.write_f32(coordinates[1]);
         }
         w.extend(requirements);
+        if t.formats.lower >= 777 {
+            w.write_f32(coordinates[0]);
+            w.write_f32(coordinates[1]);
+        }
     }
     // Removed identifiers, progress and showAdvancements have no registry ids.
     w.extend_from_slice(r);
