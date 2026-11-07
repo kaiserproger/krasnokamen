@@ -55,6 +55,9 @@ def run_player_script(ctx, row, jar, vanilla_data):
             name = f'Proto{index}'
             client = ProtocolMatrixClient(name, ('127.0.0.1', server.port), directory,
                                           vanilla_data, server.command, account_uuid=offline_uuid(name))
+            # Vanilla omits cursor packets when the client's prediction matches;
+            # force a correction so the observer never relies on predicted state.
+            client.observer.force_cursor_sync = True
             client.chunk_min_y = minimum
             client.observer.chunk_min_y = minimum
             clients.append(client)

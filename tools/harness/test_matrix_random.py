@@ -61,7 +61,7 @@ class RandomMatrixTests(unittest.TestCase):
         state = [pending]
         clicks = []
         def wait(predicate, *, description):
-            if description == 'received crafting input':
+            if description == 'received crafting input and cursor':
                 self.assertFalse(predicate())
                 state[0] = applied
             self.assertTrue(predicate())

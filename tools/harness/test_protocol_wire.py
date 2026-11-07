@@ -48,6 +48,10 @@ class ProtocolWireTests(unittest.TestCase):
     def test_click_wire_has_empty_prediction_not_item_stack(self):
         self.assertEqual(wire.click_body(4, 7, 12, 0, 1), bytes([4, 7, 0, 12, 0, 1, 0, 0]))
 
+    def test_vanilla_cursor_correction_uses_explicit_mismatching_hashed_stack(self):
+        self.assertEqual(wire.click_body(4, 7, 12, 0, 1, force_cursor_sync=True),
+                         bytes([4, 7, 0, 12, 0, 1, 0, 1, 1, 127, 0, 0]))
+
     def test_compressed_frame_roundtrip(self):
         a, b = socket.socketpair()
         try:

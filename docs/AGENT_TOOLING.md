@@ -133,7 +133,9 @@ The user timer runs at 03:00 local time. Disable it with
 the owner-host memory runner at low priority, enforces a campaign time budget,
 and retains failure artifacts under the configured receipts directory (default
 `<work>/receipts/scenarios`). Campaign `result.json` records the pinned binary
-manifest, requested and attempted seeds, and any reductions.
+manifest, requested and attempted seeds, and any reductions. Each passing seed
+retains its command, step and bot counts, server SHA and harness tree fingerprint
+even after its full receipt is pruned.
 The configured disk budget is checked between seeds, not enforced as a hard
 filesystem quota during a running seed; a single seed or reduction may exceed
 it before the campaign stops.

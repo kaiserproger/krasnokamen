@@ -262,12 +262,16 @@ def pack_block_position(position: tuple[int, int, int]) -> bytes:
     return struct.pack(">Q", ((x & 0x3FFFFFF) << 38) | ((z & 0x3FFFFFF) << 12) | (y & 0xFFF))
 
 
-def click_body(window: int, state_id: int, slot: int, button: int, mode: int) -> bytes:
-    """ContainerClick: empty changed-slot map and empty HashedStack prediction."""
+def click_body(window: int, state_id: int, slot: int, button: int, mode: int,
+               *, force_cursor_sync: bool = False) -> bytes:
+    """ContainerClick with an optional deliberately wrong cursor prediction."""
     if mode not in range(7):
         raise ValueError(f"unknown click mode {mode}")
+    # A count above the fixture's max stack forces vanilla to send its actual
+    # carried stack, including an explicit empty cursor after placement.
+    carried = b"\x01\x01\x7f\x00\x00" if force_cursor_sync else b"\x00"
     return (write_varint(window) + write_varint(state_id) + struct.pack(">hb", slot, button)
-            + write_varint(mode) + b"\x00\x00")
+            + write_varint(mode) + b"\x00" + carried)
 
 
 def decode_section_blocks(body: bytes) -> dict[tuple[int, int, int], int]:
@@ -557,7 +561,8 @@ class PlayObserver:
               state_id: int | None = None) -> None:
         with self.condition:
             state = self.menus[window]["state_id"] if state_id is None else state_id
-        self.send(0x12, click_body(window, state, slot, button, mode))
+        self.send(0x12, click_body(window, state, slot, button, mode,
+                                   force_cursor_sync=getattr(self, 'force_cursor_sync', False)))
         self.send(0x0D)
 
     def _cache_player_suffix(self, window: int) -> None:
