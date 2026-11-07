@@ -40,6 +40,28 @@ Explicit saves queue behind the current checkpoint. Shutdown requests a final
 checkpoint. See [ADR 0020](../decisions/0020-entity-checkpoints-at-one-million.md)
 for the entity checkpoint design.
 
+Container WAL post-images can restore live custody without loading their chunk.
+Before freezing a checkpoint's container snapshot, materialize those chunks and
+hydrate their complete persisted inventories. Hydration fills only vacant live
+entries, so newer WAL slots (including an emptied inventory) retain priority.
+Do this in every dimension before projecting chest/furnace slots and the
+hopper/brewing owners' opaque records. Otherwise a partial live snapshot can
+erase untouched neighbours when typed maps are rebuilt. A refused load or
+hydration holds the entire checkpoint and its WAL; it never commits a partial
+container image. Behavioural coverage:
+`container_transfer_replay_holds_unloadable_chunk_and_wal` and
+`container_transfer_replay_materializes_full_healthy_chunk`.
+
+The custody hole combined lazy container replay, a dirty-chunk-only capture,
+and pruning by the whole-world fence: an omitted chunk's WAL was no longer a
+recovery source after the fence advanced. Dirtying the replay alone was not
+enough: materialization after the slot snapshot could clear untouched typed
+inventories, while hopper and brewing projection depended on their hydrated
+owners. Transfer-based tests cover both defenses together, including another
+restart after the WAL is pruned. The separate startup guard for block/opaque
+replay into an unreadable chunk remains fail-closed; a dropped write into a
+refused chunk still creates no unsaved custody.
+
 ## Startup and recovery
 
 1. Acquire the exclusive world-directory lease. Normal startup waits up to 30
