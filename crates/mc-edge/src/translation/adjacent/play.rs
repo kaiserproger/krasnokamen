@@ -336,7 +336,11 @@ fn translate_clientbound<'a>(
                     &mut w,
                 )?;
             }
-            inventory_stack(session, Some(-1), &mut r, &mut w)?;
+            // Window 0's carried field belongs to InventoryMenu, not the
+            // creative ItemPickerMenu's client-only cursor. An empty refresh
+            // must not discard that cursor's saved projection.
+            let cursor = (window != 0 || r.first() != Some(&0)).then_some(-1);
+            inventory_stack(session, cursor, &mut r, &mut w)?;
         }
         "container_set_slot" => {
             let window = r.read_varint()?;
@@ -450,7 +454,7 @@ pub(super) fn serverbound_body<'a>(
     let mut w = Vec::new();
     match name.strip_prefix("minecraft:").unwrap_or(name) {
         "container_close" => {
-            session.inventory_polyfills.lock().clear_slots();
+            session.inventory_polyfills.lock().close();
             return Ok(Some(Cow::Borrowed(body)));
         }
         "swing" if t.formats.upper >= 777 => {

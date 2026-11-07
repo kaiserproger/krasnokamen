@@ -216,9 +216,12 @@ An empty creative write retains the old lossy image as client-cursor provenance;
 returning that unchanged projection restores the saved canonical stack, even
 after an authoritative empty-slot refresh. A negative-slot drop restores that
 canonical stack once and consumes the provenance. Closing the container clears
-the provenance; full inventory and explicit cursor snapshots replace it with
-their authoritative carried image. Actual changed projections are translated
-normally; arbitrary creative edits are not component-preservation proof.
+the provenance. A window-0 full refresh clears slot images but preserves the
+separate creative cursor when its InventoryMenu carried field is empty; a
+nonempty carried field or explicit cursor packet updates the saved cursor.
+Count-only edits of a matching projection rewrite the canonical count and
+preserve all hidden components. Changes to the item or component projection
+translate normally; arbitrary creative edits are not component-preservation proof.
 
 This is presentation provenance, **not authoritative creative cursor custody**.
 Local `javap -p -c net.minecraft.server.network.ServerGamePacketListenerImpl`

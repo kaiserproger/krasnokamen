@@ -1,4 +1,4 @@
-//! Creative outer framing and custody of an unchanged lossy client projection.
+//! Creative outer framing and provenance of a lossy client projection.
 use super::*;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
@@ -18,6 +18,10 @@ pub enum Update<'a> {
 impl Images {
     pub fn clear_slots(&mut self) {
         self.slots.clear();
+    }
+
+    pub fn close(&mut self) {
+        self.clear_slots();
         self.carried = None;
     }
 
@@ -36,9 +40,14 @@ impl Images {
     pub fn update<'a>(&'a mut self, t: &Tables, slot: i16, wire: &[u8]) -> Result<Update<'a>> {
         if slot < 0 {
             if let Some(image) = self.carried.take()
-                && image.matches(t, wire)?
+                && let Some(count) = image.matching_count(t, wire)?
             {
-                return Ok(Update::Restore(std::borrow::Cow::Owned(image.canonical)));
+                let canonical = if count == image.count {
+                    image.canonical
+                } else {
+                    image.restored_count(count)?.into_owned()
+                };
+                return Ok(Update::Restore(std::borrow::Cow::Owned(canonical)));
             }
             return Ok(Update::Translate);
         }
@@ -46,18 +55,22 @@ impl Images {
             return Ok(Update::Translate);
         }
         if let Some(image) = self.carried.as_ref()
-            && image.matches(t, wire)?
+            && let Some(count) = image.matching_count(t, wire)?
         {
             let image = self.carried.take().expect("matching carried image");
             self.carried = self.slots.insert(slot, image);
-            return Ok(Update::Restore(std::borrow::Cow::Borrowed(
-                &self.slots[&slot].canonical,
-            )));
+            return Ok(Update::Restore(self.slots[&slot].restored_count(count)?));
         }
         if let Some(image) = self.slots.get(&slot)
-            && image.matches(t, wire)?
+            && let Some(count) = image.matching_count(t, wire)?
         {
-            return Ok(Update::Echo);
+            return Ok(if count == image.count {
+                Update::Echo
+            } else {
+                Update::Restore(std::borrow::Cow::Owned(
+                    image.restored_count(count)?.into_owned(),
+                ))
+            });
         }
         let mut count = wire;
         if count.read_varint()? == 0 {
@@ -114,9 +127,10 @@ impl Image {
         })
     }
 
-    fn matches(&self, t: &Tables, mut r: &[u8]) -> Result<bool> {
-        if r.read_varint()? != self.count || r.read_varint()? != self.item {
-            return Ok(false);
+    fn matching_count(&self, t: &Tables, mut r: &[u8]) -> Result<Option<i32>> {
+        let count = r.read_varint()?;
+        if count <= 0 || r.read_varint()? != self.item {
+            return Ok(None);
         }
         let added = r.read_varint()?;
         let removed = r.read_varint()?;
@@ -144,12 +158,12 @@ impl Image {
                 .get(&id)
                 .is_some_and(|range| &self.peer[range.clone()] == value)
             {
-                return Ok(false);
+                return Ok(None);
             }
             matched += 1;
         }
         if matched != self.added.len() || removed as usize != self.removed.len() {
-            return Ok(false);
+            return Ok(None);
         }
         for _ in 0..removed {
             let id = r.read_varint()?;
@@ -160,11 +174,23 @@ impl Image {
             seen[seen_count] = id;
             seen_count += 1;
             if !self.removed.contains(&id) {
-                return Ok(false);
+                return Ok(None);
             }
         }
         ensure!(r.is_empty(), "creative echo trailing bytes");
-        Ok(true)
+        Ok(Some(count))
+    }
+
+    fn restored_count(&self, count: i32) -> Result<std::borrow::Cow<'_, [u8]>> {
+        if count == self.count {
+            return Ok(std::borrow::Cow::Borrowed(&self.canonical));
+        }
+        let mut body = self.canonical.as_slice();
+        body.read_varint()?;
+        let mut restored = Vec::with_capacity(body.len() + 5);
+        restored.write_varint(count);
+        restored.extend_from_slice(body);
+        Ok(std::borrow::Cow::Owned(restored))
     }
 }
 

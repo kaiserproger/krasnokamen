@@ -87,7 +87,7 @@ fn legacy_creative_echo_keeps_unknown_item_but_real_changes_pass() {
 }
 
 #[test]
-fn legacy_creative_echo_and_replacement_reach_player_inventory() {
+fn legacy_creative_count_edit_preserves_canonical_player_inventory_item() {
     use super::tables::IdMap;
     use mc_core::boundary::{ConnectionId, PlayerInput};
     use mc_core::commands::GameMode;
@@ -109,7 +109,7 @@ fn legacy_creative_echo_and_replacement_reach_player_inventory() {
         .id_of(&Identifier::parse("minecraft:stone").unwrap())
         .unwrap();
     let unknown = items
-        .id_of(&Identifier::parse("minecraft:wooden_sword").unwrap())
+        .id_of(&Identifier::parse("minecraft:oak_log").unwrap())
         .unwrap();
     let mut writer = session();
     Arc::get_mut(&mut writer.profile).unwrap().tables.items = IdMap::by_name(
@@ -170,7 +170,7 @@ fn legacy_creative_echo_and_replacement_reach_player_inventory() {
             player.creative_slot(&rules, slot, stack);
         }
     }
-    assert_eq!(player.inventory.slots[0], ItemStack::new(stone, 2));
+    assert_eq!(player.inventory.slots[0], ItemStack::new(unknown, 2));
 }
 
 #[test]
@@ -348,7 +348,7 @@ fn creative_slot_echo_of_lossy_pot_components_keeps_authoritative_stack() {
                 "{peer} {case}: cursor return must restore every canonical component"
             );
             for end in ["drop", "close", "full_refresh", "cursor_refresh"] {
-                writer.inventory_polyfills.lock().clear_slots();
+                writer.inventory_polyfills.lock().close();
                 writer.clientbound(100, &body).unwrap().unwrap();
                 reader.serverbound(frame(98, &[0, 36, 0])).unwrap().unwrap();
                 match end {
@@ -386,12 +386,16 @@ fn creative_slot_echo_of_lossy_pot_components_keeps_authoritative_stack() {
                     .unwrap();
                 assert_eq!(
                     after.body.as_ref(),
-                    &[0, 37, 1, 10, 0, 0],
+                    if end == "full_refresh" {
+                        expected.as_slice()
+                    } else {
+                        &[0, 37, 1, 10, 0, 0]
+                    },
                     "{peer} {case} {end}: stale provenance"
                 );
             }
             for source in ["container_set_content", "set_cursor_item"] {
-                writer.inventory_polyfills.lock().clear_slots();
+                writer.inventory_polyfills.lock().close();
                 let cursor = if source == "container_set_content" {
                     let mut snapshot = vec![0, 0, 46];
                     snapshot.resize(49, 0);
@@ -410,6 +414,38 @@ fn creative_slot_echo_of_lossy_pot_components_keeps_authoritative_stack() {
                     expected,
                     "{peer} {case}: {source} carried image"
                 );
+            }
+            for count in [2, 64, 128] {
+                for source in ["slot", "pickup", "pickup_full_refresh"] {
+                    writer.inventory_polyfills.lock().close();
+                    writer.clientbound(100, &body).unwrap().unwrap();
+                    let slot: i16 = if source == "slot" {
+                        36
+                    } else {
+                        reader.serverbound(frame(98, &[0, 36, 0])).unwrap().unwrap();
+                        37
+                    };
+                    if source == "pickup_full_refresh" {
+                        let mut snapshot = vec![0, 0, 46];
+                        snapshot.resize(50, 0);
+                        play::clientbound_body(&mut writer, "container_set_content", &snapshot)
+                            .unwrap();
+                    }
+                    let mut changed = Vec::new();
+                    changed.write_i16(slot);
+                    changed.write_varint(count);
+                    changed.extend_from_slice(&[10, 0, 0]);
+                    let mut count_expected = Vec::new();
+                    count_expected.write_i16(slot);
+                    count_expected.write_varint(count);
+                    count_expected.extend_from_slice(&expected[3..]);
+                    let translated = reader.serverbound(frame(98, &changed)).unwrap().unwrap();
+                    assert_eq!(
+                        translated.body.as_ref(),
+                        count_expected,
+                        "{peer} {case}: {source} count edit keeps hidden components"
+                    );
+                }
             }
         }
     }
