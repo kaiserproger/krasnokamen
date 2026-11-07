@@ -13,7 +13,7 @@ PORK = "minecraft:porkchop"
 SWORD = "minecraft:wooden_sword"
 REQUIRED_TOOLS = frozenset({
     "minecraft_observe", "minecraft_wait_for_state_change", "minecraft_send_chat",
-    "minecraft_list_entities", "minecraft_wait_for_visible_entity", "minecraft_approach_entity",
+    "minecraft_list_entities", "minecraft_approach_entity",
     "minecraft_interact_entity", "minecraft_attack_entity_once",
     "minecraft_attack_entity_until_drop_collected", "minecraft_wait_for_entity_removed",
     "minecraft_wait_for_inventory", "minecraft_set_hotbar_slot", "minecraft_select_hotbar_item",
