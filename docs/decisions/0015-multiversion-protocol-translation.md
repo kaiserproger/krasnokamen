@@ -49,8 +49,17 @@ payload conversion. Login `login_finished` gains the session UUID; Play `login`
 gains `onlineMode`. `CommonPlayerSpawnInfo`, light masks, movement packets,
 player-action ordinals, tag slot displays and pot decorations retain their 775
 layouts. Slime's ageable inheritance/size metadata changes in **776**, so that
-metadata rewrite belongs to 776 -> 775, not 777 -> 776. Content identities come
-from the separate release reports, regardless of unchanged packet names.
+metadata rewrite belongs to 776 -> 775, not 777 -> 776. The actual 776/777
+class is `net.minecraft.world.entity.monster.cubemob.Slime`, extending
+`AbstractCubeMob -> AgeableMob -> PathfinderMob -> Mob -> LivingEntity -> Entity`.
+Local captures of that complete hierarchy (`slime-captures.json` and
+`net_minecraft_world_entity_*-<release>.txt`) show Entity's 8 accessors,
+LivingEntity's 7, Mob's 1 and AgeableMob's 2 (`DATA_BABY_ID`, `AGE_LOCKED`);
+`AbstractCubeMob.ID_SIZE` is index **18** in both 776 and 777. In 775 Slime
+extends Mob directly and `ID_SIZE` is **16**. Earlier captures using the old
+package for 776/777 reported “class not found” and are not evidence.
+Content identities come from separate release reports, regardless of unchanged
+packet names.
 
 **776 -> 777:** Configuration adds `post_effects`. Play adds
 `add_transient_block`, `post_effects`, `swing_animation` and serverbound `punch`,
@@ -102,10 +111,17 @@ The route is independent of `mc_protocol::PROTOCOL_VERSION` being its largest
 endpoint. For a newer client on an older canonical core, clientbound uses
 **up** codecs and serverbound uses **down** codecs. Step factories create
 stateful translators with an explicit traversal direction. This is not the
-inverse of a lossy older-client map. Synthetic routing tests exercise both
-sides of canonical and reverse serverbound order. Current measured production
-steps implement older-client codecs; no unmeasured release above 777 is
-advertised. Adding an up step changes edge codecs/profiles, not core authority.
+inverse of a lossy older-client map. The measured 777/776 production factory
+also builds its 776 -> 777 codec from the opposite source snapshots, with
+explicit changed-packet codecs in both directions. Its factory regression runs
+canonical=776 / peer=777 through Login, Configuration, Play login, light and
+block updates; a 777-only creative item is refused rather than inverted from
+its older-client stone stand-in. Swing upgrades use the measured WHACK(1)/6
+default; old particle speed applies to all three new axes and uses measured
+RandomizationType.DEFAULT(0). An unsupported new destroy-direction input errors.
+Synthetic routing tests additionally exercise both sides of canonical and
+reverse serverbound order. No unmeasured release above 777 is advertised.
+Adding an up step changes edge codecs/profiles, not core authority.
 
 ### Data ownership and automatic installation
 
@@ -179,6 +195,18 @@ not authoritative inventory/world identity. New-only attributes, statistics or
 block entities with no representation are filtered explicitly; unknown shapes
 fail closed rather than dropping an inventory/world update. This is not a
 claim that all arbitrary components or every vanilla mechanic are supported.
+
+Missing packet ids are not an omission policy: only `add_transient_block` and
+`post_effects` may be skipped for an older peer. Other missing target packets
+error with the pair, phase, packet name and source id. A block state missing
+from the source report is an error, distinct from a known state's documented
+nearest mapping. Dimension types, painting variants and display kinds are
+name-paired too; equal current ordinals do not authorize copying them.
+
+Creative inventory echoes compare against the exact saved peer image whenever
+**any recursive part** of a stack loses information: item/registry substitutions,
+omitted components/removals/tooltips, or pot sides, nested counts and nested
+components. An unchanged outer item id does not make a stack lossless.
 
 `mc-data::legacy_26_1_2` remains a durable-record migration owner, and
 `enchanting_26_1_2` remains protocol-neutral gameplay; neither is a session
