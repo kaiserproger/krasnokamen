@@ -359,7 +359,8 @@ class PlayObserver:
         from .protocol_entities import ProtocolEntities
         from .protocol_observations import decode_stack
         self.entities = ProtocolEntities(decode_stack=decode_stack,
-                                         local_entity_id=self.join.get('entity_id'))
+                                         local_entity_id=self.join.get('entity_id'),
+                                         protocol=self.protocol)
         self.health = None
         self.food = None
         self.game_time = None
