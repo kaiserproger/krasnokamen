@@ -7,6 +7,14 @@ cgroup bounds in [AGENT_TOOLING.md](../AGENT_TOOLING.md) "Resource bounds".
 This page explains how the runner works, how to diagnose it and what went
 wrong before.
 
+The runner's requirements and fresh-machine setup (systemd user scope, cgroup
+v2, `/tmp/solaris-mem-slots`, CPUs 8-11 for the `-p` lane, Landlock for the
+instrumentation guard) are in [`tools/dev/README.md`](../../tools/dev/README.md).
+Other scripts there: `scene-slot.sh` (graphical gate slots, see
+[real-client gates](real-client-gates.md#3-environment-block)),
+`instrumentation-guard.py`, `test-server/` ([test server operations](test-server-ops.md))
+and `winqa/` ([Windows QA](windows-and-macos-client-qa.md)).
+
 ## The machine
 
 One owner laptop: 6 physical / 12 logical cores, about 30 GB RAM, root disk
@@ -67,6 +75,12 @@ to keep that from happening again without idling the machine.
   `-p` command queued on the serialized perf lane (`flock $dir/perf`); anything else is a regression.
 - The runner prints one `mem-run: scope ...` line (props, lane, target, expected
   peak, signature). Copy it into receipts.
+- **One Cargo environment per tree.** Run Cargo only through the runner and keep
+  the same environment for every build on the shared host. A plain `cargo build`
+  after a runner build of the same tree rebuilt the workspace for 84 s (the runner
+  sets `CARGO_INCREMENTAL`), and any `CARGO_PROFILE_*` override is a separate
+  profile with its own artifacts. The dev/test profiles already use line-table
+  debuginfo, so no per-command debuginfo override is needed.
 
 ## Diagnosing "are they stuck?"
 

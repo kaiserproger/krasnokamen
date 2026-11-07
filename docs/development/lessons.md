@@ -6,6 +6,16 @@ Dates are when the lesson was learned (owner time zone, UTC+7).
 
 ## 2026-11
 
+- **2026-11-07 — recovery evidence must fence its source.** A live-writer hot
+  copy of a world was refused, and recovered rows that matched expectations
+  still did not show whether the checkpoint was absent, which root was selected
+  or whether the WAL replay caused the result. Recovery and durability claims
+  need: the source fenced (stopped, or a consistent snapshot); proof of the
+  checkpoint/WAL boundary (what the last checkpoint held, what only the WAL
+  held); and proof of the selected root. A hot copy, or a recovered row that
+  matches, is not causal proof that the WAL recovered it.
+  (`solaris-v2 world probe` and `world census` read a stopped native world:
+  [Constantinople fixture](constantinople-fixture.md#offline-subcommands))
 - **2026-11-07 — the advisor no longer approves publications.** A bare
   `[approved]` arrived 41 turns after it was issued, with no way to tell which
   request it answered, and the advisor kept stopping releases the owner had
@@ -29,7 +39,7 @@ Dates are when the lesson was learned (owner time zone, UTC+7).
 - **2026-11-04/05 — negative controls must speak the current protocol.** A
   pre-26.3 commit fails at login (protocol 775), which proves nothing about the
   row's assertion. Reverse-apply only the row's fix on the current candidate.
-  ([real-client gates](real-client-gates.md#promotion-with-a-negative-control-2026-11-0405))
+  ([real-client gates](real-client-gates.md#promotion-with-a-negative-control))
 - **2026-11-04 — release text from receipts, not summaries.** An agent summary
   claimed fresh profiles for all Windows soak runs; one reused a profile. Keep
   causes "likely" unless instrumented; an A/B pass plus a negative control does

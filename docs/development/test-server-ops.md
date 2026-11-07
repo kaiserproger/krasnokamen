@@ -8,6 +8,15 @@ documented in [OPERATING.md](../OPERATING.md); this page is the
 deployment routine for that host. Deploying needs owner authorization;
 deploys are batched until the owner says deploy.
 
+**Owner-only.** Everything here needs access only the owner holds:
+`SOLARIS_TEST_HOST`, an SSH key for it, a host-side RCON helper and `/root` on
+the host. A contributor without them can read the routine and rehearse it on a
+local machine, but cannot run it. Never copy a real host address, SSH detail,
+password or owner-specific receipt path into a tracked file; use
+`SOLARIS_TEST_HOST` and placeholders. The scripts and their environment
+variables are described in
+[`tools/dev/test-server/README.md`](../../tools/dev/test-server/README.md).
+
 ## Host
 
 - Debian 13, 2 vCPUs (AVX2), about 4 GB RAM, no swap, glibc 2.41 or newer,
@@ -40,8 +49,8 @@ deploys are batched until the owner says deploy.
 
 ## Redeploy, keeping the world
 
-1. Build locally with the release command from AGENTS.md (`--locked`), and
-   check the glibc requirement:
+1. Build locally with `cargo build --release --locked -p mc-edge --bin solaris-v2`,
+   and check the glibc requirement:
    `objdump -T <bin> | grep -oE "GLIBC_[0-9.]+" | sort -Vu | tail -1`.
 2. Smoke locally **with the exact plugin set you will deploy**: a temp dir with
    the server's `server.toml` changed to a private port, a private dashboard

@@ -4,13 +4,15 @@ This comparison uses the stock **26.1.2 gameplay oracle**, retained by the 26.3 
 
 ## Final revision-30 results
 
+These numbers were measured on 2026-10-28 at `WORLDGEN_REVISION` 30 and have not been re-measured since; the code in `crates/mc-worldgen/src/lib.rs` is the authority for the current revision. Rerun the recipe below before citing them for another build.
+
 | Seed | Exact state, all cells | Exact state, non-air union | No-small-decor state, non-air union | Biome quarts | Surface MAE, blocks | Surface p95 / max, blocks | Structure starts vanilla / Solaris / same type+chunk |
 |---:|---:|---:|---:|---:|---:|---:|---:|
 | 0 | 91.267% | 74.763% | 74.977% | 99.968% | 0.178 | 0 / 81 | 4 / 1 / 0 |
 | 81 | 91.238% | 72.527% | 72.949% | 99.945% | 1.492 | 12 / 73 | 7 / 7 / 3 |
 | 497625 | 91.104% | 73.699% | 74.013% | 99.958% | 0.304 | 0 / 64 | 7 / 5 / 2 |
 
-Shared air inflates all-cell agreement; the non-air union excludes cells that are air in both worlds. `no_decor_state` removes the tool's explicit small-plant/decor set but preserves other state properties. Structure numbers compare start metadata only, not piece layouts or contents. Missing/non-FULL chunks fail closed. See [the generated report](report.md), [raw report](report.json), and [metric definitions](../../../tools/worldgen_diff/README.md).
+Shared air inflates all-cell agreement; the non-air union excludes cells that are air in both worlds. `no_decor_state` removes the tool's explicit small-plant/decor set but preserves other state properties. Structure numbers compare start metadata only, not piece layouts or contents. Missing/non-FULL chunks fail closed. See the [raw report](report.json) and the [metric definitions](../../../tools/worldgen_diff/README.md); the tool regenerates the rendered markdown report with each run.
 
 ## Landed improvements
 
@@ -33,14 +35,14 @@ Maps use generated flat colors, not redistributed Minecraft textures. **Left: va
 
 ## Reproduce
 
-From the repository root, after building the release server and importing the local 26.1.2 cache:
+From the repository root. Prerequisites (all local, nothing downloaded for you except where stated): a release `solaris-v2` (`cargo build --release -p mc-edge --bin solaris-v2`), the 26.3 content cache (`solaris-v2 content import --version 26.3 --download --cache data/vanilla`, see [OPERATING](../../OPERATING.md#vanilla-content-cache)), and the stock Mojang **26.1.2** bundled `server.jar` you obtained yourself (the oracle).
 
 ```sh
-/home/kaiserroman/solaris/.analysis/tools/mem-run.sh -m 6G \
+tools/dev/mem-run.sh -m 6G \
   python3 -m tools.worldgen_diff \
-  --server-bin /run/media/kaiserroman/games/solaris-work/targets/worldgen/release/solaris-v2 \
-  --vanilla-jar /home/kaiserroman/solaris/.analysis/server.jar \
-  --data-dir /run/media/kaiserroman/games/solaris-work/wt/worldgen/data/vanilla \
+  --server-bin <path>/release/solaris-v2 \
+  --vanilla-jar <path>/server.jar \
+  --data-dir <path>/data/vanilla \
   --out .analysis/worldgen-diff/reproduce
 ```
 

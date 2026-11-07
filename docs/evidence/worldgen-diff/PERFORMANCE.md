@@ -32,16 +32,16 @@ The full saved-block comparison covered 1,024 spawn-centered chunks for each see
 
 ## Reproduction
 
-Build the release `mc-worldgen` test executable at `364315ec` and `db0ba531`, preserving the executable path printed by Cargo after each build. Run all Cargo and measurement commands through the shared 6 GiB wrapper, after the coordinator's measurement GO:
+Build the release `mc-worldgen` test executable at the baseline (`364315ec`) and the candidate (`db0ba531`) revisions, preserving the executable path printed by Cargo after each build (use one worktree per revision and its own target directory). Run Cargo and measurement commands through the runner (`tools/dev/mem-run.sh`, see [heavy commands](../../development/heavy-commands-and-memory.md)) with a 6 GiB cap, and measure only after the coordinator's measurement GO:
 
 ```sh
-/home/kaiserroman/solaris/.analysis/tools/mem-run.sh -m 6G \
+tools/dev/mem-run.sh -m 6G \
   env RUSTC_WRAPPER= CARGO_TARGET_DIR=/absolute/path/to/own-target \
   cargo test --release -p mc-worldgen --lib --no-run
-/home/kaiserroman/solaris/.analysis/tools/mem-run.sh -m 6G \
+tools/dev/mem-run.sh -m 6G \
   python3 -m tools.worldgen_diff.profile \
   --before /absolute/path/to/before-test --after /absolute/path/to/after-test \
   --out .analysis/worldgen-diff/ab
 ```
 
-The imported content cache must be a real `data/vanilla` directory: the loader rejects a symlink as the cache root. Use the final diff tool for spawn-centered block comparisons; the earlier tooling commit's origin-centered rectangle did not contain seed 81's actual spawn. See [the tool instructions](../../../tools/worldgen_diff/README.md) for the full comparison command and metric definitions.
+The imported 26.3 content cache must be a real `data/vanilla` directory: the loader rejects a symlink as the cache root. Use the final diff tool for spawn-centered block comparisons; the earlier tooling commit's origin-centered rectangle did not contain seed 81's actual spawn. See [the tool instructions](../../../tools/worldgen_diff/README.md) for the full comparison command and metric definitions.

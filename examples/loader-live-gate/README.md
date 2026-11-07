@@ -1,17 +1,18 @@
 # Loader Live-Gate Fixture
 
-**Scope after ADR 0014 Phase 5:** retained component/bundle authoring fixture
-and historical two-owner gate contract. The old automatic fixture-server
-lifecycle is deleted. Its recorded interaction/audio expectations below are
-not current native-runtime acceptance receipts or a default `loader-live` path.
+**Scope after ADR 0014 Phase 5:** retained component/bundle authoring fixture.
+The old automatic two-owner gate (and its input, sound and screenshot
+expectations) is deleted; this fixture is no longer a default `loader-live`
+path. Loader wire protocol 3 (`LOADER_PROTOCOL_VERSION` in `mc-loader`) is the
+current shared contract.
 
 **Deployment: Requires Solaris Loader on client.** A client profile without
 Solaris Loader protocol support is rejected during Configuration with the
 supported loader platforms and required bundle identities.
 
-This is the isolated two-owner input for the Solaris Loader real-client gate.
-It uses production plugin discovery and artifact transfer; it does not alter a
-PrismLauncher instance.
+This is an isolated two-owner plugin and client-bundle input for the Solaris
+Loader. It uses production plugin discovery and artifact transfer and does not
+alter a PrismLauncher instance.
 
 Both owners are the *same* real component: `sdk/rust/examples/hello` built in its
 `loader-live` mode, deployed twice under the two manifests below. The owner is
@@ -91,48 +92,18 @@ python3 -m tools.harness run scenario loader-v2-settlements-smoke --platform fab
   --server-bin /absolute/solaris-v2 --plugins-dir /absolute/matched-packages
 ```
 
-Use the current catalog and `docs/AGENT_TOOLING.md` for scenario scope and
-prerequisites. This named smoke is not a replacement claim for the historical
-two-owner input/audio contract below. Its actual result and visual-review
-limits must come from its own receipt.
+Use `python3 -m tools.harness explain` for scenario scope and prerequisites, and
+[AGENT_TOOLING](../../docs/AGENT_TOOLING.md). This named smoke is not a
+replacement claim for the retired two-owner input/audio gate. Its actual result
+and visual-review limits must come from its own receipt. The Forge Xvfb profile
+sets `earlyWindowControl=false` in `fml.toml` (`tools/harness/loader.py`) so
+Minecraft creates its normal game window instead of the failing FML early-window
+GL context handoff; Forge's early-window GL features are outside that gate's
+evidence.
 
-## Historical two-owner expectations
+## Manual inspection
 
-The following input, sound and screenshot requirements describe the retired
-automatic fixture gate, not checks implicitly performed by the named smoke.
-Loader wire protocol 3 remains the current shared contract in `mc-loader`.
-
-Native Space also reports Ruby press/release. G reaches both owners; opening the
-armed Ruby modal releases both actions before native key-up. Menu input is
-suppressed, including declared Escape while closing inventory or a Loader modal.
-Declared F2/F11 report both edges while vanilla writes a screenshot and toggles
-fullscreen on/off. Mixed valid/invalid named-key batches in press and respawn
-must fail before movement or plugin actions. Reconnect resets counts and
-reinstalls bindings. Named input invokes Minecraft's actual callback, not OS
-hardware emulation.
-
-The sound gate additionally needs PulseAudio-compatible `pactl`/`parec`. It
-creates a private null sink and selects it only in the isolated Minecraft profile.
-It disables vanilla music there, records actual stereo 48 kHz float32 audio to
-`audio.f32le`, and removes the sink on exit; the desktop default sink is untouched.
-Spectral measurements cover personal playback, quarter volume, pitch 1.5,
-near/mid/far world attenuation, simultaneous owners, owner-local and foreign stop,
-disconnect silence, reconnect silence and newly requested playback. `result.json`
-records each sample's byte range, RMS and 440/660 Hz amplitudes; chat is an
-ordering barrier, not proof of playback.
-
-Screenshots under each run's `screenshots/` directory wait for the real loading
-overlay to disappear. `passed` covers protocol, view/HUD, inventory, input and
-measured audio checks; `ui_visual_review` explicitly remains required. Inspect
-the images for both HUDs, updated text, owner-local removal and no stale HUD after
-reconnect before claiming rendering/lifecycle acceptance.
-
-The owner-approved Forge Xvfb profile sets `earlyWindowControl=false`: Minecraft
-creates its normal game window instead of the failing FML early-window GL context
-handoff. The real game renderer and HUD are still exercised; Forge's early-window
-GL features are explicitly outside this gate's evidence.
-
-For manual inspection, prepare the deployment and start the server with:
+Prepare the deployment and start the server with:
 
 ```sh
 tools/build-loader-live-gate-fixture.sh --prepare
@@ -142,7 +113,7 @@ cargo run -p mc-edge --bin solaris-v2 -- --config examples/loader-live-gate/play
 and launch one isolated client with a per-run MCP bearer token:
 
 ```sh
-SOLARIS_CLIENT_MCP_TOKEN=change-me \
+SOLARIS_CLIENT_MCP_TOKEN="$(openssl rand -hex 32)" \
 python3 -m tools.harness client --platform <fabric|neoforge|forge>
 ```
 

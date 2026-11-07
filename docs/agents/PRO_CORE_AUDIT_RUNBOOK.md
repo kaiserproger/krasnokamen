@@ -7,7 +7,7 @@ Run this only after currently active implementation agents have reached terminal
 `codexpro --mode pro` is the context-export/planning path for model surfaces that do not call MCP tools directly. The reproducible repository entrypoint is:
 
 ```bash
-cd /home/kaiserroman/solaris
+cd <repository root>   # the core checkout
 just pro-audit-context
 ```
 
@@ -16,7 +16,7 @@ That regenerates `.ai-bridge/pro-context.md` from the current tree with a size b
 Give the Pro model both:
 
 1. `.ai-bridge/pro-context.md`
-2. `docs/agents/PRO_CORE_AUDIT_PROMPT.md`
+2. [`docs/agents/PRO_CORE_AUDIT_PROMPT.md`](PRO_CORE_AUDIT_PROMPT.md)
 
 The second file is the exact audit/decomposition prompt. Do not replace it with a short paraphrase.
 

@@ -5,16 +5,18 @@ local stock Minecraft **26.1.2** server. This remains the gameplay oracle for th
 26.3 protocol release, which retains the 26.1.2 gameplay datapack.
 
 Prerequisites: Python 3.11+, NumPy, Pillow, Java 25+, a locally obtained Mojang
-26.1.2 server bundle, an imported 26.1.2 content cache, and a release
-`solaris-v2` binary. Neither this tool nor its reports redistribute the bundle,
-content cache, or saved worlds. Run from the repository root:
+26.1.2 server bundle (`server.jar`), an imported content cache (the 26.3 cache
+from `solaris-v2 content import --version 26.3 --download`, which carries the
+26.1.2 gameplay pack; see `docs/OPERATING.md`), and a release `solaris-v2` binary.
+Neither this tool nor its reports redistribute the bundle, content cache, or saved
+worlds. Run from the repository root:
 
 ```sh
-/home/kaiserroman/solaris/tools/dev/mem-run.sh -m 6G \
+tools/dev/mem-run.sh -m 6G \
   python3 -m tools.worldgen_diff \
   --server-bin /absolute/path/to/release/solaris-v2 \
-  --vanilla-jar /home/kaiserroman/solaris/.analysis/server.jar \
-  --data-dir /home/kaiserroman/solaris/data/vanilla \
+  --vanilla-jar /absolute/path/to/server.jar \
+  --data-dir /absolute/path/to/data/vanilla \
   --out .analysis/worldgen-diff/run
 ```
 
@@ -83,7 +85,7 @@ Builds go through the shared memory wrapper, not a measurement lane. On the
 coordinator's approved measurement GO:
 
 ```sh
-/home/kaiserroman/solaris/tools/dev/mem-run.sh -m 6G \
+tools/dev/mem-run.sh -m 6G \
   python3 -m tools.worldgen_diff.profile \
   --before /absolute/path/to/before-test \
   --after /absolute/path/to/after-test \
@@ -110,7 +112,7 @@ a second generation mode.
 Collect a sampling profile from the same frozen executable separately:
 
 ```sh
-/home/kaiserroman/solaris/tools/dev/mem-run.sh -m 6G \
+tools/dev/mem-run.sh -m 6G \
   perf record -F 199 -e cycles:u -g --call-graph dwarf,32768 \
   -o .analysis/worldgen-diff/before.perf -- \
   /absolute/path/to/before-test --ignored --exact \

@@ -8,12 +8,11 @@ from a successful measurement.
 
 ## Publication status
 
-**Pending quiet-window measurement.** Main suspended exclusive measurement
-windows during the shared-machine build wave. Per the publication decision,
-ordinary-lane short smoke runs validate lifecycle only; their contended
-MSPT/RSS/TPS values are discarded as publication evidence. The table is
-deliberately unfilled rather than presenting historical or unrelated numbers as
-these four profiles.
+**Pending quiet-window measurement.** No exclusive-window result is published
+yet. Short smoke runs validate lifecycle only; their contended MSPT/RSS/TPS
+values are discarded as publication evidence. The table is deliberately
+unfilled rather than presenting historical or unrelated numbers as these four
+profiles.
 
 | Profile | Server RSS peak / steady (MiB) | MSPT p50 / p95 / p99 / max (ms) | TPS | Generated chunks/s |
 |---|---|---|---|---|
@@ -134,8 +133,12 @@ indefinitely through terrain. Login includes operator-assisted safe landing.
 ## Reproduce
 
 Run from a checkout with the pinned Rust toolchain, Clang/mold, Python 3, Linux
-`taskset`, `lscpu`, `lsblk` and `findmnt`. Import the licensed 26.1.2 content cache
-as described in the [operating guide](../OPERATING.md#vanilla-content-cache).
+`taskset`, `lscpu`, `lsblk` and `findmnt`. Import the 26.3 content cache as
+described in the [operating guide](../OPERATING.md#vanilla-content-cache)
+(`solaris-v2 content import --version 26.3 --download`; the cache joins the 26.3
+protocol identity with the 26.1.2 gameplay pack, so no separate legacy cache is
+needed for these profiles). `tools.coreperf.profiles` reads `./data/vanilla` by
+default; point it elsewhere with `--vanilla-data-dir`.
 Neither Mojang bytes nor prepared worlds are shipped in Git.
 
 ### Build once and retain provenance
@@ -173,9 +176,10 @@ receipt = {
 PY
 ```
 
-On the shared agent host, wrap builds in
-`/home/kaiserroman/solaris/tools/dev/mem-run.sh -m 4G` and use the assigned
-target directory (raise the cap only after an observed OOM). Do not compile during somebody else's measurement window.
+On the shared agent host, wrap builds in `tools/dev/mem-run.sh -m 4G` (the
+runner is Main's copy, see [heavy commands](../development/heavy-commands-and-memory.md))
+and use the assigned target directory (raise the cap only after an observed OOM).
+Do not compile during somebody else's measurement window.
 
 ### One command per profile
 
@@ -195,8 +199,7 @@ python3 -m tools.coreperf.profiles villager-heavy "${COMMON[@]}"
 
 Fixture preparation uses the harness's memory guard, so execute these commands
 inside a bounded cgroup. On the shared host, request Main's **GO**, then prefix
-**each** command with
-`/home/kaiserroman/solaris/tools/dev/mem-run.sh -x -p -m 6G`.
+**each** command with `tools/dev/mem-run.sh -x -p -m 6G`.
 On another Linux host use the same runner or an equivalent bounded cgroup,
 record the cap and run without competing builds/tests. The published affinity
 is server logical CPUs `0-7`, bots `8-11`; override `--server-cpus` and
@@ -270,8 +273,8 @@ This historical source identity is base
 `83b5d1a6a98d98e7ab3ddbdc5d42fd37c1bf499448231ad37dcd34a565250b6b`
 and SIMD patch
 `f969e468a707bbed311bad4dd38d6222eb5d5b940005c75a620f12c3969b9db1`;
-it is not a new measurement of the profile server binary. The owner's retained
-raw artifacts are under `.analysis/codex-logs/Gen32/`.
+it is not a new measurement of the profile server binary. Its raw artifacts are
+not retained in the repository.
 
 Raw ms/chunk observations, in run order:
 
@@ -300,14 +303,8 @@ Village placement caches the mirror/rotation result for each processed block
 state for the duration of one piece, after processors and before waterlogging.
 This avoids repeated registry/property resolution for repeated palette states;
 the cache is discarded after the piece and can be removed if that resolution
-ceases to dominate. A seed-712816 CPU offline pregeneration diagnostic at
-radius 256, including startup validation, used 183.051/182.354 billion
-user-space instructions before and 172.012/172.018 billion after (two fresh
-worlds per leg, `perf stat`, serialized `mem-run -p` lane). Most affected
-lookups were in startup village validation, so this is not a per-chunk or live
-server speedup claim. Wall time was contaminated by host contention.
-The fixed-seed region block fingerprint and village placement tests fence output.
+ceases to dominate. It is not a per-chunk or live-server speedup claim. The
+fixed-seed region block fingerprint and village placement tests fence output.
 
-Use the same memory/quiet-window rules as above. The separate GenBench
-Java-versus-Solaris server experiment has no completed Solaris result in this
-publication; no server-throughput ratio is claimed.
+Use the same memory/quiet-window rules as above. No server-throughput ratio
+against vanilla is claimed.

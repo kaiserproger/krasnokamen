@@ -128,6 +128,12 @@ For any gate set that must describe one build (release, perf round, QA wave):
    Compare binary SHAs when agents reuse private target dirs: cargo can return
    the previous binary.
 
+The identity is the `solaris-v2` binary from `mc-edge`. Older freeze or snapshot
+recipes in external skills or notes that build or copy `mc-server` describe the
+retired v1 binary ([ADR 0014](../decisions/0014-v1-core-retirement.md)); they
+cannot produce a current acceptance identity. The release procedure is in
+[releases](release-and-tags.md).
+
 ## Background jobs
 
 - Cancel a looping job through its parent (`proc://<job>/kill`), not by killing

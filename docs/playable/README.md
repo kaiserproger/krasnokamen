@@ -11,7 +11,9 @@ required artifacts (`manifest.json`, `client.log`, `server.log`,
 ## Current inputs
 
 - [`playable.toml`](../../playable.toml): default manual profile. Copy it
-  to a per-run config rather than editing it in place.
+  to a per-run config rather than editing it in place; the end-to-end manual
+  launch (owner-visible play, not the automated gate) is in
+  [real-client gates](../development/real-client-gates.md#manual-local-playable-launch-owner-visible-play-not-a-gate).
 - [`real-client-playable-loop.json`](real-client-playable-loop.json): bounded
   natural-progression real-client scenario pack (join, wood to tools, crafting,
   save/restart/rejoin, furnace smelt, food, storage, sleep, combat and two-client

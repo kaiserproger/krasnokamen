@@ -13,7 +13,7 @@ Before the correction, both `deepslate_gradient` regressions failed with stone i
 | `cargo clippy --release -p mc-worldgen --all-targets --no-deps -- -D warnings` | exit 0 | [worldgen-clippy.txt](worldgen-clippy.txt) |
 | `cargo build --release -p mc-edge --bin solaris-v2` | exit 0 | [server-build.txt](server-build.txt) |
 
-Every Cargo command used `/home/kaiserroman/solaris/.analysis/tools/mem-run.sh -m 6G env RUSTC_WRAPPER= CARGO_TARGET_DIR=/run/media/kaiserroman/games/solaris-work/targets/worldgen`; no exclusive/perf lane or private Cargo job limit was used. [validation.json](validation.json) records the complete command arrays and exit codes. The worldgen test invocation also set `SOLARIS_LOD_PROGRAM_FIXTURE` to export the final far-program fixture.
+Every Cargo command ran under the memory-capped runner (`tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER= CARGO_TARGET_DIR=<own target dir>`); no exclusive/perf lane or private Cargo job limit was used. [validation.json](validation.json) records the complete command arrays and exit codes. The worldgen test invocation also set `SOLARIS_LOD_PROGRAM_FIXTURE` to export the final far-program fixture.
 
 The existing upgrade test creates a real native world, rewrites its generation contract to revision 29, verifies default startup refuses it with the explicit upgrade hint, and invokes the same `upgrade_worldgen_revision` implementation as `world upgrade-worldgen`. It asserts revision **29 → 30**, a rewritten generation contract, unchanged stored checkpoint inspection, and successful subsequent `Core::open` startup/shutdown. This is the requested focused-test proof; it is not presented as a separately exercised CLI or network-listener run.
 
@@ -25,9 +25,9 @@ More strongly, the revision-30 server's newly exported fixture is **byte-identic
 
 - 180,401 decompressed bytes.
 - SHA-256: `910bb02370cd868fe4c235898c8e374e3a99eb3aa044568527e73f45648d8d02`.
-- Compared fixture: `/run/media/kaiserroman/games/solaris-work/wt/client-input/tests/fixtures/far-program-seed81.zlib`.
+- Compared fixture: `tests/fixtures/far-program-seed81.zlib` in the native-client repository.
 
-The primary native-client checkout lacked its fixture file, so this comparison used the existing `client-input` worktree copy without modifying either client checkout. No native-client test suite or graphical client gate is claimed here.
+The comparison used a copy of that fixture from a client worktree without modifying any client checkout. No native-client test suite or graphical client gate is claimed here.
 
 ## Scope limits
 

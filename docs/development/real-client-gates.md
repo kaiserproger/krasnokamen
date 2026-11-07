@@ -4,103 +4,325 @@ What counts as evidence is fixed elsewhere: [AGENTS.md](../../AGENTS.md)
 (actual-client gates, release server binary, breaker), the
 [bug regression contract](../bugs/README.md), the
 [break-it QA protocol](../QA_AGENT_PROTOCOL.md) (gate hygiene, negative
-controls, variance) and [AGENT_TOOLING.md](../AGENT_TOOLING.md) (profiles,
-client variables, receipts). This page is the working recipe and the traps.
+controls, variance) and [AGENT_TOOLING.md](../AGENT_TOOLING.md) (harness
+commands, receipts, Java/Loader client variables). This page is the working
+recipe and the traps for graphical and native-client gates. Profile and scenario
+lists come from `python3 -m tools.harness list` and `explain`, not from here.
+
+## Prerequisites
+
+Everything below is reproducible from public sources, except where a line says
+**owner-local**. Sibling repositories: the native client
+([solaris-client](https://github.com/kaiserproger/solaris-client)), the Loader
+([solaris-loader](https://github.com/kaiserproger/solaris-loader)) and the first-party
+plugins ([solaris-default-plugins](https://github.com/kaiserproger/solaris-default-plugins)),
+checked out beside this repository unless an environment variable says otherwise.
+
+### 1. Build the release server and the native client
+
+- Server: `cargo build --release -p mc-edge --bin solaris-v2`
+  (the harness reads it from `SOLARIS_SERVER_BINARY`; debug servers drop to 2-9
+  TPS while chunks generate, so timing-sensitive gates need release).
+- Client (in the client checkout): `cargo build --release --bin solaris-client`.
+  On Linux it links ALSA and needs the distro development packages (the client's
+  release workflow installs `pkg-config libasound2-dev libudev-dev
+  libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxi-dev
+  libxrandr-dev libgl1-mesa-dev libvulkan-dev cmake`). The windowed gates also
+  need a Vulkan 1.1+ driver; Mesa `lavapipe` software Vulkan works, slowly.
+- **ALSA sysroot (owner-local workaround).** The owner's machine has no root
+  install of the ALSA headers, so the client checkout carries an ignored
+  `.analysis/build-support/usr/lib/x86_64-linux-gnu` (an unpacked ALSA 1.2.11
+  development package: `libasound.so*`, `pkgconfig/alsa.pc`, plus a
+  `libxkbcommon.so` link). With root, install the packages above and skip it.
+  Without root, unpack the distro's `libasound2-dev` (and `libxkbcommon-dev`)
+  packages into a directory yourself and point both variables at its `lib`
+  directory: `PKG_CONFIG_PATH=$B/pkgconfig LIBRARY_PATH=$B`, with
+  `B=<sysroot>/usr/lib/x86_64-linux-gnu`. Missing `PKG_CONFIG_PATH` makes
+  `alsa-sys` panic; missing `LIBRARY_PATH` fails linking `-lasound`. Check the
+  binary's mtime afterwards: an early-exiting wrapped build leaves the old binary.
+  On the shared host wrap the build:
+  `<work>/solaris/tools/dev/mem-run.sh -m 10G env RUSTC_WRAPPER= cargo build --release --bin solaris-client`.
+
+### 2. Build the client data root from public sources
+
+The client refuses to start without a complete data root. Let the launcher
+produce it, from a release build of the client repository:
+
+```sh
+solaris-launcher --headless-bootstrap --data-dir <root>      # needs internet access
+```
+
+`--headless-bootstrap` is the whole first-run install without a window (also
+usable in CI or on a server); `--force` reinstalls and `--manifest URL` overrides
+the content manifest baked into the launcher. It downloads the Solaris facts
+bundle (data tables only) and, from Mojang's own endpoints, the 26.3 `client.jar`
+and the asset objects, then unpacks the textures, models and fonts. No Mojang
+account is involved and no Mojang bytes are in Git. The resulting layout
+(`launcher/src/paths.rs` and the client README in the client repository):
+
+```text
+<root>/facts/                     Solaris facts tables
+<root>/data/vanilla/reports/      blocks.json, block_mining.json, block_light.json, registries.json, ...
+<root>/resources/assets/          textures/models/fonts unpacked from client.jar
+<root>/assets/asset-index.json    Mojang asset index (+ objects/)
+<root>/mojang/versions/26.3/      version json and client.jar
+<root>/cache/  installed.json     launcher state
+```
+
+`<root>` defaults to `$XDG_DATA_HOME/solaris-client` (`~/.local/share/solaris-client`).
+Without internet access the client's own alternative is `solaris-client setup
+--from-dist DIST --assets ASSETS`, which links a locally prepared bundle and an
+asset cache. The owner's `<work>/qa-armada/template-data` is only a launcher
+output kept on the owner's disk; recreate it with the command above.
+The complete content bundle (a full server cache, for singleplayer only) and the
+facts publishing flow are the client repository's business, not a gate
+prerequisite.
+
+### 3. Environment block
+
+Keep these in one env file per gate wave and source it; never retype paths.
+
+```sh
+export SOLARIS_SERVER_BINARY=<core>/target/release/solaris-v2   # release build
+export SOLARIS_CLIENT_ROOT=<client checkout>                    # default ../solaris-client
+export SOLARIS_CLIENT_BINARY=<client>/target/release/solaris-client
+# The data root from step 2:
+export SOLARIS_CLIENT_DATA_DIR=<root>/data/vanilla              # the vanilla metadata dir, not <root>
+export SOLARIS_CLIENT_RESOURCE_ROOT=<root>/resources
+export SOLARIS_CLIENT_ASSET_ROOT=<root>/assets
+export SOLARIS_CLIENT_ASSET_INDEX=<root>/assets/asset-index.json
+# Sibling repositories, only for the gates that use them:
+export SOLARIS_LOADER_ROOT=<solaris-loader checkout>            # Java/Loader clients; default ../solaris-loader
+export SOLARIS_DEFAULT_PLUGINS_ROOT=<solaris-default-plugins>   # standard-pack and plugin gates
+```
+
+- A headless native run (`--client native`) needs only `SOLARIS_CLIENT_DATA_DIR`
+  (checked: the directory exists); `--windowed` additionally needs
+  `SOLARIS_CLIENT_RESOURCE_ROOT`, `SOLARIS_CLIENT_ASSET_ROOT` and
+  `SOLARIS_CLIENT_ASSET_INDEX` (checked: directories, and the index is a file).
+  A missing variable fails the run before launch. Unlisted profiles are rejected
+  for native, see [AGENT_TOOLING](../AGENT_TOOLING.md#harness-entrypoint).
+  `SOLARIS_CLIENT_BINARY` must exist if set; unset means
+  `<client>/target/debug/solaris-client`, built once with debuginfo off.
+- A single wrong path (for example an item properties file under the wrong repo)
+  leaves the client on a white "loading content" screen forever without naming
+  the file; diff the env against the last green gate line by line.
+- The client's own data folder is `$XDG_DATA_HOME/solaris-client`. Give each gate
+  a fresh `XDG_DATA_HOME` whose `solaris-client/` **symlinks** (never copies; 650 MB
+  per run filled the disk) `facts assets data resources mojang`. A shared XDG
+  leaks `client-settings.json` between gates (an FOV assertion broke that way).
+  Without it the client looks under `~/.local/share/solaris-client` (a dangling
+  `facts` symlink there) and exits before MCP is ready. `scene-shot` does this
+  itself (symlinks those four plus `assets`, copies the rest, forces fov 70).
+- The singleplayer scenarios (`native-world-first-start-interrupted`,
+  `native-sp-relaunch-lease-race`) need `SOLARIS_SERVER_BINARY` naming the release
+  server and an imported 26.3 content cache at `<core>/data/vanilla`
+  (`solaris-v2 content import --version 26.3 --download --cache data/vanilla`,
+  see [OPERATING](../OPERATING.md#vanilla-content-cache)); they copy it into the
+  private client data root as `servers/content/26.3`.
+- Run each graphical gate through the scene slot so at most three run on the
+  host: `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER=
+  python3 -m tools.harness run <profile> --client native --windowed`.
+
+### 4. Which gates need owner-held access
+
+No harness gate needs a Mojang or Microsoft account: the native client uses the
+`offline-test` profile (official authentication is not implemented) and the
+Java/Loader client uses offline identities. The `SOLARIS_CLIENT_MCP_TOKEN` and
+the bridge secrets are per-run random values you generate. What only the owner
+holds:
+
+- the public test server (`SOLARIS_TEST_HOST`, SSH, `solaris-auth` passwords,
+  `SOLARIS_SOAK_AUTH`): [test server operations](test-server-ops.md), the
+  headless join smoke below against that host, `tools/dev/test-server/soak.py`;
+- the Windows VM login: [Windows and macOS client QA](windows-and-macos-client-qa.md);
+- release publication (`gh`, tags, GitHub secrets):
+  [releases](release-and-tags.md).
+
+Never write any of these values, addresses or paths into tracked files.
 
 ## Evidence classes
 
 Keep them separate in every report:
 
-- **Functional:** headless native client, protocol bots, unit/TCP tests.
-  A headless native run records `details.headless=true` and proves received
-  state only.
+- **Functional:** headless native client, protocol bots, unit/TCP tests. A
+  headless native run records `details.headless=true` and proves received state
+  only.
 - **Graphical:** native `--windowed` under the harness Xvfb with retained frames
   and pixel predicates, plus a human look at least one screenshot. Comparing
   light arrays or other internal state does not prove rendering.
-- **Java client:** proves vanilla-client compatibility for the path it ran;
-  it is diagnostic for native-client rendering claims.
+  `present_requested` does not prove physical monitor scanout.
+- **Java client:** proves vanilla-client compatibility for the path it ran; it is
+  diagnostic for native-client rendering claims. A client older than the server's
+  protocol (the Loader's `minecraftVersion`) connects through the retained legacy
+  cache.
 
-Native `minecraft_click_container_slot` bypasses hit-testing; GUI-scale or
-layout proofs need a physical XTest click (pattern: `_scroll` in
+Native `minecraft_click_container_slot` bypasses hit-testing; GUI-scale or layout
+proofs need a physical XTest click (pattern: `_scroll` in
 `tools/harness/backends/native_p4.py`).
 
 ## Isolation (owner rules, 2026-10-23/24)
 
 - **Never the owner's desktop.** Every agent client runs on its own Xvfb display
   (never `:0`/`:1`) with `WAYLAND_DISPLAY` unset; the harness forces X11
-  (`SDL_VIDEODRIVER`/`GDK_BACKEND=x11`) and scene-shot fails if `client.log`
-  says `video driver: wayland`. Browser/noVNC viewers need their own proven
-  headless isolation (QA protocol, breaker procedure).
-- **Never the owner's microphone or speakers** (he is often in a call).
-  Minimum: `ALSOFT_DRIVERS=null` for every agent-launched Java/Minecraft client
-  (QA protocol). Stronger isolation used for bot fleets and QA hunts: a private
-  null ALSA config (`pcm.!default { type null }`, `ctl.!default { type null }`)
-  via `ALSA_CONFIG_PATH`, `PIPEWIRE_REMOTE=/nonexistent`,
+  (`SDL_VIDEODRIVER`/`GDK_BACKEND=x11`) and scene-shot fails if `client.log` says
+  `video driver: wayland`. Browser/noVNC viewers need their own proven headless
+  isolation (QA protocol, breaker procedure).
+- **Never the owner's microphone or speakers** (he is often in a call). Minimum:
+  `ALSOFT_DRIVERS=null` for every agent-launched Java/Minecraft client (QA
+  protocol). Stronger isolation used for bot fleets and QA hunts: a private null
+  ALSA config (`pcm.!default { type null }`, `ctl.!default { type null }`) via
+  `ALSA_CONFIG_PATH`, `PIPEWIRE_REMOTE=/nonexistent`,
   `PULSE_SERVER=unix:/nonexistent`, private `XDG_RUNTIME_DIR`; verify with
   `wpctl status` that no new stream appeared. A null output sink alone isolates
   only output, not capture. Harness audio gates record a virtual null-sink
   monitor, never the microphone; the desktop mic indicator during such runs is
   expected.
-- Private ports, data roots and worlds per run; kill only processes you
-  started, by PID.
+- Private ports, data roots and worlds per run; kill only processes you started,
+  by PID.
 
-## Native client environment
+## Native scenario rules
 
-The harness needs a built native client and its content:
+- Native runs the client headless (`play --headless`) against the harness-started
+  server over an ephemeral loopback MCP endpoint: no Java, no Xvfb. Descriptor
+  readiness uses inotify complete-write events and process pidfd, followed by
+  authenticated MCP initialization; scenario readiness uses MCP state events,
+  never sleeps. Each run uses an isolated descriptor/token directory under the
+  client's `.analysis/harness-runs/`; the 0600 bearer token and private nonce are
+  not receipted.
+- The `survival` server uses an isolated seed-81 world with no plugins by default,
+  no operators and hostile spawning disabled. By default the harness builds the
+  current debug server; `SOLARIS_SERVER_BINARY` selects a known matching prebuilt
+  server read-only (path and SHA-256 are receipted). `--plugins-dir PATH` (an
+  existing directory used directly as `[plugins].directory`) is accepted by the
+  profiles that allow it and supplies no plugin-specific scenarios or unlock
+  proofs.
+- `--windowed` owns Xvfb and launches `play --windowed`. After success,
+  `screenshots/native-final.png` and its JSON receipt retain an actual-window scene
+  target with frame id, scene/state/resource revisions and GPU completion; missing
+  capture evidence fails the run. The default stays functional headless and makes
+  no visual claim.
+- Operator fixtures use the vanilla `ops.json` beside the isolated server config
+  (level 4, offline identities recorded in the receipt). Headless survival has no
+  operator grant; windowed survival grants its one test identity for the
+  separately labelled playthrough death fixture only, after ordinary
+  mining/pickup/placement acceptance.
+- The respawn path uses the bounded event-driven Play wait. An immediate
+  `in_play=false` right after the Death-screen Respawn click is not itself a
+  disconnect, but there is no protocol respawn fallback: a failed UI request, Play
+  timeout or missing restored health fails the gate.
+- Rendered name/text/colour/glow, piglin admiration, merchant offers and similar
+  visual items need screenshot review; inventory debit or menu admission alone is
+  not visual acceptance. Action/renderer gaps fail closed.
+- Headless native scenario families are received-state evidence only;
+  `--windowed` adds the shared final capture, not full pixel parity. `explain <id>`
+  lists a scenario's exact fixtures and fences.
+- Singleplayer recovery:
+  `run scenario native-world-first-start-interrupted --client native --windowed`
+  interrupts the server only after both the first-start marker and database exist;
+  `run scenario native-sp-relaunch-lease-race --client native --windowed` suspends
+  the old server until the new one logs its lease wait. They create private client
+  data and worlds, use a private Xvfb, and do not cover the lease timeout branch or
+  Windows. For the first-start negative control only,
+  `SOLARIS_FIRST_START_RECOVERY_BINARY` can select an older server for the
+  recovery attempt after the fixed server created and interrupted the world.
+- `java-v2-p5-parity`, `java-v2-p5-towns` and `loader-v2-settlements-smoke` run the
+  real Java/Loader clients under private Xvfb against a frozen candidate
+  (`SOLARIS_SERVER_BINARY` or `--server-bin`, plus `--plugins-dir`); they never
+  build a server.
 
-- **Build** (client repo; vendored ALSA sysroot):
-  `B=<client>/.analysis/build-support/usr/lib/x86_64-linux-gnu;
-  PKG_CONFIG_PATH=$B/pkgconfig LIBRARY_PATH=$B <work>/solaris/tools/dev/mem-run.sh -m 10G env
-  RUSTC_WRAPPER= cargo build --release --bin solaris-client`. Missing
-  `PKG_CONFIG_PATH` makes `alsa-sys` panic; missing `LIBRARY_PATH` fails linking
-  `-lasound`. Check the binary's mtime afterwards: an early-exiting wrapped
-  build leaves the old binary.
-- **Content root.** A complete client data root lives at
-  `<work>/qa-armada/template-data` (facts, assets, data, resources, mojang,
-  cache, `installed.json`). Point `SOLARIS_CLIENT_DATA_DIR`,
-  `SOLARIS_CLIENT_ASSET_INDEX` (`assets/asset-index.json`),
-  `SOLARIS_CLIENT_ASSET_ROOT` and `SOLARIS_CLIENT_RESOURCE_ROOT` into it.
-- **Fresh `XDG_DATA_HOME` per run** whose `solaris-client/` symlinks (never
-  copies; 650 MB per run filled the disk) `facts assets data resources mojang
-  cache`. A shared XDG leaks `client-settings.json` between gates (an FOV
-  assertion broke that way). Without it the client looks under
-  `~/.local/share/solaris-client` (a dangling `facts` symlink there) and exits
-  before MCP is ready.
-- Also `SOLARIS_CLIENT_ROOT`, `SOLARIS_CLIENT_BINARY` (release build),
-  `SOLARIS_SERVER_BINARY` (release build), `SOLARIS_LOADER_ROOT`,
-  `SOLARIS_DEFAULT_PLUGINS_ROOT`. Keep these in one env file per gate wave and
-  source it; never retype paths. A single wrong path (for example an item
-  properties file under the wrong repo) leaves the client on a white
-  "loading content" screen forever without naming the file; diff the env
-  against the last green gate line by line.
-- Run each graphical gate through the scene slot so at most three run on the
-  host: `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER=
-  python3 -m tools.harness run <profile> --client native --windowed`.
+## Scene shots
+
+`python3 -m tools.harness run scene-shot --client native --windowed` runs a
+scripted capture. Set `SOLARIS_SERVER_BINARY`, `SOLARIS_CLIENT_BINARY`, the native
+env block above and `SCENE_SHOT_SCENARIO` to a JSON file. The JSON has `steps`,
+each one of `cmd`, `tp` (five coordinates), `look`, `wait_ticks`, `wait_play`,
+`wait_terrain`, `shot`, `observe`, `use_item_on`, `click_screen_button`,
+`scan_blocks`, `read_block`, `navigate_to_block`, `list_entities`, or `key`
+(`keys` and `ticks` MCP arguments; released when the step finishes). Optional
+`seed` defaults to 100, `world` copies an existing world, `server_view_distance`
+defaults to 4, and `client_settings` accepts `graphics_preset`, `render_distance`
+and `fov` (default 70: the owner's saved fov is never inherited). PNG paths are
+recorded in `result.json`; settings and world are isolated per run.
+
+- With a client supporting held MCP input,
+  `{"shot":"tab","hold_keys":["key.keyboard.tab"]}` captures the visible player
+  list and releases the key even if capture fails (native only).
+- Terrain fence (native only): after observing the relevant block states and
+  before the screenshot, use
+  `{"wait_terrain":{"name":"terrain-ready","args":{"sections":[[62,10,62],[62,9,62]],"timeout_seconds":30}}}`.
+  Sections are unique section-coordinate integer triples (1-64); the timeout is
+  0.1-120 s, default 30, also bounded by the scenario deadline. A missing tool,
+  timeout or non-ready response fails the scenario. The receipt is saved as
+  `<artifact>/terrain-ready.json` and in `scenario.terrain_waits`; requested and
+  mesh revisions must match. The completed frame is a readiness fence, not proof
+  of visible pixels, and capture is not atomic with the fence.
+- `--client java --windowed` runs the same scenario against the vanilla Java client
+  (Loader `:fabric-agent:runClientMcp`) as a rendering oracle: `shot` uses
+  `minecraft_screenshot` and the client gets the same 1280x720 window, fov, GUI
+  scale 3 and render distance through its `options.txt`. Mojang's client is a
+  test-time reference only, never a source for Solaris models.
+- `settlement-map-qa` reuses this lifecycle with a scripted body and judges the
+  client's own screenshots: it founds an empty town, opens its map, certifies a
+  real Storage while the map stays open (stale shot: unchanged), refreshes and
+  returns to the main page; palette pixel deltas between shots prove territory,
+  viewer and storage cells. `--client native --windowed` presses the dialog
+  buttons and drives the native pointer (`client_pointer`): a territory cell and
+  a storage cell must show tooltips, and clicking the storage must bring the
+  server's building page. `--client java --windowed` uses the pages' `/settlement
+  menu` commands (Loader MCP cannot press buttons inside a dialog's scroll body)
+  and has no pointer tool, so hovers and cell clicks are native-only.
+
+## Distant Horizons gate (`dh-gate`)
+
+`python3 -m tools.harness run dh-gate --platform fabric|neoforge` runs a real
+Java Distant Horizons (DH) client against a candidate server. Prerequisite
+discovery alone is never a pass. The profile checks both publisher hashes (URLs,
+sizes, SHA-512/SHA-1) and the baseline loader pins in
+[`tools/harness/dh-artifacts.json`](../../tools/harness/dh-artifacts.json), which
+is the pin owner.
+
+- Inputs: `SOLARIS_DH_JAR` (the pinned DH jar), `SOLARIS_SERVER_BINARY` (the
+  candidate), Java 25, Xvfb, Python Pillow, and the real DH scenario driver in the
+  sibling `solaris-loader` (`SOLARIS_LOADER_ROOT` selects the checkout). The driver
+  uses a private copy under `.analysis/prism-26.1.2/minecraft` inside that
+  checkout, never the owner's Prism, and mints fresh local MCP bearer tokens per
+  client.
+- Scenario: independently clean DH caches; server DH disabled versus enabled from
+  the same camera; vanilla render distance <= 8, DH radius 128; a never-visited
+  landmark 1024 blocks away.
+- Required receipts: request/DTO/render completion, vanilla-versus-DH packet
+  coordinates, screenshots, surface-edit/reconnect/dimension/reset checks and a
+  bounded adversarial pass. `dh-scenario.json`, `dh-packet-evidence.json` and
+  `result.json` keep the actual outcomes.
+- Fixed-camera pixel check: no gold in the DH-off control, gold in the cold DH-on
+  frame, emerald after the live edit. A decoded leaf or replacement VBO can precede
+  parent aggregation and is not a rendered-edit pass.
 
 ## Flakes that are environment
 
 - Load above ~25 on 12 cores: the client never enters Play, or
   `stale_dimension_epoch` after a respawn. Rerun at low load before debugging.
-- `renderer_initialization_failed: Parent device is lost`: transient
-  GPU/Xvfb flake; rerun once.
+- `renderer_initialization_failed: Parent device is lost`: transient GPU/Xvfb
+  flake; rerun once.
 - Under Xvfb about 25-30 ms per frame goes to `xcb_put_image`; it exists only in
   harness runs and is not client FPS cost.
-- The graphical settlement war gate failed with `stale-revision` while a cargo
-  matrix ran on the same host and passed on an idle host (2026-10-07). Run long
-  graphical gates on a quiet host and count such passes as host-idle evidence.
+- A graphical settlement war gate once failed with `stale-revision` while a cargo
+  matrix ran on the same host and passed on an idle host. Run long graphical gates
+  on a quiet host and count such passes as host-idle evidence.
 - A debug server runs at about 2-9 TPS while a joining player's chunks generate;
   timing-sensitive checks (bow draw, eating, cooldowns) need the release server
   (AGENTS.md).
 
-## Promotion with a negative control (2026-11-04/05)
+## Promotion with a negative control
 
-A bug row closes only with a registered `harness:<profile>:<scenario>` check
-that fails closed at the row's own assertion on a negative control. Build the
-negative control as the current candidate with only that row's fix
-reverse-applied. Commits from before the 26.3 cutover speak protocol 775 and
-fail at login, which is not a negative control; bundled multi-fix reversals do
-not count either. A unit or synthetic test is a regression guard, never the
-closing evidence for a client-visible bug.
+A bug row closes only with a registered `harness:<profile>:<scenario>` check that
+fails closed at the row's own assertion on a negative control. Build the negative
+control as the current candidate with only that row's fix reverse-applied. Commits
+from before the 26.3 cutover speak protocol 775 and fail at login, which is not a
+negative control; bundled multi-fix reversals do not count either. A unit or
+synthetic test is a regression guard, never the closing evidence for a
+client-visible bug.
 
 ## village-autonomy-qa
 
@@ -110,25 +332,25 @@ closing evidence for a client-visible bug.
    seed_100_generated_village_builds_storage_with_player_simulation_distance --
    --ignored --nocapture`.
 3. `python3 -m tools.harness run village-autonomy-qa --client native --windowed`
-   takes 40-55 min (cap 3600 s); run it async with `timeout: 0`. Two in
-   parallel are fine on the 12-core host; stop stale `solaris-v2` processes from
-   old runs by PID first.
+   takes 40-55 min (cap 3600 s); run it async with `timeout: 0`. Two in parallel
+   are fine on the 12-core host; stop stale `solaris-v2` processes from old runs by
+   PID first.
 4. Receipt: `.analysis/validation/<UTC>-village-autonomy-qa-*/village-autonomy-qa/scenario.json`:
-   `assertions`, `autonomy_acceptance.storage_rounds` (chest totals and
-   buildings about once a minute), `client_blocks` (blueprint matches;
-   `wood_species`), `planner_status`, resident census; `transcript.json` has
-   every MCP call. Replay recorded `minecraft_scan_blocks` results through the
-   harness matcher offline to test matcher changes without a 50-minute rerun.
-5. `all_behaviours_pass` requires every recorded verdict, including ones
-   commented "non-gating". Never narrow it without an owner decision.
+   `assertions`, `autonomy_acceptance.storage_rounds` (chest totals and buildings
+   about once a minute), `client_blocks` (blueprint matches; `wood_species`),
+   `planner_status`, resident census; `transcript.json` has every MCP call. Replay
+   recorded `minecraft_scan_blocks` results through the harness matcher offline to
+   test matcher changes without a 50-minute rerun.
+5. `all_behaviours_pass` requires every recorded verdict, including ones commented
+   "non-gating". Never narrow it without an owner decision.
 
-Known causes (2026-10): builders only come from residents that reach storage
-(a bridge exit over water once blocked them); builders and resource workers
-work only in day time 2000..9000, so harness waits must span a game day;
-construction uses the settlement's wood species; natural zones must prove wild
-resources. A chat-reply race (`mutations_refused_while_unowned`) fails on a
-CPU-contended host. Lumberjack latency varied between runs; only the final
-checkpoint persists, so diagnosing it needs a run that records state over time.
+Known causes: builders only come from residents that reach storage (a bridge exit
+over water once blocked them); builders and resource workers work only in day time
+2000..9000, so harness waits must span a game day; construction uses the
+settlement's wood species; natural zones must prove wild resources. A chat-reply
+race (`mutations_refused_while_unowned`) fails on a CPU-contended host. Lumberjack
+latency varied between runs; only the final checkpoint persists, so diagnosing it
+needs a run that records state over time.
 
 To trace villagers temporarily (never merge): a `tracing::debug!(target:
 "villager_trace", ...)` gated every 400 ticks in the villager brain, run with
@@ -148,13 +370,17 @@ Check these before blaming the product (all happened):
 - Over-funding (1.5x) lets the planner upgrade to the next level right after
   certification; fund 1.0x.
 - An oracle variable never updated in its loop makes the verdict always FAIL.
-- A target outside simulation distance does not tick; keep the player near
-  both site and storage.
-- The client log ends at `session startup: play` by design; server logins are
-  not logged at INFO.
+- A target outside simulation distance does not tick; keep the player near both
+  site and storage.
+- The client log ends at `session startup: play` by design; server logins are not
+  logged at INFO.
 - Never read state with `strings state.redb` (old pages); use the recovery path.
-- Guard-return oracle: track one soldier UUID that leaves its post by more than
-  4 blocks and returns within 2.5 after the lure dies.
+- Guard-return oracle: track one soldier UUID that leaves its post by more than 4
+  blocks and returns within 2.5 after the lure dies. The `army-qa` fixture waits
+  for every live guard within 2.5 blocks of its post before spawning a zombie 11
+  blocks away (inside the 12-block tether); the command-order check needs an
+  `Ordered` reply newer than its chat fence and a dialog roster showing Patrol for
+  every soldier; Return deliberately does not engage.
 
 For product failures, copy the receipt world into a throwaway `#[ignore]` core
 test, add a ticket at the player chunk, run the real tick and log per resident;
@@ -170,77 +396,105 @@ Proves join, auth, one action and persistence; not a graphical gate.
    MCP: `initialize` with the descriptor's nonce, `notifications/initialized`,
    then `tools/call`.
 2. `minecraft_wait_for_play` (90-120 s). "Connection refused" right after the
-   server became ready means the client launched too early: relaunch rather
-   than reuse the session.
+   server became ready means the client launched too early: relaunch rather than
+   reuse the session.
 3. Auth plugin servers: `/register <pw> <pw>` or `/login <pw>` via chat, confirmed
    through `recent_chat` and `minecraft_wait_for_state_change`. Keep test
    passwords in a 0600 file under ignored `.analysis/`.
 4. One action with a server-side result: scan, navigate, `minecraft_break_block`
-   expecting `became_air` and `pickup_confirmed`. Spawn protection (16 blocks
-   when `ops.json` is non-empty) makes a non-op dig near spawn report
-   `started` without `became_air`; move away. A plant above the target blocks
-   the look ray; pick another column.
+   expecting `became_air` and `pickup_confirmed`. Spawn protection (16 blocks when
+   `ops.json` is non-empty) makes a non-op dig near spawn report `started` without
+   `became_air`; move away. A plant above the target blocks the look ray; pick
+   another column.
 5. Persistence: disconnect, stop the server via `stop` on stdin and wait for the
    checkpoint line, restart, rejoin, `minecraft_wait_for_loaded_block`,
    `minecraft_read_block`.
 6. Clients older than the server's Loader channel version fail in configuration
-   with `unsupported Loader channel or phase`; that is version skew, not a
-   server bug.
+   with `unsupported Loader channel or phase`; that is version skew, not a server
+   bug.
+
+## Manual local playable launch (owner-visible play, not a gate)
+
+An owner-visible session on a visible display, with a copied config and release
+binaries. It produces no receipt and proves nothing; the automated
+`playable`/`regression` profiles and agent QA run isolated, headless-display
+clients instead and must never touch the owner's desktop.
+
+1. Prepare the server cache once:
+   `solaris-v2 content import --version 26.3 --download --cache data/vanilla`
+   then `solaris-v2 content verify --cache data/vanilla`.
+2. Copy the manual profile and edit the copy, never `playable.toml` itself:
+   `cp playable.toml .analysis/playable-run.toml`; set `world_dir`, `port` and
+   `seed` (the profile is offline, loopback `127.0.0.1:25565`, view distance 4).
+   A reused `world_dir` keeps its old seed and generation contract; use a new
+   directory for a fresh world.
+3. Start the server: `target/release/solaris-v2 --config .analysis/playable-run.toml`.
+   It is ready when it logs that the listener is bound. Type `stop` on its stdin
+   (or send Ctrl+C) to write the final checkpoint.
+4. Install and start the client from the client repository's release build:
+   run `solaris-launcher --headless-bootstrap` once (or the launcher window), then
+   `solaris-client` (Title screen: Multiplayer, Add Server or Direct Connect) or
+   `solaris-client --server 127.0.0.1:25565 --username Steve`. Use the same
+   `--data-dir` as the bootstrap if you did not use the default.
 
 ## Vanilla render oracle (native visual parity)
 
 The owner requires a side-by-side comparison with the real Java client, not
-memory or wiki images:
+memory or wiki images. Reproducible from this repository: the two captures.
+**Not reproducible from this repository:** the panel step. The owner's runners
+and panel composer live in the owner-local `<work>/vref-kit` (a throwaway
+Pillow script that pastes the vanilla and Solaris PNGs of each row side by side
+with labels); it is not tracked anywhere. To review, put the two PNGs of the
+same scenario step next to each other with any image viewer or a few lines of
+Pillow, and follow the review rules below.
 
-- `python3 -m tools.harness run scene-shot --client java|native --windowed`
-  with a scenario JSON (`SCENE_SHOT_SCENARIO`; steps `cmd`, `tp`, `look`,
-  `wait_ticks`, `shot`, `observe`, `hold_keys`). The Java oracle uses a Loader
-  checkout for the server's Minecraft version (`SOLARIS_LOADER_ROOT`).
-- Same window 1280x720, FOV 70, GUI scale 3, seed, server build, render
-  distance and pose for both clients. Java shots change only when the server
-  changes: reuse them and reshoot native only. Kit (panels, runners):
-  `<work>/vref-kit/`.
-- Vanilla's default graphics preset resets render distance to 16 at startup:
-  write `graphicsPreset:"custom"` and fail when the post-run `options.txt`
-  distance differs.
-- The native Medium preset is the HDR look; Low is the vanilla-exact path
-  (default since RC2). Check the preset first for global colour gaps.
-- Review panels yourself; report each item as `matches` or `differs:` with
-  RGB sampled over the same rectangles (no HUD, hands or text). Never generalise
-  a per-sample error beyond the samples.
+- Capture both clients with the same scenario JSON: `python3 -m tools.harness run
+  scene-shot --client java|native --windowed` (steps in [Scene shots](#scene-shots)).
+  The Java oracle uses a Loader checkout for the server's Minecraft version
+  (`SOLARIS_LOADER_ROOT`).
+- Same window 1280x720, FOV 70, GUI scale 3, seed, server build, render distance
+  and pose for both clients. Java shots change only when the server changes: reuse
+  them and reshoot native only.
+- Vanilla's default graphics preset resets render distance to 16 at startup: write
+  `graphicsPreset:"custom"` and fail when the post-run `options.txt` distance
+  differs.
+- The native Medium preset is the HDR look; Low is the vanilla-exact path (default
+  since RC2). Check the preset first for global colour gaps.
+- Review the panels yourself; report each item as `matches` or `differs:` with RGB
+  sampled over the same rectangles (no HUD, hands or text). Never generalise a
+  per-sample error beyond the samples.
 - Capture native scenes only after `geometry_ready` with zero pending sections.
-- Provenance (owner, 2026-11-04): never copy Mojang code, numbers, model
-  geometry or UVs into sources, including values read from decompiled or
-  `javap` classes; textures load from game resources at runtime. Entity rigs are
-  authored by eye from public visuals, with provenance notes kept outside Git.
-  Tell agents not to open decompiled sources.
-- The owner workstation cannot reach minecraft.wiki; fetch reference files
-  through the test server (`ssh "$SOLARIS_TEST_HOST" "curl -sSL -o
-  /tmp/wiki-ref/X.png 'https://minecraft.wiki/w/Special:FilePath/<name>'"`) and
-  rsync them back; touch only `/tmp/wiki-ref` there.
+- Provenance (owner, 2026-11-04): never copy Mojang code, numbers, model geometry or
+  UVs into sources, including values read from decompiled or `javap` classes;
+  textures load from game resources at runtime. Entity rigs are authored by eye
+  from public visuals, with provenance notes kept outside Git. Tell agents not to
+  open decompiled sources. (This rule is about client rendering assets. Packet ids
+  and layouts for the server are read from local reports and `javap`, see
+  [ADR 0002](../decisions/0002-vanilla-protocol-metadata-as-reference.md).)
+- The owner workstation cannot reach minecraft.wiki; reference files were fetched
+  through the test server with `ssh "$SOLARIS_TEST_HOST" "curl ..."` into
+  `/tmp/wiki-ref` there and rsynced back. That needs the owner's SSH access.
 
-## Combinatorial scenario matrix with bots (2026-10-24)
+## Combinatorial scenario matrix with bots
 
-A matrix of gameplay rows run by protocol, Java and native bots against a
-release server lived under `<work>/scenarios/` (`matrix.yaml` from
-`gen_matrix.py`, append-only `ledger.jsonl`, last line per id wins, written only
-through `gen_matrix.py --record`). Its shared harness API
-(`tools/harness/matrix_api.py`, `protocol-matrix`/`java-matrix`/`native-matrix`
-profiles) stayed on branches and is not in `main`. Rules that carry over:
+**Not runnable from `main`.** The matrix generator (`gen_matrix.py`), the
+`matrix.yaml` and append-only `ledger.jsonl` it produced, and the shared harness
+API (`tools/harness/matrix_api.py` with the `protocol-matrix`, `java-matrix` and
+`native-matrix` profiles) lived on branches and in the owner's `<work>/scenarios/`;
+none of them is in this repository, and `python3 -m tools.harness list` has no
+such profile. The supported replacement is the registered harness scenarios
+(`python3 -m tools.harness explain`) and [catalog load](catalog-load.md). Rules
+from that matrix that still bind any new gameplay row:
 
 - One runner: the canonical harness. No second runner or DSL.
 - An adapter's oracle returns non-empty checks; a missing verb raises a named
   `MissingCapability` and never passes. A command's feedback is not a success
   oracle; check world state. Input verbs are submission-only; wait for fresh
   state. A forceload acknowledgement is not a loaded-chunk fence.
-- kill -9 durability: wait until the published journal batch covers the
-  mutation tick, then SIGKILL; the mutation must survive. A mid-action crash
-  must recover consistent state; losing up to the documented WAL tail is
-  allowed.
+- kill -9 durability: wait until the published journal batch covers the mutation
+  tick, then SIGKILL; the mutation must survive. A mid-action crash must recover
+  consistent state; losing up to the documented WAL tail is allowed.
 - Coverage classes: spec_only / stub / real_partial / complete / executed
   (pass|fail). A registration is not coverage.
 - Disjoint port ranges per runner; plugin-sensitive rows record a plugin-set
   fingerprint. No bots on the live test-server world.
-- The bots found real defects on a live build: an End restart failure on a
-  dangling dragon-fight UUID, an entity-store stale-slot panic, and kill -9 WAL
-  replay losing scoreboard and player position.

@@ -47,14 +47,31 @@ bump. Old-version support is described in
    Fixing ids one live failure at a time wasted hours.
 2. One version constant per data source; grep the protocol and content loaders
    for hard-coded version literals.
-3. The facts bundle comes from about eleven Java capture programs kept in the
-   client's ignored `.analysis/` (`player-research`, `evidence`,
-   `inventory-contract`, `ui-contract`). Port each to the new jar classpath, fan
-   them out by file group, and accept a file only with full coverage of state
-   ids and items, a by-name diff against the old capture with every difference
-   named, and the new blocks present. Bind vanilla tags before capture.
-   Reflection "owner" lookups break when vanilla introduces delegators or
-   renames classes; resolve the real override.
+3. **The facts bundle (owner-local step).** The twelve files in the client's
+   `dist/facts` (listed in `tools/publish_facts.sh` of the client repository:
+   `action-state-facts.json`, `block-state-predicates.json`,
+   `block-use-classes.json`, `block_collision_shapes_26_3.bin`,
+   `creative-facts.json`, `entity-use-static.json`, `interaction-facts.json`,
+   `item-placement-facts.json`, `item-properties.json`, `item-use-owners.json`,
+   `placement-state-facts.json`, `terrain-facts.json`) come from about eleven
+   Java capture programs that live only in the owner's ignored client
+   `.analysis/` (`player-research`, `evidence`, `inventory-contract`,
+   `ui-contract`). **They are not tracked in any repository.** A contributor
+   with only the repositories cannot rerun them: the facts-regeneration part of a
+   bump is blocked until the owner supplies the programs or a contributor writes
+   equivalents. To recreate one, write a Java program per facts file, compile it
+   against the new server jar's classpath (JDK 25, the bundle's
+   `META-INF/versions` and `META-INF/libraries` jars) and have it read the file's
+   data from the live vanilla registries, never from memory. The tracked pattern
+   to copy is this repository's `tools/extract-block-collision-shapes.sh` with
+   `tools/extract-block-collision-shapes/CollisionShapeExtractor.java` (and the
+   sibling `tools/extract-block-{light,mining,explosion,map-colors}.sh`). For a
+   regenerated file: port it to the new jar classpath, fan the files out by
+   group, and accept it only with full coverage of state ids and items, a
+   by-name diff against the old capture with every difference named, and the new
+   blocks present. Bind vanilla tags before capture. Reflection "owner" lookups
+   break when vanilla introduces delegators or renames classes; resolve the real
+   override.
 4. Entity metadata: check serializer registration order against the new jar;
    holder-typed serializers encode id + 1 with 0 meaning an inline value.
 5. Strict clippy: compare diagnostics by (lint, path) against the baseline

@@ -43,13 +43,38 @@ docker start solaris-win
 
 ## Building the Windows client
 
-Cross-build in a client worktree with the mingw toolchain kept in the core
-checkout's ignored `.analysis/mingw` (no system mingw):
-`cargo build --release --locked --target x86_64-pc-windows-gnu --workspace`
-(apply the zlib CFLAGS workaround from the client's `release.yml`). The exes
-import only system DLLs. Package them in the previous release zip layout
-(`LICENSE`, `README`, `icon.png`, `plugins/`, `solaris-v2.exe`) with the new
-`solaris-client.exe` and `solaris-launcher.exe` swapped in.
+The published Windows zip is built by the client repository's release workflow
+on a `windows-latest` runner with the MSVC target (CRT linked statically, with
+its own CRT-dependency checks). That is the supported public path.
+
+For a QA build from Linux, cross-build in a client worktree with the GNU target:
+
+```sh
+rustup target add x86_64-pc-windows-gnu
+PATH=<mingw>/bin:$PATH RUSTC_WRAPPER= \
+  CFLAGS_x86_64_pc_windows_gnu=-I<libz-sys src/zlib> \
+  cargo build --release --locked --target x86_64-pc-windows-gnu --workspace
+```
+
+- `<libz-sys src/zlib>` is the zlib header directory inside the checked-out
+  `libz-sys` crate (`~/.cargo/registry/src/*/libz-sys-*/src/zlib`); it is the
+  same workaround the client's `release.yml` applies for the bundled FreeType.
+- **mingw toolchain.** Install your distro's mingw-w64 GCC for
+  `x86_64-w64-mingw32` (posix threads flavour; on Ubuntu `gcc-mingw-w64-x86-64-posix`
+  and `g++-mingw-w64-x86-64-posix`), so `x86_64-w64-mingw32-gcc` is on `PATH`.
+  The owner's machine has no root install; his copy is **owner-local** and was
+  made without root by unpacking the Ubuntu mingw-w64 13-posix `.deb` files
+  (`binutils-mingw-w64-x86-64`, `gcc-mingw-w64-x86-64-posix` and its `-runtime`,
+  `g++-mingw-w64-x86-64-posix`, `gcc-mingw-w64-base`, `mingw-w64-common`,
+  `mingw-w64-x86-64-dev`) into one directory with `dpkg -x`, with a `bin/`
+  directory of symlinks named `x86_64-w64-mingw32-{gcc,g++,cpp,ar,as,ld,nm,
+  objcopy,ranlib,strip,dlltool,...}` pointing at the unpacked `usr/bin` tools.
+  The ignored copy sits under the core checkout's `.analysis/mingw`; recreate it
+  the same way if you cannot install packages.
+- The exes import only system DLLs. Package them in the previous release zip
+  layout (`LICENSE`, `README`, `icon.png`, `plugins/`, `solaris-v2.exe`) with the
+  new `solaris-client.exe` and `solaris-launcher.exe` swapped in. A mingw build is
+  a QA artifact, not the release artifact.
 
 ## Driving the guest
 

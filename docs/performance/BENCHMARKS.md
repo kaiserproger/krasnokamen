@@ -38,8 +38,8 @@ the server takes the whole pool they **share** it (the table says so).
 
 Linux, Python 3.11+, `taskset`, `lscpu`, `lsblk`, `findmnt`, cgroup v2, `systemd-run` (a user
 session, or root) for the memory cap, and the imported 26.3 content cache
-(`solaris-v2 content import --version 26.3 --download`; the dir holding `version.json`, passed
-as `--vanilla-data-dir` if it is not `./data/vanilla` or `~/.local/share/solaris/content/26.3`).
+(`solaris-v2 content import --version 26.3 --download`; the dir holding `version.json`:
+`./data/vanilla`, or `$SOLARIS_VANILLA_DATA_DIR`, or `--vanilla-data-dir`).
 `/usr/bin/time` (GNU time) is optional: it adds peak RSS and CPU-ms/chunk to the worldgen tables.
 For comparable runs use the `performance` CPU governor (`cpupower frequency-set -g performance`);
 the governor is recorded.
@@ -183,6 +183,72 @@ inside the server) but does change what the bots can sustain, which the bot repo
 Not covered: the remote SMT topology is not probed (every vCPU counts as its own core), so
 `--cpu-mode physical` on a VPS equals `logical`.
 
+## Player-capacity ladder
+
+`tools/coreperf/capacity_ladder.py` runs a fresh generated world per rung (no
+prepared fixture) against the ordinary release `solaris-v2` and the Rust protocol
+bots, and reports per window: exact core tick samples from the dashboard's
+`/load-metrics` stream, tick-phase means, thread CPU, network, checkpoint cost,
+memory and an optional `perf` capture. It reuses the catalog-load session,
+config and login-window machinery ([catalog load](../development/catalog-load.md)).
+It measures; it never classifies a capacity claim beyond the operator thresholds.
+
+```sh
+# Build the two frozen release binaries first (non-PGO, see "Build once" above),
+# then run the ladder in the serialized perf lane. --out must be a new directory.
+tools/dev/mem-run.sh -p -m 5G \
+  python3 -m tools.coreperf.capacity_ladder \
+  --server-bin /abs/solaris-v2 --bots-bin /abs/player-scale-bots \
+  --out /abs/new/capacity-run --workload build --view-distance 8 \
+  --clients 20 50 100 --server-cpus 8-9 --bot-cpus 10-11
+```
+
+Options (defaults in parentheses): `--workload build|fight` (`build`),
+`--view-distance` (8), `--clients` rungs (`20 50 100`), `--group-size` (5) and
+`--spacing` (256), `--seed` (42), `--steady-seconds`/`--burst-seconds`/
+`--recovery-seconds` (120/60/20), `--readiness-seconds` (1500),
+`--prepare-concurrency` (3), `--server-cpus` (`8-9`) and `--bot-cpus` (`10-11`),
+`--vanilla-data-dir` (`data/vanilla`), `--server-stop-seconds` (180: the final save
+of a loaded world can exceed a 10 s stop limit), and `--perf-seconds`/
+`--perf-delay-seconds` (0/20) for a diagnostic capture inside the steady window.
+Use `--server-cpus 8-11 --bot-cpus 8-11` for a four-thread envelope (server and
+bots share the lane). Compare ladder numbers only with numbers from the same
+lane and envelope. The `-x` whole-machine envelope needs Main's GO
+([performance windows](../development/performance-windows-and-profiling.md)).
+
+Workload per rung: a new empty world dir, seed 42, defaults for everything else
+(`view_distance = simulation_distance = VD`, offline mode, dashboard on),
+operators for all bots (creative landing uses commands). Bots log in 3 at a time
+in groups of 5 (5x5-block clusters) with groups 256 blocks apart, so groups
+overlap views only partially. The schedule is open-loop wall clock and never waits
+for responses:
+
+| window | length | movement | block edits | chat |
+|---|---|---|---|---|
+| steady | 120 s | 20 Hz/bot | `build` 2 Hz, `fight` 1 Hz | 1 Hz |
+| burst | 60 s | 20 Hz/bot | `build` 5 Hz, `fight` 2 Hz | 2 Hz |
+| recovery | 20 s | none, readers only | none | none |
+
+- `build`: creative bots, daytime (`time set 6000`, no daylight cycle): walking
+  legs of 43-56 blocks with sprint/jump, break/place, chat.
+- `fight`: `--survival --respawn`, night (`time set 18000`, no daylight cycle):
+  natural hostile spawns attack walking survival bots, which die and respawn.
+  **The bots never attack**: "fighting" is mobs hurting players, not
+  player-vs-mob damage.
+- Wall-tick is the core's active iteration `wall_us` (excludes pacing sleep); TPS
+  is completed ticks over the window length. Operator limits for pass/fail:
+  sustained TPS >= 19.5 (5 s bins), p99 <= 50 ms, max <= 250 ms, server RSS <=
+  3072 MiB, no disconnects (overridable with `--min-tps`, `--sustained-seconds`,
+  `--max-tick-p99-ms`, `--max-tick-max-ms`, `--max-rss-mb`). A run in which bots
+  lose a connection ends early; its window is measured only up to the last
+  completed tick (`partial`), which makes short partial windows weak evidence.
+
+Output: `<out>/summary.json` (headline per rung) and `<out>/rung-N/result.json`
+(windows, phases, thread CPU, checkpoints, bot report) beside raw samples and logs.
+How the bots account for offered, admitted and completed work:
+[PLAYER_CAPACITY](PLAYER_CAPACITY.md). Results from older runs are not current
+evidence: run the ladder on the build you are asking about before citing capacity.
+
 ## Smoke checks (pipeline proof, not numbers)
 
 `--smoke` shrinks windows to 5 s warmup + 25 s, uses the cheap defaults (`idle,explore-20`,
@@ -206,38 +272,10 @@ Thread CPU excludes descheduling; phase wall time and end-to-end ready time do n
 Use deterministic operation-count regressions to explain a solver-work reduction.
 These diagnostics do not replace the quiet integrated readiness/TPS acceptance window.
 
-**2026-10-28 admission diagnostic.** A matched 100 s cold `explore-20` run
-(seed 42, server CPUs `8,9`, bot CPUs `10,11`, preparation concurrency 3)
-compared the original policy/solver with dominance pruning plus real-tick slack:
-
-| Diagnostic metric | Baseline | Candidate |
-|---|---:|---:|
-| Admission thread CPU per chunk, aggregate mean | 5,213 µs | 4,195 µs (-19.5%) |
-| Admitted chunks / observed global tick | 0.996 | 1.602 (+60.7%) |
-| Ticks admitting more than one chunk | 21 / 1,998 | 1,145 / 1,996 |
-| Total chunks admitted | 1,991 | 3,199 |
-| Seed face checks, one-chunk oracle regression | 4,742 | 1,272 (-73.2%) |
-
-The deterministic 16-block-high emitter/sky fixture has the same 791 seed
-cells before and after pruning and checks the full light oracle. The two live
-runs hit the same fixture cache key
-`9e874f55587142f5ddc9c78e13e42729cafc71bce4c7237022cb2be1749fd4a6`
-and use the same immutable bot binary. Their different progress changes the
-admitted-chunk distribution, so aggregate CPU is not an identical-chunk
-comparison. Both hit the deliberately shortened 100 s all-client readiness
-deadline; neither is a readiness pass or a quiet 2-/6-CPU acceptance result.
-These figures predate the 26.3 rebase and the multi-world progress-reservation
-correction; the corrected integrated tree needs its own acceptance measurement.
-Receipts in the `pauline/weakhw-login` worktree:
-`.analysis/admission-cpu-comparison.json`,
-`.analysis/login-cpu-{baseline,candidate}/admission-cost-summary.json`,
-`.analysis/test-admission-{before,final}.log`, and
-`.analysis/validation-final.json`.
-
 Run it under the memory-capped shared lane:
 
 ```sh
-M=/home/kaiserroman/solaris/tools/dev/mem-run.sh
+M=<work>/solaris/tools/dev/mem-run.sh
 $M -m 8G python3 -m tools.bench weak-hw --smoke --slice solaris-heavy.slice
 $M -m 8G python3 -m tools.bench scaling --smoke --cpu-mode logical,physical --slice solaris-heavy.slice
 $M -m 8G python3 -m tools.bench worldgen --smoke --cores 1,2

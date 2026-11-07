@@ -228,6 +228,11 @@ worker):
 > commands with results, receipt paths, open issues. Never stop at an
 > intermediate checkpoint; report blockers with exact evidence.
 
+Worker prompts or skills kept outside the repository that name
+`.analysis/tools/mem-run.sh` are stale: that ignored runner is retired and the
+tracked one is `tools/dev/mem-run.sh`. If such a prompt conflicts with
+AGENTS.md or the prompt above, follow those.
+
 Workers allowed to delegate add: "You may spawn the fast worker for parallel or
 mechanical parts (test ports, data or config moves, bounded refactors, larger
 well-specified pieces). Give each a self-contained task with exact files and
