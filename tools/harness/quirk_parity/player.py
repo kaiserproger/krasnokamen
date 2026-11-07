@@ -38,7 +38,7 @@ def run_player_script(ctx, row, jar, vanilla_data):
     clients = []
     server = VanillaMatrixServer(directory, seed=row['seed'], jar=jar, use_mem_run=False,
                                  properties={'max-players': row['context']['player_count'],
-                                             'difficulty': 'peaceful'})
+                                             'difficulty': 'peaceful', 'white-list': 'false'})
     evidence = {'jar': str(jar), 'jar_sha256': hashlib.sha256(jar.read_bytes()).hexdigest(),
                 'status': 'running'}
     ctx.client_evidence['vanilla'] = evidence

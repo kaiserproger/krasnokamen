@@ -9,6 +9,7 @@ import zlib
 from unittest.mock import patch
 
 from .backends import matrix_random
+from .quirk_parity import player
 
 from .matrix_domains.random import invariant_checks, mutate_observation, stock, _published, setup, recovery_matches, _mine
 from .quirk_parity.fuzz import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_ACTIONS,
@@ -16,6 +17,18 @@ from .quirk_parity.fuzz import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_A
 
 
 class RandomMatrixTests(unittest.TestCase):
+    def test_vanilla_network_fixture_disables_default_whitelist(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            jar = root / 'server.jar'
+            jar.write_bytes(b'test')
+            ctx = SimpleNamespace(artifact_dir=root, client_evidence={}, logs=[])
+            with patch.object(player, 'VanillaMatrixServer') as server:
+                server.return_value.start.side_effect = RuntimeError('stop after configuration')
+                with self.assertRaisesRegex(RuntimeError, 'stop after configuration'):
+                    player.run_player_script(ctx, player_scenario(7, 1, 2), jar, root)
+            self.assertEqual(server.call_args.kwargs['properties']['white-list'], 'false')
+
     def test_mining_waits_for_exact_ack_including_sequence_zero(self):
         snapshots = iter([{'block_ack_sequence': None}, {'block_ack_sequence': 0}])
         actor = SimpleNamespace(look_at=lambda *args: None, break_block=lambda *args, **kwargs: 0,
