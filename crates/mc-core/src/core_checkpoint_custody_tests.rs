@@ -1857,7 +1857,9 @@ fn container_transfer_fixture(
     let lectern = case.name == "lectern";
     if shelf {
         slots[0][1] = item("diamond", 9);
-    } else if !(jukebox || pot || chiseled || lectern) {
+    } else if chiseled {
+        slots[0][5] = item("book", 1);
+    } else if !(jukebox || pot || lectern) {
         slots[0][if case.name == "brewing_stand" { 3 } else { 0 }] = item("diamond", 2);
         slots[0][case.size - 1] = item("diamond", 7);
     }
@@ -1920,6 +1922,24 @@ fn container_transfer_fixture(
             .unwrap();
         crate::block_entity_defaults::after_blocks(&mut world.state, &[(TRANSFER_POS, id)]);
     }
+    if chiseled {
+        let mut fields = vec![
+            (
+                "id".into(),
+                mc_nbt::Tag::String("minecraft:chiseled_bookshelf".into()),
+            ),
+            ("x".into(), mc_nbt::Tag::Int(TRANSFER_POS.x)),
+            ("y".into(), mc_nbt::Tag::Int(TRANSFER_POS.y)),
+            ("z".into(), mc_nbt::Tag::Int(TRANSFER_POS.z)),
+        ];
+        mc_data::storage_blocks::encode_items(&mut fields, &slots[0], &world.state.registry.items);
+        let mut bytes = Vec::new();
+        mc_nbt::write_network(&mut bytes, &mc_nbt::Tag::Compound(fields)).unwrap();
+        world
+            .state
+            .world
+            .set_opaque_block_entity(TRANSFER_POS, Some(bytes));
+    }
     crate::redstone::containers::register(&mut world.state, TRANSFER_POS);
     if case.name == "crafter" {
         crate::crafter::register(&mut world.state, TRANSFER_POS);
@@ -1934,7 +1954,9 @@ fn container_transfer_fixture(
         case,
         slots,
         player: world.state.players[&entity].inventory.slots.clone(),
-        total: if jukebox || pot || chiseled || lectern {
+        total: if chiseled {
+            13
+        } else if jukebox || pot || lectern {
             12
         } else {
             20

@@ -56,6 +56,8 @@ The matrix includes decorated pots, chiseled bookshelves and lecterns; their
 opaque WAL images require a resident chunk and refuse recovery if it cannot load.
 Campfire items, vault rewards and trial-spawner pending items instead use
 opaque-only custody and are covered by the unreadable-chunk recovery refusal.
+Chiseled bookshelves hydrate through their six-slot owner only, not the
+three-slot wooden-shelf decoder; a populated sixth slot guards against loss.
 
 The custody hole combined lazy container replay, a dirty-chunk-only capture,
 and pruning by the whole-world fence: an omitted chunk's WAL was no longer a
