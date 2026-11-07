@@ -260,7 +260,7 @@ class ProtocolMatrixClient(ProtocolStationVerbs, ProtocolInputVerbs):
     def drop(self, all=False):
         self.observer.sequence += 1
         # interaction.rs ServerboundPlayerAction 0x29; direction=down.
-        self.observer.send(0x29, wire.write_varint(3 if all else 4)
+        self.observer.send(0x29, wire.write_varint(4 if all else 5)
                            + wire.pack_block_position((0,0,0)) + b'\x00'
                            + wire.write_varint(self.observer.sequence))
         self.observer.send(0x0D)

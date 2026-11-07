@@ -3604,12 +3604,12 @@ regression = []
 
 [[bug]]
 id = "SCENARIO-RANDOM-BREAK-NO-PROGRESS"
-title = "Seeded network scenario times out waiting for removal of a dirt block after acknowledged survival mining; server versus harness cause has not been established."
-area = "gameplay"
-repro = "client"
+title = "Network mining harness sent 26.3 Cancel instead of Finish because it used the older player-action ordinals; the observed failure does not establish a server mining bug."
+area = "harness"
+repro = "source"
 severity = "major"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T170731-matrix-random-4x_c80x4/result.json"
+source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T170731-matrix-random-4x_c80x4/result.json; regression: tools/harness/test_protocol_input_verbs.py EncodingTests.test_break_block_sends_start_then_stop_with_sequence"
 regression = []
 failing_first = "reported"
 

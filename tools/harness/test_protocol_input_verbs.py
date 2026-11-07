@@ -54,7 +54,7 @@ class EncodingTests(unittest.TestCase):
         self.assertEqual(
             observer.sent,
             [(0x29, b'\x00' + position + b'\x01\x01'), (0x0D, b''),
-             (0x29, b'\x02' + position + b'\x01\x02'), (0x0D, b'')])
+             (0x29, b'\x03' + position + b'\x01\x02'), (0x0D, b'')])
 
     def test_break_block_rejects_fabricated_drop_proof(self):
         observer = _Observer()
@@ -74,7 +74,7 @@ class EncodingTests(unittest.TestCase):
         self.assertEqual(
             observer.sent,
             [(0x29, b'\x00' + position + b'\x01\x01'), (0x0D, b''),
-             (0x29, b'\x01' + position + b'\x01\x02'), (0x0D, b'')])
+             (0x29, b'\x02' + position + b'\x01\x02'), (0x0D, b'')])
         with self.assertRaises(ValueError):
             client.break_block((0, 64, 0), phase='half')
 
@@ -105,8 +105,8 @@ class EncodingTests(unittest.TestCase):
         client.swap_hands()
         zero = _packed((0, 0, 0))
         self.assertEqual(observer.sent,
-                         [(0x29, b'\x05' + zero + b'\x00\x01'), (0x0D, b''),
-                          (0x29, b'\x06' + zero + b'\x00\x02'), (0x0D, b'')])
+                         [(0x29, b'\x06' + zero + b'\x00\x01'), (0x0D, b''),
+                          (0x29, b'\x07' + zero + b'\x00\x02'), (0x0D, b'')])
 
     def test_respawn_sends_perform_respawn(self):
         observer = _Observer()

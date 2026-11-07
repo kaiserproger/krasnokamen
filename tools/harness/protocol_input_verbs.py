@@ -210,7 +210,7 @@ class ProtocolInputVerbs:
             raise MissingCapability('oracle:block_drop')
         block = _parse_block_position(position)
         _parse_face(face)
-        actions = {'start': (0,), 'abort': (1,), 'stop': (2,), 'complete': (0, 2)}[phase]
+        actions = {'start': (0,), 'abort': (2,), 'stop': (3,), 'complete': (0, 3)}[phase]
         for action in actions:
             self.observer.sequence += 1
             self.observer.send(PLAYER_ACTION_ID,
@@ -239,14 +239,14 @@ class ProtocolInputVerbs:
         """Send ``ReleaseUseItem`` (bow release / interrupted eating)."""
         self.observer.sequence += 1
         self.observer.send(PLAYER_ACTION_ID,
-                           _player_action_body(5, (0, 0, 0), 'down', self.observer.sequence))
+                           _player_action_body(6, (0, 0, 0), 'down', self.observer.sequence))
         self.observer.send(CLIENT_TICK_END_ID)
 
     def swap_hands(self) -> None:
         """Send ``SwapItemWithOffhand``."""
         self.observer.sequence += 1
         self.observer.send(PLAYER_ACTION_ID,
-                           _player_action_body(6, (0, 0, 0), 'down', self.observer.sequence))
+                           _player_action_body(7, (0, 0, 0), 'down', self.observer.sequence))
         self.observer.send(CLIENT_TICK_END_ID)
 
     def respawn(self) -> None:
