@@ -1,0 +1,320 @@
+domain: chat
+vanilla_version: 26.1.2
+port_range:
+  - 26460
+  - 26479
+execution: shared matrix_api Adapter only; YAML is specification, not a second runner/DSL
+evidence_scope: Specifications and blocked requirements are not runtime passes; see canonical receipts and ledger.
+subjects:
+  - id: chat.advancement_announce
+    matrix_ids:
+      - pw:chat.advancement_announce/forge_solaris_loader/creative/the_end/hard/N8/slow_reader_backpressure/pause_when_empty_resume/op_4
+    adapter: tools.harness.matrix_domains.chat:ADAPTERS[chat.advancement_announce]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      clients:
+        2 for public/private/join/announcement;3 for team including nonmember; raw/signed input capabilities
+        where needed
+    source:
+      - https://minecraft.wiki/w/Chat
+    expected_version: Java 26.1.2
+    actions:
+      - gamerule show_advancement_messages true
+      - advancement grant actor only minecraft:story/root
+    oracle:
+      implementation: chat.oracle returns per-recipient counts/order or exact disconnection/visibility checks
+      public_chat:
+        count_per_client: 2
+        order:
+          - One
+          - Two
+      private_team: only sender/target or team members; no nonmember marker
+      spam: 10 un-decayed messages hit threshold200; non-op disconnect, op remains
+      raw: overlength and illegal character disconnect; empty remains connected
+      secure: valid signed message delivered once; no disconnect
+    received_history_contract:
+      protocol cumulative actual packets; native bounded GUI history => native_cumulative_received_chat;
+      absent Java events => cumulative_chat_history
+  - id: chat.chat_spam
+    matrix_ids:
+      - pw:chat.chat_spam/native_windows/adventure/overworld/easy/1/duplicate_login/save_all_checkpoint/op_1
+    adapter: tools.harness.matrix_domains.chat:ADAPTERS[chat.chat_spam]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      clients:
+        2 for public/private/join/announcement;3 for team including nonmember; raw/signed input capabilities
+        where needed
+    source:
+      - https://minecraft.wiki/w/Chat
+    expected_version: Java 26.1.2
+    actions:
+      - chat_burst ten messages in same server tick (20each; threshold200; op exempt)
+    oracle:
+      implementation: chat.oracle returns per-recipient counts/order or exact disconnection/visibility checks
+      public_chat:
+        count_per_client: 2
+        order:
+          - One
+          - Two
+      private_team: only sender/target or team members; no nonmember marker
+      spam: 10 un-decayed messages hit threshold200; non-op disconnect, op remains
+      raw: overlength and illegal character disconnect; empty remains connected
+      secure: valid signed message delivered once; no disconnect
+    received_history_contract:
+      protocol cumulative actual packets; native bounded GUI history => native_cumulative_received_chat;
+      absent Java events => cumulative_chat_history
+  - id: chat.chat_validation
+    matrix_ids:
+      - pw:chat.chat_validation/fabric_solaris_loader/survival/the_nether/normal/2/malformed_or_stale_packet/hot_backup_during_action/op_2
+    adapter: tools.harness.matrix_domains.chat:ADAPTERS[chat.chat_validation]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      clients:
+        2 for public/private/join/announcement;3 for team including nonmember; raw/signed input capabilities
+        where needed
+    source:
+      - https://minecraft.wiki/w/Chat
+    expected_version: Java 26.1.2
+    actions:
+      - send_raw_chat 257 chars
+      - reconnect
+      - send_raw_chat section-sign
+      - reconnect
+      - send_raw_chat empty
+    oracle:
+      implementation: chat.oracle returns per-recipient counts/order or exact disconnection/visibility checks
+      public_chat:
+        count_per_client: 2
+        order:
+          - One
+          - Two
+      private_team: only sender/target or team members; no nonmember marker
+      spam: 10 un-decayed messages hit threshold200; non-op disconnect, op remains
+      raw: overlength and illegal character disconnect; empty remains connected
+      secure: valid signed message delivered once; no disconnect
+    received_history_contract:
+      protocol cumulative actual packets; native bounded GUI history => native_cumulative_received_chat;
+      absent Java events => cumulative_chat_history
+  - id: chat.chat_visibility_setting
+    matrix_ids:
+      - pw:chat.chat_visibility_setting/neoforge_solaris_loader/spectator/the_end/peaceful/N8/normal/crash_kill9_wal_replay/non_op_0
+    adapter: tools.harness.matrix_domains.chat:ADAPTERS[chat.chat_visibility_setting]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      clients:
+        2 for public/private/join/announcement;3 for team including nonmember; raw/signed input capabilities
+        where needed
+    source:
+      - https://minecraft.wiki/w/Chat
+    expected_version: Java 26.1.2
+    actions:
+      - configure_chat full|commands_only|hidden
+      - other actor chat marker
+      - receiver command list
+    oracle:
+      implementation: chat.oracle returns per-recipient counts/order or exact disconnection/visibility checks
+      public_chat:
+        count_per_client: 2
+        order:
+          - One
+          - Two
+      private_team: only sender/target or team members; no nonmember marker
+      spam: 10 un-decayed messages hit threshold200; non-op disconnect, op remains
+      raw: overlength and illegal character disconnect; empty remains connected
+      secure: valid signed message delivered once; no disconnect
+    received_history_contract:
+      protocol cumulative actual packets; native bounded GUI history => native_cumulative_received_chat;
+      absent Java events => cumulative_chat_history
+  - id: chat.emote_say
+    matrix_ids:
+      - pw:chat.emote_say/vanilla_java_26_1_2/spectator/overworld/peaceful/N8/reconnect_mid_action/clean_restart_mid_action/op_3
+    adapter: tools.harness.matrix_domains.chat:ADAPTERS[chat.emote_say]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      clients:
+        2 for public/private/join/announcement;3 for team including nonmember; raw/signed input capabilities
+        where needed
+    source:
+      - https://minecraft.wiki/w/Chat
+    expected_version: Java 26.1.2
+    actions:
+      - command me MatrixEmote
+      - command say MatrixSay
+    oracle:
+      implementation: chat.oracle returns per-recipient counts/order or exact disconnection/visibility checks
+      public_chat:
+        count_per_client: 2
+        order:
+          - One
+          - Two
+      private_team: only sender/target or team members; no nonmember marker
+      spam: 10 un-decayed messages hit threshold200; non-op disconnect, op remains
+      raw: overlength and illegal character disconnect; empty remains connected
+      secure: valid signed message delivered once; no disconnect
+    received_history_contract:
+      protocol cumulative actual packets; native bounded GUI history => native_cumulative_received_chat;
+      absent Java events => cumulative_chat_history
+  - id: chat.join_leave_messages
+    matrix_ids:
+      - pw:chat.join_leave_messages/fabric_distant_horizons/creative/overworld/normal/N8/normal/hot_backup_during_action/non_op_0
+    adapter: tools.harness.matrix_domains.chat:ADAPTERS[chat.join_leave_messages]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      clients:
+        2 for public/private/join/announcement;3 for team including nonmember; raw/signed input capabilities
+        where needed
+    source:
+      - https://minecraft.wiki/w/Chat
+    expected_version: Java 26.1.2
+    actions:
+      - target disconnect
+      - target reconnect
+    oracle:
+      named_departure: same received event contains the target name and multiplayer.player.left or rendered departure
+      named_rejoin: same received event contains the target name and multiplayer.player.joined or rendered rejoin
+      style: both actual received translated components carry color=yellow; missing style is not a pass
+    missing_capabilities:
+      - snapshot:chat_components.join_leave_color
+    received_history_contract:
+      protocol cumulative actual packets; native bounded GUI history => native_cumulative_received_chat;
+      absent Java events => cumulative_chat_history
+  - id: chat.private_message
+    matrix_ids:
+      - pw:chat.private_message/fabric_svc/survival/overworld/peaceful/N8/malformed_or_stale_packet/steady/op_2@vanilla
+      - pw:chat.private_message/fabric_svc/survival/overworld/peaceful/N8/malformed_or_stale_packet/steady/op_2@live
+    adapter: tools.harness.matrix_domains.chat:ADAPTERS[chat.private_message]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      clients:
+        2 for public/private/join/announcement;3 for team including nonmember; raw/signed input capabilities
+        where needed
+    source:
+      - https://minecraft.wiki/w/Chat
+    expected_version: Java 26.1.2
+    actions:
+      - command msg <target> MatrixPrivate
+      - non-op command msg @a MatrixForbiddenSelector
+    oracle:
+      implementation: chat.oracle returns per-recipient counts/order or exact disconnection/visibility checks
+      public_chat:
+        count_per_client: 2
+        order:
+          - One
+          - Two
+      private_team: only sender/target or team members; no nonmember marker
+      spam: 10 un-decayed messages hit threshold200; non-op disconnect, op remains
+      raw: overlength and illegal character disconnect; empty remains connected
+      secure: valid signed message delivered once; no disconnect
+    plugin_profiles:
+      changed_by:
+        - solaris-essentials
+      vanilla: 767fbd3331effa358e238e39e2a88ed1345d5623207015671228536e53975f00
+      live: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+    plugin_profile_oracle:
+      vanilla: core private messaging semantics; selectors forbidden below op2
+      live:
+        solaris-essentials exact-name resolution; @a produces Online player not found or ambiguous.; messages
+        use [to target] and [from sender] prefixes
+      source: /run/media/kaiserroman/games/solaris-work/solaris-default-plugins/sources/solaris-essentials/src/lib.rs:450-471,607-610,636-645,853-863
+    received_history_contract:
+      protocol cumulative actual packets; native bounded GUI history => native_cumulative_received_chat;
+      absent Java events => cumulative_chat_history
+  - id: chat.public_chat
+    matrix_ids:
+      - pw:chat.public_chat/protocol_bot/spectator/the_nether/easy/N8/slow_reader_backpressure/crash_kill9_wal_replay/op_1
+    adapter: tools.harness.matrix_domains.chat:ADAPTERS[chat.public_chat]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      clients:
+        2 for public/private/join/announcement;3 for team including nonmember; raw/signed input capabilities
+        where needed
+    source:
+      - https://minecraft.wiki/w/Chat
+    expected_version: Java 26.1.2
+    actions:
+      - chat MatrixPublicOne
+      - chat MatrixPublicTwo
+    oracle:
+      implementation: chat.oracle returns per-recipient counts/order or exact disconnection/visibility checks
+      public_chat:
+        count_per_client: 2
+        order:
+          - One
+          - Two
+      private_team: only sender/target or team members; no nonmember marker
+      spam: 10 un-decayed messages hit threshold200; non-op disconnect, op remains
+      raw: overlength and illegal character disconnect; empty remains connected
+      secure: valid signed message delivered once; no disconnect
+    received_history_contract:
+      protocol cumulative actual packets; native bounded GUI history => native_cumulative_received_chat;
+      absent Java events => cumulative_chat_history
+  - id: chat.secure_chat_session
+    matrix_ids:
+      - pw:chat.secure_chat_session/native_linux/adventure/overworld/easy/1/normal/steady/non_op_0
+    adapter: tools.harness.matrix_domains.chat:ADAPTERS[chat.secure_chat_session]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      clients:
+        2 for public/private/join/announcement;3 for team including nonmember; raw/signed input capabilities
+        where needed
+    source:
+      - https://minecraft.wiki/w/Chat
+    expected_version: Java 26.1.2
+    actions:
+      - valid profile-key ChatSessionUpdate and signed MatrixSigned message
+    oracle:
+      implementation: chat.oracle returns per-recipient counts/order or exact disconnection/visibility checks
+      public_chat:
+        count_per_client: 2
+        order:
+          - One
+          - Two
+      private_team: only sender/target or team members; no nonmember marker
+      spam: 10 un-decayed messages hit threshold200; non-op disconnect, op remains
+      raw: overlength and illegal character disconnect; empty remains connected
+      secure: valid signed message delivered once; no disconnect
+    received_history_contract:
+      protocol cumulative actual packets; native bounded GUI history => native_cumulative_received_chat;
+      absent Java events => cumulative_chat_history
+  - id: chat.team_message
+    matrix_ids:
+      - bl:chat.team_message/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+    adapter: tools.harness.matrix_domains.chat:ADAPTERS[chat.team_message]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      clients:
+        2 for public/private/join/announcement;3 for team including nonmember; raw/signed input capabilities
+        where needed
+    source:
+      - https://minecraft.wiki/w/Chat
+    expected_version: Java 26.1.2
+    actions:
+      - team join matrix_chat actor,target
+      - command teammsg MatrixTeam
+    oracle:
+      implementation: chat.oracle returns per-recipient counts/order or exact disconnection/visibility checks
+      public_chat:
+        count_per_client: 2
+        order:
+          - One
+          - Two
+      private_team: only sender/target or team members; no nonmember marker
+      spam: 10 un-decayed messages hit threshold200; non-op disconnect, op remains
+      raw: overlength and illegal character disconnect; empty remains connected
+      secure: valid signed message delivered once; no disconnect
+    received_history_contract:
+      protocol cumulative actual packets; native bounded GUI history => native_cumulative_received_chat;
+      absent Java events => cumulative_chat_history
+phase2_checkpoint:
+  "56 distinct focused tests exercised; 3 received chat-style and localization tests passed after 53 prior methods.
+  No new live pass; Main paused new live runs for critical compile admission."

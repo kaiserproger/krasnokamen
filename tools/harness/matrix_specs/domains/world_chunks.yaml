@@ -1,0 +1,762 @@
+domain: world_chunks
+phase: executable specification; adapters use shared matrix_api, this file is NOT a runner DSL
+target_release: 26.1.2
+source_tree: /run/media/kaiserroman/games/solaris-work/wt/deploy-final
+ports:
+  - 26540
+  - 26559
+execution_contract:
+  context:
+    Driver applies every row factor before setup; no overriding mode/dimension/permissions. All matrix_rows
+    must execute; unsupported combination is blocked, never substituted.
+  setup:
+    Commands run as server fixture authority, in actor dimension using execute in; subject player actions retain
+    row permission.
+  synchronization:
+    Received packets, exact console predicates, and pushed dashboard tick events only. No sleeps.
+    Feedback fence proves only ordering.
+  references:
+    Vanilla mechanics reference minecraft.wiki; Solaris extensions/SLOs explicitly separate. No claim
+    that Solaris WAL/hot backup/anti-xray are vanilla features.
+  temporal_snapshots:
+    Freeze or record exact simulation tick; compare timers relative to ticks, not literal after
+    arbitrary elapsed time.
+  oracles:
+    A missing field/query is MissingCapability, not an empty value or success. Require non-empty Check list
+    and observed causality.
+  permission:
+    Subject minimum permission is a POSITIVE minimum, not a context override. Below minimum, execute actor
+    command unchanged and require hidden root + refusal + unchanged state. Console authority only creates fixtures
+    unless context.permission == console.
+  boundary:
+    Adapter invokes shared MatrixContext.boundary() exactly once after first acknowledged subject action.
+    Driver owns all context network/lifecycle operations.
+  scope_status:
+    Specifications cover all subjects/rows. Registered unavailable adapters raise exact MissingCapability
+    before mutation; they are blocked, NOT completed execution.
+  plugin_profiles:
+    Use shared select_plugin_profile and plugin_set_fingerprint. No adapter-wide exclusions or fabricated
+    plugin fingerprints. Missing client observations remain blocked in both profiles.
+context_overlays:
+  duplicate_login:
+    actions:
+      - connect second session same identity while original owns custody
+      - wait new Play and old disconnect; old socket cannot mutate
+    checks:
+      - old_session_connected: false
+      - new_session_connected: true
+      - UUID_live_owner_count: 1
+      - custody_total: unchanged
+    reference: owner decision 2026-10-24; vanilla newcomer replaces old session; ServerFixes owns implementation
+  crash_kill9_wal_replay:
+    actions:
+      - capture durable tick and atomic custody ledger
+      - kill9_restart before next checkpoint
+      - reconnect; query recovered state
+    checks:
+      - recovered_tick: last durably committed WAL tick, not last sent input
+      - custody_total: conserved; each transaction wholly before or wholly after
+    capabilities:
+      - server_kill9_wal_replay
+      - observe:durable_tick
+      - observe:atomic_custody
+  clean_restart_mid_action:
+    actions:
+      - capture state at stop boundary
+      - clean_restart same directory and identity
+      - reconnect
+    checks:
+      - persistent_state: equals committed pre-stop snapshot
+    capabilities:
+      - server_clean_restart
+  hot_backup_during_action:
+    actions:
+      - hot_backup
+      - restore_backup into separate world
+      - query frozen backup image
+    checks:
+      - backup_tick: manifest recoverable tick
+      - custody_total: conserved in single image
+    capabilities:
+      - server_backup_restore
+  pause_when_empty_resume:
+    actions:
+      - all clients disconnect
+      - await explicit pause transition event
+      - record ticks at pause and next independent liveness event; no sleep or wait-for-tick deadlock
+      - reconnect and await newer tick
+    checks:
+      - tick_while_paused: unchanged
+      - tick_after_join: greater than pause tick
+      - inflight_state: unchanged while paused
+    capabilities:
+      - server_pause_empty
+      - observe:pause_transition
+  save_all_checkpoint:
+    actions:
+      - save_all; await durable checkpoint acknowledgment
+    checks:
+      - checkpoint_committed: true
+  reconnect_mid_action:
+    actions:
+      - disconnect after first state-changing received action
+      - reconnect same identity
+      - continue subject action
+    checks:
+      - custody_total: unchanged
+      - stale_old_connection_mutations: 0
+  disconnect_during_menu:
+    actions:
+      - capture inventory+container+cursor single image
+      - disconnect while menu open
+      - reconnect and reopen container
+    checks:
+      - menu_old_id_reused: false
+      - custody_total: exact initial total including resolved cursor
+    capabilities:
+      - observe:atomic_custody
+  slow_reader_backpressure:
+    actions:
+      - throttle only designated reader; normal observer continues
+      - restore reader; await authoritative resync
+    checks:
+      - normal_observer_progress: true
+      - resumed_reader_final_state: equals authoritative state
+    capabilities:
+      - slow_reader_backpressure
+  malformed_or_stale_packet:
+    actions:
+      - send stale menu state or malformed packet at subject mutation boundary
+    checks:
+      - unauthorized_state_changes: 0
+      - process_alive: true
+    capabilities:
+      - malformed_packet_injection
+server_query_support:
+  execute_if_block_entity_score: implemented command_context.rs:215-288
+  data_queries:
+    - id: data_get_entity
+      evidence: crates/mc-core/src/command_context.rs:495-503 -> datapacks.rs:503-505 -> command_blocks.rs:258,283
+      repro: data get entity <online-player> Inventory
+      expected: NBT inventory payload
+      observed_source:
+        Dedicated data dispatcher supports command blocks only; not general entity/block NBT. Live
+        frozen-binary receipt DomLifecycle/20261024T032808-protocol-matrix-u4kezcpd/server.log:24 confirms restriction.
+    - id: data_get_block
+      evidence: crates/mc-core/src/command_context.rs:495-503 -> datapacks.rs:503-505 -> command_blocks.rs:258,283
+      repro: setblock 0 65 0 chest; data get block 0 65 0
+      expected: Chest NBT payload
+      observed_source:
+        Dedicated data dispatcher supports command blocks only; not general entity/block NBT. Live
+        frozen-binary receipt DomLifecycle/20261024T032808-protocol-matrix-u4kezcpd/server.log:24 confirms restriction.
+    - id: execute_store
+      evidence: crates/mc-core/src/command_context.rs:473
+      repro: execute store result score n lc run data get entity <player> Health
+      expected: Store numeric query result
+      observed_source: Explicit not implemented error
+  clean_restart: Shared ProtocolServer.clean_restart implemented; payload fixture/readback gaps remain distinct.
+subjects:
+  world_chunks.fresh_generation:
+    preconditions:
+      - two independent new worlds same seed 42, same 26.1.2 generation contract; no prior generated target chunks
+    actions:
+      - teleport_to distant coordinate (4096, safe-Y,4096) in each dimension; await received chunks
+      - save each world; compare canonical section/biome hashes at identical coordinates excluding entities/timestamps
+    checks:
+      - observation: same-seed canonical chunk hashes
+        operator: equals_capture
+        expected: other independent world
+      - observation: missing expected sections/chunks
+        operator: equals
+        expected: []
+      - observation: chunk boundary state constraints
+        operator: equals_capture
+        expected: vanilla 26.1.2 reference fixture
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/World_seed
+    missing_capabilities:
+      - vanilla_26_1_2_generation_reference_and_chunk_sections
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/chunks.rs
+      - crates/mc-core/src/chunk_loader.rs
+      - crates/mc-core/src/chunk_tickets.rs
+      - crates/mc-core/src/light.rs
+    matrix_rows:
+      - id: pw:world_chunks.fresh_generation/native_linux/survival/overworld/easy/1/reconnect_mid_action/hot_backup_during_action/non_op_0
+        context:
+          client_kind: native_linux
+          game_mode: survival
+          dimension: overworld
+          difficulty: easy
+          player_count: "1"
+          network_condition: reconnect_mid_action
+          server_lifecycle: hot_backup_during_action
+          permission: non_op_0
+        driver: native_mcp
+        context_oracle:
+          - "reference: chunks generated deterministically by seed; no holes/stripes"
+          - after reconnect the client receives exactly the server-committed state; the interrupted action is either
+            fully applied or not at all; item totals across player/containers/entities unchanged except by the committed
+            part
+          - server keeps ticking during backup; the backup restores to a single consistent tick (no torn state between
+            player and containers)
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/world_chunks.py
+      not_a_live_pass: true
+  world_chunks.chunk_streaming_radius:
+    preconditions:
+      - server view 8 simulation 4; stationary client view 8; entity fixtures in radius 3 and 6; no force tickets
+    actions:
+      - wait chunk cache settled; capture coordinates; advance 40 dashboard ticks
+    checks:
+      - observation: required view coordinate coverage
+        operator: equals_capture
+        expected: 26.1.2 reference cache shape at radius 8
+      - observation: inner entity movement
+        operator: greater_than
+        expected: 0
+      - observation: outside simulation entity movement
+        operator: equals
+        expected: 0
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Server.properties
+    missing_capabilities:
+      - observe:chunk_coordinates_and_simulation_boundary
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/chunks.rs
+      - crates/mc-core/src/chunk_loader.rs
+      - crates/mc-core/src/chunk_tickets.rs
+      - crates/mc-core/src/light.rs
+    matrix_rows:
+      - id: pw:world_chunks.chunk_streaming_radius/fabric_solaris_loader/creative/the_end/normal/N8/normal/steady/op_4
+        context:
+          client_kind: fabric_solaris_loader
+          game_mode: creative
+          dimension: the_end
+          difficulty: normal
+          player_count: N8
+          network_condition: normal
+          server_lifecycle: steady
+          permission: op_4
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: full view square readable; simulation radius bounded"
+          - "8 concurrent actors: results conserved, server MSPT stays below 50 ms, no correction storms or protocol
+            errors"
+          - holds in the_end (dimension-isolated world)
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/world_chunks.py
+      not_a_live_pass: true
+  world_chunks.light_updates:
+    preconditions:
+      - Build sealed stone room across x=15/16 seam; no skylight; actor resident; light sample cells at torch origin
+        and next cell
+    actions:
+      - setblock 15 65 0 torch; wait light packet revision
+      - setblock 15 65 0 air; wait light revision
+      - remove roof; observe skylight
+    checks:
+      - observation: block light at source/neighbor after placement
+        operator: equals
+        expected:
+          - 14
+          - 13
+      - observation: block light after removal
+        operator: equals
+        expected:
+          - 0
+          - 0
+      - observation: unobstructed sky light after roof removal
+        operator: equals
+        expected: 15
+      - observation: server/client sampled light
+        operator: equals
+        expected: true
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Light
+    missing_capabilities:
+      - observe:server_and_client_light_arrays
+    server_gap: []
+    source_modules:
+      - crates/mc-core/src/light.rs
+      - crates/mc-edge/src/light.rs
+      - crates/mc-edge/src/chunks.rs
+      - crates/mc-core/src/chunk_loader.rs
+      - crates/mc-core/src/chunk_tickets.rs
+    matrix_rows:
+      - id: pw:world_chunks.light_updates/protocol_bot/spectator/overworld/easy/N8/duplicate_login/crash_kill9_wal_replay/op_1
+        context:
+          client_kind: protocol_bot
+          game_mode: spectator
+          dimension: overworld
+          difficulty: easy
+          player_count: N8
+          network_condition: duplicate_login
+          server_lifecycle: crash_kill9_wal_replay
+          permission: op_1
+        driver: protocol_bot
+        context_oracle:
+          - "reference: client light equals server light; no dark chunks"
+          - "vanilla 26.1.2 newcomer wins (owner requirement, BugTriage DUPLICATE-LOGIN): the existing session is disconnected
+            ('You logged in from another location'), the new connection reaches Play with the same persisted player
+            state; exactly one live player entity for the UUID, no inventory copy or loss, no join-wait timeout. Current
+            Solaris (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
+            — expected to fail until ServerFixes lands"
+          - "after SIGKILL + restart (no wait for a published WAL fence) the world equals a consistent prefix of the
+            committed transactions: every transaction is all-or-nothing (no torn/split/half-moved stacks), no item duplication,
+            nothing that was durable before the action (setup baseline) is lost, and later transactions only appear
+            after earlier ones; surviving every pre-kill ACK is NOT required (latest-ACK durability needs a separate
+            fenced proof); world opens or fails closed on corruption (never silently reset); where the reference says
+            'identical/restored after restart', read it as identical to that recovered prefix"
+          - "8 concurrent actors: results conserved, server MSPT stays below 50 ms, no correction storms or protocol
+            errors"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/world_chunks.py
+      not_a_live_pass: true
+  world_chunks.anti_xray:
+    preconditions:
+      - anti-xray enabled; stone enclosure around diamond_ore at loaded position; observer outside enclosure
+    actions:
+      - observe encoded chunk ore cell
+      - break one adjacent enclosing stone; wait fresh block update
+    checks:
+      - observation: hidden client cell
+        operator: not_equals
+        expected: minecraft:diamond_ore
+      - observation: authoritative ore unchanged
+        operator: equals
+        expected: minecraft:diamond_ore
+      - observation: exposed client cell
+        operator: equals
+        expected: minecraft:diamond_ore
+    reference:
+      scope: solaris_extension_no_vanilla_equivalent
+      source:
+        - crates/mc-edge/src/anti_xray.rs
+    missing_capabilities:
+      - snapshot:chunk_block_state
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/anti_xray.rs
+      - crates/mc-edge/src/chunks.rs
+      - crates/mc-core/src/chunk_loader.rs
+      - crates/mc-core/src/chunk_tickets.rs
+      - crates/mc-core/src/light.rs
+    matrix_rows:
+      - id: pw:world_chunks.anti_xray/forge_solaris_loader/spectator/overworld/easy/2/malformed_or_stale_packet/clean_restart_mid_action/op_2
+        context:
+          client_kind: forge_solaris_loader
+          game_mode: spectator
+          dimension: overworld
+          difficulty: easy
+          player_count: "2"
+          network_condition: malformed_or_stale_packet
+          server_lifecycle: clean_restart_mid_action
+          permission: op_2
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: hidden ores absent from client data until exposed"
+          - out-of-reach/illegal/malformed input is rejected (BlockChangedAck + block update / correction teleport /
+            protocol disconnect) without state change; a stale container state_id is applied once and followed by a
+            full-state resync (vanilla handleContainerClick); never duplicated; server keeps running
+          - after /stop + restart the world, block entities, entities (same UUIDs), player inventories/positions and
+            partially finished processes equal the last committed pre-stop state; no duplication or loss
+          - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
+            desync between observers
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/world_chunks.py
+      not_a_live_pass: true
+  world_chunks.distant_horizons_lod:
+    preconditions:
+      - DH 3.3.3 protocol 16 client; target beyond vanilla view, never visited
+    actions:
+      - request target LOD; correlate request id and response; ordinary chat in parallel
+    checks:
+      - observation: LOD response coordinate
+        operator: equals_capture
+        expected: requested coordinate
+      - observation: LOD decoded columns
+        operator: greater_than
+        expected: 0
+      - observation: vanilla chunk send radius
+        operator: less_equal
+        expected: negotiated view boundary
+      - observation: chat echo
+        operator: equals
+        expected: true
+    reference:
+      scope: DH_extension_no_vanilla_equivalent
+      source:
+        - crates/mc-edge/src/dh.rs
+        - crates/mc-edge/src/lod.rs
+    missing_capabilities:
+      - dh_lod_request
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/dh.rs
+      - crates/mc-edge/src/lod.rs
+      - crates/mc-edge/src/chunks.rs
+      - crates/mc-core/src/chunk_loader.rs
+      - crates/mc-core/src/chunk_tickets.rs
+      - crates/mc-core/src/light.rs
+    matrix_rows:
+      - id: bl:world_chunks.distant_horizons_lod/fabric_distant_horizons/survival/overworld/normal/1/normal/steady/non_op_0
+        context:
+          client_kind: fabric_distant_horizons
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: non_op_0
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: LOD data for never-visited chunks; vanilla packet bounds"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/world_chunks.py
+      not_a_live_pass: true
+  world_chunks.forceload_spawn_chunks:
+    preconditions:
+      - pause-when-empty disabled; furnace loaded with one raw iron and coal at fixture; forceload add fixture x z
+      - observer stays online far beyond simulation radius; no observer near fixture
+    actions:
+      - advance 240 dashboard ticks
+      - return and open furnace; forceload remove fixture x z
+      - query gamerule spawnChunkRadius
+    checks:
+      - observation: furnace iron_ingot count
+        operator: equals
+        expected: 1
+      - observation: forceload query while forced
+        operator: contains
+        expected: forced
+      - observation: removed spawnChunkRadius accepted
+        operator: equals
+        expected: false
+    reference:
+      scope: vanilla_26.1.2
+      source:
+        - https://minecraft.wiki/w/Commands/forceload
+        - https://minecraft.wiki/w/Spawn_chunk
+    missing_capabilities:
+      - data_get_entity
+      - data_get_block
+      - same_tick_admission_fence
+      - fixture:own_and_shared_forced_furnaces_N8
+    server_gap:
+      - forced_neighbor_entities_tick_at_block_only_ticket_level
+    source_modules:
+      - crates/mc-core/src/forceload.rs
+      - crates/mc-core/src/command_rules.rs
+      - crates/mc-edge/src/chunks.rs
+      - crates/mc-core/src/chunk_loader.rs
+      - crates/mc-core/src/chunk_tickets.rs
+      - crates/mc-core/src/light.rs
+    matrix_rows:
+      - id: pw:world_chunks.forceload_spawn_chunks/neoforge_solaris_loader/survival/the_nether/peaceful/N8/slow_reader_backpressure/save_all_checkpoint/op_3
+        context:
+          client_kind: neoforge_solaris_loader
+          game_mode: survival
+          dimension: the_nether
+          difficulty: peaceful
+          player_count: N8
+          network_condition: slow_reader_backpressure
+          server_lifecycle: save_all_checkpoint
+          permission: op_3
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: forced chunks tick without players; removed spawn-chunk rule is rejected as unknown (vanilla
+            26.1.2 has no spawn chunks, core:command_rules.rs)"
+          - server tick (MSPT) and other players unaffected; slow client either catches up with consistent state or
+            is disconnected by bounded queue/timeout; no unbounded memory growth
+          - save-all completes without stalling the tick; post-save state equals pre-save state
+          - "8 concurrent actors: results conserved, server MSPT stays below 50 ms, no correction storms or protocol
+            errors"
+          - holds in the_nether (dimension-isolated world)
+    minimum_tested_action_permission: 2
+    implementation:
+      class: real_but_partial
+      adapter: tools/harness/matrix_domains/world_chunks.py
+      not_a_live_pass: true
+      remaining_clause:
+        N8 mapped row still needs all-actor own/shared furnace fixtures and authoritative coordinated-input
+        receipts. Single-machine clause implementation is not full N8 coverage.
+  world_chunks.structures_loot:
+    preconditions:
+      - Find generated structure chest with unrolled loot table; record coordinate and table/seed from reference fixture;
+        no manual item insertion
+    actions:
+      - open_container; capture full slots
+      - close/open twice; clean restart; reopen
+    checks:
+      - observation: post-first-open complete stacks
+        operator: equals_capture
+        expected: first open stacks
+      - observation: loot table after generation
+        operator: equals
+        expected: null
+      - observation: generated stacks
+        operator: satisfies
+        expected: referenced 26.1.2 loot-table pools/entry counts
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Loot_table
+    missing_capabilities:
+      - data_get_block
+    server_gap: []
+    source_modules:
+      - crates/mc-core/src/maps/loot.rs
+      - crates/mc-edge/src/chunks.rs
+      - crates/mc-core/src/chunk_loader.rs
+      - crates/mc-core/src/chunk_tickets.rs
+      - crates/mc-core/src/light.rs
+    matrix_rows:
+      - id: pw:world_chunks.structures_loot/vanilla_java_26_1_2/adventure/the_nether/hard/1/disconnect_during_menu/pause_when_empty_resume/op_1
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: adventure
+          dimension: the_nether
+          difficulty: hard
+          player_count: "1"
+          network_condition: disconnect_during_menu
+          server_lifecycle: pause_when_empty_resume
+          permission: op_1
+        driver: java_mcp
+        context_oracle:
+          - "reference: loot table rolled once on first open"
+          - server closes the menu on Leave; carried cursor stack returns to the player inventory (dropped at feet if
+            full) exactly once; container contents reflect only acknowledged clicks; reopening after rejoin shows the
+            same contents
+          - while empty the world does not advance (no growth/smelting/mob movement); after rejoin it resumes from the
+            same tick and the action completes normally
+          - holds in the_nether (dimension-isolated world)
+          - "conservation: item totals over inventories/containers/item entities as expected (no dupe, no loss)"
+      - id: pw:world_chunks.structures_loot/fabric_distant_horizons/creative/the_end/peaceful/1/disconnect_during_menu/steady/op_1
+        context:
+          client_kind: fabric_distant_horizons
+          game_mode: creative
+          dimension: the_end
+          difficulty: peaceful
+          player_count: "1"
+          network_condition: disconnect_during_menu
+          server_lifecycle: steady
+          permission: op_1
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: loot table rolled once on first open"
+          - "creative: placements/uses do not debit items; creative break yields no drops"
+          - server closes the menu on Leave; carried cursor stack returns to the player inventory (dropped at feet if
+            full) exactly once; container contents reflect only acknowledged clicks; reopening after rejoin shows the
+            same contents
+          - holds in the_end (dimension-isolated world)
+          - "conservation: item totals over inventories/containers/item entities as expected (no dupe, no loss)"
+      - id: pw:world_chunks.structures_loot/native_windows/creative/the_nether/normal/2/disconnect_during_menu/steady/op_2
+        context:
+          client_kind: native_windows
+          game_mode: creative
+          dimension: the_nether
+          difficulty: normal
+          player_count: "2"
+          network_condition: disconnect_during_menu
+          server_lifecycle: steady
+          permission: op_2
+        driver: native_mcp
+        context_oracle:
+          - "reference: loot table rolled once on first open"
+          - "creative: placements/uses do not debit items; creative break yields no drops"
+          - server closes the menu on Leave; carried cursor stack returns to the player inventory (dropped at feet if
+            full) exactly once; container contents reflect only acknowledged clicks; reopening after rejoin shows the
+            same contents
+          - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
+            desync between observers
+          - holds in the_nether (dimension-isolated world)
+          - "conservation: item totals over inventories/containers/item entities as expected (no dupe, no loss)"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/world_chunks.py
+      not_a_live_pass: true
+  world_chunks.pregenerate:
+    preconditions:
+      - isolated world seed 42; explicit requested chunk square; no players there
+    actions:
+      - invoke existing offline/online pregeneration entry point for radius 2
+      - observe progress and tick while online; open requested chunks without generating new revisions
+    checks:
+      - observation: generated requested coordinates
+        operator: equals_capture
+        expected: 25 requested chunks
+      - observation: world seed/contract unchanged
+        operator: equals
+        expected: true
+      - observation: online tick advance
+        operator: greater_than
+        expected: 0
+    reference:
+      scope: solaris_operator_extension
+      source:
+        - crates/mc-core/src/pregenerate.rs
+    missing_capabilities:
+      - server_pregenerate
+    server_gap: []
+    source_modules:
+      - crates/mc-core/src/pregenerate.rs
+      - crates/mc-edge/src/chunks.rs
+      - crates/mc-core/src/chunk_loader.rs
+      - crates/mc-core/src/chunk_tickets.rs
+      - crates/mc-core/src/light.rs
+    matrix_rows:
+      - id: pw:world_chunks.pregenerate/fabric_svc/survival/the_end/normal/2/slow_reader_backpressure/hot_backup_during_action/op_3
+        context:
+          client_kind: fabric_svc
+          game_mode: survival
+          dimension: the_end
+          difficulty: normal
+          player_count: "2"
+          network_condition: slow_reader_backpressure
+          server_lifecycle: hot_backup_during_action
+          permission: op_3
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: chunks generated off-tick; server responsive"
+          - "NEGATIVE (permission op_3 < op 4): command not advertised in the command tree, execution answers 'Unknown
+            or incomplete command', no state change"
+          - server tick (MSPT) and other players unaffected; slow client either catches up with consistent state or
+            is disconnected by bounded queue/timeout; no unbounded memory growth
+          - server keeps ticking during backup; the backup restores to a single consistent tick (no torn state between
+            player and containers)
+          - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
+            desync between observers
+          - holds in the_end (dimension-isolated world)
+    minimum_tested_action_permission: 4
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/world_chunks.py
+      not_a_live_pass: true
+  world_chunks.world_import_export_anvil:
+    preconditions:
+      - 26.1.2 vanilla source fixture containing placed gold block, named cow, chest diamonds, player inventory; hash
+        source
+    actions:
+      - offline import into separate native world
+      - offline export native world into fresh Anvil directory
+      - open export with vanilla 26.1.2 and query fixture
+    checks:
+      - observation: block/entity UUID/chest/player payloads
+        operator: equals_capture
+        expected: source fixture
+      - observation: vanilla startup successful
+        operator: equals
+        expected: true
+      - observation: source hashes unchanged
+        operator: equals
+        expected: true
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Anvil_file_format
+    missing_capabilities:
+      - server_world_import_export_and_vanilla_reference
+    server_gap: []
+    source_modules:
+      - crates/mc-core/src/world_conversion.rs
+      - crates/mc-edge/src/chunks.rs
+      - crates/mc-core/src/chunk_loader.rs
+      - crates/mc-core/src/chunk_tickets.rs
+      - crates/mc-core/src/light.rs
+    matrix_rows:
+      - id: bl:world_chunks.world_import_export_anvil/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: non_op_0
+        driver: java_mcp
+        context_oracle:
+          - "reference: blocks/entities/players round-trip; vanilla opens export"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/world_chunks.py
+      not_a_live_pass: true
+  world_chunks.worldgen_upgrade:
+    preconditions:
+      - stopped native fixture older supported worldgen revision; seed/format/geometry identical; record stored chunk
+        and entity hashes
+    actions:
+      - normal open must refuse old revision
+      - offline worldgen upgrade; repeat upgrade
+      - open upgraded world and generate new neighboring chunk
+    checks:
+      - observation: stored chunk/entity hashes
+        operator: equals_capture
+        expected: pre-upgrade
+      - observation: worldgen revision
+        operator: equals_capture
+        expected: current build revision
+      - observation: second upgrade rewritten
+        operator: equals
+        expected: false
+      - observation: new chunk generation contract
+        operator: equals_capture
+        expected: current build
+    reference:
+      scope: solaris_revision_upgrade_not_vanilla_seam_guarantee
+      source:
+        - crates/mc-core/src/worldgen_upgrade.rs:1-7,35-40
+    missing_capabilities:
+      - server_worldgen_upgrade
+    server_gap: []
+    source_modules:
+      - crates/mc-core/src/worldgen_upgrade.rs
+      - crates/mc-edge/src/chunks.rs
+      - crates/mc-core/src/chunk_loader.rs
+      - crates/mc-core/src/chunk_tickets.rs
+      - crates/mc-core/src/light.rs
+    matrix_rows:
+      - id: bl:world_chunks.worldgen_upgrade/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: non_op_0
+        driver: java_mcp
+        context_oracle:
+          - "reference: upgrade path consistent; no seams"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/world_chunks.py
+      not_a_live_pass: true
+shared_api: bots-runproto@1e20dd5f merged into dom-lifecycle; shared MatrixContext/server/client APIs only
+implementation_counts:
+  spec_only: 0
+  registered_stub: 9
+  complete_adapter: 0
+  real_but_partial: 1
+  executed_in_ledger:
+    pass: 0
+    fail: 0

@@ -679,6 +679,26 @@ def run_oracle_check(ctx: ProfileContext) -> dict[str, Any]:
 
 
 
+def run_protocol_matrix(ctx: ProfileContext) -> dict[str, Any]:
+    from .backends.protocol_matrix import run
+    return run(ctx)
+
+
+def run_matrix_random(ctx: ProfileContext) -> dict[str, Any]:
+    from .backends.matrix_random import run
+    return run(ctx)
+
+
+def run_java_matrix(ctx: ProfileContext) -> dict[str, Any]:
+    from .backends.java_matrix import run
+    return run(ctx)
+
+
+def run_native_matrix(ctx: ProfileContext) -> dict[str, Any]:
+    from .backends.native_matrix import run
+    return run(ctx)
+
+
 def run_catalog_load(ctx: ProfileContext) -> dict[str, Any]:
     """Explicit release artifacts; fixture preparation uses public v2 commands."""
     extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
@@ -979,6 +999,26 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Headless native CPU/RSS canaries beside real Rust protocol bots; non-exclusive diagnostic only",
         "run": run_native_scale,
     },
+    "protocol-matrix": {
+        "scope": "tcp",
+        "description": "Release protocol bots executing shared matrix adapters with received-state oracles",
+        "run": run_protocol_matrix,
+    },
+    "matrix-random": {
+        "scope": "tcp",
+        "description": "Seeded multiplayer invariant checks on the release server over real protocol sockets",
+        "run": run_matrix_random,
+    },
+    "java-matrix": {
+        "scope": "real-client",
+        "description": "Java clients executing shared matrix adapters on an isolated release server",
+        "run": run_java_matrix,
+    },
+    "native-matrix": {
+        "scope": "real-client",
+        "description": "Native clients executing shared matrix adapters on an isolated release server",
+        "run": run_native_matrix,
+    },
     "pause-empty": {
         "scope": "functional-native",
         "description": "Empty-server pause: pause log, frozen tick across console save, status while paused, offline protocol join resume, re-pause after leave",
@@ -1113,6 +1153,10 @@ PROFILE_PREREQUISITES = {
     "native-lifecycle": _SHARED_BUILD,
     "logical-native": _NATIVE_BUILD,
     "native-scale": _NATIVE_BUILD,
+    "protocol-matrix": (("server_binary",), (), (), ()),
+    "matrix-random": (("server_binary",), (), (), ()),
+    "java-matrix": (("server_binary", "loader", "xvfb"), (), (), ()),
+    "native-matrix": (("server_binary", "client_binary", "client_data", "xvfb"), (), (), ()),
     "pause-empty": (("optional_server_binary",), (), (), ()),
     "item-merge": (("optional_server_binary",), (), (), ()),
     "graves": (("optional_server_binary", "plugins_dir"), (), (), ()),

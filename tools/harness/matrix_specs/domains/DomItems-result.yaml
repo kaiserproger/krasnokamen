@@ -1,0 +1,559 @@
+verdict: changes
+worktree: /run/media/kaiserroman/games/solaris-work/wt/dom-items
+base_commit: 1e20dd5f
+server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+subjects_specified: 150
+counts:
+  inventory: 18
+  items: 18
+  crafting: 17
+  effects: 40
+  damage: 30
+  combat: 14
+  death_respawn: 13
+manifest: /run/media/kaiserroman/games/solaris-work/scenarios/domains/items-adapters.yaml
+implementation:
+  Shared Adapter setup/act/oracle functions; no second runner or DSL.
+  Main waived separate prose Phase1 documents in favor of executable adapters.
+coverage_claim:
+  150 registered real adapters:20 complete current curated subject oracles,130
+  real-but-partial; no pure stubs and no spec-only subjects. Complete implementation
+  does not imply its driver capabilities exist or its product behavior passes. Three
+  distinct exact ledger IDs have exercised passes; blocked and supplemental receipts
+  do not count.
+server_gap:
+  - subjects:
+      - damage.vanilla_freeze
+      - damage.vanilla_fly_into_wall
+      - damage.vanilla_cramming
+      - damage.vanilla_sonic_boom
+      - damage.vanilla_dragon_breath
+      - damage.vanilla_stalagmite
+    evidence: deploy-final/crates/mc-core/src/survival.rs:69-149; special_mobs/mod.rs:392-400
+    repro:
+      Warden sonic attack reports minecraft:magic, not minecraft:sonic_boom. Six
+      required damage identities absent; not claiming every physical mechanism absent.
+    report: damage-bugs.md
+  - subjects:
+      - items.totem_of_undying
+    evidence: deploy-final/crates/mc-core/src/tick/damage.rs:258-259,332-339
+    repro:
+      Lethal instant_damage with held totem directly reaches death path without
+      totem interception. /kill and void are intentionally not used as totem tests.
+    report: items-bugs.md
+  - subjects:
+      - death_respawn.death_message
+    evidence: deploy-final/crates/mc-core/src/tick/damage.rs:393-438
+    repro:
+      /kill emits English death text instead of death.attack.genericKill translation.
+      show_death_messages=false suppresses the dying player Died event too.
+    report: death_respawn-bugs.md
+missing_query_verb_capabilities:
+  source_confirmed_original_binary:
+    - data_get_entity
+    - data_get_block (non-command-block)
+    - execute_store
+    - server:damage
+  shared_protocol_declared_unavailable:
+    - client:move_physics
+    - ctx.concurrently real consumed-intent identity receipts for own/shared N8 and
+      explicit concurrent triples
+    - same_tick_admission_fence for two same-tick dupe origins and same-block triple
+    - rich effect/render/physics observations listed per subject
+  rich_observations_needed_not_claimed_implemented:
+    - anvil_cost
+    - attributes
+    - bossbars
+    - compass_target
+    - cooldowns
+    - damage_events
+    - death_message
+    - effect_rendering
+    - enchanting_offers
+    - equipment
+    - fishing_bite
+    - fishing_loot
+    - loom_patterns
+    - map_data
+    - merchant_offers
+    - on_ground
+    - projectile_events
+    - recipes
+    - sounds
+    - sprinting
+    - spyglass_zoom
+    - stonecutter_recipes
+    - vehicle_id
+    - velocity
+  required_client_verbs:
+    - attack
+    - break_block
+    - click_slot
+    - close_container
+    - container_button
+    - drop
+    - edit_book
+    - interact_entity
+    - jump
+    - move
+    - open_container
+    - place_recipe
+    - press_inputs
+    - release_use_item
+    - rename_item
+    - respawn
+    - select_hotbar
+    - set_creative_slot
+    - sneak
+    - sprint
+    - stale_click
+    - swap_hands
+    - toggle_crafter_slot
+    - use_item
+    - use_item_on
+  policy:
+    Missing fields/capabilities block; they never become empty components, zero
+    counters, pass, or a gameplay bug by inference.
+  historical_observed_live:
+    - client:duplicate_login
+    - snapshot:stack:components
+  d4cba654_update:
+    Supported component patches now decoded; old stack-components blockers
+    historical only. Unsupported codecs still fail closed.
+  1e20dd5f_update:
+    Real packets now provide entities (id/uuid/type/position/spawn_position/item/health/xp_value/effects),
+    player XP and effects. Consumed by fixture custody, merge, death XP-level and
+    effect visibility checks. No custom_name/equipment/passengers/pose/velocity. Unsupported
+    entity packet sets sticky error and omits observations; never treated as empty
+    world.
+  remaining_entity_fields:
+    - custom_name
+    - equipment
+    - passengers
+    - pose
+    - velocity
+    - experience_orb:value_count (xp_value alone lacks merged count)
+synchronization:
+  input:
+    Block use/break use actual submitted token+received BlockChangedAck. Other
+    submission-only verbs still fence with two unique received /tell replies at20-tick
+    pacing; this40tick fence is NOT suitable for short cooldown, invulnerability or
+    precise timing clauses, which remain explicitly partial.
+  world:
+    ensure_loaded received chunk fence; arena y180 avoids deployed economy y60..100
+    zone.
+  boundary: ctx.boundary called once after first behavioral check.
+death_lanes:
+  vanilla:
+    Exact @vanilla profile excludes graves; compare inventory+armor+offhand+cursor
+    ground custody, XP drop/reset.
+  live:
+    Exact @live full set; <=27 distinct stacks become grave barrel custody without
+    ground duplicate; XP retention per deployed code/README.
+  selection:
+    ctx.factors.plugin_profile checked against actual enabled_plugins; canonical
+    shared runner validates plugin_set.
+  execution:
+    Historical exact @vanilla/@live keep_inventory_false rows blocked on
+    old component capability, not rerun here. New supplemental keep_inventory_true
+    passes7 actual custody/respawn/level checks with all10 deployed plugins; does
+    not prove graves capture or vanillaXP drop/multiplicity.
+changed_files:
+  - tools/harness/matrix_domains/_items.py
+  - tools/harness/matrix_domains/inventory.py
+  - tools/harness/matrix_domains/items.py
+  - tools/harness/matrix_domains/crafting.py
+  - tools/harness/matrix_domains/effects.py
+  - tools/harness/matrix_domains/damage.py
+  - tools/harness/matrix_domains/combat.py
+  - tools/harness/matrix_domains/death_respawn.py
+  - tools/harness/test_matrix_items.py
+file_sha256:
+  tools/harness/matrix_domains/_items.py: 7de6670dd3938e49d8365a2adacc0b203aeb9fce6e79c5d774b22e07b11cd0cd
+  tools/harness/matrix_domains/inventory.py: 3b24f47c4db92c8cbde55d8fa0dfbb1d71994fcbc6c1283bfcd74e599c779534
+  tools/harness/matrix_domains/items.py: 8a09be4dfdcd8dca3396aedb3b9c71769c483f8e781003fffeda79d73648ecc0
+  tools/harness/matrix_domains/crafting.py: ffecd9afce416295d64015d839e68374e9c9c02a55840a70db830208ccc1069f
+  tools/harness/matrix_domains/effects.py: e16444aa5598a0e55ee44cdc77d521f6909d4ffe0914a3f29e080b27046ab78f
+  tools/harness/matrix_domains/damage.py: 63de75ab3db2084722d673e93a566376d8162fd41c4ca65c50ab7630d1b1ebf3
+  tools/harness/matrix_domains/combat.py: d6b01678872812bc18bc7087ec5ed33322b4585c2f77ec3bf2655b2e97eacac4
+  tools/harness/matrix_domains/death_respawn.py: 93f2be24d9e966f51f08593d183ac298b8d9644d7f89e8e2d88209c14bfca09b
+  tools/harness/test_matrix_items.py: d20a35b2835b42be15af61d6eb46eef555ffee106c44633baa06e28e279bc3bd
+adapter_tree_sha256: 107c0b50b32e93f052af01bbf43a38143e7e0393cfe5ec18ffd42b2b27b34bce
+patch: /run/media/kaiserroman/games/solaris-work/scenarios/domains/DomItems.patch
+validation:
+  unit:
+    status: pass
+    unique_tests: 33
+    batches:
+      - command:
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.harness.test_matrix_items
+          -v
+        tests: 22
+        elapsed_seconds: 0.027
+      - command:
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.harness.test_matrix_items.ItemAdaptersTest.test_restart_cannot_hide_reverted_hand_swap_behind_equal_totals
+          -v
+        tests: 1
+        elapsed_seconds: 0.005
+      - command:
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.harness.test_matrix_items.ItemAdaptersTest.test_recipe_placement_detects_lost_ingredient
+          -v
+        tests: 1
+        elapsed_seconds: 0.003
+      - command:
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.harness.test_matrix_items.ItemAdaptersTest.test_hotbar_actor_uses_selected_stack_without_echoed_slot
+          tools.harness.test_matrix_items.ItemAdaptersTest.test_hotbar_multiplayer_never_skips_received_equipment
+          -v
+        tests: 2
+        elapsed_seconds: 0.004
+      - command:
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.harness.test_matrix_items.ItemAdaptersTest.test_numeric_components_resolve_actual_registry_names
+          tools.harness.test_matrix_items.ItemAdaptersTest.test_registry_name_missing_never_guesses_wire_order
+          -v
+        tests: 2
+        elapsed_seconds: 0.004
+      - command:
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.harness.test_matrix_items.ItemAdaptersTest.test_received_effect_ids_resolve_without_fabricating_entries
+          tools.harness.test_matrix_items.ItemAdaptersTest.test_received_experience_and_food_do_not_need_entity_nbt_query
+          tools.harness.test_matrix_items.ItemAdaptersTest.test_effect_lifecycle_asserts_received_observer_flags
+          -v
+        tests: 3
+        elapsed_seconds: 0.011
+      - command:
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.harness.test_matrix_items.ItemAdaptersTest.test_merge_custody_excludes_other_items_but_catches_extra_fixture_stone
+          -v
+        tests: 1
+        elapsed_seconds: 0.004
+      - command:
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.harness.test_matrix_items.ItemAdaptersTest.test_death_custody_ignores_ambient_items_but_detects_modified_copies
+          tools.harness.test_matrix_items.ItemAdaptersTest.test_retained_zero_total_does_not_hide_lost_experience_levels
+          -v
+        tests: 2
+        elapsed_seconds: 0.001
+    note:
+      33 current unique tests exercised across unchanged-green and focused new
+      batches; no repeated unchanged-green full suite.
+  matrix_registration:
+    missing_assigned_subjects: []
+    status: pass
+  strict_clippy: "Not applicable: no Rust crate files changed."
+  independent_review: Not run; agent spawning disabled.
+  receipts:
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T032617-protocol-matrix-ho3dfheo/result.json
+      harness_status: failed
+      matrix_status: fail
+      matrix_id: null
+      note:
+        "received 9 stone; frames={10: 2, 64: 1, 105: 1, 16: 1, 72: 2, 43: 2, 113:
+        49, 38: 7, 97: 1, 94: 3, 95: 3, 133: 1, 76: 1, 74: 21, 18: 3, 104: 2, 127: 1,
+        128: 1, 130: 41, 99: 104, 103: 1, 121: 13, 131: 1, 70: 1, 45: 50, 48: 176, 6:
+        6, 1: 44, 8: 937, 77: 8, 54: 9, 83: 9, 53: 417, 44: 3, 37: 25, 59: 1, 20: 1},
+        menu_errors={1: 'component-bearing stack requires the Rust mechanic observer'}"
+      plugin_set: null
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T033653-protocol-matrix-8ipvhy3b/result.json
+      harness_status: failed
+      matrix_status: blocked
+      matrix_id: pw:inventory.creative_inventory/protocol_bot/survival/the_end/peaceful/2/duplicate_login/hot_backup_during_action/op_4
+      note: client:duplicate_login
+      plugin_set: null
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T034253-protocol-matrix-kkasxeie/result.json
+      harness_status: failed
+      matrix_status: blocked
+      matrix_id: null
+      note: "missing vanilla_data dir: /run/media/kaiserroman/games/solaris/data/vanilla"
+      plugin_set: null
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T034309-protocol-matrix-9q4if5g5/result.json
+      harness_status: failed
+      matrix_status: fail
+      matrix_id: null
+      note:
+        "received ordered client input fence DomItemsInputFence00000001; frames={10:
+        2, 64: 2, 105: 1, 16: 2, 72: 5, 43: 2, 113: 49, 38: 8, 97: 1, 94: 6, 95: 6,
+        133: 1, 76: 1, 74: 4, 18: 3, 104: 3, 127: 1, 128: 1, 130: 6, 99: 106, 103: 2,
+        131: 1, 121: 15, 45: 53, 48: 174, 1: 44, 54: 16, 83: 11, 6: 6, 8: 1555, 77:
+        7, 53: 403, 44: 3, 70: 1, 37: 28}, menu_errors={}"
+      plugin_set: null
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T034605-protocol-matrix-d_8a07ej/result.json
+      harness_status: failed
+      matrix_status: fail
+      matrix_id: null
+      note:
+        "received ordered client input fence DomItemsInputFence00000012: server
+        disconnect: 0a08000474657874000f646973636f6e6e6563742e7370616d00"
+      plugin_set: null
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T034743-protocol-matrix-lyy92xbs/result.json
+      harness_status: failed
+      matrix_status: blocked
+      matrix_id: tr.dupe.two_players_take_same_tick:death_respawn.keep_inventory_false/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0@vanilla
+      note: snapshot:stack:components
+      plugin_set: e56535d0c6cea98455d9c9609f15efb2ba93228f7d7ec4f9712bd7c653c1b0cf
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T035042-protocol-matrix-nui5ddne/result.json
+      harness_status: passed
+      matrix_status: pass
+      matrix_id: null
+      note: null
+      plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T035132-protocol-matrix-4aoix3q_/result.json
+      harness_status: failed
+      matrix_status: blocked
+      matrix_id: tr.dupe.two_players_take_same_tick:death_respawn.keep_inventory_false/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0@live
+      note: snapshot:stack:components
+      plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T040305-protocol-matrix-h961lnry/result.json
+      harness_status: passed
+      matrix_status: pass
+      matrix_id: tr.restart_x_inventory.clean_restart_mid_action:inventory.swap_hands/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+      checks: 2
+      note: Older swap2checks superseded by strengthened post-restart identities
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T040402-protocol-matrix-x3ybqmsy/result.json
+      harness_status: passed
+      matrix_status: pass
+      matrix_id: null
+      plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+      checks: 4
+      note: "Supplemental quick-craft: no matrix credit"
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T041232-protocol-matrix-8ea1bce7/result.json
+      harness_status: passed
+      matrix_status: pass
+      matrix_id: tr.restart_x_inventory.clean_restart_mid_action:inventory.swap_hands/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+      checks: 4
+      note: "Ledger pass: custody and exact hand slot identities after clean restart"
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T041403-protocol-matrix-_us2u_ut/result.json
+      harness_status: passed
+      matrix_status: pass
+      matrix_id: null
+      plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+      checks: 18
+      note:
+        "Supplemental actor hotbar18checks: actual9placements+debits; no matrix
+        credit and no observer claim"
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T042016-protocol-matrix-rs5ugl5j/result.json
+      harness_status: passed
+      matrix_status: pass
+      matrix_id: tr.restart_x_inventory.clean_restart_mid_action:inventory.cursor_on_close/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+      checks: 3
+      note: "Ledger pass: cursor empty after restart, returned and dropped fixture custody"
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T042128-protocol-matrix-nu2dew7t/result.json
+      harness_status: failed
+      matrix_status: fail
+      matrix_id: null
+      plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+      checks: 3
+      note:
+        "Historical supplemental failure: unrelated ambient item count; adapter
+        oracle corrected, not a product bug"
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T042356-protocol-matrix-qs60gg7e/result.json
+      harness_status: failed
+      matrix_status: fail
+      matrix_id: null
+      plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+      checks: 6
+      note:
+        "Historical supplemental failure: unrelated kelp; adapter oracle corrected,
+        not a product bug"
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T042654-protocol-matrix-egjcerii/result.json
+      harness_status: passed
+      matrix_status: pass
+      matrix_id: null
+      plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+      checks: 3
+      note: Supplemental corrected fixture merge pass; no matrix credit
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T042647-protocol-matrix-fi8liei8/result.json
+      harness_status: passed
+      matrix_status: pass
+      matrix_id: tr.restart_x_inventory.clean_restart_mid_action:inventory.armor_equip/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+      checks: 8
+      note: "Ledger pass: eight checks including armor state after clean restart"
+    - receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T042915-protocol-matrix-1cvspavi/result.json
+      harness_status: passed
+      matrix_status: pass
+      matrix_id: null
+      plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+      checks: 7
+      note:
+        "Supplemental corrected keep_inventory_true: exact inventory/armor/offhand,
+        no fixture ground copy or grave, actual received level10 retained; no matrix
+        credit"
+  supplemental_inventory:
+    status: pass
+    subject: inventory.click_pickup
+    checks: 8
+    receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T035042-protocol-matrix-nui5ddne/result.json
+    matrix_credit: false
+    scope:
+      Right pickup half/remainder, right place one, same-item merge, different-item
+      cursor swap, exact stone+dirt conservation; frozen release with all10 plugins.
+  ledger_records_appended: 6
+  earlier_serialization_failure:
+    artifact: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T033601-protocol-matrix-l958s75d
+    status:
+      harness finish failed serializing Check objects in adapter state; fixed
+      to JSON dictionaries, covered by regression and subsequent canonical pass
+  owner_issue_review:
+    gh issue list --state open --author kaiserproger; gh issue view1
+    before followup commit; https://github.com/kaiserproger/solaris/issues/1
+  canonical_runs:
+    All release attempts use mem-run -m3G. Headroom waits were followed
+    by successful launch; earlier Main message interpreting truncated output as a
+    timeout was explicitly corrected.
+  ledger_current_counts:
+    distinct_pass_ids: 3
+    distinct_fail_ids: 0
+    distinct_blocked_ids: 3
+  supplemental_hotbar:
+    status: pass
+    checks: 18
+    receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T041403-protocol-matrix-_us2u_ut/result.json
+    matrix_credit: false
+    observer_covered: false
+  supplemental_death_keep_inventory:
+    status: pass
+    checks: 7
+    receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/20261024T042915-protocol-matrix-1cvspavi/result.json
+    matrix_credit: false
+    level_before: 10
+    level_after: 10
+ledger:
+  Only exact completed receipt rows recorded using gen_matrix.py validation+flock
+  append. Supplemental subject probes never counted as matrix coverage.
+sources:
+  vanilla_version: 26.1.2
+  local_javap: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomItems/facts
+  wiki:
+    Each behavioral Check source cites minecraft.wiki or pinned local data/javap;
+    see actual adapter functions.
+  added_pinned_javap:
+    - ExperienceOrb.javap:651-670 (entity-id modulo40 merge filter)
+    - AbstractArrow.javap:1752-1807 (pickup statuses)
+    - Foods.javap
+    - FuelValues.javap
+integration_action:
+  Merge dom-items cc717bc4 (includes bots-runproto1e20dd5f). Tip
+  sent to RunNative and RunJava. Explicit per-subject omitted clauses remain partial,
+  not claimed covered.
+adapter_patch_sha256: cf7ed29fa1bb9af7080de41a61ed9f154343b11f22de3f28fd061124751d9341
+commit: cc717bc4
+commits:
+  - f5d8b3f0
+  - 00cfbe27
+  - 6f96145b
+  - b1d1b95f
+  - 2e56327e
+  - 296f5a8f
+  - cc717bc4
+implementation_classes:
+  inventory:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 5
+    real_but_partial: 13
+    executed_in_ledger_pass_fail: 3
+  items:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 8
+    real_but_partial: 10
+    executed_in_ledger_pass_fail: 0
+  crafting:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 6
+    real_but_partial: 11
+    executed_in_ledger_pass_fail: 0
+  effects:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 0
+    real_but_partial: 40
+    executed_in_ledger_pass_fail: 0
+  damage:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 0
+    real_but_partial: 30
+    executed_in_ledger_pass_fail: 0
+  combat:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 1
+    real_but_partial: 13
+    executed_in_ledger_pass_fail: 0
+  death_respawn:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter: 0
+    real_but_partial: 13
+    executed_in_ledger_pass_fail: 0
+classification_contract:
+  unit:
+    distinct assigned subject, all clauses of current curated matrix rows; no
+    claim for the full Cartesian expansion
+  spec_only: no adapter registration
+  registered_stub: registration without real action+behavioral oracle
+  complete_adapter:
+    full current subject oracle implemented; can still be blocked
+    on declared capabilities or fail a product bug
+  real_but_partial:
+    real action+checks, but omitted reference or context clauses explicitly
+    listed; not counted complete
+  executed_in_ledger_pass_fail:
+    distinct exact row IDs with observed pass/fail receipts;
+    orthogonal to implementation classes; blocked excluded
+implemented_this_revision:
+  - Exact block admission token ACK; Java None or absent field fails closed, initial
+    protocol None waits; ACK alone never becomes success
+  - Inventory right-drag remainder; equip swaps old chestplate without loss; XP addition+deterministic41-orb
+    modulo40 merge conservation; recipe ghost+ingredient custody
+  - Honey bottle return; signed-book title/pages; shaped/shapeless grid consumption;
+    stonecutter cursor result; loom banner+dye debit
+  - Obstructed bed fallback+feedback; anchor position; void spawn no recovered diamonds
+  - Creative ALLOWED arrow pickup inserts an item, CREATIVE_ONLY only removes projectile
+    (pinned26.1.2 bytecode); entity admission/removal checked
+  - Hand swap asserts both slot identities after restart boundary, not merely unchanged
+    item totals
+  - N1 hotbar actor now proves server-selected slot by nine actual placements and exact
+    debits; N2 retains received-equipment oracle per refrozen observer split
+  - Numeric potion/enchantment component identities resolve through real received/report
+    registry mappings; absent mapping fails closed
+  - Consume real numeric effect IDs via received registry; assert local and N2 observer
+    flags without invented rendering
+  - Consume actual received experience total/level/progress and hunger rather than unavailable
+    data-get query
+  - Scope fixture item sums against unrelated ambient drops while retaining detection
+    of extra fixture items and modified-component copies
+  - Assert full armor slot set after restart; separately assert death retained/reset
+    level rather than vacuous total0 equality
+matrix_wave1_id_set_sha256: f607a7d49e3157b0b487f696a1ceec78d83161f8cca82aa322f17c37bb10bc05
+matrix_row_count: 1405
+findings_this_revision:
+  - evidence: tools/harness/matrix_domains/combat.py:267-280; local facts/AbstractArrow.javap:1752-1807
+    scenario:
+      "Creative player collects ALLOWED arrow with free inventory: vanilla inserts
+      one arrow; old oracle expected zero. Corrected oracle also asserts entity removal."
+  - evidence: tools/harness/matrix_domains/inventory.py:179-194
+    scenario:
+      "Restart preserves counts but swaps mainhand/offhand back: old custody-only
+      check would pass. Added both post-boundary slot identities and failing-state regression."
+  - evidence: tools/harness/matrix_domains/inventory.py:162-176
+    scenario:
+      "Client echoes selected hotbar index while server still uses old slot:
+      actor now places nine distinguishable blocks and verifies actual selected stack
+      debit; received equipment required separately for N2."
+  - evidence: tools/harness/matrix_domains/inventory.py:274-286; runs/DomItems/20261024T042128-protocol-matrix-nu2dew7t/Proto0-1.wire.jsonl:1928
+    scenario:
+      Ambient12 terrain drops at y49..55 inflated expected70 fixture stone at
+      y180 to82. Corrected scopedstone oracle; new regression still fails extra fixturestone.
+      Corrected canonical supplemental merge passes.
+  - evidence: tools/harness/matrix_domains/death_respawn.py:103-139; runs/DomItems/20261024T042356-protocol-matrix-qs60gg7e/result.json
+    scenario:
+      Unrelated41 kelp falsely failed keep_inventory_no_ground_copy. Ground
+      oracle now scoped by fixture item type, preserving component-sensitive duplicate
+      detection. Separate level check catches level10 reset even if XP total stays0.
+completion_scope:
+  Latest shared real-packet capabilities integrated; all reachable
+  checks in this revision exercised. Full matrix remains partial as explicitly classified;
+  no claim that150subjects or1405rows passed.

@@ -224,6 +224,7 @@ class NativeV2ProbeTests(unittest.TestCase):
                     mock.patch.object(runtime.os, "access", return_value=True), \
                     mock.patch.object(runtime, "port_open", return_value=False), \
                     mock.patch.object(runtime, "wait_port"), \
+                    mock.patch("tools.harness.audio.private_audio_preflight"), \
                     mock.patch.object(runtime.subprocess, "Popen") as launch:
                 process, handle = runtime.start_client(
                     game_dir=root / "game", log_path=root / "client.log",
@@ -247,7 +248,8 @@ class NativeV2ProbeTests(unittest.TestCase):
                         username="HarnessUnit", display=":99")
             with self.assertRaisesRegex(ValueError, "platform"):
                 runtime.start_client(**args, platform="invalid")
-            with mock.patch.object(runtime, "AGENT_ROOT", root):
+            with mock.patch.object(runtime, "AGENT_ROOT", root), \
+                    mock.patch("tools.harness.audio.private_audio_preflight"):
                 with self.assertRaisesRegex(RuntimeError, "missing executable Gradle wrapper"):
                     runtime.start_client(**args, platform="fabric")
 

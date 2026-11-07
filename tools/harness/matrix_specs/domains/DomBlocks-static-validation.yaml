@@ -1,0 +1,40 @@
+status: pass
+scope: static specification index and helper unit tests only; not full scenario coverage
+domains: 7
+matrix_subjects: 107
+specified_subjects: 107
+adapter_paths_exist: true
+shared_interface_revision: 1e20dd5f
+missing_capabilities_or_adapter_coverage:
+  - context_oracle:unimplemented_mode
+  - data_get_block
+  - data_get_entity
+  - scenario_concurrent_actor_schedule
+  - server:configure_spawn_protection
+  - server:forceload_fixture_chunk
+  - server:unload_fixture_chunk
+  - snapshot:action_bar
+  - snapshot:block_cracks
+  - snapshot:block_light
+  - snapshot:block_region
+  - snapshot:block_transitions
+  - snapshot:entity_lifecycle
+  - snapshot:explosion_impulses
+  - snapshot:explosions
+  - snapshot:map_markers
+  - snapshot:mining_events
+  - snapshot:predicted_blocks
+  - snapshot:screen
+  - snapshot:block_ack_sequence (Java/native absent)
+  - client:mining_tool_speed_hold
+unit_tests:
+  command: python3 -m unittest tools.harness.test_matrix_blocks -v
+  status: pass
+  tests: 24
+strict_clippy: "not applicable: no Rust changes"
+server_sha256: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+live_gameplay:
+  Official full-set repeater/comparator/daylight p1 PASS (8 checks), N2 PASS (8 authoritative +8 received
+  observer checks), and anvil PASS (2 checks, actual received golem health 100 to 86). Three cells ledger recorded.
+  Two historical TNT blocked attempts recorded; neither credited as execution. Supplemental axe FAIL three checks,
+  not ledger.

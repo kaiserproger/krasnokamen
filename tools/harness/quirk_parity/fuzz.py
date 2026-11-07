@@ -13,6 +13,82 @@ import random
 CELL_SPACING = 48
 GRID = 8
 INNER = 6  # contraption volume is INNER x INNER x HEIGHT inside the cell
+
+# The network matrix uses this same seeded-generator owner. Each action is a
+# trusted adapter operation, not a command supplied by a scenario document.
+PLAYER_ACTIONS = ("place", "break", "click", "drag", "container", "craft",
+                  "mount", "rejoin", "kill9")
+DETERMINISTIC_ACTIONS = PLAYER_ACTIONS[:6]
+
+
+def player_scenario(seed: int, steps: int = 20, bots: int = 3, *,
+                    differential: bool = False) -> dict:
+    if type(seed) is not int or type(steps) is not int or not 1 <= steps <= 10000:
+        raise ValueError("seed must be an integer; steps must be in 1..10000")
+    if type(bots) is not int or not 2 <= bots <= 8:
+        raise ValueError("bots must be in 2..8, including the independent observer")
+    rng = random.Random(seed)
+    choices = DETERMINISTIC_ACTIONS if differential else PLAYER_ACTIONS
+    actions = [{"verb": rng.choice(choices), "actor": rng.randrange(bots - 1),
+                "count": rng.randrange(1, 9), "target": index}
+               for index in range(steps)]
+    return {"id": f"random:{seed}", "subject": "random.seeded",
+            "origin": "seeded_network", "seed": seed, "actions": actions,
+            "context": {"client_kind": "protocol_bot", "game_mode": "survival",
+                        "dimension": "overworld", "difficulty": "peaceful",
+                        "player_count": str(bots), "network_condition": "normal",
+                        "server_lifecycle": "steady", "permission": "non_op_0"},
+            "driver": {"kind": "protocol_bot"},
+            "exclusions": ["random loot", "AI", "random ticks", "despawn",
+                           "creative stock", "untracked give", "lava"]}
+
+
+def failure_identity(report: dict) -> str | None:
+    """Only stable product/oracle failures can drive reduction, never blocks."""
+    import re
+    if report.get('status') != 'fail':
+        return None
+    note = report.get('note', '')
+    match = re.match(r'random:([a-z_]+):step=\d+:', note)
+    if match:
+        return 'random:' + match.group(1)
+    if note.startswith('legal '):
+        return note.split(';', 1)[0]
+    return None
+
+
+def shrink_player_scenario(row: dict, reproduces) -> dict:
+    """Deterministic ddmin, then scalar simplification, using the same runner."""
+    import copy
+    candidate = copy.deepcopy(row)
+    granularity = 2
+    while len(candidate['actions']) >= 2:
+        actions = candidate['actions']
+        size = (len(actions) + granularity - 1) // granularity
+        reduced = False
+        for start in range(0, len(actions), size):
+            trial = copy.deepcopy(candidate)
+            trial['actions'] = actions[:start] + actions[start + size:]
+            if trial['actions'] and reproduces(trial):
+                candidate = trial
+                granularity = max(2, granularity - 1)
+                reduced = True
+                break
+        if reduced:
+            continue
+        if granularity >= len(actions):
+            break
+        granularity = min(len(actions), granularity * 2)
+    for index in range(len(candidate['actions'])):
+        for key, value in (('count', 1), ('target', 0), ('actor', 0)):
+            if candidate['actions'][index][key] == value:
+                continue
+            trial = copy.deepcopy(candidate)
+            trial['actions'][index][key] = value
+            if reproduces(trial):
+                candidate = trial
+    return candidate
+
 HEIGHT = 4
 BASE_Y = 64
 FACINGS = ["north", "south", "east", "west", "up", "down"]

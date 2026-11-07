@@ -1,0 +1,330 @@
+kind: adapter-source-index
+not_a_runner_or_dsl: true
+domain: computer
+vanilla_version: 26.1.2
+adapter_module: tools.harness.matrix_domains.computer
+shared_interface: tools.harness.matrix_api.Adapter
+source_checkout: /run/media/kaiserroman/games/solaris-work/wt/deploy-final
+ports:
+- 26520
+- 26539
+sources:
+- /run/media/kaiserroman/games/solaris-work/wt/deploy-final/docs/decisions/0018-in-game-computer.md:25-117
+- /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-edge/src/computer.rs:117-204
+synchronization: received state / console response / dashboard tick counter; no sleeps
+subjects:
+- subject: computer.desktop_capture_local
+  matrix_ids:
+  - bl:computer.desktop_capture_local/fabric_solaris_loader/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+    setup_callable: computer.ADAPTERS['computer.desktop_capture_local'].setup
+    fixture_calls:
+    - "p.fixture(ctx, 'synthetic_xvfb_window', pattern='matrix-26520', host_capture=False,\n                   \
+      \      environment={'WAYLAND_DISPLAY': None, 'PIPEWIRE_NODE': 'agents-null'})"
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: computer.desktop_capture_local
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:62-71
+    calls:
+    - p.rich_action(ctx, 'local_capture_consent', isolated['window_id'], allow=False)
+    - p.rich_action(ctx, 'local_capture_consent', isolated['window_id'], allow=True)
+    - p.rich_action(ctx, 'capture_texture_marker')
+    - p.rich_action(ctx, 'local_capture_stop')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'denial captures no frames', p.observe(ctx, 'capture.frame_count'), 0)
+    - p.check(ctx, 'isolated window texture', p.rich_action(ctx, 'capture_texture_marker'), 'matrix-26520')
+    - p.check(ctx, 'terminal capture uploads', p.observe(ctx, 'capture.server_bytes'), 0)
+    - p.check(ctx, 'capture released', p.observe(ctx, 'capture.running'), False)
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: client-local only; no bytes to server; explicit consent'
+- subject: computer.screen_share_audio
+  matrix_ids:
+  - pw:computer.screen_share_audio/native_linux/spectator/the_nether/peaceful/N8/slow_reader_backpressure/steady/op_4
+  preconditions:
+    setup_callable: computer.ADAPTERS['computer.screen_share_audio'].setup
+    fixture_calls:
+    - "p.fixture(ctx, 'monitor_row', width=1, height=1, source='synthetic_xvfb', host_capture=False,\n         \
+      \               audio='synthetic_opus', sink='agents-null')"
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: computer.screen_share_audio
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:107-129
+    calls:
+    - p.rich_action(ctx, 'screen_share_open', monitor['id'])
+    - p.rich_action(ctx, 'screen_share_request', monitor['id'], index=1)
+    - p.rich_action(ctx, 'screen_share_answer', p.observe(ctx, 'screen_share.request_id'), True)
+    - p.rich_action(ctx, 'screen_share_send_audio', monitor['id'], sequence=1, marker='matrix-tone')
+    - p.ticks(ctx, 1)
+    - p.rich_action(ctx, 'screen_share_send_audio', monitor['id'], sequence=2, marker='matrix-hidden-tone')
+    - p.ticks(ctx, 1)
+    - p.rich_action(ctx, 'screen_share_send_audio_burst', monitor['id'], count=200)
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - "p.check(ctx, 'granted looking viewer audio', p.observe(ctx, 'screen_share.last_audio', 1),\n            {'id':\
+      \ monitor['id'], 'sequence': 1, 'marker': 'matrix-tone'})"
+    - p.check(ctx, 'looking away stops audio', p.observe(ctx, 'screen_share.audio_count', 1), before)
+    - p.check(ctx, 'ungranted observer no audio', p.observe(ctx, 'screen_share.audio_count', 2), 0)
+    - "p.test(ctx, 'token bucket drops excess', p.observe(ctx, 'screen_share.audio_dropped') > 0,\n           p.observe(ctx,\
+      \ 'screen_share.audio_dropped'))"
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: real_but_partial
+  subject_oracle_text: 'reference: AUDIO relayed with the same id/seq only to granted looking viewers; nothing within
+    one tick of looking away/revoke; non-granted hears nothing; packet/byte token buckets bound it (ADR 0018 ''Screen
+    audio'')'
+  remaining_oracle_clause:
+    description: Revocation audio suppression not checked.
+    missing_capabilities:
+    - client:screen_share_send_audio
+    - snapshot:screen_share.audio_count
+- subject: computer.screen_share_non_native_clients
+  matrix_ids:
+  - pw:computer.screen_share_non_native_clients/neoforge_solaris_loader/survival/the_nether/normal/N8/malformed_or_stale_packet/steady/op_4
+  - pw:computer.screen_share_non_native_clients/vanilla_java_26_1_2/spectator/overworld/normal/N8/normal/steady/op_1
+  preconditions:
+    setup_callable: computer.ADAPTERS['computer.screen_share_non_native_clients'].setup
+    fixture_calls:
+    - p.fixture(ctx, 'native_screen_owner', source='synthetic_xvfb', host_capture=False)
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: computer.screen_share_non_native_clients
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:132-141
+    calls:
+    - p.client(ctx).teleport_to(*monitor['viewer_position'])
+    - p.ticks(ctx, 2)
+    - p.rich_action(ctx, 'block_model', monitor['anchor'])
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - "p.check(ctx, 'non-native receives no screen channel',\n            [r for r in p.observe(ctx, 'custom_payloads')\
+      \ if r['channel'] == 'solaris:screen'], [])"
+    - p.check(ctx, 'non-native play unaffected', p.observe(ctx, 'connection.phase'), 'play')
+    - "p.check(ctx, 'non-native sees carrier', p.rich_action(ctx, 'block_model', monitor['anchor']),\n         \
+      \   'minecraft:black_glazed_terracotta')"
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: these clients never see solaris:screen (relay serves native-Loader clients only);
+    they see the plain monitor/terracotta; no disconnect. Fabric not showing the share is the client lacking the
+    channel, not a missing server feature'
+- subject: computer.screen_share_refusals
+  matrix_ids:
+  - bl:computer.screen_share_refusals/native_linux/survival/overworld/normal/2/normal/steady/non_op_0
+  preconditions:
+    setup_callable: computer.ADAPTERS['computer.screen_share_refusals'].setup
+    fixture_calls:
+    - p.fixture(ctx, 'monitor_row', width=1, height=1, source='synthetic_xvfb', host_capture=False)
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: computer.screen_share_refusals
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:91-104
+    calls:
+    - p.rich_action(ctx, 'screen_share_send_invalid', monitor['id'], case)
+    - p.rich_action(ctx, 'screen_share_open', monitor['id'])
+    - p.rich_action(ctx, 'break_block', tuple(monitor['anchor']))
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, case + ' reason', reply['reason'], reason)
+    - p.check(ctx, case + ' no disconnect', p.observe(ctx, 'connection.phase'), 'play')
+    - p.check(ctx, 'removed monitor closes show', p.observe(ctx, 'screen_share.active'), False)
+    - p.check(ctx, 'block removal does not kick', p.observe(ctx, 'connection.phase'), 'play')
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  implementation_class: real_but_partial
+  subject_oracle_text: 'reference: REFUSED with the matching reason (2 out of reach, 1 not a monitor, 3 too many,
+    4 taken, 5 bad frame, 7 repeat/rate limited); budget overflow frames dropped; malformed or repeated unsolicited
+    frames close the screen; broken/unloaded monitor ends the show; connection never kicked'
+  remaining_oracle_clause:
+    description: Budget overflow, malformed close, unloaded monitor clauses omitted.
+    missing_capabilities:
+    - client:screen_share_send_invalid
+    - snapshot:screen_share.active
+- subject: computer.screen_share_to_others
+  matrix_ids:
+  - bl:computer.screen_share_to_others/native_linux/survival/overworld/normal/2/normal/steady/non_op_0
+  preconditions:
+    setup_callable: computer.ADAPTERS['computer.screen_share_to_others'].setup
+    fixture_calls:
+    - p.fixture(ctx, 'monitor_row', width=2, height=1, source='synthetic_xvfb', host_capture=False)
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: computer.screen_share_to_others
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:74-88
+    calls:
+    - p.rich_action(ctx, 'screen_share_open', monitor['id'])
+    - p.rich_action(ctx, 'screen_share_request', monitor['id'], index=1)
+    - p.rich_action(ctx, 'screen_share_answer', p.observe(ctx, 'screen_share.request_id'), False)
+    - p.rich_action(ctx, 'screen_share_request', monitor['id'], index=1)
+    - p.rich_action(ctx, 'screen_share_answer', p.observe(ctx, 'screen_share.request_id'), True)
+    - p.rich_action(ctx, 'screen_share_marker', index=1)
+    - p.rich_action(ctx, 'screen_share_revoke', monitor['id'], p.observe(ctx, 'uuid', 1))
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'default viewers get no frames', p.observe(ctx, 'screen_share.frame_count', 1), 0)
+    - p.check(ctx, 'denied viewers get no frames', p.observe(ctx, 'screen_share.frame_count', 1), 0)
+    - p.check(ctx, 'consented viewer receives pattern', p.rich_action(ctx, 'screen_share_marker', index=1), monitor['marker'])
+    - p.check(ctx, 'revocation stops frames', p.observe(ctx, 'screen_share.stopped', 1), True)
+    - p.check(ctx, 'viewer cannot control owner input', p.observe(ctx, 'screen_share.input_forwarded'), 0)
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  implementation_class: real_but_partial
+  subject_oracle_text: 'reference: solaris:screen protocol 1 (ADR 0018): everyone in the dimension gets ACTIVE(on)
+    only, no frames, until granted; DEMAND turns on for the owner only while a granted viewer looks (32 blocks,
+    published pose, no occlusion); FRAME relayed to granted looking viewers only; looking away -> STOP 0, revoke
+    -> STOP 2, owner close -> STOP 1, owner leave -> STOP 3; viewers never send input'
+  remaining_oracle_clause:
+    description: ACTIVE/DEMAND, looking-away STOP0, close STOP1 and leave STOP3 omitted.
+    missing_capabilities:
+    - client:screen_share_request
+    - snapshot:screen_share
+- subject: computer.terminal_disabled_vanilla_iron
+  matrix_ids:
+  - pw:computer.terminal_disabled_vanilla_iron/fabric_svc/creative/the_nether/hard/2/normal/clean_restart_mid_action/op_1
+  - pw:computer.terminal_disabled_vanilla_iron/forge_solaris_loader/spectator/overworld/normal/1/duplicate_login/crash_kill9_wal_replay/non_op_0
+  - pw:computer.terminal_disabled_vanilla_iron/protocol_bot/adventure/the_end/easy/2/reconnect_mid_action/hot_backup_during_action/op_3
+  - pw:computer.terminal_disabled_vanilla_iron/native_windows/creative/the_nether/hard/1/slow_reader_backpressure/save_all_checkpoint/op_2
+  - pw:computer.terminal_disabled_vanilla_iron/fabric_distant_horizons/creative/the_end/normal/2/slow_reader_backpressure/crash_kill9_wal_replay/op_1
+  preconditions:
+    setup_callable: computer.ADAPTERS['computer.terminal_disabled_vanilla_iron'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: computer.terminal_disabled_vanilla_iron
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:51-59
+    calls:
+    - p.use(ctx, pos)
+    - p.ticks(ctx, 2)
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.block_is(ctx, pos, 'minecraft:iron_block')
+    - p.check(ctx, 'no terminal', p.observe(ctx, 'screen.kind'), 'game')
+    - "p.check(ctx, 'no computer replies', [r for r in p.observe(ctx, 'custom_payloads')[len(before):]\n       \
+      \                                if r['channel'] == 'solaris:computer'], [])"
+    delegated_helpers:
+    - carrier(ctx, enabled=False)
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: plain iron block behaviour'
+- subject: computer.terminal_open_op4
+  matrix_ids:
+  - pw:computer.terminal_open_op4/fabric_solaris_loader/survival/the_end/peaceful/N8/disconnect_during_menu/pause_when_empty_resume/op_2
+  preconditions:
+    setup_callable: computer.ADAPTERS['computer.terminal_open_op4'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: computer.terminal_open_op4
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:17-25
+    calls:
+    - p.use(ctx, pos)
+    - p.rich_action(ctx, 'computer_open', pos, session=1)
+    - p.rich_action(ctx, 'computer_input', 1, 'matrix-echo-26520')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - 'p.check(ctx, ''open session reply'', opened, {''session'': 1, ''kind'': ''opened''})'
+    - p.check(ctx, 'echo output session', reply['session'], 1)
+    - p.test(ctx, 'echo bytes', 'matrix-echo-26520' in reply['text'], reply)
+    - p.block_is(ctx, pos, 'minecraft:iron_block')
+    delegated_helpers:
+    - carrier(ctx)
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: terminal opens on solaris:computer; echo backend replies'
+- subject: computer.terminal_refusals
+  matrix_ids:
+  - bl:computer.terminal_refusals/fabric_solaris_loader/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+    setup_callable: computer.ADAPTERS['computer.terminal_refusals'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: computer.terminal_refusals
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:28-35
+    calls:
+    - p.rich_action(ctx, 'computer_refusal_probe', pos, identity=reason)
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, reason + ' refused', reply['kind'], 'closed')
+    - p.check(ctx, reason + ' no process', reply['spawned_children'], 0)
+    - p.block_is(ctx, pos, 'minecraft:iron_block')
+    delegated_helpers:
+    - carrier(ctx)
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: refused with closed reply; no process spawned'
+- subject: computer.terminal_session_close
+  matrix_ids:
+  - bl:computer.terminal_session_close/fabric_solaris_loader/survival/overworld/normal/1/normal/steady/op_4
+  preconditions:
+    setup_callable: computer.ADAPTERS['computer.terminal_session_close'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: computer.terminal_session_close
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:38-48
+    calls:
+    - p.rich_action(ctx, 'computer_open', pos, session=2)
+    - p.rich_action(ctx, 'computer_revoke_session', revoke, pos)
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, revoke + ' opened', opened['kind'], 'opened')
+    - p.check(ctx, revoke + ' session closed', result['closed'], True)
+    - p.check(ctx, revoke + ' direct child reaped', result['child_exited'], True)
+    - p.check(ctx, revoke + ' no stale output', result['output_after_close'], [])
+    delegated_helpers:
+    - carrier(ctx, backend='harness_line_echo')
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: session closed; child killed'
+receipt_policy: Index of shared Python Adapter callables, not an interpreter. Capability requests are not live pass
+  evidence; consult canonical receipts and ledger.
+helper_sources:
+  carrier: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/computer.py:9-14
+adapter_revision: 794c8ff5
