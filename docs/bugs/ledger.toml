@@ -3307,6 +3307,17 @@ failing_first = "reported"
 regression = ["cargo:mc-core:settlements::allocator::tests::claimed_village_with_storage_assigns_its_free_adult_to_forestry_before_workshops"]
 
 [[bug]]
+id = "CIVILIZATION-FUNDED-PLANNER-IDLE"
+title = "Settlement idle while a candidate is funded."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "civilization-seed-qa seed 24, .analysis/validation/20261107T122413-civilization-seed-qa-binw9gjz/result.json: revision 15 and cursor 0 throughout the funded idle interval; focused failing-first .analysis/validation/20261107T130801-test-74aw_bjp/result.json; reverting only the planner guard move fails .analysis/validation/20261107T131817-test-0vdhijbt/result.json; reverting only gatherer protection borrows the Lumberjack in .analysis/validation/20261107T133539-test-yg_jmb0o/result.json."
+failing_first = "reported"
+regression = ["cargo:mc-core:settlements::construction::planner_tests::funded_seed24_candidate_starts_without_borrowing_its_priority_gatherer"]
+
+[[bug]]
 id = "CIVILIZATION-MIXED-WOOD-FUNDING-STALL"
 title = "A funded mixed-wood building can consume its selected wood on generic recipes and stall before completion."
 area = "gameplay"
@@ -3316,6 +3327,7 @@ status = "open"
 source = "Mixed birch/oak lumber-camp construction: 176/183 cells complete, seven birch planks missing while 34 oak logs remain."
 failing_first = "reported"
 regression = ["cargo:mc-core:settlements::construction::tests::admitted_birch_camp_can_finish_from_the_same_mixed_stock"]
+fix_commit = "e2a61744749a879ef3c5a02866ea120310d9e11d"
 
 [[bug]]
 id = "VILLAGER-RATION-PATH-STARVATION"
@@ -3327,6 +3339,7 @@ status = "open"
 source = "Seed-24 civilization worker repeatedly selects a delivery target without an admitted path search."
 failing_first = "reported"
 regression = ["cargo:mc-core:villager::brain::tests::exhausted_spare_bed_search_does_not_starve_a_lumber_delivery"]
+fix_commit = "01767ab8714af7c27792790897f885f40e2e2971"
 
 [[bug]]
 id = "CIV-SEED24-FURNACE-OUTPUT"

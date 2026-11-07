@@ -206,6 +206,130 @@ fn optional_lamps_do_not_borrow_the_worker_funding_the_next_house() {
         Profession::Lumberjack
     );
 }
+
+#[test]
+fn funded_seed24_candidate_starts_without_borrowing_its_priority_gatherer() {
+    let (mut state, id, worker) = fixture();
+    open_plan(&mut state);
+    certificate(
+        state.settlements.get_mut(id).unwrap(),
+        BuildingKind::Storage,
+        1,
+        false,
+    );
+    certificate(
+        state.settlements.get_mut(id).unwrap(),
+        BuildingKind::LumberCamp,
+        1,
+        true,
+    );
+    let job = [30, 201, 30];
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .buildings
+        .values_mut()
+        .find(|building| building.kind == BuildingKind::LumberCamp)
+        .unwrap()
+        .work_points
+        .push(job);
+    let v = state.entities.row_mut(worker).villager.as_mut().unwrap();
+    v.data.profession = Profession::Lumberjack;
+    v.job_site = Some(crate::boundary::BlockPos {
+        x: job[0],
+        y: job[1],
+        z: job[2],
+    });
+    v.job_site_dimension = state.dimension.name().into();
+    let builder = crate::settlements::allocator::tests::villager(&mut state, [2.5, 201.0, 2.5]);
+    let entity = state.entities.body(builder).id;
+    crate::settlements::bind(&mut state, id, entity).unwrap();
+    let stock = [
+        ("oak_log", 34),
+        ("bread", 16),
+        ("raw_iron", 6),
+        ("coal", 7),
+        ("cobblestone", 264),
+        ("oak_planks", 2),
+        ("stick", 1),
+        ("oak_fence", 1),
+        ("torch", 3),
+        ("white_wool", 4),
+        ("shears", 1),
+        ("birch_log", 83),
+        ("dirt", 16),
+    ];
+    let stacks: Vec<_> = stock
+        .into_iter()
+        .flat_map(|(name, count)| {
+            let item = state
+                .registry
+                .items
+                .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
+                .unwrap();
+            (0..count)
+                .step_by(64)
+                .map(move |offset| mc_data::ItemStack::new(item, (count - offset).min(64)))
+        })
+        .collect();
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    slots.fill(mc_data::ItemStack::EMPTY);
+    slots[..stacks.len()].clone_from_slice(&stacks);
+    assert!(has_funded_candidate(&state, id));
+    assert_eq!(needed_gatherer(&state, id), Some(Profession::Lumberjack));
+    plan(&mut state, id);
+    let record = state.settlements.get(id).unwrap();
+    assert!(
+        record.project.is_some() || record.construction_cursor != 0,
+        "the funded planner must search sites instead of returning at the gatherer guard"
+    );
+    plan_until_started(&mut state, id);
+    assert!(
+        state.settlements.get(id).unwrap().project.is_some(),
+        "funded construction must not remain idle behind the priority gatherer guard"
+    );
+    state
+        .entities
+        .row_mut(builder)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::Nitwit;
+    assign_builder(&mut state, id);
+    assert_eq!(
+        state
+            .entities
+            .row(worker)
+            .villager
+            .as_ref()
+            .unwrap()
+            .data
+            .profession,
+        Profession::Lumberjack
+    );
+    state
+        .entities
+        .row_mut(builder)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::None;
+    assign_builder(&mut state, id);
+    assert_eq!(
+        state
+            .entities
+            .row(builder)
+            .villager
+            .as_ref()
+            .unwrap()
+            .data
+            .profession,
+        Profession::Builder
+    );
+}
 #[test]
 fn iron_demand_tracks_open_house_and_real_shears_or_wool() {
     let (mut state, id, worker) = fixture();

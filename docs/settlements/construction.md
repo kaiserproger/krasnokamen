@@ -20,6 +20,8 @@ Keep the anchor, storage and worksite chunks loaded. Construction uses real item
 
 The planner selects one active settlement every 20 ticks. It considers missing kinds in this order: storage; houses when certified house capacity is below population; farm; lumber camp; mine; Builder hut (`mason`); barracks from 6 residents; tower from 8; wall from 10. Natural mine and lumber zones do not count as built blueprint kinds. Funded upgrades are considered for eligible blueprint-built certificates; workshops requiring iron or flint are not on this automatic list. A need without available stock or a capable local source does not conjure materials or have to block another funded kind.
 
+An unfunded priority bill does not stop the search for funded buildings or upgrades. Its staffed extraction worker is protected from Builder recruitment for autonomous work, leaving another resident free to build; explicit owner projects retain their active-bill gathering rules. Optional street projects still wait for that priority bill.
+
 The street plan is fixed relative to the bell: roads are three blocks wide every 28 blocks on both axes, with a one-block verge, an open 9 × 9 plaza, and two back-to-back rows of lots up to 11 blocks deep. `/settlement layout` reports the plan, reachable and obstructed roads, paving, lamps, building access and next street work.
 
 - A frontage must be reachable on foot from the plaza on loaded, walkable ground within eight blocks of the bell's elevation, with clear headroom and steps no higher than one block. A lamp-free verge separates it from the lot. Terrain and obstructions can cut the network off; they are not bulldozed to connect it.

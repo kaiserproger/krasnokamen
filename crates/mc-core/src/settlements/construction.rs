@@ -1456,13 +1456,10 @@ fn plan(state: &mut TickState, id: SettlementId) {
     // Probe one canonical storage image set; an unfundable early autonomous
     // need cannot monopolize the single project slot.
     let images = executor::source_images(state, id);
-    // Do not repeatedly loan the worker supplying the priority bill to cheaper
-    // buildings or streets. Unsupported needs still permit other funded work.
-    if gatherer_demand(state, record, &images)
-        .is_some_and(|profession| has_staffed_gatherer(state, id, profession))
-    {
-        return;
-    }
+    // Keep the priority material worker out of optional street work, not out
+    // of the entire planner: another resident can build a funded later kind.
+    let gathering = gatherer_demand(state, record, &images)
+        .is_some_and(|profession| has_staffed_gatherer(state, id, profession));
     let catalog = blueprints::all(&state.registry);
     let mut funded = [None; AUTONOMOUS_KINDS];
     let mut funded_count = 0;
@@ -1500,6 +1497,9 @@ fn plan(state: &mut TickState, id: SettlementId) {
     } else if let Some((project, species, color)) = upgrade_project(state, record, &images)
         && begin(state, project, &species, color)
     {
+        return;
+    }
+    if gathering {
         return;
     }
     // Free street work fills every pass that starts no building or upgrade.
@@ -1709,10 +1709,16 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
         return;
     }
     let protected = state.settlements.get(id).and_then(|record| {
-        record
-            .project
-            .as_ref()
-            .and_then(|_| needed_gatherer(state, id))
+        record.project.as_ref().and_then(|project| {
+            needed_gatherer(state, id).or_else(|| {
+                if project.ordered {
+                    return None;
+                }
+                let images = executor::source_images(state, id);
+                gatherer_demand(state, record, &images)
+                    .filter(|profession| has_staffed_gatherer(state, id, *profession))
+            })
+        })
     });
     let mut candidates = Vec::new();
     for slot in residents(state, id) {
