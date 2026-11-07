@@ -45,6 +45,11 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     v2_scenario = ctx.scenario_id in native_v2.NATIVE_SCENARIO_IDS
     auth_scenario = ctx.scenario_id == native_auth_budget.SCENARIO
     p5_scenario = ctx.scenario_id in java_p5.SCENARIO_IDS
+    from . import java_protocol_pot
+
+    protocol_pot = ctx.scenario_id == java_protocol_pot.SCENARIO
+    if protocol_pot and (ctx.client != "java" or kind != "inventory"):
+        raise ValueError("creative pot echo requires --client java and inventory")
     if p5_scenario:
         if ctx.client != "java" or kind != "entities":
             raise ValueError("java-v2-p5 scenarios require --client java and entities")
@@ -100,6 +105,8 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         required = required | {"minecraft_connect"}
     if p5_scenario:
         required = java_p5.REQUIRED_TOOLS
+    if protocol_pot:
+        required = java_protocol_pot.REQUIRED_TOOLS
     if ctx.scenario_id in ("java-v2-p5-craft-drag", "java-v2-p5-craft-drag-paced"):
         required = required | {"minecraft_open_inventory"}
     artifact = ctx.artifact_dir
@@ -304,7 +311,7 @@ seed = 81
         else:
             xvfb, display, display_log = runtime.start_xvfb(artifact)
             token, mcp_port = secrets.token_urlsafe(32), runtime.reserve_port()
-            if p5_scenario:
+            if p5_scenario or protocol_pot:
                 game_dir = artifact / "game"
                 game_dir.mkdir(parents=True, exist_ok=True)
                 (game_dir / "options.txt").write_text(
@@ -388,7 +395,11 @@ seed = 81
                 return mcp
 
             attach_p5_client()
-        if kind == "inventory":
+        if protocol_pot:
+            mcp.p4_window = java_p5.acquire_window(display, startup_timeout)
+            evidence["java_window"] = mcp.p4_window
+            result = java_protocol_pot.run(mcp, artifact, timeout)
+        elif kind == "inventory":
             with ProbeSteps(mcp, artifact / "inventory-fixture", startup_timeout, "inventory-operator-fixture") as setup:
                 setup.fixture("debug give minecraft:apple 2 1")
                 setup.call("minecraft_wait_for_inventory", {
