@@ -6,10 +6,10 @@ startup descriptions are superseded.
 
 ## Contract
 
-Solaris targets Minecraft Java 26.1.2. Registry, tag, recipe, loot, component,
+Solaris targets Minecraft Java 26.3, with 26.1.2 clients supported through
+translation and a retained legacy cache. Registry, tag, recipe, loot, component,
 block-property, protocol and world-format facts come from the matching local
-vanilla distribution, not remembered layouts or guessed values. The local
-owner-supplied oracle is `.analysis/server.jar`.
+vanilla distribution, not remembered layouts or guessed values.
 
 Extraction, `wire-probe`/`javap`, decompiled-source inspection and side-by-side
 execution establish observable behavior. They do not authorize copying Mojang
@@ -27,10 +27,12 @@ not redistributed in Git, crates or release bundles. `.analysis/` and extracted
 - Protocol layouts and provenance belong to ADR 0002.
 
 The operator explicitly derives the complete content cache from a licensed
-artifact with `solaris-v2 content import --version 26.1.2 --from <jar>` or
-`--download` (Mojang metadata pins size and SHA-1). Import stages and validates
-before publishing; failure preserves the previous cache. `content verify`
-validates offline without starting the world/listener.
+artifact with `solaris-v2 content import --version 26.3 --from <jar>` or
+`--download` (Mojang metadata pins size and SHA-1). The 26.3 cache uses a
+26.1.2 gameplay pack; `--gameplay-from` supplies its server bundle locally,
+otherwise missing bundles are downloaded. Import stages and validates before
+publishing; failure preserves the previous cache. `content verify` validates
+offline without starting the world/listener.
 
 Serving only discovers and validates: `[data].vanilla_data_dir` →
 `SOLARIS_CONTENT_CACHE` → XDG/home cache → working-directory/checkout

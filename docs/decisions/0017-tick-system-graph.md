@@ -193,28 +193,6 @@ label those **approximate, contended machine**, use medians across repetitions,
 and do not treat them as quiet-window acceptance. The delivery report records
 actual results and commands, rather than treating test existence as a pass.
 
-### Prototype result (ordinary lane, approximate)
-
-Main authorized an interim **approximate, contended machine** release experiment
-instead of the paused exclusive windows. Four samples per mode on two physical
-cores (0/2), two workers, 48 measured phases per sample:
-
-| Mobs | Serial row median | Parallel row median | Serial phase+merge | Parallel phase+merge |
-| --- | ---: | ---: | ---: | ---: |
-| 128 | 1,683.5 us | 1,688.5 us | 2,616 us | 2,634 us |
-| 8,192 | 102,778.5 us | 78,801.5 us | 175,743.5 us | 154,118 us |
-
-Totals are over 48 phases. Large-population speedups were approximately 1.30x
-for the row kernel and 1.14x including preparation/writeback/merge. Small work
-did not benefit. Large parallel samples ranged 56,325–106,692 us; these are not
-quiet acceptance figures. Legacy parallel medians were 88,296 us row / 159,454.5
-us phase+merge; the scheduler uses the same parallel algorithm, so that noisy
-difference is not evidence of a scheduler speedup. Every variant's final state
-hash matched. The 48-tick full-tick parity test also passed on 1/2/4 workers.
-
-Retain coarse data parallelism and the direct small/one-worker path; do not
-infer whole-server TPS or tune a new grain from this experiment. Raw samples,
-binary identity, successful instruction counter and exact commands are in
-`.analysis/codex-logs/TickPipeline/report.md` and `microbench.json` (local
-receipts, not required runtime files). Proper quiet-window measurement remains
-deferred by Main.
+Quiet-window measurement remains required for performance acceptance; the
+prototype is not evidence of a whole-server speedup. Retain coarse data
+parallelism and the direct small/one-worker path.

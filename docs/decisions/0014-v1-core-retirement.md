@@ -2,9 +2,8 @@
 
 **Date:** 2026-10-15  
 **Status:** Accepted; Phase 5 source retirement completed 2026-10-15.
-ADRs 0004/0005/0006 and the v1 parts of 0011 are marked Superseded by 0013/0014;
-their historical decision text remains. Final integration verification is
-reported separately; source deletion does not fabricate an A/B or gameplay pass.
+ADRs 0004/0005/0006 and the v1 parts of 0011 are superseded by 0013/0014.
+Source deletion does not fabricate an A/B or gameplay pass.
 
 ## Context at acceptance
 

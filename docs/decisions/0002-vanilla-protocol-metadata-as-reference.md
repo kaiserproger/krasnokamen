@@ -10,11 +10,9 @@ names, field names, packet ID constants, record layouts) of the official
 
 ## Context
 
-Context (historical section numbers; current posture: ADR 0001). PROJECT_SPEC §2.1 (historical numbering) locks Solaris to vanilla 26.1.x, which Mojang
-explicitly released "fully unobfuscated" — the class and field names in
-the official server jar **are** the canonical public names for those
-constructs. There is no longer a separate "mojmap" mapping layer; the
-production jar is itself the reference.
+Minecraft Java 26.1+ is unobfuscated: class and field names in the official
+jar are available as protocol metadata without a separate mappings layer.
+See [ADR 0015](0015-multiversion-protocol-translation.md) for current versions.
 
 PROJECT_SPEC §8.1 (historical numbering; amended by this ADR, current posture in ADR 0001)'s original prohibition was written against the
 historical pre-26.1 reality where reading mappings was a deliberate
@@ -101,10 +99,8 @@ Negative:
 
 ## Implementation
 
-- `.analysis/extracted/` keeps the unpacked classes from
-  `tools/extract-vanilla-data.sh` (the script is extended in this
-  ADR to also drop `client.jar` / `server.jar` contents under
-  `.analysis/extracted/` when present).
+- Keep any extracted classes local and untracked; do not rely on a particular
+  extracted-class directory or commit Mojang bytes.
 - A short script `tools/dump-vanilla-protocol.sh` runs `javap -p`
   over the `net.minecraft.network.protocol` package and writes a
   human-readable summary to `.analysis/protocol-dump.txt`. The

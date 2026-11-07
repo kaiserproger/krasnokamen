@@ -13,10 +13,8 @@ sensors and parameters. It also says there is "no per-type code path a plugin ty
 cannot use". The core did not fully meet that. Blueprints were `'static` Rust
 tables, and many shared behaviours were decided by comparing type names or type
 ids (`is_enderman()`, `Some(type_id) == *X_TYPE`, `matches!(name, "minecraft:…")`).
-The appendix lists 124 function-level sites (531 lines in 56 files at
-`286c275c`). The owner wants players and addons to compose mobs that are not tied
-to a vanilla type, for example a mob that is hurt by water, explodes like a
-creeper and flies.
+Shared behaviours should be composable by plugins without tying them to a
+vanilla type; unique mechanics and presentation layouts remain separate.
 
 ## Decision
 
@@ -34,6 +32,11 @@ creeper and flies.
   `knockback_resistance`.
 - **`capabilities: Capabilities`**: shared behaviours. Exactly one generic system
   runs each one for every blueprint that sets it.
+
+Shared family behaviour belongs in capabilities or parameters, not a type check.
+Unique boss and special mechanics remain type-specific. Presentation, NBT and
+wire layouts may be keyed by vanilla type; non-mob entity-kind dispatch is not
+mob behaviour. These distinctions do not turn unique mechanics into capabilities.
 
 | Capability | Executor | Vanilla users (built-in table) |
 | --- | --- | --- |
@@ -309,50 +312,3 @@ not a claim of equivalence with unconditional nearest-target switching.
   deployment definitions before decoding entities. Anvil export maps custom
   records to their vanilla presentation id instead of dropping them.
 
-## Appendix: type-decision inventory (`286c275c`)
-
-Dispositions:
-
-- **C**: converted to a capability or parameter in layers 1–2.
-- **U**: unique boss or special mechanic, kept.
-- **P**: bound to presentation, NBT or wire layout; correctly keyed on the vanilla
-  type.
-- Former **D** shared families are now **C**; unique sub-mechanics remain **U**.
-
-The full site list, one row per function, is in
-`.analysis/codex-logs/Capabilities/inventory-sites.tsv` (ignored, local).
-Non-mob entity kinds are excluded because they are entity-kind dispatch, not mob
-behaviour: projectiles, vehicles, item, XP orb, TNT, falling block, leash knot,
-end crystal and armor stand.
-
-| Site | Behaviour | Shared by (vanilla) | Disp. |
-| --- | --- | --- | --- |
-| `blueprint.rs:667-683`, `species.rs:210-217` | sun burn and night-only aggro set by name | zombie, zombie_villager, skeleton, stray, bogged, parched, phantom; spider, cave_spider | C |
-| `species.rs:223-229`; `tick.rs:5345,6673` | wall climbing | spider, cave_spider | C |
-| `species.rs:231-253`; `tick.rs:5346,6674` | swimmer control family | 5 fish; squid, glow_squid; dolphin | C |
-| `species.rs:255-277`; `entity_loot.rs:538-539` | natural armor, knockback resistance | 5 zombies; iron_golem, hoglin, zoglin, ravager | C |
-| `mob_fall.rs:16-46,70-73` | fall-damage immunity | 18 types | C |
-| `projectiles/payloads.rs:186-206` | inverted instant health/damage | 14 undead | C |
-| `enderman.rs:13-18,193-223` | water/rain damage (`ENDERMAN_TYPE` lane) | enderman (vanilla: + blaze, snow_golem, strider) | C (damage); the teleport stays U |
-| `hostile.rs:26-31,459-467` | swell fuse 30, power 3, creeper grief switch for every `Swell` | creeper | C |
-| `enderman.rs:16-18,59-190,224-246`; `tick.rs:5737,5753`; `projectiles/embedded_projectiles.rs:45`; `journal.rs:2696` | stare anger (retained NBT), projectile dodge by teleport, chase only while angry, no arrow embedding, replay position | — | U |
-| `end_fight.rs:246-705`, `end_fight/persistence.rs:244-313`, `world_conversion/import.rs:1793-1836`, `portals_travel.rs:56-59` | dragon fight and crystals; dragon and wither never use portals | wither (portal rule) | U |
-| `special_mobs/wither.rs:37,211`; `survival.rs:121-140` | wither immunities, summoning, skull damage type | — | U |
-| `special_mobs/blueprints.rs:12-38`, `special_mobs/summons.rs:235`, `special_mobs/persistence.rs:81-157` | dedicated attack goals and retained state | blaze, ghast, pillager, witch, breeze, guardians, warden, evoker, shulker, wither, vex | U (goal kinds are data; executors per type) |
-| `special_mobs/raiders.rs:24-61,113` | raid roles | pillager, vindicator, evoker, illusioner, ravager, witch | U |
-| `shrieker.rs:525`, `creaking.rs:10`, `entities.rs:1654` | warden summon; creaking heart, no motion rest | — | U |
-| `bees.rs:13-1186`, `allay.rs:15-344`, `copper_golem.rs:16-672`, `dolphin.rs:18-297`, `tick.rs:6643` | hive, delivery, sorting, dolphin drive/toys | — | U |
-| `piglin.rs`; `tick.rs`; `entities.rs` | villager/monster/living target classes and exclusions | zombie family, golem, zoglin | C; piglin bartering/adult anger stays U |
-| `villager/defense.rs`, `villager/soldier.rs`; villager life modules | guards' hostile list and golem monster exclusions; villager retained state | original hostile list | C for target classes; villager life, infection and trades U |
-| `mob_lanes.rs`, `golems.rs` | snow golem trails; golem build patterns | iron/snow golem | U |
-| `hostile.rs`, `entity_loot.rs`, `projectiles/payloads.rs`, `effects_trigger.rs` | poison attacks and projectile vulnerability | bogged, cave spider, blaze, breeze | C; infested/oozing are effect-defined spawn identities (P), not mob-family dispatch |
-| `entity_loot.rs`; `tick.rs`; `natural_spawn.rs` | size-scaled stats, split on death, slime-chunk/nether light rules | slime, magma cube, ghast | C; size metadata/NBT layout P |
-| `blueprint.rs` wool, `settlements/construction_availability.rs:141`, `core.rs:2662-2722` | sheep wool data index 18, capture | — | P |
-| `command_summon.rs:198-494`, `dimensions_recovery.rs:37-227`, `journal.rs:2162-2325`, `entities.rs:1548-1551`, `entity_life.rs:156,638-645`, `projectiles/payloads.rs:850`, `world_conversion/census.rs:262`, `villager/generated.rs:41` | summon NBT keys, retained NBT, egg/tadpole clocks, hatching | chicken, tadpole, villager, … | P |
-| `statistics.rs:153-165,216`, `advancements.rs:231-239`, `plugin.rs:2443,2544` | vanilla stat ids, advancement predicates, plugin event names | 14 rideables | P |
-| `taming.rs` | tame, sit, collar, equine feed/inherit | original pet/equine families | C; fox trust inheritance and presentation/NBT indices U/P |
-| `leash.rs` | leadable | original 33 types | C |
-| `mounts.rs` | riding, saddle, steering item, equine armor | original mount families | C; wolf armor repair and caravan/camel unique actions U |
-| `entity_life.rs`, `golden_dandelion.rs` | breeding eligibility, milking, ageability | original species lists | C; egg/tadpole/sniffer clocks and retained variant fields U/P |
-| `mob_equipment.rs`, `mob_equipment_pickup.rs` | loadout, pickup, gold/trident preferences | original equipment families | C |
-| `species.rs:105-217,321-441`, `blueprint.rs:348-677`, `registry.rs:420-426`, `trial_spawner.rs:119` | construction-time vanilla tables and defaults | — | data, already blueprint fields |

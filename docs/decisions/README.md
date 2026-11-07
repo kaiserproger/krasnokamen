@@ -1,56 +1,33 @@
 # Architecture Decision Index
 
-Read the ADR owning the decision. Later explicit supersession takes priority;
-milestone notes and desired migrations do not silently change runtime truth.
-The current server is `mc-edge`/`solaris-v2` + `mc-core`, defined by
-[ADR 0013](0013-core-model-v2.md); [ADR 0014](0014-v1-core-retirement.md)
-records the completed v1 source retirement. [ARCHITECTURE.md](../ARCHITECTURE.md)
-summarizes current boundaries.
+The current server is `mc-edge`/`solaris-v2` over `mc-core`: [ADR 0013](0013-core-model-v2.md).
+Later explicit supersession takes priority over historical descriptions. See also
+[architecture](../ARCHITECTURE.md). For a practical packet workflow, see
+[protocol changes](../development/protocol-changes.md).
 
-| ADR | Status | Scope |
+| ADR | Status | Read when… |
 | --- | --- | --- |
-| [0001](0001-vanilla-data-as-runtime-input.md) | Accepted; current ownership updated | Licensed local vanilla content cache, explicit import/verify, no vendor bytes in Git |
-| [0002](0002-vanilla-protocol-metadata-as-reference.md) | Accepted | Protocol metadata, oracle provenance and packet-layout proof |
-| [0003](0003-runtime-world-lock-architecture.md) | Superseded by 0013/0014 | Historical v1 world locks and lock order |
-| [0004](0004-staged-single-writer-simulation.md) | Superseded by 0013/0014 | Historical v1 central simulation authority and commit/publication |
-| [0005](0005-regional-simulation.md) | Superseded by 0013/0014 | Historical v1 region leases, owner lanes and regional WAL |
-| [0006](0006-mc-net-module-boundaries.md) | Superseded by 0013/0014 | Historical deleted modular-monolith/extraction boundaries |
-| [0007](0007-connection-liveness-under-outbound-pressure.md) | Liveness principle retained; v1 implementation historical | Keepalive and bounded publication under pressure; current edge behavior governed by 0013 |
-| [0008](0008-overworld-density-router.md) | Accepted worldgen design | Worldgen shape authority and deterministic pipeline; old serving-storage descriptions retired |
-| [0009](0009-regional-plugin-boundary.md) | Isolation/admission principles retained; v1 implementation superseded | Serial plugins over bounded values; current native host/commit model in 0013 |
-| [0010](0010-solaris-loader-contract.md) | Accepted | Untrusted client bundles, Configuration handshake, permissions and cache identity; wire owner `mc-loader` |
-| [0011](0011-core-crate-topology-and-threading.md) | V1 topology/threading/durability superseded by 0013/0014 | Historical extraction and multiple durable streams; general ownership principles retained |
-| [0012](0012-earth-worldplan-and-native-overlay.md) | Proposed for native v2; not ported | Earth WorldPlan/base/overlay proposal; v1 W0–W5 evidence is historical |
-| [0013](0013-core-model-v2.md) | Accepted; sole current core model | Data-parallel snapshot/intents/merge, native state, one tick WAL, off-tick plugins and remote tickets |
-| [0014](0014-v1-core-retirement.md) | Accepted; Phase 5 source retirement complete | Shared Loader/vanilla boundaries, v2-only harness/operator surface and clean v1 deletion |
-| [0015](0015-multiversion-protocol-translation.md) | Proposed; 26.3 deferred by measured diff | Per-session `mc-edge` protocol translation and profile evidence |
-| [0016](0016-mob-capabilities.md) | Accepted; layer 1 implemented | Owned data blueprints, mob capabilities, bounded data-defined mob types and their vanilla presentation |
-| [0017](0017-tick-system-graph.md) | Proposed graph; one-system prototype | Declared entity-column resources, ordered row execution and deterministic tick barriers |
-| [0018](0018-in-game-computer.md) | Accepted; draft, client QA pending | Operator-only terminal on vanilla carrier blocks and local desktop-capture boundary |
-| [0019](0019-voice-chat.md) | Accepted; draft, real-client QA pending | Proximity voice chat: `solaris:voice` Opus relay between native clients, edge-only |
-| [0020](0020-entity-checkpoints-at-one-million.md) | Accepted; implemented | Incremental entity checkpoints and replay layout for 1M entities |
-| [0021](0021-build-time-and-crate-split.md) | Step 1 accepted and implemented; split pilot designed, not started | Dev/test build time: line-table debuginfo, measured `mc-core` split cost and future plan |
+| [0001](0001-vanilla-data-as-runtime-input.md) | Accepted; ownership updated | importing, licensing or selecting local vanilla content |
+| [0002](0002-vanilla-protocol-metadata-as-reference.md) | Accepted | establishing protocol metadata provenance and packet layouts |
+| [0003](0003-runtime-world-lock-architecture.md) | Superseded by 0013/0014 | tracing the retired v1 world-lock decision |
+| [0004](0004-staged-single-writer-simulation.md) | Superseded by 0013/0014 | tracing the retired v1 simulation owner |
+| [0005](0005-regional-simulation.md) | Superseded by 0013/0014 | tracing retired v1 regional ownership |
+| [0006](0006-mc-net-module-boundaries.md) | Superseded by 0013/0014 | tracing retired v1 network module boundaries |
+| [0007](0007-connection-liveness-under-outbound-pressure.md) | Liveness principle retained; v1 implementation historical | investigating outbound pressure and keepalive liveness |
+| [0008](0008-overworld-density-router.md) | Accepted | changing worldgen authority or its revision fence |
+| [0009](0009-regional-plugin-boundary.md) | Isolation/value/admission principles retained; v1 implementation superseded | understanding plugin isolation and admission rationale |
+| [0010](0010-solaris-loader-contract.md) | Accepted; staged implementation | changing client bundles, Loader negotiation or trust |
+| [0011](0011-core-crate-topology-and-threading.md) | V1 topology, threading and durability superseded by 0013/0014 | tracing retired v1 crate and thread ownership |
+| [0012](0012-earth-worldplan-and-native-overlay.md) | Proposed for native v2; not ported | evaluating the Earth WorldPlan proposal, not a current serving mode |
+| [0013](0013-core-model-v2.md) | Accepted; sole current core model | changing native state authority, tick, persistence, plugins or tickets |
+| [0014](0014-v1-core-retirement.md) | Accepted; Phase 5 source retirement complete | understanding the v1 retirement and current crate cutover |
+| [0015](0015-multiversion-protocol-translation.md) | Accepted; implemented | changing per-session translation: canonical 26.3, translated 26.1.2 |
+| [0016](0016-mob-capabilities.md) | Accepted; layers 1 and 2 and sensors step 1 implemented | changing mob blueprints, capabilities or sensors |
+| [0017](0017-tick-system-graph.md) | Proposed graph; bounded one-system prototype implemented | evaluating tick system declarations and row-phase scheduling |
+| [0018](0018-in-game-computer.md) | Accepted design; draft implementation, real-client QA pending | changing the opt-in in-game computer |
+| [0019](0019-voice-chat.md) | Accepted design; draft implementation, real-client QA pending | changing proximity voice relay |
+| [0020](0020-entity-checkpoints-at-one-million.md) | Accepted; steps 1–2 implemented; strict latency criterion unmet | changing entity checkpoints or replay recovery |
+| [0021](0021-build-time-and-crate-split.md) | Step 1 accepted and implemented; split pilot designed, not started | changing build profiles or proposing a core crate split |
 
-## Routing
-
-- Data loading/licensing and content cache: 0001.
-- Packet ids/layouts and vanilla protocol provenance: 0002.
-- Per-session protocol version translation: 0015.
-- Current state authority, tick/merge, threads, waiting, persistence, shutdown,
-  snapshots, plugin intents, block work and tickets: 0013.
-- Incremental entity checkpoints and 1M reopen layout: 0020.
-- Mob blueprint capabilities, data-defined mob types and their bounds: 0016.
-- Tick system graph proposal and bounded row-phase prototype: 0017.
-- Current crate ownership, retirement and explicit port/delete decisions: 0013/0014.
-- Build-time profile settings and any future `mc-core` crate split: 0021.
-- Worldgen topology, climate, rivers, caves and feature ownership: 0008; runtime
-  storage/recovery constraints remain 0013.
-- Plugin author/operator contract: [PLUGINS.md](../PLUGINS.md) and 0013; 0009
-  supplies the historical rationale, not old Luau/reload configuration.
-- Loader bundles, trust, negotiation and permissions: 0010.
-- Earth WorldPlan proposal: 0012, not a current serving mode.
-
-Superseded ADR bodies intentionally retain deleted names and old test commands
-as decision history. Never execute them as current recipes or treat their
-receipts as current verification. Update the owning live ADR when authority,
-threading, persistence ordering or module policy changes.
+Update the owning live ADR when authority, threading, persistence ordering or
+module policy changes. Superseded ADR tombstones are not current recipes.

@@ -214,29 +214,13 @@ fallback is pre-accepted.
   recaptured; inline `Option<VillagerState>` is 2,160 B). Without the rename
   fold fix both rename tests fail: the original UUID stays stored.
 
-## Measurements (2026-11-05, step 3, `057bcfbd` vs `037cfa2b`)
+## Measurement boundary
 
-Release builds, `mem-run -x -m 8G`, CPUs 0–3, system allocator, 5 AB/BA pairs
-per row; receipts `receipts/CkptMeasure/RESULT.yaml`. Values are medians of
-per-run maxima (ms), baseline → candidate.
+The owner accepted the decision with the strict latency criterion unmet.
+The 1–2-core profile, exact-UUID offline fold after reopen and SIGKILL after a
+committed checkpoint were not run. Historical receipts are not available in a
+clean checkout; the proof below describes the required checks, not a pass.
 
-| Fixture | Checkpoint tick | Normal tick |
-|---|---|---|
-| frozen-distant 10k | 27.7 → 2.3 | paired Δ −0.27, +0.06, −0.18, +0.30, −5.37 |
-| frozen-distant 100k | 259.8 → 10.7 | — |
-| all-active 10k (NoAI, forced chunks) | 35.4 → 34.7 | 15.7 → 15.4 |
-| all-active 100k (NoAI cows) | 310.8 → 307.6 | 851.4 → 100.4 |
-
-- Reopen readiness at 262k: 32.0 s → 27.6 s (−14%), within the +10% gate.
-- 1M, 8 GiB scope: three committed checkpoints, SIGKILL at the next checkpoint
-  entry, reopened species/total counts equal the pre-kill census; sampled
-  anon peak 5.76 GB, scope peak 6.48 GB, `max` and `oom` 0. The offline fold
-  and the post-checkpoint SIGKILL were not run.
-- The strict latency pass ("none worse") fails on outliers: two frozen 10k
-  paired normal-tick maxima are worse by 0.06 and 0.30 ms, and the worst single
-  all-active 100k normal stall rose from 2.79 s to 3.29 s. Not run: the
-  1–2-core profile, an exact-UUID offline fold after reopen, and a SIGKILL
-  after a committed checkpoint. The owner accepted the ADR with these open.
 
 ## Proof
 
@@ -291,12 +275,3 @@ checkpoint for the old binary, whose next full write tombstones and rewrites as
 before, and the reverse also holds. Rollback is a revert and redeploy with no
 migration. Replay boxing is in-memory only.
 
-## Evidence
-
-- `solaris-work/scenarios/rnd-memory-stream-20261103/receipts/{REPORT,DESIGN}.md`
-- `solaris-work/receipts/rnd-mem-integrate/RESULT.yaml`
-- `solaris-work/receipts/rnd-mem-split/{RESULT.yaml,reopen-summary.json}`
-- committee review `ReviewAdr0020` (verdict amend; all findings addressed above)
-
-The 1M and streaming runs used jemalloc. The 10k/100k A/B runs used the default
-allocator on a shared noisy host.
