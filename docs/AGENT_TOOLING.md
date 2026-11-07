@@ -424,6 +424,19 @@ scene/state/resource revisions, and GPU completion; missing capture evidence
 fails the run. `present_requested` does not prove physical monitor scanout.
 The default remains functional headless and makes no visual claim.
 
+Singleplayer recovery is covered by
+`run scenario native-world-first-start-interrupted --client native --windowed`
+and `run scenario native-sp-relaunch-lease-race --client native --windowed`.
+Both require `SOLARIS_SERVER_BINARY` naming the release server and the native
+content environment above. They create private client data and worlds, copy
+`data/vanilla` as the server content cache, and use private Xvfb. The first
+interrupts the server only after both the first-start marker and database are
+present; the second suspends the old server until the new server logs its
+lease wait. These Linux scenarios do not cover the lease timeout branch or
+Windows. For the first-start negative control only,
+`SOLARIS_FIRST_START_RECOVERY_BINARY` can select an older server for the
+recovery attempt after the fixed server created and interrupted the world.
+
 Named native scenarios (all use the same isolated server/native lifecycle
 and `ProbeSteps` receipts; per-scenario `scenario.json` and
 `transcript.json` are retained even on failure; default deadline 180 s):

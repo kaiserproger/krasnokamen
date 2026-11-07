@@ -347,6 +347,12 @@ def run_title_connect(ctx: ProfileContext) -> dict[str, Any]:
 
     return title_connect.run(ctx)
 
+def run_singleplayer_regressions(ctx: ProfileContext) -> dict[str, Any]:
+    from .backends import singleplayer_regressions
+
+    return singleplayer_regressions.run(ctx)
+
+
 def run_dialogs(ctx: ProfileContext) -> dict[str, Any]:
     """Server-driven dialog round trip (show_dialog -> custom_click_action) on the native client."""
     from .backends import dialogs
@@ -837,6 +843,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "scope": "real-client",
         "description": "Native Title → Multiplayer → Direct Connect, type address+name, join and disconnect back to Title (--client native, windowed for screenshots)",
         "run": run_title_connect,
+    },
+    "singleplayer-regressions": {
+        "scope": "real-client",
+        "description": "Graphical singleplayer interrupted-start and held-lease regressions",
+        "run": run_singleplayer_regressions,
     },
     "village-qa": {
         "scope": "real-client",

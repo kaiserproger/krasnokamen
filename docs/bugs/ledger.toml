@@ -3447,9 +3447,10 @@ title = "A new world whose first start is stopped before the initial checkpoint 
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Windows 11 VM, RC5 release build: world 'rc5 world' timed out at 180 s under host load, then 'Server exited during startup' (receipts/WinLease, winvm/shared/rc5-server.log)"
-regression = []
+regression = ["cargo:mc-core:core::native_checkpoint_crash_tests::first_start_stopped_before_its_initial_checkpoint_reopens_as_a_new_world", "harness:singleplayer-regressions:native-world-first-start-interrupted"]
+failing_first = "reported"
 
 [[bug]]
 id = "WINDOWS-BACKUP-CONVERSION"
@@ -3467,6 +3468,7 @@ title = "After Save & Quit, the native client's process can end while its single
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "RC5 pre-tag breaker receipts/breaker-rc5-pretag-20261106/report.yaml (P1; interrupted-var2 refused 1/2 exact attempts; lease-rc4/lease-rc5 timings). Fixed in code by Core::open waiting up to 30 s for the lease (RC5 f29c3d62, main d1360198; cargo test start_waits_for_the_previous_server_to_release_the_world); breaker re-attack report-r2.yaml held 3/3 per branch with real clients. Stays open until a canonical real-client harness scenario covers it."
-regression = []
+status = "fixed"
+source = "RC5 pre-tag breaker receipts/breaker-rc5-pretag-20261106/report.yaml (P1; interrupted-var2 refused 1/2 exact attempts; lease-rc4/lease-rc5 timings). Fixed by Core::open waiting up to 30 s for the lease (RC5 f29c3d62, main d1360198); breaker re-attack report-r2.yaml held 3/3 per branch with real clients."
+regression = ["cargo:mc-core:core::native_checkpoint_crash_tests::start_waits_for_the_previous_server_to_release_the_world", "harness:singleplayer-regressions:native-sp-relaunch-lease-race"]
+failing_first = "reported"

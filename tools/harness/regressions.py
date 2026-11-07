@@ -154,6 +154,8 @@ def run(ctx):
             failures.append(f"{', '.join(sorted(set().union(*clients.values())))}: release server: {error}")
         else:
             env = os.environ.copy()
+            # A mutation control must never replace the binary in a ledger gate.
+            env.pop('SOLARIS_FIRST_START_RECOVERY_BINARY', None)
             env['SOLARIS_SERVER_BINARY'] = str(binary)
             for ref, bug_ids in sorted(clients.items()):
                 _, profile, scenario = ref.split(':', 2)

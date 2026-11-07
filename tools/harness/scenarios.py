@@ -85,6 +85,24 @@ def _entry(**kwargs: object) -> Scenario:
 
 
 SCENARIOS: dict[str, Scenario] = {
+    "native-world-first-start-interrupted": _entry(
+        id="native-world-first-start-interrupted",
+        summary="Recover a singleplayer world interrupted during its first start",
+        owner="core:harness", evidence="graphical", profile="singleplayer-regressions",
+        scenario_id="native-world-first-start-interrupted", requires=("xvfb",),
+        sources=("tools/harness/backends/singleplayer_regressions.py",),
+        proves="A fresh world enters Play after its server is killed with its first-start marker and database present.",
+        limits="One Linux native singleplayer first-start interruption.",
+    ),
+    "native-sp-relaunch-lease-race": _entry(
+        id="native-sp-relaunch-lease-race",
+        summary="Relaunch singleplayer while the prior server holds the world lease",
+        owner="core:harness", evidence="graphical", profile="singleplayer-regressions",
+        scenario_id="native-sp-relaunch-lease-race", requires=("xvfb",),
+        sources=("tools/harness/backends/singleplayer_regressions.py",),
+        proves="A relaunched client enters after a logged lease wait and the previous holder exits.",
+        limits="One Linux native singleplayer held-lease release; not the timeout branch.",
+    ),
     "native-v2-map-frame-waypoint": _entry(
         id="native-v2-map-frame-waypoint", summary="Distant framed home waypoint remains on the traveler's held clone",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-map-frame-waypoint",
