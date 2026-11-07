@@ -454,7 +454,7 @@ async fn run_connection(
                 let (frame, admitted) = match frame {
                     Ok(frame) => frame,
                     Err(error) => {
-                        warn!(%peer, connection = id.0, stage = "play-read", name = %outcome.name, %error, "connection closed");
+                        warn!(%peer, connection = id.0, stage = "play-read", name = %outcome.name, error = %format_args!("{error:#}"), "connection closed");
                         break 'play_loop "read-frame";
                     }
                 };

@@ -45,6 +45,11 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     v2_scenario = ctx.scenario_id in native_v2.NATIVE_SCENARIO_IDS
     auth_scenario = ctx.scenario_id == native_auth_budget.SCENARIO
     p5_scenario = ctx.scenario_id in java_p5.SCENARIO_IDS
+    from . import java_protocol_pot
+
+    protocol_pot = ctx.scenario_id == java_protocol_pot.SCENARIO
+    if protocol_pot and (ctx.client != "java" or kind != "inventory"):
+        raise ValueError("creative pot echo requires --client java and inventory")
     if p5_scenario:
         if ctx.client != "java" or kind != "entities":
             raise ValueError("java-v2-p5 scenarios require --client java and entities")
@@ -100,6 +105,8 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         required = required | {"minecraft_connect"}
     if p5_scenario:
         required = java_p5.REQUIRED_TOOLS
+    if protocol_pot:
+        required = java_protocol_pot.REQUIRED_TOOLS
     if ctx.scenario_id in ("java-v2-p5-craft-drag", "java-v2-p5-craft-drag-paced"):
         required = required | {"minecraft_open_inventory"}
     artifact = ctx.artifact_dir
@@ -302,9 +309,17 @@ seed = 81
 
                     evidence["window_focus"] = native_focus.acquire(display, client_process.pid, startup_timeout)
         else:
+            client_address = address
+            if protocol_pot:
+                report = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]).parent / "26.1.2/reports/packets.json"
+                wire_trace = light_wire.LightWireProxy(
+                    port, artifact, client_packet_observer=java_protocol_pot.creative_packet_observer(report, artifact),
+                    decode_light=False)
+                client_address = wire_trace.address
+                evidence["creative_wire_trace"] = str(artifact / "creative-wire.json")
             xvfb, display, display_log = runtime.start_xvfb(artifact)
             token, mcp_port = secrets.token_urlsafe(32), runtime.reserve_port()
-            if p5_scenario:
+            if p5_scenario or protocol_pot:
                 game_dir = artifact / "game"
                 game_dir.mkdir(parents=True, exist_ok=True)
                 (game_dir / "options.txt").write_text(
@@ -323,7 +338,7 @@ seed = 81
         if ctx.client == "java":
             require_tools(tools, {"minecraft_connect"}, kind)
             runtime.wait_client_ready_for_connect(mcp, startup_timeout)
-            mcp.call_tool("minecraft_connect", {"server_addr": address})
+            mcp.call_tool("minecraft_connect", {"server_addr": client_address})
         play = mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
         if not play.get("in_play"):
             raise RuntimeError(f"{kind} client did not enter Play: {play}")
@@ -388,7 +403,11 @@ seed = 81
                 return mcp
 
             attach_p5_client()
-        if kind == "inventory":
+        if protocol_pot:
+            mcp.p4_window = java_p5.acquire_window(display, startup_timeout)
+            evidence["java_window"] = mcp.p4_window
+            result = java_protocol_pot.run(mcp, artifact, timeout)
+        elif kind == "inventory":
             with ProbeSteps(mcp, artifact / "inventory-fixture", startup_timeout, "inventory-operator-fixture") as setup:
                 setup.fixture("debug give minecraft:apple 2 1")
                 setup.call("minecraft_wait_for_inventory", {

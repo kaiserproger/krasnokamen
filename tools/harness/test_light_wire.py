@@ -110,6 +110,7 @@ class ProxyTests(unittest.TestCase):
         proxy = light_wire.LightWireProxy.__new__(light_wire.LightWireProxy)
         proxy.lock = threading.Lock()
         proxy.packet_observer = None
+        proxy.decode_light = True
         wire = light_wire.WireLight()
         frames = bytearray(
             _frame(45, struct.pack(">q", 123), False)
@@ -126,6 +127,7 @@ class ProxyTests(unittest.TestCase):
         proxy.lock = threading.Lock()
         observed = []
         proxy.packet_observer = lambda wire, phase, packet, body: observed.append((phase, packet, body))
+        proxy.decode_light = True
         wire = light_wire.WireLight()
         payload = b"\x14distant_horizons:msg\x00\x10\x00\x04"
         frames = bytearray(_frame(3, b"", True) + _frame(0x18, payload, True))
@@ -133,6 +135,18 @@ class ProxyTests(unittest.TestCase):
         self.assertEqual(observed, [("configuration", 3, b""), ("play", 0x18, payload)])
         self.assertTrue(wire.played)
         self.assertEqual(frames, bytearray())
+
+    def test_packet_only_observer_does_not_apply_another_protocols_light_ids(self) -> None:
+        proxy = light_wire.LightWireProxy.__new__(light_wire.LightWireProxy)
+        proxy.lock = threading.Lock()
+        proxy.decode_light = False
+        observed = []
+        proxy.packet_observer = lambda wire, phase, packet, body: observed.append((phase, packet, body))
+        wire = light_wire.WireLight()
+        frames = bytearray(_frame(46, b"not a 26.3 chunk", False))
+        self.assertEqual(proxy._frames(frames, wire, "play", False), ("play", False))
+        self.assertEqual(observed, [("play", 46, b"not a 26.3 chunk")])
+        self.assertEqual(wire.events, [])
 
     def test_serverbound_observer_does_not_apply_clientbound_state_changes(self) -> None:
         proxy = light_wire.LightWireProxy.__new__(light_wire.LightWireProxy)

@@ -437,6 +437,17 @@ SCENARIOS: dict[str, Scenario] = {
         proves="ordinary slot clicks consume one oak log and create four planks, conserve two apples across cursor pickup/return, and select the crafted stack",
         limits="focused inventory probe only; native state/protocol evidence is not rendering/GUI preservation; bare Java inventory retains its broader compatibility gates",
     ),
+    "java-protocol-pot-creative-echo": _entry(
+        id="java-protocol-pot-creative-echo",
+        summary="Older creative client returns a lossy decorated pot without replacing canonical components",
+        owner="edge:protocol", evidence="graphical", profile="inventory",
+        scenario_id="java-protocol-pot-creative-echo",
+        requires=("sibling:solaris-loader", "xvfb"),
+        sources=("tools/harness/backends/java_protocol_pot.py", "tools/harness/backends/client_probes.py"),
+        fixture="creative 26.1.2 Java client; one named pot with three absent sides and a named three-brick template",
+        proves="physical creative-screen pickup and return to another hotbar slot preserve exact server-authoritative components twice",
+        limits="one lossy pot projection through the current chain; not arbitrary creative edits or component parity",
+    ),
     "core-replay-seed-81": _entry(
         id="core-replay-seed-81",
         summary="Core replay seed-81 actions in a real client",

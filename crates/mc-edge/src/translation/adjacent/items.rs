@@ -131,6 +131,14 @@ impl Components {
             .ok()
             .and_then(|id| source.get(id).copied().flatten())
     }
+
+    fn contains(&self, to: To, id: i32) -> bool {
+        let source = match to {
+            To::Legacy => &self.canonical,
+            To::Canonical => &self.legacy,
+        };
+        usize::try_from(id).is_ok_and(|id| id < source.len())
+    }
 }
 
 fn map(ids: &IdMap, to: To, id: i32) -> Option<i32> {
@@ -150,6 +158,17 @@ pub fn stack_with_loss(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>) -> Re
     let mut lossy = false;
     stack_at(t, to, r, w, 0, &mut lossy)?;
     Ok(lossy)
+}
+
+/// Creative writes delimit each outer component; nested templates remain ordinary.
+pub fn untrusted_stack(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
+    let count = r.read_varint()?;
+    w.write_varint(count);
+    if count > 0 {
+        w.write_varint(mapped_item(t, to, r.read_varint()?, &mut false)?);
+        patch_framed(t, to, r, w, 0, &mut false, true)?;
+    }
+    Ok(())
 }
 
 fn mapped_item(t: &Tables, to: To, id: i32, lossy: &mut bool) -> Result<i32> {
@@ -212,6 +231,18 @@ fn patch(
     depth: usize,
     lossy: &mut bool,
 ) -> Result<()> {
+    patch_framed(t, to, r, w, depth, lossy, false)
+}
+
+fn patch_framed(
+    t: &Tables,
+    to: To,
+    r: &mut &[u8],
+    w: &mut Vec<u8>,
+    depth: usize,
+    lossy: &mut bool,
+    delimited: bool,
+) -> Result<()> {
     let added = r.read_varint()?;
     let removed = r.read_varint()?;
     ensure!(
@@ -227,17 +258,37 @@ fn patch(
             .shape(to, id)
             .with_context(|| format!("unsupported item component {id}"))?;
         let target = map(&t.components, to, id);
+        let mut framed;
+        let component = if delimited {
+            let length = usize::try_from(r.read_varint()?).context("negative component length")?;
+            ensure!(length <= r.len(), "truncated creative component");
+            (framed, *r) = r.split_at(length);
+            &mut framed
+        } else {
+            &mut *r
+        };
         if target.is_none()
             && let Payload::NativeOnly(id) = shape
         {
-            mc_protocol::packets::play::skip_native_item_component(r, id, depth)?;
+            mc_protocol::packets::play::skip_native_item_component(component, id, depth)?;
+            ensure!(
+                !delimited || component.is_empty(),
+                "creative component trailing bytes"
+            );
             *lossy = true;
             continue;
         }
         let mut payload_out = Vec::new();
-        copy_payload(t, to, shape, r, &mut payload_out, depth, lossy)?;
+        copy_payload(t, to, shape, component, &mut payload_out, depth, lossy)?;
+        ensure!(
+            !delimited || component.is_empty(),
+            "creative component trailing bytes"
+        );
         if let Some(target) = target {
             body.write_varint(target);
+            if delimited {
+                body.write_varint(payload_out.len() as i32);
+            }
             body.extend_from_slice(&payload_out);
             kept_added += 1;
         } else {
@@ -247,7 +298,16 @@ fn patch(
     let mut kept_removed = 0;
     let mut removed_ids = Vec::new();
     for _ in 0..removed {
-        if let Some(target) = map(&t.components, to, r.read_varint()?) {
+        let id = r.read_varint()?;
+        let protocol = match to {
+            To::Legacy => t.formats.upper,
+            To::Canonical => t.formats.lower,
+        };
+        ensure!(
+            t.component_shapes.contains(to, id),
+            "unknown removed component {id} in protocol {protocol}"
+        );
+        if let Some(target) = map(&t.components, to, id) {
             removed_ids.write_varint(target);
             kept_removed += 1;
         } else {
@@ -436,6 +496,8 @@ pub fn unsupported<T>(what: &str) -> Result<T> {
 
 mod payloads;
 use payloads::{extra, registry};
+
+pub(super) mod creative;
 
 #[cfg(test)]
 #[path = "items_tests.rs"]
