@@ -1272,6 +1272,13 @@ const FALL_DAMAGE_IMMUNE: [&str; 18] = [
     "minecraft:breeze",
 ];
 
+const ZOMBIE_FAMILY: [&str; 4] = [
+    "minecraft:zombie",
+    "minecraft:husk",
+    "minecraft:drowned",
+    "minecraft:zombie_villager",
+];
+
 /// Vanilla capability data: the only place the shared-behaviour type lists
 /// live. The tick reads [`MobBlueprint::capabilities`] and params, never names.
 fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
@@ -1288,34 +1295,25 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
                 | "minecraft:phantom"
         ),
         dark_aggro_only: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
-        aggressive_arms: matches!(
-            name,
-            "minecraft:zombie"
-                | "minecraft:husk"
-                | "minecraft:drowned"
-                | "minecraft:zombie_villager"
-        ),
+        aggressive_arms: ZOMBIE_FAMILY.contains(&name),
         resists_magic: name == "minecraft:witch",
         hurt_by_water: name == "minecraft:enderman",
         fall_damage_immune: FALL_DAMAGE_IMMUNE.contains(&name),
         climbs_walls: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
-        inverted_healing: matches!(
-            name,
-            "minecraft:zombie"
-                | "minecraft:zombie_villager"
-                | "minecraft:husk"
-                | "minecraft:drowned"
-                | "minecraft:zombified_piglin"
-                | "minecraft:zoglin"
-                | "minecraft:skeleton"
-                | "minecraft:stray"
-                | "minecraft:bogged"
-                | "minecraft:wither_skeleton"
-                | "minecraft:wither"
-                | "minecraft:phantom"
-                | "minecraft:zombie_horse"
-                | "minecraft:skeleton_horse"
-        ),
+        inverted_healing: ZOMBIE_FAMILY.contains(&name)
+            || matches!(
+                name,
+                "minecraft:zombified_piglin"
+                    | "minecraft:zoglin"
+                    | "minecraft:skeleton"
+                    | "minecraft:stray"
+                    | "minecraft:bogged"
+                    | "minecraft:wither_skeleton"
+                    | "minecraft:wither"
+                    | "minecraft:phantom"
+                    | "minecraft:zombie_horse"
+                    | "minecraft:skeleton_horse"
+            ),
         aquatic: match name {
             "minecraft:cod"
             | "minecraft:salmon"
