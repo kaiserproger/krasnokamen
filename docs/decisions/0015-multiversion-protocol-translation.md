@@ -1,260 +1,205 @@
-# ADR 0015 - Per-session protocol translation
+# ADR 0015 - Per-session adjacent protocol translation
 
-**Date:** 2026-10-21 (implemented 2026-10-28)  
-**Status:** Accepted. The server's canonical protocol is 26.3 (777); 26.1.2
-(775) clients are served through the per-session translator below.
+**Date:** 2026-10-21; chain decision 2026-11-07  
+**Status:** Accepted. Canonical is Java 26.3 (777). The standing support window
+is **every Java release from 26.1.2 through 26.3**, not just its endpoints.
+A bump adds a step and never drops a previously supported release.
 
-## Context
+## Context and measured window
 
-`mc-core` is authoritative and version-independent; `mc-edge` already owns each
-connection's state, Configuration exchange, packet decoding and presentation
-planning. At the initial investigation (2026-10-21), Solaris published only
-26.1.2 (775). The 26.3 cutover now makes 777 canonical while retaining 775
-sessions at the edge. Other Login versions receive vanilla's
-`multiplayer.disconnect.incompatible` reason.
+`mc-core` owns version-independent gameplay, persistence and plugins. `mc-edge`
+owns transport, wire identities, presentation and connection state. Multiple
+client releases must coexist without a protocol branch in core authority.
+The owner also requires a newer client on an older canonical server to be
+possible without bumping that core. Future backfill reaches 1.7; it is not
+implemented or advertised by this decision.
 
-A local licensed 26.3 client was downloaded from Mojang's 26.3 manifest on
-2026-10-21. Its SHA-1 is `e877b6a07acd633fb3bb475002175cec036e7b87`.
-It and all derived material remain under ignored `.analysis/` paths, per ADR
-0001 and ADR 0002.
+[Mojang's version manifest](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json)
+was fetched on 2026-11-07. Selecting `type=release`, from 26.1.2 through 26.3
+inclusive in release order, yields exactly:
 
-## Measured 26.1.2 -> 26.3 delta
+| Release | Protocol | World version | Client SHA-1 |
+|---|---|---|---|
+| 26.1.2 | 775 | 4790 | `4e618f09a0c649dde3fdf829df443ce0b8831e65` |
+| 26.2 | 776 | 4903 | `2dc72797acbc1b63fc16a11c4ac393605f453754` |
+| 26.3 | 777 | 5023 | `e877b6a07acd633fb3bb475002175cec036e7b87` |
 
-`javap` was run through `tools/dump-vanilla-protocol.sh` for both local client
-jars. The raw registrations and record-field output are retained at:
+Protocol/world constants were read with local `javap -p -c -constants` of each
+client's `net.minecraft.SharedConstants`; packet registrations/record fields
+were captured with `tools/dump-vanilla-protocol.sh`. Artifacts are ignored:
 
-- `.analysis/vanilla-26.3/protocol-26.1.2-javap.txt`
-- `.analysis/vanilla-26.3/protocol-26.3-javap.txt`
-- `.analysis/vanilla-26.3/protocol-26.1.2-to-26.3.diff`
+- `.analysis/protocol-chain/version_manifest_v2.json` and `<release>.json`;
+- `.analysis/protocol-chain/SharedConstants-<release>.txt`;
+- `.analysis/protocol-chain/protocol-<release>-javap.txt`;
+- `.analysis/protocol-chain/26.1.2-to-26.2.diff`;
+- `.analysis/protocol-chain/26.2-to-26.3.diff`;
+- additional per-class `javap` captures/diffs in the same directory.
 
-`net.minecraft.SharedConstants` in the 26.3 client reports release network
-protocol **777** and world version **5023**, versus Solaris' protocol 775 and
-world version 4790. The registration/record diff is not an ID-only shift:
+The dump script's historical printed 26.1.2 label is not a version oracle;
+these filenames, manifest checksums and SharedConstants identify each input.
+Mojang jars, classes, reports and derived snapshots remain local, never in Git
+(ADRs [0001](0001-vanilla-data-as-runtime-input.md) and
+[0002](0002-vanilla-protocol-metadata-as-reference.md)).
 
-- The Configuration catalog grows from 30 to 31 entries: one clientbound
-  `POST_EFFECTS` registration. The Play catalog changes from 210 to 213
-  entries: five names added and two removed, shifting later IDs in their
-  respective directions.
-- Play clientbound adds `ADD_TRANSIENT_BLOCK`, `POST_EFFECTS`, and
-  `SWING_ANIMATION`; Play serverbound adds `PUNCH` and replaces the separate
-  spectate and swing packets with `SPECTATOR_ACTION`.
-- The record inventory adds six entries (including those new packets plus
-  `common/ClientboundPostEffectsPacket` and `game/MovementPacket`), removes
-  two, and changes the declared fields of 15 existing packets. The changed
-  packets include Login's `ClientboundLoginFinishedPacket` (a session UUID),
-  entity position sync, explosion, particles, Login/respawn, vehicle movement,
-  sign editing, chat signatures, advancements, teleport acknowledgement,
-  chat, and item-on-block use. These changes affect both the join path and
-  ordinary movement/action traffic.
+### Adjacent wire deltas
 
-The client resource registry inventory grew from 8,775 to 10,447 paths. Its
-set-level diff is 1,913 added and 241 removed paths (2,154 changed names at a
-minimum; same-name content edits are not included in that lower bound). Added
-entries include 528 recipes, 432 worldgen resources, 351 structures, 249
-advancements, 138 tags, and 123 loot tables; 227 worldgen resources, 12 tags,
-and two villager trades disappeared. The exact lists are retained at:
+**775 -> 776:** Configuration registrations are unchanged. Play renames
+`spectate_entity` to `spectator_action`, whose optional entity id needs a
+payload conversion. Login `login_finished` gains the session UUID; Play `login`
+gains `onlineMode`. `CommonPlayerSpawnInfo`, light masks, movement packets,
+player-action ordinals, tag slot displays and pot decorations retain their 775
+layouts. Slime's ageable inheritance/size metadata changes in **776**, so that
+metadata rewrite belongs to 776 -> 775, not 777 -> 776. Content identities come
+from the separate release reports, regardless of unchanged packet names.
 
-- `.analysis/vanilla-26.3/registry-resources-26.1.2.txt`
-- `.analysis/vanilla-26.3/registry-resources-26.3.txt`
-- `.analysis/vanilla-26.3/registry-resources-26.1.2-to-26.3.diff`
-
-The existing `wire-probe` is deliberately compiled against
-`mc_protocol::PROTOCOL_VERSION`; it probes the canonical server, not the
-legacy translator. A separate raw 775 TCP client in `legacy/join_tests.rs`
-exercises the legacy Login/Configuration/Play path. The `javap` evidence
-above remains the structural oracle; raw TCP tests are not graphical-client
-acceptance.
+**776 -> 777:** Configuration adds `post_effects`. Play adds
+`add_transient_block`, `post_effects`, `swing_animation` and serverbound `punch`,
+removing `swing`. Changed layouts include spawn-info game modes, movement step
+lists/position paths, particles, explosion sound flag, sign editing, teams,
+advancement coordinates, tag HolderSets, pot decorations and light BitSets.
+The session UUID and `onlineMode` already exist in 776 and must be retained by
+this step. The shared `sulfur_cube_content` component remains an item template
+in both releases, with its nested ids translated rather than an empty payload.
+The full measured 775 -> 777 delta was originally retained under
+`.analysis/vanilla-26.3/`; it is historical evidence, not a direct runtime step.
 
 ## Decision
 
-Use a **per-session translation layer in `mc-edge`**, analogous to ViaVersion.
-An ID-only remap is insufficient: changed layouts and every registry-bearing
-payload require the selected session's ids.
+Use a **per-session adjacent chain in `mc-edge/src/translation/`**, analogous
+to ViaVersion. A route from canonical 777 to client 775 is exactly
+**777 -> 776 -> 775**. No direct 777 -> 775 bypass exists. Clientbound visits
+steps in that order; serverbound visits them in reverse. Each step has its own
+session state (phase, teleports, lossy inventory images and metadata tracking).
+Compression/framing is decoded/re-encoded once for the whole route at the
+existing `connection.rs` boundary, not once per step.
 
-1. The handshake selects an immutable `legacy::Profile` for protocol 775.
-   Unsupported Login handshakes receive the vanilla incompatible disconnect;
-   Status advertises the selected supported name/protocol.
-2. `mc-edge` stores the selected profile in connection state. `mc-core`, its
-   player inputs, player changes, persistence, plugins and world authority do
-   not receive a protocol-version branch.
-3. Profile-specific decoders map a peer packet ID/layout into the existing
-   canonical edge input before the input is admitted to `mc-core`. Unknown or
-   untranslatable packets fail the connection clearly before mutation.
-4. The existing canonical `PlayerChange`/presentation plan is converted at the
-   edge into the selected profile's clientbound ID/layout. Translation happens
-   before framing/compression and never in the tick or fanout authority.
-5. Each profile owns its Configuration registry/tag/known-pack snapshot and
-   explicit canonical-to-peer registry mappings. It may not reuse a 26.1.2
-   numeric registry ID for 26.3 merely because an identifier happens to match.
-6. A new profile is accepted only with local `javap` registration/layout
-   capture, raw wire-probe Login -> Configuration -> Play capture, registry
-   mapping tests, and a graphical client gate covering join, movement, chat,
-   block interaction and inventory.
+The original six requirements remain:
 
+1. The handshake chooses an immutable available version profile. Unsupported
+   Login handshakes receive `multiplayer.disconnect.incompatible`. Status
+   advertises the selected available release/protocol; unknown or disabled
+   ids advertise canonical and therefore appear incompatible.
+2. Only connection state owns the selected route. Core inputs, player changes,
+   persistence, plugins, tick and world authority do not branch on protocol.
+3. Profile/step decoders turn peer ids/layouts into canonical edge inputs before
+   core admission. Malformed or untranslatable payloads fail with context before
+   mutation; deliberately unrepresentable presentation packets are omitted.
+4. Canonical presentation is translated before framing/compression, never in
+   tick/fanout authority. Pre-framed fanout batches cross the same boundary.
+5. Every **version profile** owns its exact registry/tag/known-pack snapshot.
+   Every **step** owns name-paired adjacent registry mappings, including block
+   states, items, entities, components and synced registries. Matching numeric
+   ids is never evidence of matching identity. Lossy forward mappings do not
+   become authoritative reverse mappings; ingress uses exact name matches.
+6. Accept a release only with local registration/layout evidence, synthetic
+   per-step mapping/layout tests, a real-cache raw Login -> Configuration -> Play
+   gate, and a graphical gate covering ordinary gameplay. TCP is not graphical
+   acceptance. A missing graphical adapter is an explicit release-specific gap.
 
-## Implementation (2026-10-28): 26.1.2 clients on the 26.3 server
+### A step above canonical
 
-The bump inverted the original plan: the canonical server protocol is 26.3
-(777) and the translator serves 26.1.2 (775), the client base already in the
-field. It lives in `crates/mc-edge/src/legacy/` and follows points 1-5 above:
+The route is independent of `mc_protocol::PROTOCOL_VERSION` being its largest
+endpoint. For a newer client on an older canonical core, clientbound uses
+**up** codecs and serverbound uses **down** codecs. Step factories create
+stateful translators with an explicit traversal direction. This is not the
+inverse of a lossy older-client map. Synthetic routing tests exercise both
+sides of canonical and reverse serverbound order. Current measured production
+steps implement older-client codecs; no unmeasured release above 777 is
+advertised. Adding an up step changes edge codecs/profiles, not core authority.
 
-- **Selection.** `handshake::read_handshake` accepts protocol 775 when the
-  26.1.2 profile is loaded and installs a `legacy::Session` on the
-  `Connection`. Status pings from 775 clients advertise `26.1.2`/775, so the
-  server list shows the server as compatible. Without the profile, 775 logins
-  keep the vanilla incompatible-version refusal.
-- **Data.** The profile is loaded at startup from a second content cache: the
-  26.1.2 cache beside the canonical one (`.../content/26.1.2` next to
-  `.../content/26.3`, or `data/vanilla-26.1.2` next to `data/vanilla`;
-  `SOLARIS_LEGACY_CONTENT_CACHE` overrides). Only its datagen reports
-  (`packets.json`, `blocks.json`, `registries.json`), synced registry names,
-  captured `reports/registry_network_nbt` and tags are used. A missing or
-  unusable cache logs the reason and disables 775 logins, not 777 sessions.
-  Upgrades retain the deployment's existing 26.1.2 cache; rc.1 `content import`
-  remains 26.3-only. Native 26.3 singleplayer does not need the old cache.
-  See [operator setup](../OPERATING.md#retaining-2612-clients-after-upgrading-to-263).
-- **Hook.** The translator sits at the one encode/decode boundary in
-  `connection.rs`: `Connection::send_packet`/`read_frame_*` before Play and
-  `PlayReader::read_frame`/`PlayWriter::write_bytes` in Play. Pre-framed,
-  possibly compressed fan-out batches are split, translated and re-framed per
-  legacy session; canonical sessions take the old path unchanged. `mc-core`
-  and the planner never see a protocol version.
-- **Tables.** Packet ids, block states, items, entity types, block-entity
-  types, sounds, particles, data-component types, attributes and the synced
-  biome/damage-type registries are paired **by name** from both caches'
-  reports, never by numeric id. Names 26.1.2 lacks are polyfilled by a small
-  table in `legacy/tables.rs`: new stone families map to granite/end stone
-  and sandstone variants, poplar wood to birch, coloured concrete/wool slabs
-  and stairs to a similarly coloured existing slab/stairs (shape preserved),
-  cushions to carpets, explorer maps to `map`, the sulfur cube to a slime,
-  the cushion entity to an invisible `interaction`, `dappled_forest` to
-  `forest`, `sulfur_caves` to `dripstone_caves`. Block states keep every
-  property the substitute shares. Entities whose metadata layout differs
-  (26.3 slime-like mobs extend `AgeableMob`: size moves 18 -> 16) are tracked
-  from `add_entity` and their `set_entity_data` indices rewritten.
-- **Configuration.** A 775 session announces `minecraft:core 26.1.2` and the
-  26.1.2 registry entry names and tags, so the client uses its built-in
-  definitions; 26.3-only `post_effects` is dropped.
-- **Layouts.** Translated per the measured delta: `login_finished`
-  (session UUID), `login`/`respawn` (spawn-info game modes, `onlineMode`),
-  chunk sections (block/biome palettes; global palettes repacked from 16 to
-  15 bits), chunk and incremental light masks (26.3 byte-array BitSets expand
-  back to 26.1.2 long-array BitSets), block updates/events/entities, entity movement
-  (`move_entity_*` step lists, `entity_position_sync` position path),
-  `animate`/`swing_animation`, particles and explosions, sounds (unknown
-  sounds inline by name), attributes, damage events, teams, item stacks in
-  slots/equipment/metadata; serverbound `accept_teleportation` (pose filled
-  from the tracked teleport), `player_action` ordinals, `sign_update`, item
-  ids in creative slots and hashed container clicks. `swing` becomes `punch`,
-  and `spectate_entity` becomes `spectator_action`. Commands, recipes, recipe
-  book entries, advancements, merchant offers and statistics retain their
-  presentations with registry ids remapped; advancement coordinates move back
-  inside the legacy display record. Recipe tag slot displays remove the 26.3
-  named item-HolderSet marker before writing the 26.1.2 bare tag identifier.
-  The local 26.3 `javap -c -p SlotDisplay$TagSlotDisplay` static initializer
-  selects `ByteBufCodecs.holderSet(Registries.ITEM)`; `ByteBufCodecs$34`
-  writes VarInt zero before a named set's identifier. Omitting that marker
-  makes the client consume identifier bytes as item registry ids during join.
-  Nested item templates retain their item-first layout (not optional slot
-  layout); pot decorations convert the new four optional templates into the
-  legacy four-item list.
-  Local 26.3 `ClientboundLightUpdatePacketData.STREAM_CODEC` uses
-  `ByteBufCodecs.BIT_SET`; its `$15` codec writes `BitSet.toByteArray()`
-  (length-prefixed little-endian bytes, trailing zeros omitted). This differs
-  from 26.1.2 `FriendlyByteBuf.writeBitSet`'s long array, not from heightmaps'
-  unchanged long-array format.
-- **Failure policy.** Packets with malformed or untranslatable payloads fail
-  the connection with context rather than silently discarding an inventory or
-  world update. Explicitly new-only presentation packets (`post_effects`,
-  `add_transient_block`) and unsupported new particles are omitted; registry
-  entries with no representation (new attributes/statistics/block entities)
-  are filtered at entry level. Item walkers cover every component Solaris
-  admits for wire emission; arbitrary components beyond native admission are
-  not a compatibility claim.
-- **Reconfiguration limit.** The edge does not emit a Play-to-Configuration
-  transition today. Only the initial Login → Configuration → Play path is
-  supported here: after the connection splits, the writer cannot observe the
-  reader's finish-configuration acknowledgement. Any future runtime
-  reconfiguration feature must coordinate both translator halves before sending
-  new Play packets.
+### Data ownership and automatic installation
 
-Agent-run evidence (2026-10-28): 28 focused unit tests passed. The end-to-end
-test `legacy::join_tests::legacy_client_joins_and_sees_polyfilled_chunk` passed:
-a 775 handshake reaches Play on the 777 server, both known-pack and full legacy
-RegistryData exchanges carry legacy tags, and a translated block update and
-chunk replace 26.3-only cinnabar with the independently loaded 26.1.2 granite id.
+`mc_data::protocol_versions::SUPPORTED` owns the release window. `content import
+--download` and a fresh first start install every endpoint using the existing
+verified Mojang download, datagen and vanilla RegistryData capture path. This
+does **not** depend on the proposed native importer in
+[ADR 0022](0022-content-without-java.md), whose owner questions remain open.
+Only canonical content needs the gameplay extractors; other endpoints need
+reports, their own definitions/tags and exact captured registry payloads.
 
-The actual Minecraft 26.1.2 graphical client (NeoForge 26.1.2.76 plus the
-automation agent, under Xvfb) also passed two existing harness profiles against
-the release server, both on seed 81:
+For a canonical cache `content/26.3`, version caches are `content/26.1.2` and
+`content/26.2`. Each adjacent step separately owns mapping-only snapshots in
+`content/steps/776-775/` or `content/steps/777-776/`: both sides' reports,
+version identities and ordered synced-registry entry names. Import derives
+these from both adjacent caches and validates before atomic publication.
+Valid older steps are immutable across canonical re-imports and bumps. For an
+arbitrary explicit cache root, the sibling layout is documented in
+[operations](../OPERATING.md#client-protocol-compatibility).
 
-- `survival`: join, ordinary mining, drop pickup, hotbar selection, placement
-  and item consumption.
-- `inventory`: cursor round-trip conserves two apples, crafting consumes one
-  oak log and creates four planks, the grid/cursor end empty, and selection
-  preserves inventory. This is the bounded adjacent inventory/duplication pass.
+Endpoint availability and route availability are distinct:
 
-Receipts are under `.analysis/validation/20261028T065419-survival-qu1chur_/`
-and `.analysis/validation/20261028T065648-inventory-lyaogt0n/` in the validation
-checkout, including `result.json`, `scenario.json`, `server.log` and `client.log`.
-Both used release-server SHA-256
-`827e4169b78242604bbeba36a81c5fb5e30e61ad8c8122b73afdbe1f9dbd4fed`.
-These are bounded agent-run passes, not certification of every packet or a
-canonical 777 graphical-client gate. Both clients logged nonfatal trial-spawner
-NBT errors (`Registry does not exist: minecraft:trial_spawner`); trial-spawner
-presentation is an observed remaining gap, not covered by these passing scenarios.
+- Missing/broken **endpoint** data disables logins for that version only. A
+  775 route can still cross 776 using its step-owned snapshot when the 776
+  endpoint cache is absent. Each failure names release, protocol, path and cause.
+- Missing/broken **step** data disables every route crossing that pair, with a
+  clear pair-level log line. It never silently bypasses the missing step.
+- Canonical sessions do not require translation data. Existing content is reused
+  offline; an unusable existing canonical cache fails closed, not auto-overwritten.
 
-Reproduce from the checkout root (wrap heavy commands with the shared-machine
-memory runner as required by `AGENTS.md`):
+Each cache/step publication is atomic, not a whole-window transaction. A failed
+window import reports failure even if earlier artifacts were successfully
+published; rerunning repairs missing artifacts. No retained pre-upgrade cache
+or retired cache override is required.
 
-```sh
-cargo test -p mc-edge --lib legacy::
-cargo test -p mc-edge --lib legacy::join_tests::legacy_client_joins_and_sees_polyfilled_chunk -- --ignored --exact
-cargo clippy -p mc-edge --lib --tests -- -D warnings
-cargo build --release -p mc-edge --bin solaris-v2
-SOLARIS_SERVER_BINARY="$PWD/target/release/solaris-v2" python3 -m tools.harness run survival --client java --timeout-seconds 120
-SOLARIS_SERVER_BINARY="$PWD/target/release/solaris-v2" python3 -m tools.harness run inventory --client java --timeout-seconds 120
-```
+### Backfill constraints: Configuration, ids, chunks, light and chat
 
-The ignored TCP gate requires the canonical 26.3 cache at `data/vanilla` and
-the retained 26.1.2 cache selected as above; absent caches are an error, not
-a skipped/pass result. Ordinary translation unit tests use synthetic reports
-and do not require Mojang data.
-Set `SOLARIS_SERVER_BINARY` to the actual Cargo target path if
-`CARGO_TARGET_DIR` is overridden, and `SOLARIS_LOADER_ROOT` to the checkout
-containing the 26.1.2 graphical automation agent.
+These constrain future steps; they do not implement or advertise older releases:
 
-## Canonical 26.3 Play wire acceptance (2026-10-28)
+- **Before 1.20.2:** there is no Configuration wire phase. Phase state belongs
+  inside each step, not a global chain enum or the core. A future phase bridge
+  must distinguish its two endpoints, synthesize canonical configuration
+  acknowledgements and peer login/play setup, and coordinate reader/writer
+  halves. Wire transitions are events, not packet-id arithmetic. The transport
+  boundary must support bounded zero/one/many frame emissions plus opposite-
+  direction control actions when that bridge is introduced; an absent peer
+  phase must never make canonical startup wait for an impossible peer packet.
+- **Before 1.13:** blocks/items use numeric id plus metadata, not flattened state
+  ids. A step needs a typed name/property <-> numeric-id/metadata mapping;
+  version-neutral core identity cannot become a global legacy numeric id.
+  Unrepresentable states take explicit nearest mappings, not guessed ordinals.
+- **Chunks/light:** a step owns its endpoint's palette, section, height, biome,
+  bulk-chunk and lighting layouts. Repacking and packet splitting/combining
+  belongs there; a universal modern chunk envelope must not leak into the
+  step-factory contract. Bounds must be explicit before buffering/coalescing.
+- **Chat:** pre-signed-chat and older text component formats require per-step
+  chat codecs and session/security policy. Never invent signatures, claim secure
+  chat for unsigned messages, or let a text conversion bypass core moderation.
+- **Runtime reconfiguration:** current steps implement initial Login ->
+  Configuration -> Play. The edge does not emit runtime Play -> Configuration
+  today. Before adding it, shared phase barriers must coordinate both halves
+  before any post-transition Play write; copying a phase at split is not enough.
 
-The agent-run Minecraft Java 26.3 client (NeoForge 26.3.0.83 plus the
-automation agent) passed all four requested profiles on the same release
-server SHA-256
-`3d65f95698b60f8ee45dfd356ce97667f26d546768b9e0980dc41dcf42bdd9ab`.
-The two wire fixes are the named HolderSet marker in recipe tag displays and
-byte-array BitSets in chunk/incremental lighting; neither fix suppresses packets.
+### Polyfill policy
 
-Receipts below are relative to the `pauline/tags263` validation checkout:
+Use the nearest name/property-preserving representation for missing features.
+Dynamic registries can carry server-sent data where the client accepts it;
+items may use `item_model` plus a server resource pack. **Datapacks cannot
+polyfill blocks, entities or mechanics.** Substitution changes presentation,
+not authoritative inventory/world identity. New-only attributes, statistics or
+block entities with no representation are filtered explicitly; unknown shapes
+fail closed rather than dropping an inventory/world update. This is not a
+claim that all arbitrary components or every vanilla mechanic are supported.
 
-| Profile | Passed scope | Receipt (`result.json`) |
-|---|---|---|
-| `core-client --client java` | Play join and own-chat echo on the same connection/dimension; not Wasm/economy/Loader-required checks | `.analysis/validation/20261028T095727-core-client-ny4t4eqy/` |
-| `inventory --client java` | Cursor conservation, oak-log-to-four-planks crafting, empty grid/cursor and hotbar selection | `.analysis/validation/20261028T095829-inventory-gvlkvyux/` |
-| `survival --client java` | Ordinary mining, item pickup, selection, placement and consumption | `.analysis/validation/20261028T095920-survival-_pf6nb4e/` |
-| `entities --client java` | Same pig UUID fed, damaged, killed, removed and its drop collected/selected | `.analysis/validation/20261028T100001-entities-74xk4fiv/` |
+`mc-data::legacy_26_1_2` remains a durable-record migration owner, and
+`enchanting_26_1_2` remains protocol-neutral gameplay; neither is a session
+profile, a chain bypass, nor an alias for the retired translator module.
 
-These are bounded 777 gameplay passes, not full vanilla parity. Client logs
-still report decorated-pot block-entity NBT `sherds` lists rejected as
-`Not a map` (for example the core-client `client.log:130–156`). This is an
-observed remaining NBT presentation defect; the gates do not certify pottery
-appearance. The OpenGL backend attempt fails with `EGL_BAD_DISPLAY`, after
-which the client creates a Wayland window and reaches Play; no packet decode
-disconnect remains in these four receipts.
+## Validation and historical evidence
 
-Focused validation: 460 `mc-protocol` library tests, 31 legacy unit tests,
-the explicitly enabled legacy TCP join/chunk test, and strict Clippy
-`-p mc-protocol -p mc-edge --all-targets -- -D warnings` passed.
-Failing-first logs and local-jar disassembly evidence are retained under
-`.analysis/codex-logs/Wire263/`. Reproduce using the commands above with the
-26.3 automation checkout in `SOLARIS_LOADER_ROOT` and the actual release binary
-in `SOLARIS_SERVER_BINARY`; the legacy TCP test used
-`SOLARIS_LEGACY_CONTENT_CACHE=/home/kaiserroman/solaris/data/vanilla`.
+Current focused gates are the `translation` unit tests and
+`translation::join_tests::protocol_{775,776,777}_login_configuration_play`.
+The ignored TCP cases require real imported caches/steps and exercise known
+packs, full RegistryData, chunks, block placement/breaking and chest opening.
+A missing cache fails; it is not a skipped/pass result. Set `SOLARIS_CONTENT_CACHE`
+to the isolated canonical root for a fresh-install gate.
+
+The original 2026-10-28 graphical evidence is historical, not proof of this
+chain cutover: 775 survival/inventory receipts were
+`.analysis/validation/20261028T065419-survival-qu1chur_/` and
+`20261028T065648-inventory-lyaogt0n/`; 777 core-client/inventory/survival/entities
+receipts were `20261028T095727-core-client-ny4t4eqy/`,
+`20261028T095829-inventory-gvlkvyux/`, `20261028T095920-survival-_pf6nb4e/` and
+`20261028T100001-entities-74xk4fiv/` in their respective validation checkouts.
+Those bounded passes still observed trial-spawner/pot NBT presentation defects;
+they did not establish complete parity. New chain receipts and its negative
+control must be reported against the exact committed tree and pinned release.

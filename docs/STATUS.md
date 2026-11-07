@@ -98,13 +98,13 @@ decides it):
 Supported surfaces (standing contracts, not transitions; only an
 owner-declared sunset would make one):
 
-- 26.1.2 (protocol 775): AGENTS.md and
-  [ADR 0015](decisions/0015-multiversion-protocol-translation.md) keep it
-  served through a retained legacy content cache
-  (`crates/mc-edge/src/legacy/`, 14 files, about 4.7k lines including tests;
-  `mc-data` `legacy_26_1_2.rs` and `enchanting_26_1_2.rs`;
-  [operator steps](OPERATING.md#retaining-2612-clients-after-upgrading-to-263)),
-  and owner testing runs on a 26.1.2 client. Fixes there are always allowed.
+- Supported client window: **every release from 26.1.2 through 26.3**
+  (775/776/777), with canonical 26.3. [ADR 0015](decisions/0015-multiversion-protocol-translation.md)
+  owns the adjacent chain in `crates/mc-edge/src/translation/`; content import
+  and first start install all endpoint caches and independently owned step
+  snapshots ([operations](OPERATING.md#client-protocol-compatibility)).
+  A version bump adds a step and never sunsets existing clients. Backfill to
+  1.7 is a future constraint, not an implemented compatibility claim.
 - Loader on 26.1.2 ([ADR 0010](decisions/0010-solaris-loader-contract.md),
   "Accepted, staged implementation"; [SOLARIS_LOADER](SOLARIS_LOADER.md)): a
   supported surface with an open Fabric 26.1.2 blocker (`LOADER-SOUND-MIXIN`).
