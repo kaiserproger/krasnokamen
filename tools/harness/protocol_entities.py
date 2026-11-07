@@ -485,6 +485,9 @@ class ProtocolEntities:
         cur = _Cursor(raw)
         entity_id = cur.varint()
         if self._protocol == 777:
+            # 26.3 VecDelta.read: properties contain onGround and step count;
+            # each stepped delta is a VarInt tick offset followed by three shorts.
+            # Verified against the 26.3 server jar's VecDelta javap.
             properties = cur.varint()
             count = properties >> 1
             if count > cur.remaining() // 7:
