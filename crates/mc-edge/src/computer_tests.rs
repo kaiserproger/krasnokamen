@@ -142,6 +142,129 @@ async fn computer_process_limit_is_shared_and_released() {
     );
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn computer_worker_reopen_and_close_reopen_at_capacity() {
+    use mc_core::boundary::{
+        ChangeSet, EntityAppearance, EntityView, SnapshotChunk, WorldSnapshot,
+    };
+    use mc_protocol::packets::play::ClientboundCustomPayload;
+    use mc_world::{
+        BlockStateId,
+        chunk::{Chunk, ChunkPos},
+    };
+    let (mut server, dir) = crate::server::admin_tests::fixture();
+    server.cfg.computer.enabled = true;
+    server.cfg.computer.command = vec!["/bin/cat".into()];
+    server.cfg.computer.working_directory = "/tmp".into();
+    server.cfg.computer.max_processes = 1;
+    server.computer_processes = Arc::new(Semaphore::new(1));
+    let (id, mut replies) = crate::server::admin_tests::register(&server, "Operator", true);
+    let entity = EntityId(7);
+    let pos = ChunkPos { x: 0, z: 0 };
+    let iron = server
+        .wire
+        .blocks
+        .block(&Identifier::parse("minecraft:iron_block").unwrap())
+        .unwrap()
+        .default;
+    let mut chunk = Chunk::empty(
+        pos,
+        BlockStateId(0),
+        Identifier::parse("minecraft:plains").unwrap(),
+    );
+    chunk.set_block(1, 64, 1, iron);
+    let player = EntityView {
+        id: entity,
+        uuid: uuid::Uuid::nil(),
+        type_id: 1,
+        position: [1.5, 64.0, 1.5],
+        velocity: [0.0; 3],
+        yaw: 0.0,
+        pitch: 0.0,
+        head_yaw: 0.0,
+        on_ground: true,
+        appearance: Arc::new(EntityAppearance {
+            health: 20.0,
+            ..Default::default()
+        }),
+    };
+    let output = TickOutput {
+        tick: 1,
+        snapshot: Arc::new(WorldSnapshot {
+            dimension: Dimension::Overworld,
+            chunks: Arc::new(vec![SnapshotChunk {
+                pos,
+                revision: 1,
+                chunk: Arc::new(chunk),
+            }]),
+            entities: vec![player].into(),
+            ..Default::default()
+        }),
+        changes: Arc::new(ChangeSet::default()),
+        times: Default::default(),
+    };
+    let (ticks, tick_rx) = tokio::sync::broadcast::channel(8);
+    let (tx, rx) = mpsc::channel(8);
+    let server = Arc::new(server);
+    let worker_server = Arc::clone(&server);
+    let task = tokio::spawn(async move {
+        run_with_ticks(
+            &worker_server,
+            id,
+            entity,
+            "127.0.0.1:50000".parse().unwrap(),
+            rx,
+            tick_rx,
+        )
+        .await
+    });
+    ticks.send(output).unwrap();
+    async fn response(rx: &mut mpsc::Receiver<bytes::Bytes>) -> (u8, String) {
+        let data = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let mut frame = bytes::BytesMut::from(data.as_ref());
+        let decoded = mc_protocol::frame::try_decode_frame(
+            &mut frame,
+            mc_protocol::frame::Compression::Threshold(256),
+        )
+        .unwrap()
+        .unwrap();
+        let packet = ClientboundCustomPayload::decode(&mut &decoded.body[..]).unwrap();
+        let CustomPayload::Unknown { payload, .. } = packet.payload else {
+            panic!("not computer payload")
+        };
+        (
+            payload[1],
+            String::from_utf8(payload[6..].to_vec()).unwrap(),
+        )
+    }
+    for session in [1, 2] {
+        tx.send(Request::Open {
+            session,
+            at: [1, 64, 1],
+        })
+        .await
+        .unwrap();
+        assert_eq!(response(&mut replies).await.0, 0, "Open {session}");
+    }
+    tx.send(Request::Close { session: 2 }).await.unwrap();
+    assert_eq!(response(&mut replies).await.0, 2);
+    tx.send(Request::Open {
+        session: 3,
+        at: [1, 64, 1],
+    })
+    .await
+    .unwrap();
+    assert_eq!(response(&mut replies).await.0, 0, "Open after Close");
+    drop(tx);
+    task.await.unwrap().unwrap();
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 #[test]
 fn computer_target_requires_live_player_loaded_carrier_and_reach() {
     use mc_core::boundary::{

@@ -19,6 +19,28 @@ fn id(name: &str) -> Identifier {
 }
 
 #[test]
+#[ignore = "pickup publication allocation and timing microbenchmark"]
+fn pickup_publication_micro() {
+    let mode = std::env::var("PICKUP_MODE").unwrap_or_else(|_| "delta".into());
+    let iterations: usize = std::env::var("PICKUP_COUNT")
+        .map(|value| value.parse().unwrap()).unwrap_or(100_000);
+    let mut player = PlayerState::new(ConnectionId(1), GameMode::Survival);
+    for slot in 0..36 {
+        let stack = ItemStack::new(APPLE, 1).with_custom_name(format!("stack-{slot}"));
+        player.inventory.slots[slot] = stack;
+    }
+    let start = std::time::Instant::now();
+    for _ in 0..iterations {
+        if mode == "full" {
+            std::hint::black_box(player.inventory_contents());
+        } else {
+            std::hint::black_box(player.pickup_changes(1));
+        }
+    }
+    println!("PICKUP_PUBLICATION mode={mode} count={iterations} total_ns={}", start.elapsed().as_nanos());
+}
+
+#[test]
 fn teleport_sequence_survives_respawn_wraps_like_vanilla_and_resets_on_reconnect() {
     let connection = ConnectionId(1);
     let mut player = PlayerState::new(connection, GameMode::Survival);

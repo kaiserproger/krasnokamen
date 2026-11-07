@@ -1490,7 +1490,7 @@ impl PlayerState {
 
     /// Publish only changed pickup slots visible in the active menu.
     pub(crate) fn pickup_changes(&mut self, changed: u64) -> Vec<PlayerChange> {
-        let offhand_needs_image = self.open.is_some() && changed & (1 << OFF_HAND) != 0;
+        let mut remaining = changed;
         let mut changes = Vec::new();
         let menu = self.open.as_mut().unwrap_or(&mut self.inventory_menu);
         for slot in 0..menu.kind.slot_count() {
@@ -1500,12 +1500,11 @@ impl PlayerState {
             if changed & (1 << index) == 0 {
                 continue;
             }
-            if changes.is_empty() {
-                menu.state_id = (menu.state_id + 1) & 0x7FFF;
-            }
+            remaining &= !(1 << index);
+            menu.state_id = (menu.state_id + 1) & 0x7FFF;
             changes.push(slot_change(menu, slot, &self.inventory.slots[index]));
         }
-        if offhand_needs_image {
+        if remaining != 0 {
             changes.push(self.inventory_contents());
         }
         changes

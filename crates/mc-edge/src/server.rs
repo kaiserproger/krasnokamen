@@ -75,6 +75,9 @@ use pump::*;
 /// Next-connection-id counter start (1-based; 0 is reserved as "none").
 const FIRST_CONNECTION_ID: u64 = 1;
 
+/// Consecutive rejected ordinary input submissions before disconnect.
+const MAX_SUBMIT_SHEDS: u32 = 64;
+
 /// Per-Play-packet-id token buckets. Paper's packet limiter is permissive for
 /// normal clients; these defaults retain that headroom while bounding one
 /// packet type independently of all other client traffic.
@@ -1633,7 +1636,7 @@ mod tests;
 
 #[cfg(test)]
 #[path = "admin_tests.rs"]
-mod admin_tests;
+pub(crate) mod admin_tests;
 
 #[cfg(test)]
 #[path = "server_lifecycle_tests.rs"]

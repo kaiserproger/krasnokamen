@@ -1,7 +1,7 @@
 use super::*;
 use mc_protocol::packets::{Packet, play::*};
 
-fn fixture() -> (EdgeServer, std::path::PathBuf) {
+pub(crate) fn fixture() -> (EdgeServer, std::path::PathBuf) {
     let dir = std::env::temp_dir().join(format!("mc-edge-admin-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
     let mut config = mc_core::config::CoreConfig::new(dir.join("world"), 42);
@@ -52,7 +52,7 @@ fn fixture() -> (EdgeServer, std::path::PathBuf) {
     (server, dir)
 }
 
-fn register(
+pub(crate) fn register(
     server: &EdgeServer,
     name: &str,
     op: bool,

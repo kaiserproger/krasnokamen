@@ -317,7 +317,18 @@ async fn run(
     id: ConnectionId,
     entity: EntityId,
     peer: SocketAddr,
+    rx: mpsc::Receiver<Request>,
+) -> anyhow::Result<()> {
+    run_with_ticks(server, id, entity, peer, rx, server.hub.subscribe()).await
+}
+
+async fn run_with_ticks(
+    server: &EdgeServer,
+    id: ConnectionId,
+    entity: EntityId,
+    peer: SocketAddr,
     mut rx: mpsc::Receiver<Request>,
+    mut ticks: tokio::sync::broadcast::Receiver<TickOutput>,
 ) -> anyhow::Result<()> {
     let carrier = server
         .wire
@@ -326,7 +337,6 @@ async fn run(
         .ok_or_else(|| anyhow::anyhow!("computer carrier unavailable"))?
         .default
         .0;
-    let mut ticks = server.hub.subscribe();
     let mut latest: Option<TickOutput> = None;
     let mut target: Option<Target> = None;
     let mut process: Option<Process> = None;

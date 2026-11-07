@@ -28,17 +28,17 @@ fn pickup_publishes_only_changed_slots_for_active_menu() {
             .iter()
             .filter_map(|change| match change {
                 PlayerChange::MenuSlot {
-                    window, slot, item, ..
-                } => Some((*window, *slot, item.as_ref().map(|stack| stack.count))),
+                    window, state_id, slot, item,
+                } => Some((*window, *state_id, *slot, item.as_ref().map(|stack| stack.count))),
                 _ => None,
             })
             .collect();
         assert_eq!(
             slots,
             if menu.is_some() {
-                vec![(7, 37, Some(64)), (7, 38, Some(2))]
+                vec![(7, 1, 37, Some(64)), (7, 2, 38, Some(2))]
             } else {
-                vec![(0, 36, Some(64)), (0, 37, Some(2))]
+                vec![(0, 1, 36, Some(64)), (0, 2, 37, Some(2))]
             }
         );
         assert!(
@@ -92,6 +92,24 @@ fn pickup_into_offhand_syncs_inventory_with_or_without_open_chest() {
 }
 
 #[test]
+fn pickup_with_lectern_open_updates_hidden_player_inventory() {
+    let (mut state, entity, pos) = flat_player_fixture();
+    let apple = state.registry.items
+        .id_of(&mc_data::Identifier::parse("minecraft:apple").unwrap()).unwrap();
+    state.players.get_mut(&entity).unwrap().open =
+        Some(crate::inventory::Menu::new(7, crate::inventory::MenuKind::Lectern));
+    state.outbox.clear();
+    let dropped = crate::tick::spawn_item_entity(&mut state, pos, mc_data::ItemStack::new(apple, 1));
+    let item = state.entities.slot_of(dropped).unwrap();
+    let collector = state.entities.slot_of(entity).unwrap();
+    state.merge_pickups.push((item, collector, 1));
+    state.commit_merge_effects();
+    assert!(state.outbox[&ConnectionId(1)].iter().any(|change| matches!(change,
+        PlayerChange::MenuContents { window: 0, slots, .. }
+        if slots[36].as_ref().is_some_and(|stack| stack.count == 1))));
+}
+
+#[test]
 #[ignore = "pickup flood timing; run in the perf lane"]
 fn pickup_flood_micro() {
     let (mut state, entity, pos) = flat_player_fixture();
@@ -104,6 +122,7 @@ fn pickup_flood_micro() {
     let count: usize = std::env::var("PICKUP_COUNT")
         .map(|value| value.parse().expect("PICKUP_COUNT must be an integer"))
         .unwrap_or(10_000);
+    let cpu_before = pickup_cpu_ticks();
     let start = std::time::Instant::now();
     for _ in 0..count {
         state.players.get_mut(&entity).unwrap().inventory.slots[0] = mc_data::ItemStack::EMPTY;
@@ -115,10 +134,23 @@ fn pickup_flood_micro() {
         state.outbox.clear();
     }
     println!(
-        "PICKUP_FLOOD count={count} total_ns={}",
-        start.elapsed().as_nanos()
+        "PICKUP_FLOOD count={count} total_ns={} cpu_ticks={}",
+        start.elapsed().as_nanos(),
+        pickup_cpu_ticks() - cpu_before
     );
 }
+
+fn pickup_cpu_ticks() -> u64 {
+    let stat = std::fs::read_to_string("/proc/self/stat").unwrap();
+    let fields: Vec<_> = stat
+        .rsplit_once(')')
+        .unwrap()
+        .1
+        .split_whitespace()
+        .collect();
+    fields[11].parse::<u64>().unwrap() + fields[12].parse::<u64>().unwrap()
+}
+
 #[test]
 fn statistics_movement_uses_accepted_centimeters_and_modes() {
     let (mut state, entity, pos) = flat_player_fixture();

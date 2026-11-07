@@ -1308,10 +1308,18 @@ pub(super) struct StepCtx<'a> {
 }
 
 pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawIntent>) {
+    let reader = ctx.world.physics_reader();
+    step_entity_with_reader(row, ctx, &reader)
+}
+
+fn step_entity_with_reader(
+    row: ReadRow,
+    ctx: &StepCtx,
+    reader: &crate::world::PhysicsReader<'_>,
+) -> (MoveWrite, Vec<RawIntent>) {
     let rows = ctx.rows;
     let players = ctx.players.table();
     let cow_cells = ctx.cow_cells;
-    let reader = ctx.world.physics_reader();
     let block_at = &|x, y, z| reader.block_at(x, y, z);
     let chunk_loaded = ctx.chunk_loaded;
     let registry = ctx.registry;
