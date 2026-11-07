@@ -112,7 +112,10 @@ restart restores the same ticks (test
 
 A quarantined chunk that holds unsaved state declines the whole checkpoint
 instead, and the log error (`checkpoint declined`, repeated on every declined
-checkpoint so a stuck server is visible) names the chunk and its counts. The
+checkpoint so a stuck server is visible) names the dimension, chunk and counts.
+An early container-hydration refusal reports `container_records` (live container
+records in that chunk); capture-time refusal reports the aggregate unsaved entries
+and skipped scheduled projections. The
 WAL is retained. Unsaved state means pending block writes, container records of
 the chunk held by the live owners, edited sections, and the container edit or
 removal mark (`block_entity_dirty`; a removed record leaves nothing but the
@@ -136,6 +139,15 @@ out is an offline `restore` of the last backup (play since that backup is
 lost); the stored record stays byte-identical for inspection. Importing an
 Anvil chunk, and loading a native one, validates crafter, shelf, shulker box
 and conduit records by the block that owns them, never by the record's own id.
+
+The `container_transfer_replay_*` regressions exercise actual transfers for chest,
+trapped chest, barrel, copper chest, furnace, smoker, blast furnace, hopper,
+brewing stand, dispenser, dropper, crafter, shulker box, shelf and jukebox, with an
+untouched chest in the same chunk. Typed-only WAL tails hold a refused checkpoint
+and materialize healthy unloaded chunks before capture. Owners that also emit an
+opaque WAL image already require a resident chunk at recovery, so an unreadable
+chunk refuses startup instead. Both routes retain full container/player contents
+and total custody through repair, checkpoints and repeated restarts.
 
 ## Backup and restore
 

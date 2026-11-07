@@ -3556,8 +3556,39 @@ repro = "cargo"
 severity = "major"
 status = "open"
 source = "CoreBlockers: historical dirty-only fix 1d6bef3e was rejected and reverted because materializing after the snapshot erases neighbouring inventories. ContainerReplayCustody: real chest-to-player transfer regressions cover healthy/refused unloaded chunks, full chest/furnace/hopper/brewing inventories, WAL retention, repair and two restarts. Contributing factors and defenses: docs/architecture/persistence.md#checkpoints."
-regression = ["cargo:mc-core:core::checkpoint_custody_tests::container_transfer_replay_holds_unloadable_chunk_and_wal", "cargo:mc-core:core::checkpoint_custody_tests::container_transfer_replay_materializes_full_healthy_chunk"]
-repro_check = ["cargo:mc-core:core::checkpoint_custody_tests::container_transfer_replay_holds_unloadable_chunk_and_wal", "cargo:mc-core:core::checkpoint_custody_tests::container_transfer_replay_materializes_full_healthy_chunk"]
+regression = [
+  "cargo:mc-core:core::checkpoint_custody_tests::chest::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::chest::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::trapped_chest::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::trapped_chest::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::barrel::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::barrel::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::copper_chest::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::copper_chest::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::furnace::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::furnace::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::smoker::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::smoker::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::blast_furnace::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::blast_furnace::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::hopper::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::hopper::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::brewing_stand::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::brewing_stand::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::dispenser::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::dispenser::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::dropper::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::dropper::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::crafter::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::crafter::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::shulker_box::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::shulker_box::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::shelf::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::shelf::container_transfer_replay_materializes_full_healthy_chunk",
+  "cargo:mc-core:core::checkpoint_custody_tests::jukebox::container_transfer_replay_holds_unloadable_chunk_and_wal",
+  "cargo:mc-core:core::checkpoint_custody_tests::jukebox::container_transfer_replay_materializes_full_healthy_chunk",
+]
+repro_check = ["cargo:mc-core:core::checkpoint_custody_tests::chest::container_transfer_replay_holds_unloadable_chunk_and_wal", "cargo:mc-core:core::checkpoint_custody_tests::chest::container_transfer_replay_materializes_full_healthy_chunk"]
 failing_first = "reported"
 fix_commit = "aa3e10f6"
 

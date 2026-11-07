@@ -67,23 +67,36 @@ pub(super) fn start_checkpoint(
 /// The WAL can own only one inventory in an otherwise unloaded chunk. Hydrate
 /// its neighbours before freezing slots or projecting the opaque container owners.
 fn prepare_container_checkpoint(state: &mut TickState) -> bool {
-    if !state
+    let materialized = state
         .world
-        .materialize_container_chunks(state.block_entities.keys().copied())
-    {
-        return false;
+        .materialize_container_chunks(state.block_entities.keys().copied());
+    if materialized {
+        // Vacant-only hydration preserves newer WAL slots, including empty images.
+        crate::tick::sync_chunk_block_entities(state);
     }
-    // Vacant-only hydration preserves newer WAL slots, including empty images.
-    crate::tick::sync_chunk_block_entities(state);
-    state.block_entities.keys().all(|(x, _, z)| {
-        state
+    let mut refused = std::collections::BTreeMap::new();
+    for (x, _, z) in state.block_entities.keys() {
+        let chunk = crate::boundary::ChunkPos {
+            x: x.div_euclid(16),
+            z: z.div_euclid(16),
+        };
+        if state.world.load_error(chunk).is_some() {
+            *refused.entry((chunk.x, chunk.z)).or_insert(0usize) += 1;
+        }
+    }
+    for (&(x, z), &container_records) in &refused {
+        let error = state
             .world
-            .load_error(crate::boundary::ChunkPos {
-                x: x.div_euclid(16),
-                z: z.div_euclid(16),
-            })
-            .is_none()
-    })
+            .load_error(crate::boundary::ChunkPos { x, z })
+            .expect("counted refused container chunk");
+        tracing::error!(
+            tick = state.tick,
+            %error,
+            container_records,
+            "checkpoint declined: container chunk cannot be hydrated; the journal is retained"
+        );
+    }
+    materialized && refused.is_empty()
 }
 
 pub(super) fn start_checkpoint_with_reply(
