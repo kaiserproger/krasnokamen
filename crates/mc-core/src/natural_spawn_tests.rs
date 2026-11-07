@@ -468,9 +468,9 @@ fn grass_state_with_radius(
     east_biome: &'static str,
     radius: i32,
 ) -> TickState {
-    static REGISTRY: std::sync::LazyLock<Arc<CoreRegistry>> =
-        std::sync::LazyLock::new(|| Arc::new(CoreRegistry::load(None).expect("registry")));
-    let registry = Arc::clone(&REGISTRY);
+    static REGISTRY: std::sync::LazyLock<CoreRegistry> =
+        std::sync::LazyLock::new(|| CoreRegistry::load(None).expect("registry"));
+    let registry = Arc::new(REGISTRY.clone());
     let generator: Arc<dyn mc_world::ChunkGenerator> = Arc::new(GrassWorld {
         air: registry.states.air,
         grass: registry.states.grass_block,
