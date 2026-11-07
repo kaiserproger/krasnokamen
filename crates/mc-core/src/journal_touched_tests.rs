@@ -1,4 +1,5 @@
 use super::*;
+use crate::boundary::ConnectionId;
 use crate::core::journal_entries_for_tick;
 use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
 use crate::tick::BlockEntityState;
