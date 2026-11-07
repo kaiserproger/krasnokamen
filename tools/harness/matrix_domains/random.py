@@ -267,9 +267,39 @@ def _mine(actor, position):
     actor.break_block(position, phase='stop')
 
 
+def _concurrent_chest(ctx):
+    actors = ctx.clients[:2]
+    if len(ctx.clients) < 3:
+        raise MissingCapability('concurrent:two_actors_and_observer')
+    actor = actors[0]
+    _supply(ctx, actor, 'minecraft:dirt', 8)
+    actor.teleport_to(33.5, 80, 32.5)
+    actor.open_container(CHEST)
+    _click(actor, _slot(actor, 'minecraft:dirt'), kind='quick_move')
+    _close(actor)
+    for player in actors:
+        player.teleport_to(33.5, 80, 32.5)
+        player.open_container(CHEST)
+    slots = [stack['slot'] for stack in actors[0].snapshot()['menu']['slots']
+             if stack['slot'] < 27 and stack['item_id'] == 'minecraft:dirt']
+    if not slots:
+        raise AssertionError('concurrent chest fixture did not receive dirt')
+    slot = slots[0]
+    actors[1].wait_until(lambda: any(stack['slot'] == slot and stack['item_id'] == 'minecraft:dirt'
+                                    for stack in actors[1].snapshot()['menu']['slots']),
+                         description='second actor received conflicting chest stack')
+    ctx.concurrently([(player, 'click_slot', {'slot': slot, 'kind': 'quick_move'})
+                      for player in actors])
+    for player in actors:
+        _close(player)
+
+
 def _action(ctx, step):
     actor = ctx.clients[step['actor']]
     verb, count = step['verb'], step['count']
+    if verb == 'concurrent':
+        _concurrent_chest(ctx)
+        return
     position = (32 + step['target'] % 4, 80, 34 + step['target'] // 4 % 3)
     actor.teleport_to(position[0] + .5, 80, position[2] - 1.5)
     if verb in {'place', 'break'}:

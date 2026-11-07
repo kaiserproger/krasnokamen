@@ -100,7 +100,7 @@ class RandomMatrixTests(unittest.TestCase):
         first = player_scenario(101, 100, 4)
         self.assertEqual(first, player_scenario(101, 100, 4))
         self.assertNotEqual(first['actions'], player_scenario(102, 100, 4)['actions'])
-        self.assertEqual(set(PLAYER_ACTIONS), {a['verb'] for a in first['actions']})
+        self.assertEqual(set(PLAYER_ACTIONS) | {'concurrent'}, {a['verb'] for a in first['actions']})
         self.assertTrue(all(a['actor'] < 3 for a in first['actions']))
         self.assertTrue(set(a['verb'] for a in player_scenario(101, 100, 4, differential=True)['actions'])
                         <= set(DETERMINISTIC_ACTIONS))

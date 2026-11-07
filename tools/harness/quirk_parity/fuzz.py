@@ -29,6 +29,7 @@ def player_scenario(seed: int, steps: int = 20, bots: int = 3, *,
         raise ValueError("bots must be in 2..8, including the independent observer")
     rng = random.Random(seed)
     choices = DETERMINISTIC_ACTIONS if differential else PLAYER_ACTIONS
+    choices = choices + (("concurrent",) if not differential and bots >= 3 else ())
     actions = [{"verb": rng.choice(choices), "actor": rng.randrange(bots - 1),
                 "count": rng.randrange(1, 9), "target": index}
                for index in range(steps)]
