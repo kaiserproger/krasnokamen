@@ -1869,15 +1869,16 @@ fn sniffer_eggs_hatch_into_baby_sniffers() {
     let (mut state, _) = setup();
     let egg = block(&state, "sniffer_egg", &[("hatch", "0")]);
     put(&mut state, 3, Y + 1, -2, egg);
-    crate::eggs::changed(
-        &mut state,
-        crate::boundary::BlockPos {
-            x: 3,
-            y: Y + 1,
-            z: -2,
-        },
-    );
-    for _ in 0..30_000 {
+    let pos = crate::boundary::BlockPos {
+        x: 3,
+        y: Y + 1,
+        z: -2,
+    };
+    crate::eggs::changed(&mut state, pos);
+    let end = state.tick + 30_000;
+    for _ in 0..3 {
+        let due = crate::tick_tests::warp_to_block_tick(&mut state, pos);
+        assert!(due < end, "sniffer egg deadline exceeded the original limit");
         run(&mut state, 1);
         let babies = state
             .entities
