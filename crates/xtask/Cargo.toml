@@ -8,7 +8,10 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+# Line numbers of `#[cfg(test)]` items need span locations outside a proc macro.
+proc-macro2 = { version = "1", features = ["span-locations"] }
 serde_json = { workspace = true }
+syn = { version = "2", features = ["full", "visit"] }
 
 [lints]
 workspace = true
