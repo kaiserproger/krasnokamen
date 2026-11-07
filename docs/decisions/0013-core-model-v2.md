@@ -53,7 +53,11 @@ nor reordered. A dead journal stops the core. Reliable per-player results are
 ordered and bounded; exhaustion disconnects rather than silently discarding
 results. Bulk producers such as the scoreboard join snapshot and one scoreboard
 publication send one ordered batch per connection, and the edge queues its
-frames as one item, so a large scoreboard does not hit the bound. World fanout
+frames as one item, so a large scoreboard does not hit the bound. Chat and
+system-message lines are bounded at their source (the sender's spam budget, the
+command sequence budget), so a connection's trailing run of them compacts into
+one `TextBurst` entry at the cap instead of disconnecting a recipient, and the
+edge queues the burst's frames as one item. World fanout
 may reconcile to a newer snapshot. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
@@ -67,7 +71,15 @@ unflushed tail consistently. Some non-player motion is checkpoint-only.
 Checkpoints require durable WAL coverage before the atomic database commit;
 only a committed checkpoint permits pruning. Corrupt, incomplete, inconsistent
 or unsupported required state refuses startup, rather than silently losing
-custody. The complete framing, first-start, lease and backup contract is in
+custody, except a quarantined chunk (never loaded or rewritten, stored record
+byte-identical): one without unsaved state is skipped and the other chunks keep
+checkpointing (only its chunk-local scheduled-tick projection is skipped and
+counted; the manifest scheduler images keep the queues), one with unsaved
+state (block writes, container records and removal marks) declines the
+checkpoint (WAL retained), because committing the rest of the world without
+those edits could duplicate custody. Each checkpoint logs the quarantined chunks with their counts. The
+complete framing, first-start,
+lease and backup contract is in
 [persistence](../architecture/persistence.md).
 
 ## Plugin admission

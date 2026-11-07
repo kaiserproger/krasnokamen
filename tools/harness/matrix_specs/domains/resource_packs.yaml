@@ -1,0 +1,166 @@
+kind: adapter-source-index
+not_a_runner_or_dsl: true
+domain: resource_packs
+vanilla_version: 26.1.2
+adapter_module: tools.harness.matrix_domains.resource_packs
+shared_interface: tools.harness.matrix_api.Adapter
+source_checkout: /run/media/kaiserroman/games/solaris-work/wt/deploy-final
+ports:
+- 26520
+- 26539
+sources:
+- https://minecraft.wiki/w/Server.properties#resource-pack-required
+- /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-edge/src/resource_pack.rs:84-148
+synchronization: received state / console response / dashboard tick counter; no sleeps
+subjects:
+- subject: resource_packs.pack_accept
+  matrix_ids:
+  - pw:resource_packs.pack_accept/vanilla_java_26_1_2/creative/overworld/easy/N8/reconnect_mid_action/crash_kill9_wal_replay/op_4
+  - pw:resource_packs.pack_accept/forge_solaris_loader/survival/the_end/hard/2/slow_reader_backpressure/steady/op_4
+  preconditions:
+    setup_callable: resource_packs.ADAPTERS['resource_packs.pack_accept'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: resource_packs.pack_accept
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:19-25
+    calls:
+    - p.rich_action(ctx, 'resource_asset_marker')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'download SHA1', receipt['download_sha1'], configured['sha1'])
+    - p.check(ctx, 'terminal status', receipt['status'], 'successfully_loaded')
+    - p.check(ctx, 'client pack active', receipt['active'], True)
+    - p.check(ctx, 'play reached', p.observe(ctx, 'connection.phase'), 'play')
+    - p.check(ctx, 'pack asset loaded', p.rich_action(ctx, 'resource_asset_marker'), 'matrix-purple-checker')
+    delegated_helpers:
+    - negotiate(ctx)
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: pack downloaded/loaded; play continues'
+- subject: resource_packs.pack_decline_optional
+  matrix_ids:
+  - pw:resource_packs.pack_decline_optional/native_windows/adventure/the_nether/normal/1/slow_reader_backpressure/clean_restart_mid_action/op_3
+  - pw:resource_packs.pack_decline_optional/fabric_distant_horizons/survival/the_end/normal/2/normal/crash_kill9_wal_replay/op_1
+  preconditions:
+    setup_callable: resource_packs.ADAPTERS['resource_packs.pack_decline_optional'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: resource_packs.pack_decline_optional
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:28-36
+    calls:
+    - p.client(ctx).chat('matrix-pack-optional')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'declined', receipt['status'], 'declined')
+    - p.check(ctx, 'not active', receipt['active'], False)
+    - p.check(ctx, 'play continues', p.observe(ctx, 'connection.phase'), 'play')
+    - p.test(ctx, 'gameplay after decline', True, 'received own server chat')
+    delegated_helpers:
+    - negotiate(ctx, policy='decline')
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: plays without pack'
+- subject: resource_packs.pack_decline_required
+  matrix_ids:
+  - pw:resource_packs.pack_decline_required/neoforge_solaris_loader/spectator/the_end/hard/2/normal/hot_backup_during_action/non_op_0
+  - pw:resource_packs.pack_decline_required/native_linux/spectator/the_nether/normal/2/slow_reader_backpressure/pause_when_empty_resume/op_2
+  preconditions:
+    setup_callable: resource_packs.ADAPTERS['resource_packs.pack_decline_required'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: resource_packs.pack_decline_required
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:39-44
+    calls: []
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'declined', receipt['status'], 'declined')
+    - p.check(ctx, 'required decline disconnected', p.observe(ctx, 'connection.phase'), 'disconnected')
+    - p.test(ctx, 'required decline reason', 'required resource pack' in reason.lower(), reason)
+    delegated_helpers:
+    - negotiate(ctx, required=True, policy='decline')
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: disconnected: required resource pack declined'
+- subject: resource_packs.pack_download_fail
+  matrix_ids:
+  - pw:resource_packs.pack_download_fail/protocol_bot/survival/overworld/peaceful/1/malformed_or_stale_packet/save_all_checkpoint/op_2
+  - pw:resource_packs.pack_download_fail/fabric_svc/spectator/the_nether/peaceful/N8/normal/hot_backup_during_action/op_2
+  preconditions:
+    setup_callable: resource_packs.ADAPTERS['resource_packs.pack_download_fail'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: resource_packs.pack_download_fail
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:47-54
+    calls: []
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.test(ctx, broken + ' load rejected', receipt['status'] in ('failed_download', 'failed_reload'), receipt)
+    - p.check(ctx, broken + ' active', receipt['active'], False)
+    - "p.check(ctx, broken + ' session policy', p.observe(ctx, 'connection.phase'),\n                    'disconnected'\
+      \ if required else 'play')"
+    delegated_helpers:
+    - negotiate(ctx, required=required, broken=broken)
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: failed status; required -> disconnect'
+- subject: resource_packs.pack_prompt_text
+  matrix_ids:
+  - pw:resource_packs.pack_prompt_text/fabric_solaris_loader/spectator/the_end/peaceful/N8/duplicate_login/pause_when_empty_resume/op_1
+  preconditions:
+    setup_callable: resource_packs.ADAPTERS['resource_packs.pack_prompt_text'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: resource_packs.pack_prompt_text
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:57-63
+    calls:
+    - p.rich_action(ctx, 'read_resource_pack_prompt')
+    - p.rich_action(ctx, 'resource_pack_choose', 'decline')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'prompt component', receipt['prompt'], component)
+    - p.check(ctx, 'rendered prompt text', p.rich_action(ctx, 'read_resource_pack_prompt'), 'Matrix pack consent')
+    - p.check(ctx, 'optional prompt can decline', p.observe(ctx, 'connection.phase'), 'play')
+    delegated_helpers:
+    - negotiate(ctx, policy='prompt', prompt=component)
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: prompt displayed'
+receipt_policy: Index of shared Python Adapter callables, not an interpreter. Capability requests are not live pass
+  evidence; consult canonical receipts and ledger.
+helper_sources:
+  negotiate: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/resource_packs.py:9-16
+adapter_revision: 794c8ff5

@@ -316,6 +316,8 @@ pub(crate) fn output(state: &ConsoleState, changes: &[PlayerChange]) {
                 | mc_core::boundary::TitleChange::Subtitle(content)
                 | mc_core::boundary::TitleChange::ActionBar(content),
             ) => state.feedback(&component_text(content, &state.language)),
+            // The reliable outbox folds a long run of text lines into one burst.
+            PlayerChange::TextBurst { lines } => output(state, lines),
             _ => {}
         }
     }

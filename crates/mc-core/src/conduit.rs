@@ -240,8 +240,20 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
         .collect();
     positions.sort_unstable_by_key(|pos| (pos.x, pos.y, pos.z));
     for pos in positions {
+        if !state
+            .world
+            .has_chunk(pos.x.div_euclid(16), pos.z.div_euclid(16))
+        {
+            continue;
+        }
+        let old = match image(state, pos) {
+            Ok(old) => old,
+            Err(error) => {
+                crate::tick::refuse_record(state, pos, error);
+                continue;
+            }
+        };
         let size = frame_size(state, pos);
-        let old = image(state, pos).unwrap_or_else(|err| panic!("{err}"));
         if size >= 16 {
             let radius = (size / 7 * 16) as f64;
             for index in 0..state.entities.len() {

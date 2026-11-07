@@ -169,9 +169,8 @@ Keep them separate in every report:
   light arrays or other internal state does not prove rendering.
   `present_requested` does not prove physical monitor scanout.
 - **Java client:** proves vanilla-client compatibility for the path it ran; it is
-  diagnostic for native-client rendering claims. A client older than the server's
-  protocol (the Loader's `minecraftVersion`) connects through the retained legacy
-  cache.
+  diagnostic for native-client rendering claims. Each retained release uses
+  its own automatically imported endpoint cache and adjacent translation route.
 
 Native `minecraft_click_container_slot` bypasses hit-testing; GUI-scale or layout
 proofs need a physical XTest click (pattern: `_scroll` in

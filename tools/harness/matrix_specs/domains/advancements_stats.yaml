@@ -1,0 +1,222 @@
+kind: adapter-source-index
+not_a_runner_or_dsl: true
+domain: advancements_stats
+vanilla_version: 26.1.2
+adapter_module: tools.harness.matrix_domains.advancements_stats
+shared_interface: tools.harness.matrix_api.Adapter
+source_checkout: /run/media/kaiserroman/games/solaris-work/wt/deploy-final
+ports:
+- 26520
+- 26539
+sources:
+- https://minecraft.wiki/w/Advancement
+- https://minecraft.wiki/w/Statistics
+- /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/advancement/adventure/adventuring_time.json
+synchronization: received state / console response / dashboard tick counter; no sleeps
+subjects:
+- subject: advancements_stats.advancement_location
+  matrix_ids:
+  - pw:advancements_stats.advancement_location/native_windows/creative/the_nether/normal/1/malformed_or_stale_packet/pause_when_empty_resume/op_4
+  - pw:advancements_stats.advancement_location/fabric_solaris_loader/creative/the_end/normal/2/normal/crash_kill9_wal_replay/op_2
+  preconditions:
+    setup_callable: advancements_stats.ADAPTERS['advancements_stats.advancement_location'].setup
+    fixture_calls:
+    - p.admin(ctx,f'advancement revoke {p.client(ctx).name} only minecraft:nether/find_fortress')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: advancements_stats.advancement_location
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:93-108
+    calls:
+    - p.rich_action(ctx,'travel_dimension','minecraft:the_nether')
+    - p.rich_action(ctx,'locate_structure','minecraft:fortress')
+    - p.client(ctx).teleport_to(*result['interior'])
+    - p.rich_action(ctx,'travel_dimension','minecraft:overworld')
+    - p.rich_action(ctx,'locate_biome','minecraft:deep_dark')
+    - p.client(ctx).teleport_to(*result['position'])
+    authoritative_commands_in_action_order:
+    - p.admin(ctx,f'advancement revoke {p.client(ctx).name} only minecraft:nether/find_fortress')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - "p.check(ctx, 'deep_dark criterion', p.observe(ctx, 'advancements.progress')[\n        'minecraft:adventure/adventuring_time']['criteria']['minecraft:deep_dark'],\
+      \ True)"
+    delegated_helpers:
+    - granted(ctx,'minecraft:nether/find_fortress')
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: location triggers fire'
+- subject: advancements_stats.advancement_tabs_seen
+  matrix_ids:
+  - pw:advancements_stats.advancement_tabs_seen/protocol_bot/survival/the_end/easy/2/reconnect_mid_action/save_all_checkpoint/op_2
+  - pw:advancements_stats.advancement_tabs_seen/native_linux/creative/the_nether/hard/2/duplicate_login/clean_restart_mid_action/op_3
+  preconditions:
+    setup_callable: advancements_stats.ADAPTERS['advancements_stats.advancement_tabs_seen'].setup
+    fixture_calls:
+    - p.admin(ctx,f'advancement grant {p.client(ctx).name} only minecraft:story/root')
+    - p.admin(ctx,f'advancement grant {p.client(ctx).name} only minecraft:nether/root')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: advancements_stats.advancement_tabs_seen
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:47-56
+    calls:
+    - p.rich_action(ctx,'open_advancements',tab)
+    - p.rich_action(ctx,'close_container')
+    - p.ticks(ctx,2)
+    authoritative_commands_in_action_order:
+    - p.admin(ctx,f'advancement grant {p.client(ctx).name} only minecraft:story/root')
+    - p.admin(ctx,f'advancement grant {p.client(ctx).name} only minecraft:nether/root')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx,'selected advancement tab',p.observe(ctx,'advancements.selected_tab'),tab)
+    - p.check(ctx,'opening tabs emits no duplicate toasts',len(p.observe(ctx,'advancements.toasts')),before)
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: SeenAdvancements handled; no toast flood'
+- subject: advancements_stats.earn_advancements
+  matrix_ids:
+  - pw:advancements_stats.earn_advancements/forge_solaris_loader/adventure/overworld/hard/N8/normal/clean_restart_mid_action/op_1
+  - pw:advancements_stats.earn_advancements/vanilla_java_26_1_2/adventure/overworld/easy/1/duplicate_login/crash_kill9_wal_replay/op_3
+  preconditions:
+    setup_callable: advancements_stats.ADAPTERS['advancements_stats.earn_advancements'].setup
+    fixture_calls:
+    - p.arena(ctx)
+    - p.admin(ctx,f'advancement revoke {p.client(ctx).name} everything')
+    - p.admin(ctx,f'give {p.client(ctx).name} minecraft:wooden_pickaxe 1')
+    - p.admin(ctx,f'setblock {x+2} {y} {z} minecraft:stone')
+    - p.admin(ctx,f'summon minecraft:zombie {x+2} {y} {z}')
+    - p.admin(ctx,f'summon minecraft:wolf {x+2} {y} {z}')
+    - p.admin(ctx,f'give {p.client(ctx).name} minecraft:bone 64')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: advancements_stats.earn_advancements
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:15-44
+    calls:
+    - p.rich_action(ctx,'select_inventory_item','minecraft:wooden_pickaxe')
+    - p.rich_action(ctx,'break_block',(x+2,y,z))
+    - p.client(ctx).teleport_to(x+2,y,z)
+    - p.rich_action(ctx,'travel_dimension','minecraft:the_nether')
+    - p.rich_action(ctx,'travel_dimension','minecraft:the_end')
+    - p.rich_action(ctx,'travel_dimension','minecraft:overworld')
+    - p.rich_action(ctx,'find_entity','minecraft:zombie')
+    - p.rich_action(ctx,'attack_until_dead',entity)
+    - p.rich_action(ctx,'select_inventory_item','minecraft:bone')
+    - p.rich_action(ctx,'find_entity','minecraft:wolf')
+    - p.rich_action(ctx,'interact_entity',wolf)
+    authoritative_commands_in_action_order:
+    - p.admin(ctx,f'advancement revoke {p.client(ctx).name} everything')
+    - p.admin(ctx,f'give {p.client(ctx).name} minecraft:wooden_pickaxe 1')
+    - p.admin(ctx,f'setblock {x+2} {y} {z} minecraft:stone')
+    - p.admin(ctx,f'summon minecraft:zombie {x+2} {y} {z}')
+    - p.admin(ctx,f'summon minecraft:wolf {x+2} {y} {z}')
+    - p.admin(ctx,f'give {p.client(ctx).name} minecraft:bone 64')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.test(ctx,'toast delivered',len(p.observe(ctx,'advancements.toasts'))>=1,p.observe(ctx,'advancements.toasts'))
+    - p.test(ctx,'parent tree exists','minecraft:story/root' in p.observe(ctx,'advancements.definitions'),p.observe(ctx,'advancements.definitions'))
+    delegated_helpers:
+    - granted(ctx,'minecraft:story/mine_stone')
+    - granted(ctx,'minecraft:nether/root')
+    - granted(ctx,'minecraft:end/root')
+    - granted(ctx,'minecraft:adventure/kill_a_mob')
+    - granted(ctx,'minecraft:husbandry/tame_an_animal')
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: advancement granted with toast; parent tree shown'
+- subject: advancements_stats.recipe_unlocks
+  matrix_ids:
+  - pw:advancements_stats.recipe_unlocks/fabric_distant_horizons/spectator/overworld/peaceful/N8/slow_reader_backpressure/steady/non_op_0
+  - pw:advancements_stats.recipe_unlocks/fabric_svc/adventure/overworld/hard/1/duplicate_login/pause_when_empty_resume/op_2
+  preconditions:
+    setup_callable: advancements_stats.ADAPTERS['advancements_stats.recipe_unlocks'].setup
+    fixture_calls:
+    - p.arena(ctx)
+    - p.admin(ctx,f'clear {p.client(ctx).name}')
+    - p.admin(ctx,f'setblock {x+2} {y} {z} minecraft:oak_log')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: advancements_stats.recipe_unlocks
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:59-69
+    calls:
+    - p.rich_action(ctx,'break_block',(x+2,y,z))
+    - p.client(ctx).teleport_to(x+2,y,z)
+    - p.rich_action(ctx,'read_recipe_book')
+    - p.rich_action(ctx,'place_recipe','minecraft:oak_planks')
+    authoritative_commands_in_action_order:
+    - p.admin(ctx,f'clear {p.client(ctx).name}')
+    - p.admin(ctx,f'setblock {x+2} {y} {z} minecraft:oak_log')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.test(ctx,'oak planks recipe unlocked','minecraft:oak_planks' in recipes,recipes)
+    - p.check(ctx,'recipe result',p.observe(ctx,'menu.result.item_id'),'minecraft:oak_planks')
+    - p.check(ctx,'recipe result count',p.observe(ctx,'menu.result.count'),4)
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: recipe book entries added'
+- subject: advancements_stats.statistics_request
+  matrix_ids:
+  - pw:advancements_stats.statistics_request/neoforge_solaris_loader/creative/the_nether/normal/1/duplicate_login/hot_backup_during_action/op_3
+  preconditions:
+    setup_callable: advancements_stats.ADAPTERS['advancements_stats.statistics_request'].setup
+    fixture_calls:
+    - p.arena(ctx)
+    - p.admin(ctx,f'give {p.client(ctx).name} minecraft:iron_pickaxe 1')
+    - p.admin(ctx,f'setblock {x+2} {y} {z} minecraft:stone')
+    - p.admin(ctx,f'summon minecraft:pig {x+2} {y} {z}')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: advancements_stats.statistics_request
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:72-90
+    calls:
+    - p.rich_action(ctx,'request_statistics')
+    - p.rich_action(ctx,'select_inventory_item','minecraft:iron_pickaxe')
+    - p.rich_action(ctx,'break_block',(x+2,y,z))
+    - p.rich_action(ctx,'move',forward=1,ticks=20)
+    - p.rich_action(ctx,'attack_until_dead',p.rich_action(ctx,'find_entity','minecraft:pig'))
+    - p.rich_action(ctx,'find_entity','minecraft:pig')
+    - p.rich_action(ctx,'request_statistics')
+    - p.rich_action(ctx,'request_statistics')
+    authoritative_commands_in_action_order:
+    - p.admin(ctx,f'give {p.client(ctx).name} minecraft:iron_pickaxe 1')
+    - p.admin(ctx,f'setblock {x+2} {y} {z} minecraft:stone')
+    - p.admin(ctx,f'summon minecraft:pig {x+2} {y} {z}')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx,key+' delta',after.get(key,0)-before.get(key,0),1)
+    - p.test(ctx,'walk counter advances',after.get(key,0)>before.get(key,0),{'before':before,'after':after})
+    - p.check(ctx,'requests do not increment counters',p.observe(ctx,'statistics'),after)
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  implementation_class: real_but_partial
+  subject_oracle_text: 'reference: authoritative counters (blocks mined, distance, kills) match actions'
+  remaining_oracle_clause:
+    description: Distance counter only checks increase, not exact action-derived displacement.
+    missing_capabilities:
+    - client:move_physics
+    - snapshot:movement_path
+receipt_policy: Index of shared Python Adapter callables, not an interpreter. Capability requests are not live pass
+  evidence; consult canonical receipts and ledger.
+helper_sources:
+  granted: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/advancements_stats.py:9-12
+adapter_revision: 794c8ff5

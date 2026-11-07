@@ -198,10 +198,7 @@ pub(crate) fn decode_chunk(
                     pos.z.rem_euclid(16) as u8,
                 )
                 .and_then(|id| registry.blocks.by_id(id))
-                .is_none_or(|b| {
-                    !is_shelf(b.block.id.path())
-                        && !crate::chiseled_shelf::is_chiseled(b.block.id.path())
-                })
+                .is_none_or(|b| !is_shelf(b.block.id.path()))
         {
             continue;
         }

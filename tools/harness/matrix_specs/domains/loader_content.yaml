@@ -1,0 +1,265 @@
+kind: adapter-source-index
+not_a_runner_or_dsl: true
+domain: loader_content
+vanilla_version: 26.1.2
+adapter_module: tools.harness.matrix_domains.loader_content
+shared_interface: tools.harness.matrix_api.Adapter
+source_checkout: /run/media/kaiserroman/games/solaris-work/wt/deploy-final
+ports:
+- 26520
+- 26539
+sources:
+- /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-edge/src/plugin_loader.rs:44-105
+- /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/computer/README.md:3-19
+- /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/chisel/plugin.toml:10-19
+- /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-edge/src/configuration.rs:95-97,212-216
+synchronization: received state / console response / dashboard tick counter; no sleeps
+subjects:
+- subject: loader_content.bundle_handshake_cache
+  matrix_ids:
+  - pw:loader_content.bundle_handshake_cache/forge_solaris_loader/spectator/the_end/normal/1/duplicate_login/crash_kill9_wal_replay/op_1
+  - pw:loader_content.bundle_handshake_cache/protocol_bot/adventure/the_end/hard/N8/reconnect_mid_action/save_all_checkpoint/op_1
+  preconditions:
+    setup_callable: loader_content.ADAPTERS['loader_content.bundle_handshake_cache'].setup
+    fixture_calls:
+    - p.fixture(ctx, 'loader_bundle', package='chisel', cache='empty')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: loader_content.bundle_handshake_cache
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:8-20
+    calls:
+    - p.client(ctx).reconnect()
+    - p.client(ctx).disconnect()
+    - p.client(ctx).reconnect()
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'manifest package', first['package'], 'chisel')
+    - p.check(ctx, 'verified bundle', first['sha256'], bundle['sha256'])
+    - p.check(ctx, 'first join download', first['download_count'], 1)
+    - p.check(ctx, 'cache identity', second['sha256'], bundle['sha256'])
+    - p.check(ctx, 'cache hit no redownload', second['download_count'], 0)
+    - p.check(ctx, 'cached pack activated', second['active'], True)
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: manifest -> download -> sha256 verify -> cache hit on rejoin'
+- subject: loader_content.custom_items_render
+  matrix_ids:
+  - pw:loader_content.custom_items_render/native_windows/adventure/the_nether/peaceful/N8/normal/steady/non_op_0
+  preconditions:
+    setup_callable: loader_content.ADAPTERS['loader_content.custom_items_render'].setup
+    fixture_calls:
+    - p.fixture(ctx, 'loader_bundle', package='chisel')
+    - p.admin(ctx, f'give {p.client(ctx).name} chisel:chisel 1')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: loader_content.custom_items_render
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:72-79
+    calls:
+    - p.rich_action(ctx, 'item_model', 'chisel:chisel')
+    - p.rich_action(ctx, 'select_inventory_item', 'chisel:chisel')
+    - p.rich_action(ctx, 'held_item_model')
+    - p.client(ctx).drop()
+    - p.rich_action(ctx, 'dropped_item_model', 'chisel:chisel')
+    authoritative_commands_in_action_order:
+    - p.admin(ctx, f'give {p.client(ctx).name} chisel:chisel 1')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'custom model rendered', p.rich_action(ctx, 'item_model', 'chisel:chisel'), 'chisel:chisel')
+    - p.check(ctx, 'held custom model', p.rich_action(ctx, 'held_item_model'), 'chisel:chisel')
+    - p.check(ctx, 'world custom model', p.rich_action(ctx, 'dropped_item_model', 'chisel:chisel'), 'chisel:chisel')
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: real_but_partial
+  subject_oracle_text: 'reference: custom model/texture renders; the minecraft:stick carrier is never visible to
+    a consenting Solaris client (the vanilla stick fallback is checked in plugins.chisel_loader_bundle)'
+  remaining_oracle_clause:
+    description: Texture/no-carrier observations omitted.
+    missing_capabilities:
+    - client:item_texture
+- subject: loader_content.loader_view_request
+  matrix_ids:
+  - pw:loader_content.loader_view_request/neoforge_solaris_loader/creative/overworld/easy/2/reconnect_mid_action/hot_backup_during_action/op_4
+  preconditions:
+    setup_callable: loader_content.ADAPTERS['loader_content.loader_view_request'].setup
+    fixture_calls:
+    - p.fixture(ctx, 'loader_view', package='solaris-towns')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: loader_content.loader_view_request
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:65-69
+    calls:
+    - p.rich_action(ctx, 'loader_view_request', view['id'])
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'view identity', p.observe(ctx, 'loader.view.id'), view['id'])
+    - p.check(ctx, 'view authoritative data', p.observe(ctx, 'loader.view.data'), view['expected_data'])
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: server-declared view opens with plugin data'
+- subject: loader_content.optional_bundle_vanilla
+  matrix_ids:
+  - pw:loader_content.optional_bundle_vanilla/vanilla_java_26_1_2/creative/the_end/normal/N8/normal/clean_restart_mid_action/non_op_0
+  preconditions:
+    setup_callable: loader_content.ADAPTERS['loader_content.optional_bundle_vanilla'].setup
+    fixture_calls:
+    - deploy(ctx, 'chisel', 'computer')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: loader_content.optional_bundle_vanilla
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:23-28
+    calls:
+    - p.rich_action(ctx, 'reconnect_profile', 'vanilla_26_1_2')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'optional bundle permits vanilla', p.observe(ctx, 'connection.phase'), 'play')
+    - p.check(ctx, 'vanilla uses no loader content', p.observe(ctx, 'loader.active_packages'), [])
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: real_but_partial
+  subject_oracle_text: 'reference: configuration completes, no solaris:loader/manifest is sent, and the client plays
+    without Loader content (edge configuration_tests vanilla_client_completes_configuration_with_only_optional_bundles)'
+  remaining_oracle_clause:
+    description: No-manifest observation omitted.
+    missing_capabilities:
+    - snapshot:configuration_payloads
+- subject: loader_content.permission_prompt_cache
+  matrix_ids:
+  - pw:loader_content.permission_prompt_cache/fabric_solaris_loader/survival/overworld/hard/N8/slow_reader_backpressure/clean_restart_mid_action/op_3
+  preconditions:
+    setup_callable: loader_content.ADAPTERS['loader_content.permission_prompt_cache'].setup
+    fixture_calls:
+    - p.fixture(ctx, 'loader_bundle', package='chisel', required=False, cache='empty')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: loader_content.permission_prompt_cache
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:39-62
+    calls:
+    - 'p.rich_action(ctx, ''loader_permission_policy'', {''register_items'': False, ''load_assets'': False})'
+    - p.client(ctx).disconnect()
+    - p.client(ctx).reconnect()
+    - p.client(ctx).disconnect()
+    - p.client(ctx).reconnect()
+    - p.rich_action(ctx, 'loader_reset_permission_decision')
+    - 'p.rich_action(ctx, ''loader_permission_policy'', {''register_items'': True, ''load_assets'': True})'
+    - p.client(ctx).disconnect()
+    - p.client(ctx).reconnect()
+    - p.client(ctx).disconnect()
+    - p.client(ctx).reconnect()
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'denied optional content inactive', p.observe(ctx, 'loader.active_packages'), [])
+    - p.check(ctx, 'Loader denial disconnects', p.observe(ctx, 'connection.phase'), 'disconnected')
+    - p.test(ctx, 'stored denial reason', 'permissions were denied for' in reason, reason)
+    - p.check(ctx, 'denial cached', p.observe(ctx, 'loader.prompt_count'), 0)
+    - p.check(ctx, 'cached denial still rejects', p.observe(ctx, 'connection.phase'), 'disconnected')
+    - p.test(ctx, 'allowed content active', 'chisel' in p.observe(ctx, 'loader.active_packages'), p.observe(ctx,
+      'loader.active_packages'))
+    - p.check(ctx, 'allowed bundle verified', p.observe(ctx, 'loader.bundle.sha256'), bundle['sha256'])
+    - p.check(ctx, 'allowed first download', p.observe(ctx, 'loader.bundle.download_count'), 1)
+    - p.check(ctx, 'permissions cached', p.observe(ctx, 'loader.prompt_count'), 0)
+    - p.check(ctx, 'cached allowed bundle not downloaded', p.observe(ctx, 'loader.bundle.download_count'), 0)
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: deny -> the Loader disconnects itself with ''permissions were denied for <server>''
+    (loader-fabric handleManifest -> disconnect; applies to optional bundles too once the client said hello) and
+    stores the denial, so the rejoin disconnects without a new prompt; allow -> bundle downloaded/verified and the
+    decision cached, rejoin without prompt (loader-core LoaderPermissionController)'
+- subject: loader_content.required_bundle_vanilla_refused
+  matrix_ids:
+  - bl:loader_content.required_bundle_vanilla_refused/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+    setup_callable: loader_content.ADAPTERS['loader_content.required_bundle_vanilla_refused'].setup
+    fixture_calls:
+    - p.fixture(ctx, 'loader_bundle', package='chisel', required=True)
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: loader_content.required_bundle_vanilla_refused
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:31-36
+    calls:
+    - p.rich_action(ctx, 'reconnect_profile', 'vanilla_26_1_2')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'required bundle denies vanilla', p.observe(ctx, 'connection.phase'), 'disconnected')
+    - p.test(ctx, 'actionable Loader reason', 'Solaris Loader' in reason, reason)
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: refused during Configuration with a reason naming the Loader requirement; no
+    play (edge server.rs: any required bundle forces Loader negotiation on every client)'
+- subject: loader_content.stale_bundle_update
+  matrix_ids:
+  - pw:loader_content.stale_bundle_update/native_linux/spectator/the_nether/hard/2/malformed_or_stale_packet/pause_when_empty_resume/op_2
+  preconditions:
+    setup_callable: loader_content.ADAPTERS['loader_content.stale_bundle_update'].setup
+    fixture_calls:
+    - p.fixture(ctx, 'loader_bundle', package='chisel', revision='A')
+    - p.fixture(ctx, 'loader_bundle', package='chisel', revision='B')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: loader_content.stale_bundle_update
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:82-92
+    calls:
+    - p.client(ctx).reconnect()
+    - p.client(ctx).disconnect()
+    - p.client(ctx).reconnect()
+    - p.rich_action(ctx, 'loader_asset_marker')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'revision A', p.observe(ctx, 'loader.bundle.sha256'), first['sha256'])
+    - p.test(ctx, 'fixture really changed', first['sha256'] != second['sha256'], [first, second])
+    - p.check(ctx, 'revision B verified', p.observe(ctx, 'loader.bundle.sha256'), second['sha256'])
+    - p.check(ctx, 'revision B downloaded', p.observe(ctx, 'loader.bundle.download_count'), 1)
+    - p.check(ctx, 'revision B rendered', p.rich_action(ctx, 'loader_asset_marker'), second['marker'])
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: new bundle fetched; stale not used'
+receipt_policy: Index of shared Python Adapter callables, not an interpreter. Capability requests are not live pass
+  evidence; consult canonical receipts and ledger.
+helper_sources: {}
+bundle_policy: The deployed chisel and computer bundles are optional. The required-bundle negative case changes
+  only an isolated fixture copy. A consenting Loader receives custom assets; vanilla joins and sees the chisel stick
+  carrier. Stale chisel README refusal text is not authoritative.
+adapter_revision: 794c8ff5

@@ -369,6 +369,30 @@ fn chunk_from_nbt_with_items_impl(
             let by = get_int(cmp, "y")?;
             let bz = get_int(cmp, "z")?;
             let block_entity_id = get_string(cmp, "id").ok();
+            // The block owns its record: crafters, shelves, shulker boxes and
+            // conduits are validated by the block they belong to, never by an
+            // id the record merely claims.
+            if let Some(kind) = chunk
+                .get_block(bx.rem_euclid(16) as u8, by, bz.rem_euclid(16) as u8)
+                .and_then(|id| registry.by_id(id))
+                .and_then(|state| {
+                    mc_data::block_entity_kinds::BlockEntityKind::for_block(state.block.id.path())
+                })
+                && matches!(
+                    kind,
+                    mc_data::block_entity_kinds::BlockEntityKind::Crafter
+                        | mc_data::block_entity_kinds::BlockEntityKind::Shelf
+                        | mc_data::block_entity_kinds::BlockEntityKind::ShulkerBox
+                        | mc_data::block_entity_kinds::BlockEntityKind::Conduit
+                )
+                && block_entity_id.map(String::as_str) != Some(kind.vanilla_id())
+            {
+                return Err(ChunkNbtError::InvalidBlockEntity(format!(
+                    "block entity at ({bx},{by},{bz}): record id {} does not belong to its block (expected {})",
+                    block_entity_id.map_or("<missing>", String::as_str),
+                    kind.vanilla_id(),
+                )));
+            }
             if block_entity_id.is_some_and(|id| id == "minecraft:conduit") {
                 mc_data::conduit_nbt::target(cmp).map_err(ChunkNbtError::InvalidBlockEntity)?;
             }

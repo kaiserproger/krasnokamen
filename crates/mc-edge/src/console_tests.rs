@@ -144,6 +144,29 @@ fn serverops_console_capture_is_bounded_and_cancellation_clears_it() {
     assert!(state.response.lock().is_none());
 }
 
+/// More than `outbox_cap` text lines in one console tick arrive as one compacted
+/// `TextBurst`; the console and RCON reply must still show every line, in order.
+#[test]
+fn console_reply_shows_every_line_of_a_compacted_text_burst() {
+    let state = ConsoleState::default();
+    *state.response.lock() = Some(Ok(String::new()));
+    let mut lines: Vec<_> = (0..600)
+        .map(|i| PlayerChange::Chat {
+            message: format!("line {i:03}"),
+        })
+        .collect();
+    lines.push(PlayerChange::StyledChat {
+        content: mc_nbt::Tag::String("styled tail".into()),
+    });
+    output(&state, &[PlayerChange::TextBurst { lines }]);
+    let reply = state.response.lock().take().unwrap().unwrap();
+    let expected: String = (0..600)
+        .map(|i| format!("line {i:03}\n"))
+        .chain(std::iter::once("styled tail\n".to_owned()))
+        .collect();
+    assert_eq!(reply, expected);
+}
+
 #[tokio::test]
 async fn serverops_console_drain_wait_is_event_driven_and_handles_early_delivery() {
     let state = ConsoleState::default();

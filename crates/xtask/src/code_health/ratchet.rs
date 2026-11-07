@@ -31,7 +31,7 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     cycle_modules: 189,
     vanilla_id_literals: 2_637,
     path_equality: 115,
-    panics: 8,
+    panics: 5,
     merge_block_write_pushes: 17,
 };
 

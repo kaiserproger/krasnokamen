@@ -1,0 +1,234 @@
+verdict: blocked
+phase_1:
+  subjects_specified: 107
+  domains:
+    block_interact: 29
+    block_break: 24
+    block_place: 24
+    special_blocks: 8
+    falling_blocks: 6
+    fire: 5
+    explosions: 11
+  format: Python shared-interface adapters plus YAML source/oracle indexes; YAML is not a second runner/DSL
+  matrix_ids: refrozen content-derived matrix IDs
+  sources: minecraft.wiki URLs plus twelve local pinned 26.1.2 javap evidence files
+phase_2:
+  registered_subjects: 107
+  executed_matrix_cells: 3
+  blocked_matrix_attempts: 2
+  ledger_lines_written: 5
+  gameplay_passes: 3
+  completion:
+    "Not complete across context matrix: mode-specific oracle branches and concurrent/composite actor
+    schedules explicitly block; registration is not coverage."
+base_tree: 1e20dd5f
+worktree: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks
+patch: /run/media/kaiserroman/games/solaris-work/scenarios/domains/DomBlocks.patch
+diff_sha256: 1191c0c3be9452f9c32f9f84fc42de04286e1ea9dede6e595daff62880c98a77
+changed_files:
+  - /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py
+  - /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
+  - /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
+  - /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
+  - /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
+  - /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/falling_blocks.py
+  - /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/fire.py
+  - /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/explosions.py
+  - /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/test_matrix_blocks.py
+  - /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place.py
+  - /run/media/kaiserroman/games/solaris-work/scenarios/domains/block_interact.yaml
+  - /run/media/kaiserroman/games/solaris-work/scenarios/domains/block_break.yaml
+  - /run/media/kaiserroman/games/solaris-work/scenarios/domains/block_place.yaml
+  - /run/media/kaiserroman/games/solaris-work/scenarios/domains/special_blocks.yaml
+  - /run/media/kaiserroman/games/solaris-work/scenarios/domains/falling_blocks.yaml
+  - /run/media/kaiserroman/games/solaris-work/scenarios/domains/fire.yaml
+  - /run/media/kaiserroman/games/solaris-work/scenarios/domains/explosions.yaml
+  - /run/media/kaiserroman/games/solaris-work/scenarios/domains/block_interact-bugs.md
+  - /run/media/kaiserroman/games/solaris-work/scenarios/domains/block_place-bugs.md
+  - /run/media/kaiserroman/games/solaris-work/scenarios/domains/special_blocks-bugs.md
+  - /run/media/kaiserroman/games/solaris-work/scenarios/domains/falling_blocks-bugs.md
+  - /run/media/kaiserroman/games/solaris-work/scenarios/domains/fire-bugs.md
+server_gap:
+  block_interact:
+    - subject: block_interact.axe_strip_scrape_unwax
+      evidence:
+        - "INTERACT-001: received action ACKs followed by three failed authoritative block queries; stripping, scraping
+          and unwaxing live reproduced; see block_interact-bugs.md"
+  block_break: []
+  block_place:
+    - subject: block_place.spawn_protection_radius
+      evidence:
+        - PLACE-001
+  special_blocks:
+    - subject: special_blocks.decorated_pot_chiseled_bookshelf
+      evidence:
+        - SPECIAL-001
+  falling_blocks:
+    - subject: falling_blocks.suspicious_blocks
+      evidence:
+        - FALL-002
+    - subject: falling_blocks.dragon_egg
+      evidence:
+        - FALL-001
+  fire:
+    - subject: fire.eternal_fire
+      evidence:
+        - FIRE-001
+  explosions: []
+findings:
+  - id: INTERACT-001
+    severity: gameplay parity
+    evidence: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomBlocks/20261024T035253-protocol-matrix-741qn8td/protocol-result.json:36-72
+    scenario:
+      Vanilla iron axe acknowledged but oak log not stripped, copper not scraped/unwaxed; all ten plugins;
+      y144 arena. Native block_tools.rs193-210 requires custom_for_stack.
+  - id: DRIVER-ENTITIES
+    severity: historical execution blocker; basic entity observations now implemented
+    evidence: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomBlocks/20261024T040932-protocol-matrix-y4si9xp_/protocol-result.json:55-69
+    scenario:
+      After real component decoder integration, TNT cell advances past inventory and blocks on snapshot:entities;
+      no complete fuse/chain/replay oracle credited. Shared 1e20dd5f now provides real entity fields; this older receipt
+      is not a post-integration result. Entity lifecycle timing remains unavailable.
+  - id: RECEIVED-HEALTH-ANVIL
+    severity: validated observation path
+    evidence: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomBlocks/20261024T042629-protocol-matrix-kco6fqjz/protocol-result.json:61-74
+    scenario:
+      Full live plugin set; falling anvil reduced actual received iron-golem health from 100 to 86 and landed
+      as an anvil/chipped-anvil. Two checks passed; this does not prove all subject contexts.
+missing_query_or_verb_capabilities: &id001
+  - context_oracle:unimplemented_mode
+  - data_get_block
+  - data_get_entity
+  - scenario_concurrent_actor_schedule
+  - server:configure_spawn_protection
+  - server:forceload_fixture_chunk
+  - server:unload_fixture_chunk
+  - snapshot:action_bar
+  - snapshot:block_cracks
+  - snapshot:block_light
+  - snapshot:block_region
+  - snapshot:block_transitions
+  - snapshot:entity_lifecycle
+  - snapshot:explosion_impulses
+  - snapshot:explosions
+  - snapshot:map_markers
+  - snapshot:mining_events
+  - snapshot:predicted_blocks
+  - snapshot:screen
+  - snapshot:block_ack_sequence (Java/native absent)
+  - client:mining_tool_speed_hold
+validation:
+  status: pass
+  scope: static specification index and helper unit tests only; not full scenario coverage
+  domains: 7
+  matrix_subjects: 107
+  specified_subjects: 107
+  adapter_paths_exist: true
+  shared_interface_revision: 1e20dd5f
+  missing_capabilities_or_adapter_coverage: *id001
+  unit_tests:
+    command: python3 -m unittest tools.harness.test_matrix_blocks -v
+    status: pass
+    tests: 24
+  strict_clippy: "not applicable: no Rust changes"
+  server_sha256: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+  live_gameplay:
+    Official full-set repeater/comparator/daylight p1 PASS (8 checks), N2 PASS (8 authoritative +8
+    received observer checks), and anvil PASS (2 checks, actual received golem health 100 to 86). Three cells ledger
+    recorded. Two historical TNT blocked attempts recorded; neither credited as execution. Supplemental axe FAIL
+    three checks, not ledger.
+receipts:
+  final_axe_probe: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomBlocks/20261024T035253-protocol-matrix-741qn8td/result.json
+  tnt_matrix_blocked: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomBlocks/20261024T035013-protocol-matrix-1kss9ld2/result.json
+  repeater_full_set_pass: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomBlocks/20261024T040239-protocol-matrix-ntdu9vlu/result.json
+  tnt_matrix_blocked_latest: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomBlocks/20261024T040932-protocol-matrix-y4si9xp_/result.json
+  repeater_two_client_pass: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomBlocks/20261024T041234-protocol-matrix-0khdr9ia/result.json
+  anvil_received_health_pass: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomBlocks/20261024T042629-protocol-matrix-kco6fqjz/result.json
+ledger:
+  path: /run/media/kaiserroman/games/solaris-work/scenarios/ledger.jsonl
+  writer: gen_matrix.py --record
+  lines_written: 5
+  pass_cells: 3
+  blocked_attempts: 2
+  unique_blocked_cells: 1
+  supplemental_probes_not_recorded: true
+integration_notes:
+  - No product code or Main checkout edits. Main authorized local dom-blocks commits; current implementation head
+    5ca306f2.
+  - Merge dom-blocks 5ca306f2 (includes bots-runproto 1e20dd5f); alternatively apply DomBlocks.patch to shared 1e20dd5f.
+  - All block fixtures raised to y144 (floor143), full plugin set retained.
+  - Fixture blocks wait received exact state; use/mine wait actual submitted sequence ACK. Server/world checks still
+    determine success. No sleeps or revision-only ACKs.
+  - Raw action and rich observation dependencies fail closed; original binary general data queries unavailable.
+  - Explosion power fields and rich entity metadata remain unavailable observations; not substituted with guessed
+    values.
+  - Ordinary N2 observer states are actual read_block_state results on the observer; N8 and concurrent origins still
+    await subject-specific own/shared actor scheduling.
+  - Actual received XP totals/orb values, living health, local effect packets and beacon menu level replace unavailable
+    data queries in six subjects. Unsupported or absent observation fields still fail closed.
+next_action:
+  "Remaining coverage is explicit real_partial: entity/block metadata and timing observations, correct
+  held-mining timing, Java/native request-sequence observations, and subject-specific N8/concurrent own/shared schedules.
+  Do not count registration or supplemental probe as matrix execution."
+coverage_classes:
+  block_interact:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter_all_contexts: 0
+    real_partial_adapter: 29
+    executed_in_ledger_pass_or_fail: 2
+  block_break:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter_all_contexts: 0
+    real_partial_adapter: 24
+    executed_in_ledger_pass_or_fail: 0
+  block_place:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter_all_contexts: 0
+    real_partial_adapter: 24
+    executed_in_ledger_pass_or_fail: 0
+  special_blocks:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter_all_contexts: 0
+    real_partial_adapter: 8
+    executed_in_ledger_pass_or_fail: 0
+  falling_blocks:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter_all_contexts: 0
+    real_partial_adapter: 6
+    executed_in_ledger_pass_or_fail: 1
+  fire:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter_all_contexts: 0
+    real_partial_adapter: 5
+    executed_in_ledger_pass_or_fail: 0
+  explosions:
+    spec_only: 0
+    registered_stub: 0
+    complete_adapter_all_contexts: 0
+    real_partial_adapter: 11
+    executed_in_ledger_pass_or_fail: 0
+coverage_definition:
+  Counts are subject registrations except executed_in_ledger counts executed cells; complete
+  requires all oracle/context clauses, so a single passing cell does not promote its whole subject. Main explicitly
+  accepted real_partial_adapter as fifth class.
+added_or_corrected_clauses:
+  - Spectator negative behavior for door/gate/trapdoor, lever/button, note block; adventure+spectator immutable repeaters/comparators/daylight
+    and axe/shovel/hoe transformations.
+  - Item frame displayed item and comparator strength for all eight rotations.
+  - Unwaxed copper random-tick aging alongside wax protection/lightning.
+  - Slab item debit after each placement, blocked bed foot/head, menu id-zero sneak placement oracle.
+  - Out-of-reach uses shared wire verbs and exact received sequence; removes fictional raw verbs.
+  - Wind-charge button activation; allay duplication shard cost and cooldown custody.
+  - Ore/spawner XP from snapshot.xp.total and entity xp_value; anvil/dripstone/conduit damage from received living
+    health; beacon/conduit effects from real effect packets and registry mapping; beacon level from received menu
+    property 0.
+commits:
+  - 3d2a9b3b
+  - a7485690
+  - 5ca306f2

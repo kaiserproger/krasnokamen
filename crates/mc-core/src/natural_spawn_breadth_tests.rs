@@ -57,7 +57,9 @@ fn key(category: MobCategory) -> &'static str {
     }
 }
 fn habitat(category: MobCategory) -> TickState {
-    let mut registry = CoreRegistry::load(None).unwrap();
+    static REGISTRY: std::sync::LazyLock<CoreRegistry> =
+        std::sync::LazyLock::new(|| CoreRegistry::load(None).unwrap());
+    let mut registry = REGISTRY.clone();
     registry.biome_spawns =
         mc_data::biomes::BiomeSpawnRules::from_entries(std::collections::BTreeMap::from([(
             mc_data::Identifier::parse("minecraft:plains").unwrap(),

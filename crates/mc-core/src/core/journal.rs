@@ -64,6 +64,41 @@ pub(super) fn start_checkpoint(
     start_checkpoint_with_reply(state, work_tx, done, tick, None)
 }
 
+/// The WAL can own only one inventory in an otherwise unloaded chunk. Hydrate
+/// its neighbours before freezing slots or projecting the opaque container owners.
+fn prepare_container_checkpoint(state: &mut TickState) -> bool {
+    let materialized = state
+        .world
+        .materialize_container_chunks(state.block_entities.keys().copied());
+    if materialized {
+        // Vacant-only hydration preserves newer WAL slots, including empty images.
+        crate::tick::sync_chunk_block_entities(state);
+    }
+    let mut refused = std::collections::BTreeMap::new();
+    for (x, _, z) in state.block_entities.keys() {
+        let chunk = crate::boundary::ChunkPos {
+            x: x.div_euclid(16),
+            z: z.div_euclid(16),
+        };
+        if state.world.load_error(chunk).is_some() {
+            *refused.entry((chunk.x, chunk.z)).or_insert(0usize) += 1;
+        }
+    }
+    for (&(x, z), &container_records) in &refused {
+        let error = state
+            .world
+            .load_error(crate::boundary::ChunkPos { x, z })
+            .expect("counted refused container chunk");
+        tracing::error!(
+            tick = state.tick,
+            %error,
+            container_records,
+            "checkpoint declined: container chunk cannot be hydrated; the journal is retained"
+        );
+    }
+    materialized && refused.is_empty()
+}
+
 pub(super) fn start_checkpoint_with_reply(
     state: &mut TickState,
     work_tx: &std::sync::mpsc::SyncSender<JournalWork>,
@@ -72,6 +107,17 @@ pub(super) fn start_checkpoint_with_reply(
     reply: Option<std::sync::mpsc::Sender<bool>>,
 ) -> bool {
     let capture_start = std::time::Instant::now();
+    if !prepare_container_checkpoint(state)
+        || !state
+            .other_dimensions
+            .values_mut()
+            .all(|world| prepare_container_checkpoint(world))
+    {
+        if let Some(reply) = reply {
+            let _ = reply.send(false);
+        }
+        return false;
+    }
     // Writes from here on stamp above `tick`, so whatever this capture misses
     // stays dirty after its acknowledgement (ADR 0020).
     state.entities.checkpoint_captured(tick);
@@ -106,15 +152,45 @@ pub(super) fn start_checkpoint_with_reply(
     let dimensions = crate::dimensions::checkpoint::capture(state, tick);
     let tombstones = checkpoint_tombstones(state);
     let dimensions_time = capture_start.elapsed();
-    if regions.load_error().is_some()
-        || dimensions
+    let refused: Vec<&crate::world::RefusedChunk> = regions
+        .refused()
+        .iter()
+        .chain(
+            dimensions
+                .values()
+                .flat_map(|capture| capture.regions.refused()),
+        )
+        .collect();
+    let blocked = regions.load_error().or_else(|| {
+        dimensions
             .values()
-            .any(|capture| capture.regions.load_error().is_some())
-    {
+            .find_map(|capture| capture.regions.load_error())
+    });
+    if let Some(error) = blocked {
+        tracing::error!(
+            tick,
+            %error,
+            chunks = %refused.iter().map(|chunk| chunk.to_string()).collect::<Vec<_>>().join("; "),
+            "checkpoint declined: a chunk cannot be written and holds unsaved state; the journal is retained"
+        );
         if let Some(reply) = reply {
             let _ = reply.send(false);
         }
         return false;
+    }
+    if !refused.is_empty() {
+        // The checkpoint commits without these chunks: their stored records
+        // stay byte-identical and they stay refused until repaired.
+        tracing::error!(
+            tick,
+            count = refused.len(),
+            chunks = %refused
+                .iter()
+                .map(|error| error.to_string())
+                .collect::<Vec<_>>()
+                .join("; "),
+            "checkpoint skipped quarantined chunks; repair required"
+        );
     }
     let job = CheckpointJob {
         tick,
@@ -532,7 +608,7 @@ pub(super) enum NativeWork {
         job: Box<CheckpointJob>,
         plugins: Result<Box<crate::plugin::PluginState>, CoreError>,
     },
-    SaveGenerated(crate::world::ChunkCapture),
+    SaveGenerated(Box<crate::world::ChunkCapture>),
     /// Copy the last committed checkpoint and the WAL after it (hot backup).
     Backup {
         job: BackupJob,

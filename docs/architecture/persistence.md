@@ -40,6 +40,35 @@ Explicit saves queue behind the current checkpoint. Shutdown requests a final
 checkpoint. See [ADR 0020](../decisions/0020-entity-checkpoints-at-one-million.md)
 for the entity checkpoint design.
 
+Container WAL post-images can restore live custody without loading their chunk.
+Before freezing a checkpoint's container snapshot, materialize their dirty chunks
+and hydrate their complete persisted inventories. Clean evicted chunks stay unloaded.
+Hydration fills only vacant live entries, so newer WAL slots (including an emptied
+inventory) retain priority.
+Do this in every dimension before projecting chest/furnace slots and the
+hopper/brewing owners' opaque records. Otherwise a partial live snapshot can
+erase untouched neighbours when typed maps are rebuilt. A refused load or
+hydration holds the entire checkpoint and its WAL; it never commits a partial
+container image. Behavioural coverage:
+`container_transfer_replay_holds_unloadable_chunk_and_wal` and
+`container_transfer_replay_materializes_full_healthy_chunk`.
+The matrix includes decorated pots, chiseled bookshelves and lecterns; their
+opaque WAL images require a resident chunk and refuse recovery if it cannot load.
+Campfire items, vault rewards and trial-spawner pending items instead use
+opaque-only custody and are covered by the unreadable-chunk recovery refusal.
+Chiseled bookshelves hydrate through their six-slot owner only, not the
+three-slot wooden-shelf decoder; a populated sixth slot guards against loss.
+
+The custody hole combined lazy container replay, a dirty-chunk-only capture,
+and pruning by the whole-world fence: an omitted chunk's WAL was no longer a
+recovery source after the fence advanced. Dirtying the replay alone was not
+enough: materialization after the slot snapshot could clear untouched typed
+inventories, while hopper and brewing projection depended on their hydrated
+owners. Transfer-based tests cover both defenses together, including another
+restart after the WAL is pruned. The separate startup guard for block/opaque
+replay into an unreadable chunk remains fail-closed; a dropped write into a
+refused chunk still creates no unsaved custody.
+
 ## Startup and recovery
 
 1. Acquire the exclusive world-directory lease. Normal startup waits up to 30
@@ -69,6 +98,74 @@ is durable. A remaining marker permits retrying interrupted first start; a store
 without a checkpoint or marker fails closed. Required checkpoint player records
 must decode and match their keys; offline player custody is retained rather than
 silently discarded.
+
+## Quarantined chunks
+
+A chunk whose stored record cannot be loaded (decode error, invalid block
+entity record, or an undecodable runtime record found by a block-entity owner)
+is quarantined: it is never loaded, never generated over and never rewritten,
+so its stored record stays byte-identical.
+
+A quarantined chunk that holds no unsaved state (refused when it was loaded,
+never edited) does not block checkpointing: every other chunk checkpoints
+normally and each checkpoint logs one error naming every quarantined chunk
+with its dimension, coordinates, reason and counts. The chunk-local
+projection of changed scheduled block and fluid ticks of such a chunk cannot be
+written and is skipped (`scheduled projections skipped` in the log). The queues
+themselves are not lost: the manifest carries the global scheduler images, and a
+restart restores the same ticks (test
+`scheduled_ticks_of_a_refused_chunk_survive_checkpoint_and_restart`). Debt and inhabited-time metadata of it are not written.
+
+A quarantined chunk that holds unsaved state declines the whole checkpoint
+instead, and the log error (`checkpoint declined`, repeated on every declined
+checkpoint so a stuck server is visible) names the dimension, chunk and counts.
+An early container-hydration refusal reports `container_records` (live container
+records in that chunk); capture-time refusal reports the aggregate unsaved entries
+and skipped scheduled projections. The
+WAL is retained. Unsaved state means pending block writes, container records of
+the chunk held by the live owners, edited sections, and the container edit or
+removal mark (`block_entity_dirty`; a removed record leaves nothing but the
+mark). Refusal never clears these. Skipping such a chunk would commit the rest
+of the world (a player's inventory, a dropped item) without the chunk's edits,
+so an item taken from or dropped by a container of that chunk could exist twice
+after a restart; recovery ignores journal records at or before the checkpoint
+tick, so keeping the WAL behind a committed checkpoint would not help.
+A chunk refused at runtime while it holds containers therefore declines every
+checkpoint until the server restarts, even with no edits, because its live
+records count. After a restart it is refused at load, so it is skipped unless
+the retained WAL replays edits into it, and then the declines continue; the
+exception is a WAL block write or opaque block-entity record (campfire, hive,
+brushable block) into a chunk refused at load: recovery needs that chunk
+resident to replay it, so it stops with the chunk's load error and the world
+does not open, nothing is checkpointed, and the WAL keeps the write until the
+stored chunk is valid again (test
+`opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal`). Solaris
+has no command that repairs or removes a quarantined chunk: the operator's way
+out is an offline `restore` of the last backup (play since that backup is
+lost); the stored record stays byte-identical for inspection. Importing an
+Anvil chunk, and loading a native one, validates crafter, shelf, shulker box
+and conduit records by the block that owns them, never by the record's own id.
+
+The `container_transfer_replay_*` regressions exercise actual transfers for chest,
+trapped chest, barrel, copper chest, furnace, smoker, blast furnace, hopper,
+brewing stand, dispenser, dropper, crafter, shulker box, shelf, jukebox,
+decorated pot, chiseled bookshelf and lectern, with an untouched chest in the same chunk.
+Typed-only WAL tails hold a refused checkpoint
+and materialize healthy unloaded chunks before capture. Owners that also emit an
+opaque WAL image already require a resident chunk at recovery, so an unreadable
+chunk refuses startup instead. Both routes retain full container/player contents
+and total custody through repair, checkpoints and repeated restarts.
+
+In RC5, a chiseled bookshelf with books confined to slots 1–3 could load
+through both the ordinary three-slot shelf decoder and its six-slot owner.
+Hydration applied the ordinary shelf first; interaction replaced that
+wrong-length record with an empty six-slot record, losing its books. Books in
+slots 4–6 instead made the three-slot decode reject the chunk. The storage
+format did not change. The owner classification fix removes the overlapping
+decoder; `chiseled_bookshelf_old_save_interaction_preserves_all_books` tests
+an old stored record without a live or WAL substitute through interaction and
+restart. Prior load and custody tests did not cover this combination; the
+slot-6 refusal was a different failure, not proof against this data loss.
 
 ## Backup and restore
 

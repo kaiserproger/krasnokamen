@@ -62,7 +62,7 @@ The last is not a file in any jar: the oracle runs vanilla's overworld biome
 builder, and ADR 0001 forbids porting that code, so it can only be a fact table.
 The 775 path reads only the 26.1.2 registry dirs, tags, `registry_network_nbt`,
 `packets.json`, `registries.json` and `blocks.json`
-(`mc-edge/src/legacy/mod.rs:74-80`).
+(`mc-edge/src/translation/mod.rs`, profile loading).
 
 ## Decision (proposed)
 
@@ -89,8 +89,8 @@ serves no Mojang bytes. Each kind of content has one source:
    pack: `mc_data::registry_network::encode_entry` (implemented, see the proof
    below).
 4. **Packet names by id**, the only use of `packets.json`
-   (`mc-edge/src/legacy/tables.rs:191`), become Solaris protocol tables for 777
-   and 775 compiled into `mc-protocol`, like the 26.3 packet ids already are.
+   (`mc-edge/src/translation/adjacent/tables.rs`), would become Solaris tables
+   for every release in the support window, like the 26.3 packet ids already are.
 5. **Java stays only with maintainers**: datagen, the extractors and the oracle
    build the facts bundle; the vanilla capture and datagen's `packets.json`
    are the oracles the encoder and the packet tables are checked against

@@ -1,0 +1,293 @@
+kind: adapter-source-index
+not_a_runner_or_dsl: true
+domain: ui_presentation
+vanilla_version: 26.1.2
+adapter_module: tools.harness.matrix_domains.ui_presentation
+shared_interface: tools.harness.matrix_api.Adapter
+source_checkout: /run/media/kaiserroman/games/solaris-work/wt/deploy-final
+ports:
+- 26520
+- 26539
+sources:
+- https://minecraft.wiki/w/Commands/bossbar
+- https://minecraft.wiki/w/Commands/title
+- https://minecraft.wiki/w/Text_component_format
+- /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_text.rs
+synchronization: received state / console response / dashboard tick counter; no sleeps
+subjects:
+- subject: ui_presentation.bossbar_custom
+  matrix_ids:
+  - pw:ui_presentation.bossbar_custom/fabric_distant_horizons/survival/the_end/peaceful/N8/duplicate_login/clean_restart_mid_action/op_2
+  - pw:ui_presentation.bossbar_custom/neoforge_solaris_loader/survival/overworld/normal/N8/malformed_or_stale_packet/save_all_checkpoint/op_1
+  preconditions:
+    setup_callable: ui_presentation.ADAPTERS['ui_presentation.bossbar_custom'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: ui_presentation.bossbar_custom
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:9-20
+    calls:
+    - p.client(ctx).command('bossbar add matrix:test {"text":"Matrix"}')
+    - p.client(ctx).command(f'bossbar set matrix:test players {p.client(ctx).name}')
+    - p.client(ctx).command('bossbar set matrix:test max 100')
+    - p.client(ctx).command('bossbar set matrix:test value 25')
+    - p.client(ctx).command('bossbar set matrix:test color blue')
+    - p.client(ctx).command('bossbar set matrix:test style notched_10')
+    - p.client(ctx).command('bossbar remove matrix:test')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx,'bossbar '+key,bar[key],expected)
+    - p.test(ctx,'bossbar removed','matrix:test' not in p.observe(ctx,'bossbars'),p.observe(ctx,'bossbars'))
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: bossbar shown/updated/removed'
+- subject: ui_presentation.bossbar_entities
+  matrix_ids:
+  - pw:ui_presentation.bossbar_entities/fabric_solaris_loader/adventure/overworld/hard/2/reconnect_mid_action/hot_backup_during_action/non_op_0
+  preconditions:
+    setup_callable: ui_presentation.ADAPTERS['ui_presentation.bossbar_entities'].setup
+    fixture_calls:
+    - p.arena(ctx)
+    - p.admin(ctx,f'summon {mob} {x+5} {y+2} {z}')
+    - p.admin(ctx,f'kill @e[type={mob}]')
+    - p.fixture(ctx,'vanilla_raid',center=(x,y,z))
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: ui_presentation.bossbar_entities
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:23-37
+    calls:
+    - p.rich_action(ctx,'find_entity',mob)
+    - p.rich_action(ctx,'entity_bossbar',entity)
+    - p.client(ctx).attack(entity)
+    - p.rich_action(ctx,'entity_bossbar',entity)
+    - p.rich_action(ctx,'entity_bossbar',entity)
+    - p.rich_action(ctx,'raid_bossbar',raid['id'])
+    authoritative_commands_in_action_order:
+    - p.admin(ctx,f'summon {mob} {x+5} {y+2} {z}')
+    - p.admin(ctx,f'kill @e[type={mob}]')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.test(ctx,mob+' bar visible',before['visible'],before)
+    - p.check(ctx,mob+' progress follows health',after['progress'],after['health']/after['max_health'])
+    - p.check(ctx,mob+' bar removed',p.rich_action(ctx,'entity_bossbar',entity)['visible'],False)
+    - p.check(ctx,'raid progress',bar['progress'],bar['remaining_health']/bar['wave_health'])
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: auto bossbars track health/progress'
+- subject: ui_presentation.entity_glow_invisibility
+  matrix_ids:
+  - pw:ui_presentation.entity_glow_invisibility/protocol_bot/creative/overworld/easy/2/malformed_or_stale_packet/save_all_checkpoint/op_1
+  preconditions:
+    setup_callable: ui_presentation.ADAPTERS['ui_presentation.entity_glow_invisibility'].setup
+    fixture_calls:
+    - p.admin(ctx,f'effect give {other.name} minecraft:{effect} 30 0')
+    - p.admin(ctx,f'effect clear {other.name} minecraft:{effect}')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: ui_presentation.entity_glow_invisibility
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:112-121
+    calls:
+    - p.rich_action(ctx,'entity_metadata_flags',p.observe(ctx,'entity_id',1))
+    - p.rich_action(ctx,'entity_effect_rendered',p.observe(ctx,'entity_id',1),effect)
+    - p.rich_action(ctx,'entity_metadata_flags',p.observe(ctx,'entity_id',1))
+    authoritative_commands_in_action_order:
+    - p.admin(ctx,f'effect give {other.name} minecraft:{effect} 30 0')
+    - p.admin(ctx,f'effect clear {other.name} minecraft:{effect}')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.test(ctx,effect+' metadata flag',bool(flags&flag),flags)
+    - p.check(ctx,effect+' rendered',p.rich_action(ctx,'entity_effect_rendered',p.observe(ctx,'entity_id',1),effect),True)
+    - p.check(ctx,effect+' flag cleared',flags&flag,0)
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: metadata flags visible to observers'
+- subject: ui_presentation.nameplates_labels
+  matrix_ids:
+  - pw:ui_presentation.nameplates_labels/native_linux/spectator/the_nether/normal/1/normal/steady/op_4
+  preconditions:
+    setup_callable: ui_presentation.ADAPTERS['ui_presentation.nameplates_labels'].setup
+    fixture_calls:
+    - p.arena(ctx)
+    - p.admin(ctx,f'summon minecraft:pig {x+2} {y} {z} {{CustomName:"MatrixPig",CustomNameVisible:1b}}')
+    - p.admin(ctx,f'summon minecraft:cow {x+4} {y} {z} {{CustomName:"HiddenCow",CustomNameVisible:0b}}')
+    - p.fixture(ctx,'settlement_label',name='Matrix Settlement')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: ui_presentation.nameplates_labels
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:99-109
+    calls:
+    - p.rich_action(ctx,'find_entity','minecraft:pig')
+    - p.rich_action(ctx,'entity_label',entity)
+    - p.rich_action(ctx,'find_entity','minecraft:cow')
+    - p.rich_action(ctx,'entity_label',cow)
+    - p.rich_action(ctx,'entity_label',settlement['entity_id'])
+    authoritative_commands_in_action_order:
+    - p.admin(ctx,f'summon minecraft:pig {x+2} {y} {z} {{CustomName:"MatrixPig",CustomNameVisible:1b}}')
+    - p.admin(ctx,f'summon minecraft:cow {x+4} {y} {z} {{CustomName:"HiddenCow",CustomNameVisible:0b}}')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx,'visible custom label',p.rich_action(ctx,'entity_label',entity),'MatrixPig')
+    - p.check(ctx,'hidden label when not targeted',p.rich_action(ctx,'entity_label',cow),None)
+    - p.check(ctx,'settlement label',p.rich_action(ctx,'entity_label',settlement['entity_id']),'Matrix Settlement')
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: labels shown per flags'
+- subject: ui_presentation.server_dialogs
+  matrix_ids:
+  - pw:ui_presentation.server_dialogs/fabric_svc/spectator/the_end/hard/1/slow_reader_backpressure/crash_kill9_wal_replay/op_3
+  preconditions:
+    setup_callable: ui_presentation.ADAPTERS['ui_presentation.server_dialogs'].setup
+    fixture_calls:
+    - p.fixture(ctx,'server_dialog',fields={'text':'initial','slider':5,'checkbox':False})
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: ui_presentation.server_dialogs
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:89-96
+    calls:
+    - p.rich_action(ctx,'set_screen_input','text','matrix')
+    - p.rich_action(ctx,'set_screen_input','slider',7)
+    - p.rich_action(ctx,'set_screen_input','checkbox',True)
+    - p.rich_action(ctx,'click_screen_button','submit')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx,'custom click payload',received,{'text':'matrix','slider':7,'checkbox':True})
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: custom_click_action payload exact at server'
+- subject: ui_presentation.tab_list
+  matrix_ids:
+  - pw:ui_presentation.tab_list/forge_solaris_loader/adventure/the_end/easy/N8/malformed_or_stale_packet/pause_when_empty_resume/op_4
+  preconditions:
+    setup_callable: ui_presentation.ADAPTERS['ui_presentation.tab_list'].setup
+    fixture_calls:
+    - p.admin(ctx,f'gamemode spectator {other.name}')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: ui_presentation.tab_list
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:73-86
+    calls:
+    - p.rich_action(ctx,'reply_keepalive',index=1)
+    - other.disconnect()
+    - other.reconnect()
+    authoritative_commands_in_action_order:
+    - p.admin(ctx,f'gamemode spectator {other.name}')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.test(ctx,'both players listed',all(c.name in p.observe(ctx,'tab_list') for c in ctx.clients[:2]),p.observe(ctx,'tab_list'))
+    - p.check(ctx,'spectator style',p.observe(ctx,'tab_list')[other.name]['spectator'],True)
+    - p.check(ctx,'spectator mode update',p.observe(ctx,'tab_list')[other.name]['gamemode'],'spectator')
+    - p.test(ctx,'latency supplied',isinstance(latency,int) and latency>=0,latency)
+    - p.test(ctx,'disconnected player removed',other.name not in p.observe(ctx,'tab_list'),p.observe(ctx,'tab_list'))
+    - p.test(ctx,'rejoined player listed',other.name in p.observe(ctx,'tab_list'),p.observe(ctx,'tab_list'))
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: player info updates; spectators greyed'
+- subject: ui_presentation.tellraw_components
+  matrix_ids:
+  - pw:ui_presentation.tellraw_components/native_windows/creative/overworld/normal/N8/malformed_or_stale_packet/steady/non_op_0
+  preconditions:
+    setup_callable: ui_presentation.ADAPTERS['ui_presentation.tellraw_components'].setup
+    fixture_calls:
+    - p.admin(ctx,'scoreboard objectives add matrix dummy')
+    - p.admin(ctx,f'scoreboard players set {name} matrix 7')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: ui_presentation.tellraw_components
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:58-70
+    calls:
+    - p.client(ctx).command(f'tellraw {name} {component}')
+    - p.rich_action(ctx,'last_chat_component')
+    authoritative_commands_in_action_order:
+    - p.admin(ctx,'scoreboard objectives add matrix dummy')
+    - p.admin(ctx,f'scoreboard players set {name} matrix 7')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx,'score resolved',observed['resolved_score'],'7')
+    - p.check(ctx,'selector resolved',observed['resolved_selector'],name)
+    - p.check(ctx,'translation rendered',observed['rendered_translation'],'<Matrix> translated')
+    - p.check(ctx,'click suggestion',observed['suggest_command'],'/help')
+    - p.check(ctx,'hover text',observed['hover_text'],'Hover')
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: components resolved server-side'
+- subject: ui_presentation.title_actionbar
+  matrix_ids:
+  - pw:ui_presentation.title_actionbar/vanilla_java_26_1_2/creative/overworld/peaceful/N8/malformed_or_stale_packet/hot_backup_during_action/op_3
+  preconditions:
+    setup_callable: ui_presentation.ADAPTERS['ui_presentation.title_actionbar'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: ui_presentation.title_actionbar
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/ui_presentation.py:40-55
+    calls:
+    - p.client(ctx).command(f'title {name} times 2 10 2')
+    - p.client(ctx).command(f'title {name} subtitle {{"text":"Matrix subtitle"}}')
+    - p.client(ctx).command(f'title {name} title {{"text":"Matrix title"}}')
+    - p.client(ctx).command(f'title {name} actionbar {{"text":"Matrix action"}}')
+    - p.ticks(ctx,14)
+    - p.client(ctx).command(f'title {name} clear')
+    - p.client(ctx).command(f'title {name} reset')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx,'title text',p.observe(ctx,'hud.title'),'Matrix title')
+    - p.check(ctx,'subtitle text',p.observe(ctx,'hud.subtitle'),'Matrix subtitle')
+    - p.check(ctx,'title durations',p.observe(ctx,'hud.title_times'),[2,10,2])
+    - p.check(ctx,'actionbar',p.observe(ctx,'hud.actionbar'),'Matrix action')
+    - p.check(ctx,'title expires',p.observe(ctx,'hud.title_visible'),False)
+    - p.check(ctx,'clear title',p.observe(ctx,'hud.title_visible'),False)
+    - p.check(ctx,'reset timing',p.observe(ctx,'hud.title_times'),[10,70,20])
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: client shows texts with timing'
+receipt_policy: Index of shared Python Adapter callables, not an interpreter. Capability requests are not live pass
+  evidence; consult canonical receipts and ledger.
+helper_sources: {}
+adapter_revision: 794c8ff5
