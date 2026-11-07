@@ -86,6 +86,14 @@ decides it):
 - [ADR 0016](decisions/0016-mob-capabilities.md) Layer 3 (Wasm capability
   code), operator data-directory blueprints and persistent sensor
   subscriptions.
+- Content without Java ([ADR 0022](decisions/0022-content-without-java.md)):
+  Mojang bytes read from the jars the user downloads from Mojang, fact tables
+  from the one pinned facts bundle, RegistryData from the native encoder
+  `mc_data::registry_network` (implemented and proven byte for byte against
+  vanilla captures, not wired into `content import`), packet names from
+  Solaris tables; the singleplayer content bundle would retire. Waits on the
+  owner's four questions in the ADR; the Java import and the content bundle
+  are the current path, not an old side.
 
 Supported surfaces (standing contracts, not transitions; only an
 owner-declared sunset would make one):

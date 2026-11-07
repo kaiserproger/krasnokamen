@@ -28,6 +28,7 @@ Later explicit supersession takes priority over historical descriptions. See als
 | [0019](0019-voice-chat.md) | Accepted design; draft implementation, real-client QA pending | changing proximity voice relay |
 | [0020](0020-entity-checkpoints-at-one-million.md) | Accepted; steps 1–2 implemented; strict latency criterion unmet | changing entity checkpoints or replay recovery |
 | [0021](0021-build-time-and-crate-split.md) | Step 1 accepted and implemented; split pilot designed, not started | changing build profiles or proposing a core crate split |
+| [0022](0022-content-without-java.md) | Proposed; native RegistryData encoder implemented, not wired | removing Java from content import, changing the facts bundle or RegistryData payloads |
 
 Update the owning live ADR when authority, threading, persistence ordering or
 module policy changes. Superseded ADR tombstones are not current recipes.
