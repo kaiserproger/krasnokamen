@@ -6,17 +6,17 @@ Dates are when the lesson was learned (owner time zone, UTC+7).
 
 ## 2026-11
 
-- **2026-11-07 — a late `[approved]` is ambiguous; intermediate releases need
-  none.** A bare `[approved]` arrived 41 turns after it was issued, with no way
-  to tell which request it answered. Requests now carry an ID, only one is open
-  at a time, and an `[approved]` counts only if issued after that request
-  (`turns_ago`). The owner then lifted the advisor gate for intermediate
-  releases: it stays only for an RC the owner names as risky and for 1.0.0.
-  ([releases](release-and-tags.md#a-pushed-tag-whose-ci-failed))
+- **2026-11-07 — the advisor no longer approves publications.** A bare
+  `[approved]` arrived 41 turns after it was issued, with no way to tell which
+  request it answered, and the advisor kept stopping releases the owner had
+  authorized. The owner replaced the gate: publications need owner
+  authorization, and every release tag gets two read-only reviewers (release
+  contents; core state as a whole).
+  ([release reviewers](review-committee-and-breaker.md#release-reviewers-owner-2026-11-07))
 - **2026-11-06 — RC5 notes: three of four advisor rejections were unproven
   claims** ("RC4 behaves the same" without running RC4, "always" from one run,
   an untested platform). Map every claim to a receipt and a run count before
-  the approval request. ([releases](release-and-tags.md#core-release-cut))
+  the release review. ([releases](release-and-tags.md#core-release-cut))
 - **2026-11-04 — pooled target dirs gave false greens.** Pooled Cargo target
   dirs were shared across git worktrees. Cargo freshness is mtime-based and
   dep-info paths are relative to the package root, so a worktree whose files
@@ -51,7 +51,7 @@ Dates are when the lesson was learned (owner time zone, UTC+7).
   player-path checks; see the QA protocol introduction and
   [releases](release-and-tags.md).
 - **2026-10-29 — a bare repeated `[approved]` was once dropped as a duplicate.**
-  Each request now carries an ID and only one is open at a time (2026-11-07).
+  The advisor gate was removed on 2026-11-07 (above).
 - **2026-10-28 — a stray slice `CPUQuota` throttled every build to 2 CPUs for
   two days.** Symptom: host CPU pressure about 80% while `vmstat` shows >40%
   idle. The runner now clears the quota on every call.

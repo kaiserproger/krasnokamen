@@ -35,27 +35,32 @@ in the ignored, owner-maintained `WATCHDOG.yml` (do not edit it). Its policy:
   extra agents, parallel edits of one file); violating a direct owner order or
   AGENTS.md. Every `STOP` is a blocker. `concern`: needless complexity or
   inefficiency without immediate harm. `nit`: minor.
-- **Publication (owner order):** the executor publishes nothing outside (GitHub
-  review, comment, PR or issue; deploy; messages to third parties) until the
-  advisor answers exactly `[approved]` to the specific final text or action.
-  Releases (owner, 2026-11-07): intermediate releases (push, tag and release
-  of an ordinary or hotfix RC) need only the owner's authorization; the
-  advisor's `[approved]` is required only for an RC the owner names as risky
-  (large changes) and for 1.0.0. The executor gives each request an ID (for
-  example `RC5-PUB-3`) with its exact commands, SHA and final text; only one
-  request is open at a time, and an `[approved]` answers it only if it was
-  issued after that request. Approving the push of a temporary CI check
-  branch also covers later commits to that branch that change only its
-  workflow file. Before approving, the advisor checks every claim of the text
-  against code or source (`file:line`); a false or unproven claim is a blocker
-  with a list of corrections. No `[approved]` without that check.
+- **Publication (owner, 2026-11-07):** the advisor issues no `[approved]` and
+  approves no publication. Every publication (push, tag, release, deploy,
+  GitHub comment, message to third parties) needs the owner's authorization;
+  publishing without it is a blocker. Before a release tag Main runs the two
+  release reviewers below.
 - No nitpicking on style or naming without effect on correctness or complexity.
 
-When a publication needs the advisor, each public step of it gets its own
-request ID and its own `[approved]` (see
-[releases](release-and-tags.md#a-pushed-tag-whose-ci-failed)). An advisor
-lesson (2026-10-24): verify definitions and callers at the pinned commit before
-escalating a worker's "baseline is broken" report.
+An advisor lesson (2026-10-24): verify definitions and callers at the pinned
+commit before escalating a worker's "baseline is broken" report.
+
+## Release reviewers (owner, 2026-11-07)
+
+Before every release tag, Main runs two independent read-only `reviewer`
+agents on the candidate. They make no builds or edits:
+
+1. **Release contents:** the diff from the previous tag, bugs it introduces
+   or leaves open, every release-note claim against code and receipts,
+   upgrade traps and sibling pins.
+2. **Core state as a whole:** readiness for 1.0.0 in owner priority order
+   (ordinary play, save integrity, plugin API, performance, client-input
+   security), open bug-ledger rows a player would hit, and ADR violations that
+   cause real bugs.
+
+Each finding needs `file:line`, a reachable path and a severity. A P0/P1 that
+the release introduces or leaves open in its own scope blocks the tag. Save
+both YAML results under `.analysis/releases/<tag>/`.
 
 ## Independent reviewer
 

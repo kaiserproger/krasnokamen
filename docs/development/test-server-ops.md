@@ -5,10 +5,8 @@ written in the repository: scripts and commands take it from the environment
 variable `SOLARIS_TEST_HOST` (SSH destination, user included); the owner holds
 the value, SSH access and every credential. Server operation in general is
 documented in [OPERATING.md](../OPERATING.md); this page is the
-deployment routine for that host. Deploying needs owner authorization and the
-advisor's `[approved]` (see
-[review committee and breaker](review-committee-and-breaker.md)); deploys are
-batched until the owner says deploy.
+deployment routine for that host. Deploying needs owner authorization;
+deploys are batched until the owner says deploy.
 
 ## Host
 

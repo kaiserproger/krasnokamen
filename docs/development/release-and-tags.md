@@ -1,10 +1,9 @@
 # Releases and tags
 
 Authorization rules are in [AGENTS.md](../../AGENTS.md) (no commit, push, tag
-or publication without explicit owner authorization) and in
-[review committee and breaker](review-committee-and-breaker.md) (the advisor's
-`[approved]` is needed only for an RC the owner names as risky and for 1.0.0;
-intermediate RCs need only owner authorization).
+or publication without explicit owner authorization). The two release reviewers
+and the advisor's role are in
+[review committee and breaker](review-committee-and-breaker.md#release-reviewers-owner-2026-11-07).
 The breaker passes before the tag and before the announcement are in the
 [break-it QA protocol](../QA_AGENT_PROTOCOL.md) "Release-candidate breaker
 pass". This page is the release procedure for the four repositories:
@@ -29,8 +28,8 @@ pass". This page is the release procedure for the four repositories:
    `include_str!` of `data/vanilla`, and every production or bench registry load
    passes a `vanilla_data_dir` (`CoreRegistry::load(None)` is test-only).
    **macOS:** there is no local Mac. Push the candidate commit to
-   `rc-check/<tag>` and delete the branch afterwards (both need the advisor's
-   `[approved]` only when the release does); `.github/workflows/rc-check-macos.yml` runs
+   `rc-check/<tag>` and delete the branch afterwards;
+   `.github/workflows/rc-check-macos.yml` runs
    the `mc-core` and `mc-world` lib tests (nextest `ci` profile, which skips
    tests over 3 s) on `macos-15` with the 26.3 content cache. Pass = a green
    run whose log prints the candidate SHA; save the log
@@ -57,12 +56,12 @@ pass". This page is the release procedure for the four repositories:
    validation boundary. Before writing QA results into the notes, check each
    run's attributes in its own receipt, not the agent's summary (an RC4 Windows
    soak summary implied fresh profiles; only two of three runs had them). Keep
-   a cause "likely" unless the mechanism was instrumented. Before the approval
-   request, write `.analysis/releases/<tag>/claims.md`: every claim of the notes
+   a cause "likely" unless the mechanism was instrumented. Before the release
+   review, write `.analysis/releases/<tag>/claims.md`: every claim of the notes
    with its receipt path and run count. State counts ("3 of 3 runs"), never
    "always"; a claim about another version ("RC4 behaves the same") needs the
    same scenario run on that version; an advertised platform without a run is
-   named as not run. (RC5: three of four advisor rejections were such claims.)
+   named as not run. (RC5: three of four review rejections were such claims.)
 6. **Receipt.** `.analysis/releases/<tag>/receipt.yaml`: every gate with its
    receipt path, scope notes and `not_run` items.
 7. **Commit, tag, push** (authorized only). Stage nothing local-only
@@ -73,16 +72,11 @@ pass". This page is the release procedure for the four repositories:
    release job marks `v0.*` tags and any tag containing `-` (such as `-rc.N`)
    as prereleases. Watch with
    `gh run watch <run-id> --exit-status` (async, timeout >= 3600).
-8. One independent read-only review of the late cutover diffs before tagging,
-   even when gates are green.
+8. **Release reviewers** before tagging, even when gates are green: release
+   contents and core state as a whole
+   ([procedure](review-committee-and-breaker.md#release-reviewers-owner-2026-11-07)).
 
 ## A pushed tag whose CI failed
-
-When the release needs the advisor (a risky RC or 1.0.0), each public step gets
-its own approval. Give the request an ID (for example `RC5-PUB-3`) with the
-exact commands and SHA, and keep only one request open at a time. The answer
-is exactly `[approved]`; it counts only if issued after that request: answers
-can arrive many turns late (an advisory's `turns_ago` shows when it was issued).
 
 1. Diagnose: `gh run view <run> --json jobs` plus the failed job log (save under
    `.analysis/releases/<tag>/`); `gh release view <tag>` (not found when publish
