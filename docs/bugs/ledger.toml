@@ -3545,20 +3545,8 @@ area = "gameplay"
 repro = "source"
 severity = "major"
 status = "open"
-source = "Independent review, 2026-11-07 (not reproduced). Recovery refuses to open on chunk load error and retains the WAL; the registered test exercises that path. A negative control removing the recovery guard failed at the recovery assertion (receipts/CoreBlockers/custody-replay-negative-control.log outside the repository). Disposition pending."
+source = "Independent review of the CoreBlockers wave, 2026-11-07 (read from code, not reproduced). Low reach: needs a stored record that the native owner-block check refuses while the WAL holds opaque writes for it."
 regression = ["cargo:mc-core:core::checkpoint_custody_tests::opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal"]
-
-[[bug]]
-id = "CONTAINER-CUSTODY-LOST-ON-UNLOADED-REPLAY"
-title = "A replayed container post-image in an unloaded chunk is not marked for checkpoint materialization, allowing a checkpoint to prune its only WAL copy."
-area = "gameplay"
-repro = "cargo"
-severity = "major"
-status = "open"
-source = "CoreBlockers: a container WAL post-image recovered into an unloaded chunk lets start_checkpoint accept and skip it, even when its stored chunk is unreadable. The registered test failed at the checkpoint refusal assertion before the fix."
-regression = ["cargo:mc-core:core::checkpoint_custody_tests::container_replay_into_unloadable_chunk_declines_checkpoint_and_keeps_wal"]
-failing_first = "reported"
-fix_commit = "1d6bef3e"
 
 [[bug]]
 id = "COMMAND-SCULK-RECORD-UNVALIDATED"
