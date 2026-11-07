@@ -3491,7 +3491,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "Main's smoke of the published RC5 Windows zip, 2026-11-07: 4-core Windows 11 VM with software rendering (WARP; the client used about 3000 s CPU and starved the server). Play #1 and #2 timed out; Play #3, with the client minimized, had the server listening after 36 s. Not tried on hardware with a GPU."
-regression = []
+regression = ["harness:singleplayer-regressions:native-sp-slow-machine"]
 failing_first = "reported"
 
 [[bug]]
