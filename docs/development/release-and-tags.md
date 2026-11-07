@@ -2,8 +2,9 @@
 
 Authorization rules are in [AGENTS.md](../../AGENTS.md) (no commit, push, tag
 or publication without explicit owner authorization) and in
-[review committee and breaker](review-committee-and-breaker.md) (every public
-step also needs the advisor's `[approved]` on that step's open request).
+[review committee and breaker](review-committee-and-breaker.md) (the advisor's
+`[approved]` is needed only for an RC the owner names as risky and for 1.0.0;
+intermediate RCs need only owner authorization).
 The breaker passes before the tag and before the announcement are in the
 [break-it QA protocol](../QA_AGENT_PROTOCOL.md) "Release-candidate breaker
 pass". This page is the release procedure for the four repositories:
@@ -28,8 +29,8 @@ pass". This page is the release procedure for the four repositories:
    `include_str!` of `data/vanilla`, and every production or bench registry load
    passes a `vanilla_data_dir` (`CoreRegistry::load(None)` is test-only).
    **macOS:** there is no local Mac. Push the candidate commit to
-   `rc-check/<tag>` (a public step: it needs `[approved]`, together with
-   the branch deletion afterwards); `.github/workflows/rc-check-macos.yml` runs
+   `rc-check/<tag>` and delete the branch afterwards (both need the advisor's
+   `[approved]` only when the release does); `.github/workflows/rc-check-macos.yml` runs
    the `mc-core` and `mc-world` lib tests (nextest `ci` profile, which skips
    tests over 3 s) on `macos-15` with the 26.3 content cache. Pass = a green
    run whose log prints the candidate SHA; save the log
@@ -77,11 +78,11 @@ pass". This page is the release procedure for the four repositories:
 
 ## A pushed tag whose CI failed
 
-Each public step needs its own advisor approval. Give the request an ID (for
-example `RC5-PUB-3`) with the exact commands and SHA, and keep only one request
-open at a time. The answer is exactly `[approved]`; it counts only if issued
-after that request: answers can arrive many turns late (an advisory's
-`turns_ago` shows when it was issued; 2026-11-07).
+When the release needs the advisor (a risky RC or 1.0.0), each public step gets
+its own approval. Give the request an ID (for example `RC5-PUB-3`) with the
+exact commands and SHA, and keep only one request open at a time. The answer
+is exactly `[approved]`; it counts only if issued after that request: answers
+can arrive many turns late (an advisory's `turns_ago` shows when it was issued).
 
 1. Diagnose: `gh run view <run> --json jobs` plus the failed job log (save under
    `.analysis/releases/<tag>/`); `gh release view <tag>` (not found when publish

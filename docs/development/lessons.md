@@ -6,10 +6,12 @@ Dates are when the lesson was learned (owner time zone, UTC+7).
 
 ## 2026-11
 
-- **2026-11-07 — a late `[approved]` is ambiguous.** A bare `[approved]`
-  arrived 41 turns after it was issued, with no way to tell which request it
-  answered. Requests now carry an ID, only one is open at a time, and an
-  `[approved]` counts only if issued after that request (`turns_ago`).
+- **2026-11-07 — a late `[approved]` is ambiguous; intermediate releases need
+  none.** A bare `[approved]` arrived 41 turns after it was issued, with no way
+  to tell which request it answered. Requests now carry an ID, only one is open
+  at a time, and an `[approved]` counts only if issued after that request
+  (`turns_ago`). The owner then lifted the advisor gate for intermediate
+  releases: it stays only for an RC the owner names as risky and for 1.0.0.
   ([releases](release-and-tags.md#a-pushed-tag-whose-ci-failed))
 - **2026-11-06 — RC5 notes: three of four advisor rejections were unproven
   claims** ("RC4 behaves the same" without running RC4, "always" from one run,
