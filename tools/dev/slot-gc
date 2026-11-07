@@ -1,0 +1,716 @@
+#!/usr/bin/env python3
+"""Delete dead build artifacts from pooled target slots: slot-gc [--delete] [-v] [slot...].
+
+Owner-host tool (see tools/dev/README.md). A pooled slot (<work>/targets/slot-<l>)
+caches builds of many trees. These artifacts are removed (the last class only when the
+disk is short); everything else is kept:
+
+* Build units: `deps/<stem>.d` and matching outputs, when at least one absolute
+  prerequisite is in a removed worktree or /tmp tree and every absolute prerequisite
+  is either in a removed tree or the target pool. Unknown, registry, toolchain and
+  live-tree prerequisites keep the unit.
+* Incremental crate dirs (`incremental/<crate>-<id>`): only on proven attribution.
+  The dir's recorded sessions must mention the root source file of a unit with the
+  same full stem (first source of its `.d`, absolute) that lies in a removed
+  tree, and must mention no path of any existing tree at all (an existing
+  worktree or /tmp dir, a main checkout, any other path under <work> or in a
+  home directory except the cargo registry and the toolchain). A cache that
+  also mentions a live tree, or mentions no attributable root, is reported as
+  unattributed and kept.
+* Superseded incremental sessions (class 1, every pass): in each incremental crate
+  dir every finalized `s-*` session except the newest (rustc's order: the base-36
+  timestamp in the name), with its `.lock`. rustc only ever loads the newest
+  finalized session; `-working` ones are skipped, and so is a session whose
+  `.lock` rustc holds (flock), exactly as rustc's own session GC does.
+* Capacity rotation (class 2): only when free space on the targets disk is still
+  below floor + 10 GiB (`--min-free-gb`, SOLARIS_SLOT_MIN_FREE_GB, default 80)
+  after the safe classes, evict idle slots least recently used first (last use:
+  newest mtime under `<profile>/.fingerprint` or the pool lock file's mtime): first
+  the slot's incremental dirs, then, if still short, everything except `tmp/`. A
+  slot is never rotated while its pool lock is held or a live process has it as
+  CARGO_TARGET_DIR. Evictions rename into `<slot>/.gc-trash-<pid>` first, so an
+  interrupted run is finished by the next pass. `--no-rotate` skips this class.
+
+Each slot is processed under two locks: its pool lock (`<lock-dir>/<l>`, the flock
+mem-run takes for a slot it selects and pin-release takes around its build) and its
+use lock (`<lock-dir>/<l>.use`, which every mem-run command whose target is that
+slot holds shared for its whole run, including an explicit CARGO_TARGET_DIR and
+pin-release's inner build). A slot with either lock held is skipped and reported;
+a runner command that starts during a pass waits for that slot's pass to end. The
+CARGO_TARGET_DIR process scan is a second layer for cargo run outside mem-run,
+repeated just before a slot is changed; such a command starting after that scan
+is not protected. Without --delete nothing is removed (dry run). Units are
+removed file by file, so an interrupted run leaves a consistent slot.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import os
+import re
+import shutil
+import stat
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import wtlib as w  # noqa: E402
+
+LOCK_DIR = Path("/tmp/solaris-mem-slots")
+# Directories of a cargo profile dir that are never searched for further profile dirs.
+OPAQUE = {"deps", "incremental", "build", ".fingerprint", "examples"}
+SESSION_FILES = ("query-cache.bin", "dep-graph.bin", "work-products.bin")
+CHUNK = 16 << 20
+OVERLAP = 8192
+GIB = 2**30
+TRASH = ".gc-trash-"  # evicted dirs are renamed to <slot>/.gc-trash-<pid>, then removed
+
+
+@dataclass
+class Roots:
+    """Where trees live. `tmp` is the scratch root whose children count as trees."""
+    work: Path
+    targets: Path
+    tmp: Path = Path("/tmp")
+
+    @property
+    def wt(self) -> Path:
+        return self.work / "wt"
+
+
+def classify(path: str, roots: Roots) -> tuple[str, str]:
+    """(kind, tree) of an absolute path: kind is dead | live | neutral | other.
+
+    dead: inside a tree root under <work>/wt or the tmp root that does not exist;
+    live: the same for an existing one; neutral: pool build output, which says
+    nothing about a tree; other: anything else (main checkouts, registry, ...)."""
+    p = Path(os.path.normpath(path))
+    if p.is_relative_to(roots.targets):
+        return "neutral", str(roots.targets)
+    parts = p.relative_to(roots.wt).parts if p.is_relative_to(roots.wt) else ()
+    base = roots.wt
+    if not parts and p.is_relative_to(roots.tmp):
+        # Only a directory below the tmp root is a tree; a bare file in it is not.
+        parts, base = p.relative_to(roots.tmp).parts, roots.tmp
+        parts = parts if len(parts) >= 2 else ()
+    if not parts:
+        return "other", str(p)
+    tree = base / parts[0]
+    return ("live" if os.path.lexists(tree) else "dead"), str(tree)
+
+
+# --- dep-info units ---------------------------------------------------------
+
+def _split_rule(line: str) -> list[str]:
+    """Prerequisites of one makefile rule line (`target: a b\\ c`); [] for comments
+    and empty rules."""
+    if line.startswith("#") or not line.strip():
+        return []
+    escaped = line.replace("\\ ", "\0")
+    _, sep, rest = escaped.partition(": ")
+    if not sep:
+        return []
+    return [tok.replace("\0", " ") for tok in rest.split()]
+
+
+def parse_depinfo(dfile: Path) -> list[str]:
+    """All prerequisites in a .d file, in order (first = the crate root source)."""
+    try:
+        text = dfile.read_text(errors="replace")
+    except OSError:
+        return []
+    out: list[str] = []
+    for line in text.splitlines():
+        out.extend(_split_rule(line))
+    return out
+
+
+def unit_verdict(sources: list[str], roots: Roots) -> tuple[str, set[str]]:
+    """Return ('dead', removed trees) only if all absolute sources are attributable
+    to removed trees or the target pool, with at least one removed tree. Registry,
+    toolchain, unknown and existing-tree paths keep the unit."""
+    trees: set[str] = set()
+    for src in sources:
+        if not src.startswith("/"):
+            continue
+        kind, tree = classify(src, roots)
+        if kind == "dead":
+            trees.add(tree)
+        elif kind != "neutral":
+            return ("live" if kind == "live" else "foreign"), set()
+    return ("dead", trees) if trees else ("none", set())
+
+
+def disk_bytes(st: os.stat_result) -> int:
+    """Bytes a removal frees: a file with other hard links frees nothing yet."""
+    return st.st_blocks * 512 if st.st_nlink == 1 else 0
+
+
+def profile_dirs(slot: Path):
+    """Every cargo profile dir (one with a `deps` dir) inside the slot, without
+    descending into cargo's own output dirs."""
+    for dirpath, dirnames, _ in os.walk(slot):
+        here = Path(dirpath)
+        if "deps" in dirnames and not (here / "deps").is_symlink():
+            yield here
+        dirnames[:] = [d for d in dirnames if d not in OPAQUE and not d.startswith(TRASH) and not (here / d).is_symlink()]
+
+
+def unit_files(deps: Path, names: list[str]) -> dict[str, list[str]]:
+    """stem -> files of the unit (`<stem>`, `<stem>.*`, `lib<stem>.*`) for every .d stem."""
+    plain: dict[str, list[str]] = {}
+    libs: dict[str, list[str]] = {}
+    for name in names:
+        plain.setdefault(name.split(".", 1)[0], []).append(name)
+        if name.startswith("lib"):
+            libs.setdefault(name[3:].split(".", 1)[0], []).append(name)
+    return {name[:-2]: plain.get(name[:-2], []) + libs.get(name[:-2], []) for name in names if name.endswith(".d")}
+
+
+# --- incremental dirs -------------------------------------------------------
+
+def _mention_regex(roots: Roots) -> re.Pattern:
+    """Path roots worth classifying inside a binary cache: a worktree, any other
+    child of <work>, a child of the tmp root, a home-directory child."""
+    name = "[A-Za-z0-9_.-]+"
+    work, tmp = re.escape(str(roots.work)), re.escape(str(roots.tmp))
+    return re.compile(f"({work}/wt/{name}|{work}/{name}|{tmp}/{name}|/home/{name}/{name})(?=/)".encode())
+
+
+def scan_mentions(path: Path, roots: Roots, needles: set[bytes]) -> tuple[set[str], set[bytes]]:
+    """(path-root mentions, needles present) in one binary cache file, read in chunks."""
+    regex = _mention_regex(roots)
+    found: set[str] = set()
+    hit: set[bytes] = set()
+    with open(path, "rb") as handle:
+        tail = b""
+        while True:
+            block = handle.read(CHUNK)
+            if not block:
+                break
+            data = tail + block
+            found.update(m.group(1).decode(errors="replace") for m in regex.finditer(data))
+            hit.update(n for n in needles if n in data)
+            tail = data[-OVERLAP:]
+    return found, hit
+
+
+def mention_kind(mention: str, roots: Roots) -> str:
+    """dead | neutral | other for one mentioned path root (live trees are `other`:
+    any existing tree, main checkout or unknown location blocks deletion)."""
+    if mention.startswith("/home/"):
+        parts = Path(mention).parts
+        return "neutral" if len(parts) >= 4 and parts[3] in (".cargo", ".rustup") else "other"
+    kind, _ = classify(mention + "/x", roots)
+    return {"dead": "dead", "neutral": "neutral"}.get(kind, "other")
+
+
+def incremental_verdict(crate_dir: Path, root_files: set[str], roots: Roots) -> tuple[str, str]:
+    """('dead', tree) on proven attribution, else ('unattributed', reason)."""
+    needles = {r.encode(): r for r in root_files}
+    dead_roots: set[str] = set()
+    for session in sorted(crate_dir.glob("s-*")):
+        if session.is_symlink() or not session.is_dir():
+            continue
+        for name in SESSION_FILES:
+            f = session / name
+            if not f.is_file() or f.is_symlink():
+                continue
+            try:
+                mentions, hit = scan_mentions(f, roots, set(needles))
+            except OSError:
+                return "unattributed", f"unreadable {name}"
+            for m in mentions:
+                if mention_kind(m, roots) == "other":
+                    return "unattributed", f"mentions {m}"
+            dead_roots.update(needles[n] for n in hit)
+    if not dead_roots:
+        return "unattributed", "no root source of a unit of this crate is mentioned"
+    for root in sorted(dead_roots):
+        kind, tree = classify(root, roots)
+        if kind != "dead":
+            return "unattributed", f"root {root} is not in a removed tree"
+    return "dead", classify(sorted(dead_roots)[0], roots)[1]
+
+
+def tree_bytes(path: Path) -> int:
+    total = 0
+    for dirpath, dirnames, filenames in os.walk(path):
+        for name in filenames:
+            try:
+                total += disk_bytes(os.lstat(os.path.join(dirpath, name)))
+            except OSError:
+                pass
+    return total
+
+
+# --- slot processing --------------------------------------------------------
+
+@dataclass
+class SlotReport:
+    slot: str
+    status: str = "ok"  # ok | busy | unmanaged | missing
+    units: int = 0
+    unit_bytes: int = 0
+    inc_dirs: int = 0
+    inc_bytes: int = 0
+    trees: dict[str, list[int]] = field(default_factory=dict)  # removed tree -> [units, incremental dirs]
+    kept_units: dict[str, int] = field(default_factory=dict)  # reason -> count
+    unattributed: int = 0
+    sess_dirs: int = 0
+    sess_bytes: int = 0
+    sess_locked: int = 0
+    busy_reason: str = ""
+    errors: list[str] = field(default_factory=list)
+    listing: list[str] = field(default_factory=list)
+
+    def credit(self, tree: str, index: int) -> None:
+        self.trees.setdefault(tree, [0, 0])[index] += 1
+
+
+def remove_unit_files(deps: Path, files: list[str], delete: bool, report: SlotReport) -> None:
+    for name in files:
+        path = deps / name
+        try:
+            st = os.lstat(path)
+            if stat.S_ISDIR(st.st_mode):
+                continue
+            report.unit_bytes += disk_bytes(st)
+            if delete:
+                os.unlink(path)
+        except FileNotFoundError:
+            pass
+        except OSError as err:
+            report.errors.append(f"{path}: {err}")
+
+
+def session_order(entry: Path) -> tuple[int, float]:
+    """rustc's order: the base-36 timestamp of `s-<ts>-…`; mtime only breaks ties and
+    places a name rustc could not parse first."""
+    try:
+        stamp = int(entry.name.split("-")[1], 36)
+    except (IndexError, ValueError):
+        stamp = -1
+    try:
+        return stamp, entry.stat().st_mtime
+    except OSError:
+        return stamp, 0.0
+
+
+def finalized_sessions(crate_dir: Path) -> list[Path]:
+    """Finalized `s-*` session dirs of an incremental crate dir, oldest first in
+    rustc's order. `-working` dirs (a session being written) are never included."""
+    try:
+        entries = list(crate_dir.iterdir())
+    except OSError:
+        return []
+    found = [e for e in entries
+             if e.name.startswith("s-") and not e.name.endswith("-working") and e.is_dir() and not e.is_symlink()]
+    return sorted(found, key=lambda e: (*session_order(e), e.name))
+
+
+def session_lock(session: Path) -> Path:
+    """`s-<ts>-<hash>-<svh>` is locked by `s-<ts>-<hash>.lock` (the session id is dropped)."""
+    return session.with_name(session.name.rsplit("-", 1)[0] + ".lock")
+
+
+def lock_session(session: Path) -> int | None:
+    """Exclusive non-blocking flock on the session's `.lock`, as rustc's own GC takes
+    before deleting a session; None when rustc holds it (or it cannot be opened)."""
+    try:
+        fd = os.open(session_lock(session), os.O_RDWR)
+    except FileNotFoundError:
+        return os.open(os.devnull, os.O_RDONLY)  # no lock file: nothing can hold it
+    except OSError:
+        return None
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(fd)
+        return None
+    return fd
+
+
+def prune_old_sessions(crate_dir: Path, delete: bool, report: SlotReport) -> None:
+    """Class 1: rustc only ever loads the newest finalized session of a crate dir, so
+    every older one (with its lock file) is dead weight, unless rustc holds its lock."""
+    for session in finalized_sessions(crate_dir)[:-1]:
+        fd = lock_session(session)
+        if fd is None:
+            report.sess_locked += 1
+            continue
+        try:
+            report.sess_dirs += 1
+            report.sess_bytes += tree_bytes(session)
+            report.listing.append(f"old session {session}")
+            if not delete:
+                continue
+            shutil.rmtree(session, ignore_errors=True)
+            if session.exists():
+                report.errors.append(f"{session}: not fully removed")
+                continue
+            session_lock(session).unlink(missing_ok=True)
+        finally:
+            os.close(fd)
+
+
+def process_profile(profile: Path, roots: Roots, delete: bool, report: SlotReport) -> None:
+    deps = profile / "deps"
+    try:
+        units = unit_files(deps, os.listdir(deps))
+    except OSError as err:
+        report.errors.append(f"{deps}: {err}")
+        return
+    # Judge every unit and collect crate root sources before anything is removed:
+    # the incremental verdicts below need the roots of the units that are deleted.
+    dead: list[tuple[str, set[str]]] = []
+    crate_roots: dict[str, set[str]] = {}
+    for stem in units:
+        sources = parse_depinfo(deps / f"{stem}.d")
+        if sources and sources[0].startswith("/"):
+            crate_roots.setdefault(stem, set()).add(sources[0])
+        verdict, trees = unit_verdict(sources, roots)
+        if verdict == "dead":
+            dead.append((stem, trees))
+        else:
+            report.kept_units[verdict] = report.kept_units.get(verdict, 0) + 1
+    for stem, trees in dead:
+        report.units += 1
+        for tree in trees:
+            report.credit(tree, 0)
+        report.listing.append(f"unit {deps / stem}  [{', '.join(sorted(trees))}]")
+        remove_unit_files(deps, units[stem], delete, report)
+
+    inc = profile / "incremental"
+    if not inc.is_dir() or inc.is_symlink():
+        return
+    for crate_dir in sorted(inc.iterdir()):
+        if crate_dir.is_symlink() or not crate_dir.is_dir():
+            continue
+        verdict, detail = incremental_verdict(crate_dir, crate_roots.get(crate_dir.name, set()), roots)
+        if verdict != "dead":
+            report.unattributed += 1
+            report.listing.append(f"unattributed {crate_dir}  ({detail})")
+            prune_old_sessions(crate_dir, delete, report)
+            continue
+        report.inc_dirs += 1
+        report.inc_bytes += tree_bytes(crate_dir)
+        report.credit(detail, 1)
+        report.listing.append(f"incremental {crate_dir}  [{detail}]")
+        if delete:
+            shutil.rmtree(crate_dir, ignore_errors=True)
+            if crate_dir.exists():
+                report.errors.append(f"{crate_dir}: not fully removed")
+
+
+class SlotLock:
+    """A slot's pool lock and use lock, both held exclusively; close() releases them."""
+
+    def __init__(self, fds: list[int]) -> None:
+        self.fds = fds
+
+    def close(self) -> None:
+        for fd in self.fds:
+            os.close(fd)
+        self.fds = []
+
+
+def try_flock(path: Path, stamp_new: bool) -> int | None:
+    """Open `path` without O_TRUNC and flock it exclusively, non-blocking; None when
+    held. The runner's truncating open of the pool lock bumps its mtime, and that
+    mtime is the slot's last-use stamp, so probing must not touch it; a pool lock
+    file created here (/tmp is cleared at reboot) is stamped with the epoch."""
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o664)
+        if stamp_new:
+            os.utime(fd, (0, 0))
+    except FileExistsError:
+        fd = os.open(path, os.O_WRONLY)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(fd)
+        return None
+    return fd
+
+
+def slot_lock(lock_dir: Path, letter: str) -> tuple[SlotLock | None, str]:
+    """Take `<lock-dir>/<letter>` (pool lock) and `<lock-dir>/<letter>.use` (held
+    shared by every runner command on the slot); (None, why) when either is held."""
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    pool = try_flock(lock_dir / letter, stamp_new=True)
+    if pool is None:
+        return None, "pool lock held"
+    use = try_flock(lock_dir / f"{letter}.use", stamp_new=False)
+    if use is None:
+        os.close(pool)
+        return None, "a runner command uses it (use lock held)"
+    return SlotLock([pool, use]), ""
+
+
+def target_dir_users(proc: Path = Path("/proc")) -> dict[str, list[int]]:
+    """CARGO_TARGET_DIR (real path) -> pids of live processes started with it. A command
+    that sets it takes no pool lock, so the lock alone does not prove a slot idle.
+    Unreadable environments (other users) are skipped; this process is not counted."""
+    users: dict[str, list[int]] = {}
+    for entry in proc.iterdir():
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            environ = (entry / "environ").read_bytes()
+        except OSError:
+            continue
+        for item in environ.split(b"\0"):
+            if item.startswith(b"CARGO_TARGET_DIR="):
+                path = os.path.realpath(item[17:].decode(errors="replace"))
+                users.setdefault(path, []).append(int(entry.name))
+    return users
+
+
+def users_of(slot: Path, users: dict[str, list[int]]) -> list[int]:
+    """Pids whose CARGO_TARGET_DIR is the slot or lies inside it."""
+    root = os.path.realpath(slot)
+    return sorted(pid for path, pids in users.items() if path == root or path.startswith(root + os.sep) for pid in pids)
+
+
+def purge_trash(slot: Path, report: SlotReport) -> None:
+    """Finish an interrupted eviction (the slot lock is held)."""
+    for leftover in slot.glob(TRASH + "*"):
+        shutil.rmtree(leftover, ignore_errors=True)
+        if leftover.exists():
+            report.errors.append(f"{leftover}: not fully removed")
+
+
+def gc_slot(slot: Path, roots: Roots, lock_dir: Path, delete: bool, users: dict[str, list[int]] | None = None) -> SlotReport:
+    """Classes 0 (dead units and incremental dirs) and 1 (superseded incremental sessions)."""
+    report = SlotReport(slot.name)
+    m = re.fullmatch(r"slot-([a-z])", slot.name)
+    if not m:
+        report.status = "unmanaged"  # no pool lock exists for it: nothing proves it idle
+        return report
+    if not slot.is_dir() or slot.is_symlink():
+        report.status = "missing"
+        return report
+    lock, why = slot_lock(lock_dir, m.group(1))
+    if lock is None:
+        report.status, report.busy_reason = "busy", why
+        return report
+    # Second layer, for cargo run outside the runner: a fresh scan once the locks are
+    # held when deleting, plus the caller's (older) snapshot.
+    fresh = target_dir_users() if delete else {}
+    pids = sorted(set(users_of(slot, users or {}) + users_of(slot, fresh)))
+    if pids:
+        lock.close()
+        report.status, report.busy_reason = "busy", f"CARGO_TARGET_DIR of pid {', '.join(map(str, pids[:5]))}"
+        return report
+    if not delete:
+        # A report removes nothing, so it must not keep a slot away from the
+        # runner for the minutes a scan takes: the locks only prove idleness now.
+        lock.close()
+    try:
+        if delete:
+            purge_trash(slot, report)
+        for profile in profile_dirs(slot):
+            process_profile(profile, roots, delete, report)
+    finally:
+        lock.close()  # releases both flocks (no-op after a dry run's early release)
+    return report
+
+
+# --- class 2: capacity rotation ---------------------------------------------
+
+@dataclass
+class Eviction:
+    slot: str
+    stage: str  # incremental | slot
+    bytes: int
+    reason: str
+
+
+def free_gib(path: Path) -> float:
+    st = os.statvfs(path)
+    return st.f_bavail * st.f_frsize / GIB
+
+
+def last_use(slot: Path, lock_dir: Path) -> float:
+    """Newest mtime under <profile>/.fingerprint (cargo rewrites invoked.timestamp on
+    every build), or the pool lock file's mtime if newer (the runner truncates it on
+    each use). 0 when neither exists."""
+    stamps = [0.0]
+    try:
+        stamps.append((lock_dir / slot.name.removeprefix("slot-")).stat().st_mtime)
+    except OSError:
+        pass
+    for profile in profile_dirs(slot):
+        fp = profile / ".fingerprint"
+        for root, dirs, files in os.walk(fp, followlinks=False):
+            for path in [Path(root), *(Path(root) / n for n in dirs + files)]:
+                try:
+                    stamps.append(path.lstat().st_mtime)
+                except OSError:
+                    pass
+    return max(stamps)
+
+
+def trash_and_remove(slot: Path, entries: list[Path]) -> list[str]:
+    """Rename `entries` into one trash dir inside the slot (atomic, same filesystem),
+    then remove it; an interrupted removal is finished by the next pass."""
+    trash = slot / f"{TRASH}{os.getpid()}"
+    trash.mkdir(exist_ok=True)
+    for i, entry in enumerate(entries):
+        os.rename(entry, trash / f"{i}-{entry.name}")
+    shutil.rmtree(trash, ignore_errors=True)
+    return [f"{trash}: not fully removed"] if trash.exists() else []
+
+
+def entry_bytes(path: Path) -> int:
+    return tree_bytes(path) if path.is_dir() and not path.is_symlink() else disk_bytes(path.lstat())
+
+
+def rotate(names: list[str], roots: Roots, lock_dir: Path, delete: bool, threshold: float, users: dict[str, list[int]],
+           freed_estimate: int = 0) -> tuple[list[Eviction], list[str], list[str]]:
+    """Class 2. Only if free space is still below `threshold` GiB after the safe classes:
+    evict idle slots, least recently used first; per slot its incremental dirs, then
+    (if still short) everything except tmp/. Returns (evictions, notes, errors).
+    A dry run plans with free = measured + `freed_estimate` + what it plans to evict."""
+    evictions: list[Eviction] = []
+    notes: list[str] = []
+    errors: list[str] = []
+    planned = 0.0 if delete else freed_estimate / GIB  # GiB a dry run assumes freed
+
+    def free() -> float:
+        return free_gib(roots.targets) + planned
+
+    if free() >= threshold:
+        return evictions, notes, errors
+    candidates = sorted(
+        (last_use(roots.targets / n, lock_dir), n)
+        for n in names if re.fullmatch(r"slot-[a-z]", n) and (roots.targets / n).is_dir() and not (roots.targets / n).is_symlink()
+    )
+    now = time.time()
+    for stamp, name in candidates:
+        if free() >= threshold:
+            break
+        slot = roots.targets / name
+        lock, busy = slot_lock(lock_dir, name.removeprefix("slot-"))
+        if lock is None:
+            notes.append(f"{name}: busy ({busy}), not rotated")
+            continue
+        try:
+            current_users = target_dir_users() if delete else {}
+            pids = sorted(set(users_of(slot, users) + users_of(slot, current_users)))
+            if pids:
+                notes.append(f"{name}: busy (CARGO_TARGET_DIR of pid {', '.join(map(str, pids[:5]))}), not rotated")
+                continue
+            if not delete:
+                lock.close()  # a plan must not hold the slot while it measures
+            age = f"{(now - stamp) / 86400:.1f}d" if stamp else "never"
+            why = f"free {free():.1f}G < {threshold:g}G; last use {age} ago"
+            incs = [p for prof in profile_dirs(slot) if (p := prof / "incremental").is_dir() and not p.is_symlink()]
+            inc_bytes = sum(tree_bytes(p) for p in incs)
+            if incs:
+                if delete:
+                    errors += trash_and_remove(slot, incs)
+                else:
+                    planned += inc_bytes / GIB
+                evictions.append(Eviction(name, "incremental", inc_bytes, why))
+            if free() >= threshold:
+                continue
+            rest = [p for p in slot.iterdir() if p.name != "tmp" and not p.name.startswith(TRASH)]
+            # A dry run left the incremental dirs in place: they are already planned.
+            rest_bytes = max(sum(entry_bytes(p) for p in rest) - (0 if delete else inc_bytes), 0)
+            if rest:
+                if delete:
+                    errors += trash_and_remove(slot, rest)
+                else:
+                    planned += rest_bytes / GIB
+                evictions.append(Eviction(name, "slot", rest_bytes, why + ("; incremental was not enough" if incs else "")))
+        except OSError as err:
+            errors.append(f"{name}: {err}")
+        finally:
+            lock.close()
+    if free() < threshold:
+        notes.append(f"still {free():.1f}G free, below {threshold:g}G: no idle slot left to rotate")
+    return evictions, notes, errors
+
+
+def gib(n: int) -> str:
+    return f"{n / GIB:.1f} GiB"
+
+
+def print_report(reports: list[SlotReport], delete: bool, verbose: bool) -> int:
+    verb = "deleted" if delete else "would delete"
+    total = 0
+    for r in reports:
+        if r.status == "busy":
+            print(f"{r.slot}: BUSY ({r.busy_reason}), skipped")
+            continue
+        if r.status == "unmanaged":
+            print(f"{r.slot}: skipped (not a slot-<letter> dir, no pool lock protocol)")
+            continue
+        if r.status == "missing":
+            print(f"{r.slot}: skipped (no such directory)")
+            continue
+        total += r.unit_bytes + r.inc_bytes + r.sess_bytes
+        kept = ", ".join(f"{k} {v}" for k, v in sorted(r.kept_units.items())) or "-"
+        print(f"{r.slot}: {verb} {r.units} dead units ({gib(r.unit_bytes)}), {r.inc_dirs} dead incremental dirs "
+              f"({gib(r.inc_bytes)}) and {r.sess_dirs} superseded incremental sessions ({gib(r.sess_bytes)}); "
+              f"kept units by reason: {kept}; {r.unattributed} incremental dirs unattributed (kept)"
+              + (f"; {r.sess_locked} old sessions locked by rustc (kept)" if r.sess_locked else ""))
+        for tree, (units, dirs) in sorted(r.trees.items()):
+            print(f"    removed tree {tree}: {units} units, {dirs} incremental dirs")
+        if verbose:
+            for line in r.listing:
+                print(f"    {line}")
+        for err in r.errors:
+            print(f"    error: {err}", file=sys.stderr)
+    print(f"total: {verb} {gib(total)}")
+    return 1 if any(r.errors for r in reports) else 0
+
+
+def print_rotation(evictions: list[Eviction], notes: list[str], errors: list[str], delete: bool) -> int:
+    verb = "evicted" if delete else "would evict"
+    for e in evictions:
+        what = "incremental dirs" if e.stage == "incremental" else "everything except tmp/"
+        print(f"rotation: {verb} {e.slot} {what} ({gib(e.bytes)}): {e.reason}")
+    for note in notes:
+        print(f"rotation: {note}")
+    for err in errors:
+        print(f"rotation: error: {err}", file=sys.stderr)
+    return 1 if errors else 0
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Delete dead build artifacts from idle pooled target slots and rotate them when the disk is short (dry run by default).")
+    parser.add_argument("slots", nargs="*", help="slot names (slot-a or a); default: every slot-* dir")
+    parser.add_argument("--delete", action="store_true", help="remove the artifacts (default: report only)")
+    parser.add_argument("-v", "--verbose", action="store_true", help="list every dead unit and incremental dir")
+    parser.add_argument("--no-rotate", action="store_true", help="skip class 2 (capacity rotation of idle slots)")
+    parser.add_argument("--min-free-gb", type=float, default=float(os.environ.get("SOLARIS_SLOT_MIN_FREE_GB") or 80),
+                        help="free-space floor; rotation runs while free space is below floor + 10 GiB (default 80, SOLARIS_SLOT_MIN_FREE_GB)")
+    parser.add_argument("--work", type=Path, default=w.WORK, help=argparse.SUPPRESS)
+    parser.add_argument("--targets", type=Path, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--lock-dir", type=Path, default=LOCK_DIR, help=argparse.SUPPRESS)
+    parser.add_argument("--tmp", type=Path, default=Path("/tmp"), help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    targets = args.targets or Path(os.environ.get("SOLARIS_SLOT_TARGETS") or args.work / "targets")
+    roots = Roots(work=args.work, targets=targets, tmp=args.tmp)
+    if args.slots:
+        names = [s if s.startswith("slot-") else f"slot-{s}" for s in args.slots]
+    else:
+        names = sorted(p.name for p in targets.glob("slot-*"))
+    users = target_dir_users()
+    reports = [gc_slot(targets / name, roots, args.lock_dir, args.delete, users) for name in names]
+    status = print_report(reports, args.delete, args.verbose)
+    if not args.no_rotate and targets.is_dir():
+        freed = sum(r.unit_bytes + r.inc_bytes + r.sess_bytes for r in reports)
+        evictions, notes, errors = rotate(names, roots, args.lock_dir, args.delete, args.min_free_gb + 10, users, freed)
+        status |= print_rotation(evictions, notes, errors, args.delete)
+    sys.exit(status)
+
+
+if __name__ == "__main__":
+    w.run_tool(main)

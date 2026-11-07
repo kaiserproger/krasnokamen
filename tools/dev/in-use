@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Mark paths other agents must not remove: in-use add|remove|list.
+
+  in-use add <path> --owner <name> --kind client_root|loader_root|receipt_binary [--kind worktree|pin]
+  in-use remove <path> --owner <name>
+  in-use list [--json]
+
+Owner-host tool (see tools/dev/README.md). The marks live in the append-only
+<work>/receipts/.in-use.jsonl; readers fold it (wtlib.in_use_fold). wt-new and
+pin-release register their worktree and pin themselves. Call `add` for a client or
+loader checkout a harness run points at and for a receipt binary a gate executes,
+and `remove` when the run ends: `wt-done` refuses to remove a worktree that another
+owner has marked, and `wt-gc` shows the marks. Slots are caches and ignore them.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import wtlib as w  # noqa: E402
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Mark or unmark paths as in use (append-only registry).")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    add = sub.add_parser("add", help="mark a path in use")
+    add.add_argument("path")
+    add.add_argument("--owner", required=True, help="agent or worktree name holding the mark")
+    add.add_argument("--kind", required=True, choices=w.KINDS)
+    rem = sub.add_parser("remove", help="drop the mark of one owner on a path")
+    rem.add_argument("path")
+    rem.add_argument("--owner", required=True)
+    lst = sub.add_parser("list", help="print the current marks")
+    lst.add_argument("--json", action="store_true")
+    args = parser.parse_args()
+
+    if args.cmd == "add":
+        w.in_use_add(args.path, args.owner, args.kind)
+    elif args.cmd == "remove":
+        w.in_use_remove(args.path, args.owner)
+    else:
+        marks = w.in_use_marks()
+        if args.json:
+            print(json.dumps(marks, indent=2))
+        for m in ([] if args.json else marks):
+            print(f"{m['path']}\t{m['owner']}\t{m['kind']}\t{m['since']}")
+
+
+if __name__ == "__main__":
+    w.run_tool(main)
