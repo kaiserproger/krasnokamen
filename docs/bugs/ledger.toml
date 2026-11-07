@@ -3611,7 +3611,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T170731-matrix-random-4x_c80x4/result.json"
 regression = []
-failing_first = "observed"
+failing_first = "reported"
 
 [[bug]]
 id = "SCENARIO-MOB-ATTACK-NO-PROGRESS"
@@ -3622,4 +3622,4 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T163619-protocol-matrix-3xalnot6/result.json"
 regression = []
-failing_first = "observed"
+failing_first = "reported"
