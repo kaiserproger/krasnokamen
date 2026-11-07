@@ -243,8 +243,6 @@ queued deadline, then run the native tick and assert the outcome. This does
 not advance other simulation systems: do not use it if movement, random ticks,
 other deadlines, or elapsed per-tick effects matter. `/tick sprint`, including
 the civilization-seed QA sprint, removes waits but still executes every tick.
-The default nextest profile warns every 60 seconds and terminates a test after
-eight warnings (480 seconds), allowing substantial contention on a loaded host.
 
 Concurrency: `RUST_TEST_THREADS` (first priority), else `NEXTEST_TEST_THREADS`
 (default `num-cpus`), selects the gate default; nextest's `--test-threads=N`
