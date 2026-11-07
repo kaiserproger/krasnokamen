@@ -403,7 +403,7 @@ pub(super) fn work(
     let working =
         v.activity == Activity::Work && (2_000..9_000).contains(&state.day_time.rem_euclid(24_000));
     if !working
-        || mining::needs_deposit(v)
+        || mining::heavy_load(v)
         || (state.tick.is_multiple_of(PERIOD)
             && v.settlement.is_some_and(|id| {
                 crate::settlements::construction::candidate_funded_by_delivery(

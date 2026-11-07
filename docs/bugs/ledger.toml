@@ -3354,6 +3354,17 @@ failing_first = "reported"
 regression = ["cargo:mc-core:settlements::construction::planner_tests::an_already_funded_candidate_does_not_send_each_harvested_log_home"]
 
 [[bug]]
+id = "CIVILIZATION-MIXED-LOG-HAUL-STARVATION"
+title = "A lumberjack carrying more than a stack of mixed wood keeps searching instead of delivering because neither species fills a stack."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 .analysis/validation/20261107T160204-civilization-seed-qa-uvkz8j4d/result.json and stall-snapshot.json: 61 birch logs and 6 oak logs remain carried with returning=false while settlement stock is unchanged for a day; failing-first .analysis/validation/civsim3-mixed-load-failing-first.log; reverting only the shared load predicate fails .analysis/validation/civsim3-mixed-load-negative-control.log."
+failing_first = "reported"
+regression = ["cargo:mc-core:villager::lumber_tests::lumberjack_delivers_a_stack_sized_mixed_wood_load_during_work"]
+
+[[bug]]
 id = "CIV-SEED24-FURNACE-OUTPUT"
 title = "Completed settlement furnace output remains stranded after the nearby tender takes a vanilla profession."
 area = "gameplay"

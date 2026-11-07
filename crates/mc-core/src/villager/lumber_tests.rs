@@ -379,14 +379,7 @@ fn lumberjack_completes_trunk_and_replants_across_stack_haul() {
     let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
     tree(&mut state, 10, 10, 5);
     let oak = mining::item_id(&state, "oak_log").unwrap();
-    let cobble = mining::item_id(&state, "cobblestone").unwrap();
-    v.inventory = std::array::from_fn(|i| {
-        if i == 0 {
-            Some(ItemStack::new(oak, 60))
-        } else {
-            Some(ItemStack::new(cobble, 63))
-        }
-    });
+    v.inventory[0] = Some(ItemStack::new(oak, 60));
     storage(&mut state, &v, [12, 201, 12]);
     let mut changes = ChangeSet::default();
     let mut tick = 0u64;
@@ -415,7 +408,7 @@ fn lumberjack_completes_trunk_and_replants_across_stack_haul() {
     let chest = state.block_entities.get(&(12, 201, 12)).unwrap();
     assert_eq!(
         chest.slots.iter().map(|s| s.count).sum::<i32>(),
-        505,
+        64,
         "the stack-triggered trip drains all carried resources"
     );
     assert_eq!(
@@ -425,9 +418,53 @@ fn lumberjack_completes_trunk_and_replants_across_stack_haul() {
             .filter(|s| !s.is_empty())
             .map(|s| s.count)
             .sum::<i32>(),
-        505
+        64
     );
     assert_eq!(count(&v, oak), 1, "last trunk block after the trip");
+}
+
+#[test]
+fn lumberjack_delivers_a_stack_sized_mixed_wood_load_during_work() {
+    let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
+    let birch = mining::item_id(&state, "birch_log").unwrap();
+    let oak = mining::item_id(&state, "oak_log").unwrap();
+    let bread = mining::item_id(&state, "bread").unwrap();
+    v.inventory[0] = Some(ItemStack::new(birch, 61));
+    v.inventory[1] = Some(ItemStack::new(oak, 6));
+    v.inventory[2] = Some(ItemStack::new(bread, 3));
+    let target = BlockPos {
+        x: 12,
+        y: 201,
+        z: 12,
+    };
+    storage(&mut state, &v, [target.x, target.y, target.z]);
+    state.tick = 21;
+    let mut changes = ChangeSet::default();
+    assert_eq!(
+        lumber::work(&mut state, slot, &mut v, &mut changes),
+        Some(target),
+        "mixed wood must not wait for one species to fill a stack"
+    );
+    assert!(v.lumber_progress.returning);
+    follow(&mut state, slot, target);
+    lumber::work(&mut state, slot, &mut v, &mut changes);
+    assert!(!v.lumber_progress.returning);
+    assert_eq!(count(&v, bread), 3, "the worker keeps its ration");
+    assert_eq!(count(&v, birch), 0);
+    assert_eq!(count(&v, oak), 0);
+    let chest = &state.block_entities[&(target.x, target.y, target.z)];
+    for (item, expected) in [(birch, 61), (oak, 6)] {
+        assert_eq!(
+            chest
+                .slots
+                .iter()
+                .filter(|s| s.item_id == item)
+                .map(|s| s.count)
+                .sum::<i32>(),
+            expected,
+            "the physical delivery conserves each wood species"
+        );
+    }
 }
 
 #[test]
