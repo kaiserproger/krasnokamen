@@ -99,11 +99,12 @@ Adapter guidance: [matrix domains](../tools/harness/matrix_domains/README.md),
 [containers](../tools/harness/matrix_domains/containers.md), and
 [platform coverage](../tools/harness/matrix_domains/platform.md).
 
-The true-vanilla Java lane is blocked: the current Loader Java agent premain
-does not install lifecycle or packet hooks, so the client state-change event
-does not arrive. The attempted row and its failure are recorded locally at
-`/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T133737-java-matrix-bam34j27/result.json`.
-This is a harness instrumentation blocker, not a passing Java gameplay check.
+The true-vanilla Java lane requires Loader's vanilla premain event transformer
+and a direct, non-symlink `SOLARIS_LEGACY_CONTENT_CACHE` for protocol 775.
+The real client reached Play in
+`/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T173128-java-matrix-hymtay_4/`;
+that run blocked later on missing player eye-height observation and is not a
+passing gameplay check.
 `matrix-random` is experimental. When at least two actor bots are available,
 its generated actions include conflicting quick-move clicks on the same chest
 slot. The isolated server's opt-in input log records each consumed input and
@@ -113,6 +114,11 @@ deterministic merely because the action seed is fixed.
 Inventory comparisons use each owning client's received inventory, not an
 independent observer of other players' private inventories. Do not infer replay
 determinism or crash atomicity without corresponding real-server receipts.
+The restart action first tests a live carried stack, then crashes again after
+that transfer settles and its WAL fence is published. The second comparison
+retains each player's and chest's slot, item fields and component SNBT, plus
+the observed block states. The carried-stack recovery separately compares item
+custody, because the destination slot on disconnect is not predicted.
 
 The owner-host campaign launcher is `tools/dev/scenario-nightly`. It requires a
 verified `pin-release` server and the imported vanilla data directory. For

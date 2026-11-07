@@ -27,7 +27,7 @@ class VanillaMatrixServer(VanillaOracle):
 
     def dashboard_stats(self):
         feedback = self.query('time query gametime')
-        match = re.search(r'The time is (\d+)', feedback)
+        match = re.search(r'The (?:game )?time is (\d+)', feedback)
         if match is None:
             raise RuntimeError('vanilla did not acknowledge the game-time fence: ' + feedback)
         return {'simulation_tick': int(match.group(1))}
@@ -38,7 +38,12 @@ def run_player_script(ctx, row, jar, vanilla_data):
     clients = []
     server = VanillaMatrixServer(directory, seed=row['seed'], jar=jar, use_mem_run=False,
                                  properties={'max-players': row['context']['player_count'],
-                                             'difficulty': 'peaceful'})
+                                             'difficulty': 'peaceful', 'white-list': 'false',
+                                             'generator-settings': json.dumps({
+                                                 'biome': 'minecraft:plains',
+                                                 'layers': [{'height': 1, 'block': 'minecraft:stone'}],
+                                                 'features': False, 'lakes': False,
+                                                 'structure_overrides': []})})
     evidence = {'jar': str(jar), 'jar_sha256': hashlib.sha256(jar.read_bytes()).hexdigest(),
                 'status': 'running'}
     ctx.client_evidence['vanilla'] = evidence

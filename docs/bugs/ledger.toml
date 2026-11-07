@@ -3601,3 +3601,36 @@ severity = "minor"
 status = "open"
 source = "Independent review of the CoreBlockers wave, 2026-11-07 (read from code, not reproduced)."
 regression = []
+
+[[bug]]
+id = "SCENARIO-RANDOM-BREAK-NO-PROGRESS"
+title = "Network mining harness sent 26.3 Cancel instead of Finish because it used the older player-action ordinals; the observed failure does not establish a server mining bug."
+area = "harness"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T170731-matrix-random-4x_c80x4/result.json; regression: tools/harness/test_protocol_input_verbs.py EncodingTests.test_break_block_sends_start_then_stop_with_sequence"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "SCENARIO-MOB-ATTACK-NO-PROGRESS"
+title = "Network mob scenario times out waiting for an attack to change authoritative health or remove the target; server versus harness cause has not been established."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T163619-protocol-matrix-3xalnot6/result.json"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "SCENARIO-VANILLA-CRAFT-ACK"
+title = "Differential seed 19 completes the Solaris crafting action but times out waiting for an inventory transition on vanilla; the adapter or protocol cause is unclassified."
+area = "harness"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T172634-matrix-random-u9k17kiz/result.json"
+regression = []
+failing_first = "reported"

@@ -22,6 +22,13 @@ MEM_RUN = WORK / 'solaris/tools/dev/mem-run.sh'
 def size(directory):
     return sum(path.stat().st_size for path in directory.rglob('*') if path.is_file())
 
+def passed_receipt(record, path, receipt):
+    """Keep compact provenance before deleting an individual passing run."""
+    return {**record, 'status': receipt['status'], 'tree': receipt.get('tree'),
+            'original_receipt': str(path), 'original_receipt_retained': False,
+            'receipt_sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+
+
 
 def prune(root, current, maximum):
     """Evict oldest completed campaigns, never an in-flight campaign."""
@@ -80,8 +87,15 @@ def run_campaign(args):
                'server_sha256': hashlib.sha256(args.server_bin.read_bytes()).hexdigest(),
                'server_pin_manifest': str(args.server_bin.parent / 'manifest.json'),
                'server_pin': json.loads((args.server_bin.parent / 'manifest.json').read_text()),
-               'repo': str(args.repo), 'requested_seeds': args.seeds, 'seeds_run': 0,
-               'passed': 0, 'failed': 0, 'failures': [], 'reductions': {}, 'stop_reason': 'seed_count'}
+               'repo': str(args.repo), 'requested_seeds': args.seeds, 'start_seed': args.start_seed,
+               'steps': args.steps, 'bots': args.bots, 'seeds_run': 0,
+               'passed': 0, 'passed_seeds': [], 'failed': 0, 'failures': [],
+               'reductions': {}, 'stop_reason': 'seed_count'}
+    if prune(args.receipts, root, args.max_bytes) >= args.max_bytes:
+        summary.update(status='failed', stop_reason='disk_budget_before_start')
+        (root / 'result.json').write_text(json.dumps(summary, indent=2) + '\n')
+        print(root / 'result.json', flush=True)
+        return 1
     deadline = time.monotonic() + args.budget_seconds
     common = [str(MEM_RUN), '-m', '6G', 'env', 'RUSTC_WRAPPER=', 'nice', '-n', '19',
               'ionice', '-c', '3', sys.executable, '-m', 'tools.harness', 'run', 'matrix-random',
@@ -111,6 +125,7 @@ def run_campaign(args):
         report = receipt.get('details', {}).get('protocol_matrix', {})
         summary['seeds_run'] += 1
         if record['exit'] == 0 and receipt.get('status') == 'passed' and report.get('status') == 'pass':
+            summary['passed_seeds'].append(passed_receipt(record, receipts[0], receipt))
             summary['passed'] += 1
             shutil.rmtree(directory)
         else:

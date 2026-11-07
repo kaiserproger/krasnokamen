@@ -1,5 +1,6 @@
 """Seed reproducibility and independent fault controls for every invariant."""
 import copy
+import json
 from pathlib import Path
 import struct
 import tempfile
@@ -9,13 +10,38 @@ import zlib
 from unittest.mock import patch
 
 from .backends import matrix_random
+from .quirk_parity import player
 
-from .matrix_domains.random import invariant_checks, mutate_observation, stock, _published, setup, recovery_matches, _mine
+from .matrix_domains.random import invariant_checks, mutate_observation, stock, _published, setup, recovery_matches, _mine, _exact_slots
 from .quirk_parity.fuzz import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_ACTIONS,
                                 shrink_player_scenario, failure_identity)
 
 
 class RandomMatrixTests(unittest.TestCase):
+    def test_differential_rejects_planted_inventory_divergence(self):
+        state = {'inventories': [{}], 'container': {}, 'blocks': {}}
+        self.assertTrue(player.compare_player_states(state, state)['passed'])
+        self.assertFalse(player.compare_player_states(state, state, fault=True)['passed'])
+
+    def test_vanilla_game_time_fence_parses_actual_feedback(self):
+        oracle = object.__new__(player.VanillaMatrixServer)
+        oracle.query = lambda _: 'System chat: The game time is 642 tick(s)'
+        self.assertEqual(oracle.dashboard_stats(), {'simulation_tick': 642})
+
+    def test_vanilla_network_fixture_disables_default_whitelist(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            jar = root / 'server.jar'
+            jar.write_bytes(b'test')
+            ctx = SimpleNamespace(artifact_dir=root, client_evidence={}, logs=[])
+            with patch.object(player, 'VanillaMatrixServer') as server:
+                server.return_value.start.side_effect = RuntimeError('stop after configuration')
+                with self.assertRaisesRegex(RuntimeError, 'stop after configuration'):
+                    player.run_player_script(ctx, player_scenario(7, 1, 2), jar, root)
+            self.assertEqual(server.call_args.kwargs['properties']['white-list'], 'false')
+            settings = json.loads(server.call_args.kwargs['properties']['generator-settings'])
+            self.assertEqual(settings['layers'], [{'height': 1, 'block': 'minecraft:stone'}])
+
     def test_mining_waits_for_exact_ack_including_sequence_zero(self):
         snapshots = iter([{'block_ack_sequence': None}, {'block_ack_sequence': 0}])
         actor = SimpleNamespace(look_at=lambda *args: None, break_block=lambda *args, **kwargs: 0,
@@ -70,6 +96,17 @@ class RandomMatrixTests(unittest.TestCase):
         wrong_item['inventories'][1] = {'minecraft:oak_planks': 4}
         self.assertFalse(recovery_matches(committed, wrong_item, 0, cursor))
 
+    def test_exact_post_image_distinguishes_slots_and_components(self):
+        image = _exact_slots('[{Slot: 2b, id: "minecraft:dirt", count: 1, '
+                             'components: {"example:key": {count: 5}}}]')
+        self.assertNotEqual(image, _exact_slots('[{Slot: 3b, id: "minecraft:dirt", count: 1, '
+                                                'components: {"example:key": {count: 5}}}]'))
+        self.assertNotEqual(image, _exact_slots('[{Slot: 2b, id: "minecraft:dirt", count: 1, '
+                                                'components: {"example:key": {count: 6}}}]'))
+        with self.assertRaises(ValueError):
+            _exact_slots('[{Slot: 2b, id: "minecraft:dirt"}, {Slot: 2b, id: "minecraft:stone"}]')
+
+
     def test_fixture_commands_follow_received_chunk_loading(self):
         events = []
         actor = SimpleNamespace(teleport_to=lambda *args: events.append('teleport'),
@@ -86,6 +123,9 @@ class RandomMatrixTests(unittest.TestCase):
                 'sources': {'earth': 4}, 'refusals': [], 'progress': True,
                 'authority': authority, 'observer': copy.deepcopy(authority), 'recovery_ok': True,
                 'recovery': {'exact_post_image': True, 'actor_index': 0, 'cursor': None,
+                             'cursor_recovery_ok': True,
+                             'expected_exact_image': {'inventories': [{}]},
+                             'recovered_exact_image': {'inventories': [{}]},
                              'expected_committed_image': copy.deepcopy(authority),
                              'recovered_image': copy.deepcopy(authority)}}
 
@@ -119,6 +159,8 @@ class RandomMatrixTests(unittest.TestCase):
                          stock([{'item_id': 'minecraft:oak_planks', 'count': 8}]))
         self.assertNotEqual(stock([{'item_id': 'minecraft:oak_log', 'count': 2}]),
                             stock([{'item_id': 'minecraft:oak_planks', 'count': 9}]))
+        self.assertEqual(stock([{'item_id': 'minecraft:diamond', 'count': 1}]),
+                         {'minecraft:diamond': 1})
 
     def test_published_wal_fence_checks_framing_checksum_and_tick(self):
         with tempfile.TemporaryDirectory() as directory:
