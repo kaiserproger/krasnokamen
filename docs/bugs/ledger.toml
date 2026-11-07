@@ -3316,6 +3316,7 @@ status = "open"
 source = "civilization-seed-qa seed 24, .analysis/validation/20261107T122413-civilization-seed-qa-binw9gjz/result.json: revision 15 and cursor 0 throughout the funded idle interval; focused failing-first .analysis/validation/20261107T130801-test-74aw_bjp/result.json; reverting only the planner guard move fails .analysis/validation/20261107T131817-test-0vdhijbt/result.json; reverting only gatherer protection borrows the Lumberjack in .analysis/validation/20261107T133539-test-yg_jmb0o/result.json."
 failing_first = "reported"
 regression = ["cargo:mc-core:settlements::construction::planner_tests::funded_seed24_candidate_starts_without_borrowing_its_priority_gatherer"]
+fix_commit = "384e83f692d42b64fc65110ba9aea002c98854f6"
 
 [[bug]]
 id = "CIVILIZATION-MIXED-WOOD-FUNDING-STALL"

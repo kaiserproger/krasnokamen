@@ -1710,14 +1710,18 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
     }
     let protected = state.settlements.get(id).and_then(|record| {
         record.project.as_ref().and_then(|project| {
-            needed_gatherer(state, id).or_else(|| {
-                if project.ordered {
-                    return None;
-                }
-                let images = executor::source_images(state, id);
-                gatherer_demand(state, record, &images)
-                    .filter(|profession| has_staffed_gatherer(state, id, *profession))
-            })
+            let images = executor::source_images(state, id);
+            active_project_bill(state, id)
+                .and_then(|bill| {
+                    super::construction_crafting::needed_gatherer(state, &bill, &images)
+                })
+                .or_else(|| {
+                    if project.ordered {
+                        return None;
+                    }
+                    gatherer_demand(state, record, &images)
+                        .filter(|profession| has_staffed_gatherer(state, id, *profession))
+                })
         })
     });
     let mut candidates = Vec::new();
