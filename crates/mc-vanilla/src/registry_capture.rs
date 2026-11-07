@@ -79,6 +79,8 @@ use mc_protocol::packets::configuration::{
 use super::process::{VanillaLaunchError, VanillaServerProcess};
 use crate::wire_client::Client;
 
+mod protocol;
+
 /// Typed failure of the vanilla RegistryData capture step.
 ///
 /// Variants name the concrete cause; the four a caller switches on are
@@ -86,6 +88,8 @@ use crate::wire_client::Client;
 /// and [`Self::PayloadMissing`].
 #[derive(Debug, thiserror::Error)]
 pub enum RegistryCaptureError {
+    #[error("cannot read capture protocol metadata at {}: {detail}", root.display())]
+    ProtocolMetadata { root: PathBuf, detail: String },
     #[error(
         "java executable is unavailable at {}; install a JDK or pass its path",
         java.display()
@@ -188,6 +192,12 @@ pub async fn capture_registry_payloads_from_jar(
     // Read the staged index before starting a JVM, so a broken staging tree is
     // reported without paying for a server launch.
     let expected = expected_registry_index(&root)?;
+    let protocol = protocol::Protocol::from_cache(&root).map_err(|error| {
+        RegistryCaptureError::ProtocolMetadata {
+            root: root.clone(),
+            detail: format!("{error:#}"),
+        }
+    })?;
     let work = tempfile::Builder::new()
         .prefix("vanilla-capture-")
         .tempdir_in(scratch_dir)
@@ -197,7 +207,7 @@ pub async fn capture_registry_payloads_from_jar(
         })?;
 
     let server = TemporaryServer::launch(jar, java, work, startup_timeout).await?;
-    let captured = capture_registry_payloads(server.addr(), staging.path()).await?;
+    let captured = capture_registry_payloads_for(server.addr(), staging.path(), &protocol).await?;
     server.stop().await?;
 
     verify_index(&root, &expected, &captured)?;
@@ -225,17 +235,25 @@ pub async fn capture_registry_payloads(
     addr: SocketAddr,
     staging_root: &Path,
 ) -> Result<BTreeMap<String, BTreeSet<String>>, RegistryCaptureError> {
+    capture_registry_payloads_for(addr, staging_root, &protocol::Protocol::canonical()).await
+}
+
+async fn capture_registry_payloads_for(
+    addr: SocketAddr,
+    staging_root: &Path,
+    protocol: &protocol::Protocol,
+) -> Result<BTreeMap<String, BTreeSet<String>>, RegistryCaptureError> {
     let mut client = Client::connect(addr)
         .await
         .map_err(handshake_refused(addr))?;
-    let _ = client
-        .drive_login(addr, "RegistryCapture")
+    protocol
+        .login(&mut client, addr)
         .await
         .map_err(handshake_refused(addr))?;
 
     loop {
         let frame = client.read_frame().await.map_err(handshake_refused(addr))?;
-        if frame.id == ClientboundKnownPacks::ID {
+        if frame.id == protocol.known_cb {
             let mut body = frame.body;
             let _ = ClientboundKnownPacks::decode(&mut body).map_err(handshake_refused(addr))?;
             require_drained(body, "Known Packs", addr)?;
@@ -243,14 +261,14 @@ pub async fn capture_registry_payloads(
         }
     }
     client
-        .write_packet(&ServerboundKnownPacks { packs: Vec::new() })
+        .write_raw(protocol.known_sb, &[0])
         .await
         .map_err(handshake_refused(addr))?;
 
     let mut captured = BTreeMap::new();
     loop {
         let frame = client.read_frame().await.map_err(handshake_refused(addr))?;
-        if frame.id == RegistryData::ID {
+        if frame.id == protocol.registry {
             let mut body = frame.body;
             let registry = RegistryData::decode(&mut body).map_err(handshake_refused(addr))?;
             require_drained(body, "RegistryData", addr)?;
@@ -305,13 +323,13 @@ pub async fn capture_registry_payloads(
             }
             continue;
         }
-        if frame.id == UpdateTags::ID {
+        if frame.id == protocol.tags {
             let mut body = frame.body;
             let _ = UpdateTags::decode(&mut body).map_err(handshake_refused(addr))?;
             require_drained(body, "Update Tags", addr)?;
             continue;
         }
-        if frame.id == FinishConfiguration::ID {
+        if frame.id == protocol.finish {
             let mut body = frame.body;
             let _ = FinishConfiguration::decode(&mut body).map_err(handshake_refused(addr))?;
             require_drained(body, "Finish Configuration", addr)?;
@@ -1063,6 +1081,69 @@ mod tests {
     /// is what the capture itself adds.
     fn staged_content_fixture() -> anyhow::Result<tempfile::TempDir> {
         let root = tempfile::tempdir()?;
+        fs::write(
+            root.path().join("version.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "protocol_version": mc_protocol::PROTOCOL_VERSION
+            }))?,
+        )?;
+        let mut packets = serde_json::json!({});
+        let protocol = protocol::Protocol::canonical();
+        for (phase, direction, name, id) in [
+            (
+                "configuration",
+                "clientbound",
+                "select_known_packs",
+                protocol.known_cb,
+            ),
+            (
+                "configuration",
+                "serverbound",
+                "select_known_packs",
+                protocol.known_sb,
+            ),
+            (
+                "configuration",
+                "clientbound",
+                "registry_data",
+                protocol.registry,
+            ),
+            ("configuration", "clientbound", "update_tags", protocol.tags),
+            (
+                "configuration",
+                "clientbound",
+                "finish_configuration",
+                protocol.finish,
+            ),
+            ("login", "serverbound", "hello", protocol.hello),
+            (
+                "login",
+                "clientbound",
+                "login_compression",
+                protocol.compression,
+            ),
+            ("login", "clientbound", "login_finished", protocol.success),
+            (
+                "login",
+                "serverbound",
+                "login_acknowledged",
+                protocol.acknowledged,
+            ),
+            (
+                "login",
+                "clientbound",
+                "login_disconnect",
+                protocol.disconnect,
+            ),
+        ] {
+            packets[phase][direction][format!("minecraft:{name}")] =
+                serde_json::json!({"protocol_id": id});
+        }
+        fs::create_dir_all(root.path().join("reports"))?;
+        fs::write(
+            root.path().join("reports/packets.json"),
+            serde_json::to_vec(&packets)?,
+        )?;
         for (_registry, subpath) in mc_data::KNOWN_REGISTRIES {
             let dir = root.path().join("data/minecraft").join(subpath);
             fs::create_dir_all(&dir)?;

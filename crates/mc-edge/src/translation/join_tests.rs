@@ -1,7 +1,5 @@
-//! End to end: a raw 26.1.2 (protocol 775) client joins the real edge server
-//! over TCP, and a 26.3-only block reaches it as its polyfill, both as a block
-//! update and inside a chunk. Needs the canonical cache at `data/vanilla` and
-//! the 26.1.2 cache beside it (`data/vanilla-26.1.2`).
+//! Report-driven raw clients for every release in the supported window. Both
+//! known-pack and full RegistryData joins exercise the real cache and edge.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,13 +12,21 @@ use mc_protocol::{Compression, RawFrame};
 use tokio::net::{TcpListener, TcpStream};
 
 use super::Profile;
+use super::adjacent::{items, tables};
 use crate::server::EdgeServer;
 
 const DEADLINE: Duration = Duration::from_secs(240);
+
+#[path = "join_interactions.rs"]
+mod interactions;
 const MIN_Y: i32 = -64;
 
 fn server(root: &std::path::Path) -> EdgeServer {
-    let vanilla = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    let vanilla = std::env::var_os(crate::content_cache::CONTENT_CACHE_ENV)
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
+        });
     let mut config = mc_core::CoreConfig::new(root.join("world"), 42);
     config.vanilla_data_dir = Some(vanilla.clone());
     config.view_distance = 2;
@@ -41,7 +47,7 @@ fn server(root: &std::path::Path) -> EdgeServer {
     EdgeServer::new(core, data, tags, cfg).unwrap()
 }
 
-/// Bare framing client: no translation, raw 26.1.2 ids.
+/// Bare framing client: endpoint report ids and no client-side translation.
 struct Client {
     stream: TcpStream,
     buf: BytesMut,
@@ -84,12 +90,15 @@ impl Client {
             (_, true) => &packets.play_cb,
             (_, false) => &packets.play_sb,
         };
-        names
-            .legacy_id(name)
-            .unwrap_or_else(|| panic!("26.1.2 has {name}"))
+        names.legacy_id(name).unwrap_or_else(|| {
+            panic!(
+                "{} lacks {phase} packet {name}",
+                self.profile.version.release
+            )
+        })
     }
 
-    /// Handshake 775 -> Login -> Configuration -> Play.
+    /// The selected endpoint's Handshake -> Login -> Configuration -> Play.
     async fn join(
         address: std::net::SocketAddr,
         name: &str,
@@ -103,7 +112,7 @@ impl Client {
             profile,
         };
         let mut hello = Vec::new();
-        hello.write_varint(super::PROTOCOL);
+        hello.write_varint(client.profile.version.protocol);
         hello.write_string("127.0.0.1", 255).unwrap();
         hello.write_u16(address.port());
         hello.write_varint(2);
@@ -124,7 +133,14 @@ impl Client {
                 assert_eq!(r.read_uuid().unwrap(), crate::crypto::offline_uuid(name));
                 assert_eq!(r.read_string(16).unwrap(), name);
                 assert_eq!(r.read_varint().unwrap(), 0, "no profile properties");
-                assert!(r.is_empty(), "26.1.2 profile has no session UUID");
+                if client.profile.version.protocol >= 776 {
+                    r.read_uuid().unwrap();
+                }
+                assert!(
+                    r.is_empty(),
+                    "login profile consumed for {}",
+                    client.profile.version.release
+                );
                 break;
             } else {
                 panic!("unexpected login packet {:#04x}", frame.id);
@@ -142,7 +158,7 @@ impl Client {
                 let mut r = &frame.body[..];
                 assert_eq!(r.read_varint().unwrap(), 1);
                 let pack: Vec<String> = (0..3).map(|_| r.read_string(64).unwrap()).collect();
-                assert_eq!(pack, ["minecraft", "core", super::RELEASE]);
+                assert_eq!(pack, ["minecraft", "core", client.profile.version.release]);
                 client
                     .send(
                         client.id("configuration", false, "minecraft:select_known_packs"),
@@ -170,7 +186,10 @@ impl Client {
                                 .registry_entry_payload(&packet.registry_id, name)
                                 .as_deref()
                         );
-                        assert!(entry.nbt_payload.is_some(), "full 26.1.2 registry payload");
+                        assert!(
+                            entry.nbt_payload.is_some(),
+                            "full endpoint registry payload"
+                        );
                     }
                 }
             } else if frame.id == client.id("configuration", true, "minecraft:update_tags") {
@@ -180,7 +199,7 @@ impl Client {
                     for tag in registry.tags {
                         assert_eq!(
                             tag.entries, expected[&tag.tag],
-                            "legacy tag numeric identities"
+                            "endpoint tag numeric identities"
                         );
                     }
                 }
@@ -199,18 +218,64 @@ impl Client {
         }
     }
 
+    async fn status(address: std::net::SocketAddr, profile: Arc<Profile>) {
+        let mut client = Self {
+            stream: TcpStream::connect(address).await.unwrap(),
+            buf: BytesMut::new(),
+            compression: Compression::Disabled,
+            profile,
+        };
+        let mut handshake = Vec::new();
+        handshake.write_varint(client.profile.version.protocol);
+        handshake.write_string("127.0.0.1", 255).unwrap();
+        handshake.write_u16(address.port());
+        handshake.write_varint(1);
+        client.send(0, &handshake).await;
+        client.send(0, &[]).await;
+        let frame = client.recv().await;
+        assert_eq!(frame.id, 0);
+        let value: serde_json::Value =
+            serde_json::from_str(&frame.body.as_ref().read_string(32767).unwrap()).unwrap();
+        assert_eq!(
+            value["version"]["protocol"],
+            client.profile.version.protocol
+        );
+        assert_eq!(value["version"]["name"], client.profile.version.release);
+        client.send(1, &123i64.to_be_bytes()).await;
+        assert_eq!(client.recv().await.body.as_ref(), &123i64.to_be_bytes());
+    }
+
     /// Play until `stop` returns a value; answers teleports, chunk batches
     /// and keep-alives like a vanilla client.
     async fn play_until<T>(&mut self, mut stop: impl FnMut(&Self, &RawFrame) -> Option<T>) -> T {
         loop {
             let frame = self.recv().await;
             if frame.id == self.id("play", true, "minecraft:update_advancements") {
-                validate_legacy_advancement_icons(&self.profile.tables, &frame.body);
+                if self.profile.version.protocol < 777 {
+                    validate_legacy_advancement_icons(&self.profile.tables, &frame.body);
+                } else {
+                    let mut body = frame.body.as_ref();
+                    mc_protocol::packets::play::ClientboundUpdateAdvancements::decode(&mut body)
+                        .unwrap();
+                    assert!(body.is_empty());
+                }
             }
             if frame.id == self.id("play", true, "minecraft:player_position") {
                 let id = (&frame.body[..]).read_varint().unwrap();
                 let mut accept = Vec::new();
                 accept.write_varint(id);
+                if self.profile.version.protocol >= 777 {
+                    let mut r = frame.body.as_ref();
+                    r.read_varint().unwrap();
+                    for _ in 0..3 {
+                        accept.write_f64(r.read_f64().unwrap());
+                    }
+                    for _ in 0..3 {
+                        r.read_f64().unwrap();
+                    }
+                    accept.write_f32(r.read_f32().unwrap());
+                    accept.write_f32(r.read_f32().unwrap());
+                }
                 self.send(
                     self.id("play", false, "minecraft:accept_teleportation"),
                     &accept,
@@ -304,7 +369,7 @@ fn container(
 /// Rebuild the canonical envelope from the old layout, walking every legacy
 /// icon through its real component schemas. The canonical decoder then rejects
 /// duplicate/contradictory component patches instead of accepting a bare frame.
-fn validate_legacy_advancement_icons(tables: &super::tables::Tables, body: &[u8]) {
+fn validate_legacy_advancement_icons(tables: &tables::Tables, body: &[u8]) {
     use mc_protocol::packets::play::ClientboundUpdateAdvancements;
     let mut input = body;
     let mut canonical = Vec::new();
@@ -325,15 +390,10 @@ fn validate_legacy_advancement_icons(tables: &super::tables::Tables, body: &[u8]
         canonical.write_bool(display);
         let mut coordinates = [0.0; 2];
         if display {
-            super::items::copy_nbt(&mut input, &mut canonical).unwrap();
-            super::items::copy_nbt(&mut input, &mut canonical).unwrap();
-            super::items::template(
-                tables,
-                super::items::To::Canonical,
-                &mut input,
-                &mut canonical,
-            )
-            .unwrap_or_else(|error| panic!("advancement {id} legacy icon: {error:#}"));
+            items::copy_nbt(&mut input, &mut canonical).unwrap();
+            items::copy_nbt(&mut input, &mut canonical).unwrap();
+            items::template(tables, items::To::Canonical, &mut input, &mut canonical)
+                .unwrap_or_else(|error| panic!("advancement {id} legacy icon: {error:#}"));
             canonical.write_varint(input.read_varint().unwrap());
             let flags = input.read_i32().unwrap();
             canonical.write_i32(flags);
@@ -370,20 +430,55 @@ fn validate_legacy_advancement_icons(tables: &super::tables::Tables, body: &[u8]
     );
 }
 
-#[ignore = "requires local 26.3 and 26.1.2 content caches"]
+#[ignore = "requires imported real caches and step snapshots"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn legacy_client_joins_and_sees_polyfilled_chunk() {
-    assert_eq!(
-        mc_protocol::PROTOCOL_VERSION,
-        777,
-        "canonical server is 26.3"
-    );
+async fn protocol_775_login_configuration_play() {
+    join_version(775).await;
+}
+
+#[ignore = "requires imported real caches and step snapshots"]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn protocol_776_login_configuration_play() {
+    join_version(776).await;
+}
+
+#[ignore = "requires imported real caches and step snapshots"]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn protocol_777_login_configuration_play() {
+    join_version(777).await;
+}
+
+async fn join_version(protocol: i32) {
     let dir = tempfile::tempdir().unwrap();
     let server = server(dir.path());
-    let profile = server
-        .legacy
-        .clone()
-        .expect("26.1.2 content cache beside data/vanilla (data/vanilla-26.1.2)");
+    let version = mc_data::protocol_versions::by_protocol(protocol).unwrap();
+    if protocol != mc_protocol::PROTOCOL_VERSION {
+        assert!(
+            server.protocols.get(protocol).is_some(),
+            "{} must be enabled",
+            version.release
+        );
+    }
+    let canonical_root = server.data.sidecar_root().unwrap();
+    let peer_root = mc_data::protocol_versions::cache_root(
+        canonical_root,
+        mc_protocol::TARGET_RELEASE,
+        version,
+    );
+    let mut profile = Profile::load(&peer_root, version, Vec::new()).unwrap();
+    // Independent name-paired oracle, not the session's composed mapping.
+    profile.tables = tables::Tables::new(
+        &tables::Reports::load(canonical_root).unwrap(),
+        &tables::Reports::load(&peer_root).unwrap(),
+        &server.data,
+        &profile.data,
+    )
+    .unwrap();
+    profile.tables.formats = tables::Formats {
+        upper: 777,
+        lower: protocol,
+    };
+    let profile = Arc::new(profile);
     let hub = Arc::clone(&server.hub);
     let tables = &profile.tables;
     let cinnabar = server
@@ -404,7 +499,14 @@ async fn legacy_client_joins_and_sees_polyfilled_chunk() {
     .unwrap();
     let granite = legacy_blocks
         .iter()
-        .find(|block| block.id.as_str() == "minecraft:granite")
+        .find(|block| {
+            block.id.as_str()
+                == if protocol == 775 {
+                    "minecraft:granite"
+                } else {
+                    "minecraft:cinnabar"
+                }
+        })
         .unwrap()
         .states
         .iter()
@@ -412,13 +514,16 @@ async fn legacy_client_joins_and_sees_polyfilled_chunk() {
         .unwrap()
         .id as i32;
     assert_eq!(tables.block_states.get(cinnabar as i32), Some(granite));
-    assert_ne!(granite, cinnabar as i32, "the polyfill changes the id");
+    if protocol == 775 {
+        assert_ne!(granite, cinnabar as i32, "the polyfill changes the id");
+    }
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let serve = tokio::spawn(crate::server::serve(listener, server));
 
     tokio::time::timeout(DEADLINE, async {
-        let mut first = Client::join(address, "Legacy1", Arc::clone(&profile), true).await;
+        Client::status(address, Arc::clone(&profile)).await;
+        let mut first = Client::join(address, "Chain1", Arc::clone(&profile), true).await;
         let spawn = first
             .play_until(|client, frame| {
                 (frame.id == client.id("play", true, "minecraft:player_position")).then(|| {
@@ -461,9 +566,10 @@ async fn legacy_client_joins_and_sees_polyfilled_chunk() {
             })
             .await;
         assert_eq!(updated, granite, "block update carries the polyfill");
+        interactions::run(&mut first, &hub, pos).await;
         drop(first);
 
-        let mut second = Client::join(address, "Legacy2", Arc::clone(&profile), false).await;
+        let mut second = Client::join(address, "Chain2", Arc::clone(&profile), false).await;
         let seen = second
             .play_until(|client, frame| {
                 (frame.id == client.id("play", true, "minecraft:level_chunk_with_light"))

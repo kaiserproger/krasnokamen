@@ -40,10 +40,11 @@
 Solaris is an independent Minecraft: Java Edition server written from scratch in
 Rust. It is a full server, not a framework: it reimplements the game itself, from
 world generation, mobs and redstone to villages, combat and inventories. Players
-join with the **normal, unmodified Minecraft Java 26.3 client** (protocol 777).
-26.1.2 clients can still join when a 26.1.2 content cache is retained
-([details](docs/OPERATING.md#client-protocol-compatibility)). No client mods,
-no launcher tricks.
+join with a **normal, unmodified Minecraft Java client**. **Version support:**
+every release from **26.1.2 through 26.3** (775, 776, 777); canonical is 26.3.
+Content import and first start install each version's cache automatically
+([details](docs/OPERATING.md#client-protocol-compatibility)). A bump adds a
+translation step without dropping older versions. No client mods or launcher tricks.
 
 It is built for the things the vanilla server is bad at:
 

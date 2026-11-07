@@ -10,6 +10,11 @@ fn session() -> Session {
     test_session(Tables {
         block_states: IdMap::by_name([("a", 0), ("b", 9)], [("a", 0), ("b", 4)], |_| None),
         items: IdMap::by_name([("stick", 10)], [("stick", 3)], |_| None),
+        registry_ids: [(
+            "dimension_type".into(),
+            IdMap::by_name([("overworld", 0)], [("overworld", 0)], |_| None),
+        )]
+        .into(),
         ..Tables::default()
     })
 }
@@ -137,7 +142,7 @@ fn login_drops_online_mode_and_narrows_game_modes() {
     body.write_varint(0);
     body.write_varint(63);
     let spawn_end = body.len();
-    body.write_bool(true); // onlineMode (26.3 only)
+    body.write_bool(true); // onlineMode (introduced in 26.2)
     body.write_bool(false); // enforcesSecureChat
     let out = clientbound(&mut s, "minecraft:login", &body)
         .unwrap()
@@ -151,6 +156,36 @@ fn login_drops_online_mode_and_narrows_game_modes() {
     expected.extend_from_slice(&body[spawn_end - 5..spawn_end]);
     expected.write_bool(false);
     assert_eq!(out, expected);
+    let mut upper = session();
+    std::sync::Arc::get_mut(&mut upper.profile)
+        .unwrap()
+        .tables
+        .formats = super::super::tables::Formats {
+        upper: 777,
+        lower: 776,
+    };
+    let intermediate = clientbound(&mut upper, "minecraft:login", &body)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        intermediate.len(),
+        expected.len() + 1,
+        "26.2 retains onlineMode"
+    );
+    let mut lower = session();
+    std::sync::Arc::get_mut(&mut lower.profile)
+        .unwrap()
+        .tables
+        .formats = super::super::tables::Formats {
+        upper: 776,
+        lower: 775,
+    };
+    assert_eq!(
+        clientbound(&mut lower, "minecraft:login", &intermediate)
+            .unwrap()
+            .unwrap(),
+        expected
+    );
 }
 
 #[test]
@@ -354,6 +389,11 @@ fn sign_editor_translates_text_slot_to_front_flag() {
 fn block_entity_payload_and_respawn_tail_are_consumed() {
     let mut s = test_session(Tables {
         block_entities: IdMap::by_name([("chest", 7)], [("chest", 1)], |_| None),
+        registry_ids: [(
+            "dimension_type".into(),
+            IdMap::by_name([("overworld", 0)], [("overworld", 0)], |_| None),
+        )]
+        .into(),
         ..Tables::default()
     });
     let mut body = Vec::new();
@@ -387,6 +427,7 @@ fn decorated_pot_26_3_update_and_chunk_downgrade_named_templates() {
             [("decorated_pot", 42)],
             |_| None,
         ),
+        decorated_pot: Some(native_kind),
         ..Tables::default()
     });
     let tag = Tag::Compound(vec![
@@ -560,5 +601,134 @@ fn creative_polyfill_tracks_player_inventory_images_and_updates() {
         serverbound(&mut reader, "set_creative_mode_slot", &echo)
             .unwrap()
             .is_some()
+    );
+}
+
+#[test]
+fn unchanged_776_to_775_teleports_do_not_accumulate_777_echo_state() {
+    let mut session = test_session(Tables {
+        formats: super::super::tables::Formats {
+            upper: 776,
+            lower: 775,
+        },
+        ..Tables::default()
+    });
+    let mut body = Vec::new();
+    body.write_varint(4);
+    for value in [1.5, 70.0, -2.5, 0.0, 0.0, 0.0] {
+        body.write_f64(value);
+    }
+    body.write_f32(90.0);
+    body.write_f32(10.0);
+    body.write_i32(0);
+    assert_eq!(
+        clientbound(&mut session, "minecraft:player_position", &body)
+            .unwrap()
+            .unwrap(),
+        body
+    );
+    assert!(session.teleports.lock().sent.is_empty());
+    assert_eq!(
+        serverbound(&mut session, "minecraft:accept_teleportation", &[4])
+            .unwrap()
+            .unwrap(),
+        [4]
+    );
+    let mut position = Vec::new();
+    for value in [1.5, 70.0, -2.5] {
+        position.write_f64(value);
+    }
+    position.write_u8(1);
+    assert_eq!(
+        serverbound(&mut session, "minecraft:move_player_pos", &position)
+            .unwrap()
+            .unwrap(),
+        position
+    );
+    assert!(session.teleports.lock().pose.is_none());
+}
+
+#[test]
+fn spectator_entity_option_is_added_only_at_the_775_to_776_boundary() {
+    let mut lower = test_session(Tables {
+        formats: super::super::tables::Formats {
+            upper: 776,
+            lower: 775,
+        },
+        ..Tables::default()
+    });
+    let converted = serverbound(&mut lower, "minecraft:spectate_entity", &[7])
+        .unwrap()
+        .unwrap();
+    assert_eq!(converted, [8]);
+    let mut upper = test_session(Tables {
+        formats: super::super::tables::Formats {
+            upper: 777,
+            lower: 776,
+        },
+        ..Tables::default()
+    });
+    assert_eq!(
+        serverbound(&mut upper, "minecraft:spectator_action", &converted)
+            .unwrap()
+            .unwrap(),
+        [8]
+    );
+    assert_eq!(
+        serverbound(&mut upper, "minecraft:spectator_action", &[0])
+            .unwrap()
+            .unwrap(),
+        [0]
+    );
+}
+
+#[test]
+fn unknown_block_state_is_not_a_documented_polyfill() {
+    let mut body = Vec::new();
+    body.write_i64(0);
+    body.write_varint(123456);
+    let error = clientbound(&mut session(), "minecraft:block_update", &body)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("unknown block-state 123456"), "{error}");
+    assert!(error.contains("777 -> 775"), "{error}");
+}
+
+#[test]
+fn dimension_and_painting_ids_follow_names_when_orders_differ() {
+    let mut s = session();
+    let t = &mut std::sync::Arc::get_mut(&mut s.profile).unwrap().tables;
+    t.registry_ids.insert(
+        "dimension_type".into(),
+        IdMap::by_name(
+            [("overworld", 0), ("nether", 1)],
+            [("nether", 0), ("overworld", 1)],
+            |_| None,
+        ),
+    );
+    t.registry_ids.insert(
+        "painting_variant".into(),
+        IdMap::by_name(
+            [("earth", 0), ("wind", 1)],
+            [("wind", 0), ("earth", 1)],
+            |_| None,
+        ),
+    );
+    let mut spawn = vec![0];
+    spawn.write_string("minecraft:overworld", 32767).unwrap();
+    spawn.write_i64(42);
+    spawn.extend([1, 0, 0, 0, 0, 0, 63]);
+    let mut output = Vec::new();
+    spawn_info(t, &mut spawn.as_slice(), &mut output).unwrap();
+    assert_eq!(
+        output[0], 1,
+        "dimension_type follows overworld, not ordinal zero"
+    );
+    let mut output = Vec::new();
+    assert!(metadata_value(t, 34, &mut &[1][..], &mut output).unwrap());
+    assert_eq!(
+        output,
+        [2],
+        "holder offset surrounds the named painting mapping"
     );
 }

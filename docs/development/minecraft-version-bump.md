@@ -2,8 +2,10 @@
 
 Lesson from 26.1.2 to 26.3 (protocol 775 to 777, 2026-10): unit and TCP tests
 stayed green while real clients disconnected. Only real-client gates prove a
-bump. Old-version support is described in
-[OPERATING.md](../OPERATING.md) "Client protocol compatibility" and
+bump. The standing support window is **every release from 26.1.2 through 26.3**
+(775/776/777), with 777 canonical. A bump **adds an adjacent chain step and keeps
+all existing versions**, never replacing the previous profile. See
+[OPERATING.md](../OPERATING.md#client-protocol-compatibility) and
 [ADR 0015](../decisions/0015-multiversion-protocol-translation.md).
 
 ## Sources of truth
@@ -28,15 +30,22 @@ bump. Old-version support is described in
 3. **Changed codecs.** Diff every codec that changed shape (in 26.3: slot
    displays, light masks, some block-entity NBT). Tests that compare encoded
    packets with in-memory structs compare the decoded wire form.
-4. **Legacy translation** (`crates/mc-edge/src/legacy/`) converts each changed
-   layout back. Grep it for hard-coded component and registry ids and override
-   guards: duplicate components get through vanilla (last wins) but break the
-   native client. Test the exact payload and decode strictly in the legacy TCP
-   gate (`cargo test -p mc-edge --lib legacy` plus the ignored TCP join test with
-   `SOLARIS_LEGACY_CONTENT_CACHE`).
+4. **Adjacent translation** (`crates/mc-edge/src/translation/`) adds the
+   new-to-previous step; preserve all older steps, profiles and caches. Enumerate
+   releases from Mojang's manifest and capture local `javap` deltas per adjacent
+   pair under `.analysis/`. Pair packet/registry identities by name, never by
+   ordinal; check component payloads, duplicate patches and entity metadata.
+   Tests use synthetic reports per step, composition in both directions relative
+   to canonical, and `translation::join_tests` against every real endpoint cache.
+   Remove one changed-packet translation and demonstrate a red regression.
 5. Refresh fixtures and wire ordinals from the local reports of the right
    version.
-6. Re-import the content cache (old caches fail the new verify), rebuild the
+6. Extend `mc_data::protocol_versions::SUPPORTED`, then run `content import
+   --download`: it installs every endpoint and missing adjacent step snapshot.
+   Steps own mapping data separately from endpoint caches; re-importing canonical
+   must not churn valid older steps. Update Status/handshake coverage for the
+   added protocol. A step above canonical needs explicit clientbound-up and
+   serverbound-down codecs, not an inverse of lossy down mappings. Rebuild the
    singleplayer content bundle and re-pin it in the launcher
    ([releases](release-and-tags.md#client-release-and-the-singleplayer-content-bundle)).
 
@@ -84,8 +93,10 @@ bump. Old-version support is described in
 - Java, new version: `run core-client|inventory|survival|entities --client java`
   with `SOLARIS_LOADER_ROOT` pointing at a Loader checkout for the new version.
   Prewarm Gradle once (`:fabric-agent:classes`) or the first runs time out.
-- Java, previous version: the same `core-client` with the old Loader and
-  `SOLARIS_LEGACY_CONTENT_CACHE`.
+- Java, **every retained version**: the same gate with that version's Loader
+  automation checkout and the automatically installed endpoint caches. An
+  intermediate version without automation must name its exact blocker; TCP is
+  not a substitute for graphical acceptance.
 - Native: `native-lifecycle --client native` to Play with chunks rendered, one
   interaction, clean exit, on the release client with the real published
   content and facts.

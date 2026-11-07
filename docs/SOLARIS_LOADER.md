@@ -21,11 +21,11 @@ can change between revisions (there is no protocol-1/2 compatibility path;
 schema-1 bundles and the removed UI/interaction content kinds fail closed). The
 plugin API version does not change the wire protocol or artifact schema.
 
-The Loader targets **26.1.2, one release behind the server's canonical 26.3**.
-A 26.1.2 client speaks protocol 775, and a 26.3 server serves it only while it
-retains a separate 26.1.2 content cache; otherwise the client is disconnected as
-incompatible. See
-[Retaining 26.1.2 clients](OPERATING.md#retaining-2612-clients-after-upgrading-to-263).
+This documented Loader target is **26.1.2**. The server's supported window
+includes 26.1.2, 26.2 and canonical 26.3; content import installs their endpoint
+caches and adjacent translation steps automatically. A missing endpoint cache
+disables that release, not other available clients. See
+[client protocol compatibility](OPERATING.md#client-protocol-compatibility).
 Install the Loader only in a Minecraft 26.1.2 instance; do not use a nearby
 Minecraft version.
 

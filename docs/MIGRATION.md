@@ -290,9 +290,9 @@ solaris-v2 --config /srv/solaris/server.toml
 ```
 
 Wait for the listening message and successful content, world and plugin
-admission. On the private endpoint, join with an unmodified 26.3 client (a
-26.1.2 client works only with a retained legacy cache, see
-[OPERATING.md](OPERATING.md#retaining-2612-clients-after-upgrading-to-263)) and
+admission. On the private endpoint, join with an unmodified supported client
+(every release from 26.1.2 through 26.3; import installs all caches, see
+[OPERATING.md](OPERATING.md#client-protocol-compatibility)) and
 complete the checklist below. Stop with console `stop` and wait for the process
 to exit and write its final checkpoint. Serving writes the native
 `native/state.redb` and tick WAL, **not** the old Anvil files; keep the same

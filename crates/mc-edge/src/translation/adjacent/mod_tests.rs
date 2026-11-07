@@ -12,7 +12,7 @@ const CANONICAL: &str = r#"{
         "serverbound": {"minecraft:hello": {"protocol_id": 0}, "minecraft:login_acknowledged": {"protocol_id": 3}}
     },
     "configuration": {
-        "clientbound": {"minecraft:finish_configuration": {"protocol_id": 3}, "minecraft:post_effects": {"protocol_id": 10}, "minecraft:store_cookie": {"protocol_id": 11}},
+        "clientbound": {"minecraft:finish_configuration": {"protocol_id": 3}, "minecraft:post_effects": {"protocol_id": 10}, "minecraft:store_cookie": {"protocol_id": 11}, "minecraft:registry_data": {"protocol_id": 12}},
         "serverbound": {"minecraft:finish_configuration": {"protocol_id": 3}}
     },
     "play": {
@@ -229,14 +229,87 @@ fn malformed_world_updates_fail_instead_of_being_silently_lost() {
 }
 
 #[test]
-fn legacy_cache_sits_beside_the_canonical_one() {
-    if std::env::var_os(CACHE_ENV).is_some() {
-        return;
+fn missing_target_packet_errors_unless_explicitly_presentation_only() {
+    let mut session = session();
+    session.phase = Phase::Configuration;
+    assert!(session.clientbound(10, &[]).unwrap().is_none());
+    let error = session.clientbound(12, &[]).unwrap_err().to_string();
+    for detail in [
+        "777 -> 775",
+        "Configuration",
+        "minecraft:registry_data",
+        "0x0c",
+    ] {
+        assert!(error.contains(detail), "{error}");
     }
-    let release = Path::new("/srv/content").join(mc_protocol::TARGET_RELEASE);
-    assert_eq!(cache_root(&release), Path::new("/srv/content/26.1.2"));
-    assert_eq!(
-        cache_root(Path::new("data/vanilla")),
-        Path::new("data/vanilla-26.1.2")
-    );
+}
+
+#[test]
+fn creative_slot_echo_of_lossy_pot_components_keeps_authoritative_stack() {
+    use super::items::Components;
+    use super::tables::IdMap;
+    use mc_protocol::codec::WriteMc;
+
+    for peer in [775, 776] {
+        for case in ["missing_side", "nested_count", "custom_name", "combined"] {
+            let mut writer = session();
+            let tables = &mut Arc::get_mut(&mut writer.profile).unwrap().tables;
+            tables.formats.lower = peer;
+            tables.items = IdMap::by_name(
+                [("decorated_pot", 10), ("brick", 11)],
+                [("decorated_pot", 10), ("brick", 11)],
+                |_| None,
+            );
+            tables.legacy_brick = 11;
+            let components = [
+                "minecraft:pot_decorations".to_owned(),
+                "minecraft:custom_name".to_owned(),
+            ];
+            tables.components = IdMap::by_name(
+                [("pot_decorations", 0), ("custom_name", 1)],
+                [("pot_decorations", 0), ("custom_name", 1)],
+                |_| None,
+            );
+            tables.component_shapes = Components::new(&components, &components);
+            writer.phase = Phase::Play;
+            let mut reader = writer.split();
+            let mut body = vec![0, 1, 10, 1, 0, 0]; // hotbar 0, unchanged pot id, one component
+            for side in 0..4 {
+                let present = !(side == 0 && matches!(case, "missing_side" | "combined"));
+                body.write_bool(present);
+                if present {
+                    body.write_varint(11);
+                    body.write_varint(
+                        if (side == 0 && case == "nested_count")
+                            || (side == 1 && case == "combined")
+                        {
+                            2
+                        } else {
+                            1
+                        },
+                    );
+                    let named =
+                        (side == 0 && case == "custom_name") || (side == 1 && case == "combined");
+                    body.write_varint(i32::from(named));
+                    body.write_varint(0);
+                    if named {
+                        body.write_varint(1);
+                        mc_nbt::write_network_value(
+                            &mut body,
+                            &mc_nbt::Tag::String("Custom brick".into()),
+                        )
+                        .unwrap();
+                    }
+                }
+            }
+            let (_, peer_image) = writer.clientbound(100, &body).unwrap().unwrap();
+            let mut echo = Vec::new();
+            echo.write_i16(36);
+            echo.extend_from_slice(&peer_image[1..]);
+            assert!(
+                reader.serverbound(frame(98, &echo)).unwrap().is_none(),
+                "{peer} {case}: a lossy component echo must not replace the authoritative pot"
+            );
+        }
+    }
 }

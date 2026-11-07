@@ -70,7 +70,10 @@ fn manifest_selection_uses_the_pinned_version_not_latest() {
     .unwrap();
     assert_eq!(metadata.id, mc_protocol::TARGET_RELEASE);
     assert_eq!(metadata.server.unwrap().size, 42);
-    assert!(require_target_version("26.2").is_err());
+    for version in mc_data::protocol_versions::SUPPORTED {
+        require_target_version(version.release).unwrap();
+    }
+    assert!(require_target_version("26.4").is_err());
 }
 
 #[tokio::test]
@@ -80,7 +83,7 @@ async fn rejected_version_does_not_create_staging_or_change_existing_cache() {
     write_valid_cache(&cache);
     let before = std::fs::read(cache.join("version.json")).unwrap();
     let error = import_content(&ImportRequest {
-        version: "26.2".into(),
+        version: "26.4".into(),
         source: ContentSource::Download,
         gameplay_source: ContentSource::Download,
         cache: cache.clone(),

@@ -136,3 +136,42 @@ fn packet_names_pair_ids_across_versions() {
     assert_eq!(bits_for(35_723), 16);
     assert_eq!(bits_for(65), 7);
 }
+
+#[test]
+fn slime_size_metadata_change_belongs_to_776_to_775_only() {
+    let report = Reports::parse(
+        "{}",
+        r#"{"minecraft:entity_type":{"entries":{
+        "minecraft:slime":{"protocol_id":7},"minecraft:sulfur_cube":{"protocol_id":8}
+    }}}"#,
+        "{}",
+    )
+    .unwrap();
+    let mut upper = Tables {
+        formats: Formats {
+            upper: 777,
+            lower: 776,
+        },
+        entity_metadata: [
+            (7, Metadata::Cube),
+            (8, Metadata::Cube),
+            (9, Metadata::Below(8)),
+        ]
+        .into(),
+        ..Tables::default()
+    };
+    upper.configure_metadata(&report).unwrap();
+    assert!(!upper.entity_metadata.contains_key(&7));
+    assert!(!upper.entity_metadata.contains_key(&8));
+    assert_eq!(upper.entity_metadata.get(&9), Some(&Metadata::Below(8)));
+    let mut lower = Tables {
+        formats: Formats {
+            upper: 776,
+            lower: 775,
+        },
+        ..Tables::default()
+    };
+    lower.configure_metadata(&report).unwrap();
+    assert_eq!(lower.entity_metadata.get(&7), Some(&Metadata::Cube));
+    assert_eq!(lower.entity_metadata.get(&8), Some(&Metadata::Cube));
+}

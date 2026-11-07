@@ -73,7 +73,7 @@ pub fn payload(name: &str) -> Option<Payload> {
         "tooltip_display" => TooltipDisplay,
         "potion_contents" => PotionContents,
         "block_state" => BlockState,
-        "use_remainder" => Template,
+        "use_remainder" | "sulfur_cube_content" => Template,
         "bundle_contents" | "charged_projectiles" => TemplateList,
         "container" => Container,
         "pot_decorations" => PotDecorations,
@@ -93,7 +93,6 @@ pub fn payload(name: &str) -> Option<Payload> {
         "interact_animation" => NativeOnly(ids::INTERACT_ANIMATION),
         "block_transformer" => NativeOnly(ids::BLOCK_TRANSFORMER),
         "villager_food" => NativeOnly(ids::VILLAGER_FOOD),
-        "sulfur_cube_content" => NativeOnly(ids::SULFUR_CUBE_CONTENT),
         "compostable" => NativeOnly(ids::COMPOSTABLE),
         "cooking_fuel" => NativeOnly(ids::COOKING_FUEL),
         "brewing_fuel" => NativeOnly(ids::BREWING_FUEL),
@@ -143,10 +142,32 @@ fn map(ids: &IdMap, to: To, id: i32) -> Option<i32> {
 
 /// Copy one `ItemStack` (optional-stack codec: count 0 = empty).
 pub fn stack(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
-    stack_at(t, to, r, w, 0)
+    stack_with_loss(t, to, r, w).map(|_| ())
 }
 
-fn stack_at(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>, depth: usize) -> Result<()> {
+/// Report loss across the whole recursive stack, not just its outer item id.
+pub fn stack_with_loss(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>) -> Result<bool> {
+    let mut lossy = false;
+    stack_at(t, to, r, w, 0, &mut lossy)?;
+    Ok(lossy)
+}
+
+fn mapped_item(t: &Tables, to: To, id: i32, lossy: &mut bool) -> Result<i32> {
+    let target = map(&t.items, to, id).context("unmapped item id")?;
+    if to == To::Legacy && t.items.back(target) != Some(id) {
+        *lossy = true;
+    }
+    Ok(target)
+}
+
+fn stack_at(
+    t: &Tables,
+    to: To,
+    r: &mut &[u8],
+    w: &mut Vec<u8>,
+    depth: usize,
+    lossy: &mut bool,
+) -> Result<()> {
     ensure!(depth <= MAX_DEPTH, "item stack nesting too deep");
     let count = r.read_varint()?;
     w.write_varint(count);
@@ -154,27 +175,43 @@ fn stack_at(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>, depth: usize) ->
         return Ok(());
     }
     let item = r.read_varint()?;
-    w.write_varint(match to {
-        To::Legacy => t.items.get(item).unwrap_or(1),
-        To::Canonical => t.items.back(item).context("item id has no 26.3 entry")?,
-    });
-    patch(t, to, r, w, depth)
+    w.write_varint(mapped_item(t, to, item, lossy)?);
+    patch(t, to, r, w, depth, lossy)
 }
 
 /// Non-optional ItemStackTemplate: item id, count, then a component patch.
-pub(super) fn template(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
-    template_at(t, to, r, w, 0)
+pub(in crate::translation) fn template(
+    t: &Tables,
+    to: To,
+    r: &mut &[u8],
+    w: &mut Vec<u8>,
+) -> Result<()> {
+    template_at(t, to, r, w, 0, &mut false)
 }
 
-fn template_at(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>, depth: usize) -> Result<()> {
+fn template_at(
+    t: &Tables,
+    to: To,
+    r: &mut &[u8],
+    w: &mut Vec<u8>,
+    depth: usize,
+    lossy: &mut bool,
+) -> Result<()> {
     ensure!(depth <= MAX_DEPTH, "item template nesting too deep");
     let item = r.read_varint()?;
-    w.write_varint(map(&t.items, to, item).context("unmapped template item")?);
+    w.write_varint(mapped_item(t, to, item, lossy)?);
     w.write_varint(r.read_varint()?);
-    patch(t, to, r, w, depth)
+    patch(t, to, r, w, depth, lossy)
 }
 
-fn patch(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>, depth: usize) -> Result<()> {
+fn patch(
+    t: &Tables,
+    to: To,
+    r: &mut &[u8],
+    w: &mut Vec<u8>,
+    depth: usize,
+    lossy: &mut bool,
+) -> Result<()> {
     let added = r.read_varint()?;
     let removed = r.read_varint()?;
     ensure!(
@@ -190,12 +227,21 @@ fn patch(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>, depth: usize) -> Re
             .shape(to, id)
             .with_context(|| format!("unsupported item component {id}"))?;
         let target = map(&t.components, to, id);
+        if target.is_none()
+            && let Payload::NativeOnly(id) = shape
+        {
+            mc_protocol::packets::play::skip_native_item_component(r, id, depth)?;
+            *lossy = true;
+            continue;
+        }
         let mut payload_out = Vec::new();
-        copy_payload(t, to, shape, r, &mut payload_out, depth)?;
+        copy_payload(t, to, shape, r, &mut payload_out, depth, lossy)?;
         if let Some(target) = target {
             body.write_varint(target);
             body.extend_from_slice(&payload_out);
             kept_added += 1;
+        } else {
+            *lossy = true;
         }
     }
     let mut kept_removed = 0;
@@ -204,6 +250,8 @@ fn patch(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>, depth: usize) -> Re
         if let Some(target) = map(&t.components, to, r.read_varint()?) {
             removed_ids.write_varint(target);
             kept_removed += 1;
+        } else {
+            *lossy = true;
         }
     }
     w.write_varint(kept_added);
@@ -220,16 +268,18 @@ fn copy_payload(
     r: &mut &[u8],
     w: &mut Vec<u8>,
     depth: usize,
+    lossy: &mut bool,
 ) -> Result<()> {
     match shape {
         Payload::NativeOnly(id) => {
-            ensure!(to == To::Legacy, "native-only component on legacy ingress");
+            let before = *r;
             mc_protocol::packets::play::skip_native_item_component(r, id, depth)?;
+            w.extend_from_slice(&before[..before.len() - r.len()]);
         }
         Payload::Empty => {}
         Payload::VarInt => w.write_varint(r.read_varint()?),
         // ChickenVariant.STREAM_CODEC uses holderRegistry: a direct registry VarInt.
-        Payload::ChickenVariant => registry(t, to, "chicken_variant", r, w, false)?,
+        Payload::ChickenVariant => registry(t, to, "chicken_variant", r, w, false, lossy)?,
         Payload::Bool => w.write_bool(r.read_bool()?),
         Payload::I32 => w.write_i32(r.read_i32()?),
         Payload::Nbt => copy_nbt(r, w)?,
@@ -243,7 +293,7 @@ fn copy_payload(
         Payload::Enchantments => {
             let n = list_len(r, w)?;
             for _ in 0..n {
-                registry(t, to, "enchantment", r, w, false)?;
+                registry(t, to, "enchantment", r, w, false, lossy)?;
                 w.write_varint(r.read_varint()?);
             }
         }
@@ -256,6 +306,7 @@ fn copy_payload(
                 .into_iter()
                 .filter_map(|id| map(&t.components, to, id))
                 .collect();
+            *lossy |= ids.len() != n as usize;
             w.write_varint(ids.len() as i32);
             for id in ids {
                 w.write_varint(id);
@@ -264,7 +315,7 @@ fn copy_payload(
         Payload::PotionContents => {
             if r.read_bool()? {
                 w.write_bool(true);
-                registry(t, to, "potion", r, w, false)?;
+                registry(t, to, "potion", r, w, false, lossy)?;
             } else {
                 w.write_bool(false);
             }
@@ -276,7 +327,7 @@ fn copy_payload(
             }
             let n = list_len(r, w)?;
             for _ in 0..n {
-                registry(t, to, "mob_effect", r, w, false)?;
+                registry(t, to, "mob_effect", r, w, false, lossy)?;
                 copy_effect_details(r, w, 0)?;
             }
             if r.read_bool()? {
@@ -293,14 +344,14 @@ fn copy_payload(
                 w.write_string(&r.read_string(32767)?, 32767)?;
             }
         }
-        Payload::Template => template_at(t, to, r, w, depth + 1)?,
+        Payload::Template => template_at(t, to, r, w, depth + 1, lossy)?,
         Payload::TemplateList => {
             let n = list_len(r, w)?;
             for _ in 0..n {
-                template_at(t, to, r, w, depth + 1)?;
+                template_at(t, to, r, w, depth + 1, lossy)?;
             }
         }
-        other => extra(t, to, other, r, w, depth)?,
+        other => extra(t, to, other, r, w, depth, lossy)?,
     }
     Ok(())
 }

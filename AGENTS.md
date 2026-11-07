@@ -1,8 +1,10 @@
 # Agent Guide — Solaris
 
-Solaris is a Rust Minecraft Java server for 26.3; 26.1.2 clients can still join
-through a retained legacy content cache. The current release candidate is
-1.0.0-rc.5 "Pauline" ([status](docs/STATUS.md)). The binary is `mc-edge`'s
+Solaris is a Rust Minecraft Java server serving every release from 26.1.2
+through 26.3 (775–777), with canonical 26.3 and an adjacent protocol chain.
+Content import installs all version caches; bumps add steps and retain old clients.
+The current release candidate is 1.0.0-rc.5 "Pauline" ([status](docs/STATUS.md)).
+The binary is `mc-edge`'s
 `solaris-v2` over the native core `mc-core`; v1 is retired. `CLAUDE.md` is a
 symlink to this guide. The owner is `kaiserproger <kaisergrobe@gmail.com>`;
 never change Git configuration.
