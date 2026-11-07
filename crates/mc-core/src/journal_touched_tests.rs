@@ -211,7 +211,13 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
     let mut writer = JournalWriter::open(&dir, 1).unwrap();
     for index in 0..20 {
         let entries = step(&mut state);
-        writer.append(if index == 0 { 1 } else { state.tick }, state.tick, &entries).unwrap();
+        writer
+            .append(
+                if index == 0 { 1 } else { state.tick },
+                state.tick,
+                &entries,
+            )
+            .unwrap();
     }
     let aggressive = |state: &TickState| {
         let slot = state.entities.slot_of(zombie).unwrap();
@@ -219,7 +225,10 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
             *index == 15 && matches!(value, crate::boundary::EntityDataValue::Byte(flags) if flags & 4 != 0)
         })
     };
-    assert!(state.entities.pos(slot)[0] < centre[0] - 0.1, "zombie must chase the player");
+    assert!(
+        state.entities.pos(slot)[0] < centre[0] - 0.1,
+        "zombie must chase the player"
+    );
     assert!(aggressive(&state), "chase must establish the pose");
     writer.flush().unwrap();
     drop(writer);
@@ -232,32 +241,67 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
     // Checkpoints encode entity records, not the WAL's transient appearance.
     let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
     let native = crate::native_checkpoint::encode_entities(
-        crate::dimensions::Dimension::Overworld, &chunks, &state.registry.items, state.tick,
-    ).unwrap();
+        crate::dimensions::Dimension::Overworld,
+        &chunks,
+        &state.registry.items,
+        state.tick,
+    )
+    .unwrap();
     let config = crate::CoreConfig::new(dir.join("checkpoint"), 42);
-    crate::native_checkpoint::tests::write_manifest(&config, &crate::journal::CheckpointManifest {
-        tick: state.tick, ..Default::default()
-    }).unwrap();
+    crate::native_checkpoint::tests::write_manifest(
+        &config,
+        &crate::journal::CheckpointManifest {
+            tick: state.tick,
+            ..Default::default()
+        },
+    )
+    .unwrap();
     let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
     let base = store.read_checkpoint().unwrap();
-    store.commit_checkpoint(mc_world::native::NativeCheckpoint {
-        tick: state.tick, previous_tick: base.tick, chunks: &[], entities: &native,
-        players: &[], globals: &base.globals,
-    }, &state.registry.blocks, &state.registry.items).unwrap();
+    store
+        .commit_checkpoint(
+            mc_world::native::NativeCheckpoint {
+                tick: state.tick,
+                previous_tick: base.tick,
+                chunks: &[],
+                entities: &native,
+                players: &[],
+                globals: &base.globals,
+            },
+            &state.registry.blocks,
+            &state.registry.items,
+        )
+        .unwrap();
     drop(store);
     let checkpoint = crate::native_checkpoint::recover_offline(&config).unwrap();
-    let checkpoint_record = &checkpoint.dimensions[&crate::dimensions::Dimension::Overworld].entities[&zombie.0];
+    let checkpoint_record =
+        &checkpoint.dimensions[&crate::dimensions::Dimension::Overworld].entities[&zombie.0];
     let (mut checkpoint_restart, player, _) = crate::hostile_tests::setup(12.0);
-    checkpoint_restart.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
+    checkpoint_restart
+        .players
+        .get_mut(&player)
+        .unwrap()
+        .game_mode = crate::commands::GameMode::Creative;
     crate::core::restore_entity(&mut checkpoint_restart, zombie.0, checkpoint_record).unwrap();
-    assert!(!aggressive(&checkpoint_restart), "checkpoint does not retain the WAL pose");
+    assert!(
+        !aggressive(&checkpoint_restart),
+        "checkpoint does not retain the WAL pose"
+    );
     step(&mut checkpoint_restart);
-    assert!(!aggressive(&checkpoint_restart), "hostile evaluation reconciles the absent target");
+    assert!(
+        !aggressive(&checkpoint_restart),
+        "hostile evaluation reconciles the absent target"
+    );
     let checkpoint_again = crate::native_checkpoint::recover_offline(&config).unwrap();
     let (mut second_restart, player, _) = crate::hostile_tests::setup(12.0);
-    second_restart.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
-    crate::core::restore_entity(&mut second_restart, zombie.0,
-        &checkpoint_again.dimensions[&crate::dimensions::Dimension::Overworld].entities[&zombie.0]).unwrap();
+    second_restart.players.get_mut(&player).unwrap().game_mode =
+        crate::commands::GameMode::Creative;
+    crate::core::restore_entity(
+        &mut second_restart,
+        zombie.0,
+        &checkpoint_again.dimensions[&crate::dimensions::Dimension::Overworld].entities[&zombie.0],
+    )
+    .unwrap();
     step(&mut second_restart);
     assert!(!aggressive(&second_restart));
 
@@ -270,16 +314,29 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
     assert!(aggressive(&restored));
     let repair = step(&mut restored);
     assert!(!aggressive(&restored));
-    assert_eq!(image_ids(&repair).iter().filter(|id| **id == zombie.0).count(), 1);
+    assert_eq!(
+        image_ids(&repair)
+            .iter()
+            .filter(|id| **id == zombie.0)
+            .count(),
+        1
+    );
     assert!(repair.iter().any(|entry| matches!(entry,
         JournalEntry::Entity { id, appearance, .. } if *id == zombie.0
             && !appearance.extra.iter().any(|(index, value)| *index == 15
                 && matches!(value, crate::journal::EntityDataValueImage::Byte(flags) if flags & 4 != 0)))));
     let quiet = step(&mut restored);
-    assert!(!image_ids(&quiet).contains(&zombie.0), "quiet tick must not rewrite the repair");
+    assert!(
+        !image_ids(&quiet).contains(&zombie.0),
+        "quiet tick must not rewrite the repair"
+    );
     let mut writer = JournalWriter::open(&dir, 1).unwrap();
-    writer.append(state.tick + 1, state.tick + 1, &repair).unwrap();
-    writer.append(state.tick + 2, state.tick + 2, &quiet).unwrap();
+    writer
+        .append(state.tick + 1, state.tick + 1, &repair)
+        .unwrap();
+    writer
+        .append(state.tick + 2, state.tick + 2, &quiet)
+        .unwrap();
     writer.flush().unwrap();
     drop(writer);
     let batches = read_complete_batches_after(&dir.join("journal"), 0).unwrap();
@@ -287,7 +344,10 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
     let (mut wal_restart, player, _) = crate::hostile_tests::setup(12.0);
     wal_restart.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
     crate::core::restore_entity(&mut wal_restart, zombie.0, &replay.entities[&zombie.0]).unwrap();
-    assert!(!aggressive(&wal_restart), "repair survives the second WAL restart");
+    assert!(
+        !aggressive(&wal_restart),
+        "repair survives the second WAL restart"
+    );
     let _ = std::fs::remove_dir_all(dir);
 }
 

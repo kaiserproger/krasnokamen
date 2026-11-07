@@ -88,29 +88,78 @@ fn gamerule_suppresses_player_scene_success_but_not_failure_or_console() {
     state.outbox.clear();
     command(&mut state, alice, "time set 18000");
     assert_eq!(state.day_time, 18000);
-    assert!(!has_translation(&state, ConnectionId(1), "commands.time.set.absolute"));
+    assert!(!has_translation(
+        &state,
+        ConnectionId(1),
+        "commands.time.set.absolute"
+    ));
     command(&mut state, alice, "summon minecraft:zombie ~ ~ ~");
-    assert!(!has_translation(&state, ConnectionId(1), "commands.summon.success"));
-    command(&mut state, alice, "effect give @s minecraft:night_vision 30");
+    assert!(!has_translation(
+        &state,
+        ConnectionId(1),
+        "commands.summon.success"
+    ));
+    command(
+        &mut state,
+        alice,
+        "effect give @s minecraft:night_vision 30",
+    );
     assert!(!chat_contains(&state, "Updated effects"));
     command(&mut state, alice, "effect clear @s minecraft:invisibility");
     assert!(chat_contains(&state, "No entities were affected"));
     command(&mut state, alice, "say ordinary chat remains visible");
-    assert!(has_translation(&state, ConnectionId(1), "chat.type.announcement"));
-    command(&mut state, alice, "bossbar add minecraft:test {\"text\":\"Test\"}");
-    assert!(!has_translation(&state, ConnectionId(1), "commands.bossbar.create.success"));
-    command(&mut state, alice, "bossbar add minecraft:test {\"text\":\"Test\"}");
-    assert!(has_translation(&state, ConnectionId(1), "commands.bossbar.create.failed"));
+    assert!(has_translation(
+        &state,
+        ConnectionId(1),
+        "chat.type.announcement"
+    ));
+    command(
+        &mut state,
+        alice,
+        "bossbar add minecraft:test {\"text\":\"Test\"}",
+    );
+    assert!(!has_translation(
+        &state,
+        ConnectionId(1),
+        "commands.bossbar.create.success"
+    ));
+    command(
+        &mut state,
+        alice,
+        "bossbar add minecraft:test {\"text\":\"Test\"}",
+    );
+    assert!(has_translation(
+        &state,
+        ConnectionId(1),
+        "commands.bossbar.create.failed"
+    ));
     command(&mut state, alice, "summon minecraft:zombie 30000000 80 0");
-    assert!(has_translation(&state, ConnectionId(1), "commands.summon.invalidPosition"));
+    assert!(has_translation(
+        &state,
+        ConnectionId(1),
+        "commands.summon.invalidPosition"
+    ));
     let mut changes = ChangeSet::default();
-    execute(&mut state, crate::command_console::CONNECTION, crate::command_console::EXECUTOR,
-        &parse("time set 6000", true).unwrap(), &mut changes);
-    assert!(has_translation(&state, crate::command_console::CONNECTION, "commands.time.set.absolute"));
+    execute(
+        &mut state,
+        crate::command_console::CONNECTION,
+        crate::command_console::EXECUTOR,
+        &parse("time set 6000", true).unwrap(),
+        &mut changes,
+    );
+    assert!(has_translation(
+        &state,
+        crate::command_console::CONNECTION,
+        "commands.time.set.absolute"
+    ));
     state.outbox.clear();
     command(&mut state, alice, "gamerule send_command_feedback true");
     command(&mut state, alice, "time set 7000");
-    assert!(has_translation(&state, ConnectionId(1), "commands.time.set.absolute"));
+    assert!(has_translation(
+        &state,
+        ConnectionId(1),
+        "commands.time.set.absolute"
+    ));
 }
 
 #[test]

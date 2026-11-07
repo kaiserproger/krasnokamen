@@ -3513,7 +3513,7 @@ severity = "minor"
 status = "open"
 source = "External critique of 4d32f28, crates/mc-core/src/tick/merge.rs pickup commit"
 repro = "source"
-regression = []
+regression = ["cargo:mc-core:tick_tests::statistics_tests::pickup_publishes_only_changed_slots_for_active_menu", "cargo:mc-core:tick_tests::statistics_tests::pickup_into_offhand_syncs_inventory_with_or_without_open_chest", "cargo:mc-core:tick_tests::statistics_tests::pickup_with_lectern_open_updates_hidden_player_inventory"]
 failing_first = "not recorded"
 
 [[bug]]
@@ -3524,7 +3524,18 @@ severity = "major"
 status = "open"
 source = "External critique of 4d32f28, crates/mc-edge/src/server.rs op/deop admission"
 repro = "source"
-regression = []
+regression = ["cargo:mc-edge:server::admin_tests::operator_updates_wait_for_capacity_before_mutating"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "EDGE-OP-JOIN-STALE-PERMISSION"
+title = "A concurrent operator change during join can leave the native session with stale permissions"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Code review of server/connection.rs Join permission snapshot preceding admin session registration"
+repro = "source"
+regression = ["cargo:mc-edge:server::admin_tests::joining_session_and_deop_keep_native_permission_order", "cargo:mc-edge:server::admin_tests::deop_between_snapshot_and_registration_reaches_native_join", "cargo:mc-edge:server::admin_tests::join_burst_permission_change_refreshes_command_tree"]
 failing_first = "not recorded"
 
 [[bug]]
@@ -3535,7 +3546,7 @@ severity = "major"
 status = "open"
 source = "External critique of 4d32f28, crates/mc-edge/src/computer.rs bridge launch"
 repro = "source"
-regression = []
+regression = ["cargo:mc-edge:computer::tests::computer_worker_reopen_and_close_reopen_at_capacity"]
 failing_first = "not recorded"
 
 [[bug]]

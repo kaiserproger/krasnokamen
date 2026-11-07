@@ -3,6 +3,52 @@
 
 use super::*;
 
+/// Register the session and enqueue its native Join under the same fence as
+/// op/deop, so a permission update cannot overtake the Join it targets.
+pub(super) async fn admit_native_session(
+    server: &EdgeServer,
+    id: ConnectionId,
+    uuid: uuid::Uuid,
+    name: String,
+    ip: std::net::IpAddr,
+    view_distance: u8,
+    locale: String,
+) -> Result<mc_core::core::PlayerSession, mc_core::CoreError> {
+    let _guard = server.operator_updates.lock().await;
+    server.admin.register(id, uuid, name.clone(), ip);
+    let session = server.hub.join_session(
+        id,
+        uuid,
+        name,
+        server.admin.session_level(id),
+        view_distance,
+        locale,
+    );
+    if session.is_err() {
+        server.admin.remove(id);
+    }
+    session
+}
+
+pub(super) fn refresh_join_permission_tree(
+    server: &EdgeServer,
+    id: ConnectionId,
+    burst_level: u8,
+) -> anyhow::Result<()> {
+    let current = if server.hub.session_locked(id) {
+        0
+    } else {
+        server.admin.session_level(id)
+    };
+    if current != burst_level {
+        server.send(
+            id,
+            &crate::command_tree::tree(current, server.hub.plugin_commands()),
+        )?;
+    }
+    Ok(())
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum AcceptFailure {
     /// One pending connection failed; the listener is fine.
@@ -222,18 +268,16 @@ async fn run_connection(
         config_outcome.client_view_distance,
         server.cfg.server.view_distance,
     );
-    lifecycle.native = Some(
-        server.hub.join_session(
-            id,
-            outcome.uuid,
-            outcome.name.clone(),
-            server.admin.level(outcome.uuid),
-            view_distance as u8,
-            config_outcome.client_language.clone(),
-        ).inspect_err(|error| {
-            warn!(%peer, connection = id.0, stage = "join-submit", name = %outcome.name, %error, "native session refused; connection closed");
-        })?
-    );
+    let ip = outcome
+        .remote_address
+        .or(stream_peer_ip(&peer))
+        .ok_or_else(|| anyhow::anyhow!("cannot admit player {peer}: remote IP unavailable"))?;
+    lifecycle.native = Some(admit_native_session(
+        &server, id, outcome.uuid, outcome.name.clone(), ip,
+        view_distance as u8, config_outcome.client_language.clone(),
+    ).await.inspect_err(|error| {
+        warn!(%peer, connection = id.0, stage = "join-submit", name = %outcome.name, %error, "native session refused; connection closed");
+    })?);
 
     // --- Wait for our Joined (bounded): the tick loop answers with the
     // --- entity id + spawn the burst needs.
@@ -273,6 +317,11 @@ async fn run_connection(
     // --- Join burst (compressed from here on). ---
     let simulation_distance = i32::from(server.cfg.server.simulation_distance);
     let latest = latest_output(&server);
+    let burst_op_level = if server.hub.session_locked(id) {
+        0
+    } else {
+        server.admin.session_level(id)
+    };
     if let Err(error) = crate::play::send_join_burst(crate::play::JoinBurst {
         conn: &mut conn,
         data: &server.data,
@@ -284,11 +333,7 @@ async fn run_connection(
         simulation_distance,
         game_mode,
         recipes: &server.recipes,
-        op_level: if server.hub.session_locked(id) {
-            0
-        } else {
-            server.admin.level(outcome.uuid)
-        },
+        op_level: burst_op_level,
         plugin_commands: server.hub.plugin_commands(),
         online_mode: server.cfg.auth.online_mode,
     })
@@ -307,6 +352,7 @@ async fn run_connection(
     let (reliable_tx, reliable_rx) =
         mpsc::channel::<bytes::Bytes>(crate::fanout::OUTBOUND_QUEUE_BOUND);
     let (world_tx, world_rx) = mpsc::channel::<bytes::Bytes>(crate::fanout::OUTBOUND_QUEUE_BOUND);
+    let operator_guard = server.operator_updates.lock().await;
     let stashed = server.connections.register(
         id,
         ConnectionHandles {
@@ -333,11 +379,8 @@ async fn run_connection(
         }
     }
     server.connections.set_name(id, outcome.name.clone());
-    if let Some(ip) = outcome.remote_address.or(stream_peer_ip(&peer)) {
-        server
-            .admin
-            .register(id, outcome.uuid, outcome.name.clone(), ip);
-    }
+    refresh_join_permission_tree(&server, id, burst_op_level)?;
+    drop(operator_guard);
     server.feedback(id, "Settlements / Поселения: /settlement guide")?;
     if *server.stop.borrow() {
         server.kick(

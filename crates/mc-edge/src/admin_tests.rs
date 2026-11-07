@@ -125,6 +125,138 @@ async fn operator_updates_wait_for_capacity_before_mutating() {
 }
 
 #[tokio::test]
+async fn joining_session_and_deop_keep_native_permission_order() {
+    use std::future::Future;
+    let (server, dir) = fixture();
+    let (operator, _operator_rx) = register(&server, "Operator", true);
+    let uuid = crate::crypto::offline_uuid("Alex");
+    server.admin.set_op(uuid, "Alex", true).unwrap();
+    assert_eq!(server.admin.level(uuid), 4);
+    let id = server.connections.joining_id();
+    let mut ticks = server.hub.subscribe();
+    let guard = server.operator_updates.lock().await;
+    let joining = connection::admit_native_session(
+        &server,
+        id,
+        uuid,
+        "Alex".into(),
+        "127.0.0.1".parse().unwrap(),
+        2,
+        "en_us".into(),
+    );
+    tokio::pin!(joining);
+    let deop = server.handle_admin_command(operator, "deop Alex");
+    tokio::pin!(deop);
+    std::future::poll_fn(|cx| {
+        assert!(
+            joining.as_mut().poll(cx).is_pending(),
+            "Join must wait on operator fence"
+        );
+        assert!(
+            deop.as_mut().poll(cx).is_pending(),
+            "deop must wait on operator fence"
+        );
+        std::task::Poll::Ready(())
+    })
+    .await;
+    drop(guard);
+    let session = joining.await.unwrap();
+    assert!(deop.await.unwrap());
+    assert_eq!(server.admin.session_level(id), 0);
+    assert_native_deopped(&server, id, &mut ticks).await;
+    drop(session);
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+async fn assert_native_deopped(
+    server: &EdgeServer,
+    id: ConnectionId,
+    ticks: &mut tokio::sync::broadcast::Receiver<mc_core::boundary::TickOutput>,
+) {
+    for _ in 0..100 {
+        assert!(server.hub.submit(mc_core::boundary::PlayerInput::Chat {
+            connection: id,
+            message: "test".into()
+        }));
+    }
+    let disconnected = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        for _ in 0..20 {
+            ticks.recv().await.unwrap();
+            if server.hub.try_drain_outbox().iter().any(|(connection, changes)| {
+                *connection == id && changes.iter().any(|change| matches!(change,
+                    mc_core::boundary::PlayerChange::Disconnect { reason } if reason == "disconnect.spam"))
+            }) {
+                return true;
+            }
+        }
+        false
+    }).await.expect("native tick publications stalled");
+    assert!(
+        disconnected,
+        "deopped native player must hit the chat-spam gate"
+    );
+}
+
+#[tokio::test]
+async fn deop_between_snapshot_and_registration_reaches_native_join() {
+    let (server, dir) = fixture();
+    let (operator, _operator_rx) = register(&server, "Operator", true);
+    let uuid = crate::crypto::offline_uuid("Alex");
+    server.admin.set_op(uuid, "Alex", true).unwrap();
+    let stale = server.admin.level(uuid);
+    assert_eq!(stale, 4);
+    let id = server.connections.joining_id();
+    let mut ticks = server.hub.subscribe();
+    assert!(
+        server
+            .handle_admin_command(operator, "deop Alex")
+            .await
+            .unwrap()
+    );
+    let session = connection::admit_native_session(
+        &server,
+        id,
+        uuid,
+        "Alex".into(),
+        "127.0.0.1".parse().unwrap(),
+        2,
+        "en_us".into(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(server.admin.session_level(id), 0);
+    assert_native_deopped(&server, id, &mut ticks).await;
+    drop(session);
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn join_burst_permission_change_refreshes_command_tree() {
+    let (server, dir) = fixture();
+    let (alex, mut rx) = register(&server, "Alex", true);
+    let uuid = crate::crypto::offline_uuid("Alex");
+    server.admin.set_op(uuid, "Alex", false).unwrap();
+    connection::refresh_join_permission_tree(&server, alex, 4).unwrap();
+    let frame = receive(&mut rx).await;
+    let tree = ClientboundCommands::decode(&mut &frame.body[..]).unwrap();
+    assert!(
+        !tree
+            .nodes
+            .iter()
+            .any(|node| matches!(&node.kind, CommandNodeKind::Literal(name) if name == "op"))
+    );
+    connection::refresh_join_permission_tree(&server, alex, 0).unwrap();
+    assert!(
+        rx.try_recv().is_err(),
+        "unchanged permission needs no refresh"
+    );
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
 async fn suggestion_round_trip_and_permission_tree_refresh() {
     let (server, dir) = fixture();
     let (operator, mut operator_rx) = register(&server, "Operator", true);

@@ -28,8 +28,16 @@ fn pickup_publishes_only_changed_slots_for_active_menu() {
             .iter()
             .filter_map(|change| match change {
                 PlayerChange::MenuSlot {
-                    window, state_id, slot, item,
-                } => Some((*window, *state_id, *slot, item.as_ref().map(|stack| stack.count))),
+                    window,
+                    state_id,
+                    slot,
+                    item,
+                } => Some((
+                    *window,
+                    *state_id,
+                    *slot,
+                    item.as_ref().map(|stack| stack.count),
+                )),
                 _ => None,
             })
             .collect();
@@ -94,19 +102,29 @@ fn pickup_into_offhand_syncs_inventory_with_or_without_open_chest() {
 #[test]
 fn pickup_with_lectern_open_updates_hidden_player_inventory() {
     let (mut state, entity, pos) = flat_player_fixture();
-    let apple = state.registry.items
-        .id_of(&mc_data::Identifier::parse("minecraft:apple").unwrap()).unwrap();
-    state.players.get_mut(&entity).unwrap().open =
-        Some(crate::inventory::Menu::new(7, crate::inventory::MenuKind::Lectern));
+    let apple = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:apple").unwrap())
+        .unwrap();
+    state.players.get_mut(&entity).unwrap().open = Some(crate::inventory::Menu::new(
+        7,
+        crate::inventory::MenuKind::Lectern,
+    ));
     state.outbox.clear();
-    let dropped = crate::tick::spawn_item_entity(&mut state, pos, mc_data::ItemStack::new(apple, 1));
+    let dropped =
+        crate::tick::spawn_item_entity(&mut state, pos, mc_data::ItemStack::new(apple, 1));
     let item = state.entities.slot_of(dropped).unwrap();
     let collector = state.entities.slot_of(entity).unwrap();
     state.merge_pickups.push((item, collector, 1));
     state.commit_merge_effects();
-    assert!(state.outbox[&ConnectionId(1)].iter().any(|change| matches!(change,
+    assert!(
+        state.outbox[&ConnectionId(1)]
+            .iter()
+            .any(|change| matches!(change,
         PlayerChange::MenuContents { window: 0, slots, .. }
-        if slots[36].as_ref().is_some_and(|stack| stack.count == 1))));
+        if slots[36].as_ref().is_some_and(|stack| stack.count == 1)))
+    );
 }
 
 #[test]

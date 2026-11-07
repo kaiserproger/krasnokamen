@@ -23,7 +23,8 @@ fn id(name: &str) -> Identifier {
 fn pickup_publication_micro() {
     let mode = std::env::var("PICKUP_MODE").unwrap_or_else(|_| "delta".into());
     let iterations: usize = std::env::var("PICKUP_COUNT")
-        .map(|value| value.parse().unwrap()).unwrap_or(100_000);
+        .map(|value| value.parse().unwrap())
+        .unwrap_or(100_000);
     let mut player = PlayerState::new(ConnectionId(1), GameMode::Survival);
     for slot in 0..36 {
         let stack = ItemStack::new(APPLE, 1).with_custom_name(format!("stack-{slot}"));
@@ -37,7 +38,10 @@ fn pickup_publication_micro() {
             std::hint::black_box(player.pickup_changes(1));
         }
     }
-    println!("PICKUP_PUBLICATION mode={mode} count={iterations} total_ns={}", start.elapsed().as_nanos());
+    println!(
+        "PICKUP_PUBLICATION mode={mode} count={iterations} total_ns={}",
+        start.elapsed().as_nanos()
+    );
 }
 
 #[test]

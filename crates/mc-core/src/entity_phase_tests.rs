@@ -880,64 +880,6 @@ fn proc_cpu_ticks() -> u64 {
     fields[11].parse::<u64>().unwrap() + fields[12].parse::<u64>().unwrap()
 }
 
-#[test]
-#[ignore = "real entity-step dense herd microbenchmark; run in perf lane"]
-fn dense_herd_step_reader_micro() {
-    let (mut state, _) = resting_cow();
-    while state.entities.len() < 50_000 {
-        let index = state.entities.len();
-        let id = state.spawn_mob(state.registry.cow_type_id, [8.5 + (index % 6) as f64, 101.0, 8.5], 10.0);
-        let slot = state.entities.slot_of(id).unwrap();
-        state.entities.set_vel(slot, [0.0, -0.08, 0.0]);
-    }
-    state.entities.prepare_motion_hints(&state.registry);
-    let view = PrepView::of(&state);
-    let rows: Vec<_> = state.entities.slots().map(|slot| {
-        read_row(&view, slot, state.entities.motion_flags(slot), 1, &RarePrep::default()).0
-    }).collect();
-    let targets = [];
-    let cow_cells = HashMap::default();
-    let world = &state.world;
-    let loaded = |x: i32, z: i32| world.has_chunk(x.div_euclid(16), z.div_euclid(16));
-    let revision = |x, z| world.chunk_revision(x, z);
-    let ctx = StepCtx {
-        rows: &rows, entities: &state.entities, retained_targets: &state.hostile.targets,
-        players: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
-        passive: passive_follow::Context {
-            players: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
-            states: &state.players,
-            locked: state.require_plugin_login.then_some(&state.locked_sessions),
-        },
-        dolphin_toys: &[],
-        villagers: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
-        golem_targets: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
-        piglin_targets: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
-        zoglin_targets: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
-        cow_cells: &cow_cells, world, chunk_loaded: &loaded, registry: &state.registry,
-        tick: state.tick, chunk_revision: &revision, unchanged_since: state.entity_phase_revision,
-        difficulty: state.difficulty, sky_darken: 0,
-    };
-    let mut expected = None;
-    for shared in [true, false, true, false] {
-        let reader = world.physics_reader();
-        let cpu = proc_cpu_ticks();
-        let start = std::time::Instant::now();
-        let mut checksum = 0_u64;
-        for &row in &rows {
-            let (write, intents) = if shared {
-                step_entity_with_reader(row, &ctx, &reader)
-            } else {
-                step_entity(row, &ctx)
-            };
-            checksum = checksum.wrapping_add(write.pos[1].to_bits()).wrapping_add(intents.len() as u64);
-        }
-        let elapsed = start.elapsed().as_secs_f64() * 1000.0;
-        let cpu = proc_cpu_ticks() - cpu;
-        assert_eq!(*expected.get_or_insert(checksum), checksum);
-        println!("HERD_STEP shared={shared} rows={} ms={elapsed:.3} cpu_ticks={cpu} checksum={checksum}", rows.len());
-    }
-}
-
 fn full_step_without_early_rest(
     state: &TickState,
     slot: EntitySlot,

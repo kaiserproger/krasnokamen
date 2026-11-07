@@ -160,6 +160,8 @@ async fn computer_worker_reopen_and_close_reopen_at_capacity() {
     server.cfg.computer.max_processes = 1;
     server.computer_processes = Arc::new(Semaphore::new(1));
     let (id, mut replies) = crate::server::admin_tests::register(&server, "Operator", true);
+    let (second_id, mut second_replies) =
+        crate::server::admin_tests::register(&server, "SecondOperator", true);
     let entity = EntityId(7);
     let pos = ChunkPos { x: 0, z: 0 };
     let iron = server
@@ -205,8 +207,22 @@ async fn computer_worker_reopen_and_close_reopen_at_capacity() {
         times: Default::default(),
     };
     let (ticks, tick_rx) = tokio::sync::broadcast::channel(8);
+    let second_ticks = ticks.subscribe();
+    let (second_tx, second_rx) = mpsc::channel(8);
     let (tx, rx) = mpsc::channel(8);
     let server = Arc::new(server);
+    let second_server = Arc::clone(&server);
+    let second_task = tokio::spawn(async move {
+        run_with_ticks(
+            &second_server,
+            second_id,
+            entity,
+            "127.0.0.1:50001".parse().unwrap(),
+            second_rx,
+            second_ticks,
+        )
+        .await
+    });
     let worker_server = Arc::clone(&server);
     let task = tokio::spawn(async move {
         run_with_ticks(
@@ -241,25 +257,42 @@ async fn computer_worker_reopen_and_close_reopen_at_capacity() {
             String::from_utf8(payload[6..].to_vec()).unwrap(),
         )
     }
-    for session in [1, 2] {
-        tx.send(Request::Open {
-            session,
+    tx.send(Request::Open {
+        session: 1,
+        at: [1, 64, 1],
+    })
+    .await
+    .unwrap();
+    assert_eq!(response(&mut replies).await.0, 0, "first Open");
+    second_tx
+        .send(Request::Open {
+            session: 9,
             at: [1, 64, 1],
         })
         .await
         .unwrap();
-        assert_eq!(response(&mut replies).await.0, 0, "Open {session}");
-    }
+    let refusal = response(&mut second_replies).await;
+    assert_eq!(refusal.0, 2);
+    assert_eq!(refusal.1, "Computer process limit reached.");
+    tx.send(Request::Open {
+        session: 2,
+        at: [1, 64, 1],
+    })
+    .await
+    .unwrap();
     tx.send(Request::Close { session: 2 }).await.unwrap();
-    assert_eq!(response(&mut replies).await.0, 2);
     tx.send(Request::Open {
         session: 3,
         at: [1, 64, 1],
     })
     .await
     .unwrap();
+    assert_eq!(response(&mut replies).await.0, 0, "second Open");
+    assert_eq!(response(&mut replies).await.0, 2, "Close");
     assert_eq!(response(&mut replies).await.0, 0, "Open after Close");
     drop(tx);
+    drop(second_tx);
+    second_task.await.unwrap().unwrap();
     task.await.unwrap().unwrap();
     server.hub.shutdown();
     std::fs::remove_dir_all(dir).unwrap();
