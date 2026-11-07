@@ -247,9 +247,6 @@ fn planted(state: &TickState, at: [i32; 3]) -> bool {
             if dx > 4 || dz > 4 || at[1] < root[1] || at[1] - root[1] > 64 {
                 return false;
             }
-            if dx <= 1 && dz <= 1 {
-                return true;
-            }
             let low = root[1].max(at[1] - 8);
             let high = (root[1] + 64)
                 .min(at[1] + 8)

@@ -365,7 +365,8 @@ fn planted_tree_does_not_reserve_a_separate_nearby_natural_trunk() {
     let (mut state, id, _, _, _, _) = forest();
     let root = [0, 201, 0];
     let neighbor = [6, 201, 0];
-    grown_world(&mut state, vec![root, neighbor], "birch");
+    let high_neighbor = [1, 251, 0];
+    grown_world(&mut state, vec![root, neighbor, high_neighbor], "birch");
     state
         .settlements
         .get_mut(id)
@@ -374,6 +375,7 @@ fn planted_tree_does_not_reserve_a_separate_nearby_natural_trunk() {
         .insert(root);
     assert!(!clearable(&state, root));
     assert!(clearable(&state, neighbor));
+    assert!(clearable(&state, high_neighbor));
 }
 
 #[test]
