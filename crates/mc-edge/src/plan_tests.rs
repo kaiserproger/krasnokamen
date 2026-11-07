@@ -3706,6 +3706,40 @@ fn filled_map_slot_update_is_planned_for_the_client() {
 }
 
 #[test]
+fn hidden_pickup_plans_player_inventory_packet() {
+    use mc_protocol::packets::Packet;
+    with_cache(|_| {
+        let id = ConnectionId(3);
+        let mut viewer = ViewerState::new(id, EntityId(41), [8.0, 64.0, 8.0]);
+        let planned = plan_player_changes(
+            &[PlayerChange::PlayerInventorySlot {
+                slot: 40,
+                item: None,
+            }],
+            &mut viewer,
+        );
+        assert_eq!(planned.len(), 1);
+        assert_eq!(
+            planned[0].id,
+            mc_protocol::packets::play::ClientboundSetPlayerInventory::ID
+        );
+        let mut frame = bytes::BytesMut::from(planned[0].data.as_ref());
+        let decoded = mc_protocol::frame::try_decode_frame(
+            &mut frame,
+            mc_protocol::frame::Compression::Threshold(256),
+        )
+        .unwrap()
+        .unwrap();
+        let packet = mc_protocol::packets::play::ClientboundSetPlayerInventory::decode(
+            &mut &decoded.body[..],
+        )
+        .unwrap();
+        assert_eq!(packet.slot, 40);
+        assert_eq!(packet.item_stack, mc_data::ItemStack::EMPTY);
+    });
+}
+
+#[test]
 #[ignore = "wire size measurement"]
 fn pickup_inventory_wire_sizes() {
     with_cache(|_| {

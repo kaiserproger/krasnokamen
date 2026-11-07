@@ -664,6 +664,21 @@ fn container_set_slot_round_trip() {
 }
 
 #[test]
+fn set_player_inventory_uses_varint_index_and_optional_stack() {
+    let packet = ClientboundSetPlayerInventory {
+        slot: 40,
+        item_stack: ItemStack::EMPTY,
+    };
+    let mut body = Vec::new();
+    packet.encode(&mut body).unwrap();
+    assert_eq!(body, [40, 0]);
+    round_trip(ClientboundSetPlayerInventory {
+        slot: 40,
+        item_stack: ItemStack::new(28, 63),
+    });
+}
+
+#[test]
 fn set_cursor_item_is_one_optional_stack() {
     let mut empty = Vec::new();
     ClientboundSetCursorItem {

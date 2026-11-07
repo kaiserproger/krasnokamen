@@ -1096,9 +1096,25 @@ impl EdgeServer {
             match root {
                 "op" | "deop" => {
                     let _guard = self.operator_updates.lock().await;
-                    let mut permits = self.hub.reserve_inputs(2).await.map_err(|_| {
-                        anyhow::anyhow!("authoritative operator update queue stopped")
-                    })?;
+                    let sessions = self.admin.sessions_for_uuid(uuid);
+                    let mut permits =
+                        self.hub
+                            .reserve_inputs(1 + sessions.len())
+                            .await
+                            .map_err(|_| {
+                                anyhow::anyhow!("authoritative operator update queue stopped")
+                            })?;
+                    if id != mc_core::command_console::CONNECTION
+                        && (self.hub.session_locked(id)
+                            || !crate::command_tree::permitted(
+                                command,
+                                self.admin.session_level(id),
+                                self.hub.plugin_commands(),
+                            ))
+                    {
+                        self.feedback(id, "Unknown or incomplete command")?;
+                        return Ok(true);
+                    }
                     let result = self.admin.set_op(uuid, &name, root == "op");
                     if result.is_ok() {
                         permits.next().expect("reserved operator snapshot").send(
@@ -1107,23 +1123,27 @@ impl EdgeServer {
                             },
                         );
                     }
-                    if result.is_ok()
-                        && let Some((other, _, _, _)) =
-                            self.admin.find(target).filter(|entry| entry.1 == uuid)
-                    {
-                        permits.next().expect("reserved permission update").send(
-                            PlayerInput::PermissionLevel {
-                                connection: other,
-                                level: self.admin.level(uuid),
-                            },
-                        );
-                        self.send(
-                            other,
-                            &crate::command_tree::tree(
-                                self.admin.level(uuid),
-                                self.hub.plugin_commands(),
-                            ),
-                        )?;
+                    if result.is_ok() {
+                        let level = self.admin.level(uuid);
+                        for &other in &sessions {
+                            permits.next().expect("reserved permission update").send(
+                                PlayerInput::PermissionLevel {
+                                    connection: other,
+                                    level,
+                                },
+                            );
+                        }
+                        for other in sessions {
+                            let level = if self.hub.session_locked(other) {
+                                0
+                            } else {
+                                level
+                            };
+                            self.send(
+                                other,
+                                &crate::command_tree::tree(level, self.hub.plugin_commands()),
+                            )?;
+                        }
                     }
                     result
                 }

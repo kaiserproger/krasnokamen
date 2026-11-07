@@ -702,6 +702,14 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                 item_stack: stack_or_empty(item),
             },
         ),
+        PlayerChange::PlayerInventorySlot { slot, item } => push_reliable(
+            out,
+            conn,
+            &mc_protocol::packets::play::ClientboundSetPlayerInventory {
+                slot: i32::from(*slot),
+                item_stack: stack_or_empty(item),
+            },
+        ),
         PlayerChange::Cursor { item, .. } => push_reliable(
             out,
             conn,

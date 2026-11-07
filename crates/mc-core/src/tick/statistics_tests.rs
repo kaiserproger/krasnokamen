@@ -73,6 +73,7 @@ fn pickup_into_offhand_syncs_inventory_with_or_without_open_chest() {
                 7,
                 crate::inventory::MenuKind::Chest { rows: 3 },
             ));
+            player.open.as_mut().unwrap().carried = mc_data::ItemStack::new(apple, 3);
         }
         state.outbox.clear();
         let dropped =
@@ -84,16 +85,21 @@ fn pickup_into_offhand_syncs_inventory_with_or_without_open_chest() {
         let changes = &state.outbox[&ConnectionId(1)];
         if chest {
             assert!(changes.iter().any(|change| matches!(change,
-                PlayerChange::MenuContents { window: 0, slots, .. }
-                if slots[45].as_ref().is_some_and(|stack| stack.count == 64))));
+                PlayerChange::PlayerInventorySlot { slot: 40, item: Some(stack) }
+                if stack.count == 64)));
         } else {
             assert!(changes.iter().any(|change| matches!(change,
                 PlayerChange::MenuSlot { window: 0, slot: 45, item: Some(stack), .. }
                 if stack.count == 64)));
-            assert!(
-                !changes
-                    .iter()
-                    .any(|change| matches!(change, PlayerChange::MenuContents { .. }))
+        }
+        assert!(!changes.iter().any(|change| matches!(
+            change,
+            PlayerChange::MenuContents { .. } | PlayerChange::Cursor { .. }
+        )));
+        if chest {
+            assert_eq!(
+                state.players[&entity].open.as_ref().unwrap().carried.count,
+                3
             );
         }
     }
@@ -122,8 +128,13 @@ fn pickup_with_lectern_open_updates_hidden_player_inventory() {
         state.outbox[&ConnectionId(1)]
             .iter()
             .any(|change| matches!(change,
-        PlayerChange::MenuContents { window: 0, slots, .. }
-        if slots[36].as_ref().is_some_and(|stack| stack.count == 1)))
+        PlayerChange::PlayerInventorySlot { slot: 0, item: Some(stack) } if stack.count == 1))
+    );
+    assert!(
+        !state.outbox[&ConnectionId(1)].iter().any(|change| matches!(
+            change,
+            PlayerChange::MenuContents { .. } | PlayerChange::Cursor { .. }
+        ))
     );
 }
 

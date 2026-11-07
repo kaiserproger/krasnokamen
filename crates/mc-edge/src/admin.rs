@@ -245,6 +245,16 @@ impl Admin {
     pub(crate) fn session_level(&self, id: ConnectionId) -> u8 {
         self.sessions.lock().get(&id).map_or(0, |session| session.3)
     }
+    pub(crate) fn sessions_for_uuid(&self, uuid: Uuid) -> Vec<ConnectionId> {
+        let mut ids: Vec<_> = self
+            .sessions
+            .lock()
+            .iter()
+            .filter_map(|(id, session)| (session.0 == uuid).then_some(*id))
+            .collect();
+        ids.sort_unstable_by_key(|id| id.0);
+        ids
+    }
     pub(crate) fn has_ip(&self, id: ConnectionId, ip: std::net::IpAddr) -> bool {
         self.sessions.lock().get(&id).is_some_and(|s| s.2 == ip)
     }

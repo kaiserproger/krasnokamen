@@ -206,6 +206,29 @@ impl Packet for ClientboundSetCursorItem {
     }
 }
 
+/// Updates a player inventory index without changing a menu or its cursor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientboundSetPlayerInventory {
+    pub slot: i32,
+    pub item_stack: ItemStack,
+}
+
+impl Packet for ClientboundSetPlayerInventory {
+    const ID: i32 = 0x6e;
+
+    fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
+        buf.write_varint(self.slot);
+        self.item_stack.encode(buf)
+    }
+
+    fn decode<B: Buf>(buf: &mut B) -> Result<Self, CodecError> {
+        Ok(Self {
+            slot: buf.read_varint()?,
+            item_stack: ItemStack::decode(buf)?,
+        })
+    }
+}
+
 /// `Clientbound Open Screen` (CB). Verified against the local vanilla 26.1.2
 /// class: `ClientboundOpenScreenPacket(int containerId, MenuType<?> type,
 /// Component title)`. The title is an opaque binary text `Component` payload;

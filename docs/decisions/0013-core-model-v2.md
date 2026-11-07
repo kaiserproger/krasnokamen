@@ -62,11 +62,16 @@ may reconcile to a newer snapshot. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
 Operator changes reserve the whole authoritative input batch before changing
-edge-owned operator state. An async mutex serializes these changes, and the
-reserved snapshot and live permission update are sent without an intervening
-await. Queue saturation therefore waits for capacity rather than polling or
-publishing an older operator snapshot after a newer one. If the core stops
+edge-owned operator state. An async mutex serializes admission and changes;
+the initiator's live permission and lock status are rechecked after reservation.
+The operator snapshot and a permission update for every registered session of
+the target UUID are sent without an intervening await. Queue saturation waits
+for capacity rather than polling or publishing out of order. If the core stops
 while waiting, the operator mutation is not applied.
+
+Pickup publishes changed slots in the active menu. Player inventory slots hidden
+by that menu use the dedicated player-inventory packet rather than a window-0
+contents image, so another menu's cursor and crafting slots are not overwritten.
 
 ## Persistence and recovery
 

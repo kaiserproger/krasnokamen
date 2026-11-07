@@ -125,6 +125,69 @@ async fn operator_updates_wait_for_capacity_before_mutating() {
 }
 
 #[tokio::test]
+async fn queued_op_is_rejected_after_initiator_is_deopped() {
+    use std::future::Future;
+    let (server, dir) = fixture();
+    let (operator, _operator_rx) = register(&server, "Operator", true);
+    let (victim, _victim_rx) = register(&server, "Victim", true);
+    let uuid = crate::crypto::offline_uuid("Victim");
+    let held = server.hub.reserve_inputs(4096).await.unwrap();
+    let deop = server.handle_admin_command(operator, "deop Victim");
+    let regain = server.handle_admin_command(victim, "op Victim");
+    tokio::pin!(deop, regain);
+    std::future::poll_fn(|cx| {
+        assert!(deop.as_mut().poll(cx).is_pending());
+        assert!(regain.as_mut().poll(cx).is_pending());
+        std::task::Poll::Ready(())
+    })
+    .await;
+    drop(held);
+    assert!(deop.await.unwrap());
+    assert!(regain.await.unwrap());
+    assert_eq!(
+        server.admin.level(uuid),
+        0,
+        "demoted operator must not regain rights"
+    );
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn deop_reaches_rejoining_native_session() {
+    let (server, dir) = fixture();
+    let (operator, _operator_rx) = register(&server, "Operator", true);
+    let (old, _old_rx) = register(&server, "Alex", true);
+    let uuid = crate::crypto::offline_uuid("Alex");
+    let new = server.connections.joining_id();
+    let mut ticks = server.hub.subscribe();
+    let session = connection::admit_native_session(
+        &server,
+        new,
+        uuid,
+        "Alex".into(),
+        "127.0.0.1".parse().unwrap(),
+        2,
+        "en_us".into(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(server.admin.sessions_for_uuid(uuid).len(), 2);
+    assert!(
+        server
+            .handle_admin_command(operator, "deop Alex")
+            .await
+            .unwrap()
+    );
+    assert_eq!(server.admin.session_level(old), 0);
+    assert_eq!(server.admin.session_level(new), 0);
+    assert_native_deopped(&server, new, &mut ticks).await;
+    drop(session);
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
 async fn joining_session_and_deop_keep_native_permission_order() {
     use std::future::Future;
     let (server, dir) = fixture();

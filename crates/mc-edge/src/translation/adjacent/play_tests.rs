@@ -248,6 +248,24 @@ fn block_updates_and_slots_use_legacy_ids() {
 }
 
 #[test]
+fn hidden_player_inventory_packet_translates_slot_and_stack() {
+    let mut s = session();
+    let mut body = Vec::new();
+    body.write_varint(40);
+    body.write_varint(2);
+    body.write_varint(10);
+    body.write_varint(0);
+    body.write_varint(0);
+    let out = clientbound(&mut s, "minecraft:set_player_inventory", &body)
+        .unwrap()
+        .unwrap();
+    let mut r = &out[..];
+    assert_eq!(r.read_varint().unwrap(), 40);
+    assert_eq!(r.read_varint().unwrap(), 2);
+    assert_eq!(r.read_varint().unwrap(), 3);
+}
+
+#[test]
 fn animations_and_team_parameters_follow_the_old_layout() {
     let mut s = session();
     let mut body = Vec::new();

@@ -988,6 +988,11 @@ pub enum PlayerChange {
         slot: i16,
         item: Option<ItemStack>,
     },
+    /// One player-inventory slot, independent of the currently open menu.
+    PlayerInventorySlot {
+        slot: u8,
+        item: Option<ItemStack>,
+    },
     /// The item carried on the cursor changed outside a full contents update.
     Cursor {
         item: Option<ItemStack>,

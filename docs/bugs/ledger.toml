@@ -3582,7 +3582,7 @@ severity = "major"
 status = "open"
 source = "External critique of 4d32f28, crates/mc-edge/src/server.rs op/deop admission"
 repro = "source"
-regression = ["cargo:mc-edge:server::admin_tests::operator_updates_wait_for_capacity_before_mutating"]
+regression = ["cargo:mc-edge:server::admin_tests::operator_updates_wait_for_capacity_before_mutating", "cargo:mc-edge:server::admin_tests::queued_op_is_rejected_after_initiator_is_deopped"]
 failing_first = "not recorded"
 
 [[bug]]
@@ -3593,7 +3593,40 @@ severity = "major"
 status = "open"
 source = "Code review of server/connection.rs Join permission snapshot preceding admin session registration"
 repro = "source"
-regression = ["cargo:mc-edge:server::admin_tests::joining_session_and_deop_keep_native_permission_order", "cargo:mc-edge:server::admin_tests::deop_between_snapshot_and_registration_reaches_native_join", "cargo:mc-edge:server::admin_tests::join_burst_permission_change_refreshes_command_tree"]
+regression = ["cargo:mc-edge:server::admin_tests::joining_session_and_deop_keep_native_permission_order", "cargo:mc-edge:server::admin_tests::deop_between_snapshot_and_registration_reaches_native_join", "cargo:mc-edge:server::admin_tests::join_burst_permission_change_refreshes_command_tree", "cargo:mc-edge:server::admin_tests::deop_reaches_rejoining_native_session"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "CORE-PICKUP-HIDDEN-MENU-IMAGE"
+title = "Hidden pickup slots republish an inactive inventory menu and cursor"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Independent review of 0504a280 pickup fallback; vanilla 775/776/777 client handler javap"
+repro = "source"
+regression = ["cargo:mc-core:tick_tests::statistics_tests::pickup_into_offhand_syncs_inventory_with_or_without_open_chest", "cargo:mc-core:tick_tests::statistics_tests::pickup_with_lectern_open_updates_hidden_player_inventory", "cargo:mc-edge:plan::plan_tests::hidden_pickup_plans_player_inventory_packet"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "EDGE-QUEUED-OP-AFTER-DEOP"
+title = "An operator command waiting for capacity can execute after the initiator is deopped"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Independent review of 0504a280 operator admission"
+repro = "source"
+regression = ["cargo:mc-edge:server::admin_tests::queued_op_is_rejected_after_initiator_is_deopped"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "EDGE-REJOIN-OP-SESSION"
+title = "An op change updates only one of multiple registered sessions for the same UUID"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Independent review of 0504a280 operator admission"
+repro = "source"
+regression = ["cargo:mc-edge:server::admin_tests::deop_reaches_rejoining_native_session"]
 failing_first = "not recorded"
 
 [[bug]]

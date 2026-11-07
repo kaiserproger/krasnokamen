@@ -432,6 +432,11 @@ fn play_packet_ids_match_the_vanilla_report() {
         ),
         (
             "clientbound",
+            "minecraft:set_player_inventory",
+            ClientboundSetPlayerInventory::ID,
+        ),
+        (
+            "clientbound",
             "minecraft:open_screen",
             ClientboundOpenScreen::ID,
         ),

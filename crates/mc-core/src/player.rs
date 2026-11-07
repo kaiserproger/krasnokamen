@@ -1488,7 +1488,7 @@ impl PlayerState {
             .collect()
     }
 
-    /// Publish only changed pickup slots visible in the active menu.
+    /// Publish changed pickup slots through the active menu or hidden inventory.
     pub(crate) fn pickup_changes(&mut self, changed: u64) -> Vec<PlayerChange> {
         let mut remaining = changed;
         let mut changes = Vec::new();
@@ -1504,8 +1504,13 @@ impl PlayerState {
             menu.state_id = (menu.state_id + 1) & 0x7FFF;
             changes.push(slot_change(menu, slot, &self.inventory.slots[index]));
         }
-        if remaining != 0 {
-            changes.push(self.inventory_contents());
+        while remaining != 0 {
+            let index = remaining.trailing_zeros() as usize;
+            remaining &= remaining - 1;
+            changes.push(PlayerChange::PlayerInventorySlot {
+                slot: index as u8,
+                item: wire(&self.inventory.slots[index]),
+            });
         }
         changes
     }
