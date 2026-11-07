@@ -78,6 +78,36 @@ fn scoreboard_bulk_live_updates_fit_reliable_queue() {
 }
 
 #[test]
+fn text_burst_live_updates_fit_reliable_queue() {
+    use mc_protocol::packets::{Packet, play::ClientboundSystemChat};
+    let id = ConnectionId(1);
+    let mut viewer = crate::plan::ViewerState::new(id, mc_core::boundary::EntityId(1), [0.0; 3]);
+    let lines = (0..601)
+        .map(|i| mc_core::boundary::PlayerChange::Chat {
+            message: format!("line {i:04}"),
+        })
+        .collect();
+    let burst = [mc_core::boundary::PlayerChange::TextBurst { lines }];
+    let packets = crate::plan::plan_player_changes(&burst, &mut viewer);
+    let (tx, mut rx) = mpsc::channel(crate::fanout::OUTBOUND_QUEUE_BOUND);
+    for packet in packets {
+        tx.try_send(packet.data).expect("text burst reliable queue");
+    }
+    let mut bytes = bytes::BytesMut::from(rx.try_recv().expect("queued text burst").as_ref());
+    for _ in 0..601 {
+        let frame = mc_protocol::frame::try_decode_frame(
+            &mut bytes,
+            mc_protocol::frame::Compression::Threshold(256),
+        )
+        .unwrap()
+        .expect("chat frame");
+        assert_eq!(frame.id, ClientboundSystemChat::ID);
+    }
+    assert!(bytes.is_empty());
+    assert!(rx.try_recv().is_err());
+}
+
+#[test]
 fn removed_registration_fails_join_replay_without_panicking() {
     let registry = ConnectionRegistry::new();
     let id = registry.joining_id();

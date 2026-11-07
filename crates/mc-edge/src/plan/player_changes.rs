@@ -63,6 +63,22 @@ pub(crate) fn plan_routed_player_changes(
     out
 }
 
+/// Concatenate the frames planned since `start` into one reliable packet, so a
+/// bulk change occupies one slot of the bounded per-connection reliable queue.
+fn merge_frames(out: &mut Vec<PlannedPacket>, start: usize) {
+    if out.len() > start + 1 {
+        let len = out[start..].iter().map(|packet| packet.data.len()).sum();
+        let mut frames = bytes::BytesMut::with_capacity(len);
+        let mut packet = out.remove(start);
+        frames.extend_from_slice(&packet.data);
+        for next in out.drain(start..) {
+            frames.extend_from_slice(&next.data);
+        }
+        packet.data = frames.freeze();
+        out.push(packet);
+    }
+}
+
 fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<PlannedPacket>) {
     let conn = viewer.connection;
     match change {
@@ -231,17 +247,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             for event in events.iter() {
                 push_scoreboard_event(out, conn, event.clone());
             }
-            if out.len() > start + 1 {
-                let len = out[start..].iter().map(|packet| packet.data.len()).sum();
-                let mut frames = bytes::BytesMut::with_capacity(len);
-                let mut packet = out.remove(start);
-                frames.extend_from_slice(&packet.data);
-                for next in out.drain(start..) {
-                    frames.extend_from_slice(&next.data);
-                }
-                packet.data = frames.freeze();
-                out.push(packet);
-            }
+            merge_frames(out, start);
         }
         PlayerChange::Roster {
             players, removed, ..
@@ -301,6 +307,13 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                     },
                 );
             }
+        }
+        PlayerChange::TextBurst { lines } => {
+            let start = out.len();
+            for line in lines {
+                plan_change(line, viewer, out);
+            }
+            merge_frames(out, start);
         }
         PlayerChange::StyledChat { content, .. } => {
             let mut content_nbt = Vec::new();

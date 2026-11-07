@@ -78,8 +78,8 @@ fn decode(bytes: &[u8]) -> Result<Vec<(String, Tag)>, String> {
     }
 }
 
-/// Hydration rejects a chunk with an undecodable beacon, so resident
-/// beacon bytes always decode at runtime.
+/// Hydration rejects a chunk with an undecodable beacon; a runtime reader that
+/// still meets one refuses the chunk through `tick::refuse_record`.
 pub(crate) fn validate_chunk(state: &TickState, chunk: &mc_world::Chunk) -> Result<(), String> {
     for (pos, bytes) in &chunk.block_entities {
         if named(state, *pos, "beacon") {
@@ -89,16 +89,25 @@ pub(crate) fn validate_chunk(state: &TickState, chunk: &mc_world::Chunk) -> Resu
     Ok(())
 }
 
-fn image(state: &TickState, pos: BlockPos) -> Vec<(String, Tag)> {
-    state
+/// The stored fields, or the chunk refusal when the record is undecodable.
+fn image(state: &mut TickState, pos: BlockPos) -> Option<Vec<(String, Tag)>> {
+    let decoded = state
         .world
         .chunk(ChunkPos {
             x: pos.x.div_euclid(16),
             z: pos.z.div_euclid(16),
         })
         .and_then(|chunk| chunk.block_entities.get(&pos))
-        .map(|bytes| decode(bytes).expect("hydration validated resident beacon"))
-        .unwrap_or_default()
+        .map(|bytes| decode(bytes))
+        .transpose();
+    match decoded {
+        Ok(fields) => Some(fields.unwrap_or_default()),
+        Err(error) => {
+            let error = format!("beacon at {},{},{}: {error}", pos.x, pos.y, pos.z);
+            crate::tick::refuse_record(state, pos, error);
+            None
+        }
+    }
 }
 fn selection(fields: &[(String, Tag)], key: &str) -> Option<EffectId> {
     fields.iter().find_map(|(name, tag)| match tag {
@@ -199,7 +208,9 @@ pub(crate) fn open(
         .increment_custom(mc_data::statistics::CustomStat::InteractWithBeacon, 1);
     crate::tick::apply_player_effects(state, connection, entity, effects, changes);
     state.open_containers.insert(entity, (pos.x, pos.y, pos.z));
-    let fields = image(state, pos);
+    let Some(fields) = image(state, pos) else {
+        return;
+    };
     properties(
         state,
         entity,
@@ -253,6 +264,10 @@ pub(crate) fn configure(
     {
         return;
     }
+    // Read the stored image before the payment is taken: a refused chunk keeps it.
+    let Some(mut fields) = image(state, pos) else {
+        return;
+    };
     let rules = state.registry.item_rules();
     let Some(player) = state.players.get_mut(&entity) else {
         return;
@@ -274,7 +289,6 @@ pub(crate) fn configure(
     for update in updates {
         state.push_player(connection, update);
     }
-    let mut fields = image(state, pos);
     fields.retain(|(key, _)| {
         !matches!(
             key.as_str(),
@@ -317,8 +331,17 @@ pub(crate) fn run(state: &mut TickState) {
         .collect();
     positions.sort_unstable_by_key(|pos| (pos.x, pos.y, pos.z));
     for pos in positions {
+        // An earlier record of this chunk may have refused it.
+        if !state
+            .world
+            .has_chunk(pos.x.div_euclid(16), pos.z.div_euclid(16))
+        {
+            continue;
+        }
         let level = levels(state, pos);
-        let mut fields = image(state, pos);
+        let Some(mut fields) = image(state, pos) else {
+            continue;
+        };
         let primary = selection(&fields, "primary_effect");
         let secondary = selection(&fields, "secondary_effect");
         if !fields

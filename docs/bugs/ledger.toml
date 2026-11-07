@@ -840,7 +840,7 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-1"
-regression = ["cargo:mc-core:dimensions::tests::destroyed_open_chest_rejects_extract_and_insert_clicks", "cargo:mc-core:dimensions::tests::shared_destroy_command_settles_open_chest_before_the_next_click"]
+regression = ["cargo:mc-core:dimensions::tests::destroyed_open_chest_rejects_extract_and_insert_clicks", "cargo:mc-core:dimensions::tests::shared_destroy_command_settles_open_chest_before_the_next_click", "cargo:mc-core:dimensions::tests::destroying_command_and_stale_click_in_one_input_batch_never_duplicate_or_discard", "harness:entities:native-v2-destroyed-chest-race"]
 failing_first = "reported"
 
 [[bug]]
@@ -873,7 +873,8 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUTH-BUDGET"
-regression = []
+regression = ["cargo:mc-plugin-host:ordinary_callback_survives_host_scheduling_jitter", "cargo:mc-plugin-host:generous_epoch_hang_guard_still_retires_a_callback", "harness:entities:native-v2-auth-budget"]
+failing_first = "reported"
 
 [[bug]]
 id = "DUPLICATE-LOGIN"
@@ -883,7 +884,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DUPLICATE-LOGIN"
-regression = []
+regression = ["cargo:mc-core:dimensions::tests::duplicate_login_kicks_the_old_session_and_hands_over_inventory_without_duplicating", "harness:entities:native-v2-duplicate-login"]
+failing_first = "reported"
 
 [[bug]]
 id = "HS-2"
@@ -1879,7 +1881,7 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#JUKEBOX-HYDRATE-PANIC"
-regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks"]
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 
 [[bug]]
@@ -1901,7 +1903,7 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHELF-HYDRATE-PANIC"
-regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks"]
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 
 [[bug]]
@@ -1912,7 +1914,7 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CRAFTER-HYDRATE-PANIC"
-regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks"]
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 
 [[bug]]
@@ -1989,20 +1991,26 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONDUIT-RUNTIME-PANIC"
-regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks"]
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 
 [[bug]]
 id = "BEACON-RUNTIME-PANIC"
 title = "A corrupt beacon block entity crashes the tick thread at runtime: `beacon.rs:83` `read_network(..).expect(\"loaded beacon NBT\")` + `:85` `panic!(\"beacon BE must be a compound\")` inside `image()`, called from the per-tick `run()` path. Same one-policy hydration root as the conduit row (per-tick, not load-time)."
 area = "gameplay"
-repro = "manual"
+repro = "source"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BEACON-RUNTIME-PANIC"
-regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks"]
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 
+ingress_proof = [
+  "mc-core/src/world.rs:841-888: the only writers of a resident chunk's opaque records (set_opaque_block_entity, install_command_block_entity; git grep 'chunk.block_entities.insert') both end in mark_block_entity_dirty -> bump_storage_revision -> hydration_pending (world.rs:679-687, 581-585), so the next hydration sync re-validates the chunk with beacon::validate_chunk (tick/hydration.rs:66) before any per-tick reader sees the record",
+  "mc-core/src/tick/hydration.rs:66: every chunk becoming resident (stored, or WAL-replayed through core/recovery.rs:93-105) is validated the same way before any owner store is touched; an invalid record refuses the chunk",
+  "mc-world/src/anvil/chunk_nbt.rs:367,512: the importer accepts only compound records, checked against the block that owns them",
+  "mc-core/src/command_block_entity.rs:26-129 (prepare/install): command-supplied records must be compounds; every other writer encodes a fixed compound (block_entity_defaults.rs:221, beacon.rs:139, block_log.rs:1272, mc-worldgen overworld_structures.rs:530)",
+]
 [[bug]]
 id = "SHRIEKER-HYDRATE-PANIC"
 title = "A corrupt sculk-shrieker block entity crashes the tick thread at hydration: `shrieker.rs:282` `decode(..).unwrap_or_else(panic!(\"sculk_shrieker at ...\"))` inside `changed()`/hydrate path over resident chunks. Same one-policy hydration root (load/hydrate path, not per-tick effect)."
@@ -2011,7 +2019,7 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHRIEKER-HYDRATE-PANIC"
-regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks"]
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 
 [[bug]]
@@ -3496,3 +3504,67 @@ status = "open"
 source = "Same RC5 Windows VM smoke as SP-START-TIMEOUT-SLOW-MACHINE (Play #3); the session was stopped without seeing the overlay clear. Software rendering may be the whole cause."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "OUTBOX-TEXT-FLOOD-KICK"
+title = "More than the per-connection outbox cap (512) of chat or system lines in one tick (a datapack function of 600 tellraw @a lines) disconnected every recipient with a reliable queue overflow."
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "open"
+source = "CoreBlockers (wave/core-blockers): reproduced by datapacks::tests::function_chat_flood_in_one_tick_reaches_every_recipient before the TextBurst compaction; found while checking the HS-1 batch path."
+regression = ["cargo:mc-core:datapacks::tests::function_chat_flood_in_one_tick_reaches_every_recipient", "cargo:mc-edge:server::lifecycle_tests::text_burst_live_updates_fit_reliable_queue"]
+failing_first = "reported"
+
+[[bug]]
+id = "CHUNK-REFUSAL-BLOCKS-CHECKPOINTS"
+title = "After one chunk was refused (undecodable stored record), every later checkpoint, including the shutdown one, was silently declined: the journal grew and nothing newer than the refusal was saved. A refused chunk without unsaved state is now skipped; one holding unsaved state still declines, loudly and counted, to avoid duplicating custody."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "CoreBlockers: capture.load_error from the failed-chunk map (world/capture.rs, core/journal.rs); server.log of native-v2-corrupt-block-entities showed no 'checkpoint committed' after the refusal."
+regression = ["cargo:mc-core:chunk_loader::tests::refused_chunk_never_blocks_other_chunks_and_stays_refused", "cargo:mc-core:chunk_loader::tests::refusing_a_resident_chunk_keeps_custody_of_its_unsaved_edits", "harness:entities:native-v2-corrupt-block-entities"]
+failing_first = "reported"
+
+[[bug]]
+id = "NATIVE-INPLAY-BLOCKED-BY-MISSING-CHUNK"
+title = "The native client never reaches in_play while a refused or missing chunk lies within about 12 blocks of the camera (play_world_presentation_ready in src/session/observation.rs needs the biome-neighbour chunks); a vanilla client proceeds with a hole in the world."
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "CoreBlockers: native-v2-corrupt-block-entities fixtures had to stay two chunks from the player; with the fixture in the player's own chunk the client stays at 'session startup: play' while the server keeps ticking (scenario native-v2-corrupt-chunk-near-camera, restart_client_entered_play fails); a refused chunk two chunks away does not block it (play_world_presentation_ready, spawn_meshes_presented)."
+regression = []
+repro_check = "harness:entities:native-v2-corrupt-chunk-near-camera"
+
+[[bug]]
+id = "OPAQUE-CUSTODY-LOST-ON-REFUSED-REPLAY"
+title = "WAL recovery replays an OpaqueBlockEntity record into a chunk that is refused at load: set_opaque_block_entity returns before mark_block_entity_dirty (crates/mc-core/src/world.rs:850-852), so the refused chunk shows unsaved=0, the next checkpoint skips it and truncates the WAL, and opaque-only custody of that chunk (campfire items, hive bees, brushable items) is lost."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Independent review, 2026-11-07 (not reproduced). Recovery refuses to open on chunk load error and retains the WAL; the registered test exercises that path. A negative control removing the recovery guard failed at the recovery assertion (receipts/CoreBlockers/custody-replay-negative-control.log outside the repository). Disposition pending."
+regression = ["cargo:mc-core:core::checkpoint_custody_tests::opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal"]
+
+[[bug]]
+id = "CONTAINER-CUSTODY-LOST-ON-UNLOADED-REPLAY"
+title = "A replayed container post-image in an unloaded chunk can be skipped by checkpoint, pruning its only WAL copy."
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "open"
+source = "CoreBlockers: checkpoint a chunk with a chest, append a container WAL post-image, corrupt another record in that chunk, recover without loading it, then checkpoint. The focused test container_replay_into_unloadable_chunk_declines_checkpoint_and_keeps_wal in historical commit 1d6bef3e failed at checkpoint refusal on the unfixed tree (.analysis/validation/20261107T130215-test-focdeusd/test.log). A fix marking replayed containers dirty was rejected and reverted: materialization after the container snapshot can erase other healthy containers; the test also checked only one slot and did not restart."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "COMMAND-SCULK-RECORD-UNVALIDATED"
+title = "command_block_entity::prepare (crates/mc-core/src/command_block_entity.rs) validates the record shape but not sculk shrieker and sculk catalyst/sensor contents, so a malformed operator `setblock ... sculk_shrieker{...}` is accepted and then refuses the whole resident chunk at the next hydration instead of failing the command."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Independent review of the CoreBlockers wave, 2026-11-07 (read from code, not reproduced)."
+regression = []

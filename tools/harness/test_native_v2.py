@@ -21,6 +21,60 @@ class NativeV2ProbeTests(unittest.TestCase):
         self.assertEqual(entry.profile, "entities")
         self.assertIn("tools/harness/backends/native_custody.py", entry.sources)
 
+    def test_corruption_edits_hit_only_their_record_and_keep_every_other_byte(self) -> None:
+        from .backends import anvil_corrupt as nbt
+
+        def entity(kind: str, x: int, extra: list) -> list:
+            return [("id", (nbt.STRING, kind)), ("x", (nbt.INT, x)), ("y", (nbt.INT, 64)),
+                    ("z", (nbt.INT, 0)), *extra]
+
+        root = [("block_entities", (nbt.LIST, (nbt.COMPOUND, [
+            entity("minecraft:crafter", 1, [("crafting_ticks_remaining", (nbt.INT, 0))]),
+            entity("minecraft:jukebox", 2, [("RecordItem", (nbt.COMPOUND, []))]),
+        ]))), ("DataVersion", (nbt.INT, 5))]
+        raw = nbt.serialize("", (nbt.COMPOUND, root))
+        name, parsed = nbt.parse(raw)
+        self.assertEqual(nbt.serialize(name, parsed), raw)
+        crafters = parsed[1][0][1][1][1][0]
+        crafters[:] = [pair for pair in crafters if pair[0] != "crafting_ticks_remaining"]
+        crafters.append(("crafting_ticks_remaining", (nbt.INT, 99)))
+        edited = nbt.serialize(name, parsed)
+        self.assertNotEqual(edited, raw)
+        self.assertEqual(len(edited), len(raw))
+        self.assertEqual(nbt.field(nbt.parse(edited)[1][1][0][1][1][1][1], "x"), (nbt.INT, 2))
+
+    def test_region_rewrite_edits_the_named_block_entity_and_refuses_a_missing_one(self) -> None:
+        import zlib
+
+        from .backends import anvil_corrupt as nbt
+
+        record = [("id", (nbt.STRING, "minecraft:crafter")), ("x", (nbt.INT, 5)),
+                  ("y", (nbt.INT, 64)), ("z", (nbt.INT, 6))]
+        chunk = nbt.serialize("", (nbt.COMPOUND, [
+            ("block_entities", (nbt.LIST, (nbt.COMPOUND, [record])))]))
+        with tempfile.TemporaryDirectory() as directory:
+            region = Path(directory) / "dimensions" / "region"
+            region.mkdir(parents=True)
+            nbt._write_region(region / "r.0.0.mca", {0: (zlib.compress(chunk), 7)})
+
+            def corrupt(compound: list) -> None:
+                compound.append(("crafting_ticks_remaining", (nbt.INT, 99)))
+
+            applied = nbt.corrupt_block_entities(Path(directory), {(5, 64, 6): corrupt})
+            self.assertEqual(applied, {(5, 64, 6): "minecraft:crafter"})
+            (_, body, stamp), = nbt._read_region(region / "r.0.0.mca").values()
+            self.assertEqual(stamp, 7)
+            stored = nbt.parse(body)[1][1][0][1][1][1][0]
+            self.assertEqual(nbt.field(stored, "crafting_ticks_remaining"), (nbt.INT, 99))
+            with self.assertRaisesRegex(RuntimeError, "not found"):
+                nbt.corrupt_block_entities(Path(directory), {(9, 9, 9): corrupt})
+
+    def test_new_core_blocker_scenarios_are_runnable_catalog_entries(self) -> None:
+        for name in ("native-v2-destroyed-chest-race", "native-v2-duplicate-login",
+                     "native-v2-corrupt-block-entities", "native-v2-corrupt-chunk-near-camera"):
+            self.assertIn(name, native_v2.RUNNERS)
+            self.assertEqual(scenarios.SCENARIOS[name].evidence, "graphical")
+
     def test_lifecycle_difficulty_uses_only_fresh_fenced_responses(self) -> None:
         from .backends.native_lifecycle import _difficulty_from_interval
 
@@ -121,7 +175,9 @@ class NativeV2ProbeTests(unittest.TestCase):
                 "native-v2-end-restart", "native-v2-entity-gallery",
                 "native-v2-p2-optional-pack", "native-v2-custody-mount-export",
                 "native-v2-cursor-close", "native-v2-banner-placement",
-                "native-v2-snow-golem-shear") else "tcp")
+                "native-v2-snow-golem-shear", "native-v2-destroyed-chest-race",
+                "native-v2-duplicate-login", "native-v2-corrupt-block-entities",
+                "native-v2-corrupt-chunk-near-camera") else "tcp")
             self.assertEqual(entry.evidence, expected)
 
     def test_p1_catalog_covers_all_five_surfaces(self) -> None:

@@ -278,12 +278,15 @@ pub(crate) fn changed(state: &mut TickState, pos: BlockPos) {
             z: pos.z.div_euclid(16),
         })
         .and_then(|c| c.block_entities.get(&pos));
-    let (mut entry, pending) = saved
-        .map(|b| {
-            decode(b, state.tick)
-                .unwrap_or_else(|e| panic!("sculk_shrieker at {},{},{}: {e}", pos.x, pos.y, pos.z))
-        })
-        .unwrap_or_default();
+    let decoded = saved.map(|b| decode(b, state.tick)).transpose();
+    let (mut entry, pending) = match decoded {
+        Ok(decoded) => decoded.unwrap_or_default(),
+        Err(error) => {
+            let error = format!("sculk_shrieker at {},{},{}: {error}", pos.x, pos.y, pos.z);
+            crate::tick::refuse_record(state, pos, error);
+            return;
+        }
+    };
     // Vanilla imports retain the scheduled block tick; native records retain
     // an absolute deadline so replay never repeats the warning/spawn response.
     if entry.shriek_until == 0 && property(state, pos, "shrieking") {

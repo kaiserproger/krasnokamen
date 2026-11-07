@@ -41,7 +41,7 @@ mod entity_lifecycle;
 mod entity_phase;
 mod hydration;
 mod residency;
-pub(crate) use hydration::sync_chunk_block_entities;
+pub(crate) use hydration::{refuse_record, sync_chunk_block_entities};
 mod input;
 pub(crate) mod merchant;
 pub(crate) mod mining;
@@ -802,7 +802,8 @@ impl TickState {
     /// Reliable per-player push. On cap overflow the queue is sealed with a
     /// terminal `Disconnect` (always last) and the connection is scheduled
     /// for Leave-equivalent removal on a later tick; further pushes are
-    /// dropped so nothing can land after `Disconnect`.
+    /// dropped so nothing can land after `Disconnect`. Overflowing text lines
+    /// compact into a `TextBurst` instead (see `PlayerChange::is_text`).
     pub fn push_player(&mut self, connection: ConnectionId, change: PlayerChange) {
         if self
             .disconnects
@@ -813,6 +814,27 @@ impl TickState {
         }
         crate::vibration::menu(self, connection, &change);
         let queue = self.outbox.entry(connection).or_default();
+        if change.is_text() {
+            if let Some(PlayerChange::TextBurst { lines }) = queue.last_mut() {
+                lines.push(change);
+                return;
+            }
+            // A tick's text beyond the cap (a datapack function, a command block
+            // chain) compacts its trailing run of lines into one burst entry.
+            if queue.len() >= self.outbox_cap {
+                let run = queue
+                    .iter()
+                    .rev()
+                    .take_while(|entry| entry.is_text())
+                    .count();
+                if run > 0 {
+                    let mut lines = queue.split_off(queue.len() - run);
+                    lines.push(change);
+                    queue.push(PlayerChange::TextBurst { lines });
+                    return;
+                }
+            }
+        }
         if queue.len() >= self.outbox_cap {
             queue.push(PlayerChange::Disconnect {
                 reason: "reliable queue overflow".to_owned(),
