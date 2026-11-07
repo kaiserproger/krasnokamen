@@ -16,6 +16,7 @@ mc-data = { path = "../mc-data" }
 mc-protocol = { path = "../mc-protocol" }
 anyhow = { workspace = true }
 bytes = { workspace = true }
+serde_json = { workspace = true }
 tempfile = "3"
 thiserror = { workspace = true }
 tokio = { workspace = true }

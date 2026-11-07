@@ -46,10 +46,6 @@ fn route(steps: &[Step], canonical: i32, peer: i32) -> Result<Vec<(usize, Direct
     let mut current = canonical;
     let mut result = Vec::new();
     while current != peer {
-        ensure!(
-            result.len() < steps.len(),
-            "protocol chain cycle reaching {peer}"
-        );
         let direction = if peer < current {
             Direction::Down
         } else {
@@ -65,6 +61,10 @@ fn route(steps: &[Step], canonical: i32, peer: i32) -> Result<Vec<(usize, Direct
             .with_context(|| {
                 format!("missing adjacent protocol step from {current} toward {peer}")
             })?;
+        ensure!(
+            result.len() < steps.len(),
+            "protocol chain cycle reaching {peer}"
+        );
         current = match direction {
             Direction::Down => step.lower,
             Direction::Up => step.upper,

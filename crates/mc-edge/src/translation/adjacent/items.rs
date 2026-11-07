@@ -161,7 +161,12 @@ fn stack_at(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>, depth: usize) ->
 }
 
 /// Non-optional ItemStackTemplate: item id, count, then a component patch.
-pub(super) fn template(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
+pub(in crate::translation) fn template(
+    t: &Tables,
+    to: To,
+    r: &mut &[u8],
+    w: &mut Vec<u8>,
+) -> Result<()> {
     template_at(t, to, r, w, 0)
 }
 
