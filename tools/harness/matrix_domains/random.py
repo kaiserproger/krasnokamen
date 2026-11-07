@@ -169,7 +169,8 @@ def observe(ctx):
             resources.update(stock([{'item_id': block, 'count': 1}]))
     entities = observer.snapshot()
     if 'entities' not in entities:
-        raise MissingCapability('random:received_item_entities')
+        raise MissingCapability('random:received_item_entities:' +
+                                str(entities.get('observation_errors', {}).get('entities', 'unknown')))
     for entity in entities['entities']:
         if 'item' in entity:
             resources.update(stock([entity['item']]))
