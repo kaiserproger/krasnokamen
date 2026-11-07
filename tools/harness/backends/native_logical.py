@@ -111,7 +111,7 @@ def _scenario(client: Any, artifact: Any, timeout: float) -> dict[str, Any]:
     return steps.report
 
 
-def run(ctx: ProfileContext) -> dict[str, Any]:
+def validate_args(ctx: ProfileContext) -> float:
     if getattr(ctx, "windowed", False):
         raise ValueError("logical-native is functional headless-only; --windowed is not supported")
     if ctx.client != "native" or ctx.extra_args or ctx.platform is not None:
@@ -119,6 +119,11 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 120.0
     if not math.isfinite(timeout) or not 0 < timeout <= 120:
         raise ValueError("logical-native --timeout-seconds must be finite and in (0, 120]")
+    return timeout
+
+
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    timeout = validate_args(ctx)
     artifact = ctx.artifact_dir
     binary, plugins = _server_binary(ctx), plugin_directory(ctx)
     port = runtime.reserve_port()
@@ -159,7 +164,7 @@ seed = 81
         server_log_path = artifact / "server.log"
         ctx.logs.append(str(server_log_path))
         server_log = server_log_path.open("wb")
-        server = subprocess.Popen(argv, cwd=runtime.REPO_ROOT, stdout=server_log,
+        server = runtime.start_server(argv, cwd=runtime.REPO_ROOT, stdout=server_log,
                                   stderr=subprocess.STDOUT, start_new_session=True)
         runtime.wait_port(port, timeout, server, log_path=server_log_path)
         process, client_log, client = native_client.start(ctx, native_client.resolve_binary(ctx), address, username, timeout)
@@ -168,14 +173,17 @@ seed = 81
         evidence["available_tools"] = sorted(t["name"] for t in tools)
         (artifact / "live-tool-schemas.json").write_text(json.dumps(tools, indent=2) + "\n")
         require_tools(tools, REQUIRED_TOOLS, "logical-native")
-        play = client.call_tool("minecraft_wait_for_play", {"timeout_seconds": timeout})
-        if not play.get("in_play"):
-            raise RuntimeError("logical-native client did not enter Play")
-        result = _scenario(client, artifact, timeout)
-        client.call_tool("minecraft_disconnect")
-        disconnected = client.call_tool("minecraft_observe")
-        if disconnected.get("in_play") is not False:
-            raise RuntimeError("logical-native cleanup did not leave Play")
+        with runtime.phase("join"):
+            play = client.call_tool("minecraft_wait_for_play", {"timeout_seconds": timeout})
+            if not play.get("in_play"):
+                raise RuntimeError("logical-native client did not enter Play")
+        with runtime.phase("scenario"):
+            result = _scenario(client, artifact, timeout)
+        with runtime.phase("teardown"):
+            client.call_tool("minecraft_disconnect")
+            disconnected = client.call_tool("minecraft_observe")
+            if disconnected.get("in_play") is not False:
+                raise RuntimeError("logical-native cleanup did not leave Play")
         evidence["disconnect_left_play"] = True
         return {"scenario": result, "evidence_domain": "functional_headless_native", "excludes": EXCLUDES}
     finally:

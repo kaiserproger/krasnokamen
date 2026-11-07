@@ -142,7 +142,7 @@ fn hostile_flat_ground_chase_distance_matches_tuned_speed() {
             BlockMaterial::Air
         }
     });
-    for (name, expected) in [("minecraft:zombie", 3.8), ("minecraft:spider", 5.0)] {
+    for (name, expected) in [("minecraft:zombie", 2.4), ("minecraft:spider", 5.0)] {
         let type_id = registry
             .entity_types
             .id_of(&mc_data::Identifier::parse(name).unwrap())

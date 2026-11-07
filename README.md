@@ -1,119 +1,82 @@
-# Solaris
+<p align="center">
+  <img src="docs/assets/brand/solaris-logo.svg" alt="Solaris logo: a pixel-art sun" width="128">
+</p>
 
-**A Minecraft Java Edition server written from scratch in Rust.**
+<h1 align="center">Solaris</h1>
 
-Solaris is a replacement for the vanilla server (and Paper/Spigot-style servers).
-Players join with the normal, unmodified Minecraft **Java 26.3** client (protocol
-777); 26.1.2 clients can still join when a 26.1.2 content cache is retained (see
-[the operating guide](docs/OPERATING.md#client-protocol-compatibility)). There
-are no client mods to install. Solaris reimplements the game itself: world
-generation, mobs, redstone, villages, combat and inventories. It is built for two
-things the vanilla server is bad at:
+<p align="center">
+  <b>A Minecraft: Java Edition server, rebuilt from scratch in Rust for every core.</b><br>
+  Parallel ticks · deterministic outcomes · WAL-backed saves · sandboxed Wasm plugins
+</p>
 
-- **Using every CPU core.** Vanilla simulates a world on essentially one thread.
-  Solaris runs the expensive per-entity work in parallel on all cores. The result
-  stays deterministic: the same inputs always produce the same world.
-- **Crash-consistent saves.** World, inventories, containers and plugin data
-  commit together in a write-ahead log. After a crash or `kill -9` everything
-  recovers to the same durable tick: items cannot be duplicated or lost between
-  a player and a chest. Only the last few ticks that had not reached the disk
-  yet may roll back.
+<p align="center">
+  <a href="https://github.com/kaiserproger/solaris/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/kaiserproger/solaris?include_prereleases&display_name=tag&sort=semver&style=for-the-badge&color=F5B942"></a>
+  <a href="https://github.com/kaiserproger/solaris/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/kaiserproger/solaris/ci.yml?branch=main&label=CI&style=for-the-badge"></a>
+  <img alt="Minecraft Java 26.3" src="https://img.shields.io/badge/Minecraft_Java-26.3-62B47A?style=for-the-badge">
+  <img alt="Built with Rust" src="https://img.shields.io/badge/Built_with-Rust-CE422B?style=for-the-badge&logo=rust&logoColor=white">
+  <a href="#license"><img alt="MIT OR Apache-2.0" src="https://img.shields.io/badge/License-MIT_or_Apache--2.0-6A8DFF?style=for-the-badge"></a>
+</p>
 
-> **Status: Solaris 1.0 "Pauline", release candidate 5 (prerelease).**
-> Not bit-identical to vanilla, and Java mods do not run (see below). Each
-> release's notes list what was validated and what is known to be unsupported.
+<p align="center">
+  <a href="https://github.com/kaiserproger/solaris/releases"><b>Download</b></a> ·
+  <a href="#quick-start"><b>Quick start</b></a> ·
+  <a href="#how-it-works"><b>How it works</b></a> ·
+  <a href="#the-solaris-ecosystem"><b>Ecosystem</b></a> ·
+  <a href="docs/README.md"><b>Docs</b></a> ·
+  <a href="CONTRIBUTING.md"><b>Contribute</b></a>
+</p>
 
-## Performance
+![A stylized blocky valley at sunrise under a pixel-art sun, with a river and a lit village](docs/assets/brand/solaris-banner.webp)
 
-Four reproducible release profiles cover an idle world, exploration and dense
-entity simulation. **Quiet-window measurements are pending**; setup/smoke runs
-are not published as performance results.
+> [!IMPORTANT]
+> **Solaris 1.0 "Pauline" is a release candidate (RC5, prerelease).** Survival,
+> multiplayer, crash recovery and real-client compatibility are tested on every
+> release, and each release's notes list what was validated and what is known to
+> be unsupported. Gameplay is vanilla-like, not bit-identical, and Java mods do not
+> run. Back up worlds before trusting it with a long-running server.
 
-| Profile | Players / bots and entity load | Server RSS peak / steady | MSPT p50 / p95 / p99 / max | TPS |
-|---|---|---|---|---|
-| Idle world | 0 clients, generated Overworld | pending | pending | pending |
-| Exploration | 20 protocol bots exploring fresh terrain | pending | pending | pending |
-| Native-100 | 100 protocol bots + 100,000 mixed mobs | pending | pending | pending |
-| Villager-heavy | 100 protocol bots + 100,000 mixed mobs + 20,000 villagers | pending | pending | pending |
+## What is Solaris?
 
-Reference host: **Ryzen 5 7535HS (6 cores / 12 threads), 32 GB RAM, NVMe SSD,
-Ubuntu 26.04.1 / Linux 7.0.0-38**. The server uses four physical cores; bots use
-the other two. Release source: `0a86cfffc173d9fe13e9d0795a6c5494fc33a222`.
-A separate, already measured **single-threaded in-process generator benchmark**
-takes **13.8–17.3 ms/chunk** across three seeds; this excludes lighting, storage
-and networking and is **not server chunk throughput**.
+Solaris is an independent Minecraft: Java Edition server written from scratch in
+Rust. It is a full server, not a framework: it reimplements the game itself, from
+world generation, mobs and redstone to villages, combat and inventories. Players
+join with the **normal, unmodified Minecraft Java 26.3 client** (protocol 777).
+26.1.2 clients can still join when a 26.1.2 content cache is retained
+([details](docs/OPERATING.md#client-protocol-compatibility)). No client mods,
+no launcher tricks.
 
-See [full conditions, metric definitions, receipts and one-command
-reproduction](docs/performance/PROFILES.md). Measurements describe the stated
-hardware and workload, not guarantees or vanilla-parity/capacity claims.
+It is built for the things the vanilla server is bad at:
 
-## What works
+<table>
+<tr>
+<td width="50%" valign="top">
 
-- **Survival basics:** mining, crafting, smelting, farming, breeding, enchanting,
-  anvils, brewing, trading, beds, death and respawn, statistics, advancements.
-- **World:** vanilla-style terrain, biomes, caves, villages and structures. The
-  Nether and the End include portals and the ender dragon fight.
-- **Mobs:** passive, neutral and hostile mobs, mounts and vehicles, raids, piglin
-  bartering, golems (including player-built iron and snow golems), the warden
-  and sculk.
-- **Redstone:** pistons, hoppers, comparators, observers and the crafter.
-- **Newer content:** trial chambers, vaults, mace, wind charges, copper golems,
-  bees, allays, elytra and beacons.
-- **Multiplayer:** many players in one world, chat, teams and scoreboards.
-- **Operators:** console commands, bans and whitelist, backups, plus an optional
-  read-only web dashboard.
+**⚡ Every core, one outcome.**
+Vanilla simulates a world on essentially one thread. Solaris runs the expensive
+per-entity work on all cores, and the result stays deterministic: the same inputs
+always produce the same world.
 
-Gameplay aims to feel like vanilla, not to be bit-identical. Exact AI timing and
-vanilla bugs are not reproduced. The network protocol and world file formats
-*are* exact, so normal clients and normal world saves work.
+**🛡️ Recovery by design.**
+The native store and tick write-ahead log cover world, inventory, container and
+plugin data. Crash and restart scenarios test recovery; unflushed work can roll
+back. RC5 still has recovery gaps, so keep backups.
 
-Map-making support is partial: directory `/function` datapacks with schedules,
-command blocks (impulse, chain, repeating and conditional; off by default),
-`/clone`, `/data get` and storage `/data` commands, and `/execute` with score
-stores work within documented limits. ZIP and worldgen datapacks, `/place`,
-general `/data modify` on entities and blocks, command minecarts and the
-command-block editor are not there yet. See
-[the limits and setup](docs/OPERATING.md#datapacks-and-command-blocks).
+</td>
+<td width="50%" valign="top">
 
-## Settlements
+**🧩 Plugins that cannot take the server down.**
+Plugins are WebAssembly components in a Wasmtime sandbox. They declare the
+capabilities they need, cannot read your files or block the tick, and their data
+commits in the same log as the world.
 
-Villages are settlements that run themselves. A planner lays out and builds
-houses, workshops, storage, mines and camps from real materials; villagers take
-building, mining and lumber jobs, keep their work across nights, raise an army
-and trade through a settlement economy. Players claim and manage a settlement
-through server-driven dialogs, with no client mod. See the short
-[player guide](docs/SETTLEMENTS_GUIDE.md), or
-`/settlement guide` and `/help settlement` in game.
+**🏘️ Villages that run themselves.**
+Settlements plan and build houses, workshops, mines and storage from real
+materials. Villagers take jobs, keep them across nights, trade and raise an
+army, all managed through server-driven dialogs that work in a vanilla client.
 
-## Native client
-
-[Solaris client](https://github.com/kaiserproger/solaris-client) is an
-optional native Rust client (wgpu: Vulkan, Metal, DX12) with its own launcher.
-It has Low/Medium/High graphics presets (HDR, bloom, shadows, god rays,
-reflections), GPU-generated far terrain from the server's `[lod]` channel,
-proximity voice chat (`[voice]`, the server only relays Opus packets) and
-screen sharing to in-world monitors. Vanilla clients do not need it.
-
-## For server owners
-
-- `content import`, `backup` / `restore`, live console `backup`,
-  `world import-anvil` / `export-anvil`, `world census`.
-- Bans, whitelist, operators, a block and container history (`/co`), RCON,
-  Query, Velocity forwarding and anti-xray.
-- An optional read-only web dashboard with live TPS and tick timing.
-- Distant Horizons support (`[distant_horizons]`).
-
-Details: the [operating guide](docs/OPERATING.md).
-
-## Mods
-
-Forge, Fabric and NeoForge mods do not run on Solaris: in All the Mods 11,
-215 of 289 mods ship server-side Java and 152 rewrite Minecraft internals with
-Mixins. Directory datapacks load a limited set (functions, recipes, plain block
-loot); ZIP and worldgen datapacks do not. Server-side features are written as
-[Wasm plugins](#plugins). An experimental offline converter handles one narrow
-Bukkit slice and one Forge block-break handler; it is not mod compatibility (see
-the [plugin guide](docs/PLUGINS.md#converting-bukkit-and-forge-input-experimental)).
+</td>
+</tr>
+</table>
 
 ## How it works
 
@@ -129,40 +92,125 @@ flowchart LR
     M -- results --> E
 ```
 
-- Each tick, workers on all cores read an immutable snapshot of the world and
-  return *intents* such as "move here" or "attack that". A single merge step
-  then applies them in a fixed order, so parallelism never changes the outcome.
-- Entity data is laid out for CPU caches. Hot fields sit in dense columns and
-  rare data lives out of line, so passes over 100k mobs touch far less memory.
-- Storage is a native database plus the tick log. Vanilla Anvil worlds are
-  imported and exported with an offline command; the import keeps unknown data
-  verbatim.
-- Networking and per-player view tracking run on separate threads from the game
-  tick.
+- **Snapshot, intents, merge.** Each tick, workers on all cores read an immutable
+  snapshot of the world and return *intents* such as "move here" or "attack that".
+  A single merge step applies them in a fixed order, so parallelism never changes
+  the outcome.
+- **Data laid out for the CPU.** Hot entity fields sit in dense columns and rare
+  data lives out of line, so a pass over 100,000 mobs touches far less memory.
+- **Storage that follows the tick.** A native database plus the tick log is the
+  only save format. Vanilla Anvil worlds are imported and exported with an
+  offline command; the import keeps unknown data verbatim.
+- **The game tick never waits on the network.** Networking and per-player view
+  tracking run on their own threads.
 
-## Plugins
+Deep dive: [architecture overview](docs/ARCHITECTURE.md) ·
+[persistence](docs/architecture/persistence.md) ·
+[operating guide](docs/OPERATING.md).
 
-Plugins are **WebAssembly components** running in the Wasmtime sandbox:
+## What works today
 
-- A plugin cannot crash the server, read your files or block the game tick.
-- It declares the capabilities it needs (storage, economy transactions, zones,
-  teleports…), and the server refuses everything else.
-- Plugin data and receipts commit in the same tick log as the world, so an
-  economy purchase is never half-applied after a crash.
-- Write plugins in Rust with the [SDK](sdk/rust/), or in any language that
-  compiles to WebAssembly components.
+| Area | What you get |
+| :-- | :-- |
+| **Survival** | Mining, crafting, smelting, farming, breeding, enchanting, anvils, brewing, trading, beds, death and respawn, statistics, advancements |
+| **World** | Vanilla-style terrain, biomes, caves, villages and structures; the Nether and the End with portals and the ender dragon fight |
+| **Mobs** | Passive, neutral and hostile mobs, mounts and vehicles, raids, piglin bartering, iron and snow golems, the warden and sculk |
+| **Redstone** | Pistons, hoppers, comparators, observers and the crafter |
+| **Newer content** | Trial chambers, vaults, mace, wind charges, copper golems, bees, allays, elytra and beacons |
+| **Multiplayer** | Many players in one world, chat, teams and scoreboards |
+| **Operators** | Console, bans and whitelist, live backups, block and container history (`/co`), RCON, Query, Velocity forwarding, anti-xray, Distant Horizons support and an optional read-only web dashboard |
 
-Ready-made packages live in
-[solaris-default-plugins](https://github.com/kaiserproger/solaris-default-plugins):
-a standard pack of permissions, essentials, economy, towns (chunk claims
-enforced natively) and audit, plus optional packages for offline-mode
-authentication, death graves, a chisel addon and a basic shop. Plugins that add
-client-side content use the optional
-[Solaris Loader](https://github.com/kaiserproger/solaris-loader) client mod
-(Fabric, NeoForge, Forge). Server-only plugins work with vanilla clients. See
-the [plugin guide](docs/PLUGINS.md).
+Solaris targets the vanilla network protocol and supports offline Anvil world
+import and export, with compatibility still partial. Gameplay aims to feel like
+vanilla, not to be bit-identical: exact AI timing and vanilla bugs are not
+reproduced. Map-making support is partial: directory `/function` datapacks,
+command blocks, `/clone`, storage `/data` and `/execute` work within
+[documented limits](docs/OPERATING.md#datapacks-and-command-blocks); ZIP and worldgen
+datapacks do not load yet. The per-feature picture is in
+[compatibility](docs/COMPATIBILITY.md).
 
-## Install
+### Settlements
+
+Villages are settlements that run themselves. A planner lays out and builds
+houses, workshops, storage, mines and camps from real materials. Villagers take
+building, mining and lumber jobs, keep their work across nights, raise an army and
+trade through a settlement economy. Players claim and manage a settlement through
+server-driven dialogs, with no client mod. Start with the
+[player guide](docs/SETTLEMENTS_GUIDE.md), or `/settlement guide` in game.
+
+## The Solaris ecosystem
+
+| Project | What it is |
+| :-- | :-- |
+| **[Solaris](https://github.com/kaiserproger/solaris)** | This repository: the server core, deterministic simulation, storage, protocol and validation tooling |
+| **[Solaris Client](https://github.com/kaiserproger/solaris-client)** | Optional native Rust client (wgpu: Vulkan, Metal, DX12) with its own launcher and singleplayer: Low/Medium/High presets (HDR, bloom, shadows, god rays, reflections), GPU-generated far terrain, proximity voice chat and screen sharing to in-world monitors |
+| **[Default Plugins](https://github.com/kaiserproger/solaris-default-plugins)** | Ready-made Wasm packages: permissions, essentials, economy, towns with natively enforced chunk claims, audit, offline-mode authentication, graves and more |
+| **[Solaris Loader](https://github.com/kaiserproger/solaris-loader)** | Optional client mod (Fabric, NeoForge, Forge) for plugins that add client-side content |
+
+Vanilla clients need none of the optional pieces. Server-only plugins work with
+vanilla clients.
+
+> [!NOTE]
+> **Forge, Fabric, NeoForge and Bukkit/Paper plugins do not run on Solaris.** In
+> All the Mods 11, 215 of 289 mods ship server-side Java and 152 rewrite Minecraft
+> internals with Mixins; there is no JVM to host them. Server features are written
+> as [Wasm plugins](docs/PLUGINS.md), in Rust with the [SDK](sdk/rust/) or any
+> language that compiles to WebAssembly components.
+
+## Performance
+
+Measured, not promised. Four reproducible release profiles cover an idle world,
+exploration and dense entity simulation, each from **one documented command** with
+receipts. Quiet-window results for 1.0 are pending; setup and smoke runs are never
+published as performance numbers.
+
+| Profile | Players / bots and entity load | Server RSS peak / steady | MSPT p50 / p95 / p99 / max | TPS |
+|---|---|---|---|---|
+| Idle world | 0 clients, generated Overworld | pending | pending | pending |
+| Exploration | 20 protocol bots exploring fresh terrain | pending | pending | pending |
+| Native-100 | 100 protocol bots + 100,000 mixed mobs | pending | pending | pending |
+| Villager-heavy | 100 protocol bots + 100,000 mixed mobs + 20,000 villagers | pending | pending | pending |
+
+Reference host: Ryzen 5 7535HS (6 cores / 12 threads), 32 GB RAM, NVMe SSD,
+Ubuntu 26.04.1. Already measured: the single-threaded in-process terrain
+generator takes **13.8–17.3 ms per chunk** across three seeds (lighting, storage
+and networking excluded; this is not server chunk throughput). Conditions, metric
+definitions and one-command reproduction: [profiles](docs/performance/PROFILES.md)
+and [benchmarks](docs/performance/BENCHMARKS.md).
+
+## Built to be trusted
+
+Solaris is tested the way players break servers:
+
+- **7,300+ Rust tests** across the workspace, plus crash and restart tests that
+  kill the server mid-checkpoint and check that the world comes back whole.
+- **Real-client gates:** graphical Minecraft clients under Xvfb play scripted
+  scenarios including inventory, mounts and autonomous villages against a
+  release build.
+- **A public bug ledger:** 334 bugs tracked with their original repro; each of the
+  132 fixed rows lists a regression check. Cargo checks run on integration; client
+  checks run in the client tier. See [the ledger](docs/bugs/README.md).
+
+Since the first commit on 2026-05-12: 1,593 commits and 750,000+ lines of Rust in
+this repository alone.
+
+<details>
+<summary><b>Milestones</b></summary>
+
+| Date | Milestone |
+| :-- | :-- |
+| 2026-05-12 | Project bootstrap; protocol, world generation and other systems followed |
+| 2026-08-28 | `v0.0.2-alpha.1` |
+| 2026-09-09 | Loader and default plugins become their own repositories |
+| 2026-09-19 | `v0.0.7`: Wasm plugins, settlements |
+| 2026-10-18 | `v0.0.8`: **Core v2** (one logical tick, parallel snapshot reads, deterministic merge, native storage and tick WAL) |
+| 2026-10-19 | Native Rust client and launcher |
+| 2026-10-29 | `v1.0.0-rc.1` "Pauline": Minecraft Java 26.3 |
+| 2026-11-07 | `v1.0.0-rc.5` |
+
+</details>
+
+## Quick start
 
 Linux x86-64 and AArch64 binaries are published on
 [GitHub Releases](https://github.com/kaiserproger/solaris/releases). You need
@@ -175,24 +223,25 @@ curl -fsSLo example.toml \
   https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.5/example.toml
 ```
 
-Solaris does not ship any Mojang files. Before the first start, download the
-official server once and let Solaris derive its game data from it:
+Solaris does not ship any Mojang files. Before the first start, let it download the
+official server once and derive its game data from it:
 
 ```sh
 solaris content import --version 26.3 --download
 solaris --config example.toml
 ```
 
+Then connect a Minecraft Java 26.3 client to `127.0.0.1:25565`.
+
+> [!CAUTION]
+> The example config listens on all interfaces with **offline authentication**.
+> For anything beyond local testing, set `[auth].online_mode = true` and review
+> `[network].bind_address` and your firewall.
+
 The first start creates an empty `plugins/` directory next to the config; copy
 packages from `solaris-default-plugins` into it and restart to deploy them.
 Deploying `solaris-auth` locks every new session until the player runs
 `/register` or `/login`.
-
-Then connect a Minecraft Java 26.3 client to `127.0.0.1:25565`.
-
-> The example config listens on all interfaces with **offline authentication**.
-> For anything beyond local testing, set `[auth].online_mode = true` and review
-> `[network].bind_address` and your firewall.
 
 To bring an existing vanilla world, stop the server and convert it once:
 
@@ -220,10 +269,26 @@ To use server jars you already have, replace `--download` with
 `--from /path/to/26.3/server.jar --gameplay-from /path/to/26.1.2/server.jar`
 (see [the content cache](docs/OPERATING.md#vanilla-content-cache)).
 
+## FAQ
+
+**Do players need a special client?** No. The unmodified Minecraft Java 26.3
+client joins directly. The Solaris Client is an optional extra.
+
+**Can I run my Paper plugins or Fabric mods?** No; see the note under
+[the ecosystem](#the-solaris-ecosystem). Write a Wasm plugin instead, or use a
+[default plugin](https://github.com/kaiserproger/solaris-default-plugins).
+
+**Is it production-ready?** Not yet: 1.0 is in release-candidate testing. Each
+release's notes list what was validated and what is still unsupported.
+
+**Does it contain Mojang code or assets?** No. Game data is derived on your
+machine from the official server download.
+
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). One command runs the full check (format,
-lint, architecture rules, the whole test suite):
+Bug reports with a reproduction, focused fixes and documentation improvements are
+welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. One command runs the full
+check (format, lint, architecture rules, regressions and the whole test suite):
 
 ```sh
 python3 -m tools.harness run correctness
@@ -237,5 +302,7 @@ covered in the [RC1 notes](docs/releases/v1.0.0-rc.1.md)).
 ## License
 
 Dual-licensed under [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your
-option. Minecraft is a trademark of Mojang AB; Solaris is not affiliated with
-Mojang or Microsoft.
+option.
+
+<sub>Solaris is unofficial and independent. It is not approved by or affiliated
+with Mojang Studios or Microsoft. Minecraft is a trademark of Mojang AB.</sub>

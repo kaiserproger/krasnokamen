@@ -96,14 +96,30 @@ export SOLARIS_LOADER_ROOT=<solaris-loader checkout>            # Java/Loader cl
 export SOLARIS_DEFAULT_PLUGINS_ROOT=<solaris-default-plugins>   # standard-pack and plugin gates
 ```
 
-- A headless native run (`--client native`) needs only `SOLARIS_CLIENT_DATA_DIR`
-  (checked: the directory exists); `--windowed` additionally needs
+*Owner host:* builds land in a pooled target dir (`targets/slot-<l>`) that
+other trees reuse, so the harness refuses `SOLARIS_SERVER_BINARY` or
+`SOLARIS_CLIENT_BINARY` inside a slot. Pin instead:
+`<work>/solaris/tools/dev/pin-release <worktree> [--client]` builds once per
+tree (HEAD plus the hash of uncommitted changes), copies the binary to
+`<work>/pins/<sha12>[-<diff8>]/` with a manifest, prints the
+`SOLARIS_SERVER_BINARY=` (or `SOLARIS_CLIENT_BINARY=`) line and reuses an
+existing pin without building. Pins are immutable. A harness profile that
+builds the release server itself (`regressions-client`) hard-links its build
+into the run's artifact dir.
+
+- A headless native run (`--client native`) needs `SOLARIS_CLIENT_DATA_DIR`
+  with its block and registry reports. `--windowed` additionally needs
   `SOLARIS_CLIENT_RESOURCE_ROOT`, `SOLARIS_CLIENT_ASSET_ROOT` and
-  `SOLARIS_CLIENT_ASSET_INDEX` (checked: directories, and the index is a file).
-  A missing variable fails the run before launch. Unlisted profiles are rejected
-  for native, see [AGENT_TOOLING](../AGENT_TOOLING.md#harness-entrypoint).
-  `SOLARIS_CLIENT_BINARY` must exist if set; unset means
-  `<client>/target/debug/solaris-client`, built once with debuginfo off.
+  `SOLARIS_CLIENT_ASSET_INDEX`, including the assets directory, objects and a
+  nonempty asset index. Missing or incomplete paths fail before launch.
+  Real-client runs require executable `SOLARIS_SERVER_BINARY` and native runs
+  also require `SOLARIS_CLIENT_BINARY`; paths under owner-host pooled
+  `targets/slot-*` are refused. Pin copies outside the pool and use those paths.
+  Unlisted profiles are rejected for native; see
+  [AGENT_TOOLING](../AGENT_TOOLING.md#harness-entrypoint).
+  Headless native profiles create a temporary writable XDG root with links to
+  the template containing `data/vanilla`, `facts` and `resources/assets`;
+  it is removed after the profile exits.
 - A single wrong path (for example an item properties file under the wrong repo)
   leaves the client on a white "loading content" screen forever without naming
   the file; diff the env against the last green gate line by line.
@@ -238,12 +254,26 @@ scripted capture. Set `SOLARIS_SERVER_BINARY`, `SOLARIS_CLIENT_BINARY`, the nati
 env block above and `SCENE_SHOT_SCENARIO` to a JSON file. The JSON has `steps`,
 each one of `cmd`, `tp` (five coordinates), `look`, `wait_ticks`, `wait_play`,
 `wait_terrain`, `shot`, `observe`, `use_item_on`, `click_screen_button`,
-`scan_blocks`, `read_block`, `navigate_to_block`, `list_entities`, or `key`
-(`keys` and `ticks` MCP arguments; released when the step finishes). Optional
+`scan_blocks`, `read_block`, `navigate_to_block`, `list_entities`, `timed_entities`,
+`mob_motion`, or `key` (`keys` and `ticks` MCP arguments; released when the step finishes). Optional
 `seed` defaults to 100, `world` copies an existing world, `server_view_distance`
 defaults to 4, and `client_settings` accepts `graphics_preset`, `render_distance`
 and `fov` (default 70: the owner's saved fov is never inherited). PNG paths are
 recorded in `result.json`; settings and world are isolated per run.
+
+- `timed_entities` takes the same `name` and `args` as `list_entities` and retains
+  its same-client-thread `game_time` and entity positions. Missing timestamps fail.
+- `mob_motion` reads three named `timed_entities` receipts and records horizontal
+  displacement and blocks per client tick for one zombie and one spider. Both
+  must retain their identities and move; observed game time must advance. These
+  are client-observed rates, not authoritative server-clock speeds: client time
+  can be corrected by server packets, and curved paths make net displacement a
+  lower bound on traveled distance.
+- Zombie-family chase uses a blueprint capability to send the aggressive-arms
+  mob flag. It is cleared when the target is lost or on the first hostile
+  evaluation after restart, because targets are runtime-only; the changed
+  appearance is journaled. The focused metadata and WAL tests do not substitute
+  for a matched animated visual comparison.
 
 - With a client supporting held MCP input,
   `{"shot":"tab","hold_keys":["key.keyboard.tab"]}` captures the visible player
@@ -257,11 +287,19 @@ recorded in `result.json`; settings and world are isolated per run.
   `<artifact>/terrain-ready.json` and in `scenario.terrain_waits`; requested and
   mesh revisions must match. The completed frame is a readiness fence, not proof
   of visible pixels, and capture is not atomic with the fence.
-- `--client java --windowed` runs the same scenario against the vanilla Java client
-  (Loader `:fabric-agent:runClientMcp`) as a rendering oracle: `shot` uses
-  `minecraft_screenshot` and the client gets the same 1280x720 window, fov, GUI
-  scale 3 and render distance through its `options.txt`. Mojang's client is a
-  test-time reference only, never a source for Solaris models.
+- `--client java --windowed` ordinarily connects the vanilla Java client to the
+  Solaris server (Loader `:fabric-agent:runClientMcp`): `shot` uses
+  `minecraft_screenshot` and matches the 1280x720 window, fov, GUI scale 3 and
+  render distance. It is a rendering oracle, not a vanilla-server AI or movement
+  oracle. Mojang's client is a test-time reference only, never a source for models.
+- For a Java client **and vanilla server** oracle, set `vanilla_singleplayer: true`
+  in the scenario and run `--client java --windowed`. No standalone server or
+  EULA file is created. Begin the steps with `ui_click` (exact screen `class`,
+  `title`, and 1280×720 window `x`/`y`), `ui_wait` (screen class), and `ui_shot`
+  as needed to create a world and enable commands, followed by `wait_play` and
+  normal scene actions. The harness checks the title overlay, window ownership,
+  actual in-play state and integrated-server log; fixed UI coordinates are tied to
+  this window size and must be checked when the Java UI changes.
 - `settlement-map-qa` reuses this lifecycle with a scripted body and judges the
   client's own screenshots: it founds an empty town, opens its map, certifies a
   real Storage while the map stays open (stale shot: unchanged), refreshes and

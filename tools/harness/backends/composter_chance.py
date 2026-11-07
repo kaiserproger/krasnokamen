@@ -32,12 +32,17 @@ TOOLS = frozenset({"minecraft_observe", "minecraft_wait_for_play", "minecraft_wa
                    "minecraft_close_screen"})
 
 
-def run(ctx: ProfileContext) -> dict[str, Any]:
+def validate_args(ctx: ProfileContext) -> float:
     if ctx.client != "native" or not ctx.windowed or ctx.extra_args or ctx.platform is not None:
         raise ValueError("composter-chance requires --client native --windowed")
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 900.0
     if not 0 < timeout <= 3600:
         raise ValueError("composter-chance timeout must be in (0, 3600]")
+    return timeout
+
+
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    timeout = validate_args(ctx)
     override = os.environ.get("SOLARIS_SERVER_BINARY")
     if not override or not os.environ.get("SOLARIS_CLIENT_BINARY"):
         raise RuntimeError("composter-chance requires prebuilt SOLARIS_SERVER_BINARY and SOLARIS_CLIENT_BINARY")
@@ -72,7 +77,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         log_path = artifact / "server.log"
         log = log_path.open("wb")
         ctx.logs.append(str(log_path))
-        server = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],
+        server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
             cwd=runtime.REPO_ROOT, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         runtime.wait_port(port, timeout, server, log_path=log_path)
         xvfb, display, _ = runtime.start_xvfb(artifact)

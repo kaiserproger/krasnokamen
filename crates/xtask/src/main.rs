@@ -7,11 +7,17 @@ fn main() {
     let mut args = env::args().skip(1);
     match args.next().as_deref() {
         Some("code-health") => {
-            if let Some(arg) = args.next() {
-                eprintln!("code-health: unknown option {arg:?}");
-                std::process::exit(2);
+            let mut root = None;
+            while let Some(arg) = args.next() {
+                match (arg.as_str(), args.next()) {
+                    ("--root", Some(dir)) if root.is_none() => root = Some(dir.into()),
+                    _ => {
+                        eprintln!("code-health: unknown option {arg:?} (usage: --root <dir>)");
+                        std::process::exit(2);
+                    }
+                }
             }
-            if let Err(code) = code_health::run_code_health() {
+            if let Err(code) = code_health::run_code_health(root) {
                 std::process::exit(code);
             }
         }
@@ -30,7 +36,9 @@ fn main() {
             }
         }
         _ => {
-            eprintln!("usage: cargo run -p xtask -- code-health|architecture [--check]");
+            eprintln!(
+                "usage: cargo run -p xtask -- code-health [--root <dir>] | architecture [--check]"
+            );
             std::process::exit(2);
         }
     }

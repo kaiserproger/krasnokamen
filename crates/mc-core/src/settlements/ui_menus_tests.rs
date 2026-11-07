@@ -194,6 +194,31 @@ fn held(state: &TickState, name: &str) -> i32 {
 }
 
 #[test]
+fn debug_menu_uses_settlement_icons_and_falls_through_stale_window() {
+    let mut state = joined();
+    let id = storage_town(&mut state, PLAYER);
+    dialog(&mut state, id, "storage", &[]);
+    let actor = entity(&state);
+    let cobble = stock_slot(&state, "minecraft:cobblestone");
+    let image = crate::tick::debug_menu_snapshot(&state, actor).unwrap();
+    assert_eq!(image["slots"][cobble]["item"], "minecraft:cobblestone");
+    assert_eq!(image["slots"][cobble]["count"], 70);
+
+    let registry = std::sync::Arc::clone(&state.registry);
+    let slots = state.block_entities[&(6, 201, 4)].slots.clone();
+    state.players.get_mut(&actor).unwrap().open_menu(
+        &registry.item_rules(),
+        MenuKind::Chest { rows: 3 },
+        "Chest".into(),
+        &slots,
+    );
+    state.open_containers.insert(actor, (6, 201, 4));
+    let image = crate::tick::debug_menu_snapshot(&state, actor).unwrap();
+    assert_eq!(image["slots"][0]["item"], "minecraft:bread");
+    assert_eq!(image["slots"][0]["count"], 5);
+}
+
+#[test]
 fn storage_inventory_moves_real_stacks_both_ways_without_duplication() {
     let mut state = joined();
     let id = storage_town(&mut state, PLAYER);

@@ -34,7 +34,9 @@ Every rule below is one idea: **each fact has one owner, and each problem is fix
 originates.** Code that breaks this gets reverted and redone by its author.
 
 - One source of truth. No duplicate paths, shims, aliases or legacy branches; migrate callers
-  and delete the old.
+  and delete the old. This is about facts and mechanisms: repeated code at call sites is not a
+  second source, and a shared function bent by caller-specific flags is worse than the
+  repetition ([mechanisms, not code](development/adding-a-feature.md#mechanisms-not-code)).
 - Fix the cause, never mask it. No fallback, retry, default or guard that hides a broken
   invariant. No sleeps or polling in place of real signals.
 - Nothing speculative or dead. No unused abstractions, flags, stubs, placeholders or fake success.

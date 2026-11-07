@@ -37,3 +37,37 @@ Later owner decisions (2026-11-07): publications need only the owner's
 authorization; the advisor issues no `[approved]`; every release tag gets two
 read-only release reviewers
 ([review committee and breaker](review-committee-and-breaker.md#release-reviewers-owner-2026-11-07)).
+
+> "и не забывайте коммитить почаще. ничего страшного если нерабочие коммиты улетят в main, нам не нужны гигантские коммиты и обновление мэйна раз в два дня" (2026-11-07)
+
+Main therefore commits small slices and pushes `main` often; a not-yet-green
+commit on `main` is acceptable. Tags, releases and publication keep their rules.
+
+Owner decisions on the agent-work retrospective (2026-11-07, chosen from
+`receipts/AgentRetro/` proposals; AGENTS.md restates them):
+
+- Main has standing authorization to spawn subagents within the fleet limits
+  (at most 10 live agents, 3 concurrent builders); this replaces the
+  `quaka-whaka-zaka-du` phrase.
+- Only Main runs the hourly owner-issue check; workers do not.
+- Failing-first is recorded, not a gate. A fix's regression test must go red
+  when the fix hunks are reverted, and a bug row becomes `fixed` only through
+  `ledger promote`.
+- Review at three points: a promotion batch of five or more rows; persistence,
+  protocol or custody changes before commit; two reviewers before a tag. No
+  reviewer for docs-only or test-only slices.
+- Briefs and results follow fixed templates: implementers return `status`,
+  reviewers and breakers `verdict`; at most three messages per agent; no GO
+  for measurement lanes.
+- Worktrees and release binaries go through `tools/dev/wt-new`, `wt-done`,
+  `wt-gc` and `pin-release`; each sibling repo's `main` is brought up to date at
+  every RC.
+- Stale slot-era skills are deleted and the role prompts follow these rules.
+- The advisor raises one STOP per topic (a repeat needs new evidence) and logs
+  each concern's disposition.
+
+> все явные пробелы ЧИНИТЬ (owner, 2026-11-07)
+
+Every gap an agent or Main reports is a work item to fix, not an accepted
+ending. Only what needs something outside the agents' reach (owner action,
+hardware, credentials) stays open, with the exact blocker named.

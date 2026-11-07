@@ -559,6 +559,20 @@ def _craft_drag(steps: ProbeSteps, _origin: tuple[int, int, int]) -> None:
     native_craft_drag.run(steps, steps.artifact_dir.parent, steps.client.p4_window)
 
 
+def _craft_drag_paced(steps: ProbeSteps, _origin: tuple[int, int, int]) -> None:
+    from . import native_craft_drag_paced
+
+    if not getattr(steps.client, "p4_window", None):
+        raise RuntimeError("paced craft drag requires the harness-owned windowed Xvfb client")
+    _give(steps, "minecraft:oak_log", 0)
+    _echo(steps, "paced_drag_fixture_ordered")
+    steps.call("minecraft_open_inventory")
+    steps.wait(lambda state: state["screen"]["open"]
+               and state["container"]["container_id"] == 0,
+               "paced_drag_real_inventory_open")
+    native_craft_drag_paced.run(steps, steps.artifact_dir.parent, steps.client.p4_window)
+
+
 def _settlement_storage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from . import native_settlement_storage
 
@@ -653,6 +667,7 @@ RUNNERS = {
     "native-v2-corrupt-block-entities": _corrupt_block_entities,
     "native-v2-corrupt-chunk-near-camera": _corrupt_chunk_near_camera,
     "native-v2-craft-drag": _craft_drag,
+    "native-v2-craft-drag-paced": _craft_drag_paced,
     "native-v2-settlement-storage": _settlement_storage,
     "native-v2-redstone": _redstone, "native-v2-stations": _stations,
     "native-v2-brewing": _brewing, "native-v2-jukebox": _jukebox,

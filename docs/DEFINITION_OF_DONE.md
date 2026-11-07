@@ -71,7 +71,7 @@ Closeouts must include this matrix, even for drafts:
 
 | Gate | Required wording |
 |---|---|
-| Cargo baseline | Exact `fmt`, `xtask code-health`, `clippy`, and `test` commands (or the `correctness` harness profile) run after the last code change, or why not. |
+| Cargo baseline | Exact `regressions`, `fmt`, `xtask code-health`, `clippy` and `test` commands (or the `correctness` harness profile, which runs all of them) run after the last code change, or why not. |
 | Focused tests | Which behavior they prove, and why they are not pass-by-construction. |
 | Vanilla oracle | `wire-probe`, `javap`, decompiled source, vanilla server capture, or explicit `not run`. |
 | Client/manual gate | Real-client harness profile or owner-run PrismLauncher status: owner-run, agent-run, prepared only, or not run; name the client release (26.3 or legacy 26.1.2). |

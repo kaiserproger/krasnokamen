@@ -129,43 +129,33 @@ else
     flock 6
   fi
 fi
-# Target dirs: a command that sets CARGO_TARGET_DIR (in its own `env ...` or in the
-# caller's environment) keeps it and takes no pool lock. Otherwise it gets a free
-# shared dir slot-a..slot-z, preferring the one its source tree (git toplevel of the
-# cwd) used last; crates.io dependencies stay compiled across worktrees. Cargo
-# trusts mtimes, so a tree whose files are older than another tree's build in the
-# same slot would reuse that tree's binaries (a false green, seen 2026-11-04). On a
-# tree switch every tracked file of the new tree is touched, so its workspace
-# crates rebuild. The lock files a-e are the old slot locks, so commands of the
-# previous runner version never share a dir with new ones. Never waits: with all 26
-# busy the command is refused.
-target=${CARGO_TARGET_DIR:-}
-for w in "$@"; do [[ $w == CARGO_TARGET_DIR=* ]] && target=${w#CARGO_TARGET_DIR=}; done
-if [ -z "$target" ]; then
-  slots=${SOLARIS_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
-  tree=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-  slot=
-  for pass in own any; do
-    for l in {a..z}; do
-      if [ "$pass" = own ] && [ "$(cat "$slots/slot-$l/.solaris-tree" 2>/dev/null)" != "$tree" ]; then
-        continue
-      fi
-      exec 7>"$dir/$l"
-      if flock -n 7; then slot=$l; break 2; fi
-      exec 7>&-
-    done
-  done
-  [ -n "$slot" ] || { echo "mem-run: all 26 shared target dirs busy; refusing (exit 75)" >&2; exit 75; }
-  export CARGO_TARGET_DIR="$slots/slot-$slot"
-  target=$CARGO_TARGET_DIR
-  if [ "$(cat "$target/.solaris-tree" 2>/dev/null)" != "$tree" ]; then
-    if git -C "$tree" rev-parse --git-dir >/dev/null 2>&1; then
-      (cd "$tree" && git ls-files -z | xargs -0 -r touch -c --)
+# Disk floor: below SOLARIS_SLOT_MIN_FREE_GB + 10 GiB free on the targets disk, run
+# slot-gc --delete first. It takes each slot's pool lock itself (busy slots are
+# skipped), removes artifacts of removed trees and superseded incremental sessions,
+# then rotates idle slots in LRU order while still short. It never delays the command
+# by more than SOLARIS_SLOT_GC_TIMEOUT seconds (default 120) and never fails it: an
+# error is printed and the command starts anyway. Not run for -x and -p, whose
+# windows are quiet measurements.
+if [ "$exclusive" = 0 ] && [ "$perf" = 0 ]; then
+  gc_root=${SOLARIS_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
+  gc_floor=$(( ${SOLARIS_SLOT_MIN_FREE_GB:-80} + 10 ))
+  gc_free=$(df --output=avail -BG "$gc_root" 2>/dev/null | tail -1 | tr -dc 0-9 || true)
+  if [ -n "$gc_free" ] && [ "$gc_free" -lt "$gc_floor" ]; then
+    echo "mem-run: ${gc_free}G free, below ${gc_floor}G (floor + 10G): running slot-gc --delete on idle slots" >&2
+    if gc_out=$(timeout "${SOLARIS_SLOT_GC_TIMEOUT:-120}" "$here/slot-gc" --delete --lock-dir "$dir" 3>&- 6>&- 2>&1); then
+      printf '%s\n' "$gc_out" | sed 's/^/mem-run: slot-gc: /' >&2
+    else
+      gc_st=$?
+      printf '%s\n' "$gc_out" | sed 's/^/mem-run: slot-gc: /' >&2
+      echo "mem-run: slot-gc failed (exit $gc_st); continuing" >&2
     fi
-    mkdir -p "$target"
-    printf '%s\n' "$tree" >"$target/.solaris-tree"
   fi
 fi
+# Target dir and its slot locks: see slot-select.sh (ownership of pooled slots,
+# tree switches, the use lock slot-gc respects).
+# shellcheck source=slot-select.sh
+source "$here/slot-select.sh"
+select_slot "$@"
 # The harness would otherwise re-run itself in its own scope outside this slice;
 # tell it it is already scoped so cargo/server/client stay under this cap.
 # Incremental for debug/test builds. This cargo (1.99) does not apply the
@@ -217,7 +207,7 @@ cg=$(sed -n "s/^0:://p" /proc/self/cgroup)
 printf "%s\t%s\t%s\t%s\n" "$cg" "$MEMRUN_EST_KIB" "$MEMRUN_PREEMPTIBLE" "$MEMRUN_TARGET" > "$MEMRUN_DIR/run/$$"
 [ "$MEMRUN_EXCLUSIVE" = 1 ] || { flock -u 3; exec 3>&-; }
 notify start
-"$@" <&0 3>&- 6>&- 7>&- & c=$!
+"$@" <&0 3>&- 6>&- 7>&- 8>&- & c=$!
 trap "kill -TERM $c 2>/dev/null" TERM INT HUP
 st=0
 wait "$c" || st=$?

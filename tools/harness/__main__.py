@@ -8,11 +8,15 @@ Subcommands:
                         launch (or check) a real client; replaces the two
                         run-*-client-mcp.sh launchers
   mcp ...               route to the client MCP smoke (tools/harness/mcp.py)
+  ledger probe|promote  classify bug-ledger rows / the only way a row becomes fixed
+  plan [--base REV] [--paths ...] [--json]
+                        print the validation a change requires (tools/harness/plan.py)
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime
 import json
 import os
@@ -330,6 +334,14 @@ def cmd_run(argv: list[str]) -> int:
     if scenario_error is None and args.server_bin is not None and profile != "loader-live":
         scenario_error = "--server-bin is only supported by loader-live"
     started_at = _utc_now()
+    # The tree the run starts on, so a later promotion can tell whether the receipt proves
+    # the candidate (ledger.check_client_receipt); never fatal.
+    try:
+        from . import ledger
+
+        run_tree = ledger.tree_fingerprint(REPO_ROOT)
+    except Exception as error:
+        run_tree = {"head": "unavailable", "dirty": True, "error": str(error)}
     start_epoch = time.time()
     named_scenario: dict[str, Any] | None = None
     if scenario is not None:
@@ -352,6 +364,9 @@ def cmd_run(argv: list[str]) -> int:
             "repo_revisions": scenario_catalog.repo_revisions(),
         }
 
+    failure_phase = "preflight"
+    child_failure = None
+
     def finish(
         status: str,
         scope: str,
@@ -366,6 +381,23 @@ def cmd_run(argv: list[str]) -> int:
         exits = list(evidence.exits if evidence else [])
         logs = list(evidence.logs if evidence else [])
         details = {**(evidence.client_evidence if evidence else {}), **details}
+        if status == "failed":
+            code = (child_failure.returncode if child_failure is not None
+                    else details.get("startup_child_exit"))
+            failure_logs = list(logs)
+            if child_failure is not None and str(child_failure.log_path) not in failure_logs:
+                failure_logs.append(str(child_failure.log_path))
+            details["failure"] = {
+                "phase": failure_phase,
+                "exit_code": code if code is not None and code >= 0 else None,
+                "signal": -code if code is not None and code < 0 else None,
+                "server_binary": {"path": details.get("server_binary_path"),
+                                  "sha256": details.get("server_binary_sha256")},
+                "client_binary": {"path": details.get("binary_path"),
+                                  "sha256": details.get("binary_sha256")},
+                "logs": failure_logs,
+            }
+
         if named_scenario is not None:
             details = dict(details)
             named_scenario["commands_cwd"] = list(evidence.cwds) if evidence else []
@@ -382,6 +414,7 @@ def cmd_run(argv: list[str]) -> int:
             "ended_at": ended_at,
             "duration_seconds": round(time.time() - start_epoch, 3),
             "details": details,
+            "tree": run_tree,
             "error": error,
         }
         (artifact_dir / "result.json").write_text(
@@ -447,11 +480,20 @@ def cmd_run(argv: list[str]) -> int:
                 "supported shared Python minecraft_* profiles: survival, inventory, entities, core-client subset, native-lifecycle, logical-native, native-scale. "
                 "Java-only minecraft_run_scenario definitions are not executed natively."
             )
-        details = spec["run"](ctx)
+        from . import preflight
+        needs = preflight.check(profile, ctx, spec)
+        with preflight.client_data_root(ctx) if 'client_data' in needs else contextlib.nullcontext():
+            failure_phase = "unknown"
+            details = spec["run"](ctx)
     except KeyboardInterrupt:
         return finish("interrupted", spec["scope"], {}, "interrupted by user",
                       artifact_dir, 130, ctx)
     except Exception as error:
+        from .runtime import child_exit, observed_phase
+        child_failure = child_exit(error)
+        observed = observed_phase(error)
+        if observed != "unknown":
+            failure_phase = observed
         return finish("failed", spec["scope"], {}, str(error), artifact_dir, 1, ctx)
     if scenario is not None and isinstance(details, dict):
         if scenario.tests:
@@ -463,6 +505,7 @@ def cmd_run(argv: list[str]) -> int:
             reasons = [f"missing test: {name}" for name in missing]
             reasons.extend(scenario_catalog.count_failures(counts))
             if reasons:
+                failure_phase = "assertion"
                 return finish(
                     "failed",
                     spec["scope"],
@@ -679,7 +722,7 @@ def _exec_in_scope(profile: str | None) -> int | None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python3 -m tools.harness")
-    parser.add_argument("command", nargs="?", choices=["list", "explain", "run", "client", "mcp"])
+    parser.add_argument("command", nargs="?", choices=["list", "explain", "run", "client", "mcp", "ledger", "plan"])
     parser.add_argument("rest", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     if args.command == "list":
@@ -705,6 +748,14 @@ def main(argv: list[str] | None = None) -> int:
         from . import mcp
 
         return mcp.main(args.rest)
+    if args.command == "ledger":
+        from . import ledger
+
+        return ledger.main(args.rest)
+    if args.command == "plan":
+        from . import plan
+
+        return plan.main(args.rest)
     parser.print_help()
     return 2
 

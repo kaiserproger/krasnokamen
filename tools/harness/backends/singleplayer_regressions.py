@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 from pathlib import Path
 import select
@@ -65,16 +66,21 @@ def _play(probe, state):
     return result
 
 
-def run(ctx: ProfileContext) -> dict:
+def validate_args(ctx: ProfileContext) -> float:
     if ctx.client != "native" or not ctx.windowed:
         raise ValueError("singleplayer regressions require --client native --windowed")
     if ctx.scenario_id not in (FIRST, LEASE):
         raise ValueError("select a registered singleplayer regression scenario")
     if ctx.extra_args or ctx.platform:
         raise ValueError("singleplayer regressions do not accept extra arguments or platform")
-    timeout = ctx.timeout_seconds or 900.0
-    if timeout <= 0:
+    timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 900.0
+    if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("timeout must be positive")
+    return timeout
+
+
+def run(ctx: ProfileContext) -> dict:
+    timeout = validate_args(ctx)
     server = Path(os.environ.get("SOLARIS_SERVER_BINARY", "")).resolve()
     if not server.is_file():
         raise RuntimeError("SOLARIS_SERVER_BINARY must name the release server")
