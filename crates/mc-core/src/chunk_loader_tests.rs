@@ -183,12 +183,14 @@ fn corrupt_native_block_entity_never_generates_or_overwrites_at_checkpoint() {
             )],
         )],
     );
-    assert_eq!(
-        scheduled.load_error().unwrap().to_string(),
-        error.to_string()
-    );
-    assert!(scheduled.visit_native(|_| Ok(())).is_err());
-    assert!(scheduled.write().is_err());
+    // Scheduled work for an unloadable chunk is dropped and counted; it never declines.
+    assert!(scheduled.load_error().is_none());
+    assert_eq!(scheduled.refused().len(), 1);
+    assert_eq!(scheduled.refused()[0].error.to_string(), error.to_string());
+    assert_eq!(scheduled.refused()[0].unsaved, 0);
+    assert_eq!(scheduled.refused()[0].scheduled, 1);
+    assert!(scheduled.written().is_empty());
+    scheduled.write().unwrap();
     let mut scheduled_fluid = world.capture_dirty(&Default::default());
     world.capture_scheduled_fluid_ticks(
         &mut scheduled_fluid,
@@ -202,24 +204,51 @@ fn corrupt_native_block_entity_never_generates_or_overwrites_at_checkpoint() {
             )],
         )],
     );
-    assert_eq!(
-        scheduled_fluid.load_error().unwrap().to_string(),
-        error.to_string()
-    );
-    assert!(scheduled_fluid.visit_native(|_| Ok(())).is_err());
-    assert!(scheduled_fluid.write().is_err());
+    assert!(scheduled_fluid.load_error().is_none());
+    assert_eq!(scheduled_fluid.refused()[0].scheduled, 1);
+    assert!(scheduled_fluid.written().is_empty());
+    scheduled_fluid.write().unwrap();
 
-    // Failed captures retain both absent custody and the pending block overlay.
+    // A container edit (or removal) mark on a refused chunk is unsaved custody: only the
+    // mark remembers a removed record, so it declines, repeatedly, counted.
     world.mark_block_entity_dirty(block);
     for _ in 0..2 {
-        let checkpoint = world.flush_dirty(&Default::default()).unwrap_err();
-        assert!(
-            checkpoint.to_string().contains(&error.to_string()),
-            "{checkpoint}"
-        );
+        let capture = world.capture_dirty(&Default::default());
+        assert_eq!(capture.load_error().unwrap().to_string(), error.to_string());
+        assert_eq!(capture.refused()[0].unsaved, 1);
+        assert!(capture.write().is_err());
         assert_eq!(store.record_counts().unwrap(), original_counts);
         assert_eq!(store.read_checkpoint().unwrap().tick, 0);
     }
+    // A changed block-entity record of the refused chunk (a container edit) is unsaved
+    // custody: skipping it would commit the rest of the world without it.
+    let mut world = {
+        drop(world);
+        ChunkWorld::new_native(
+            42,
+            Arc::clone(&store),
+            0,
+            Arc::clone(&source.generator),
+            &registry,
+            mc_world::BlockStateId(registry.states.air),
+            [block.x, block.y, block.z],
+            mc_world::OVERWORLD_GEOMETRY,
+        )
+    };
+    assert!(world.ensure_blocking(&want).is_empty());
+    let mut changed = crate::core::CheckpointBlockEntities::default();
+    changed.insert(
+        (block.x, block.y, block.z),
+        crate::journal::ReplayBlockEntity {
+            slots: Vec::new(),
+            furnace: None,
+            tick: 0,
+        },
+    );
+    let capture = world.capture_dirty(&changed);
+    assert_eq!(capture.refused()[0].unsaved, 1);
+    assert!(capture.load_error().is_some());
+    assert!(capture.write().is_err());
     drop(world);
     let mut world = ChunkWorld::new_native(
         42,
@@ -231,10 +260,14 @@ fn corrupt_native_block_entity_never_generates_or_overwrites_at_checkpoint() {
         [block.x, block.y, block.z],
         mc_world::OVERWORLD_GEOMETRY,
     );
+    // A replayed block write into the refused chunk sits in the overlay and is kept.
     world.set_block(block.x, block.y, block.z, registry.states.dirt);
     assert!(world.ensure_blocking(&want).is_empty());
     for _ in 0..2 {
-        assert!(world.flush_dirty(&Default::default()).is_err());
+        let capture = world.capture_dirty(&Default::default());
+        assert_eq!(capture.refused()[0].unsaved, 1);
+        assert!(capture.load_error().is_some());
+        assert!(capture.write().is_err());
         assert!(!world.overlay_is_empty());
         assert_eq!(store.record_counts().unwrap(), original_counts);
     }
@@ -690,4 +723,230 @@ fn absent_metadata_visitor_streams_one_chunk_and_late_failure_never_acks() {
             .is_empty(),
         "only a successful revision-matching ACK clears the absent images"
     );
+}
+
+#[test]
+fn refused_chunk_never_blocks_other_chunks_and_stays_refused() {
+    let directory = tempfile::tempdir().unwrap();
+    let registry = CoreRegistry::load(Some(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+    ))
+    .unwrap();
+    let store = crate::world::world_tests::native_store(directory.path(), &registry);
+    let refused = ChunkPos { x: 3, z: -2 };
+    let refused_block = mc_world::BlockPos {
+        x: 49,
+        y: 100,
+        z: -31,
+    };
+    let healthy = ChunkPos { x: 0, z: 0 };
+    let air = mc_world::BlockStateId(registry.states.air);
+    let biome = mc_data::Identifier::parse("minecraft:plains").unwrap();
+    let mut bad = Chunk::empty(refused, air, biome.clone());
+    let mut corrupt_nbt = Vec::new();
+    mc_nbt::write_network(
+        &mut corrupt_nbt,
+        &Tag::Compound(vec![
+            ("id".into(), Tag::String("minecraft:conduit".into())),
+            ("x".into(), Tag::Int(refused_block.x)),
+            ("y".into(), Tag::Int(refused_block.y)),
+            ("z".into(), Tag::Int(refused_block.z)),
+            ("Target".into(), Tag::IntArray(vec![1, 2, 3])),
+        ]),
+    )
+    .unwrap();
+    bad.block_entities.insert(refused_block, corrupt_nbt);
+    store
+        .import_chunk(0, &bad, &registry.blocks, &registry.items)
+        .unwrap();
+    store
+        .import_chunk(
+            0,
+            &Chunk::empty(healthy, air, biome),
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
+    let imported = store.record_counts().unwrap();
+    let generated = Arc::new(AtomicUsize::new(0));
+    let source = source(
+        Arc::clone(&store),
+        0,
+        mc_world::OVERWORLD_GEOMETRY,
+        &registry,
+        &generated,
+    );
+    let reason = source.load_or_generate(refused).unwrap_err().to_string();
+    let new_world = || {
+        ChunkWorld::new_native(
+            42,
+            Arc::clone(&store),
+            0,
+            Arc::clone(&source.generator),
+            &registry,
+            air,
+            [1, 100, 1],
+            mc_world::OVERWORLD_GEOMETRY,
+        )
+    };
+
+    let mut world = new_world();
+    let want = [(refused, 0), (healthy, 0)].into_iter().collect();
+    assert_eq!(world.ensure_blocking(&want), vec![healthy]);
+    assert!(!world.has_chunk(refused.x, refused.z));
+    assert!(world.has_chunk(healthy.x, healthy.z));
+    world.set_block(1, 100, 1, registry.states.dirt);
+
+    // The refusal lists the chunk but never fails the checkpoint.
+    let capture = world.capture_dirty(&Default::default());
+    assert!(capture.load_error().is_none());
+    assert_eq!(capture.refused().len(), 1);
+    assert_eq!(capture.refused()[0].error.pos, refused);
+    assert_eq!(capture.refused()[0].unsaved, 0);
+    assert_eq!(capture.refused()[0].error.to_string(), reason);
+    assert_eq!(
+        capture
+            .written()
+            .iter()
+            .map(|(pos, _)| *pos)
+            .collect::<Vec<_>>(),
+        vec![healthy]
+    );
+    world.mark_flushed(&capture.write().unwrap());
+    let committed = store.record_counts().unwrap();
+    assert_eq!(committed.imported_chunks, imported.imported_chunks);
+    assert!(committed.applied_chunks > imported.applied_chunks);
+    // Later checkpoints keep committing and keep listing the refusal.
+    let later = world.capture_dirty(&Default::default());
+    assert!(later.load_error().is_none());
+    assert_eq!(later.refused().len(), 1);
+    drop(world);
+
+    // Restart: the stored record is untouched, still refused with the same
+    // reason, and never generated over; the healthy edit is durable.
+    let mut world = new_world();
+    assert_eq!(world.ensure_blocking(&want), vec![healthy]);
+    assert_eq!(world.load_error(refused).unwrap().to_string(), reason);
+    assert_eq!(world.block_at(1, 100, 1), Some(registry.states.dirt));
+    assert_eq!(store.record_counts().unwrap(), committed);
+    assert_eq!(
+        source.load_or_generate(refused).unwrap_err().to_string(),
+        reason
+    );
+    assert_eq!(generated.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn refusing_a_resident_chunk_keeps_custody_of_its_unsaved_edits() {
+    let directory = tempfile::tempdir().unwrap();
+    let registry = CoreRegistry::load(Some(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+    ))
+    .unwrap();
+    let store = crate::world::world_tests::native_store(directory.path(), &registry);
+    let air = mc_world::BlockStateId(registry.states.air);
+    let biome = mc_data::Identifier::parse("minecraft:plains").unwrap();
+    let edited = ChunkPos { x: 0, z: 0 };
+    let untouched = ChunkPos { x: 1, z: 0 };
+    for pos in [edited, untouched] {
+        store
+            .import_chunk(
+                0,
+                &Chunk::empty(pos, air, biome.clone()),
+                &registry.blocks,
+                &registry.items,
+            )
+            .unwrap();
+    }
+    let generated = Arc::new(AtomicUsize::new(0));
+    let source = source(
+        Arc::clone(&store),
+        0,
+        mc_world::OVERWORLD_GEOMETRY,
+        &registry,
+        &generated,
+    );
+    let mut world = ChunkWorld::new_native(
+        42,
+        Arc::clone(&store),
+        0,
+        Arc::clone(&source.generator),
+        &registry,
+        air,
+        [1, 100, 1],
+        mc_world::OVERWORLD_GEOMETRY,
+    );
+    let want = [(edited, 0), (untouched, 0)].into_iter().collect();
+    assert_eq!(world.ensure_blocking(&want).len(), 2);
+
+    // A chunk refused as freshly loaded has nothing unsaved: the checkpoint skips it.
+    world.reject_resident(untouched, "undecodable record".to_string());
+    let capture = world.capture_dirty(&Default::default());
+    assert!(capture.load_error().is_none());
+    assert_eq!(capture.refused().len(), 1);
+    assert_eq!(capture.refused()[0].unsaved, 0);
+
+    // Edits made while it was resident are unsaved custody: committing the rest of
+    // the world without them could duplicate an item that left such a chest, so the
+    // checkpoint is declined, repeatedly, until the chunk is repaired.
+    world.set_block(1, 100, 1, registry.states.dirt);
+    world.reject_resident(edited, "undecodable record".to_string());
+    for _ in 0..2 {
+        let capture = world.capture_dirty(&Default::default());
+        assert_eq!(capture.load_error().unwrap().pos, edited);
+        assert_eq!(capture.refused().len(), 2);
+        assert_eq!(capture.refused()[0].error.pos, edited);
+        assert_eq!(capture.refused()[0].unsaved, 1);
+        assert_eq!(capture.refused()[1].unsaved, 0);
+        assert!(capture.write().is_err());
+    }
+}
+
+/// The common runtime case: a plain block edit (no container, so no record and no
+/// dirty mark) that tick end has already folded into the chunk's sections. Only
+/// the chunk's dirty sections remember it; skipping the chunk would commit the
+/// drop and the player's inventory while the stored chunk still has the block.
+#[test]
+fn refusing_a_resident_chunk_keeps_custody_of_folded_block_edits() {
+    let directory = tempfile::tempdir().unwrap();
+    let registry = CoreRegistry::load(Some(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+    ))
+    .unwrap();
+    let store = crate::world::world_tests::native_store(directory.path(), &registry);
+    let air = mc_world::BlockStateId(registry.states.air);
+    let biome = mc_data::Identifier::parse("minecraft:plains").unwrap();
+    let pos = ChunkPos { x: 0, z: 0 };
+    store
+        .import_chunk(0, &Chunk::empty(pos, air, biome), &registry.blocks, &registry.items)
+        .unwrap();
+    let generated = Arc::new(AtomicUsize::new(0));
+    let source = source(
+        Arc::clone(&store),
+        0,
+        mc_world::OVERWORLD_GEOMETRY,
+        &registry,
+        &generated,
+    );
+    let mut world = ChunkWorld::new_native(
+        42,
+        Arc::clone(&store),
+        0,
+        Arc::clone(&source.generator),
+        &registry,
+        air,
+        [1, 100, 1],
+        mc_world::OVERWORLD_GEOMETRY,
+    );
+    let want = [(pos, 0)].into_iter().collect();
+    assert_eq!(world.ensure_blocking(&want).len(), 1);
+
+    world.set_block(1, 100, 1, registry.states.dirt);
+    world.fold_overlay();
+    world.reject_resident(pos, "undecodable record".to_string());
+    let capture = world.capture_dirty(&Default::default());
+    assert_eq!(capture.load_error().unwrap().pos, pos);
+    assert_eq!(capture.refused().len(), 1);
+    assert!(capture.refused()[0].unsaved >= 1);
+    assert!(capture.write().is_err());
 }

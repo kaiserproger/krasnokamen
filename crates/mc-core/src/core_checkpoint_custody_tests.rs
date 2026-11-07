@@ -878,3 +878,609 @@ fn randomized_custody_matches_full_capture_at_every_fence() {
     world.tick(|_| {});
     world.checkpoint();
 }
+
+/// Custody across a runtime chunk refusal: an item leaves a chest of chunk X for a
+/// chest of chunk Y, then X is refused by another record. Committing the rest of
+/// the world while skipping X would store Y's diamond next to X's stale record, so a
+/// restart would hold it twice. The checkpoint must decline (WAL kept) and the
+/// restart replays the move: exactly one diamond.
+#[test]
+fn refused_chunk_with_a_moved_item_declines_the_checkpoint_and_the_item_exists_once() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let from = crate::boundary::BlockPos {
+        x: 40,
+        y: 100,
+        z: 40,
+    };
+    let to = crate::boundary::BlockPos {
+        x: 72,
+        y: 100,
+        z: 40,
+    };
+    let chunk_of = |pos: crate::boundary::BlockPos| mc_world::ChunkPos {
+        x: pos.x.div_euclid(16),
+        z: pos.z.div_euclid(16),
+    };
+    world.tick(|state| {
+        let chest = state
+            .registry
+            .blocks
+            .block(&mc_data::Identifier::parse("minecraft:chest").unwrap())
+            .unwrap()
+            .default
+            .0;
+        // Tickets keep both chunks resident when the source is refused.
+        state
+            .tickets
+            .insert("custody-from".into(), (chunk_of(from), 0));
+        state.tickets.insert("custody-to".into(), (chunk_of(to), 0));
+        state.refresh_active_chunks(state.tick);
+        let want = [(chunk_of(from), 0), (chunk_of(to), 0)]
+            .into_iter()
+            .collect();
+        state.world.ensure_blocking(&want);
+        for pos in [from, to] {
+            state.world.set_block(pos.x, pos.y, pos.z, chest);
+            state
+                .block_entities
+                .hydrate((pos.x, pos.y, pos.z), || crate::tick::BlockEntityState {
+                    slots: vec![mc_data::ItemStack::EMPTY; 27],
+                    furnace: None,
+                });
+        }
+        state.world.fold_overlay();
+    });
+    let diamond = |state: &TickState| {
+        mc_data::ItemStack::new(
+            state
+                .registry
+                .items
+                .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+                .unwrap(),
+            1,
+        )
+    };
+    world.tick(|state| {
+        let stack = diamond(state);
+        state
+            .block_entities
+            .get_mut(&(from.x, from.y, from.z))
+            .expect("chest record")
+            .slots[0] = stack;
+        state.world.mark_block_entity_dirty(from);
+    });
+    world.checkpoint();
+
+    // The move, then the refusal of the source chunk by an unrelated record.
+    world.tick(|state| {
+        let stack = diamond(state);
+        state
+            .block_entities
+            .get_mut(&(from.x, from.y, from.z))
+            .unwrap()
+            .slots[0] = mc_data::ItemStack::EMPTY;
+        state
+            .block_entities
+            .get_mut(&(to.x, to.y, to.z))
+            .unwrap()
+            .slots[0] = stack;
+        state.world.mark_block_entity_dirty(from);
+        state.world.mark_block_entity_dirty(to);
+        state
+            .world
+            .reject_resident(chunk_of(from), "undecodable record".to_string());
+    });
+    let committed = world.manifest.tick;
+    for _ in 0..2 {
+        let (work_tx, _work_rx) = journal_work_channel();
+        let (done_tx, _done_rx) = std::sync::mpsc::channel();
+        let tick = world.state.tick;
+        assert!(
+            !start_checkpoint(&mut world.state, &work_tx, &done_tx, tick),
+            "a refused chunk with unsaved state declines the checkpoint"
+        );
+        assert_eq!(world.manifest.tick, committed);
+    }
+
+    // Restart: the WAL replays the move; the diamond exists exactly once.
+    let config = world.config.clone();
+    drop(world);
+    let reopened = World::open(config);
+    let count: i32 = [from, to]
+        .iter()
+        .filter_map(|pos| reopened.state.block_entities.get(&(pos.x, pos.y, pos.z)))
+        .flat_map(|record| record.slots.iter())
+        .map(|stack| stack.count)
+        .sum();
+    assert_eq!(count, 1, "exactly one diamond after restart");
+}
+
+/// A container broken in chunk X (record removed, contents dropped as an item
+/// entity), then X refused at runtime. Only the dirty mark remembers the removal,
+/// so the checkpoint must decline: committing the rest would store the dropped
+/// item while X's stale record still holds it. After a restart the diamond exists
+/// exactly once, as the container's content or as the dropped item, never both.
+#[test]
+fn refused_chunk_with_a_broken_container_declines_the_checkpoint_and_the_item_exists_once() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let at = crate::boundary::BlockPos {
+        x: 40,
+        y: 100,
+        z: 40,
+    };
+    let chunk = mc_world::ChunkPos {
+        x: at.x.div_euclid(16),
+        z: at.z.div_euclid(16),
+    };
+    world.tick(|state| {
+        let chest = state
+            .registry
+            .blocks
+            .block(&mc_data::Identifier::parse("minecraft:chest").unwrap())
+            .unwrap()
+            .default
+            .0;
+        // A ticket keeps the chunk resident, so the break and the later refusal
+        // act on a loaded chunk.
+        state.tickets.insert("custody".into(), (chunk, 0));
+        state.refresh_active_chunks(state.tick);
+        state
+            .world
+            .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+        state.world.set_block(at.x, at.y, at.z, chest);
+        state.world.fold_overlay();
+        let diamond = mc_data::ItemStack::new(
+            state
+                .registry
+                .items
+                .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+                .unwrap(),
+            1,
+        );
+        let mut slots = vec![mc_data::ItemStack::EMPTY; 27];
+        slots[0] = diamond;
+        state
+            .block_entities
+            .hydrate((at.x, at.y, at.z), || crate::tick::BlockEntityState {
+                slots,
+                furnace: None,
+            });
+        state.world.mark_block_entity_dirty(at);
+    });
+    world.checkpoint();
+
+    let (command, mut done) = crate::command_console::ConsoleCommand::new(format!(
+        "setblock {} {} {} air destroy",
+        at.x, at.y, at.z
+    ));
+    world.run(&[crate::boundary::PlayerInput::ConsoleCommand(command)]);
+    assert!(done.try_recv().is_ok());
+    assert!(
+        !world.state.block_entities.contains_key(&(at.x, at.y, at.z)),
+        "the break removed the container record"
+    );
+    let dropped = |state: &TickState| -> i32 {
+        let diamond = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+            .unwrap();
+        state
+            .entities
+            .slots()
+            .filter(|slot| state.entities.body(*slot).alive)
+            .filter_map(|slot| state.entities.row(slot).item.as_ref())
+            .filter(|item| item.item_id == diamond)
+            .map(|item| item.count)
+            .sum()
+    };
+    assert_eq!(dropped(&world.state), 1, "the contents dropped");
+    world
+        .state
+        .world
+        .reject_resident(chunk, "undecodable record".to_string());
+
+    let committed = world.manifest.tick;
+    for _ in 0..2 {
+        let (work_tx, _work_rx) = journal_work_channel();
+        let (done_tx, _done_rx) = std::sync::mpsc::channel();
+        let tick = world.state.tick;
+        assert!(
+            !start_checkpoint(&mut world.state, &work_tx, &done_tx, tick),
+            "the removal tombstone of a refused chunk declines the checkpoint"
+        );
+        assert_eq!(world.manifest.tick, committed);
+    }
+
+    let config = world.config.clone();
+    drop(world);
+    let reopened = World::open(config);
+    let held: i32 = reopened
+        .state
+        .block_entities
+        .get(&(at.x, at.y, at.z))
+        .map_or(0, |record| {
+            record.slots.iter().map(|stack| stack.count).sum()
+        });
+    assert_eq!(
+        held + dropped(&reopened.state),
+        1,
+        "exactly one diamond after restart"
+    );
+}
+
+/// The removal of a container record leaves nothing but the dirty mark behind
+/// (no stale record, no block edit). The mark must survive a refusal of its chunk
+/// (made before it) and must also count when it is made after the refusal.
+#[test]
+fn container_removal_mark_of_a_refused_chunk_counts_before_and_after_the_refusal() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let chunk_of = |x: i32| mc_world::ChunkPos {
+        x: x.div_euclid(16),
+        z: 2,
+    };
+    let before = crate::boundary::BlockPos {
+        x: 40,
+        y: 100,
+        z: 40,
+    };
+    let after = crate::boundary::BlockPos {
+        x: 41,
+        y: 100,
+        z: 41,
+    };
+    world.tick(|state| {
+        state
+            .tickets
+            .insert("custody".into(), (chunk_of(before.x), 0));
+        state.refresh_active_chunks(state.tick);
+        state
+            .world
+            .ensure_blocking(&[(chunk_of(before.x), 0)].into_iter().collect());
+        for pos in [before, after] {
+            state
+                .block_entities
+                .hydrate((pos.x, pos.y, pos.z), || crate::tick::BlockEntityState {
+                    slots: vec![mc_data::ItemStack::EMPTY; 27],
+                    furnace: None,
+                });
+            state.world.mark_block_entity_dirty(pos);
+        }
+    });
+    world.checkpoint();
+    let chunk = chunk_of(before.x);
+
+    // Removal and mark first, then the refusal: only the mark remembers it.
+    world.tick(|state| {
+        state.block_entities.remove(&(before.x, before.y, before.z));
+        state.world.mark_block_entity_dirty(before);
+        state
+            .world
+            .reject_resident(chunk, "undecodable record".to_string());
+    });
+    let capture = world.state.world.capture_dirty(&Default::default());
+    assert!(
+        capture.load_error().is_some(),
+        "mark made before the refusal"
+    );
+
+    // A clean refusal accepts nothing until a removal mark arrives after it.
+    let mut fresh = World::new(directory.path());
+    fresh.tick(|state| {
+        state.tickets.insert("custody".into(), (chunk, 0));
+        state.refresh_active_chunks(state.tick);
+        state
+            .world
+            .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+        state
+            .world
+            .reject_resident(chunk, "undecodable record".to_string());
+    });
+    let clean = fresh.state.world.capture_dirty(&Default::default());
+    assert!(clean.load_error().is_none());
+    assert_eq!(clean.refused()[0].unsaved, 0);
+    fresh.state.world.mark_block_entity_dirty(after);
+    let marked = fresh.state.world.capture_dirty(&Default::default());
+    assert!(marked.load_error().is_some(), "mark made after the refusal");
+    assert_eq!(marked.refused()[0].unsaved, 1);
+}
+
+/// Pending scheduled work of a refused chunk: the checkpoint skips the chunk-local
+/// projection (counted), but the global scheduler images in the manifest keep the
+/// queues, so a restart restores the same block and fluid ticks.
+#[test]
+fn scheduled_ticks_of_a_refused_chunk_survive_checkpoint_and_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let at = crate::boundary::BlockPos {
+        x: 40,
+        y: 100,
+        z: 40,
+    };
+    let chunk = mc_world::ChunkPos {
+        x: at.x.div_euclid(16),
+        z: at.z.div_euclid(16),
+    };
+    world.tick(|state| {
+        state.tickets.insert("custody".into(), (chunk, 0));
+        state.refresh_active_chunks(state.tick);
+        state
+            .world
+            .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+        let due = state.tick + 600;
+        assert!(
+            state
+                .block_ticks
+                .schedule(mc_world::ScheduledBlockTick::new(
+                    at,
+                    mc_data::Identifier::parse("minecraft:stone").unwrap(),
+                    due,
+                    0,
+                ))
+        );
+        assert!(state.fluid_ticks.schedule(
+            at,
+            &mc_data::Identifier::parse("minecraft:water").unwrap(),
+            due,
+            0,
+        ));
+        state
+            .world
+            .reject_resident(chunk, "undecodable record".to_string());
+    });
+    let queued = |state: &TickState| {
+        (
+            state
+                .block_ticks
+                .image()
+                .chunks
+                .iter()
+                .map(|image| image.ticks.len())
+                .sum::<usize>(),
+            state.fluid_ticks.image().due.len(),
+        )
+    };
+    assert_eq!(queued(&world.state), (1, 1));
+    // The refused chunk holds nothing unsaved but scheduled work: it commits.
+    let capture = world.state.world.capture_dirty(&Default::default());
+    assert!(capture.load_error().is_none());
+    world.checkpoint();
+    let config = world.config.clone();
+    drop(world);
+    let reopened = World::open(config);
+    assert_eq!(
+        queued(&reopened.state),
+        (1, 1),
+        "the manifest scheduler images kept both ticks"
+    );
+}
+
+/// A WAL write into a chunk refused at load. The chunk checkpointed valid; then an item
+/// put on its campfire (an opaque block-entity record) and a scheduled tick of the same
+/// chunk reach the WAL with no checkpoint after them, and the stored chunk turns
+/// unloadable. Recovery cannot replay the record into the chunk, so it refuses to open
+/// the world rather than drop it: nothing is checkpointed past the record and the WAL
+/// keeps it until the stored chunk is valid again, when the replay installs it and a
+/// checkpoint stores the item.
+#[test]
+fn opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal() {
+    use mc_nbt::Tag;
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let at = crate::boundary::BlockPos {
+        x: 40,
+        y: 100,
+        z: 40,
+    };
+    let chunk = mc_world::ChunkPos {
+        x: at.x.div_euclid(16),
+        z: at.z.div_euclid(16),
+    };
+    world.tick(|state| {
+        state.tickets.insert("custody".into(), (chunk, 0));
+        state.refresh_active_chunks(state.tick);
+        state
+            .world
+            .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+        // Unlit, so the campfire never cooks or rewrites its record by itself.
+        let id = mc_data::Identifier::parse("minecraft:campfire").unwrap();
+        let block = state.registry.blocks.block(&id).unwrap();
+        let mut properties = state
+            .registry
+            .blocks
+            .by_id(block.default)
+            .unwrap()
+            .properties
+            .clone();
+        properties
+            .iter_mut()
+            .find(|(name, _)| name == "lit")
+            .unwrap()
+            .1 = "false".into();
+        let unlit = state
+            .registry
+            .blocks
+            .by_name_and_props(&id, &properties)
+            .unwrap()
+            .0;
+        state.world.set_block(at.x, at.y, at.z, unlit);
+        state.world.fold_overlay();
+    });
+    world.checkpoint();
+    let committed = world.manifest.tick;
+    let source = world.state.world.chunk_source();
+    let store = Arc::clone(source.native.as_ref().unwrap());
+    let valid = source.load_native(chunk).unwrap().expect("checkpointed chunk");
+    let base = source.resolve_base(chunk).unwrap();
+    let registry = Arc::clone(&world.state.registry);
+
+    let beef = mc_data::ItemStack::new(
+        registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:beef").unwrap())
+            .unwrap(),
+        1,
+    );
+    let mut item = mc_data::item_nbt::stack_to_fields(&registry.items, &beef).unwrap();
+    item.push(("Slot".into(), Tag::Byte(0)));
+    let mut bytes = Vec::new();
+    mc_nbt::write_network(
+        &mut bytes,
+        &Tag::Compound(vec![
+            (
+                "Items".into(),
+                Tag::List(mc_nbt::ListTag {
+                    element_type: mc_nbt::tag_type::COMPOUND,
+                    elements: vec![Tag::Compound(item)],
+                }),
+            ),
+            ("id".into(), Tag::String("minecraft:campfire".into())),
+            ("x".into(), Tag::Int(at.x)),
+            ("y".into(), Tag::Int(at.y)),
+            ("z".into(), Tag::Int(at.z)),
+            ("CookingTimes".into(), Tag::IntArray(vec![0; 4])),
+            ("CookingTotalTimes".into(), Tag::IntArray(vec![600, 0, 0, 0])),
+        ]),
+    )
+    .unwrap();
+    // The campfire owner's write path: the chunk record plus its WAL image.
+    world.tick(|state| {
+        state.world.set_opaque_block_entity(at, Some(bytes.clone()));
+        state.opaque_changes.push((at, Some(bytes.clone())));
+        let due = state.tick + 600;
+        assert!(
+            state
+                .block_ticks
+                .schedule(mc_world::ScheduledBlockTick::new(
+                    at,
+                    mc_data::Identifier::parse("minecraft:stone").unwrap(),
+                    due,
+                    0,
+                ))
+        );
+    });
+    let config = world.config.clone();
+    drop(world);
+    // What a restart replays past the committed checkpoint: the campfire record and a
+    // pending scheduled tick of the same chunk.
+    let wal = || {
+        let recovered = crate::native_checkpoint::recover_with_reader(
+            &config,
+            Arc::clone(&registry),
+            store.checkpoint_reader().unwrap(),
+        )
+        .unwrap();
+        let replay = &recovered.dimensions[&Dimension::Overworld];
+        let scheduled = replay
+            .block_ticks
+            .chunks
+            .iter()
+            .any(|image| image.chunk == [chunk.x, chunk.z] && !image.ticks.is_empty());
+        (
+            replay.opaque_block_entities.get(&(at.x, at.y, at.z)).cloned(),
+            scheduled,
+        )
+    };
+    assert_eq!(wal(), (Some(Some(bytes.clone())), true));
+
+    // The stored chunk turns unloadable: a conduit record the native load refuses.
+    let mut corrupt = valid.clone();
+    let conduit = mc_world::BlockPos { x: at.x + 1, ..at };
+    let mut record = Vec::new();
+    mc_nbt::write_network(
+        &mut record,
+        &Tag::Compound(vec![
+            ("id".into(), Tag::String("minecraft:conduit".into())),
+            ("x".into(), Tag::Int(conduit.x)),
+            ("y".into(), Tag::Int(conduit.y)),
+            ("z".into(), Tag::Int(conduit.z)),
+            ("Target".into(), Tag::IntArray(vec![1, 2, 3])),
+        ]),
+    )
+    .unwrap();
+    corrupt.block_entities.insert(conduit, record);
+    store
+        .apply_offline_snapshot(
+            source.dimension,
+            &base,
+            &mut corrupt,
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
+    let refusal = source.load_native(chunk).unwrap_err().to_string();
+    let counts = store.record_counts().unwrap();
+
+    // Recovery must make the chunk resident to replay the record and cannot, so it
+    // stops with the chunk's load error instead of dropping the record: the world never
+    // opens, no checkpoint runs, and the store and the WAL stay as they were.
+    for _ in 0..2 {
+        let Err(error) = recover_dimension_state(&config, Dimension::Overworld) else {
+            panic!("recovery opened a world whose WAL writes into an unloadable chunk");
+        };
+        assert!(error.to_string().contains(&refusal), "{error}");
+        assert_eq!(read_manifest(&config).unwrap().tick, committed);
+        assert_eq!(store.record_counts().unwrap(), counts);
+    }
+    assert_eq!(
+        wal(),
+        (Some(Some(bytes.clone())), true),
+        "the WAL still carries the campfire record and the scheduled tick"
+    );
+
+    // The stored chunk is valid again: the replay installs the record and a
+    // checkpoint stores the campfire's item.
+    let mut repaired = valid;
+    store
+        .apply_offline_snapshot(
+            source.dimension,
+            &base,
+            &mut repaired,
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
+    let mut world = World::open(config.clone());
+    assert!(world.state.world.load_error(chunk).is_none());
+    assert_eq!(
+        world
+            .state
+            .world
+            .chunk(chunk)
+            .expect("repaired chunk resident")
+            .block_entities
+            .get(&at),
+        Some(&bytes),
+        "the replay installed the campfire record"
+    );
+    world.tick(|_| {});
+    world.tick(|_| {});
+    world.checkpoint();
+    let stored = source.load_native(chunk).unwrap().unwrap();
+    let Tag::Compound(fields) =
+        mc_nbt::read_network(&mut stored.block_entities[&at].as_slice()).unwrap()
+    else {
+        panic!("campfire record is a compound");
+    };
+    let Some(Tag::List(items)) = mc_data::item_nbt::field(&fields, "Items") else {
+        panic!("campfire Items");
+    };
+    let [Tag::Compound(item)] = &items.elements[..] else {
+        panic!("one campfire item");
+    };
+    assert_eq!(
+        mc_data::item_nbt::stack_from_fields(&registry.items, item)
+            .unwrap()
+            .unwrap(),
+        beef,
+        "the campfire's beef reached the store"
+    );
+}

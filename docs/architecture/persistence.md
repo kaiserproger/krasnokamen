@@ -66,6 +66,50 @@ without a checkpoint or marker fails closed. Required checkpoint player records
 must decode and match their keys; offline player custody is retained rather than
 silently discarded.
 
+## Quarantined chunks
+
+A chunk whose stored record cannot be loaded (decode error, invalid block
+entity record, or an undecodable runtime record found by a block-entity owner)
+is quarantined: it is never loaded, never generated over and never rewritten,
+so its stored record stays byte-identical.
+
+A quarantined chunk that holds no unsaved state (refused when it was loaded,
+never edited) does not block checkpointing: every other chunk checkpoints
+normally and each checkpoint logs one error naming every quarantined chunk
+with its dimension, coordinates, reason and counts. The chunk-local
+projection of changed scheduled block and fluid ticks of such a chunk cannot be
+written and is skipped (`scheduled projections skipped` in the log). The queues
+themselves are not lost: the manifest carries the global scheduler images, and a
+restart restores the same ticks (test
+`scheduled_ticks_of_a_refused_chunk_survive_checkpoint_and_restart`). Debt and inhabited-time metadata of it are not written.
+
+A quarantined chunk that holds unsaved state declines the whole checkpoint
+instead, and the log error (`checkpoint declined`, repeated on every declined
+checkpoint so a stuck server is visible) names the chunk and its counts. The
+WAL is retained. Unsaved state means pending block writes, container records of
+the chunk held by the live owners, edited sections, and the container edit or
+removal mark (`block_entity_dirty`; a removed record leaves nothing but the
+mark). Refusal never clears these. Skipping such a chunk would commit the rest
+of the world (a player's inventory, a dropped item) without the chunk's edits,
+so an item taken from or dropped by a container of that chunk could exist twice
+after a restart; recovery ignores journal records at or before the checkpoint
+tick, so keeping the WAL behind a committed checkpoint would not help.
+A chunk refused at runtime while it holds containers therefore declines every
+checkpoint until the server restarts, even with no edits, because its live
+records count. After a restart it is refused at load, so it is skipped unless
+the retained WAL replays edits into it, and then the declines continue; the
+exception is a WAL block write or opaque block-entity record (campfire, hive,
+brushable block) into a chunk refused at load: recovery needs that chunk
+resident to replay it, so it stops with the chunk's load error and the world
+does not open, nothing is checkpointed, and the WAL keeps the write until the
+stored chunk is valid again (test
+`opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal`). Solaris
+has no command that repairs or removes a quarantined chunk: the operator's way
+out is an offline `restore` of the last backup (play since that backup is
+lost); the stored record stays byte-identical for inspection. Importing an
+Anvil chunk, and loading a native one, validates crafter, shelf, shulker box
+and conduit records by the block that owns them, never by the record's own id.
+
 ## Backup and restore
 
 Offline `backup` and `restore` require a stopped, exclusively leased world;

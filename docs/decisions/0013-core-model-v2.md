@@ -71,7 +71,15 @@ unflushed tail consistently. Some non-player motion is checkpoint-only.
 Checkpoints require durable WAL coverage before the atomic database commit;
 only a committed checkpoint permits pruning. Corrupt, incomplete, inconsistent
 or unsupported required state refuses startup, rather than silently losing
-custody. The complete framing, first-start, lease and backup contract is in
+custody, except a quarantined chunk (never loaded or rewritten, stored record
+byte-identical): one without unsaved state is skipped and the other chunks keep
+checkpointing (only its chunk-local scheduled-tick projection is skipped and
+counted; the manifest scheduler images keep the queues), one with unsaved
+state (block writes, container records and removal marks) declines the
+checkpoint (WAL retained), because committing the rest of the world without
+those edits could duplicate custody. Each checkpoint logs the quarantined chunks with their counts. The
+complete framing, first-start,
+lease and backup contract is in
 [persistence](../architecture/persistence.md).
 
 ## Plugin admission

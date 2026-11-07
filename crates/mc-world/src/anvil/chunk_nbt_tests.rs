@@ -2135,3 +2135,76 @@ fn authoritative_geometry_preserves_only_adjacent_light_only_sections() {
         ));
     }
 }
+
+#[test]
+fn block_entities_are_validated_by_their_block_not_by_the_record_id() {
+    fn block_report(id: u32, name: &str) -> mc_data::blocks::BlockReport {
+        mc_data::blocks::BlockReport {
+            id: Identifier::parse(name).unwrap(),
+            properties: std::collections::BTreeMap::new(),
+            states: vec![mc_data::blocks::BlockStateReport {
+                id,
+                default: true,
+                properties: std::collections::BTreeMap::new(),
+            }],
+        }
+    }
+    fn opaque(id: &str, pos: BlockPos) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        mc_nbt::write_network(
+            &mut bytes,
+            &Tag::Compound(vec![
+                ("id".into(), Tag::String(id.into())),
+                ("x".into(), Tag::Int(pos.x)),
+                ("y".into(), Tag::Int(pos.y)),
+                ("z".into(), Tag::Int(pos.z)),
+            ]),
+        )
+        .unwrap();
+        bytes
+    }
+
+    let blocks = [
+        "minecraft:crafter",
+        "minecraft:oak_shelf",
+        "minecraft:conduit",
+        "minecraft:red_shulker_box",
+        "minecraft:stone",
+    ];
+    let mut reports = vec![block_report(0, "minecraft:air")];
+    reports.extend(
+        blocks
+            .iter()
+            .enumerate()
+            .map(|(index, name)| block_report(index as u32 + 1, name)),
+    );
+    let registry = BlockRegistry::from_report(&reports).unwrap();
+    let items = ItemRegistry::from_report(&[]);
+    let biome = Identifier::parse("minecraft:plains").unwrap();
+    let decode = |block: usize, id: &str| {
+        let pos = BlockPos { x: 1, y: 64, z: 1 };
+        let mut chunk = Chunk::empty(ChunkPos { x: 0, z: 0 }, BlockStateId(0), biome.clone());
+        chunk
+            .set_block(1, 64, 1, BlockStateId(block as u32 + 1))
+            .unwrap();
+        chunk.block_entities.insert(pos, opaque(id, pos));
+        let root = chunk_to_nbt_with_items(&chunk, &registry, Some(&items)).unwrap();
+        chunk_from_nbt_with_items(
+            &root,
+            &registry,
+            Some(&items),
+            &ChestLootCatalog::new(),
+            crate::OVERWORLD_GEOMETRY,
+        )
+    };
+
+    for (index, name) in blocks.iter().enumerate().take(4) {
+        let error = decode(index, "minecraft:sign").unwrap_err().to_string();
+        assert!(
+            error.contains("does not belong to its block") && error.contains("minecraft:sign"),
+            "{name}: {error}"
+        );
+    }
+    // A block without a typed owner keeps accepting an opaque foreign record.
+    decode(4, "minecraft:sign").unwrap();
+}
