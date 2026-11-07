@@ -73,6 +73,12 @@ pub(crate) struct Open {
     targets: Vec<Target>,
 }
 
+impl Open {
+    pub(crate) fn snapshot(&self) -> (u8, &[ItemStack]) {
+        (self.window, &self.icons)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum View {
     Storage {

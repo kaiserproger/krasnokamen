@@ -92,6 +92,23 @@ class SceneShotTests(unittest.TestCase):
             self.assertIn(("minecraft_send_chat", {"message": "tp @s 1 2 3 90 0", "command": True}), probe.calls)
             self.assertIn(("minecraft_wait_ticks", {"ticks": 5}), probe.calls)
 
+    def test_entity_snapshot_requires_same_thread_game_time(self):
+        class Probe:
+            def __init__(self, game_time):
+                self.game_time = game_time
+            def call(self, name, args):
+                assert name == "minecraft_list_entities"
+                return {"game_time": self.game_time, "entities": [{"x": 1}]}
+        step = {"timed_entities": {"name": "mob", "args": {"radius": 24}}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scene_shot.execute(Probe(100), root, [step])
+            receipt = json.loads((root / "mob.json").read_text())
+            self.assertEqual(receipt["game_time"], 100)
+            self.assertEqual(receipt["snapshot"]["entities"][0]["x"], 1)
+            with self.assertRaisesRegex(RuntimeError, "omitted same-thread game_time"):
+                scene_shot.execute(Probe(None), root, [step])
+
     def test_wait_terrain_fails_closed_on_stale_receipt_and_invalid_input(self):
         class Probe:
             report = {}

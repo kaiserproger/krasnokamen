@@ -127,6 +127,8 @@ pub struct Capabilities {
     pub resists_magic: bool,
     /// Acquires targets below local brightness eight; retaliation bypasses it.
     pub dark_aggro_only: bool,
+    /// Uses the zombie-family aggressive-arms metadata while chasing.
+    pub aggressive_arms: bool,
     /// One drowning damage per tick in water or rain (vanilla
     /// `isSensitiveToWater`).
     pub hurt_by_water: bool,
@@ -916,8 +918,8 @@ pub fn vanilla_blueprints(
         },
         MobParams {
             max_health: 20.0,
-            // Modest gameplay tuning from 4.3; this is not a vanilla parity claim.
-            speed: 3.8,
+            // Java 26.3 integrated-scene chase moved ~0.116 blocks per client game tick.
+            speed: 2.4,
             attack_damage: 3.0,
             pickup_delay: 0,
             breed_cooldown: 0,
@@ -1270,6 +1272,13 @@ const FALL_DAMAGE_IMMUNE: [&str; 18] = [
     "minecraft:breeze",
 ];
 
+const ZOMBIE_FAMILY: [&str; 4] = [
+    "minecraft:zombie",
+    "minecraft:husk",
+    "minecraft:drowned",
+    "minecraft:zombie_villager",
+];
+
 /// Vanilla capability data: the only place the shared-behaviour type lists
 /// live. The tick reads [`MobBlueprint::capabilities`] and params, never names.
 fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
@@ -1286,27 +1295,25 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
                 | "minecraft:phantom"
         ),
         dark_aggro_only: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
+        aggressive_arms: ZOMBIE_FAMILY.contains(&name),
         resists_magic: name == "minecraft:witch",
         hurt_by_water: name == "minecraft:enderman",
         fall_damage_immune: FALL_DAMAGE_IMMUNE.contains(&name),
         climbs_walls: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
-        inverted_healing: matches!(
-            name,
-            "minecraft:zombie"
-                | "minecraft:zombie_villager"
-                | "minecraft:husk"
-                | "minecraft:drowned"
-                | "minecraft:zombified_piglin"
-                | "minecraft:zoglin"
-                | "minecraft:skeleton"
-                | "minecraft:stray"
-                | "minecraft:bogged"
-                | "minecraft:wither_skeleton"
-                | "minecraft:wither"
-                | "minecraft:phantom"
-                | "minecraft:zombie_horse"
-                | "minecraft:skeleton_horse"
-        ),
+        inverted_healing: ZOMBIE_FAMILY.contains(&name)
+            || matches!(
+                name,
+                "minecraft:zombified_piglin"
+                    | "minecraft:zoglin"
+                    | "minecraft:skeleton"
+                    | "minecraft:stray"
+                    | "minecraft:bogged"
+                    | "minecraft:wither_skeleton"
+                    | "minecraft:wither"
+                    | "minecraft:phantom"
+                    | "minecraft:zombie_horse"
+                    | "minecraft:skeleton_horse"
+            ),
         aquatic: match name {
             "minecraft:cod"
             | "minecraft:salmon"

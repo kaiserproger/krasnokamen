@@ -33,22 +33,22 @@ class Pointer:
         if not self.display:
             raise RuntimeError("cannot open owned Xvfb display")
         self.window = owned["window_id"]
-        self.down = False
+        self.down: int | None = None
 
     def move(self, x: int, y: int) -> None:
         self.x.XWarpPointer(self.display, 0, self.window, 0, 0, 0, 0, x, y)
         self.x.XSync(self.display, 0)
 
-    def button(self, down: bool) -> None:
-        if not self.xt.XTestFakeButtonEvent(self.display, 1, int(down), 0):
+    def button(self, down: bool, button: int = 1) -> None:
+        if not self.xt.XTestFakeButtonEvent(self.display, button, int(down), 0):
             raise RuntimeError("owned Xvfb refused mouse button")
-        self.down = down
+        self.down = button if down else None
         self.x.XSync(self.display, 0)
 
     def close(self) -> None:
         try:
             if self.down:
-                self.button(False)
+                self.button(False, self.down)
         finally:
             self.x.XCloseDisplay(self.display)
 
@@ -120,6 +120,15 @@ def run(probe: ProbeSteps, artifact: Path, owned_window: dict[str, Any]) -> None
         pointer.button(False)
         moved = _echo(probe, "craft_drag_ordered_server_echo")
         after_release = native_client.capture(probe.client, artifact, "craft-drag-direct-release")
+        probe.check("initial_drag_keeps_server_cursor",
+                    moved["container"]["carried"].get("item_id") == "minecraft:oak_log"
+                    and moved["container"]["carried"].get("count") == 1
+                    and moved["container"]["carried"].get("origin") == "server_observed"
+                    and container_slot(moved, 1)["count"] == 0)
+        # A separate click places the carried stack, matching vanilla input.
+        pointer.button(True)
+        pointer.button(False)
+        moved = _echo(probe, "craft_place_ordered_server_echo")
         probe.check("craft_drag_slot_cursor_and_result_received",
                     container_slot(moved, 1).get("item_id") == "minecraft:oak_log"
                     and container_slot(moved, 1).get("count") == 1
@@ -146,6 +155,8 @@ def run(probe: ProbeSteps, artifact: Path, owned_window: dict[str, Any]) -> None
                              and s["container"]["carried"].get("count") == 1,
                              "negative_pickup_server_image")
         pointer.move(*center(carried, 0))
+        pointer.button(False)
+        pointer.button(True)
         pointer.button(False)
         refused = _echo(probe, "negative_output_click_ordered_server_echo")
         probe.check("output_reject_keeps_cursor", refused["container"]["carried"].get("item_id") == "minecraft:diamond"
