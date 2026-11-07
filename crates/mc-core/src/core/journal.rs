@@ -64,6 +64,28 @@ pub(super) fn start_checkpoint(
     start_checkpoint_with_reply(state, work_tx, done, tick, None)
 }
 
+/// The WAL can own only one inventory in an otherwise unloaded chunk. Hydrate
+/// its neighbours before freezing slots or projecting the opaque container owners.
+fn prepare_container_checkpoint(state: &mut TickState) -> bool {
+    if !state
+        .world
+        .materialize_container_chunks(state.block_entities.keys().copied())
+    {
+        return false;
+    }
+    // Vacant-only hydration preserves newer WAL slots, including empty images.
+    crate::tick::sync_chunk_block_entities(state);
+    state.block_entities.keys().all(|(x, _, z)| {
+        state
+            .world
+            .load_error(crate::boundary::ChunkPos {
+                x: x.div_euclid(16),
+                z: z.div_euclid(16),
+            })
+            .is_none()
+    })
+}
+
 pub(super) fn start_checkpoint_with_reply(
     state: &mut TickState,
     work_tx: &std::sync::mpsc::SyncSender<JournalWork>,
@@ -72,6 +94,17 @@ pub(super) fn start_checkpoint_with_reply(
     reply: Option<std::sync::mpsc::Sender<bool>>,
 ) -> bool {
     let capture_start = std::time::Instant::now();
+    if !prepare_container_checkpoint(state)
+        || !state
+            .other_dimensions
+            .values_mut()
+            .all(|world| prepare_container_checkpoint(world))
+    {
+        if let Some(reply) = reply {
+            let _ = reply.send(false);
+        }
+        return false;
+    }
     // Writes from here on stamp above `tick`, so whatever this capture misses
     // stays dirty after its acknowledgement (ADR 0020).
     state.entities.checkpoint_captured(tick);

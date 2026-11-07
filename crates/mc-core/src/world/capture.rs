@@ -4,6 +4,30 @@
 use super::*;
 
 impl ChunkWorld {
+    /// Load dirty container custody before the caller freezes its live slots.
+    /// Clean evicted chunks stay unloaded; refused owners hold the WAL fence.
+    pub(crate) fn materialize_container_chunks(
+        &mut self,
+        cells: impl Iterator<Item = (i32, i32, i32)>,
+    ) -> bool {
+        let mut complete = true;
+        for (x, _, z) in cells {
+            let pos = ChunkPos {
+                x: x.div_euclid(16),
+                z: z.div_euclid(16),
+            };
+            if self.chunks.contains_key(&pos) {
+                continue;
+            }
+            if self.failed.contains_key(&pos)
+                || (self.dirty_absent.contains(&pos) && !self.materialize(pos))
+            {
+                complete = false;
+            }
+        }
+        complete
+    }
+
     /// Inject checkpoint block-entity storage into a chunk's typed maps
     /// (cleared first for this chunk's columns so removals persist).
     pub(super) fn inject_block_entities(

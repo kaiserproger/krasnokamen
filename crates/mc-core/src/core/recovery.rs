@@ -278,6 +278,15 @@ pub(super) fn load_dimension_state(
                     }
                 }),
             });
+        // Replay may be the only live inventory in this chunk. Checkpoint
+        // preparation loads and hydrates its neighbours before freezing slots.
+        tick_state
+            .world
+            .mark_block_entity_dirty(crate::boundary::BlockPos {
+                x: pos.0,
+                y: pos.1,
+                z: pos.2,
+            });
     }
     let _ = max_wire_id;
     for (owner, (chunk, (_, radius))) in &replay.tickets {
