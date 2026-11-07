@@ -1,6 +1,7 @@
 """Physical creative-inventory echoes of a lossy decorated-pot projection."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,21 @@ REQUIRED_TOOLS = frozenset({
     "minecraft_wait_for_inventory",
 })
 POT = "minecraft:decorated_pot"
+
+
+def creative_packet_observer(report_path: Path, artifact: Path):
+    """Retain the real client's creative writes, without changing its stream."""
+    report = json.loads(report_path.read_text())
+    creative_id = report["play"]["serverbound"]["minecraft:set_creative_mode_slot"]["protocol_id"]
+    events: list[dict[str, Any]] = []
+
+    def observe(_wire, phase: str, packet_id: int, payload: bytes) -> None:
+        if phase == "play" and packet_id == creative_id:
+            events.append({"slot": int.from_bytes(payload[:2], "big", signed=True),
+                           "payload_hex": payload.hex()})
+            (artifact / "creative-wire.json").write_text(json.dumps(events, indent=2) + "\n")
+
+    return observe
 
 
 def run(client: Any, artifact: Path, timeout: float) -> dict[str, Any]:

@@ -326,7 +326,7 @@ fn translate_clientbound<'a>(
             ensure!((0..=1024).contains(&n), "container size");
             w.write_varint(n);
             if window == 0 {
-                session.inventory_polyfills.lock().clear();
+                session.inventory_polyfills.lock().clear_slots();
             }
             for slot in 0..n {
                 inventory_stack(
@@ -506,15 +506,18 @@ pub(super) fn serverbound_body<'a>(
         "set_creative_mode_slot" => {
             let slot = r.read_i16()?;
             let mut polyfills = session.inventory_polyfills.lock();
-            if polyfills
-                .get(&slot)
-                .is_some_and(|sent| sent.as_slice() == r)
-            {
-                return Ok(None);
+            match polyfills.update(t, slot, r)? {
+                items::creative::Update::Echo => return Ok(None),
+                items::creative::Update::Restore(canonical) => {
+                    w.write_i16(slot);
+                    w.extend_from_slice(canonical);
+                    return Ok(Some(Cow::Owned(w)));
+                }
+                items::creative::Update::Translate => {}
             }
-            polyfills.remove(&slot);
+            drop(polyfills);
             w.write_i16(slot);
-            items::stack(t, To::Canonical, &mut r, &mut w)?;
+            items::untrusted_stack(t, To::Canonical, &mut r, &mut w)?;
         }
         "container_click" => {
             w.write_varint(r.read_varint()?);
@@ -555,14 +558,19 @@ fn inventory_stack(
     w: &mut Vec<u8>,
 ) -> Result<()> {
     let start = w.len();
+    let canonical = *r;
     let lossy = items::stack_with_loss(&session.profile.tables, To::Legacy, r, w)?;
     if let Some(slot @ 5..=45) = slot {
-        let mut polyfills = session.inventory_polyfills.lock();
-        if lossy {
-            polyfills.insert(slot, w[start..].to_vec());
+        let image = if lossy {
+            Some(items::creative::Image::new(
+                &session.profile.tables,
+                &canonical[..canonical.len() - r.len()],
+                &w[start..],
+            )?)
         } else {
-            polyfills.remove(&slot);
-        }
+            None
+        };
+        session.inventory_polyfills.lock().observe(slot, image);
     }
     Ok(())
 }

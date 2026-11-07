@@ -261,6 +261,7 @@ fn creative_slot_echo_of_lossy_pot_components_keeps_authoritative_stack() {
                 |_| None,
             );
             tables.legacy_brick = 11;
+            tables.legacy_pot_item = Some(10);
             let components = [
                 "minecraft:pot_decorations".to_owned(),
                 "minecraft:custom_name".to_owned(),
@@ -305,10 +306,42 @@ fn creative_slot_echo_of_lossy_pot_components_keeps_authoritative_stack() {
             let (_, peer_image) = writer.clientbound(100, &body).unwrap().unwrap();
             let mut echo = Vec::new();
             echo.write_i16(36);
-            echo.extend_from_slice(&peer_image[1..]);
+            echo.extend_from_slice(
+                &items::creative::delimit(
+                    &writer.profile.tables,
+                    items::To::Canonical,
+                    &peer_image[1..],
+                )
+                .unwrap(),
+            );
             assert!(
                 reader.serverbound(frame(98, &echo)).unwrap().is_none(),
                 "{peer} {case}: a lossy component echo must not replace the authoritative pot"
+            );
+            // Vanilla elides the four-brick default when it reserializes its
+            // projected pot. This is still the same lossy server-owned stack.
+            let normalized = [0, 36, 1, 10, 0, 0];
+            assert!(
+                reader
+                    .serverbound(frame(98, &normalized))
+                    .unwrap()
+                    .is_none()
+            );
+            reader.serverbound(frame(98, &[0, 36, 0])).unwrap().unwrap();
+            writer.clientbound(100, &[0, 0]).unwrap().unwrap();
+            let restored = reader
+                .serverbound(frame(98, &[0, 37, 1, 10, 0, 0]))
+                .unwrap()
+                .unwrap();
+            let mut expected = vec![0, 37];
+            expected.extend_from_slice(
+                &items::creative::delimit(&writer.profile.tables, items::To::Legacy, &body[1..])
+                    .unwrap(),
+            );
+            assert_eq!(
+                restored.body.as_ref(),
+                expected,
+                "{peer} {case}: cursor return must restore every canonical component"
             );
         }
     }

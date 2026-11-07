@@ -409,6 +409,7 @@ pub struct Tables {
     pub legacy_block_bits: u8,
     pub blocks: IdMap,
     pub legacy_brick: i32,
+    pub legacy_pot_item: Option<i32>,
     pub items: IdMap,
     pub entities: IdMap,
     /// Canonical entity type -> metadata policy (absent = same layout).
@@ -546,6 +547,10 @@ impl Tables {
                 .get("minecraft:brick")
                 .context("legacy item registry has no brick")?
                 .protocol_id,
+            legacy_pot_item: legacy
+                .registry("minecraft:item")?
+                .get("minecraft:decorated_pot")
+                .map(|entry| entry.protocol_id),
             entities,
             entity_metadata,
             block_entities: registry("minecraft:block_entity_type", &none)?,

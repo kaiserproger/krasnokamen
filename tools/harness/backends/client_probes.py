@@ -309,6 +309,14 @@ seed = 81
 
                     evidence["window_focus"] = native_focus.acquire(display, client_process.pid, startup_timeout)
         else:
+            client_address = address
+            if protocol_pot:
+                report = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]).parent / "26.1.2/reports/packets.json"
+                wire_trace = light_wire.LightWireProxy(
+                    port, artifact, client_packet_observer=java_protocol_pot.creative_packet_observer(report, artifact),
+                    decode_light=False)
+                client_address = wire_trace.address
+                evidence["creative_wire_trace"] = str(artifact / "creative-wire.json")
             xvfb, display, display_log = runtime.start_xvfb(artifact)
             token, mcp_port = secrets.token_urlsafe(32), runtime.reserve_port()
             if p5_scenario or protocol_pot:
@@ -330,7 +338,7 @@ seed = 81
         if ctx.client == "java":
             require_tools(tools, {"minecraft_connect"}, kind)
             runtime.wait_client_ready_for_connect(mcp, startup_timeout)
-            mcp.call_tool("minecraft_connect", {"server_addr": address})
+            mcp.call_tool("minecraft_connect", {"server_addr": client_address})
         play = mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
         if not play.get("in_play"):
             raise RuntimeError(f"{kind} client did not enter Play: {play}")

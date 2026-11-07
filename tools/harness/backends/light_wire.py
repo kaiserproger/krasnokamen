@@ -211,11 +211,13 @@ class LightWireProxy:
 
     def __init__(self, server_port: int, artifact: Path,
                  packet_observer: Callable[[WireLight, str, int, bytes], None] | None = None,
-                 client_packet_observer: Callable[[WireLight, str, int, bytes], None] | None = None) -> None:
+                 client_packet_observer: Callable[[WireLight, str, int, bytes], None] | None = None,
+                 *, decode_light: bool = True) -> None:
         self.server_port = server_port
         self.path = artifact / "light-wire-trace.json"
         self.packet_observer = packet_observer
         self.client_packet_observer = client_packet_observer
+        self.decode_light = decode_light
         self.lock = threading.Lock()
         self.connections: list[WireLight] = []
         self.errors: list[str] = []
@@ -305,12 +307,13 @@ class LightWireProxy:
             with self.lock:
                 if self.packet_observer is not None:
                     self.packet_observer(wire, phase, packet_id, payload)
-                if phase == "play" and packet_id == LEVEL_CHUNK_WITH_LIGHT:
-                    wire.chunk_packet(payload)
-                elif phase == "play" and packet_id == LIGHT_UPDATE:
-                    wire.light_packet(payload)
-                elif phase == "play" and packet_id == FORGET_LEVEL_CHUNK:
-                    wire.forget_packet(payload)
+                if self.decode_light and phase == "play":
+                    if packet_id == LEVEL_CHUNK_WITH_LIGHT:
+                        wire.chunk_packet(payload)
+                    elif packet_id == LIGHT_UPDATE:
+                        wire.light_packet(payload)
+                    elif packet_id == FORGET_LEVEL_CHUNK:
+                        wire.forget_packet(payload)
             if phase == "login" and packet_id == 3:
                 compressed = True
             elif phase == "login" and packet_id == 2:

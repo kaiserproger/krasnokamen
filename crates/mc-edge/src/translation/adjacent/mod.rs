@@ -92,8 +92,8 @@ pub struct Session {
     profile: Arc<Profile>,
     phase: Phase,
     teleports: Arc<Mutex<Teleports>>,
-    /// Last lossy player-inventory images sent on the wire, keyed by menu slot.
-    inventory_polyfills: Arc<Mutex<HashMap<i16, Vec<u8>>>>,
+    /// Lossy inventory projections and the old client's creative cursor provenance.
+    inventory_polyfills: Arc<Mutex<items::creative::Images>>,
     /// Entities whose metadata layout differs (canonical type policy).
     entities: HashMap<i32, Metadata>,
 }

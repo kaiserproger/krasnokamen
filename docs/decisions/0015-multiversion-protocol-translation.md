@@ -203,10 +203,19 @@ from the source report is an error, distinct from a known state's documented
 nearest mapping. Dimension types, painting variants and display kinds are
 name-paired too; equal current ordinals do not authorize copying them.
 
-Creative inventory echoes compare against the exact saved peer image whenever
-**any recursive part** of a stack loses information: item/registry substitutions,
+Creative inventory echoes compare the saved peer projection whenever **any
+recursive part** of a stack loses information: item/registry substitutions,
 omitted components/removals/tooltips, or pot sides, nested counts and nested
 components. An unchanged outer item id does not make a stack lossless.
+All three releases' creative packets use the untrusted stack codec: each outer
+added component is byte-length-prefixed; nested templates are not. The old
+client also elides the decorated pot's default four-brick component when it
+reserializes a stack. Echo matching accounts for component order and that
+measured default, rather than comparing a trusted clientbound byte image.
+An empty creative write retains the old lossy image as client-cursor provenance;
+returning that unchanged projection restores the saved canonical stack, even
+after an authoritative empty-slot refresh. Actual changed projections are
+translated normally; arbitrary creative edits are not component-preservation proof.
 
 `mc-data::legacy_26_1_2` remains a durable-record migration owner, and
 `enchanting_26_1_2` remains protocol-neutral gameplay; neither is a session
