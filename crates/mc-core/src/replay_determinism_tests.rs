@@ -18,7 +18,9 @@ const TOTAL_TICKS: u64 = 350;
 const VARIANT_TICK: u64 = 50;
 
 fn fresh_state() -> TickState {
-    let registry = Arc::new(full_registry());
+    static REGISTRY: std::sync::LazyLock<Arc<crate::registry::CoreRegistry>> =
+        std::sync::LazyLock::new(|| Arc::new(full_registry()));
+    let registry = Arc::clone(&REGISTRY);
     let terrain = mc_worldgen::TerrainGenerator::new(42, Arc::clone(&registry.blocks));
     let spawn = terrain.locate_safe_spawn().expect("test terrain spawn");
     let world_spawn = [spawn.block_x, spawn.surface_y + 1, spawn.block_z];

@@ -15,7 +15,8 @@ from typing import Any
 from .. import compatibility, runtime
 from ..mcp import McpClient
 from ..profiles import ProfileContext, _server_binary
-from . import entities_probe, java_p5, light_wire, native_client, native_lifecycle, native_light, native_v2
+from . import (entities_probe, java_p5, light_wire, native_auth_budget, native_client, native_lifecycle,
+               native_light, native_v2)
 from .gameplay import cpu_usage, peak_rss_kib, plugin_directory, prepare_operator_fixture, require_tools
 from .probe_steps import ProbeSteps
 
@@ -42,14 +43,20 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     if kind not in {"inventory", "entities", "core-client", "native-lifecycle"}:
         raise ValueError(f"unknown shared client probe: {kind}")
     v2_scenario = ctx.scenario_id in native_v2.NATIVE_SCENARIO_IDS
+    auth_scenario = ctx.scenario_id == native_auth_budget.SCENARIO
     p5_scenario = ctx.scenario_id in java_p5.SCENARIO_IDS
+    from . import java_protocol_pot
+
+    protocol_pot = ctx.scenario_id == java_protocol_pot.SCENARIO
+    if protocol_pot and (ctx.client != "java" or kind != "inventory"):
+        raise ValueError("creative pot echo requires --client java and inventory")
     if p5_scenario:
         if ctx.client != "java" or kind != "entities":
             raise ValueError("java-v2-p5 scenarios require --client java and entities")
-    if v2_scenario:
+    if v2_scenario or auth_scenario:
         if ctx.client != "native" or kind != "entities":
             raise ValueError("native-v2 scenarios require --client native and entities")
-    if v2_scenario and native_v2.scenario_catalog.SCENARIOS[ctx.scenario_id].evidence == "graphical" and not ctx.windowed:
+    if (v2_scenario or auth_scenario) and native_v2.scenario_catalog.SCENARIOS[ctx.scenario_id].evidence == "graphical" and not ctx.windowed:
         raise ValueError(f"{ctx.scenario_id} requires --windowed")
     soak_seconds = 1800.0
     check = kind in {"inventory", "core-client"} and ctx.extra_args == ["--check"]
@@ -66,6 +73,10 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
                        else 600.0 if ctx.scenario_id in (native_light.SCENARIO_ID,
                                                         "native-v2-radius-full-view")
                        else 1200.0 if ctx.scenario_id == "native-v2-settlement-storage"
+                       else 900.0 if ctx.scenario_id in ("native-v2-destroyed-chest-race",
+                                                         "native-v2-corrupt-block-entities",
+                                                         "native-v2-corrupt-chunk-near-camera",
+                                                         "native-v2-duplicate-login")
                        else (180.0 if v2_scenario else 120.0))
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else default_timeout
     if not math.isfinite(timeout) or timeout <= 0:
@@ -77,6 +88,8 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
                 "native-lifecycle": native_lifecycle.REQUIRED_TOOLS}[kind]
     if v2_scenario:
         required = native_v2.REQUIRED_TOOLS
+    if auth_scenario:
+        required = native_auth_budget.REQUIRED_TOOLS
     promotion_maps = (ctx.scenario_id or "").startswith("native-v2-map-")
     promotion_actor = ctx.scenario_id in (
         "native-v2-map-inventory-player-markers", "native-v2-map-pumpkin-hiding")
@@ -84,16 +97,32 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         required = required | {"minecraft_open_inventory", "client_capture"}
     if ctx.scenario_id in ("native-v2-craft-drag", "native-v2-craft-drag-paced"):
         required = required | {"minecraft_open_inventory", "client_capture"}
+    if ctx.scenario_id == "native-v2-chest-drag-disconnect":
+        required = required | {"minecraft_connect", "minecraft_wait_for_no_visible_item", "client_capture"}
     if ctx.scenario_id == "native-v2-settlement-storage":
         required = required | {"client_capture"}
     if ctx.scenario_id == "native-v2-custody-mount-export":
         required = required | {"minecraft_approach_entity", "minecraft_interact_entity", "client_capture"}
+    if ctx.scenario_id == "native-v2-duplicate-login":
+        required = required | {"minecraft_connect"}
     if p5_scenario:
         required = java_p5.REQUIRED_TOOLS
+    if protocol_pot:
+        required = java_protocol_pot.REQUIRED_TOOLS
     if ctx.scenario_id in ("java-v2-p5-craft-drag", "java-v2-p5-craft-drag-paced"):
         required = required | {"minecraft_open_inventory"}
     artifact = ctx.artifact_dir
     plugin_dir = plugin_directory(ctx)
+    if auth_scenario:
+        # The shipping solaris-auth package behind the native login gate; the harness copies
+        # the sibling checkout's package into the private plugin directory.
+        root = Path(os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", runtime.REPO_ROOT.parent / "solaris-default-plugins"))
+        package = plugin_dir / "solaris-auth"
+        package.mkdir()
+        for name in ("plugin.toml", "plugin.wasm"):
+            (package / name).write_bytes((root / "solaris-auth" / name).read_bytes())
+        ctx.client_evidence["auth_package_sha256"] = hashlib.sha256(
+            (package / "plugin.wasm").read_bytes()).hexdigest()
     binary = _server_binary(ctx)
     port = runtime.reserve_port()
     address = f"127.0.0.1:{port}"
@@ -111,6 +140,7 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         view_distance, simulation_distance = 8, 4
     # The towns gate tests plugin protection with non-operators, not spawn protection.
     town_spawn_setting = "spawn_protection = 0\n" if ctx.scenario_id == "java-v2-p5-towns" else ""
+    auth_setting = "require_plugin_login = true\n" if auth_scenario else ""
     config.write_text(f'''[server]
 name = "shared-{kind}-probe"
 motd = "Shared Python MCP gameplay probe"
@@ -121,7 +151,7 @@ bind_address = "127.0.0.1"
 port = {port}
 [auth]
 online_mode = false
-[plugins]
+{auth_setting}[plugins]
 directory = {json.dumps(str(plugin_dir))}
 [data]
 world_dir = "{(artifact / "world").relative_to(runtime.REPO_ROOT).as_posix()}"
@@ -235,6 +265,33 @@ seed = 81
                 peer_mcp.request_timeout_seconds = 130.0
                 peer_mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
                 mcp.p5_armor_actor = peer_mcp
+            if ctx.scenario_id == "native-v2-destroyed-chest-race":
+                # Shared (multi-world) command execution only exists while another dimension
+                # is populated: a second, headless client waits in the Nether for the scenario.
+                peer_ctx = replace(ctx, artifact_dir=artifact / "nether-peer",
+                                   client_evidence=peer_evidence, windowed=False)
+                evidence["nether_peer_client"] = peer_evidence
+                peer_process, peer_log, peer_mcp = native_client.start(
+                    peer_ctx, native_client.resolve_binary(peer_ctx), address, "NetherPeer",
+                    startup_timeout)
+                peer_mcp.request_timeout_seconds = 130.0
+                peer_mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
+                mcp.nether_peer = peer_mcp
+            if ctx.scenario_id == "native-v2-duplicate-login":
+                def start_second_login() -> Any:
+                    # Same username, hence the same offline identity, on a second client.
+                    nonlocal peer_process, peer_log, peer_mcp
+                    peer_ctx = replace(ctx, artifact_dir=artifact / "second-login",
+                                       client_evidence=peer_evidence, windowed=False)
+                    evidence["second_login_client"] = peer_evidence
+                    peer_process, peer_log, peer_mcp = native_client.start(
+                        peer_ctx, native_client.resolve_binary(peer_ctx), client_address, username,
+                        startup_timeout)
+                    peer_mcp.request_timeout_seconds = 130.0
+                    return peer_mcp
+
+                mcp.start_second_login = start_second_login
+                mcp.server_address = client_address
             if ctx.scenario_id == "native-v2-settlement-storage":
                 # Deliberately not an operator: the settlement's view-only visitor. Server
                 # dialog buttons need presentation (minecraft_click_screen_button), so the
@@ -254,9 +311,17 @@ seed = 81
 
                     evidence["window_focus"] = native_focus.acquire(display, client_process.pid, startup_timeout)
         else:
+            client_address = address
+            if protocol_pot:
+                report = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]).parent / "26.1.2/reports/packets.json"
+                wire_trace = light_wire.LightWireProxy(
+                    port, artifact, client_packet_observer=java_protocol_pot.creative_packet_observer(report, artifact),
+                    decode_light=False)
+                client_address = wire_trace.address
+                evidence["creative_wire_trace"] = str(artifact / "creative-wire.json")
             xvfb, display, display_log = runtime.start_xvfb(artifact)
             token, mcp_port = secrets.token_urlsafe(32), runtime.reserve_port()
-            if p5_scenario:
+            if p5_scenario or protocol_pot:
                 game_dir = artifact / "game"
                 game_dir.mkdir(parents=True, exist_ok=True)
                 (game_dir / "options.txt").write_text(
@@ -275,7 +340,7 @@ seed = 81
         if ctx.client == "java":
             require_tools(tools, {"minecraft_connect"}, kind)
             runtime.wait_client_ready_for_connect(mcp, startup_timeout)
-            mcp.call_tool("minecraft_connect", {"server_addr": address})
+            mcp.call_tool("minecraft_connect", {"server_addr": client_address})
         play = mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
         if not play.get("in_play"):
             raise RuntimeError(f"{kind} client did not enter Play: {play}")
@@ -340,20 +405,30 @@ seed = 81
                 return mcp
 
             attach_p5_client()
-        if kind == "inventory":
+        if protocol_pot:
+            mcp.p4_window = java_p5.acquire_window(display, startup_timeout)
+            evidence["java_window"] = mcp.p4_window
+            result = java_protocol_pot.run(mcp, artifact, timeout)
+        elif kind == "inventory":
             with ProbeSteps(mcp, artifact / "inventory-fixture", startup_timeout, "inventory-operator-fixture") as setup:
                 setup.fixture("debug give minecraft:apple 2 1")
                 setup.call("minecraft_wait_for_inventory", {
                     "item_id": "minecraft:apple", "count": 2, "timeout_seconds": setup.remaining(),
                 })
             result = compatibility.run_inventory_probe(mcp, artifact, timeout)
+        elif auth_scenario:
+            result = native_auth_budget.run(mcp, artifact, timeout, address, server.pid)
         elif v2_scenario:
             from . import native_p4
             mcp.p4_window = evidence.get("window_focus")
+            mcp.server_address = client_address
 
+            mcp.server_log_path = server_log_path
             if (ctx.scenario_id in native_p4.RESTART_SCENARIOS
                     or ctx.scenario_id in (native_light.SCENARIO_ID, "native-v2-end-restart",
-                                           "native-v2-custody-mount-export")):
+                                           "native-v2-custody-mount-export",
+                                           "native-v2-corrupt-block-entities",
+                                           "native-v2-corrupt-chunk-near-camera")):
                 def restart_server(remaining: float) -> str:
                     nonlocal server, server_log
                     old_pid = server.pid
@@ -361,10 +436,14 @@ seed = 81
                     if server.returncode != 0:
                         raise RuntimeError(f"P4 server did not stop cleanly: {server.returncode}")
                     server_log.close()
-                    if ctx.scenario_id == "native-v2-custody-mount-export":
-                        from .native_promotion_custody import convert_mount_world
+                    if (ctx.scenario_id == "native-v2-custody-mount-export"
+                            or (ctx.scenario_id in ("native-v2-corrupt-block-entities",
+                                                    "native-v2-corrupt-chunk-near-camera")
+                                and getattr(mcp, "corrupt_fixture", None))):
+                        from .native_promotion_custody import convert_world
 
-                        convert_mount_world(ctx, binary, config, evidence)
+                        convert_world(ctx, binary, config, evidence,
+                                      corrupt=getattr(mcp, "corrupt_fixture", None))
                     server_log = server_log_path.open("ab")
                     server = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],
                                               cwd=runtime.REPO_ROOT, stdout=server_log,
@@ -380,7 +459,7 @@ seed = 81
                 if ctx.scenario_id == "native-v2-custody-mount-export":
                     def export_reimport(remaining: float) -> dict[str, str]:
                         address = restart_server(remaining)
-                        return {"address": address, **evidence["mount_conversions"][-1]}
+                        return {"address": address, **evidence["world_conversions"][-1]}
 
                     mcp.promotion_mount_export_reimport = export_reimport
             result = native_v2.run(mcp, artifact, timeout, ctx.scenario_id)

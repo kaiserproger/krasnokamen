@@ -128,7 +128,7 @@ pub(crate) fn execute(
             ),
             Vec::new(),
         );
-        feedback(
+        crate::command_execution::success_feedback(
             state,
             connection,
             if successful.len() == 1 {

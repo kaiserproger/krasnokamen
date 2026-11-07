@@ -188,7 +188,7 @@ fn custom_name_literal_component_is_applied() {
     }
 }
 
-fn rejected_tag_reaches_sender(kind: &str, key: &str, value: &str) {
+fn rejected_tag_fixture() -> TickState {
     let (mut state, _, _) = crate::hostile_tests::setup(8.0);
     state.gamerules.insert("spawn_mobs".into(), "false".into());
     crate::tick::run_tick(
@@ -200,10 +200,18 @@ fn rejected_tag_reaches_sender(kind: &str, key: &str, value: &str) {
             permission_level: 0,
         }],
     );
+    state
+}
+
+fn rejected_tag_reaches_sender(kind: &str, key: &str, value: &str) {
+    rejected_tag_in_state(&mut rejected_tag_fixture(), kind, key, value);
+}
+
+fn rejected_tag_in_state(state: &mut TickState, kind: &str, key: &str, value: &str) {
     state.outbox.clear();
     let before = state.entities.len();
     let (_, drains, _) = crate::tick::run_tick(
-        &mut state,
+        state,
         &[PlayerInput::Command {
             connection: ConnectionId(1),
             command: format!("summon {kind} ~ ~ ~ {{{key}:{value}}}"),
@@ -636,6 +644,7 @@ fn summon_preserves_spawn_defaults_unless_equipment_is_authored() {
 
 #[test]
 fn summon_equipment_rejects_invalid_stacks_components_and_chances_before_allocation() {
+    let mut state = rejected_tag_fixture();
     for value in [
         "1b",
         "{unknown:{}}",
@@ -652,14 +661,14 @@ fn summon_equipment_rejects_invalid_stacks_components_and_chances_before_allocat
         "{mainhand:{id:'minecraft:stick',components:{'minecraft:not_a_component':1}}}",
         "{saddle:{id:'minecraft:saddle'}}",
     ] {
-        rejected_tag_reaches_sender("cow", "equipment", value);
+        rejected_tag_in_state(&mut state, "cow", "equipment", value);
     }
     for value in ["1b", "{unknown:1f}", "{head:-1f}", "{head:'bad'}"] {
-        rejected_tag_reaches_sender("cow", "drop_chances", value);
+        rejected_tag_in_state(&mut state, "cow", "drop_chances", value);
     }
-    rejected_tag_reaches_sender("cow", "CanPickUpLoot", "'bad'");
+    rejected_tag_in_state(&mut state, "cow", "CanPickUpLoot", "'bad'");
     for key in ["equipment", "drop_chances", "CanPickUpLoot"] {
-        rejected_tag_reaches_sender("oak_boat", key, "{}");
+        rejected_tag_in_state(&mut state, "oak_boat", key, "{}");
     }
 }
 

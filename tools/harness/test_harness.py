@@ -448,6 +448,54 @@ class SharedClientProbeTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "minecraft_attack_entity_once"):
                 entities_probe.run(MissingAttack(), Path(tmp), 1.0)
 
+    def test_entities_fixture_ignores_existing_pigs_and_waits_for_authored_uuid(self) -> None:
+        from .backends import entities_probe
+
+        fixture_uuid = "11111111-2222-4333-8444-555555555555"
+        natural = {"entity_id": 1, "entity_uuid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                   "entity_type": "minecraft:pig"}
+        fixture = {"entity_id": 2, "entity_uuid": fixture_uuid, "entity_type": "minecraft:pig"}
+        steps = mock.Mock()
+        steps.observe.side_effect = [{"state_version": 10}, {"state_version": 11}]
+        steps.remaining.return_value = 9
+        steps.call.side_effect = [{"entities": [natural]}, {}, {"entities": [natural, fixture]}]
+        steps.check.side_effect = lambda label, condition: self.assertTrue(condition, label)
+        with mock.patch.object(entities_probe.uuid, "uuid4", return_value=fixture_uuid):
+            result = entities_probe._summon_fixture_pig(steps, {"x": 0, "y": 64, "z": 0})
+        self.assertEqual(result, fixture)
+        self.assertIn(fixture_uuid, steps.fixture.call_args.args[0])
+        self.assertEqual(steps.call.call_args_list[1], mock.call(
+            "minecraft_wait_for_state_change", {"observed_version": 10, "timeout_seconds": 9}))
+
+    def test_entities_probe_can_start_when_natural_pigs_are_present(self) -> None:
+        from .backends import entities_probe
+
+        natural = {"entity_id": 1, "entity_uuid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                   "entity_type": "minecraft:pig"}
+        visible = [natural]
+        steps = mock.MagicMock()
+        steps.__enter__.return_value = steps
+        steps.__exit__.return_value = False
+        steps.wait.return_value = {"player": {"x": 0, "y": 64, "z": 0}, "inventory": []}
+        steps.observe.return_value = {"state_version": 10}
+        steps.check.side_effect = lambda label, condition: self.assertTrue(condition, label)
+        steps.call.side_effect = lambda name, args=None: {"entities": list(visible)}
+
+        def fixture(command):
+            if command.startswith("summon "):
+                authored_uuid = command.split("UUID:'", 1)[1].split("'", 1)[0]
+                visible.append({"entity_id": 2, "entity_uuid": authored_uuid,
+                                "entity_type": "minecraft:pig"})
+            else:
+                raise RuntimeError("reached combat setup")
+
+        steps.fixture.side_effect = fixture
+        client = mock.Mock()
+        client.list_tools.return_value = [{"name": name} for name in entities_probe.REQUIRED_TOOLS]
+        with mock.patch.object(entities_probe, "ProbeSteps", return_value=steps):
+            with self.assertRaisesRegex(RuntimeError, "reached combat setup"):
+                entities_probe.run(client, Path("/unused"), 10)
+
     def test_unknown_container_slot_is_not_treated_as_empty(self) -> None:
         from .backends.probe_steps import container_slot
 

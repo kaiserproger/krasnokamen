@@ -56,17 +56,20 @@ solaris-v2 content import --from /path/to/26.3/server.jar \
 solaris-v2 content verify --cache /path/to/cache
 ```
 
-`--version` accepts only `26.3`. A bundle you do not supply is downloaded
-(verifying size and SHA-1); `--download` cannot be combined with `--from` or
-`--gameplay-from`. Registry capture launches a disposable vanilla debug world
-solely for the configuration handshake; it never touches your gameplay world.
+`--version` selects canonical `26.3`; the command also installs 26.1.2 and
+26.2 endpoint caches and both adjacent mapping snapshots. A bundle you do not
+supply is downloaded (verifying size and SHA-1); `--download` cannot be combined
+with `--from` or `--gameplay-from`. Registry capture launches disposable vanilla
+worlds solely for Configuration; it never touches your gameplay world.
 The cache also holds 26.3 English language data for console and RCON feedback;
 reimport a cache that lacks `assets/minecraft/lang/en_us.json`.
 
-Import stages, validates and publishes the cache; a failed import keeps the
-previous cache. `verify` is offline and checks the same content startup uses,
-not the whole server/plugin deployment. Serving never downloads implicitly;
-missing or incomplete content fails before the world or listener start.
+Each cache and step snapshot is staged, validated and published atomically;
+failure preserves that artifact's previous copy. Import fails if any required
+version cannot be installed. `verify` is offline and checks canonical gameplay
+content, not the whole deployment. First start with no cache runs this same
+window-wide importer before opening a world or listener. Existing caches are
+reused offline; a broken existing canonical cache fails with an import instruction.
 
 Selection order: `[data].vanilla_data_dir`, `SOLARIS_CONTENT_CACHE`,
 `$XDG_DATA_HOME/solaris/content/26.3` (otherwise
@@ -76,42 +79,41 @@ silently choosing another source. `--cache` affects only that offline command.
 
 ### Client protocol compatibility
 
-Solaris serves Minecraft Java **26.3, protocol 777**. A Status ping from any
-client advertises the supported release, so an unsupported client's server list
-shows the entry as incompatible; a Login on an unsupported protocol gets
-vanilla's `multiplayer.disconnect.incompatible` disconnect. Sessions of the
-previous release (**26.1.2, protocol 775**) are translated at the edge when a
-26.1.2 content cache is available ([ADR 0015](decisions/0015-multiversion-protocol-translation.md)).
+Solaris serves **every Minecraft Java release from 26.1.2 through 26.3**:
 
-#### Retaining 26.1.2 clients after upgrading to 26.3
+| Client release | Protocol |
+|---|---|
+| 26.1.2 | 775 |
+| 26.2 | 776 |
+| 26.3 (canonical) | 777 |
 
-Protocol 775 clients need a **separate, intact 26.1.2 content cache**. Keep the
-deployment's existing cache before importing 26.3 and do not overwrite it. It
-must include the datapack, `reports/packets.json`, `reports/registries.json`,
-`reports/blocks.json` and the captured `reports/registry_network_nbt`, not just
-a version file or jar. The edge finds it in this order:
+`content import --download` and a fresh first start install the entire window;
+no cache from an earlier installation is needed. With a canonical cache at
+`.../content/26.3`, endpoint caches live at `.../content/26.1.2` and
+`.../content/26.2`; independent mapping snapshots live at
+`.../content/steps/776-775` and `.../content/steps/777-776`. For an arbitrary
+explicit canonical path `/path/cache`, companions are `/path/cache-26.1.2`,
+`/path/cache-26.2`, and `/path/cache-steps/<pair>`.
 
-1. `SOLARIS_LEGACY_CONTENT_CACHE` (an explicit path; set it in the server's
-   launch environment or service unit for a custom layout).
-2. A sibling release directory: canonical `.../content/26.3` uses
-   `.../content/26.1.2`.
-3. The canonical path with `-26.1.2` appended: `data/vanilla` uses
-   `data/vanilla-26.1.2`.
+Startup loads every available profile and logs its release/protocol. A missing
+or unusable **endpoint** cache disables only that client version. A missing
+**step** snapshot disables all client routes crossing it, naming that pair in
+the log; there is no direct nonadjacent bypass. Canonical clients are unaffected.
+Rerun `content import --download` with the same canonical `--cache` to repair
+missing artifacts. Valid older steps are retained across a re-import or bump.
 
-The server logs `26.1.2 (protocol 775) clients enabled` when loading succeeds.
-A missing or unusable legacy cache logs the reason and disables 775 logins
-(they receive the incompatible-version disconnect); canonical 777 clients are
-unaffected. `content import` builds the 26.3 cache only, so retain the old
-deployment cache rather than recreating it. A fresh 26.3-only installation,
-including native-client singleplayer, needs no legacy cache unless it will
-admit 775 clients.
+Status advertises each available client's own release/protocol. Unsupported or
+disabled Login versions receive vanilla's `multiplayer.disconnect.incompatible`;
+unsupported Status requests advertise canonical so the list marks them incompatible.
+A bump adds a step and retains every older release
+([ADR 0015](decisions/0015-multiversion-protocol-translation.md)).
 
-Legacy clients receive their own registry/tag snapshot. New 26.3 block states,
-items and entity types appear as named 26.1.2 substitutes (cinnabar as granite,
-a sulfur cube as a slime), not shifted numeric ids; the 14 new 26.3 item
-components are consumed and omitted for legacy viewers while native inventory
-custody is unchanged. Unknown or malformed payloads fail closed. This is
-protocol compatibility, not identical rendering or mechanics for new content.
+Each profile sends its own registries, tags and known pack. Missing features
+use the nearest representation: for example, cinnabar is granite for 26.1.2
+but remains cinnabar for 26.2. Dynamic registries and `item_model` with a
+server resource pack may provide client-accepted data; blocks, entities and
+mechanics cannot be added by datapacks. Unknown/malformed payloads fail closed.
+This is protocol compatibility, not identical rendering or mechanics.
 
 ## Configuration, network and security
 
@@ -362,7 +364,7 @@ not a proof of rendered assets, and is independent of Loader bundle negotiation.
   until the plugin unlocks that exact session. Pending sessions cannot trigger
   pressure plates, travel dimensions or ask for LOD terrain, and are excluded
   from persistence and the authenticated roster. Deployment details are in
-  [PLUGINS.md](PLUGINS.md#operator-deployment).
+  [plugin operations](plugins/OPERATIONS.md#operator-deployment).
 - Chat and native communication commands share a per-sender spam counter: 20
   points per input, one removed per tick, disconnect at 200 (vanilla's
   threshold). Operators share it; console commands are not charged.
@@ -526,6 +528,10 @@ that check. Relative coordinates resolve at the command block. The client editor
 packets, comparator result output and command minecarts are not implemented.
 
 Map-making command surface (full status in [COMPATIBILITY.md](COMPATIBILITY.md)):
+
+- `send_command_feedback false` suppresses player-source success replies for
+  the native command paths that honor it; failures remain visible and console
+  success remains enabled. Command execution and ordinary chat are unchanged.
 
 - `/data get entity|block` (level 2) reads native owners, including live
   inventory and timers, without editing state; paths accept dotted keys, indices

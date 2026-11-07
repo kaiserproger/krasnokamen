@@ -1,0 +1,606 @@
+verdict: blocked
+phase1:
+  specified_subjects:
+    mobs: 91
+    spawning: 19
+    villagers: 33
+    settlements: 38
+  total: 181
+  matrix_subject_closure: exact; refrozen1370 rows
+phase2:
+  registered_adapters:
+    mobs: 91
+    spawning: 4
+    villagers: 18
+    settlements: 11
+  total: 124
+  not_claimed: 'No all-matrix coverage: 57 spec-only subjects, 4 registered blocked family stubs, 106 real-but-partial
+    subjects, 14 complete base-subject oracles. Supplemental partial probes are never matrix passes.'
+  classification_before:
+    mobs:
+      spec_only: 0
+      registered_stub: 0
+      complete_subject_oracle: 0
+      real_but_partial: 91
+      executed_subjects: 0
+    spawning:
+      spec_only: 15
+      registered_stub: 0
+      complete_subject_oracle: 3
+      real_but_partial: 1
+      executed_subjects: 1
+    villagers:
+      spec_only: 15
+      registered_stub: 0
+      complete_subject_oracle: 3
+      real_but_partial: 15
+      executed_subjects: 0
+    settlements:
+      spec_only: 27
+      registered_stub: 0
+      complete_subject_oracle: 0
+      real_but_partial: 11
+      executed_subjects: 1
+  classification_after:
+    mobs:
+      spec_only: 0
+      registered_stub: 0
+      complete_subject_oracle: 0
+      real_but_partial: 91
+      executed_subjects: 0
+      passed_subjects: 0
+    spawning:
+      spec_only: 15
+      registered_stub: 0
+      complete_subject_oracle: 4
+      real_but_partial: 0
+      executed_subjects: 1
+      passed_subjects: 0
+    villagers:
+      spec_only: 15
+      registered_stub: 0
+      complete_subject_oracle: 3
+      real_but_partial: 15
+      executed_subjects: 1
+      passed_subjects: 1
+    settlements:
+      spec_only: 27
+      registered_stub: 4
+      complete_subject_oracle: 7
+      real_but_partial: 0
+      executed_subjects: 2
+      passed_subjects: 2
+  classification_scope: complete_subject_oracle means implemented base subject clauses, not all context-factor combinations;
+    executed_subjects is an orthogonal count of unique subjects with actual nonblocked matrix receipts, not a fifth
+    disjoint registration class.
+  subject_requirements:
+    mobs: []
+    spawning:
+    - subject: spawning.mob_cap
+      needed:
+      - eligible_spawn_chunks
+      - entity_count
+      - spawn_reason
+    - subject: spawning.light_rules
+      needed:
+      - light_query
+      - spawn_event_position_light
+    - subject: spawning.patrols
+      needed:
+      - seeded_spawn_attempt_fixture
+      - spawn_reason
+      - world_day_counter
+    - subject: spawning.wandering_trader_spawn
+      needed:
+      - entity_leash_query
+      - seeded_spawn_attempt_fixture
+      - spawn_reason
+    - subject: spawning.phantoms_insomnia
+      needed:
+      - player_time_since_rest
+      - seeded_spawn_attempt_fixture
+      - spawn_reason
+    - subject: spawning.slime_chunks_swamp
+      needed:
+      - biome_query
+      - seeded_spawn_attempt_fixture
+      - spawn_event_position_light
+      - world_seed
+    - subject: spawning.spawnRadius_world_spawn
+      needed:
+      - fresh_account
+      - received_player_position
+    - subject: spawning.natural_Monster
+      needed:
+      - biome_query
+      - eligible_spawn_chunks
+      - seeded_spawn_attempt_fixture
+      - spawn_reason
+    - subject: spawning.natural_Creature
+      needed:
+      - biome_query
+      - eligible_spawn_chunks
+      - seeded_spawn_attempt_fixture
+      - spawn_reason
+    - subject: spawning.natural_Ambient
+      needed:
+      - biome_query
+      - eligible_spawn_chunks
+      - seeded_spawn_attempt_fixture
+      - spawn_reason
+    - subject: spawning.natural_Axolotls
+      needed:
+      - biome_query
+      - eligible_spawn_chunks
+      - seeded_spawn_attempt_fixture
+      - spawn_reason
+    - subject: spawning.natural_UndergroundWaterCreature
+      needed:
+      - biome_query
+      - eligible_spawn_chunks
+      - seeded_spawn_attempt_fixture
+      - spawn_reason
+    - subject: spawning.natural_WaterCreature
+      needed:
+      - biome_query
+      - eligible_spawn_chunks
+      - seeded_spawn_attempt_fixture
+      - spawn_reason
+    - subject: spawning.natural_WaterAmbient
+      needed:
+      - biome_query
+      - eligible_spawn_chunks
+      - seeded_spawn_attempt_fixture
+      - spawn_reason
+    - subject: spawning.natural_Misc
+      needed:
+      - biome_query
+      - eligible_spawn_chunks
+      - seeded_spawn_attempt_fixture
+      - spawn_reason
+    villagers:
+    - subject: villagers.profession_Miner
+      needed:
+      - clean_restart
+      - resident_equipment_fixture
+      - resident_job_query
+      - settlement_building_fixture
+    - subject: villagers.profession_Lumberjack
+      needed:
+      - clean_restart
+      - resident_equipment_fixture
+      - resident_job_query
+      - settlement_building_fixture
+    - subject: villagers.profession_Builder
+      needed:
+      - clean_restart
+      - resident_equipment_fixture
+      - resident_job_query
+      - settlement_building_fixture
+    - subject: villagers.profession_Soldier
+      needed:
+      - clean_restart
+      - resident_equipment_fixture
+      - resident_job_query
+      - settlement_building_fixture
+    - subject: villagers.farmer_harvest
+      needed:
+      - data_get_entity
+      - item_entity_stacks
+    - subject: villagers.schedule_sleep_work
+      needed:
+      - entity_pose
+      - entity_trajectory
+    - subject: villagers.zombie_conversion_cure
+      needed:
+      - data_get_entity
+      - interact_entity
+      - merchant_offers
+    - subject: villagers.iron_golem_spawn_defend
+      needed:
+      - data_get_entity
+      - entity_health
+      - reputation_fixture
+    - subject: villagers.snow_golem
+      needed:
+      - biome_fixture
+      - data_get_entity
+      - entity_combat_events
+    - subject: villagers.copper_golem
+      needed:
+      - data_get_block
+      - golem_inventory_query
+      - seeded_oxidation_fixture
+    - subject: villagers.raid_start
+      needed:
+      - bossbars
+      - effects_snapshot
+      - raid_members
+    - subject: villagers.raid_waves_victory
+      needed:
+      - effects_snapshot
+      - merchant_offers
+      - raid_members
+    - subject: villagers.raid_loss
+      needed:
+      - bossbars
+      - effects_snapshot
+      - raid_members
+      - raid_status
+    - subject: villagers.solaris_professions
+      needed:
+      - resident_job_query
+    - subject: villagers.trade_level_restock
+      needed:
+      - data_get_entity
+      - interact_entity
+      - inventory_snapshot
+      - merchant_offers
+      - select_trade
+    settlements:
+    - subject: settlements.production_start
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.production_pause
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.production_resume
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.production_cancel
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.commerce_quote
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.commerce_accept
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.commerce_cancel
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.commerce_reserve
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.commerce_payout
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.payroll_employ
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.payroll_stop
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.payroll_dismiss
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.payroll_pay
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.caravan_open
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.caravan_pickup
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.caravan_unload
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.caravan_cancel
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.caravan_block
+      needed:
+      - building_certificate_fixture
+      - data_get_block
+      - data_get_entity
+      - multi_client_2
+      - settlement_economy_snapshot
+    - subject: settlements.army
+      needed:
+      - resident_job_query
+    - subject: settlements.autonomy_growth
+      needed:
+      - autonomous_village_fixture
+      - settlement_building_query
+    - subject: settlements.claim
+      needed:
+      - autonomous_village_fixture
+      - multi_client_2
+    - subject: settlements.building
+      needed:
+      - building_certificate_query
+    - subject: settlements.build
+      needed:
+      - construction_project_query
+      - data_get_block
+    - subject: settlements.relocate
+      needed:
+      - household_bed_query
+      - household_identity_query
+    - subject: settlements.guide
+      needed:
+      - dialog_observation
+    - subject: settlements.menu
+      needed:
+      - dialog_observation
+    - subject: settlements.persistence_restart
+      needed:
+      - clean_restart
+      - settlement_snapshot
+server_gap:
+- SPAWN-SPAWNER-EGG
+- SPAWN-SPAWNER-CATEGORIES
+- SPAWN-PEACEFUL-REMOVAL
+- QUERY-ENTITY-DATA
+- QUERY-BLOCK-DATA
+missing_capabilities:
+- autonomous_village_fixture
+- biome_fixture
+- biome_query
+- bossbars
+- building_certificate_fixture
+- building_certificate_query
+- client:slow_reader_boundary
+- construction_project_query
+- data_get_block
+- data_get_entity
+- dialog_observation
+- eligible_spawn_chunks
+- entity_combat_events
+- entity_leash_query
+- entity_pose
+- entity_trajectory
+- fresh_account
+- golem_inventory_query
+- household_bed_query
+- household_identity_query
+- light_query
+- player_time_since_rest
+- raid_members
+- raid_status
+- reputation_fixture
+- resident_equipment_fixture
+- resident_job_query
+- seeded_oxidation_fixture
+- seeded_spawn_attempt_fixture
+- settlement_building_fixture
+- settlement_building_query
+- settlement_economy_snapshot
+- settlement_snapshot
+- spawn_event_position_light
+- spawn_reason
+- world_day_counter
+- world_seed
+- snapshot:entities.villager_data
+- snapshot:entities.velocity
+- snapshot:entities.pose
+- concurrent_actor_dispatch_for_N8
+integration:
+  worktree: /run/media/kaiserroman/games/solaris-work/wt/dom-mobs
+  base_tree: 24fcc5c1cf012bb87a9af77396382b9466f5c871
+  changed_files:
+  - tools/harness/matrix_domains/_mob_contracts.py
+  - tools/harness/matrix_domains/_mob_loot.py
+  - tools/harness/matrix_domains/_mob_support.py
+  - tools/harness/matrix_domains/mobs.py
+  - tools/harness/matrix_domains/settlements.py
+  - tools/harness/matrix_domains/spawning.py
+  - tools/harness/matrix_domains/test_mobs.py
+  - tools/harness/matrix_domains/villagers.py
+  no_product_changes: true
+  branch: dom-mobs
+  commit: 771d8132
+  initial_adapter_commit: 810bbce2
+  shared_driver_integrated: 1e20dd5f
+  hook_disclosure: Initial 810bbce2 used transient hooksPath=/dev/null, disclosed to Main and both driver owners;
+    843be29f used normal hooks. No persistent Git configuration changed.
+validation:
+  focused_python_tests:
+    command: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.harness.matrix_domains.test_mobs -v
+    result: 19 tests passed on 771d8132; no Rust changes
+  strict_clippy: 'not applicable: no Rust crate touched'
+  live_ledger:
+  - id: pw:villagers.lightning_to_witch/protocol_bot/survival/the_nether/normal/2/slow_reader_backpressure/clean_restart_mid_action/op_4
+    status: blocked
+    driver: protocol_bot
+    server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+    run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T034131-protocol-matrix-uojqrs8v
+    ts: '2026-10-24T03:42:16Z'
+    note: client:slow_reader_boundary; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+      excluded_plugins=
+  - id: F:mobs.cow/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
+    status: blocked
+    driver: protocol_bot
+    server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+    run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T034449-protocol-matrix-sdwz5jgp
+    ts: '2026-10-24T03:45:12Z'
+    note: snapshot:entities; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+      excluded_plugins=
+  - id: F:spawning.peaceful_removal/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
+    status: fail
+    driver: protocol_bot
+    server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+    run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T034449-protocol-matrix-nzqu1feg
+    ts: '2026-10-24T03:45:43Z'
+    note: 'peaceful removes existing hostile controls; frames={10: 3, 64: 2, 105: 1, 16: 2, 72: 5, 43: 2, 113: 45,
+      38: 8, 97: 1, 94: 6, 95: 6, 133: 1, 76: 1, 74: 4, 18: 3, 104: 3, 127: 1, 128: 1, 130: 6, 99: 77, 103: 2, 131:
+      1, 121: 518, 45: 86, 48: 142, 1: 36, 54: 26, 83: 21, 6: 6, 8: 910, 77: 7, 53: 366, 44: 2, 70: 1, 37: 61, 102:
+      1, 34: 2, 25: 2}, menu_errors={}; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+      excluded_plugins='
+  - id: F:settlements.list/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
+    status: fail
+    driver: protocol_bot
+    server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+    run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T034449-protocol-matrix-sh7msa6z
+    ts: '2026-10-24T03:45:13Z'
+    note: 'domain oracle failed: boundary_state_preserved; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+      excluded_plugins=; HARNESS_ORACLE_BUG: transport fence incorrectly compared as world state; corrected by70dkm2q8'
+  - id: F:settlements.list/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
+    status: pass
+    driver: protocol_bot
+    server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+    run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T034642-protocol-matrix-70dkm2q8
+    ts: '2026-10-24T03:47:07Z'
+    note: ; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+      excluded_plugins=
+  - id: F:villagers.lightning_to_witch/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
+    status: pass
+    driver: protocol_bot
+    server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+    run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T040552-protocol-matrix-wy755vyl
+    ts: '2026-10-24T04:06:16Z'
+    note: dom-mobs810bbce2; ; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+      excludes=
+    plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+  - id: F:settlements.list/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
+    status: pass
+    driver: protocol_bot
+    server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+    run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T041117-protocol-matrix-iv3q183v
+    ts: '2026-10-24T04:12:00Z'
+    note: dom-mobs810bbce2; ; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+      excludes=
+    plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+  - id: F:settlements.info/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
+    status: pass
+    driver: protocol_bot
+    server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+    run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T041239-protocol-matrix-mgh1nw8k
+    ts: '2026-10-24T04:13:21Z'
+    note: dom-mobs810bbce2 explicit save/restart full oracle; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns
+    plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+  - id: F:settlements.list/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+    status: pass
+    driver: protocol_bot
+    server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+    run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T042208-protocol-matrix-gjsw3q0t
+    ts: '2026-10-24T04:23:28Z'
+    note: 843be29f; two real clients; observer independently received list before and after explicit clean restart;
+      full10 plugins
+    plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+  ledger_appended: 9
+  supplemental_lightning_receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T033627-protocol-matrix-a6dl0s45/result.json
+  supplemental_lightning_status: passed; not matrix coverage
+  observer_receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T042208-protocol-matrix-gjsw3q0t/result.json
+  supplemental_cow_before_fix:
+    receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T042448-protocol-matrix-kjejw3ke/result.json
+    status: fail
+    classification: harness_loot_attribution_bug
+    matrix_coverage: false
+    evidence: Actual health10, trajectory687 samples, beef3/leather1; remote kelp39→46 incorrectly included. Corrected
+      in771d8132.
+  supplemental_cow_after_fix:
+    receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T042806-protocol-matrix-59ja06cb/result.json
+    status: pass
+    matrix_coverage: false
+    scope: Received health/damage, 598 trajectory samples, passive no-damage, exact unenchanted loot bounds (beef2/leather1),
+      custody conservation and UUID removal; not full species navigation policy.
+  supplemental_executed_subjects:
+    mobs: 1
+    note: Not included in matrix executed_subjects or ledger.
+next_action: Integrate dom-mobs771d8132; retain partial/stub classifications. Additional execution requires the
+  listed query/fixture/driver capabilities; no partial receipt is full matrix proof.
+capability_note: Remaining named domain fixture/query requirements are deduplicated. Generic entity and merchant
+  observations are now available in protocol driver; species-specific pose/velocity and villager profession metadata
+  remain unavailable. Some available capabilities still lack full domain implementations; classifications expose
+  that rather than claiming capability coverage.
+changed_files:
+- tools/harness/matrix_domains/_mob_contracts.py
+- tools/harness/matrix_domains/_mob_loot.py
+- tools/harness/matrix_domains/_mob_support.py
+- tools/harness/matrix_domains/mobs.py
+- tools/harness/matrix_domains/settlements.py
+- tools/harness/matrix_domains/spawning.py
+- tools/harness/matrix_domains/test_mobs.py
+- tools/harness/matrix_domains/villagers.py
+- /run/media/kaiserroman/games/solaris-work/scenarios/domains/mobs.yaml
+- /run/media/kaiserroman/games/solaris-work/scenarios/domains/spawning.yaml
+- /run/media/kaiserroman/games/solaris-work/scenarios/domains/villagers.yaml
+- /run/media/kaiserroman/games/solaris-work/scenarios/domains/settlements.yaml
+- /run/media/kaiserroman/games/solaris-work/scenarios/domains/mobs-bugs.md
+- /run/media/kaiserroman/games/solaris-work/scenarios/domains/spawning-bugs.md
+- /run/media/kaiserroman/games/solaris-work/scenarios/domains/villagers-bugs.md
+- /run/media/kaiserroman/games/solaris-work/scenarios/domains/settlements-bugs.md
+- /run/media/kaiserroman/games/solaris-work/scenarios/domains/DomMobs-result.yaml
+findings:
+- id: HARNESS-LOOT-ATTRIBUTION
+  state: fixed
+  evidence: mobs.py:186-192 at771d8132; kjejw3ke fails with remote kelp39→46, corrected59ja06cb passes beef2/leather1
+    custody.
+- id: SPAWN-PEACEFUL-REMOVAL
+  state: server_gap
+  evidence: 20261024T034449-protocol-matrix-nzqu1feg/server.log:53 difficulty acknowledgement,55+ fresh zombie-present
+    queries;30s removal timeout.
+- id: SPAWN-SPAWNER-EGG
+  state: server_gap
+  evidence: deploy-final/crates/mc-core/src/spawn_egg.rs:95-168 lacks spawner configuration branch; monster_spawner.rs:178-181
+    new spawner inert.

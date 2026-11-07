@@ -1,0 +1,842 @@
+schema: solaris-domain-spec-1
+domain: spawning
+minecraft_version: 26.1.2
+executable_interface: tools/harness/matrix_api.py; plain Python adapters; this YAML is specification only, not an
+  interpreter/runner
+server_source_root: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/
+vanilla_data_root: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/
+query_capabilities:
+  data_get_entity: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_blocks.rs:245-259
+    (absent in original frozen server; DataCommands implementation pending)
+  data_get_block: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_blocks.rs:282-287
+    (only command-block NBT in original frozen server)
+  execute_store: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_context.rs:473
+  execute_if_entity: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_context.rs:217
+  execute_if_block: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_context.rs:218-230
+  settlement_economy_snapshot: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:84-104
+    (only aggregate status counts exposed, not job/quote/payroll/shipment fields)
+context_contract:
+- Driver applies every matrix context factor before setup.
+- Do not override selected mode,dimension,op level,difficulty in fixtures; explicit tested difficulty transition
+  is action.
+- Every real adapter invokes ctx.boundary once after acknowledgement.
+- Only live receipt checks establish coverage; presence of spec or adapter never sets pass.
+- Random-spawn observation with no positive sample remains inconclusive unless fixture proves every admission precondition.
+- Fixtures use Y200 outside full-set shop auto-open Y60..100; driver residency is fenced by actual received chunks.
+subjects:
+- subject: spawning.despawn_rules
+  scenario_ids:
+  - pw:spawning.despawn_rules/native_windows/creative/the_end/hard/2/reconnect_mid_action/clean_restart_mid_action/op_2
+  - tr.restart_x_inflight.clean_restart_mid_action:spawning.despawn_rules/vanilla_java_26_1_2/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+  - tr.restart_x_inflight.crash_kill9_wal_replay:spawning.despawn_rules/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+  preconditions:
+  - &id001
+    console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - &id002
+    console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - &id003
+    console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: summon zombie 40 200 0 {NoAI:1b}
+  - console: summon zombie 42 200 0 {CustomName:"Keep",NoAI:1b,PersistenceRequired:1b}
+  actions:
+  - console: tp ${actor} 180 200 0
+  - verb: wait_ticks
+    ticks: 40
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: ordinary_removed
+    query: execute unless entity @e[type=zombie,name=!Keep] run say Removed
+    operator: marker_present
+    expected: true
+    source: https://minecraft.wiki/w/Mob_spawning#Despawning
+  - name: persistent_kept
+    query: execute if entity @e[name=Keep] run say Kept
+    operator: marker_present
+    expected: true
+    source: https://minecraft.wiki/w/Mob_spawning#Despawning
+  required_capabilities:
+  - all_players_position
+  - loaded_entity_count
+  source:
+  - https://minecraft.wiki/w/Mob_spawning#Despawning
+  server_gap: []
+  adapter: tools/harness/matrix_domains/spawning.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+- subject: spawning.mob_cap
+  scenario_ids:
+  - pw:spawning.mob_cap/neoforge_solaris_loader/spectator/overworld/normal/1/malformed_or_stale_packet/crash_kill9_wal_replay/op_3
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: gamerule doMobSpawning true
+  - console: time set midnight
+  - console: summon zombie 40 200 0 {NoAI:1b}
+    repeat: 70
+    note: No PersistenceRequired/name tag; distribute inside spawning chunks; floor and roof spawnproof everywhere
+      except test pad.
+  actions:
+  - verb: wait_ticks
+    ticks: 600
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: cap
+    query: count newly naturally spawned monster UUIDs
+    operator: equals
+    expected: 0
+    source: https://minecraft.wiki/w/Mob_spawning#Java_Edition_mob_cap
+  - name: global_cap_formula
+    query: category global count and eligible spawning chunk count
+    operator: less_or_equal
+    expected: floor(70*eligible_chunks/289), allowing preloaded fixtures above cap
+    source: https://minecraft.wiki/w/Mob_spawning#Java_Edition_mob_cap
+  required_capabilities:
+  - eligible_spawn_chunks
+  - entity_count
+  - spawn_reason
+  source:
+  - https://minecraft.wiki/w/Mob_spawning#Java_Edition_mob_cap
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.light_rules
+  scenario_ids:
+  - pw:spawning.light_rules/fabric_solaris_loader/survival/the_nether/peaceful/1/duplicate_login/save_all_checkpoint/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: fill 24 199 -8 40 199 8 stone
+  - console: fill 24 203 -8 40 203 8 stone
+  - console: time set midnight
+  - console: gamerule doMobSpawning true
+  actions:
+  - verb: wait_ticks
+    ticks: 600
+    clock: dashboard.simulation_tick
+  - console: fill 24 203 -8 40 203 8 sea_lantern
+  - verb: wait_ticks
+    ticks: 600
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: dark_monster
+    query: natural zombie/skeleton/creeper spawn event.block_light
+    operator: equals
+    expected: 0
+    source: https://minecraft.wiki/w/Mob_spawning
+  - name: lit_monster
+    query: natural zombie/skeleton/creeper spawn events in lit pad
+    operator: equals
+    expected: []
+    source: https://minecraft.wiki/w/Mob_spawning
+  - name: passive_light
+    query: natural cow/pig/sheep spawn event.light
+    operator: greater_or_equal
+    expected: 9
+    source: https://minecraft.wiki/w/Mob_spawning
+  required_capabilities:
+  - light_query
+  - spawn_event_position_light
+  source:
+  - https://minecraft.wiki/w/Mob_spawning
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.monster_spawner_block
+  scenario_ids:
+  - pw:spawning.monster_spawner_block/vanilla_java_26_1_2/spectator/the_nether/peaceful/1/slow_reader_backpressure/steady/op_1
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: setblock 4 200 0 spawner
+  - console: fill -2 199 -6 10 199 6 stone
+  - console: fill -2 204 -6 10 204 6 stone
+  - console: tp ${actor} 4 200 10
+  - console: give ${actor} zombie_spawn_egg 1
+  actions:
+  - verb: use_item_on
+    position:
+    - 4
+    - 200
+    - 0
+    face: up
+    holding: zombie_spawn_egg
+  - verb: wait_ticks
+    ticks: 1000
+    clock: dashboard.simulation_tick
+  - console: tp ${actor} 4 200 17
+  - verb: wait_ticks
+    ticks: 800
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: egg_configures_spawner
+    query: data get block 4 200 0 SpawnData.entity.id
+    operator: equals
+    expected: minecraft:zombie
+    source: https://minecraft.wiki/w/Mob_spawner
+  - name: active_radius
+    query: spawn events when nearest player distance>16
+    operator: equals
+    expected: []
+    source: https://minecraft.wiki/w/Mob_spawner
+  - name: spawn_range
+    query: spawner spawn event distance_xz
+    operator: less_or_equal
+    expected: 4
+    source: https://minecraft.wiki/w/Mob_spawner
+  - name: delay_reset
+    query: data get block 4 200 0 Delay after successful spawn
+    operator: between
+    expected:
+    - 200
+    - 800
+    source: https://minecraft.wiki/w/Mob_spawner
+  required_capabilities:
+  - data_get_block
+  - snapshot:entities
+  - snapshot:entities.spawn_position
+  - spawner_spawn_events
+  source:
+  - https://minecraft.wiki/w/Mob_spawner
+  server_gap:
+  - SPAWN-SPAWNER-EGG
+  - SPAWN-SPAWNER-CATEGORIES
+  - QUERY-BLOCK-DATA
+  adapter: tools/harness/matrix_domains/spawning.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+- subject: spawning.patrols
+  scenario_ids:
+  - bl:spawning.patrols/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: gamerule doPatrolSpawning true
+  - console: time set 120000
+  actions:
+  - verb: wait_ticks
+    ticks: 24000
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: patrol_day_gate
+    query: patrol spawns when day<5
+    operator: equals
+    expected: []
+    source: https://minecraft.wiki/w/Patrol
+  - name: patrol_group
+    query: new patrol leader plus pillager follower count
+    operator: greater_or_equal
+    expected: 2
+    source: https://minecraft.wiki/w/Patrol
+  - name: disabled
+    query: new patrol events after gamerule false for full interval
+    operator: equals
+    expected: []
+    source: https://minecraft.wiki/w/Patrol
+  required_capabilities:
+  - seeded_spawn_attempt_fixture
+  - spawn_reason
+  - world_day_counter
+  source:
+  - https://minecraft.wiki/w/Patrol
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.wandering_trader_spawn
+  scenario_ids:
+  - bl:spawning.wandering_trader_spawn/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: gamerule doTraderSpawning true
+  actions:
+  - verb: wait_ticks
+    ticks: 24000
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: trader_spawn
+    query: successful trader spawn group
+    operator: equals
+    expected:
+      wandering_trader: 1
+      trader_llama: 2
+    source: https://minecraft.wiki/w/Wandering_Trader#Spawning
+  - name: leashes
+    query: each llama leash holder UUID
+    operator: equals
+    expected: new trader UUID
+    source: https://minecraft.wiki/w/Wandering_Trader#Spawning
+  required_capabilities:
+  - entity_leash_query
+  - seeded_spawn_attempt_fixture
+  - spawn_reason
+  source:
+  - https://minecraft.wiki/w/Wandering_Trader#Spawning
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.phantoms_insomnia
+  scenario_ids:
+  - bl:spawning.phantoms_insomnia/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: gamerule doInsomnia true
+  - console: fill -4 201 -4 4 319 4 air
+  - console: time set midnight
+  actions:
+  - verb: wait_ticks
+    ticks: 72001
+    clock: dashboard.simulation_tick
+    note: Time-since-rest is NOT time set; do not sleep; preserve actual player counter.
+  - verb: wait_ticks
+    ticks: 24000
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: insomnia_threshold
+    query: natural phantom spawn actor.time_since_rest
+    operator: greater_than
+    expected: 72000
+    source: https://minecraft.wiki/w/Phantom#Spawning
+  - name: night_sky
+    query: phantom spawn sky_visible && is_night
+    operator: equals
+    expected: true
+    source: https://minecraft.wiki/w/Phantom#Spawning
+  - name: disabled
+    query: spawn events after doInsomnia=false
+    operator: equals
+    expected: []
+    source: https://minecraft.wiki/w/Phantom#Spawning
+  required_capabilities:
+  - player_time_since_rest
+  - seeded_spawn_attempt_fixture
+  - spawn_reason
+  source:
+  - https://minecraft.wiki/w/Phantom#Spawning
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.slime_chunks_swamp
+  scenario_ids:
+  - bl:spawning.slime_chunks_swamp/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: gamerule doMobSpawning true
+  - console: time set 18000
+  - console: fill 24 30 0 39 30 15 stone
+  actions:
+  - verb: wait_ticks
+    ticks: 2400
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: underground
+    query: each slime spawn below40 occurs in seed-derived slime chunk
+    operator: equals
+    expected: true
+    source: https://minecraft.wiki/w/Slime#Spawning
+  - name: swamp
+    query: each surface slime spawn biome,y,light,moon
+    operator: matches
+    expected:
+      biome:
+      - swamp
+      - mangrove_swamp
+      y:
+      - 51
+      - 69
+      light_max: 7
+      new_moon_spawns: 0
+    source: https://minecraft.wiki/w/Slime#Spawning
+  required_capabilities:
+  - biome_query
+  - seeded_spawn_attempt_fixture
+  - spawn_event_position_light
+  - world_seed
+  source:
+  - https://minecraft.wiki/w/Slime#Spawning
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.breeding_and_babies
+  scenario_ids:
+  - pw:spawning.breeding_and_babies/forge_solaris_loader/adventure/overworld/easy/N8/normal/pause_when_empty_resume/op_4
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon cow 3 200 0 {Age:0}
+  - console: summon cow 4 200 0 {Age:0}
+  - console: give ${actor} wheat 4
+  actions:
+  - verb: select_hotbar
+    slot: slot containing wheat
+  - verb: interact_entity
+    target: first cow
+  - verb: interact_entity
+    target: second cow
+  - verb: wait_ticks
+    ticks: 100
+    clock: dashboard.simulation_tick
+  - verb: interact_entity
+    target: both parents
+  - verb: wait_ticks
+    ticks: 100
+    clock: dashboard.simulation_tick
+  - verb: wait_ticks
+    ticks: 24000
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: birth_count
+    query: entity count cow after100 ticks
+    operator: equals
+    expected: 3
+    source: https://minecraft.wiki/w/Breeding
+  - name: baby_age
+    query: data get entity babyUUID Age at birth
+    operator: between
+    expected:
+    - -24000
+    - -23900
+    source: https://minecraft.wiki/w/Breeding
+  - name: cooldown
+    query: cow count after second feeding before6000 ticks
+    operator: equals
+    expected: 3
+    source: https://minecraft.wiki/w/Breeding
+  - name: growth
+    query: data get entity babyUUID Age after24000 ticks
+    operator: equals
+    expected: 0
+    source: https://minecraft.wiki/w/Breeding
+  required_capabilities:
+  - dashboard:simulation_tick
+  - data_get_entity
+  - interact_entity
+  source:
+  - https://minecraft.wiki/w/Breeding
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/spawning.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+- subject: spawning.peaceful_removal
+  scenario_ids:
+  - bl:spawning.peaceful_removal/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon zombie 4 200 0
+  - console: summon skeleton 6 200 0
+  - console: summon cow 8 200 0
+  - console: gamerule doMobSpawning true
+  actions:
+  - console: difficulty peaceful
+  - verb: wait_ticks
+    ticks: 600
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: zombie_removed
+    query: execute unless entity @e[type=zombie] run say ZombieAbsent
+    operator: marker_present
+    expected: true
+    source: https://minecraft.wiki/w/Difficulty#Peaceful
+  - name: skeleton_removed
+    query: execute unless entity @e[type=skeleton] run say SkeletonAbsent
+    operator: marker_present
+    expected: true
+    source: https://minecraft.wiki/w/Difficulty#Peaceful
+  - name: passive_survives
+    query: execute if entity @e[type=cow] run say CowPresent
+    operator: marker_present
+    expected: true
+    source: https://minecraft.wiki/w/Difficulty#Peaceful
+  required_capabilities:
+  - dashboard:simulation_tick
+  source:
+  - https://minecraft.wiki/w/Difficulty#Peaceful
+  server_gap:
+  - SPAWN-PEACEFUL-REMOVAL
+  adapter: tools/harness/matrix_domains/spawning.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+- subject: spawning.spawnRadius_world_spawn
+  scenario_ids:
+  - bl:spawning.spawnRadius_world_spawn/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: setworldspawn 0 80 0
+  - console: fill -12 199 -12 12 199 12 stone
+  - console: gamerule spawnRadius 0
+  actions:
+  - verb: connect_fresh_account
+    name: MatrixSpawnZero
+  - console: gamerule spawnRadius 10
+  - verb: connect_fresh_account
+    name: MatrixSpawnTen
+  oracle:
+  - name: zero_radius
+    query: first fresh player received xz floor
+    operator: equals
+    expected:
+    - 0
+    - 0
+    source: https://minecraft.wiki/w/World_spawn
+  - name: radius10
+    query: second fresh player received xz floor
+    operator: within_square
+    expected:
+    - -10
+    - 10
+    source: https://minecraft.wiki/w/World_spawn
+  - name: safe_floor
+    query: execute if block <spawnX> <spawnY-1> <spawnZ> stone run say Safe
+    operator: marker_present
+    expected: true
+    source: https://minecraft.wiki/w/World_spawn
+  required_capabilities:
+  - fresh_account
+  - received_player_position
+  source:
+  - https://minecraft.wiki/w/World_spawn
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.natural_Monster
+  scenario_ids:
+  - bl:spawning.natural_Monster/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: gamerule doMobSpawning true
+  - console: locate biome minecraft:plains
+  - verb: teleport_to
+    position: located biome valid spawn habitat 32 blocks from spawn pad
+  - verb: verify_habitat
+    biome: plains
+    vanilla_data: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/plains.json
+  actions:
+  - verb: wait_ticks
+    ticks: 2400
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: eligible_species
+    query: each naturally spawned entity.type
+    operator: in_vanilla_biome_spawn_table
+    expected:
+      biome: plains
+      category: Monster
+    source: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/plains.json
+  - name: cap
+    query: new spawns when category count >= global and local cap
+    operator: equals
+    expected: 0
+    source: /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+      (javap static initializer)
+  required_capabilities:
+  - biome_query
+  - eligible_spawn_chunks
+  - seeded_spawn_attempt_fixture
+  - spawn_reason
+  source:
+  - /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+    (javap static initializer)
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.natural_Creature
+  scenario_ids:
+  - pw:spawning.natural_Creature/native_linux/creative/the_nether/easy/1/malformed_or_stale_packet/steady/op_3
+  preconditions:
+  - console: gamerule doMobSpawning true
+  - console: locate biome minecraft:plains
+  - verb: teleport_to
+    position: located biome valid spawn habitat 32 blocks from spawn pad
+  - verb: verify_habitat
+    biome: plains
+    vanilla_data: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/plains.json
+  actions:
+  - verb: wait_ticks
+    ticks: 2400
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: eligible_species
+    query: each naturally spawned entity.type
+    operator: in_vanilla_biome_spawn_table
+    expected:
+      biome: plains
+      category: Creature
+    source: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/plains.json
+  - name: cap
+    query: new spawns when category count >= global and local cap
+    operator: equals
+    expected: 0
+    source: /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+      (javap static initializer)
+  required_capabilities:
+  - biome_query
+  - eligible_spawn_chunks
+  - seeded_spawn_attempt_fixture
+  - spawn_reason
+  source:
+  - /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+    (javap static initializer)
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.natural_Ambient
+  scenario_ids:
+  - pw:spawning.natural_Ambient/fabric_distant_horizons/adventure/the_nether/normal/1/duplicate_login/hot_backup_during_action/op_3
+  preconditions:
+  - console: gamerule doMobSpawning true
+  - console: locate biome minecraft:dripstone_caves
+  - verb: teleport_to
+    position: located biome valid spawn habitat 32 blocks from spawn pad
+  - verb: verify_habitat
+    biome: dripstone_caves
+    vanilla_data: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/dripstone_caves.json
+  actions:
+  - verb: wait_ticks
+    ticks: 2400
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: eligible_species
+    query: each naturally spawned entity.type
+    operator: in_vanilla_biome_spawn_table
+    expected:
+      biome: dripstone_caves
+      category: Ambient
+    source: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/dripstone_caves.json
+  - name: cap
+    query: new spawns when category count >= global and local cap
+    operator: equals
+    expected: 0
+    source: /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+      (javap static initializer)
+  required_capabilities:
+  - biome_query
+  - eligible_spawn_chunks
+  - seeded_spawn_attempt_fixture
+  - spawn_reason
+  source:
+  - /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+    (javap static initializer)
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.natural_Axolotls
+  scenario_ids:
+  - pw:spawning.natural_Axolotls/protocol_bot/adventure/the_end/hard/N8/malformed_or_stale_packet/pause_when_empty_resume/op_1
+  preconditions:
+  - console: gamerule doMobSpawning true
+  - console: locate biome minecraft:lush_caves
+  - verb: teleport_to
+    position: located biome valid spawn habitat 32 blocks from spawn pad
+  - verb: verify_habitat
+    biome: lush_caves
+    vanilla_data: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/lush_caves.json
+  actions:
+  - verb: wait_ticks
+    ticks: 2400
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: eligible_species
+    query: each naturally spawned entity.type
+    operator: in_vanilla_biome_spawn_table
+    expected:
+      biome: lush_caves
+      category: Axolotls
+    source: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/lush_caves.json
+  - name: cap
+    query: new spawns when category count >= global and local cap
+    operator: equals
+    expected: 0
+    source: /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+      (javap static initializer)
+  required_capabilities:
+  - biome_query
+  - eligible_spawn_chunks
+  - seeded_spawn_attempt_fixture
+  - spawn_reason
+  source:
+  - /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+    (javap static initializer)
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.natural_UndergroundWaterCreature
+  scenario_ids:
+  - bl:spawning.natural_UndergroundWaterCreature/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: gamerule doMobSpawning true
+  - console: locate biome minecraft:dripstone_caves
+  - verb: teleport_to
+    position: located biome valid spawn habitat 32 blocks from spawn pad
+  - verb: verify_habitat
+    biome: dripstone_caves
+    vanilla_data: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/dripstone_caves.json
+  actions:
+  - verb: wait_ticks
+    ticks: 2400
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: eligible_species
+    query: each naturally spawned entity.type
+    operator: in_vanilla_biome_spawn_table
+    expected:
+      biome: dripstone_caves
+      category: UndergroundWaterCreature
+    source: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/dripstone_caves.json
+  - name: cap
+    query: new spawns when category count >= global and local cap
+    operator: equals
+    expected: 0
+    source: /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+      (javap static initializer)
+  required_capabilities:
+  - biome_query
+  - eligible_spawn_chunks
+  - seeded_spawn_attempt_fixture
+  - spawn_reason
+  source:
+  - /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+    (javap static initializer)
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.natural_WaterCreature
+  scenario_ids:
+  - bl:spawning.natural_WaterCreature/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: gamerule doMobSpawning true
+  - console: locate biome minecraft:ocean
+  - verb: teleport_to
+    position: located biome valid spawn habitat 32 blocks from spawn pad
+  - verb: verify_habitat
+    biome: ocean
+    vanilla_data: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/ocean.json
+  actions:
+  - verb: wait_ticks
+    ticks: 2400
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: eligible_species
+    query: each naturally spawned entity.type
+    operator: in_vanilla_biome_spawn_table
+    expected:
+      biome: ocean
+      category: WaterCreature
+    source: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/ocean.json
+  - name: cap
+    query: new spawns when category count >= global and local cap
+    operator: equals
+    expected: 0
+    source: /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+      (javap static initializer)
+  required_capabilities:
+  - biome_query
+  - eligible_spawn_chunks
+  - seeded_spawn_attempt_fixture
+  - spawn_reason
+  source:
+  - /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+    (javap static initializer)
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.natural_WaterAmbient
+  scenario_ids:
+  - bl:spawning.natural_WaterAmbient/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - console: gamerule doMobSpawning true
+  - console: locate biome minecraft:ocean
+  - verb: teleport_to
+    position: located biome valid spawn habitat 32 blocks from spawn pad
+  - verb: verify_habitat
+    biome: ocean
+    vanilla_data: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/ocean.json
+  actions:
+  - verb: wait_ticks
+    ticks: 2400
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: eligible_species
+    query: each naturally spawned entity.type
+    operator: in_vanilla_biome_spawn_table
+    expected:
+      biome: ocean
+      category: WaterAmbient
+    source: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/ocean.json
+  - name: cap
+    query: new spawns when category count >= global and local cap
+    operator: equals
+    expected: 0
+    source: /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+      (javap static initializer)
+  required_capabilities:
+  - biome_query
+  - eligible_spawn_chunks
+  - seeded_spawn_attempt_fixture
+  - spawn_reason
+  source:
+  - /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+    (javap static initializer)
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: spawning.natural_Misc
+  scenario_ids:
+  - pw:spawning.natural_Misc/fabric_svc/adventure/the_nether/easy/1/reconnect_mid_action/clean_restart_mid_action/non_op_0
+  preconditions:
+  - console: gamerule doMobSpawning true
+  - console: locate biome minecraft:plains
+  - verb: teleport_to
+    position: located biome valid spawn habitat 32 blocks from spawn pad
+  - verb: verify_habitat
+    biome: plains
+    vanilla_data: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/data/minecraft/worldgen/biome/plains.json
+  actions:
+  - verb: wait_ticks
+    ticks: 2400
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: no_misc_natural
+    query: natural spawn events category=Misc
+    operator: equals
+    expected: []
+    source: /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+      (javap static initializer)
+  required_capabilities:
+  - biome_query
+  - eligible_spawn_chunks
+  - seeded_spawn_attempt_fixture
+  - spawn_reason
+  source:
+  - /run/media/kaiserroman/games/solaris-work/solaris/.analysis/decompile/client.jar!net.minecraft.world.entity.MobCategory
+    (javap static initializer)
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only

@@ -100,10 +100,10 @@ class PersistenceTests(unittest.TestCase):
 
 class ProtocolTests(unittest.TestCase):
     def test_protocol_needs_tests_a_real_client_gate_and_the_reviewer(self):
-        result = build(["crates/mc-protocol/src/packets/play.rs", "crates/mc-edge/src/legacy/mod.rs"])
+        result = build(["crates/mc-protocol/src/packets/play.rs", "crates/mc-edge/src/translation/mod.rs"])
         found = gates(result)
         self.assertEqual(found[f"{PY} test -p mc-protocol"]["reviewer"], ["protocol"])
-        self.assertIn(f"{PY} test -p mc-edge --lib wire decode legacy", found)
+        self.assertIn(f"{PY} test -p mc-edge --lib wire decode translation", found)
         unmapped = [g for g in found if g.startswith("no mapped gate: choose from core-client")]
         self.assertEqual(len(unmapped), 1)
         self.assertEqual(found[unmapped[0]]["reviewer"], ["protocol"])

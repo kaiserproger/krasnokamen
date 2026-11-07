@@ -722,15 +722,17 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                         let count = packs.selection.enabled.len();
                         state.datapacks.packs = Arc::new(packs);
                         state.datapacks.load_pending = true;
-                        feedback(
-                            state,
-                            connection,
-                            if activation {
-                                format!("Datapack selection applied ({count} enabled)")
-                            } else {
-                                "Datapack functions reloaded".into()
-                            },
-                        );
+                        if crate::command_execution::accepts_success(state, connection) {
+                            feedback(
+                                state,
+                                connection,
+                                if activation {
+                                    format!("Datapack selection applied ({count} enabled)")
+                                } else {
+                                    "Datapack functions reloaded".into()
+                                },
+                            );
+                        }
                     }
                     Ok(_) => feedback(
                         state,

@@ -371,6 +371,30 @@ fn translation(change: &PlayerChange, key: &str) -> bool {
 }
 
 #[test]
+fn dimensional_teleport_success_obeys_player_feedback_rule() {
+    let (mut state, alice, _) = worlds();
+    command(&mut state, 1, "gamerule send_command_feedback false");
+    let (_, drains) = command(&mut state, 1, "tp @s 10 150 10");
+    let slot = state.entities.slot_of(alice).unwrap();
+    assert_eq!(state.entities.pos(slot)[0], 10.0);
+    assert!(!drains.iter().flat_map(|(_, changes)| changes).any(|change|
+        translation(change, "commands.teleport.success.location.single")));
+    let (_, drains) = command(&mut state, 1, r#"title @s title {"text":"Visible"}"#);
+    assert!(drains.iter().flat_map(|(_, changes)| changes).any(|change|
+        matches!(change, PlayerChange::Title(_))));
+    assert!(!drains.iter().flat_map(|(_, changes)| changes).any(|change|
+        translation(change, "commands.title.show.title.single")));
+    let (_, drains) = command(&mut state, 1, "spawnpoint @s 9 150 9");
+    assert_eq!(state.players[&alice].respawn_point, Some([9, 150, 9]));
+    assert!(!drains.iter().flat_map(|(_, changes)| changes).any(|change|
+        matches!(change, PlayerChange::Chat { message } if message.contains("Set spawn point"))));
+    command(&mut state, 1, "gamerule send_command_feedback true");
+    let (_, drains) = command(&mut state, 1, "tp @s 11 150 10");
+    assert!(drains.iter().flat_map(|(_, changes)| changes).any(|change|
+        translation(change, "commands.teleport.success.location.single")));
+}
+
+#[test]
 fn shared_command_execution_reports_missing_player_and_entity_targets() {
     let (mut state, _, _) = worlds();
     for connection in [1, 2] {
@@ -2531,6 +2555,49 @@ fn destroyed_open_chest_rejects_extract_and_insert_clicks() {
                     .all(|stack| { stack.item_id != diamond_id(&state) || stack.is_empty() })
             );
         }
+    }
+}
+
+/// The wire race itself: the destroying command and the stale container click
+/// arrive in the same tick's input batch (one TCP read), so the click runs
+/// before any later commit and must find the viewer already closed.
+#[test]
+fn destroying_command_and_stale_click_in_one_input_batch_never_duplicate_or_discard() {
+    for (insert, destroy) in [
+        (false, "setblock 10 150 8 air destroy"),
+        (true, "setblock 10 150 8 air destroy"),
+        (false, "fill 10 150 8 10 150 8 air destroy"),
+        (true, "fill 10 150 8 10 150 8 air destroy"),
+    ] {
+        let (mut state, alice, _) = worlds();
+        let mut click = open_diamond_chest(&mut state, 1);
+        if insert {
+            state.block_entities.get_mut(&(10, 150, 8)).unwrap().slots[0] =
+                mc_data::ItemStack::EMPTY;
+            let diamond = diamond_id(&state);
+            state.players.get_mut(&alice).unwrap().inventory.slots[9] =
+                mc_data::ItemStack::new(diamond, 5);
+            if let PlayerInput::ContainerClick { slot, .. } = &mut click {
+                *slot = 27;
+            }
+        }
+        crate::tick::run_tick(
+            &mut state,
+            &[
+                PlayerInput::Command {
+                    connection: ConnectionId(1),
+                    command: destroy.into(),
+                    permission_level: 2,
+                },
+                click,
+            ],
+        );
+        assert!(
+            state.players[&alice].open.is_none(),
+            "{destroy} insert={insert}"
+        );
+        // Whichever of the two inputs ran first, the five diamonds exist exactly once.
+        assert_eq!(diamonds(&state, alice), 5, "{destroy} insert={insert}");
     }
 }
 

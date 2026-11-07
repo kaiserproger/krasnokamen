@@ -92,6 +92,54 @@ class SceneShotTests(unittest.TestCase):
             self.assertIn(("minecraft_send_chat", {"message": "tp @s 1 2 3 90 0", "command": True}), probe.calls)
             self.assertIn(("minecraft_wait_ticks", {"ticks": 5}), probe.calls)
 
+    def test_look_is_validated_and_dispatched_to_real_client(self):
+        step = {"look": {"yaw_deg": 45, "pitch_deg": -60}}
+        self.assertEqual(list(scene_shot.scene_mcp_calls([step])),
+                         [("minecraft_look", step["look"])])
+        class Probe:
+            def __init__(self):
+                self.calls = []
+            def call(self, name, args):
+                self.calls.append((name, args))
+        probe = Probe()
+        scene_shot.execute(probe, Path("/tmp"), [step])
+        self.assertEqual(probe.calls, [("minecraft_look", step["look"])])
+
+    def test_hotbar_is_dispatched_to_real_client(self):
+        step = {"hotbar": {"slot": 1}}
+        self.assertEqual(list(scene_shot.scene_mcp_calls([step])),
+                         [("minecraft_set_hotbar_slot", step["hotbar"])])
+        class Probe:
+            def __init__(self):
+                self.calls = []
+            def call(self, name, args):
+                self.calls.append((name, args))
+        probe = Probe()
+        scene_shot.execute(probe, Path("/tmp"), [step])
+        self.assertEqual(probe.calls, [("minecraft_set_hotbar_slot", step["hotbar"])])
+
+    def test_mob_motion_gate_rejects_stationary_entities(self):
+        class Probe:
+            def __init__(self):
+                self.checks = {}
+            def check(self, name, value):
+                self.checks[name] = value
+        probe = Probe()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, tick in zip(("a", "b", "c"), (100, 120, 140)):
+                (root / f"{name}.json").write_text(json.dumps({
+                    "game_time": tick,
+                    "snapshot": {"entities": [
+                        {"entity_type": "minecraft:zombie", "entity_uuid": "z", "x": 0, "z": 0},
+                        {"entity_type": "minecraft:spider", "entity_uuid": "s", "x": 0, "z": 0},
+                    ]},
+                }))
+            scene_shot.execute(probe, root, [{
+                "mob_motion": {"samples": ["a", "b", "c"], "name": "motion"},
+            }])
+        self.assertEqual(probe.checks, {"mob_moved_zombie": False, "mob_moved_spider": False})
+
     def test_entity_snapshot_requires_same_thread_game_time(self):
         class Probe:
             def __init__(self, game_time):

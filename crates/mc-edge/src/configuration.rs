@@ -104,12 +104,11 @@ pub async fn handle_configuration(
         }
     }
 
-    // Step 1: advertise our known data packs (a 26.1.2 session's own release).
-    let our_pack = server_known_pack(if conn.legacy().is_some() {
-        crate::legacy::RELEASE
-    } else {
-        TARGET_RELEASE
-    });
+    // Advertise the endpoint's own known pack, not any intermediate step.
+    let our_pack = server_known_pack(
+        conn.profile()
+            .map_or(TARGET_RELEASE, |profile| profile.version.release),
+    );
     conn.send_packet(&ClientboundKnownPacks {
         packs: vec![our_pack.clone()],
     })

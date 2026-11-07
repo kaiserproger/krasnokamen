@@ -240,14 +240,16 @@ pub(crate) fn execute(
             }
         }
     }
-    state.push_player(
-        connection,
-        PlayerChange::StyledChat {
-            content: Tag::Compound(vec![(
-                "text".into(),
-                Tag::String(format!("Distributed {count} loot stack(s)")),
-            )]),
-        },
-    );
+    if crate::command_execution::accepts_success(state, connection) {
+        state.push_player(
+            connection,
+            PlayerChange::StyledChat {
+                content: Tag::Compound(vec![(
+                    "text".into(),
+                    Tag::String(format!("Distributed {count} loot stack(s)")),
+                )]),
+            },
+        );
+    }
     Ok(count)
 }

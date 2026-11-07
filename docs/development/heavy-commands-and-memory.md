@@ -33,6 +33,7 @@ to keep that from happening again without idling the machine.
   `solaris-heavy.slice` (slice `MemoryMax=25G`, `MemorySwapMax=2G`,
   no `MemoryHigh`, no `CPUQuota`). Default cap is `-m 8G`; above 12G without
   `-x` the request is lowered to 12G.
+- **Killed jobs:** an independent guardian kills the job's scope and holds its locks until the scope is empty.
 - **Scope properties.** `MemoryMax=<cap>`, `MemorySwapMax=1G`,
   `CPUQuota=<physical cores x 100>%`, `CPUWeight=50`, `nice 19`. These are the
   harness's own scope properties, so harness runs keep their canonical CPU

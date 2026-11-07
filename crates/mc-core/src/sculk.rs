@@ -365,11 +365,19 @@ pub(crate) fn changed(state: &mut TickState, pos: BlockPos) {
         .world
         .chunk(cp)
         .and_then(|c| c.block_entities.get(&pos))
-        .map(|b| {
-            decode(b, state.tick).unwrap_or_else(|e| {
-                panic!("sculk block entity at {},{},{}: {e}", pos.x, pos.y, pos.z)
-            })
-        });
+        .map(|b| decode(b, state.tick))
+        .transpose();
+    let stored = match stored {
+        Ok(stored) => stored,
+        Err(error) => {
+            let error = format!(
+                "sculk block entity at {},{},{}: {error}",
+                pos.x, pos.y, pos.z
+            );
+            crate::tick::refuse_record(state, pos, error);
+            return;
+        }
+    };
     let (entry, pending) = stored.unwrap_or_else(|| {
         (
             if catalyst {

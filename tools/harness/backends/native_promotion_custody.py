@@ -82,32 +82,40 @@ class PackWireReceipt:
 
 
 
-def convert_mount_world(ctx: Any, binary: Path, config: Path, evidence: dict[str, Any]) -> dict[str, str]:
-    """Offline conversion on a stopped private world, via the shipping CLI."""
-    from ..profiles import _run_command
+def convert_world(ctx: Any, binary: Path, config: Path, evidence: dict[str, Any],
+                  corrupt: dict[tuple[int, int, int], Any] | None = None) -> dict[str, str]:
+    """Offline conversion on a stopped private world, via the shipping CLI.
 
-    index = len(evidence.setdefault("mount_conversions", []))
+    `corrupt` edits chosen block entities of the exported Anvil copy before it is imported.
+    """
+    from ..profiles import _run_command
+    from .anvil_corrupt import corrupt_block_entities
+
+    index = len(evidence.setdefault("world_conversions", []))
     source = Path(evidence["world_dir"])
-    exported = ctx.artifact_dir / f"mount-export-{index}"
-    imported = ctx.artifact_dir / f"mount-import-{index}"
+    exported = ctx.artifact_dir / f"world-export-{index}"
+    imported = ctx.artifact_dir / f"world-import-{index}"
     receipts = {}
     for operation, src, dst, label in (
             ("export-anvil", source, exported, "export"),
             ("import-anvil", exported, imported, "import")):
-        receipt = ctx.artifact_dir / f"mount-{label}-{index}.json"
+        if label == "import" and corrupt:
+            evidence["corrupted_block_entities"] = {
+                str(position): block for position, block in corrupt_block_entities(exported, corrupt).items()}
+        receipt = ctx.artifact_dir / f"world-{label}-{index}.json"
         _run_command([str(binary), "--config", str(config), "world", operation,
                       "--source", str(src), "--destination", str(dst), "--receipt", str(receipt)],
-                     ctx, f"mount-{label}-{index}.log")
+                     ctx, f"world-{label}-{index}.log")
         json.loads(receipt.read_text())
         receipts[label + "_receipt"] = str(receipt)
     text = config.read_text()
     old_world = tomllib.loads(text)["data"]["world_dir"]
     token = "world_dir = " + json.dumps(old_world)
     if text.count(token) != 1:
-        raise RuntimeError("mount roundtrip cannot identify its private world config field")
+        raise RuntimeError("world conversion cannot identify its private world config field")
     config.write_text(text.replace(token, "world_dir = " + json.dumps(str(imported))))
     evidence["world_dir"] = str(imported)
-    evidence["mount_conversions"].append(receipts)
+    evidence["world_conversions"].append(receipts)
     return receipts
 
 

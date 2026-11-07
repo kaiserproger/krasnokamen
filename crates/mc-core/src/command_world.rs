@@ -431,7 +431,9 @@ pub(crate) fn execute(
             Failed,
         ),
     };
-    state.push_player(connection, PlayerChange::Chat { message: text });
+    if result == Failed || crate::command_execution::accepts_success(state, connection) {
+        state.push_player(connection, PlayerChange::Chat { message: text });
+    }
     result
 }
 

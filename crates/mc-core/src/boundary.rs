@@ -850,6 +850,12 @@ pub enum PlayerChange {
     StyledChat {
         content: mc_nbt::Tag,
     },
+    /// A run of `Chat`/`StyledChat` lines the reliable outbox compacted into one
+    /// entry once a tick's text reached the per-connection cap; the edge delivers
+    /// the lines in order. Only `PlayerChange::is_text` lines are ever inside.
+    TextBurst {
+        lines: Vec<PlayerChange>,
+    },
     ShieldCooldown {
         ticks: i32,
     },
@@ -1078,4 +1084,14 @@ pub enum PlayerChange {
         pitch: f32,
         game_mode: u8,
     },
+}
+
+impl PlayerChange {
+    /// Chat and system-message lines: bounded at their source (the sender's
+    /// spam budget, the command sequence budget), so a burst of them compacts
+    /// in the outbox instead of counting line by line against its cap.
+    #[must_use]
+    pub fn is_text(&self) -> bool {
+        matches!(self, Self::Chat { .. } | Self::StyledChat { .. })
+    }
 }

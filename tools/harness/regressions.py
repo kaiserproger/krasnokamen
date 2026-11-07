@@ -15,7 +15,7 @@ from .ledger_base_fixed import BASE_FIXED
 from .runtime import REPO_ROOT
 
 REQUIRED = {'id', 'title', 'area', 'repro', 'severity', 'status', 'source', 'regression'}
-OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion'}
+OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_proof'}
 PROMOTION_DIR = 'docs/bugs/promotions'
 
 
@@ -383,6 +383,10 @@ def run(ctx):
             repro_checks = bug['repro_check'] if isinstance(bug['repro_check'], list) else [bug['repro_check']]
             if not repro_checks or any(not isinstance(ref, str) or not ref for ref in repro_checks):
                 errors.append(f'{ident}: invalid repro_check')
+        if 'ingress_proof' in bug:
+            proofs = bug['ingress_proof'] if isinstance(bug['ingress_proof'], list) else [bug['ingress_proof']]
+            if not proofs or any(not isinstance(ref, str) or not ref for ref in proofs):
+                errors.append(f'{ident}: invalid ingress_proof')
         if 'failing_first' in bug and bug['failing_first'] not in ('not recorded', 'reported'):
             errors.append(f'{ident}: invalid failing_first')
         refs = bug.get('regression')

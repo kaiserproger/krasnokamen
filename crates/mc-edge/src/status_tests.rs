@@ -17,7 +17,7 @@ async fn loopback_pair() -> (Connection, Connection) {
 
 #[test]
 fn status_json_has_vanilla_shape() {
-    let json = super::build_status_json("motd", 20, 3, false);
+    let json = super::build_status_json("motd", 20, 3, None);
     let value: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(value["version"]["name"], TARGET_RELEASE);
     assert_eq!(value["version"]["protocol"], PROTOCOL_VERSION);
@@ -28,18 +28,20 @@ fn status_json_has_vanilla_shape() {
 }
 
 #[test]
-fn legacy_status_advertises_the_supported_client_release() {
-    let json = super::build_status_json("motd", 20, 3, true);
-    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(value["version"]["name"], "26.1.2");
-    assert_eq!(value["version"]["protocol"], 775);
+fn status_advertises_every_supported_client_release() {
+    for version in mc_data::protocol_versions::SUPPORTED {
+        let json = super::build_status_json("motd", 20, 3, Some(*version));
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["version"]["name"], version.release);
+        assert_eq!(value["version"]["protocol"], version.protocol);
+    }
 }
 
 #[tokio::test]
 async fn full_status_exchange_echoes_ping() {
     let (mut client, mut server) = loopback_pair().await;
     let server_task = tokio::spawn(async move {
-        super::handle_status(&mut server, "hi", 10, 1, false)
+        super::handle_status(&mut server, "hi", 10, 1, None)
             .await
             .unwrap();
     });

@@ -94,7 +94,7 @@ async fn run_connection(
         let Some(handshake) = (match crate::handshake::read_handshake(
             &mut conn,
             server.cfg.server.accepts_transfers,
-            server.legacy.as_ref(),
+            Some(&server.protocols),
         )
         .await
         {
@@ -112,8 +112,14 @@ async fn run_connection(
             let motd = server.cfg.server.motd.clone();
             let max = server.cfg.server.max_players;
             let online = server.connections.len();
-            if let Err(error) =
-                crate::status::handle_status(&mut conn, &motd, max, online, handshake.legacy).await
+            if let Err(error) = crate::status::handle_status(
+                &mut conn,
+                &motd,
+                max,
+                online,
+                handshake.status_version,
+            )
+            .await
             {
                 warn!(%peer, connection = id.0, stage = "status", %error, "connection closed");
                 return Err(error);
@@ -164,8 +170,8 @@ async fn run_connection(
     };
 
     // Configuration has its own per-read and resource-pack deadlines.
-    let legacy = conn.legacy().cloned();
-    let (data, tags) = match &legacy {
+    let profile = conn.profile().cloned();
+    let (data, tags) = match &profile {
         Some(profile) => (&profile.data, &profile.tags),
         None => (&*server.data, &*server.tags),
     };
@@ -448,7 +454,7 @@ async fn run_connection(
                 let (frame, admitted) = match frame {
                     Ok(frame) => frame,
                     Err(error) => {
-                        warn!(%peer, connection = id.0, stage = "play-read", name = %outcome.name, %error, "connection closed");
+                        warn!(%peer, connection = id.0, stage = "play-read", name = %outcome.name, error = %format_args!("{error:#}"), "connection closed");
                         break 'play_loop "read-frame";
                     }
                 };

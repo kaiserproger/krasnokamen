@@ -8,15 +8,17 @@ use mc_protocol::{PROTOCOL_VERSION, TARGET_RELEASE};
 use crate::connection::Connection;
 
 /// Builds the JSON payload the vanilla client renders in its server list.
-/// `legacy` advertises 26.1.2 / 775 to a 775 client the server serves
-/// (`crate::legacy`), so its server list shows the server as compatible.
+/// Advertise the selected available endpoint, or canonical for unknown ids.
 #[must_use]
-pub fn build_status_json(motd: &str, max_players: u32, online: usize, legacy: bool) -> String {
-    let (name, protocol) = if legacy {
-        (crate::legacy::RELEASE, crate::legacy::PROTOCOL)
-    } else {
-        (TARGET_RELEASE, PROTOCOL_VERSION)
-    };
+pub fn build_status_json(
+    motd: &str,
+    max_players: u32,
+    online: usize,
+    version: Option<mc_data::protocol_versions::Version>,
+) -> String {
+    let (name, protocol) = version.map_or((TARGET_RELEASE, PROTOCOL_VERSION), |version| {
+        (version.release, version.protocol)
+    });
     serde_json::json!({
         "version": {
             "name": name,
@@ -40,13 +42,13 @@ pub async fn handle_status(
     motd: &str,
     max_players: u32,
     online: usize,
-    legacy: bool,
+    version: Option<mc_data::protocol_versions::Version>,
 ) -> anyhow::Result<()> {
     let _ = conn
         .read_packet::<StatusRequest>(mc_protocol::State::Status)
         .await?;
     conn.send_packet(&StatusResponse {
-        json: build_status_json(motd, max_players, online, legacy),
+        json: build_status_json(motd, max_players, online, version),
     })
     .await?;
     let ping = conn

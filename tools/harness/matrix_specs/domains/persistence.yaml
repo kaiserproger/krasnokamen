@@ -1,0 +1,753 @@
+domain: persistence
+phase: executable specification; adapters use shared matrix_api, this file is NOT a runner DSL
+target_release: 26.1.2
+source_tree: /run/media/kaiserroman/games/solaris-work/wt/deploy-final
+ports:
+  - 26540
+  - 26559
+execution_contract:
+  context:
+    Driver applies every row factor before setup; no overriding mode/dimension/permissions. All matrix_rows
+    must execute; unsupported combination is blocked, never substituted.
+  setup:
+    Commands run as server fixture authority, in actor dimension using execute in; subject player actions retain
+    row permission.
+  synchronization:
+    Received packets, exact console predicates, and pushed dashboard tick events only. No sleeps.
+    Feedback fence proves only ordering.
+  references:
+    Vanilla mechanics reference minecraft.wiki; Solaris extensions/SLOs explicitly separate. No claim
+    that Solaris WAL/hot backup/anti-xray are vanilla features.
+  temporal_snapshots:
+    Freeze or record exact simulation tick; compare timers relative to ticks, not literal after
+    arbitrary elapsed time.
+  oracles:
+    A missing field/query is MissingCapability, not an empty value or success. Require non-empty Check list
+    and observed causality.
+  permission:
+    Subject minimum permission is a POSITIVE minimum, not a context override. Below minimum, execute actor
+    command unchanged and require hidden root + refusal + unchanged state. Console authority only creates fixtures
+    unless context.permission == console.
+  boundary:
+    Adapter invokes shared MatrixContext.boundary() exactly once after first acknowledged subject action.
+    Driver owns all context network/lifecycle operations.
+  scope_status:
+    Specifications cover all subjects/rows. Registered unavailable adapters raise exact MissingCapability
+    before mutation; they are blocked, NOT completed execution.
+  plugin_profiles:
+    Use shared select_plugin_profile and plugin_set_fingerprint. No adapter-wide exclusions or fabricated
+    plugin fingerprints. Missing client observations remain blocked in both profiles.
+context_overlays:
+  duplicate_login:
+    actions:
+      - connect second session same identity while original owns custody
+      - wait new Play and old disconnect; old socket cannot mutate
+    checks:
+      - old_session_connected: false
+      - new_session_connected: true
+      - UUID_live_owner_count: 1
+      - custody_total: unchanged
+    reference: owner decision 2026-10-24; vanilla newcomer replaces old session; ServerFixes owns implementation
+  crash_kill9_wal_replay:
+    actions:
+      - capture durable tick and atomic custody ledger
+      - kill9_restart before next checkpoint
+      - reconnect; query recovered state
+    checks:
+      - recovered_tick: last durably committed WAL tick, not last sent input
+      - custody_total: conserved; each transaction wholly before or wholly after
+    capabilities:
+      - server_kill9_wal_replay
+      - observe:durable_tick
+      - observe:atomic_custody
+  clean_restart_mid_action:
+    actions:
+      - capture state at stop boundary
+      - clean_restart same directory and identity
+      - reconnect
+    checks:
+      - persistent_state: equals committed pre-stop snapshot
+    capabilities:
+      - server_clean_restart
+  hot_backup_during_action:
+    actions:
+      - hot_backup
+      - restore_backup into separate world
+      - query frozen backup image
+    checks:
+      - backup_tick: manifest recoverable tick
+      - custody_total: conserved in single image
+    capabilities:
+      - server_backup_restore
+  pause_when_empty_resume:
+    actions:
+      - all clients disconnect
+      - await explicit pause transition event
+      - record ticks at pause and next independent liveness event; no sleep or wait-for-tick deadlock
+      - reconnect and await newer tick
+    checks:
+      - tick_while_paused: unchanged
+      - tick_after_join: greater than pause tick
+      - inflight_state: unchanged while paused
+    capabilities:
+      - server_pause_empty
+      - observe:pause_transition
+  save_all_checkpoint:
+    actions:
+      - save_all; await durable checkpoint acknowledgment
+    checks:
+      - checkpoint_committed: true
+  reconnect_mid_action:
+    actions:
+      - disconnect after first state-changing received action
+      - reconnect same identity
+      - continue subject action
+    checks:
+      - custody_total: unchanged
+      - stale_old_connection_mutations: 0
+  disconnect_during_menu:
+    actions:
+      - capture inventory+container+cursor single image
+      - disconnect while menu open
+      - reconnect and reopen container
+    checks:
+      - menu_old_id_reused: false
+      - custody_total: exact initial total including resolved cursor
+    capabilities:
+      - observe:atomic_custody
+  slow_reader_backpressure:
+    actions:
+      - throttle only designated reader; normal observer continues
+      - restore reader; await authoritative resync
+    checks:
+      - normal_observer_progress: true
+      - resumed_reader_final_state: equals authoritative state
+    capabilities:
+      - slow_reader_backpressure
+  malformed_or_stale_packet:
+    actions:
+      - send stale menu state or malformed packet at subject mutation boundary
+    checks:
+      - unauthorized_state_changes: 0
+      - process_alive: true
+    capabilities:
+      - malformed_packet_injection
+server_query_support:
+  execute_if_block_entity_score: implemented command_context.rs:215-288
+  data_queries:
+    - id: data_get_entity
+      evidence: crates/mc-core/src/command_context.rs:495-503 -> datapacks.rs:503-505 -> command_blocks.rs:258,283
+      repro: data get entity <online-player> Inventory
+      expected: NBT inventory payload
+      observed_source:
+        Dedicated data dispatcher supports command blocks only; not general entity/block NBT. Live
+        frozen-binary receipt DomLifecycle/20261024T032808-protocol-matrix-u4kezcpd/server.log:24 confirms restriction.
+    - id: data_get_block
+      evidence: crates/mc-core/src/command_context.rs:495-503 -> datapacks.rs:503-505 -> command_blocks.rs:258,283
+      repro: setblock 0 65 0 chest; data get block 0 65 0
+      expected: Chest NBT payload
+      observed_source:
+        Dedicated data dispatcher supports command blocks only; not general entity/block NBT. Live
+        frozen-binary receipt DomLifecycle/20261024T032808-protocol-matrix-u4kezcpd/server.log:24 confirms restriction.
+    - id: execute_store
+      evidence: crates/mc-core/src/command_context.rs:473
+      repro: execute store result score n lc run data get entity <player> Health
+      expected: Store numeric query result
+      observed_source: Explicit not implemented error
+  clean_restart: Shared ProtocolServer.clean_restart implemented; payload fixture/readback gaps remain distinct.
+subjects:
+  persistence.player_data_roundtrip:
+    preconditions:
+      - give actor diamond 7; experience set actor 5 levels; effect give actor speed infinite 0; spawnpoint actor
+        at safe current position
+      - setblock near actor ender_chest; quick_move all 7 diamonds into ender chest; close_container; give actor emerald
+        3
+      - Capture Inventory, EnderItems, XpLevel, XpTotal, XpP, active_effects, respawn, playerGameType; infinite effect
+        avoids timer drift
+      - "Crash-consistency branch only: require empty baseline EnderItems, receive seven diamonds, capture stable
+        player fields, then save_all the SETUP baseline before the transfer experiment"
+    actions:
+      - Open ender chest; quick_move the single seven-diamond stack; await received Ender custody; close; give three
+        emeralds as the subsequent transaction
+      - "Crash row: invoke shared ctx.boundary SIGKILL immediately without waiting for WAL publication; query recovered
+        player fields and open restored ender chest before any extra save/restart"
+      - "Non-crash supported row: capture persistent fields; invoke context boundary; save_all and clean restart;
+        reconnect and query restored fields/custody"
+    checks:
+      - observation: "non-crash: all captured persistent fields"
+        operator: equals_capture
+        expected: pre-stop committed state
+      - observation: diamond total inventory+ender
+        operator: equals
+        expected: 7
+      - observation: "unfenced crash: (inventory diamonds, Ender diamonds, emeralds)"
+        operator: one_of
+        expected:
+          - - 7
+            - 0
+            - 0
+          - - 0
+            - 7
+            - 0
+          - - 0
+            - 7
+            - 3
+      - observation: "unfenced crash: XP/effects/respawn/game mode"
+        operator: equals_capture
+        expected: durable SETUP baseline
+      - observation: "unfenced crash: restored cursor"
+        operator: equals
+        expected: null
+      - observation: "unfenced crash: unexpected item types"
+        operator: equals
+        expected: []
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Player.dat_format
+    missing_capabilities:
+      - data_get_entity
+      - server:restored_player_data (hot-backup context)
+    server_gap: []
+    source_modules:
+      - crates/mc-core/src/native_checkpoint.rs
+      - crates/mc-core/src/journal.rs
+      - crates/mc-core/src/hot_backup.rs
+    matrix_rows:
+      - id: pw:persistence.player_data_roundtrip/fabric_distant_horizons/creative/the_end/peaceful/1/reconnect_mid_action/clean_restart_mid_action/op_3
+        context:
+          client_kind: fabric_distant_horizons
+          game_mode: creative
+          dimension: the_end
+          difficulty: peaceful
+          player_count: "1"
+          network_condition: reconnect_mid_action
+          server_lifecycle: clean_restart_mid_action
+          permission: op_3
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: identical after restart"
+          - "creative: placements/uses do not debit items; creative break yields no drops"
+          - after reconnect the client receives exactly the server-committed state; the interrupted action is either
+            fully applied or not at all; item totals across player/containers/entities unchanged except by the committed
+            part
+          - after /stop + restart the world, block entities, entities (same UUIDs), player inventories/positions and
+            partially finished processes equal the last committed pre-stop state; no duplication or loss
+          - holds in the_end (dimension-isolated world)
+          - "conservation: item totals over inventories/containers/item entities as expected (no dupe, no loss)"
+      - id: tr.restart_x_inventory.clean_restart_mid_action:persistence.player_data_roundtrip/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+        context:
+          client_kind: protocol_bot
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: clean_restart_mid_action
+          permission: non_op_0
+        driver: protocol_bot
+        context_oracle:
+          - "reference: identical after restart"
+          - after /stop + restart the world, block entities, entities (same UUIDs), player inventories/positions and
+            partially finished processes equal the last committed pre-stop state; no duplication or loss
+          - "conservation: item totals over inventories/containers/item entities as expected (no dupe, no loss)"
+      - id: tr.restart_x_inventory.crash_kill9_wal_replay:persistence.player_data_roundtrip/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: crash_kill9_wal_replay
+          permission: non_op_0
+        driver: java_mcp
+        context_oracle:
+          - "reference: identical after restart"
+          - "after SIGKILL + restart (no wait for a published WAL fence) the world equals a consistent prefix of the
+            committed transactions: every transaction is all-or-nothing (no torn/split/half-moved stacks), no item duplication,
+            nothing that was durable before the action (setup baseline) is lost, and later transactions only appear
+            after earlier ones; surviving every pre-kill ACK is NOT required (latest-ACK durability needs a separate
+            fenced proof); world opens or fails closed on corruption (never silently reset); where the reference says
+            'identical/restored after restart', read it as identical to that recovered prefix"
+          - "conservation: item totals over inventories/containers/item entities as expected (no dupe, no loss)"
+      - id: tr.restart_x_inventory.hot_backup_during_action:persistence.player_data_roundtrip/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+        context:
+          client_kind: native_linux
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: hot_backup_during_action
+          permission: non_op_0
+        driver: native_mcp
+        context_oracle:
+          - "reference: identical after restart"
+          - server keeps ticking during backup; the backup restores to a single consistent tick (no torn state between
+            player and containers)
+          - "conservation: item totals over inventories/containers/item entities as expected (no dupe, no loss)"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: real_but_partial
+      adapter: tools/harness/matrix_domains/persistence.py
+      not_a_live_pass: true
+      remaining_clause:
+        Hot-backup row requires restored-world player readback; current complete normal/clean/WAL
+        path must not substitute.
+    crash_proof_separation:
+      mid_action:
+        "No mutation-publication wait. Recover an atomic ordered prefix: loss of an unpublished tail transfer
+        or grant is allowed; split/duplicate/lost durable baseline or a grant without its preceding transfer fails."
+      durable_state:
+        Separate proof must await actual published journal/batch-lo-hi.bin with hi >= the admitted
+        mutation tick before killing; not claimed by this adapter.
+      tail_bound_evidence:
+        Main documents 128 queued + 1 draining. core.rs:214-233 uses tick_lo=tick_hi=tick for
+        a live Append. Current facade exposes neither recovered nor admitted/mutation tick; this adapter does not
+        claim a measured tail bound from PID/checkpoint hash/ACK.
+      validation: Focused oracle/control-flow tests only; frozen release general NBT blocker is unchanged.
+  persistence.block_entities_roundtrip:
+    preconditions:
+      - Place chest, furnace, brewing_stand, oak_sign, white_banner, spawner within loaded area using setblock
+      - Give and insert furnace raw_iron+coal and brewer bottles+nether_wart+blaze_powder with menu actions; populate
+        chest; author sign/banner/spawner payload
+      - At nonzero mid-process progress tick freeze; capture complete block-entity payloads
+    actions:
+      - save_all; clean stop/restart same world; hold simulation frozen
+      - query each payload; resume; advance ticks via pushed dashboard events until recipes finish
+    checks:
+      - observation: all payloads at frozen restore
+        operator: equals_capture
+        expected: pre-stop payloads
+      - observation: iron custody raw+output
+        operator: equals_capture
+        expected: seeded raw count
+      - observation: brew bottle count
+        operator: equals
+        expected: 3
+      - observation: recipe completes once
+        operator: equals
+        expected: true
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Block_entity
+    missing_capabilities:
+      - data_get_block
+    server_gap: []
+    source_modules:
+      - crates/mc-core/src/native_checkpoint.rs
+      - crates/mc-core/src/journal.rs
+      - crates/mc-core/src/hot_backup.rs
+    matrix_rows:
+      - id: pw:persistence.block_entities_roundtrip/native_linux/creative/overworld/normal/1/malformed_or_stale_packet/steady/non_op_0
+        context:
+          client_kind: native_linux
+          game_mode: creative
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: malformed_or_stale_packet
+          server_lifecycle: steady
+          permission: non_op_0
+        driver: native_mcp
+        context_oracle:
+          - "reference: contents and progress identical"
+          - "creative: placements/uses do not debit items; creative break yields no drops"
+          - out-of-reach/illegal/malformed input is rejected (BlockChangedAck + block update / correction teleport /
+            protocol disconnect) without state change; a stale container state_id is applied once and followed by a
+            full-state resync (vanilla handleContainerClick); never duplicated; server keeps running
+          - "conservation: item totals over inventories/containers/item entities as expected (no dupe, no loss)"
+      - id: pw:persistence.block_entities_roundtrip/forge_solaris_loader/survival/the_nether/easy/N8/slow_reader_backpressure/steady/op_4
+        context:
+          client_kind: forge_solaris_loader
+          game_mode: survival
+          dimension: the_nether
+          difficulty: easy
+          player_count: N8
+          network_condition: slow_reader_backpressure
+          server_lifecycle: steady
+          permission: op_4
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: contents and progress identical"
+          - server tick (MSPT) and other players unaffected; slow client either catches up with consistent state or
+            is disconnected by bounded queue/timeout; no unbounded memory growth
+          - "8 concurrent actors: results conserved, server MSPT stays below 50 ms, no correction storms or protocol
+            errors"
+          - holds in the_nether (dimension-isolated world)
+          - "conservation: item totals over inventories/containers/item entities as expected (no dupe, no loss)"
+      - id: tr.restart_x_inflight.clean_restart_mid_action:persistence.block_entities_roundtrip/vanilla_java_26_1_2/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: clean_restart_mid_action
+          permission: non_op_0
+        driver: java_mcp
+        context_oracle:
+          - "reference: contents and progress identical"
+          - after /stop + restart the world, block entities, entities (same UUIDs), player inventories/positions and
+            partially finished processes equal the last committed pre-stop state; no duplication or loss
+          - "conservation: item totals over inventories/containers/item entities as expected (no dupe, no loss)"
+      - id: tr.restart_x_inflight.crash_kill9_wal_replay:persistence.block_entities_roundtrip/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+        context:
+          client_kind: native_linux
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: crash_kill9_wal_replay
+          permission: non_op_0
+        driver: native_mcp
+        context_oracle:
+          - "reference: contents and progress identical"
+          - "after SIGKILL + restart (no wait for a published WAL fence) the world equals a consistent prefix of the
+            committed transactions: every transaction is all-or-nothing (no torn/split/half-moved stacks), no item duplication,
+            nothing that was durable before the action (setup baseline) is lost, and later transactions only appear
+            after earlier ones; surviving every pre-kill ACK is NOT required (latest-ACK durability needs a separate
+            fenced proof); world opens or fails closed on corruption (never silently reset); where the reference says
+            'identical/restored after restart', read it as identical to that recovered prefix"
+          - "conservation: item totals over inventories/containers/item entities as expected (no dupe, no loss)"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/persistence.py
+      not_a_live_pass: true
+  persistence.entities_roundtrip:
+    preconditions:
+      - summon named cow; tame wolf via normal interaction; leash cow; place item_frame and armor_stand and boat and
+        minecart
+      - capture UUID/type/position/name/owner/leash/equipment/vehicle edges at frozen committed tick
+    actions:
+      - save_all; clean restart same world frozen
+      - reconnect observer; query UUID-indexed entities
+    checks:
+      - observation: UUID set
+        operator: equals_capture
+        expected: before
+      - observation: persistent payload per UUID
+        operator: equals_capture
+        expected: before
+      - observation: duplicate UUID count
+        operator: equals
+        expected: 0
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Entity_format
+    missing_capabilities:
+      - data_get_entity
+    server_gap: []
+    source_modules:
+      - crates/mc-core/src/entity_state_persistence_tests.rs
+      - crates/mc-core/src/native_checkpoint.rs
+      - crates/mc-core/src/journal.rs
+      - crates/mc-core/src/hot_backup.rs
+    matrix_rows:
+      - id: pw:persistence.entities_roundtrip/vanilla_java_26_1_2/survival/the_nether/peaceful/1/slow_reader_backpressure/hot_backup_during_action/op_2
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: the_nether
+          difficulty: peaceful
+          player_count: "1"
+          network_condition: slow_reader_backpressure
+          server_lifecycle: hot_backup_during_action
+          permission: op_2
+        driver: java_mcp
+        context_oracle:
+          - "reference: same UUIDs and state"
+          - server tick (MSPT) and other players unaffected; slow client either catches up with consistent state or
+            is disconnected by bounded queue/timeout; no unbounded memory growth
+          - server keeps ticking during backup; the backup restores to a single consistent tick (no torn state between
+            player and containers)
+          - holds in the_nether (dimension-isolated world)
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/persistence.py
+      not_a_live_pass: true
+  persistence.world_metadata_roundtrip:
+    preconditions:
+      - time set 12345; weather rain 600; difficulty hard only if matching context (otherwise use context difficulty)
+      - gamerule do_daylight_cycle false; worldborder center 32 48; worldborder set 1000
+      - scoreboard objectives add lifecycle dummy; scoreboard players set sentinel lifecycle 17
+      - Start raid via bad omen/raid omen village entry and dragon fight in applicable dimensions; capture timers
+        at frozen tick
+    actions:
+      - save_all; clean restart frozen; query metadata
+    checks:
+      - observation: time/difficulty/gamerules/border/scoreboard/raid/dragon payload
+        operator: equals_capture
+        expected: committed before
+      - observation: score sentinel lifecycle
+        operator: equals
+        expected: 17
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Java_Edition_level_format
+    missing_capabilities:
+      - observe:raid_dragon_metadata
+    server_gap: []
+    source_modules:
+      - crates/mc-core/src/level_metadata.rs
+      - crates/mc-core/src/native_checkpoint.rs
+      - crates/mc-core/src/journal.rs
+      - crates/mc-core/src/hot_backup.rs
+    matrix_rows:
+      - id: pw:persistence.world_metadata_roundtrip/native_windows/spectator/the_end/easy/1/reconnect_mid_action/pause_when_empty_resume/op_3
+        context:
+          client_kind: native_windows
+          game_mode: spectator
+          dimension: the_end
+          difficulty: easy
+          player_count: "1"
+          network_condition: reconnect_mid_action
+          server_lifecycle: pause_when_empty_resume
+          permission: op_3
+        driver: native_mcp
+        context_oracle:
+          - "reference: restored"
+          - after reconnect the client receives exactly the server-committed state; the interrupted action is either
+            fully applied or not at all; item totals across player/containers/entities unchanged except by the committed
+            part
+          - while empty the world does not advance (no growth/smelting/mob movement); after rejoin it resumes from the
+            same tick and the action completes normally
+          - holds in the_end (dimension-isolated world)
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/persistence.py
+      not_a_live_pass: true
+  persistence.corrupt_store_fail_closed:
+    preconditions:
+      - Create isolated checkpoint plus post-checkpoint WAL, copy into two disposable fixtures; hash pristine source
+    actions:
+      - stop fixture; corrupt checkpoint header in copy A; start A
+      - corrupt committed WAL payload/checksum in copy B; start B
+    checks:
+      - observation: both startup exit codes
+        operator: not_equals
+        expected: 0
+      - observation: both startup diagnostics
+        operator: regex
+        expected: (?i)(corrupt|checksum|invalid|storage|journal)
+      - observation: no newly generated world replaces corrupt input
+        operator: equals
+        expected: true
+      - observation: pristine source hashes
+        operator: equals_capture
+        expected: before
+    reference:
+      scope: solaris_durability_contract_not_vanilla_WAL
+      source:
+        - crates/mc-core/src/native_checkpoint_crash_tests.rs
+        - crates/mc-core/src/journal.rs
+    missing_capabilities:
+      - server:corrupt_store_fixture
+    server_gap: []
+    source_modules:
+      - crates/mc-core/src/persistence_crash_tests.rs
+      - crates/mc-core/src/native_checkpoint.rs
+      - crates/mc-core/src/journal.rs
+      - crates/mc-core/src/hot_backup.rs
+    matrix_rows:
+      - id: pw:persistence.corrupt_store_fail_closed/neoforge_solaris_loader/spectator/the_end/hard/N8/normal/crash_kill9_wal_replay/op_1
+        context:
+          client_kind: neoforge_solaris_loader
+          game_mode: spectator
+          dimension: the_end
+          difficulty: hard
+          player_count: N8
+          network_condition: normal
+          server_lifecycle: crash_kill9_wal_replay
+          permission: op_1
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: startup fails closed with clear error; no silent reset"
+          - "after SIGKILL + restart (no wait for a published WAL fence) the world equals a consistent prefix of the
+            committed transactions: every transaction is all-or-nothing (no torn/split/half-moved stacks), no item duplication,
+            nothing that was durable before the action (setup baseline) is lost, and later transactions only appear
+            after earlier ones; surviving every pre-kill ACK is NOT required (latest-ACK durability needs a separate
+            fenced proof); world opens or fails closed on corruption (never silently reset); where the reference says
+            'identical/restored after restart', read it as identical to that recovered prefix"
+          - "8 concurrent actors: results conserved, server MSPT stays below 50 ms, no correction storms or protocol
+            errors"
+          - holds in the_end (dimension-isolated world)
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/persistence.py
+      not_a_live_pass: true
+  persistence.backup_restore:
+    preconditions:
+      - give actor diamond 7; setblock near actor chest; move 3 diamonds to chest; no other item sources
+      - Record checkpoint/WAL ticks; backup directory isolated
+    actions:
+      - hot_backup while ticks advance
+      - mutate live marker block to diamond_block after backup completes
+      - restore backup into new isolated world; reconnect there
+    checks:
+      - observation: restored inventory+chest diamonds
+        operator: equals
+        expected: 7
+      - observation: restored tick
+        operator: equals_capture
+        expected: backup recoverable WAL tick
+      - observation: live post-backup marker present in restore
+        operator: equals
+        expected: false
+      - observation: all backup manifest hashes
+        operator: equals_capture
+        expected: copied files
+      - observation: live tick after backup
+        operator: greater_than_capture
+        expected: before backup
+    reference:
+      scope: solaris_hot_backup_contract
+      source:
+        - crates/mc-core/src/hot_backup.rs:1-10
+        - crates/mc-edge/src/backup.rs:1-3
+    missing_capabilities:
+      - observe:restored_initial_tick
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/backup.rs
+      - crates/mc-core/src/hot_backup.rs
+      - crates/mc-core/src/native_checkpoint.rs
+      - crates/mc-core/src/journal.rs
+    matrix_rows:
+      - id: pw:persistence.backup_restore/protocol_bot/adventure/the_nether/easy/2/duplicate_login/save_all_checkpoint/op_4
+        context:
+          client_kind: protocol_bot
+          game_mode: adventure
+          dimension: the_nether
+          difficulty: easy
+          player_count: "2"
+          network_condition: duplicate_login
+          server_lifecycle: save_all_checkpoint
+          permission: op_4
+        driver: protocol_bot
+        context_oracle:
+          - "reference: restored world equals backup point"
+          - "vanilla 26.1.2 newcomer wins (owner requirement, BugTriage DUPLICATE-LOGIN): the existing session is disconnected
+            ('You logged in from another location'), the new connection reaches Play with the same persisted player
+            state; exactly one live player entity for the UUID, no inventory copy or loss, no join-wait timeout. Current
+            Solaris (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
+            — expected to fail until ServerFixes lands"
+          - save-all completes without stalling the tick; post-save state equals pre-save state
+          - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
+            desync between observers
+          - holds in the_nether (dimension-isolated world)
+      - id: pw:persistence.backup_restore/fabric_solaris_loader/spectator/overworld/easy/N8/normal/save_all_checkpoint/op_3
+        context:
+          client_kind: fabric_solaris_loader
+          game_mode: spectator
+          dimension: overworld
+          difficulty: easy
+          player_count: N8
+          network_condition: normal
+          server_lifecycle: save_all_checkpoint
+          permission: op_3
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: restored world equals backup point"
+          - "NEGATIVE (permission op_3 < op 4): command not advertised in the command tree, execution answers 'Unknown
+            or incomplete command', no state change"
+          - save-all completes without stalling the tick; post-save state equals pre-save state
+          - "8 concurrent actors: results conserved, server MSPT stays below 50 ms, no correction storms or protocol
+            errors"
+    minimum_tested_action_permission: 4
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/persistence.py
+      not_a_live_pass: true
+  persistence.save_all_flush:
+    preconditions:
+      - actor resident; fixture marker gold_block in actor dimension; scoreboard sentinel=17; concurrent peer chat
+        workload
+    actions:
+      - save_all flush; wait explicit Saved game feedback and checkpoint completion
+      - query marker and scoreboard; consume peer echo; observe newer tick
+    checks:
+      - observation: save completion output
+        operator: regex
+        expected: (?i)(saved the game|saved game|commands.save.success)
+      - observation: marker execute if block run say token
+        operator: contains
+        expected: unique query token
+      - observation: scoreboard get sentinel
+        operator: regex
+        expected: \b17\b
+      - observation: post-save tick
+        operator: greater_than_capture
+        expected: pre-save tick
+      - observation: peer chat echo
+        operator: equals
+        expected: true
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Commands/save
+    missing_capabilities:
+      - observe:command_roots (permission-negative context)
+    server_gap: []
+    source_modules:
+      - crates/mc-core/src/native_checkpoint.rs
+      - crates/mc-core/src/journal.rs
+      - crates/mc-core/src/hot_backup.rs
+    matrix_rows:
+      - id: pw:persistence.save_all_flush/fabric_svc/spectator/overworld/hard/2/slow_reader_backpressure/pause_when_empty_resume/op_3
+        context:
+          client_kind: fabric_svc
+          game_mode: spectator
+          dimension: overworld
+          difficulty: hard
+          player_count: "2"
+          network_condition: slow_reader_backpressure
+          server_lifecycle: pause_when_empty_resume
+          permission: op_3
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: checkpoint written; tick not blocked"
+          - "NEGATIVE (permission op_3 < op 4): command not advertised in the command tree, execution answers 'Unknown
+            or incomplete command', no state change"
+          - server tick (MSPT) and other players unaffected; slow client either catches up with consistent state or
+            is disconnected by bounded queue/timeout; no unbounded memory growth
+          - while empty the world does not advance (no growth/smelting/mob movement); after rejoin it resumes from the
+            same tick and the action completes normally
+          - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
+            desync between observers
+    permission_cases:
+      below_op4:
+        actions:
+          - actor command save-all flush; wait received refusal; then context boundary
+        checks:
+          - command_tree_contains_save_all: false
+          - feedback_regex: Unknown or incomplete command|command.unknown
+          - save_command_started: false
+      op4_or_console:
+        actions:
+          - actor command save-all flush (console only when row permission=console); wait Saved the game; context
+            boundary
+        checks: positive checks below
+    minimum_tested_action_permission: 4
+    implementation:
+      class: complete_adapter
+      adapter: tools/harness/matrix_domains/persistence.py
+      not_a_live_pass: true
+      added_clauses:
+        - JSON-safe artifact state
+        - Negative permission branch also checks gold marker, score17 and tick conservation
+        - Every context client must receive post-boundary workload echo; one actor echo cannot stand for N2
+shared_api: bots-runproto@1e20dd5f merged into dom-lifecycle; shared MatrixContext/server/client APIs only
+implementation_counts:
+  spec_only: 0
+  registered_stub: 5
+  complete_adapter: 1
+  real_but_partial: 1
+  executed_in_ledger:
+    pass: 0
+    fail: 0

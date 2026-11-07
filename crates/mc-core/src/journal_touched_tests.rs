@@ -1,5 +1,4 @@
 use super::*;
-use crate::boundary::ConnectionId;
 use crate::core::journal_entries_for_tick;
 use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
 use crate::tick::BlockEntityState;
@@ -199,24 +198,29 @@ fn vehicle_motion_and_rotation_only_changes_survive_wal_replay() {
 #[test]
 fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
     let dir = std::env::temp_dir().join(format!("mc-core-zombie-pose-{}", uuid::Uuid::new_v4()));
-    let mut state = fixture();
-    spawn_idle_cow(&mut state, 9.5);
+    let (mut state, _, centre) = crate::hostile_tests::setup(12.0);
+    state.day_time = 18_000;
     let zombie_type = state
         .registry
         .entity_types
         .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap())
         .unwrap();
-    let zombie = state.spawn_mob(zombie_type, [8.5, 65.0, 8.5], 20.0);
+    let zombie = state.spawn_mob(zombie_type, centre, 20.0);
     let slot = state.entities.slot_of(zombie).unwrap();
-    state.entities.row_mut(slot).controls.no_ai = true;
     state.entities.row_mut(slot).persistent = true;
     let mut writer = JournalWriter::open(&dir, 1).unwrap();
-    let entries = step(&mut state);
-    writer.append(state.tick, state.tick, &entries).unwrap();
-    crate::hostile::set_zombie_aggressive(&mut state, slot, true);
-    let entries = step(&mut state);
-    assert_eq!(image_ids(&entries), vec![zombie.0]);
-    writer.append(state.tick, state.tick, &entries).unwrap();
+    for index in 0..20 {
+        let entries = step(&mut state);
+        writer.append(if index == 0 { 1 } else { state.tick }, state.tick, &entries).unwrap();
+    }
+    let aggressive = |state: &TickState| {
+        let slot = state.entities.slot_of(zombie).unwrap();
+        state.entities.row(slot).appearance.extra.iter().any(|(index, value)| {
+            *index == 15 && matches!(value, crate::boundary::EntityDataValue::Byte(flags) if flags & 4 != 0)
+        })
+    };
+    assert!(state.entities.pos(slot)[0] < centre[0] - 0.1, "zombie must chase the player");
+    assert!(aggressive(&state), "chase must establish the pose");
     writer.flush().unwrap();
     drop(writer);
     let batches = read_complete_batches_after(&dir.join("journal"), 0).unwrap();
@@ -224,27 +228,66 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
     let record = &replay.entities[&zombie.0];
     assert!(record.appearance.extra.iter().any(|(index, value)| *index == 15
         && matches!(value, crate::journal::EntityDataValueImage::Byte(flags) if flags & 4 != 0)));
-    let mut restored = fixture();
-    crate::tick::run_tick(
-        &mut restored,
-        &[crate::boundary::PlayerInput::Join {
-            connection: ConnectionId(1),
-            uuid: uuid::Uuid::new_v4(),
-            name: "observer".into(),
-            permission_level: 0,
-        }],
-    );
-    let player = restored.connections.entity_of(ConnectionId(1)).unwrap();
+
+    // Checkpoints encode entity records, not the WAL's transient appearance.
+    let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+    let native = crate::native_checkpoint::encode_entities(
+        crate::dimensions::Dimension::Overworld, &chunks, &state.registry.items, state.tick,
+    ).unwrap();
+    let config = crate::CoreConfig::new(dir.join("checkpoint"), 42);
+    crate::native_checkpoint::tests::write_manifest(&config, &crate::journal::CheckpointManifest {
+        tick: state.tick, ..Default::default()
+    }).unwrap();
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let base = store.read_checkpoint().unwrap();
+    store.commit_checkpoint(mc_world::native::NativeCheckpoint {
+        tick: state.tick, previous_tick: base.tick, chunks: &[], entities: &native,
+        players: &[], globals: &base.globals,
+    }, &state.registry.blocks, &state.registry.items).unwrap();
+    drop(store);
+    let checkpoint = crate::native_checkpoint::recover_offline(&config).unwrap();
+    let checkpoint_record = &checkpoint.dimensions[&crate::dimensions::Dimension::Overworld].entities[&zombie.0];
+    let (mut checkpoint_restart, player, _) = crate::hostile_tests::setup(12.0);
+    checkpoint_restart.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
+    crate::core::restore_entity(&mut checkpoint_restart, zombie.0, checkpoint_record).unwrap();
+    assert!(!aggressive(&checkpoint_restart), "checkpoint does not retain the WAL pose");
+    step(&mut checkpoint_restart);
+    assert!(!aggressive(&checkpoint_restart), "hostile evaluation reconciles the absent target");
+    let checkpoint_again = crate::native_checkpoint::recover_offline(&config).unwrap();
+    let (mut second_restart, player, _) = crate::hostile_tests::setup(12.0);
+    second_restart.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
+    crate::core::restore_entity(&mut second_restart, zombie.0,
+        &checkpoint_again.dimensions[&crate::dimensions::Dimension::Overworld].entities[&zombie.0]).unwrap();
+    step(&mut second_restart);
+    assert!(!aggressive(&second_restart));
+
+    // WAL recovery does retain the pose. With no eligible target, one hostile
+    // tick repairs it and publishes exactly one post-image; the next is quiet.
+    let (mut restored, player, _) = crate::hostile_tests::setup(12.0);
     restored.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
-    restored.world.ensure_blocking(&restored.desired_chunks());
     crate::core::restore_entity(&mut restored, zombie.0, record).unwrap();
-    let slot = restored.entities.slot_of(zombie).unwrap();
-    assert!(restored.entities.row(slot).appearance.extra.iter().any(|(index, value)| *index == 15
-        && matches!(value, crate::boundary::EntityDataValue::Byte(flags) if flags & 4 != 0)));
-    restored.entities.row_mut(slot).controls.no_ai = false;
-    step(&mut restored);
-    assert!(!restored.entities.row(slot).appearance.extra.iter().any(|(index, value)| *index == 15
-        && matches!(value, crate::boundary::EntityDataValue::Byte(flags) if flags & 4 != 0)));
+    restored.tick = state.tick;
+    assert!(aggressive(&restored));
+    let repair = step(&mut restored);
+    assert!(!aggressive(&restored));
+    assert_eq!(image_ids(&repair).iter().filter(|id| **id == zombie.0).count(), 1);
+    assert!(repair.iter().any(|entry| matches!(entry,
+        JournalEntry::Entity { id, appearance, .. } if *id == zombie.0
+            && !appearance.extra.iter().any(|(index, value)| *index == 15
+                && matches!(value, crate::journal::EntityDataValueImage::Byte(flags) if flags & 4 != 0)))));
+    let quiet = step(&mut restored);
+    assert!(!image_ids(&quiet).contains(&zombie.0), "quiet tick must not rewrite the repair");
+    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    writer.append(state.tick + 1, state.tick + 1, &repair).unwrap();
+    writer.append(state.tick + 2, state.tick + 2, &quiet).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+    let batches = read_complete_batches_after(&dir.join("journal"), 0).unwrap();
+    let replay = replay_batches(Replay::default(), &batches);
+    let (mut wal_restart, player, _) = crate::hostile_tests::setup(12.0);
+    wal_restart.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
+    crate::core::restore_entity(&mut wal_restart, zombie.0, &replay.entities[&zombie.0]).unwrap();
+    assert!(!aggressive(&wal_restart), "repair survives the second WAL restart");
     let _ = std::fs::remove_dir_all(dir);
 }
 

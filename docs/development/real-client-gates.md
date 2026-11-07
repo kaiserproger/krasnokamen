@@ -169,9 +169,8 @@ Keep them separate in every report:
   light arrays or other internal state does not prove rendering.
   `present_requested` does not prove physical monitor scanout.
 - **Java client:** proves vanilla-client compatibility for the path it ran; it is
-  diagnostic for native-client rendering claims. A client older than the server's
-  protocol (the Loader's `minecraftVersion`) connects through the retained legacy
-  cache.
+  diagnostic for native-client rendering claims. Each retained release uses
+  its own automatically imported endpoint cache and adjacent translation route.
 
 Native `minecraft_click_container_slot` bypasses hit-testing; GUI-scale or layout
 proofs need a physical XTest click (pattern: `_scroll` in
@@ -233,6 +232,10 @@ proofs need a physical XTest click (pattern: `_scroll` in
 - Headless native scenario families are received-state evidence only;
   `--windowed` adds the shared final capture, not full pixel parity. `explain <id>`
   lists a scenario's exact fixtures and fences.
+- `native-v2-chest-drag-disconnect` physically drags one log inside a chest
+  menu, checks authoritative cursor custody, disconnects without closing the
+  menu, and checks the player inventory and chest after rejoining. The fixture
+  uses an operator grant and an empty inventory; it does not cover overflow.
 - Singleplayer recovery:
   `run scenario native-world-first-start-interrupted --client native --windowed`
   interrupts the server only after both the first-start marker and database exist;
@@ -252,7 +255,7 @@ proofs need a physical XTest click (pattern: `_scroll` in
 `python3 -m tools.harness run scene-shot --client native --windowed` runs a
 scripted capture. Set `SOLARIS_SERVER_BINARY`, `SOLARIS_CLIENT_BINARY`, the native
 env block above and `SCENE_SHOT_SCENARIO` to a JSON file. The JSON has `steps`,
-each one of `cmd`, `tp` (five coordinates), `look`, `wait_ticks`, `wait_play`,
+each one of `cmd`, `tp` (five coordinates), `look`, `hotbar`, `wait_ticks`, `wait_play`,
 `wait_terrain`, `shot`, `observe`, `use_item_on`, `click_screen_button`,
 `scan_blocks`, `read_block`, `navigate_to_block`, `list_entities`, `timed_entities`,
 `mob_motion`, or `key` (`keys` and `ticks` MCP arguments; released when the step finishes). Optional

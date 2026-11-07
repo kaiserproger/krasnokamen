@@ -573,6 +573,12 @@ def _craft_drag_paced(steps: ProbeSteps, _origin: tuple[int, int, int]) -> None:
     native_craft_drag_paced.run(steps, steps.artifact_dir.parent, steps.client.p4_window)
 
 
+def _chest_drag_disconnect(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from . import native_chest_drag_disconnect
+
+    native_chest_drag_disconnect.run(steps, origin, steps.artifact_dir.parent)
+
+
 def _settlement_storage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from . import native_settlement_storage
 
@@ -584,6 +590,30 @@ def _destroyed_chest(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_custody import destroyed_chest
 
     destroyed_chest(steps, origin)
+
+
+def _destroyed_chest_race(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_custody import destroyed_chest_race
+
+    destroyed_chest_race(steps, origin)
+
+
+def _duplicate_login(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_duplicate_login import run
+
+    run(steps, origin)
+
+
+def _corrupt_block_entities(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_corrupt_block_entities import run
+
+    run(steps, origin)
+
+
+def _corrupt_chunk_near_camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_corrupt_block_entities import run_near_camera
+
+    run_near_camera(steps, origin)
 
 
 def _promotion_banner(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
@@ -638,8 +668,13 @@ RUNNERS = {
     "native-v2-end-restart": _promotion_world,
     "native-v2-entity-gallery": _promotion_world,
     "native-v2-destroyed-chest": _destroyed_chest,
+    "native-v2-destroyed-chest-race": _destroyed_chest_race,
+    "native-v2-duplicate-login": _duplicate_login,
+    "native-v2-corrupt-block-entities": _corrupt_block_entities,
+    "native-v2-corrupt-chunk-near-camera": _corrupt_chunk_near_camera,
     "native-v2-craft-drag": _craft_drag,
     "native-v2-craft-drag-paced": _craft_drag_paced,
+    "native-v2-chest-drag-disconnect": _chest_drag_disconnect,
     "native-v2-settlement-storage": _settlement_storage,
     "native-v2-redstone": _redstone, "native-v2-stations": _stations,
     "native-v2-brewing": _brewing, "native-v2-jukebox": _jukebox,

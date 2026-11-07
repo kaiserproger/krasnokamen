@@ -93,7 +93,7 @@ PROTOCOL_GLOBS = (
     "crates/mc-edge/src/login*",
     "crates/mc-edge/src/configuration*",
     "crates/mc-edge/src/play*",
-    "crates/mc-edge/src/legacy/**",
+    "crates/mc-edge/src/translation/**",
     "crates/mc-edge/src/fanout*",
     "crates/mc-edge/src/plan.rs",
     "crates/mc-edge/src/plan/**",
@@ -275,7 +275,7 @@ BACKEND_PROFILES: dict[str, tuple[str, ...]] = {
 }
 
 PERSISTENCE_FILTERS = ("restart", "recovery", "checkpoint", "journal", "reopen")
-PROTOCOL_EDGE_FILTERS = ("wire", "decode", "legacy")
+PROTOCOL_EDGE_FILTERS = ("wire", "decode", "translation")
 CUSTODY_FILTERS = ("conservation", "custody")
 SCENARIO_COLLAPSE = 3  # more matching scenarios than this: run their profile instead
 HARNESS_SUITE = "python3 -m unittest discover -t . -s tools/harness -p 'test_*.py'"

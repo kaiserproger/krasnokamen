@@ -92,6 +92,55 @@ inside that client's game directory. Forge's home-derived Minecraft assets
 therefore use that private directory; provision assets there when needed.
 Gradle's separately configured cache is not isolated by this setting.
 
+## Matrix runner status
+
+`protocol-matrix`, `native-matrix`, and `java-matrix` share the matrix adapters.
+Adapter guidance: [matrix domains](../tools/harness/matrix_domains/README.md),
+[containers](../tools/harness/matrix_domains/containers.md), and
+[platform coverage](../tools/harness/matrix_domains/platform.md).
+
+The true-vanilla Java lane requires Loader's vanilla premain event transformer
+and a direct, non-symlink `SOLARIS_LEGACY_CONTENT_CACHE` for protocol 775.
+The real client reached Play in
+`/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T173128-java-matrix-hymtay_4/`;
+that run blocked later on missing player eye-height observation and is not a
+passing gameplay check.
+`matrix-random` is experimental. When at least two actor bots are available,
+its generated actions include conflicting quick-move clicks on the same chest
+slot. The isolated server's opt-in input log records each consumed input and
+tick; a missing or gapped log fails closed. Network scheduling is not
+deterministic merely because the action seed is fixed.
+
+Inventory comparisons use each owning client's received inventory, not an
+independent observer of other players' private inventories. Do not infer replay
+determinism or crash atomicity without corresponding real-server receipts.
+The restart action first tests a live carried stack, then crashes again after
+that transfer settles and its WAL fence is published. The second comparison
+retains each player's and chest's slot, item fields and component SNBT, plus
+the observed block states. The carried-stack recovery separately compares item
+custody, because the destination slot on disconnect is not predicted.
+
+The owner-host campaign launcher is `tools/dev/scenario-nightly`. It requires a
+verified `pin-release` server and the imported vanilla data directory. For
+example, from this checkout run:
+
+```sh
+tools/dev/scenario-nightly --install --server-bin /absolute/pin/solaris-v2 --vanilla-data /absolute/vanilla-data
+```
+
+The user timer runs at 03:00 local time. Disable it with
+`systemctl --user disable --now solaris-scenario.timer`. The launcher uses
+the owner-host memory runner at low priority, enforces a campaign time budget,
+and retains failure artifacts under the configured receipts directory (default
+`<work>/receipts/scenarios`). Campaign `result.json` records the pinned binary
+manifest, requested and attempted seeds, and any reductions. Each passing seed
+retains its command, step and bot counts, server SHA and harness tree fingerprint
+even after its full receipt is pruned.
+The configured disk budget is checked between seeds, not enforced as a hard
+filesystem quota during a running seed; a single seed or reduction may exceed
+it before the campaign stops.
+
+
 ## Profiles and scenarios
 
 Do not copy the catalog into prose; ask the harness:
@@ -129,6 +178,8 @@ Each of these is a limit on what a green receipt means; never state more.
 - `core-client` is the server/own-chat continuity subset only (Java default,
   native subset). Its receipt explicitly excludes Wasm, economy and
   Loader-required rejection evidence.
+- `entities` summons its combat fixture with a fresh UUID and waits for that
+  exact received entity; naturally spawned pigs do not identify the fixture.
 - `logical-native` and `native-scale` are functional-native: a cheap headless
   movement/look/rejected-use subset and non-exclusive CPU/RSS canaries. Neither
   is `playable`, `regression` or `replay`; `logical-native --windowed` is
@@ -216,6 +267,13 @@ closed. Trailing package/target/name selectors use the same runner, for example
 explicit `cargo bench` remains the performance-measurement path. Per-test
 durations are retained in `test.log`.
 
+For a long, isolated scheduled-block simulation, use
+`crate::tick_tests::warp_to_block_tick` to jump to the target block's real
+queued deadline, then run the native tick and assert the outcome. This does
+not advance other simulation systems: do not use it if movement, random ticks,
+other deadlines, or elapsed per-tick effects matter. `/tick sprint`, including
+the civilization-seed QA sprint, removes waits but still executes every tick.
+
 Concurrency: `RUST_TEST_THREADS` (first priority), else `NEXTEST_TEST_THREADS`
 (default `num-cpus`), selects the gate default; nextest's `--test-threads=N`
 overrides it (place it before any `--`). Unsupported Cargo/libtest and
@@ -246,6 +304,39 @@ Inventory conservation property: `inventory::conservation_tests` in `mc-core`
 -- --nocapture` runs the long form (about 13 min) and prints the per-operation
 coverage table. A failure prints the shrunk operation sequence; turn it into a
 deterministic regression test (shrunk cases are not persisted).
+
+### Bot scenario matrix
+
+`protocol-matrix`, `java-matrix` and `native-matrix` use the same
+`matrix_api.Adapter(setup, act, oracle)` contract and `matrix_execution` context
+boundaries. The profiles, not a standalone runner, own processes and receipts;
+`ProtocolServer` launches through `runtime.start_server`. Missing verbs and
+observations raise `MissingCapability` and never count as passing coverage.
+
+The frozen combinatorial specs and generator live in
+`tools/harness/matrix_specs/` (`gen_matrix.py`, `subjects*.py`, `domains/`,
+`matrix.yaml`, `MATRIX_FREEZE.json`). The frozen matrix describes the historical
+26.1.2 cells; its recorded source heads are provenance, not current coverage.
+Keep mutable ledger JSONL, copied live plugins and run directories outside Git,
+by default in `/run/media/kaiserroman/games/solaris-work/scenarios/`.
+`SOLARIS_MATRIX_DATA` changes that root; `SCENARIO_LEDGER` changes the ledger.
+Generation reads this checkout and sibling repositories selected by
+`SOLARIS_WORK_ROOT`. A changed frozen id set requires explicit `--refreeze`.
+
+For a protocol adapter probe, use the pinned release binary and the current
+26.3 content cache; its version metadata selects the wire protocol:
+
+```sh
+python3 -m tools.harness run protocol-matrix --server-bin "$SOLARIS_SERVER_BINARY" --vanilla-data /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla --subject block_place.full_block
+```
+
+Select a frozen protocol row with `--matrix tools/harness/matrix_specs/matrix.yaml
+--matrix-id ID` instead of `--subject`. Java uses `--matrix`, `--id`,
+`--ledger`, `--data-dir`; native uses `--client native --windowed --matrix`,
+`--only-id`, `--ledger`, `--run-root`. Both graphical lanes require
+`--plugins-dir` and the private hardware-free `tools/harness/screen_audio_graph.sh`
+wrapper. On the owner host wrap every run in Main's absolute
+`tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER=` invocation.
 
 Optional CRAP measurement: `cargo-llvm-cov` and `cargo-crap` measure line
 coverage and cyclomatic complexity per function on one source tree. Retain the

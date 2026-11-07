@@ -10,7 +10,7 @@ from .probe_steps import ProbeSteps
 _PREFIX = "SOLARIS_MENU "
 
 
-def observe_menu(steps: ProbeSteps, label: str) -> dict[str, Any]:
+def observe_menu(steps: ProbeSteps, label: str, *, slots: int = 46) -> dict[str, Any]:
     marker = "menu-fence-" + uuid.uuid4().hex
     steps.call("minecraft_send_chat", {"message": marker, "command": False})
     steps.wait(lambda state: any(isinstance(line, str) and marker in line for line in state["recent_chat"]),
@@ -30,7 +30,9 @@ def observe_menu(steps: ProbeSteps, label: str) -> dict[str, Any]:
     line = next(line for line in lines[:boundary] if isinstance(line, str) and line.startswith(_PREFIX))
     image = json.loads(line[len(_PREFIX):])
     steps.report.setdefault("server_menu_snapshots", {})[label] = image
-    steps.check(label + "_player_menu", image["container_id"] == 0 and len(image["slots"]) == 46)
+    steps.check(label + ("_player_menu" if slots == 46 else "_container_menu"),
+                len(image["slots"]) == slots
+                and (image["container_id"] == 0 if slots == 46 else image["container_id"] != 0))
     return image
 
 

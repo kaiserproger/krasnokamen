@@ -1,0 +1,117 @@
+{
+  "artifacts": [
+    {
+      "date_published": "2026-10-22T15:12:39.676532Z",
+      "dependencies": [
+        {
+          "dependency_type": "optional",
+          "project_id": "qyVF9oeo"
+        },
+        {
+          "dependency_type": "optional",
+          "project_id": "mOgUt4GM"
+        },
+        {
+          "dependency_type": "optional",
+          "project_id": "9s6osm5g"
+        },
+        {
+          "dependency_type": "optional",
+          "project_id": "Vebnzrzj"
+        },
+        {
+          "dependency_type": "optional",
+          "project_id": "SRlzjEBS"
+        },
+        {
+          "dependency_type": "optional",
+          "project_id": "YlKdE5VK"
+        },
+        {
+          "dependency_type": "optional",
+          "project_id": "UL4bJFDY"
+        }
+      ],
+      "environment": "client_or_server_prefers_both",
+      "filename": "voicechat-fabric-2.6.25+26.1.2.jar",
+      "game_versions": [
+        "26.1",
+        "26.1.1",
+        "26.1.2"
+      ],
+      "loaders": [
+        "fabric"
+      ],
+      "name": "Simple Voice Chat 2.6.25+26.1.2",
+      "sha1": "5c5f879acc5f55c8dbae4036b7f571f89b703209",
+      "sha512": "5b45bf3e6883fbd139ed4fbbf6656bbfa361ce6a20d0cc2f22747158e26b64f7e7fc87c21fa7fffe1913c2faaa59a611e2eeb19fe5f3f02e569acbc6ba683c32",
+      "size": 5544475,
+      "status": "listed",
+      "url": "https://cdn.modrinth.com/data/9eGKb6K1/versions/aoX92WOa/voicechat-fabric-2.6.25%2B26.1.2.jar",
+      "version_id": "aoX92WOa",
+      "version_number": "fabric-2.6.25+26.1.2",
+      "version_type": "beta"
+    },
+    {
+      "date_published": "2026-10-22T15:11:27.393751Z",
+      "dependencies": [],
+      "environment": "client_or_server_prefers_both",
+      "filename": "voicechat-neoforge-2.6.25+26.1.2.jar",
+      "game_versions": [
+        "26.1",
+        "26.1.1",
+        "26.1.2"
+      ],
+      "loaders": [
+        "neoforge"
+      ],
+      "name": "Simple Voice Chat 2.6.25+26.1.2",
+      "sha1": "74dd491d76d80f7342819c1f01143b6d225fa916",
+      "sha512": "11276220d9c678c58114a9383babcbba75422f2541281a0c72dec4d1575413b4ec4c381e0d59f14a2e8527584e1c077a1926f8e70fe92113d7f77ffd46220c24",
+      "size": 4936811,
+      "status": "listed",
+      "url": "https://cdn.modrinth.com/data/9eGKb6K1/versions/1ynyCYwE/voicechat-neoforge-2.6.25%2B26.1.2.jar",
+      "version_id": "1ynyCYwE",
+      "version_number": "neoforge-2.6.25+26.1.2",
+      "version_type": "beta"
+    },
+    {
+      "date_published": "2026-10-22T15:10:16.930104Z",
+      "dependencies": [],
+      "environment": "client_or_server_prefers_both",
+      "filename": "voicechat-forge-2.6.25+26.1.2.jar",
+      "game_versions": [
+        "26.1",
+        "26.1.1",
+        "26.1.2"
+      ],
+      "loaders": [
+        "forge"
+      ],
+      "name": "Simple Voice Chat 2.6.25+26.1.2",
+      "sha1": "2e82b69650f5d3e2f9ee415938da4af7209f431d",
+      "sha512": "e802ab9b11f4a6245d8c611eba4c8c27b42b5371bf0609c72b4c2b9cf54ebb2397de4f876c26dfe33d20cac453c33c93f6fdf9c15a6ca061de061fefda537f36",
+      "size": 4930362,
+      "status": "listed",
+      "url": "https://cdn.modrinth.com/data/9eGKb6K1/versions/ZAcyqBHe/voicechat-forge-2.6.25%2B26.1.2.jar",
+      "version_id": "ZAcyqBHe",
+      "version_number": "forge-2.6.25+26.1.2",
+      "version_type": "beta"
+    }
+  ],
+  "baseline": {
+    "minecraft": "26.1.2",
+    "note": "Fabric cell (fabric-2.6.25+26.1.2, beta) is the wave-1 voice profile; NeoForge/Forge editions are pinned for lane completeness. All dependencies are optional; no other mod is required. Presence of the jar is never treated as working voice \u2014 the mod must negotiate with a server voice plugin at runtime.",
+    "simple_voice_chat": "2.6.25+26.1.2"
+  },
+  "client_requirements": [
+    "Licensed graphical Minecraft Java 26.1.2 client for the Fabric lane",
+    "Pinned Fabric loader/dependency artifact hashes for the :loader-fabric:runClientMcp lane",
+    "Java 25 and fresh Xvfb display, client bridge/MCP credentials",
+    "SVC scenario driver in sibling solaris-loader (matrix adapter owns the oracle)",
+    "Clean, independently isolated per-run mods dir under the caller's game dir",
+    "Worktree-built solaris-v2 candidate, exact config/world/epoch and binary SHA-256"
+  ],
+  "protocol": 1,
+  "source": "Simple Voice Chat publisher API (Modrinth project 9eGKb6K1, query pinned 2026-10-24): game_versions 26.1.2, loaders fabric+neoforge+forge, latest version per loader"
+}

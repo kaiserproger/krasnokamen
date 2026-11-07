@@ -85,6 +85,18 @@ pub(crate) fn sync_chunk_block_entities(state: &mut TickState) {
     }
 }
 
+/// Runtime readers of lazily decoded records (beacon, conduit, sculk, shrieker)
+/// meet an undecodable record only if a write path left one in a resident
+/// chunk after the last hydration sync. They refuse the chunk exactly as
+/// hydration does: unloaded, load error recorded, tick thread untouched.
+pub(crate) fn refuse_record(state: &mut TickState, pos: crate::boundary::BlockPos, error: String) {
+    let chunk = ChunkPos {
+        x: pos.x.div_euclid(16),
+        z: pos.z.div_euclid(16),
+    };
+    state.world.reject_resident(chunk, error);
+}
+
 fn apply(state: &mut TickState, chunk_pos: ChunkPos, decoded: Decoded) {
     crate::monster_spawner::apply_chunk(
         &mut state.monster_spawners,

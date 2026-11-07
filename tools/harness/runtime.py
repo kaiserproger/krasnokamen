@@ -13,16 +13,20 @@ import contextlib
 import ctypes
 import errno
 import functools
+import hashlib
+import json
 import os
 import re
 import select
 import selectors
+import shutil
 import signal
 import socket
 import subprocess
 import time
 from pathlib import Path
 from typing import Any
+from .matrix_api import MissingCapability
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AGENT_ROOT = Path(os.environ.get("SOLARIS_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")).expanduser().resolve()
@@ -33,18 +37,197 @@ PLATFORMS = ("fabric", "neoforge", "forge")
 
 _CLIENT_MAX_HEAP = "-Xmx512M"
 
-PROFILE_MOD_JARS = {
-    "svc": {
-        "artifact": "svc-artifacts.json",
-        "jar_key": "svc_jar",
-        "dirname": "SVCCompat",
-    },
-    "dh": {
-        "artifact": "dh-artifacts.json",
-        "jar_key": "dh_jar",
-        "dirname": "DHCompat",
-    },
-}
+_PROFILE_MOD_ARTIFACTS = {"svc": "svc-artifacts.json", "dh": "dh-artifacts.json"}
+
+
+def _mod_artifact_path(profile: str) -> Path:
+    return Path(__file__).resolve().parent / _PROFILE_MOD_ARTIFACTS[profile]
+
+
+def _default_mod_jar_dir(profile: str) -> Path:
+    stem = {"svc": "SVCCompat", "dh": "DHCompat"}[profile]
+    return REPO_ROOT / ".analysis" / stem / "artifacts"
+
+
+def _mod_env_override(profile: str) -> str | None:
+    override = os.environ.get({"svc": "SOLARIS_SVC_JAR", "dh": "SOLARIS_DH_JAR"}[profile])
+    return override or None
+
+
+def _hash_file(path: Path, algorithm: str) -> str:
+    digest = hashlib.new(algorithm)
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _select_mod_entry(profile: str, platform: str) -> dict[str, Any]:
+    """Return the pinned publisher artifact for this MC 26.1.2 profile/platform cell."""
+    payload = json.loads(_mod_artifact_path(profile).read_text())
+    if profile == "dh":
+        entries = [item for item in payload["artifacts"] if item["minecraft"] == "26.1.2"]
+    else:
+        entries = [
+            item for item in payload["artifacts"]
+            if "26.1.2" in item["game_versions"] and platform in item["loaders"]
+        ]
+    compatible = [item for item in entries if platform in item["loaders"]]
+    if not compatible:
+        raise MissingCapability(
+            f"no published {profile} artifact covers MC 26.1.2 on {platform}; "
+            "the profile is blocked until the publisher ships one"
+        )
+    if profile == "dh":
+        baseline = payload.get("baseline", {})
+        for item in compatible:
+            if item.get("distant_horizons") == baseline.get("distant_horizons"):
+                return dict(item)
+    return dict(sorted(compatible, key=lambda item: item.get("date_published", ""))[-1])
+
+
+def _profile_jar_path(profile: str, entry: dict[str, Any]) -> Path:
+    override = _mod_env_override(profile)
+    if override:
+        return Path(override).expanduser()
+    return _default_mod_jar_dir(profile) / entry["filename"]
+
+
+def _verify_mod_jar(profile: str, entry: dict[str, Any], jar: Path) -> None:
+    """Fail closed unless the staged jar matches every publisher-pinned field."""
+    if not jar.is_file():
+        raise MissingCapability(
+            f"{profile} jar missing at {jar} (fetch {entry['url']} and verify "
+            "size/sha512/sha1 before use; no download happens inside this call)"
+        )
+    actual_size = jar.stat().st_size
+    if actual_size != entry["size"]:
+        raise MissingCapability(
+            f"{profile} jar size mismatch at {jar}: {actual_size} != published {entry['size']}; "
+            "re-fetch, do not trust"
+        )
+    for algorithm in ("sha512", "sha1"):
+        actual = _hash_file(jar, algorithm)
+        if actual != entry[algorithm]:
+            raise MissingCapability(
+                f"{profile} jar {algorithm} mismatch at {jar}: {actual} != published {entry[algorithm]}; "
+                "re-fetch, do not trust"
+            )
+
+
+def _stage_profile_mods(profile: str, platform: str, game_dir: Path) -> list[str]:
+    """Verify the pinned jar and stage it into this run's isolated game_dir/mods.
+
+    Returns the staged filenames. Presence of a jar is never treated as
+    working voice/DH support; the mod still has to negotiate at runtime.
+    """
+    entry = _select_mod_entry(profile, platform)
+    jar = _profile_jar_path(profile, entry)
+    _verify_mod_jar(profile, entry, jar)
+    mods_dir = game_dir / "mods"
+    mods_dir.mkdir(parents=True, exist_ok=True)
+    unexpected = [path.name for path in mods_dir.glob("*.jar") if path.name != entry["filename"]]
+    if unexpected:
+        raise MissingCapability(f"{profile}:isolated_mods_directory:unexpected {sorted(unexpected)}")
+    staged = mods_dir / entry["filename"]
+    if not staged.is_file() or _hash_file(staged, "sha512") != entry["sha512"]:
+        shutil.copy2(jar, staged)
+    _verify_mod_jar(profile, entry, staged)
+    marker = game_dir / "solaris-profile.json"
+    marker.write_text(json.dumps({
+        "client_profile": profile,
+        "platform": platform,
+        "composition": _resolve_profile_task(profile, platform)["composition"],
+        "task": _resolve_profile_task(profile, platform)["task"],
+        "mod": {key: entry[key] for key in ("filename", "url", "size", "sha512", "sha1") if key in entry},
+    }, indent=2, sort_keys=True) + "\n")
+    return [staged.name]
+
+
+def profile_prerequisites(profile: str, platform: str | None) -> dict[str, Any]:
+    """Describe the pinned mod jar for a profile without launching anything.
+
+    Never downloads. ``present`` is False with a fetch hint when the jar is
+    absent; hash fields report mismatch details when it is staged wrong.
+    """
+    if profile not in CLIENT_PROFILES:
+        raise ValueError(f"client_profile must be one of {CLIENT_PROFILES}, got {profile!r}")
+    resolved = _resolve_profile_task(profile, platform)
+    info: dict[str, Any] = {"client_profile": profile, "platform": resolved["platform"],
+                             "task": resolved["task"], "label": resolved["label"],
+                             "composition": resolved["composition"]}
+    if profile in ("svc", "dh"):
+        try:
+            entry = _select_mod_entry(profile, resolved["platform"])
+        except RuntimeError as error:
+            return {**info, "jar": {"present": False, "detail": str(error)}}
+        jar = _profile_jar_path(profile, entry)
+        record: dict[str, Any] = {
+            "filename": entry["filename"], "url": entry["url"], "size": entry["size"],
+            "sha512": entry["sha512"], "sha1": entry["sha1"], "local_path": str(jar),
+            "present": jar.is_file(),
+        }
+        if jar.is_file():
+            record["size_ok"] = jar.stat().st_size == entry["size"]
+            record["sha512_ok"] = _hash_file(jar, "sha512") == entry["sha512"]
+            record["sha1_ok"] = _hash_file(jar, "sha1") == entry["sha1"]
+            if not all((record["size_ok"], record["sha512_ok"], record["sha1_ok"])):
+                record["detail"] = (
+                    f"size/hash mismatch at {jar}; re-fetch {entry['url']} and verify "
+                    "size/sha512/sha1 before use"
+                )
+        else:
+            record["detail"] = (
+                f"not downloaded; fetch {entry['url']} and verify size/sha512/sha1 before use. "
+                "No download happens inside the harness."
+            )
+        info["jar"] = record
+    return info
+
+
+def _resolve_profile_task(profile: str | None, platform: str | None) -> dict[str, Any]:
+    """Map (client_profile, platform) to the one real launch path.
+
+    ``None`` (legacy default) preserves the historic no-Loader Fabric agent
+    task ``:fabric-agent:runClientMcp`` — the ``fabric-agent`` module is a
+    NeoForge mod despite its directory name, so ``None`` must never be
+    described as vanilla Minecraft. Explicit ``vanilla`` runs the true
+    plain-Mojang 26.1.2 client via ``java_launcher.vanilla_command``
+    (unmodified Mojang main + ``-javaagent``, no modloader). ``loader``
+    requires an explicit platform and uses the matching Loader task.
+    ``svc``/``dh`` reuse the real ``:loader-fabric:runClientMcp`` launch with
+    the pinned publisher jar staged into the run's mods dir — that lane also
+    carries the Solaris Loader, so receipts must record the full composition
+    (``solaris-loader`` + the mod) and never claim a Loader-free mod-only
+    client. Exact voice/DH behavior additionally needs runtime negotiation,
+    not just jar presence.
+    """
+    if profile is None:
+        if platform is not None:
+            return _resolve_profile_task("loader", platform)
+        return {"platform": None, "task": ":fabric-agent:runClientMcp",
+                "label": "legacy no-Loader Fabric agent task (NeoForge mod; not vanilla Minecraft)",
+                "composition": ["solaris-agent-neoforge-mod"]}
+    if profile == "vanilla":
+        if platform is not None:
+            raise ValueError("vanilla client_profile takes no platform; pass platform=None")
+        return {"platform": None, "task": "direct-java:net.minecraft.client.main.Main+javaagent",
+                "label": "true plain-Mojang 26.1.2 client + java-agent (no modloader)",
+                "composition": ["plain-mojang-26.1.2", "java-agent"]}
+    if profile == "loader":
+        if platform is None:
+            raise ValueError("loader client_profile requires platform fabric|neoforge|forge")
+        return {"platform": platform, "task": f":loader-{platform}:runClientMcp",
+                "label": f"Loader {platform}",
+                "composition": [f"solaris-loader-{platform}"]}
+    if profile in ("svc", "dh"):
+        if platform is not None and platform != "fabric":
+            raise ValueError(f"{profile} client_profile is Fabric-only; got platform={platform!r}")
+        return {"platform": "fabric", "task": ":loader-fabric:runClientMcp",
+                "label": f"Solaris Loader (Fabric) + {profile}",
+                "composition": ["solaris-loader-fabric", profile]}
+    raise ValueError(f"client_profile must be one of {CLIENT_PROFILES}, got {profile!r}")
+
 
 _CLIENT_READY_TIMEOUT_SECONDS = 180.0
 _XVFB_READY_TIMEOUT_SECONDS = 20.0
@@ -538,6 +721,20 @@ def wait_client_ready_for_connect(client: Any, timeout_seconds: float) -> dict[s
     )
 
 
+def _agent_jar_path() -> Path:
+    """Locate the built java-agent jar (built once via mem-run, never here)."""
+    override = os.environ.get("SOLARIS_JAVA_AGENT_JAR")
+    if override:
+        return Path(override).expanduser()
+    candidates = sorted(AGENT_ROOT.glob("java-agent/build/libs/*.jar"))
+    if candidates:
+        return candidates[0]
+    raise MissingCapability(
+        "java-agent jar missing (expected java-agent/build/libs/*.jar); "
+        "build :java-agent:jar once through mem-run, never inside this call"
+    )
+
+
 @in_phase("client_start")
 def start_client(
     *,
@@ -548,13 +745,28 @@ def start_client(
     username: str,
     display: str,
     platform: str | None = None,
+    launch_manifest: Path | None = None,
+    client_profile: str | None = None,
 ) -> tuple[subprocess.Popen[Any], Any]:
     """Launch a real client and return (process, log_handle) once MCP is ready.
 
-    platform None is the no-Loader Fabric agent; fabric/neoforge/forge use
-    the matching Loader launch task. Prewritten game options are preserved.
-    Readiness is the MCP port accepting (via log/process events); the call
-    never returns merely because time passed.
+    ``client_profile`` selects the launch. ``None`` (legacy default) preserves
+    the historic no-Loader Fabric agent task ``:fabric-agent:runClientMcp`` —
+    that module is a NeoForge mod despite its directory name, so ``None`` must
+    never be described as vanilla Minecraft. Explicit ``vanilla`` runs the
+    true plain-Mojang 26.1.2 client: the unmodified ``net.minecraft.client.main.Main``
+    from locally cached Mojang metadata plus ``-javaagent`` instrumentation
+    (``tools/harness/java_launcher.py::vanilla_command``), no modloader, one
+    direct Java process per client (512M heap, isolated natives/game dir,
+    read-only Gradle/Prism caches). ``loader`` requires an explicit platform and
+    uses the matching Loader task; ``svc``/``dh`` reuse the real
+    ``:loader-fabric:runClientMcp`` Fabric launch with the pinned publisher
+    jar staged into the run's isolated ``game_dir/mods`` (verified
+    size/sha512/sha1, fail-closed before launch starts). Prewritten game
+    options are preserved. Readiness is the MCP port accepting (via
+    log/process events); the call never returns merely because time passed.
+    Profile artifacts stay under the caller's game dir (runs/RunJava or a
+    worktree .analysis dir on the games disk), never the root disk.
     """
     if not token:
         raise ValueError("token must not be empty")
@@ -568,19 +780,26 @@ def start_client(
         raise ValueError("display must not be empty")
     if platform is not None and platform not in PLATFORMS:
         raise ValueError(f"platform must be one of {PLATFORMS}, got {platform!r}")
+    if client_profile is not None and client_profile not in CLIENT_PROFILES:
+        raise ValueError(f"client_profile must be one of {CLIENT_PROFILES}, got {client_profile!r}")
+    resolved = _resolve_profile_task(client_profile, platform)
+    task = resolved["task"]
     game_dir = REPO_ROOT / game_dir if not game_dir.is_absolute() else game_dir
-    gradlew = AGENT_ROOT / "gradlew"
-    if not (gradlew.is_file() and os.access(gradlew, os.X_OK)):
-        raise RuntimeError(f"missing executable Gradle wrapper: {gradlew}")
     game_dir.mkdir(parents=True, exist_ok=True)
     options = game_dir / "options.txt"
-    if not options.exists():
-        options.write_text("version:4790\nonboardAccessibility:false\n")
+    audio_options = {"soundDevice": "SolarisAgentsNull",
+                     "soundCategory_master": "0.0", "soundCategory_music": "0.0"}
+    lines = options.read_text().splitlines() if options.exists() else ["version:4790", "onboardAccessibility:false"]
+    lines = [line for line in lines if line.partition(":")[0] not in audio_options]
+    options.write_text("\n".join(lines + [f"{key}:{value}" for key, value in audio_options.items()]) + "\n")
+    if client_profile in ("svc", "dh"):
+        _stage_profile_mods(client_profile, resolved["platform"], game_dir)
+    from .audio import private_audio_preflight
+    private_audio_preflight(game_dir)
     if port_open(mcp_port):
         raise RuntimeError(
             f"MCP port {mcp_port} is already in use; stop the existing client first"
         )
-    task = ":fabric-agent:runClientMcp" if platform is None else f":loader-{platform}:runClientMcp"
     env = os.environ.copy()
     # HOME alone does not change Java's user.home on Unix. Pass the property
     # to Gradle and its forked client so Forge's assets root is private too.
@@ -590,7 +809,7 @@ def start_client(
     env["JAVA_TOOL_OPTIONS"] = (
         f'{env.get("JAVA_TOOL_OPTIONS", "")} -Duser.home="{home}"'
     ).strip()
-    # The client must only ever use the harness-owned Xvfb, never the owner's desktop.
+    # Only the harness-owned Xvfb and private Pulse graph may reach this client.
     env.pop("WAYLAND_DISPLAY", None)
     env.update(
         {
@@ -599,38 +818,69 @@ def start_client(
             "SDL_VIDEO_DRIVER": "x11",
             "GDK_BACKEND": "x11",
             "XDG_SESSION_TYPE": "x11",
+            "PIPEWIRE_NODE": "agents-null",
+            "PULSE_SINK": "agents-null",
             "SOLARIS_CLIENT_MCP_TOKEN": token,
             "SOLARIS_CLIENT_MCP_PORT": str(mcp_port),
             "SOLARIS_CLIENT_MCP_GAME_DIR": str(game_dir),
             "SOLARIS_CLIENT_MCP_USERNAME": username,
         }
     )
+    env.setdefault("JDK_JAVA_OPTIONS", _CLIENT_MAX_HEAP)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_handle = log_path.open("wb")
     try:
-        process = subprocess.Popen(
-            [
-                str(gradlew),
-                "--no-daemon",
-                "--no-configuration-cache",
-                "-p",
-                str(AGENT_ROOT),
-                f"-Psolaris.clientMcp.gameDir={game_dir}",
-                f"-Psolaris.clientMcp.username={username}",
-                task,
-            ],
-            cwd=REPO_ROOT,
-            env=env,
-            stdout=log_handle,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
+        if launch_manifest is not None or client_profile == "vanilla":
+            from .java_launcher import prepared_fabric_command, vanilla_command
+
+            command = (prepared_fabric_command(launch_manifest, game_dir, username)
+                       if launch_manifest is not None else vanilla_command(
+                           game_dir=game_dir, username=username, agent_jar=_agent_jar_path()))
+            process = subprocess.Popen(
+                command,
+                cwd=REPO_ROOT,
+                env=env,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        else:
+            gradlew = AGENT_ROOT / "gradlew"
+            if not (gradlew.is_file() and os.access(gradlew, os.X_OK)):
+                raise RuntimeError(f"missing executable Gradle wrapper: {gradlew}")
+            process = subprocess.Popen(
+                [
+                    str(gradlew),
+                    "--no-daemon",
+                    "--no-configuration-cache",
+                    "-p",
+                    str(AGENT_ROOT),
+                    f"-Psolaris.clientMcp.gameDir={game_dir}",
+                    f"-Psolaris.clientMcp.username={username}",
+                    task,
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
     except Exception:
         log_handle.close()
         raise
     try:
         wait_port(mcp_port, _CLIENT_READY_TIMEOUT_SECONDS, process, log_path=log_path,
                   phase_name="client_start")
+        if client_profile == "vanilla":
+            # premain exposes MCP before Minecraft.getInstance() is assigned.
+            # This constructor log precedes the render loop's event snapshots.
+            def initialized():
+                code = process.poll()
+                if code is not None:
+                    raise ChildExited("Java exited before Minecraft initialized", code, log_path)
+                text = log_path.read_text(errors="replace")
+                return "Setting user:" in text, text
+            wait_for_path_condition(log_path, _CLIENT_READY_TIMEOUT_SECONDS, initialized)
     except Exception:
         stop_process(process)
         log_handle.close()

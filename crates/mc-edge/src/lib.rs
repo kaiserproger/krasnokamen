@@ -44,7 +44,6 @@ mod dh;
 mod dimensions;
 pub mod fanout;
 pub mod handshake;
-pub mod legacy;
 mod light;
 mod lod;
 pub mod login;
@@ -59,6 +58,7 @@ pub mod server;
 pub(crate) mod settlement_labels;
 pub mod startup_data;
 pub mod status;
+pub mod translation;
 
 mod conn_limit;
 mod remote_admin;

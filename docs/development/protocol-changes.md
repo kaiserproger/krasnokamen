@@ -1,9 +1,10 @@
 # Changing the Minecraft protocol
 
-Solaris speaks canonical Java 26.3 (protocol 777); `mc-edge` translates
-26.1.2 (775) per session using a retained legacy cache. See
+Solaris speaks canonical Java 26.3 (protocol 777) and serves every release from
+26.1.2 through 26.3 (775/776/777) through adjacent per-session steps. Import
+installs all caches; a bump adds a step and keeps old versions. Read
 [ADR 0015](../decisions/0015-multiversion-protocol-translation.md) before
-changing either version. Never infer packet IDs or layouts from memory.
+changing a step. Never infer packet IDs or layouts from memory.
 
 ## Reference boundary
 

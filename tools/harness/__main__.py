@@ -31,7 +31,7 @@ from typing import Any
 from .profiles import LOADER_PLATFORMS, ProfileContext, list_profiles
 from .runtime import AGENT_ROOT, REPO_ROOT, USERNAME_RE, port_open
 
-ARTIFACT_ROOT = REPO_ROOT / ".analysis" / "validation"
+ARTIFACT_ROOT = Path(os.environ.get("SOLARIS_VALIDATION_ROOT", REPO_ROOT / ".analysis" / "validation"))
 
 CLIENT_DEFAULT_PORT = 39095
 CLIENT_DEFAULT_GAME_DIR = AGENT_ROOT / "fabric-agent" / "run-mcp"
@@ -311,7 +311,7 @@ def cmd_run(argv: list[str]) -> int:
     parser.add_argument("--windowed", action="store_true",
                         help="native graphical validation under owned Xvfb, with GPU capture")
     parser.add_argument("--server-bin", type=Path, default=None,
-                        help="immutable solaris-v2 executable (loader-live only)")
+                        help="immutable solaris-v2 executable (loader-live or matrix profiles)")
     if scenario_error is None:
         args, extra = parser.parse_known_args(argv)
         profile = args.profile
@@ -331,8 +331,8 @@ def cmd_run(argv: list[str]) -> int:
         else:
             extra = list(scenario.selector)
     spec = catalog.PROFILES.get(profile)
-    if scenario_error is None and args.server_bin is not None and profile != "loader-live":
-        scenario_error = "--server-bin is only supported by loader-live"
+    if scenario_error is None and args.server_bin is not None and profile not in {"loader-live", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}:
+        scenario_error = "--server-bin is only supported by loader-live or matrix profiles"
     started_at = _utc_now()
     # The tree the run starts on, so a later promotion can tell whether the receipt proves
     # the candidate (ledger.check_client_receipt); never fatal.
@@ -381,6 +381,20 @@ def cmd_run(argv: list[str]) -> int:
         exits = list(evidence.exits if evidence else [])
         logs = list(evidence.logs if evidence else [])
         details = {**(evidence.client_evidence if evidence else {}), **details}
+        if profile in {"protocol-matrix", "matrix-random", "native-matrix", "java-matrix"}:
+            binary = details.get("server_binary_path")
+            if binary:
+                manifest = Path(binary).parent / "manifest.json"
+                if manifest.is_file():
+                    details["server_pin_manifest"] = str(manifest.resolve())
+                    try:
+                        pin = json.loads(manifest.read_text())
+                        if (Path(pin.get("binary", "")) != Path(binary)
+                                or pin.get("binary_sha256") != details.get("server_binary_sha256")):
+                            raise ValueError("pin manifest does not match selected binary")
+                        details["server_pin"] = pin
+                    except (OSError, ValueError, TypeError) as exc:
+                        details["server_pin_error"] = str(exc)
         if status == "failed":
             code = (child_failure.returncode if child_failure is not None
                     else details.get("startup_child_exit"))
@@ -420,6 +434,9 @@ def cmd_run(argv: list[str]) -> int:
         (artifact_dir / "result.json").write_text(
             json.dumps(receipt, indent=2, sort_keys=True) + "\n"
         )
+        if profile == "native-matrix":
+            from .backends.native_matrix import record_receipt
+            record_receipt(receipt, artifact_dir / "result.json")
         outcome = {"passed": "PASS", "failed": "FAIL",
                    "prepared": "PREPARED", "interrupted": "INTERRUPTED"}[status]
         print(
@@ -467,14 +484,14 @@ def cmd_run(argv: list[str]) -> int:
         server_bin=args.server_bin,
     )
     try:
-        if ctx.server_bin is not None and profile != "loader-live":
-            raise ValueError("--server-bin is supported only by loader-live")
+        if ctx.server_bin is not None and profile not in {"loader-live", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}:
+            raise ValueError("--server-bin is supported only by loader-live or matrix profiles")
         if (ctx.plugins_dir is not None and client != "native"
-                and ctx.scenario_id != "java-v2-p5-towns" and profile not in {"loader-live", "graves"}):
-            raise ValueError("--plugins-dir requires native gameplay, java-v2-p5-towns, loader-live or graves")
+                and ctx.scenario_id != "java-v2-p5-towns" and profile not in {"loader-live", "graves", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}):
+            raise ValueError("--plugins-dir requires native gameplay, java-v2-p5-towns, loader-live, graves or matrix profiles")
         if ctx.windowed and client != "native" and not (client == "java" and profile in {"scene-shot", "settlement-map-qa"}):
             raise ValueError("--windowed requires --client native (or --client java for scene-shot and settlement-map-qa)")
-        if client == "native" and profile not in {"survival", "inventory", "entities", "core-client", "native-lifecycle", "logical-native", "native-scale", "title-connect", "singleplayer-regressions", "dialogs", "admin-commands", "chisel", "anti-xray", "block-log", "composter-chance", "village-qa", "village-autonomy-qa", "civilization-seed-qa", "village-owner-order-qa", "scene-shot", "settlement-map-qa", "claim-only-qa", "buildings-qa", "army-qa", "autocraft-qa"}:
+        if client == "native" and profile not in {"survival", "inventory", "entities", "core-client", "native-lifecycle", "logical-native", "native-scale", "native-matrix", "title-connect", "singleplayer-regressions", "dialogs", "admin-commands", "chisel", "anti-xray", "block-log", "composter-chance", "village-qa", "village-autonomy-qa", "civilization-seed-qa", "village-owner-order-qa", "scene-shot", "settlement-map-qa", "claim-only-qa", "buildings-qa", "army-qa", "autocraft-qa"}:
             raise RuntimeError(
                 f"profile {profile!r} is not enabled for native; "
                 "supported shared Python minecraft_* profiles: survival, inventory, entities, core-client subset, native-lifecycle, logical-native, native-scale. "
