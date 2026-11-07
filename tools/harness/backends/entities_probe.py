@@ -1,6 +1,7 @@
 """A bounded, UUID-fenced pig feed/attack/drop probe for either client."""
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -19,22 +20,35 @@ REQUIRED_TOOLS = frozenset({
 })
 
 
+def _summon_fixture_pig(steps: ProbeSteps, player: dict[str, Any]) -> dict[str, Any]:
+    """Identify our summoned pig by its authored UUID, even among natural pigs."""
+    fixture_uuid = str(uuid.uuid4())
+    steps.fixture(
+        f"summon {PIG} {player['x'] + 1.5:.3f} {player['y']:.3f} {player['z']:.3f} "
+        f"{{UUID:'{fixture_uuid}'}}"
+    )
+    while True:
+        state = steps.observe()
+        visible = steps.call("minecraft_list_entities", {"radius": 16.0, "limit": 128})["entities"]
+        matches = [row for row in visible if row["entity_uuid"] == fixture_uuid]
+        steps.check("fixture_uuid_unique", len(matches) <= 1)
+        if matches:
+            steps.check("visible_fixture_type", matches[0]["entity_type"] == PIG)
+            return matches[0]
+        steps.call("minecraft_wait_for_state_change", {
+            "observed_version": state["state_version"], "timeout_seconds": steps.remaining(),
+        })
+
+
 def run(client: Any, artifact_dir: Path, timeout: float) -> dict[str, Any]:
     from .gameplay import require_tools
 
     require_tools(client.list_tools(), REQUIRED_TOOLS, "entities")
     with ProbeSteps(client, artifact_dir, timeout, "entities-pig-feed-attack-pickup") as steps:
         before = steps.wait(lambda state: state["player"]["on_ground"], "grounded_fixture_pose")
-        baseline = steps.call("minecraft_list_entities", {"radius": 16.0, "limit": 128})["entities"]
-        steps.check("no_preexisting_fixture_pig", not any(row["entity_type"] == PIG for row in baseline))
         steps.check("fresh_drop_inventory", item_count(before, PORK) == 0)
-        player = before["player"]
-        steps.fixture(f"summon {PIG} {player['x'] + 1.5:.3f} {player['y']:.3f} {player['z']:.3f}")
-        target = steps.call("minecraft_wait_for_visible_entity", {
-            "entity_type": PIG, "radius": 16.0, "timeout_seconds": steps.remaining(),
-        })
+        target = _summon_fixture_pig(steps, before["player"])
         identity = {key: target[key] for key in ("entity_id", "entity_uuid", "entity_type")}
-        steps.check("visible_fixture_type", identity["entity_type"] == PIG)
         visible = steps.call("minecraft_list_entities", {"radius": 16.0, "limit": 128})["entities"]
         steps.check("fixture_identity_listed", any(all(row[key] == value for key, value in identity.items())
                                                   for row in visible))
