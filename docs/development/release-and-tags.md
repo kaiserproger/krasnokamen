@@ -3,7 +3,7 @@
 Authorization rules are in [AGENTS.md](../../AGENTS.md) (no commit, push, tag
 or publication without explicit owner authorization) and in
 [review committee and breaker](review-committee-and-breaker.md) (every public
-step also needs the advisor's `[approved <ID>]` on the request with that ID).
+step also needs the advisor's `[approved]` on that step's open request).
 The breaker passes before the tag and before the announcement are in the
 [break-it QA protocol](../QA_AGENT_PROTOCOL.md) "Release-candidate breaker
 pass". This page is the release procedure for the four repositories:
@@ -28,7 +28,7 @@ pass". This page is the release procedure for the four repositories:
    `include_str!` of `data/vanilla`, and every production or bench registry load
    passes a `vanilla_data_dir` (`CoreRegistry::load(None)` is test-only).
    **macOS:** there is no local Mac. Push the candidate commit to
-   `rc-check/<tag>` (a public step: it needs `[approved <ID>]`, together with
+   `rc-check/<tag>` (a public step: it needs `[approved]`, together with
    the branch deletion afterwards); `.github/workflows/rc-check-macos.yml` runs
    the `mc-core` and `mc-world` lib tests (nextest `ci` profile, which skips
    tests over 3 s) on `macos-15` with the 26.3 content cache. Pass = a green
@@ -78,9 +78,10 @@ pass". This page is the release procedure for the four repositories:
 ## A pushed tag whose CI failed
 
 Each public step needs its own advisor approval. Give the request an ID (for
-example `RC5-PUB-3`) and name the exact commands and SHA; the answer is
-`[approved <ID>]`. A bare `[approved]` or another request's ID is not approval:
-answers can arrive many turns late (2026-11-07).
+example `RC5-PUB-3`) with the exact commands and SHA, and keep only one request
+open at a time. The answer is exactly `[approved]`; it counts only if issued
+after that request: answers can arrive many turns late (an advisory's
+`turns_ago` shows when it was issued; 2026-11-07).
 
 1. Diagnose: `gh run view <run> --json jobs` plus the failed job log (save under
    `.analysis/releases/<tag>/`); `gh release view <tag>` (not found when publish

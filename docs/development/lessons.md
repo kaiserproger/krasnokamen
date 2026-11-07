@@ -6,9 +6,10 @@ Dates are when the lesson was learned (owner time zone, UTC+7).
 
 ## 2026-11
 
-- **2026-11-07 — approvals carry the request ID.** A bare `[approved]` arrived
-  41 turns after its request, with no way to tell which request it answered.
-  Requests now carry an ID and the answer is `[approved <ID>]`.
+- **2026-11-07 — a late `[approved]` is ambiguous.** A bare `[approved]`
+  arrived 41 turns after it was issued, with no way to tell which request it
+  answered. Requests now carry an ID, only one is open at a time, and an
+  `[approved]` counts only if issued after that request (`turns_ago`).
   ([releases](release-and-tags.md#a-pushed-tag-whose-ci-failed))
 - **2026-11-06 — RC5 notes: three of four advisor rejections were unproven
   claims** ("RC4 behaves the same" without running RC4, "always" from one run,
@@ -48,7 +49,7 @@ Dates are when the lesson was learned (owner time zone, UTC+7).
   player-path checks; see the QA protocol introduction and
   [releases](release-and-tags.md).
 - **2026-10-29 — a bare repeated `[approved]` was once dropped as a duplicate.**
-  Superseded by request IDs (2026-11-07 above).
+  Each request now carries an ID and only one is open at a time (2026-11-07).
 - **2026-10-28 — a stray slice `CPUQuota` throttled every build to 2 CPUs for
   two days.** Symptom: host CPU pressure about 80% while `vmstat` shows >40%
   idle. The runner now clears the quota on every call.
