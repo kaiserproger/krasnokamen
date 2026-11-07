@@ -39,7 +39,10 @@ pass". This page is the release procedure for the four repositories:
 3. **Siblings first.** Rebuild every shipped `plugin.wasm` against the current
    WIT. Commit and push `solaris-default-plugins` and `solaris-loader` before
    core, then update `SOLARIS_PLUGINS_REVISION` / `SOLARIS_LOADER_REVISION` in
-   `.github/workflows/ci.yml`.
+   `.github/workflows/ci.yml`. At every RC bring each sibling's local `main` up
+   to the line that ships (owner, 2026-11-07: the client's local `main` had
+   fallen 150 commits behind `pauline/client-next`), and run `tools/dev/wt-gc`
+   to list dirty or unmerged worktrees older than a week.
 4. **Upgrade traps.** Diff between the previous tag and this one:
    `REQUIRED_FILES` / `REQUIRED_REGISTRY_PAYLOAD_DIR` in
    `crates/mc-edge/src/content_cache.rs` (an old cache then fails at startup

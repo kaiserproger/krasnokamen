@@ -31,3 +31,9 @@ Later explicit supersession takes priority over historical descriptions. See als
 
 Update the owning live ADR when authority, threading, persistence ordering or
 module policy changes. Superseded ADR tombstones are not current recipes.
+
+Migration state of an ADR whose status says partial, staged or proposed lives
+in [open transitions](../STATUS.md#open-transitions), not in this table. A new
+external crate, toolchain or component, language or runtime, persistent format,
+daemon or service, or required prerequisite binary needs a short decision
+record first: [new dependencies and components](../development/adding-a-feature.md#new-dependencies-and-components).
