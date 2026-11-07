@@ -72,12 +72,10 @@ def shrink(ctx, report):
             trial, receipt, argv = replay(ctx, minimal, root / f'confirm-{index}')
             replays.append({'receipt': receipt, 'identity': failure_identity(trial), 'command': argv})
         stable = all(item['identity'] == fingerprint for item in replays)
-        command = ['python3', '-m', 'tools.harness', 'run', 'matrix-random',
-                   '--server-bin', str(ctx.server_bin), '--script', str(path)]
-        iterator = iter(ctx.extra_args)
-        for value in iterator:
-            if value == '--vanilla-data':
-                command += [value, next(iterator)]
+        # Reuse the actual trial invocation so product selectors (plugins,
+        # vanilla jar, differential mode and injected controls) are not lost.
+        command = list(replays[-1]['command'])
+        command[command.index('--script') + 1] = str(path)
         result = {'status': 'reproduced' if stable else 'unstable', 'failure_identity': fingerprint,
                   'original_actions': len(original['actions']), 'minimal_actions': len(minimal['actions']),
                   'minimal_script': str(path), 'seed': minimal['seed'],

@@ -1011,7 +1011,7 @@ PROFILES: dict[str, dict[str, Any]] = {
     },
     "java-matrix": {
         "scope": "real-client",
-        "description": "Java clients executing shared matrix adapters on an isolated release server",
+        "description": "Java matrix; true-vanilla lifecycle/packet hooks currently blocked (see AGENT_TOOLING.md)",
         "run": run_java_matrix,
     },
     "native-matrix": {

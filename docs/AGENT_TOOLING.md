@@ -92,6 +92,15 @@ inside that client's game directory. Forge's home-derived Minecraft assets
 therefore use that private directory; provision assets there when needed.
 Gradle's separately configured cache is not isolated by this setting.
 
+## Matrix runner status
+
+`protocol-matrix`, `native-matrix`, and `java-matrix` share the matrix adapters.
+The true-vanilla Java lane is blocked: the current Loader Java agent premain
+does not install lifecycle or packet hooks, so the client state-change event
+does not arrive. The attempted row and its failure are recorded locally at
+`/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T133737-java-matrix-bam34j27/result.json`.
+This is a harness instrumentation blocker, not a passing Java gameplay check.
+
 ## Profiles and scenarios
 
 Do not copy the catalog into prose; ask the harness:

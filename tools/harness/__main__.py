@@ -381,6 +381,20 @@ def cmd_run(argv: list[str]) -> int:
         exits = list(evidence.exits if evidence else [])
         logs = list(evidence.logs if evidence else [])
         details = {**(evidence.client_evidence if evidence else {}), **details}
+        if profile in {"protocol-matrix", "matrix-random", "native-matrix", "java-matrix"}:
+            binary = details.get("server_binary_path")
+            if binary:
+                manifest = Path(binary).parent / "manifest.json"
+                if manifest.is_file():
+                    details["server_pin_manifest"] = str(manifest.resolve())
+                    try:
+                        pin = json.loads(manifest.read_text())
+                        if (Path(pin.get("binary", "")) != Path(binary)
+                                or pin.get("binary_sha256") != details.get("server_binary_sha256")):
+                            raise ValueError("pin manifest does not match selected binary")
+                        details["server_pin"] = pin
+                    except (OSError, ValueError, TypeError) as exc:
+                        details["server_pin_error"] = str(exc)
         if status == "failed":
             code = (child_failure.returncode if child_failure is not None
                     else details.get("startup_child_exit"))

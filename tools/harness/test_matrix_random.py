@@ -6,6 +6,9 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 import zlib
+from unittest.mock import patch
+
+from .backends import matrix_random
 
 from .matrix_domains.random import invariant_checks, mutate_observation, stock, _published, setup, recovery_matches
 from .quirk_parity.fuzz import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_ACTIONS,
@@ -24,6 +27,24 @@ class RandomMatrixTests(unittest.TestCase):
         self.assertIsNone(failure_identity({'status': 'blocked', 'note': 'random:conservation:step=0:'}))
         self.assertEqual(failure_identity({'status': 'fail', 'note': 'random:conservation:step=22: bad'}),
                          'random:conservation')
+
+    def test_reduced_repro_retains_trial_selectors(self):
+        row = player_scenario(1, 1, 2)
+        report = {'status': 'fail', 'note': 'random:conservation:step=0: planted', 'row': row}
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / 'shrink').mkdir()
+            ctx = SimpleNamespace(artifact_dir=Path(directory))
+            argv = ['python3', '-m', 'tools.harness', 'run', 'matrix-random',
+                    '--server-bin', '/pin/server', '--script', '/trial/script.json',
+                    '--vanilla-data', '/data', '--differential', '--vanilla-jar', '/vanilla.jar',
+                    '--plugins-dir', '/plugins']
+            with patch.object(matrix_random, 'replay', return_value=(report, '/trial/result.json', argv)):
+                result = matrix_random.shrink(ctx, report)
+            self.assertEqual(result['status'], 'reproduced')
+            self.assertIn('--differential', result['repro_command'])
+            self.assertIn('--vanilla-jar /vanilla.jar', result['repro_command'])
+            self.assertIn('--plugins-dir /plugins', result['repro_command'])
+            self.assertIn(result['minimal_script'], result['repro_command'])
 
     def test_recovery_rejects_lost_published_transfer_and_craft_equivalent_substitution(self):
         committed = {'inventories': [{}, {'minecraft:oak_log': 1}],

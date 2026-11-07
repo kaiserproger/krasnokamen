@@ -140,6 +140,14 @@ def run(ctx, *, random_mode=False):
         raise ValueError('protocol-matrix requires immutable --server-bin')
     report = {'driver':'protocol_bot', 'server_sha':hashlib.sha256(ctx.server_bin.read_bytes()).hexdigest(),
               'matrix_id':args.matrix_id, 'capability':args.capability, 'status':'running'}
+    manifest = ctx.server_bin.parent / 'manifest.json'
+    if manifest.is_file():
+        provenance = json.loads(manifest.read_text())
+        if (Path(provenance.get('binary', '')) != ctx.server_bin or
+                provenance.get('binary_sha256') != report['server_sha']):
+            raise ValueError('server pin manifest does not match selected binary')
+        report['server_pin'] = provenance
+        report['server_pin_manifest'] = str(manifest.resolve())
     ctx.client_evidence['protocol_matrix'] = report
     clients = []
     server = None
