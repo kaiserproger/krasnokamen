@@ -37,7 +37,8 @@ def run(steps: ProbeSteps, pointer: Pointer, coordinates: Callable[[dict[str, An
             steps.check(label + "_" + phase + "_custody", log_custody(image) == 4)
             if phase == "release":
                 steps.check(label + "_release_keeps_cursor",
-                            image["carried"] == {"item": "minecraft:oak_log", "count": held})
+                            image["carried"]["item"] == "minecraft:oak_log"
+                            and image["carried"]["count"] == held)
         steps.call("minecraft_close_screen")
         _echo(steps, label + "_close_ordered")
         image = observe_menu(steps, label + "_close")

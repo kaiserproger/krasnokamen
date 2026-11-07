@@ -104,10 +104,13 @@ fn debug_menu_reports_authoritative_inventory_through_command_path() {
     assert_eq!(messages.len(), 1, "{outbox:?}");
     let image: serde_json::Value = serde_json::from_str(messages[0]).unwrap();
     assert_eq!(image["container_id"], 0);
-    assert_eq!(image["carried"], serde_json::json!({"item":"minecraft:oak_log","count":3}));
+    assert_eq!(image["carried"]["item"], "minecraft:oak_log");
+    assert_eq!(image["carried"]["count"], 3);
     assert_eq!(image["slots"].as_array().unwrap().len(), 46);
-    assert_eq!(image["slots"][1], serde_json::json!({"item":"minecraft:oak_log","count":2}));
-    assert_eq!(image["slots"][36], serde_json::json!({"item":"minecraft:diamond","count":4}));
+    assert_eq!(image["slots"][1]["item"], "minecraft:oak_log");
+    assert_eq!(image["slots"][1]["count"], 2);
+    assert_eq!(image["slots"][36]["item"], "minecraft:diamond");
+    assert_eq!(image["slots"][36]["count"], 4);
     let (_, redirected, _) = crate::tick::run_tick(&mut state, &[PlayerInput::Command {
         connection: ConnectionId(1),
         command: "execute as Bob run debug menu".into(),
@@ -124,6 +127,22 @@ fn debug_menu_reports_authoritative_inventory_through_command_path() {
     assert_eq!(redirected_image["slots"][1], image["slots"][1]);
     assert_eq!(redirected_image["carried"], image["carried"]);
     assert!(crate::commands::parse("debug menu", false).is_err());
+}
+
+#[test]
+fn debug_menu_station_and_beacon_have_no_block_storage() {
+    let (mut state, alice, _) = fixture();
+    let registry = Arc::clone(&state.registry);
+    let item = registry.items.id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap()).unwrap();
+    for kind in [crate::inventory::MenuKind::Anvil, crate::inventory::MenuKind::Beacon] {
+        let player = state.players.get_mut(&alice).unwrap();
+        player.open_menu(&registry.item_rules(), kind, "Probe".into(), &[]);
+        player.open.as_mut().unwrap().grid[0] = mc_data::ItemStack::new(item, 1).with_damage(7);
+        state.open_containers.insert(alice, (0, 80, 0));
+        let image = crate::tick::debug_menu_snapshot(&state, alice).unwrap();
+        assert_eq!(image["slots"][0]["item"], "minecraft:diamond");
+        assert_eq!(image["slots"][0]["components"]["damage"], 7);
+    }
 }
 
 #[test]

@@ -102,6 +102,9 @@ fn ender_chest_same_player_shares_chests_but_never_other_players_or_block_storag
         .unwrap()[0],
         item
     );
+    let image = crate::tick::debug_menu_snapshot(&state, first).unwrap();
+    assert_eq!(image["slots"][0]["item"], "minecraft:diamond");
+    assert_eq!(image["slots"][0]["count"], 7);
     open_at(&mut state, 2, 8);
     assert!(
         contents(

@@ -172,6 +172,9 @@ fn mount_inventory_equipment_cargo_and_ridden_open_share_native_custody() {
         state.entities.row(target_slot).entity_life.mount.cargo[0].count,
         7
     );
+    let image = crate::tick::debug_menu_snapshot(&state, actor).unwrap();
+    assert_eq!(image["slots"][2]["item"], "minecraft:diamond");
+    assert_eq!(image["slots"][2]["count"], 7);
     let saved = serde_json::to_vec(&state.entities.row(target_slot).entity_life.mount).unwrap();
     let restored: MountState = serde_json::from_slice(&saved).unwrap();
     assert_eq!(

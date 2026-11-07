@@ -58,11 +58,12 @@ pub(crate) fn debug_menu_snapshot(
     let player = state.players.get(&entity).ok_or("player not found")?;
     let menu = player.open.as_ref().unwrap_or(&player.inventory_menu);
     use std::borrow::Cow;
-    let container: Cow<'_, [mc_data::ItemStack]> = if let Some(open) = state.settlement_menus.get(&player.connection) {
-        let (window, icons) = open.snapshot();
-        if window != menu.window {
-            return Err("settlement menu is stale");
-        }
+    let container: Cow<'_, [mc_data::ItemStack]> = if menu.kind.container_size() == 0 {
+        Cow::Borrowed(&[])
+    } else if let Some((_, icons)) = state.settlement_menus.get(&player.connection)
+        .map(|open| open.snapshot())
+        .filter(|(window, _)| *window == menu.window)
+    {
         Cow::Borrowed(icons)
     } else if crate::vehicles::is_open(state, entity) {
         Cow::Borrowed(crate::vehicles::container_slots_for_player(state, entity)
@@ -84,8 +85,6 @@ pub(crate) fn debug_menu_snapshot(
             slots.extend(record.slots.iter().cloned());
         }
         Cow::Owned(slots)
-    } else if menu.kind.container_size() == 0 {
-        Cow::Borrowed(&[])
     } else {
         return Err("menu backing storage is unavailable");
     };
@@ -94,10 +93,10 @@ pub(crate) fn debug_menu_snapshot(
     }
     let stack = |item: &mc_data::ItemStack| -> Result<serde_json::Value, &'static str> {
         if item.is_empty() {
-            return Ok(serde_json::json!({"item": null, "count": 0}));
+            return Ok(serde_json::json!({"item": null, "count": 0, "components": null}));
         }
         let name = state.registry.items.name_of(item.item_id).ok_or("unknown item in menu")?;
-        Ok(serde_json::json!({"item": name.as_str(), "count": item.count}))
+        Ok(serde_json::json!({"item": name.as_str(), "count": item.count, "components": item}))
     };
     let slots = (0..menu.kind.slot_count()).map(|index| {
         use crate::inventory::SlotRef;
