@@ -1,54 +1,39 @@
-# Owner decisions: CP-058 / CP-059 / CP-068 (RULESET DECISION)
+# Settlement war, mount and equipment decisions
 
-Source: the council's RULESET DECISION (Astra + GLM second opinion; the owner amends if desired).
-The values below are verbatim from the decision; implement exactly this. CP058/059/068 are unblocked
-on these values. Only the native profile for feed/HP/stamina/collider/seat/impulse remains open.
+The owner approved these values for settlement war, mounts and mounted charge. The native core does not implement war declarations, mounts or charge: there is no war state, window or grace timer, soldiers fight only on foot with native melee, and the army order parser accepts only `follow`, `guard`, `patrol` and `return` (see [army](army.md)). Treat everything below as the design target to implement exactly, not as current behavior.
 
-## CP058 — war
+The supply recipes from the same decision (saddle, hay block) are implemented; see [production](production.md#startup-work-recipes).
 
-- Declared by: the charter holder, with a committed declaration + a delivered reason.
-- Grace: 72000 simulation ticks.
-- Windows: ≤8, each ≤72000, pause ≥12000, absolute [start,end).
-- Targets: ≤8 lawful.
-- Record size: ≤4096 UTF-8 bytes.
-- Protection: Private/Neutral/Unknown = refusal; after peace/revoke, 0 new damage commits.
-- GLM amendments APPLY:
-  - (a) NO automatic victory by holding points — victory ONLY by a committed peace/surrender with a recorded outcome; window expiry without an outcome = effects stop, no winner.
-  - (b) auto-contribution = 0 (voluntary payment only, by a real inventory transfer).
-  - (c) victory does NOT grant a separate right to breach/salvage.
-  - (d) AdmittedConflictContinues: logout does NOT grant immunity in an already admitted lawful conflict of the current window, but there are no new offline targets.
+## War
 
-## CP059 — supply
+- Declared by the settlement's charter holder with a committed declaration and a delivered reason.
+- Grace before damage: 72,000 simulation ticks.
+- Windows: at most 8, each at most 72,000 ticks long, at least 12,000 ticks apart, absolute `[start, end)`.
+- Targets: at most 8 lawful targets. A record is at most 4,096 UTF-8 bytes.
+- Private, neutral and unknown targets are refused. After peace or revoke, no new damage commits.
+- Victory only by a committed peace or surrender with a recorded outcome. Holding points never wins; a window that expires without an outcome stops its effects and has no winner.
+- Contribution is voluntary only, by a real inventory transfer; nothing is taken automatically.
+- Victory grants no separate right to breach or salvage.
+- Logging out gives no immunity in a lawful conflict already admitted in the current window; no new offline targets are added.
 
-- Saddle: 3 leather + 1 iron = 1 saddle, crafting_table, 240 ticks.
-- Hay: 9 wheat → block 80 ticks; block → 9 wheat 40 ticks.
-- Turnover: atomic debit/output, no replay minting.
-- NO fixed price of 10–12 (price comes from secured demand).
-- NO quota of 4 per settlement (limiters = materials + worker + station).
-- Authorized trade deliveries are allowed.
+## Mounts
 
-## CP068 — mounts
+- The horse is the combat mount. Donkey and mule are pack animals only and never charge.
+- Each mount has its own native speed; none is declared a vanilla gait profile.
+- No forced dismount at 2 blocks: collision limits movement, and a dismount only goes to a safe position.
+- Lawful transit through a settlement is allowed; passage is not a right to damage.
+- Open: the native profile for mounted feed, health, stamina, collider, seat and impulse.
 
-- Horse — combat; donkey/mule — pack animals only, no charge.
-- Speeds: individual native speeds (do NOT declare Astra's numbers to be vanilla gait profiles).
-- Charge: max +3HP, spear/pike only, after 40 ticks of build-up.
-- NO forced dismount at 2 blocks (collision limits movement; dismount only to a safe position).
-- Lawful transit is allowed (passage ≠ a right to damage).
+## Charge
 
-## CP068-R2 — catalog
+- Spear or pike profile only, after 40 ticks of sustained speed of at least 0.45 blocks per simulation tick.
+- Bonus rises linearly from 0 to +3 HP between 0.45 and 0.60 blocks per tick and is capped at +3.
+- One hit per target per charge; the mount re-accelerates after contact.
 
-- Values: OWNER_DECISIONS §1 of the plugin repo (`../solaris-default-plugins/docs/settlements/OWNER_DECISIONS.md`) unchanged.
-- Spear is explicitly two-handed.
+## Equipment
+
+- The spear is two-handed.
 - Fractional wear accumulates.
 - One arrow is returned at most once.
-- Swap/reconnect/deploy never restore stamina.
-- Define a native arrow range limit.
-
-## Charge — accepted numbers (verbatim)
-
-- Trigger: ≥0.45 blocks/sim-tick, sustained 40 ticks.
-- Bonus: linear 0→3 HP from 0.45→0.60 blocks/tick, capped at +3 beyond that.
-- Spear/pike profile only.
-- One hit per target per charge.
-- Re-accelerate after contact.
-- Mounted feed/HP/stamina/collider/seat/impulse native profile — still OPEN.
+- Swapping, reconnecting or redeploying never restores stamina.
+- A native arrow range limit is defined.

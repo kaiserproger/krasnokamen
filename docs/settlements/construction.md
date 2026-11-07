@@ -1,0 +1,92 @@
+# Construction and buildings
+
+Settlements build from authored blueprints and can certify player-built structures and natural work zones.
+
+See [jobs](jobs.md), [menus](menus.md), [breeding](breeding.md), and the [settlement architecture](../architecture/settlements.md).
+
+## Blueprint files
+
+Solaris owns the JSON templates in `crates/mc-core/assets/blueprints/`. The embedded catalog contains `house` levels 1–3; `storage`, `farm`, `mason`, `lumber_camp`, `mine`, `barracks`, `wall`, and `watch_tower` levels 1–2; and `shepherd` level 1. A geometric certificate can reach level 3 even when its blueprint has no corresponding upgrade.
+
+Each file has an `id`, a building `kind`, a character-to-block-state `palette`, and `levels`. Each level contains `cert`, the certification box dimensions `[x, y, z]`; `entrance`, an `[x, y, z]` offset; and bottom-up `layers`, each made of Z rows of X characters. A dot is air. Palette states can include properties, for example `loom[facing=north]`. Each level is a complete picture, not an upgrade patch: the loader derives placements, removals, materials and rotations from it. The maximum placed dimensions are 11 × 9 × 11 blocks.
+
+The origin is the minimum corner of the rotated **maximum footprint across all levels**. Its Y is the ground-surface block, replaced by the floor layer. Certification bounds rotate in the same frame and may be smaller than the placed footprint. Upgrades retain the origin, prepared foundation and rotation. The farm's certificate includes its field as well as its shed.
+
+For authoring, `tools/blueprints.py check` checks structure, `tools/blueprints.py materials [id ...]` estimates material totals, and `tools/blueprints.py preview [id ...]` writes PNG previews. Material estimates are not runtime funding proofs: recipes may have fractional estimates even though real crafting consumes whole batches. The Rust blueprint tests check certification of the levels; the Python check is not that gate.
+
+## Planning and streets
+
+Keep the anchor, storage and worksite chunks loaded. Construction uses real items in certified storage and the generated village's bootstrap container, not player inventories. A player-founded settlement has no free stock; certify storage and stock it.
+
+The planner selects one active settlement every 20 ticks. It considers missing kinds in this order: storage; houses when certified house capacity is below population; farm; lumber camp; mine; Builder hut (`mason`); barracks from 6 residents; tower from 8; wall from 10. Natural mine and lumber zones do not count as built blueprint kinds. Funded upgrades are considered for eligible blueprint-built certificates; workshops requiring iron or flint are not on this automatic list. A need without available stock or a capable local source does not conjure materials or have to block another funded kind.
+
+The street plan is fixed relative to the bell: roads are three blocks wide every 28 blocks on both axes, with a one-block verge, an open 9 × 9 plaza, and two back-to-back rows of lots up to 11 blocks deep. `/settlement layout` reports the plan, reachable and obstructed roads, paving, lamps, building access and next street work.
+
+- A frontage must be reachable on foot from the plaza on loaded, walkable ground within eight blocks of the bell's elevation, with clear headroom and steps no higher than one block. A lamp-free verge separates it from the lot. Terrain and obstructions can cut the network off; they are not bulldozed to connect it.
+- A building's entrance faces its road. The planner seeks a free, fundable lot in walking order from the plaza. Autonomous passes examine up to 64 candidates and resume from their cursor; a new owner request searches the loaded plan.
+- The future footprint may span at most three blocks of ground-height difference. Its floor is at the door step, at most one block from the verge height. Natural ground above the floor can be excavated; gaps below it require real dirt from storage. Each cleared or filled cell is work and each fill uses one dirt. Unloaded or unsuitable sites and protected paths, farmland, fluids, containers and other obstructions are not cleared to prepare a site. The foundation is included in the bill.
+- When no building or upgrade starts, Builders can pave reachable road stretches serving standing buildings: natural soil becomes dirt path and replaceable plants above are cleared without a material charge. Lamps on served stretches use two fences and a torch from storage, at the planned positions every nine blocks. Stone and sand remain as they are. There is no automatic water placement for a well.
+
+## Builders and supplies
+
+An eligible adult resident can become a Builder; the planner prefers unemployed residents and may borrow eligible miners or lumberjacks, restoring their profession afterwards. A Builder who cannot reach storage can be released for another candidate. Work requires the daytime work shift, ticks 2000–8999, and `mob_griefing` enabled.
+
+Construction admissions select a settlement every four ticks. One admission performs either a real material transfer or one cell of construction, not both. The Builder batches materials into its real carry slots and walks to the site. For blueprint work, its entire body must be outside the full future footprint and the next cell within **12 blocks** of its feet; perimeter targets are two cells outside the footprint. Missing materials wait for replenishment. Completion checks the resulting certificate.
+
+The planner tries wood species by available stock and chooses one that can fund the complete bill, including oak as a candidate. The chosen species and bed color are fixed in the admitted project's cells. A bed needs three wool of the same color; local eligible workers can shear an adult sheep using real shears, including shears crafted from two iron ingots. Construction iron demand can be supplied by workers carrying real ore and fuel to an owned ordinary furnace and returning ingots to storage. When needed and fundable, a Builder can place a furnace near storage using a stored furnace or one crafted from eight cobblestone. These supplies are not free.
+
+Builders can use bounded recursive vanilla shaped and shapeless crafting chains, such as logs to planks to doors or planks and wool to beds. Fetch and crafting commit against real storage and carry; insufficient inputs or carry space do not partially debit the batch. This crafting path does not itself smelt or stonecut. Farmland costs dirt, wheat costs seeds, door upper halves and bed heads are free counterpart cells, and double slabs cost two slabs. Water is not created for fields.
+
+A foreign edit in a fenced construction footprint pauses the project as `footprint_changed`; the next construction admission re-snapshots and resumes it. **Remaining cells can be placed over the changed world**, while already placed cells are not re-planned. Removing a settlement cancels its construction handle but leaves placed blocks and carried materials.
+
+## Owner build requests
+
+Chat build commands target the claimed settlement containing the player and require its owner or an operator:
+
+- `/settlement build <blueprint>` requests a new level-one blueprint.
+- `/settlement build upgrade <buildingId>` requests an available blueprint upgrade by building ID; it is not the same as rechecking a certificate.
+- `/settlement build cancel` cancels the pending owner order, not active work.
+
+The **Projects** menu offers `Order: <blueprint>`, available upgrade buttons, **Status**, and **Cancel pending order**. Menu targeting can select a nearby settlement or an owned-settlement fallback; permission is checked on the selected claimed settlement, without requiring the player to stand inside it. See [menus](menus.md).
+
+An order can start when the project slot is available and the full real-material bill, including crafting and site preparation, can be funded. Admission itself neither places blocks nor debits stock. A funded owner request can preempt an autonomous project with no completed work, but not an owner project or work already started. If busy or short of materials, one pending order is retained; another queued request replaces it. While pending, it blocks new autonomous projects but not completion of current work. Refused requests are not queued. **Projects** and **Status** report progress and unmet needs; cancelling the pending order releases autonomous planning.
+
+A queued upgrade targets the building and chooses its next available level when it starts. If the building disappears or has no available next upgrade, the planner drops the order and notifies the online owner. A wall order builds a wall section with Builders; it is neither certification of player blocks nor an automatically enclosed perimeter or gate system.
+
+## Certification commands
+
+Certification inspects loaded blocks without placing them or charging materials. Certify and list select the settlement containing the player, choosing the nearest anchor and then lowest ID if radii overlap. Certification requires the owner or an operator of a claimed settlement; certificate upgrades address a building globally and require management permission for its settlement.
+
+- `/settlement building certify <kind> <x1> <y1> <z1> <x2> <y2> <z2>` certifies level 1 using inclusive, ordered minimum and maximum coordinates. Include floor and roof where required.
+- `/settlement building upgrade <id>` checks the existing bounds for the next certificate level, up to 3; build the extra blocks first. This does not order Builder work.
+- `/settlement building list` shows IDs, kinds, levels and bounds.
+
+Re-certifying the same kind with bounds containing an existing certificate refreshes or expands it without changing its ID or level. Other overlapping certificates are rejected. Bounds must fit inside the settlement and loaded chunks, with at most 64 blocks per axis and 32,768 blocks in total. A settlement can have at most 1,024 buildings.
+
+Kinds are `house`, `storage`, `barracks`, `wall`, `tower`, `gate`, `mine`, `lumber_camp` and profession workshops: `armorer`, `butcher`, `cartographer`, `cleric`, `farmer`, `fisherman`, `fletcher`, `leatherworker`, `librarian`, `mason`, `builder`, `shepherd`, `toolsmith`, `weaponsmith`.
+
+## Certificate requirements
+
+| Requirement | Level 1 | Level 2 | Level 3 |
+|---|---:|---:|---:|
+| Footprint area, except wall | 9 | 16 | 25 |
+| Inclusive height, except wall and tower | 4 | 4 | 4 |
+| House beds | 1 | 2 | 3 |
+| Barracks beds | 2 | 4 | 6 |
+| Storage containers | 1 | 2 | 3 |
+| Workshop, mine or camp workstations and job slots | 1 | 2 | 3 |
+| Wall length × height | 5 × 3 | 9 × 4 | 13 × 5 |
+| Tower height | 6 | 8 | 10 |
+| Gate doors | 1 | 2 | 3 |
+
+Ordinary buildings need a collision-bearing floor across the selection; a mine's bounds instead designate a digging zone. Houses and barracks need correctly paired beds, a door, a complete roof on the top plane and a closed collision-bearing perimeter between floor and roof. Towers need the roof and perimeter but not beds or a door. Walls need a continuous collision-bearing vertical plane along the longer axis at the minimum perpendicular coordinate; gates need four solid corner columns as well as doors. These are geometric checks, not a style requirement. Bed headroom for breeding is a separate rule; see [breeding](breeding.md).
+
+Workshops, mines and camps use distinct matching work points in their bounds, with the first 1/2/3 in coordinate order providing slots. Destroying a workstation releases its slot; unloaded chunks alone do not. Storage recognizes chests, trapped chests and barrels, up to 64 registered points. Barracks provide two soldier slots per level; see [army](army.md). For workstation types and worker behavior, see [jobs](jobs.md).
+
+## Natural zones and radius
+
+Generated-village adoption can certify a natural level-one mine or lumber zone without a placed workstation or chest. It has one open entrance and one job slot. A lumber zone needs at least four logs; a mine needs at least 32 stone or ore blocks, a 5 × 5 horizontal area and two blocks of depth below its entrance. Bounds must be loaded, within the radius and nonoverlapping. Workers extract the actual finite resources; upgrading requires the ordinary geometry and workstation.
+
+Natural-zone discovery probes outward over the saved radius, at most four candidates per 20-tick pass, using loaded terrain and avoiding generated-piece horizontal footprints. Founding mine candidates use a 15 × 15 footprint, with an entrance on the west edge near a Z edge; quarry depth follows the supported entrance height. The 5 × 5 certification minimum does not guarantee sufficient supplies.
+
+The creation radius is a floor. Population growth raises the radius to at least four blocks per resident, capped at 256; it never shrinks. For example, 30 residents require radius 120. `/settlement info` displays it.
