@@ -2,7 +2,8 @@
 
 `ledger.toml` records each bug with `id`, `title`, `area` (`gameplay`, `client`,
 `harness`; set from the symptom at filing and not changed by fixers),
-`severity` (`blocker`, `major`, `minor`), `status` (`open`, `fixed`),
+`severity` (`blocker`, `major`, `minor`), `status` (`open`, `fixed`; `fixed`
+only via `ledger promote`),
 `source`, `repro` (`manual`, `client`, `cargo`, `source`) and
 `regression`. Historical reports are not proof of the current candidate.
 
@@ -28,38 +29,176 @@ failing_first = "not recorded"
 - `severity`: `blocker`, `major`, or `minor`; `status`: file as `open`.
 - `source`: repo-relative location or plain description, not an owner-local path.
 - `repro`: `manual`, `client`, `cargo`, or `source`, according to the original report.
-- `regression`: a list of green `cargo:<crate>:<exact test path>` or
-  `harness:<profile>:<scenario>` checks; initially it may be empty.
+- `regression`: a list of green `cargo:<crate>:<exact test path>`,
+  `harness:<profile>:<scenario>`, or `harness:<profile>:<verdict>` checks;
+  initially it may be empty. Profile verdicts run the windowed native client.
+  A profile may publish boolean `details.verdicts` keyed by behaviour; the
+  referenced key must be exactly `true`. The `all` key denotes the whole
+  profile; when no boolean verdict map exists, `all` requires a passing
+  profile receipt. Legacy profiles expose their existing `PASS` behaviour
+  maps: `village-qa` has `door_walk`, `sleep_return`, `farmer_harvest`,
+  `miner_deposit`, and `lumberjack`; autonomy, claim and army expose their
+  named behaviours. `buildings-qa` uses `<blueprint>.<behaviour>`, for
+  example `wall.L1_built`. Partial or resumed profile overrides are rejected.
+  A passing profile is evidence only for symptoms its assertions actually cover.
 - `repro_check` is optional: a nonempty string or list of nonempty strings for
   known-red reproducers, kept out of the green regression gate.
 - `failing_first` is optional and, when present, is `reported` or `not recorded`;
   report the actual pre-fix evidence, never infer it from a passing test.
 
-The phase reviewer checks the original symptom, failing-first and fixed-build
-evidence before promoting a row to `fixed`; fixers do not self-promote based
-only on an implementation or an unrelated green check.
+`fix_commit` (optional until promotion) is the lowercase hex id of the commit
+that fixes the row; `promotion` is set only by `ledger promote`, see
+[the `fixed` rule](#the-fixed-rule-single-home).
 
-Add a failing-first check for a fix. `cargo:<crate>:<exact test path>` names
+Add a regression check for a fix. `failing_first` records pre-fix evidence only
+if you saw it; `ledger promote` runs the negative control.
+`cargo:<crate>:<exact test path>` names
 an exact test; `harness:<profile>:<scenario>` names an existing runnable
-scenario. Every green Cargo check in `regression`, even for an open row,
-runs on every integration; scenario checks run in the client tier. Keep a known-red reproducer in `repro_check`
-instead; it is not a gate. Never weaken or delete checks to make a run green.
+scenario. A profile verdict runs that profile once for all rows citing it:
+the child receipt must pass and the named behaviour must be true in its
+boolean verdict map, or `PASS` in its legacy behaviour map. Unknown profiles
+and verdicts fail validation.
+`regressions-client` builds its own release server (a known exception to the
+`pin-release` rule, listed in [open transitions](../STATUS.md#open-transitions))
+in the enclosing runner's pooled target, then hard-links it (copies if it
+cannot) outside the pooled target before executing clients.
+`SOLARIS_REGRESSIONS_BIN_DIR` selects that directory; the receipt records the
+pinned path and SHA-256. Pin any supplied client binary separately.
+Every green Cargo check in `regression`, even for an open row, runs on every
+integration; client checks run in the client tier. Keep a known-red reproducer
+in `repro_check` instead; it is not a gate. Never weaken or delete checks to
+make a run green.
 
-A row is fixed only when its check passes and is the same or stricter than the
-original repro. Owner/manual and real-client repros, and all client-surface
-bugs, require a real-client check; source/test findings may use a Cargo test
-through the same real tick/gameplay path or a TCP/native scenario. Tests must
-assert vanilla or owner-accepted behavior, not merely the current output.
-One row describes one symptom: split covered behavior from remaining gaps.
-The phase reviewer confirms each promotion batch matches the symptom and
-failed before the fix. A unit test cannot close a known client failure.
-Client promotion requires an assertion matching the repro; visual-review
-scenarios require recorded review.
-
-Run `python3 -m tools.harness run regressions` on every integration and
-`python3 -m tools.harness run regressions-client` when promoting a
-client-surface fix and before release. The independent breaker in
+`python3 -m tools.harness run regressions` is part of L2 (`correctness`); run it
+alone only after an integration that skips L2. Run
+`python3 -m tools.harness run regressions-client` when a client-surface fix
+is promoted and before release. The independent breaker in
 `../QA_AGENT_PROTOCOL.md` remains a release requirement.
+
+## Write-ups for blockers, data loss, dupes and agent incidents
+
+For a `blocker` row, a data-loss or dupe bug, or an incident an agent caused,
+the write-up lists the contributing factors and which defense layers (tests,
+gates, reviews, guards) held or failed, not a single root cause: each fault was
+necessary and only together they were sufficient
+([Cook](https://how.complexsystems.fail/), points 3 and 7). Write what was
+known when each action was taken, without "should have" (point 8). Judge a
+fix by whether it removes a factor or adds a defense layer, not by who erred.
+
+## The `fixed` rule (single home)
+
+A row becomes `fixed` only through `python3 -m tools.harness ledger promote
+<ID>`. Nobody sets `status = "fixed"` or `promotion` by hand: `run regressions`
+fails a `fixed` row without a `promotion` receipt, and a receipt that does not
+match the row's `id` and `fix_commit`. The only rows exempt are those already
+`fixed` at base `ffd52010` (frozen list `tools/harness/ledger_base_fixed.py`; a
+reopened row leaves the list in the same edit).
+
+**What workers do:** add `regression` refs (and `repro_check`, `failing_first`
+evidence) and record `fix_commit` (the one commit with the fix; the test may be
+in it or earlier, never only in later commits). They do not edit `status` or
+`promotion`, and they do not decide that a row is fixed: a green test that also
+passes without the fix proves nothing, which is why the script, not the
+worker, runs the negative control.
+
+**What `ledger promote` checks**, all of which must hold:
+
+1. `fix_commit` is recorded and is contained in the current tree, or, for a fix
+   not yet committed, is `patch:<sha256>` of the non-test hunks of the git diff
+   passed as `--fix-patch` (a mismatch prints the value to record; the patch
+   must still apply in reverse on the candidate, so a later edit or re-break of
+   it refuses). The candidate is the
+   exact tree: `HEAD` plus its uncommitted diff and untracked files
+   (`docs/bugs/` aside), identified by a fingerprint; no commit is needed. The
+   control and the restore worktrees reproduce it, verified by that fingerprint.
+2. The row has at least one registered check.
+3. For `area = "client"` or `repro` in `manual`/`client`: a graphical harness
+   ref, and `--client-receipt <result.json>` of a real-client run whose status
+   is `passed`, which covers one of the row's real-client refs (a scenario ref
+   by `named_scenario.id`; a profile ref by profile plus the named verdict),
+   and whose `tree` field, written by the harness at run start, is the
+   candidate's fingerprint (HEAD and the hash of the uncommitted state). A
+   receipt without that field, from another revision or with other
+   uncommitted changes is refused: rerun the gate on the candidate, and after
+   any later edit. The receipt must also name a release server binary that
+   the tooling built from exactly that candidate (`ledger probe --client` and
+   `promote` register every server they build in
+   `.analysis/ledger-builds/<sha256>.json`): a pinned or foreign
+   `SOLARIS_SERVER_BINARY`, or a binary built from an older source, proves
+   nothing about this source and is refused. A unit test cannot close a client
+   failure.
+4. Automatic negative control: the fix commit's non-test hunks (test files,
+   `docs/` and Rust hunks after the first `#[cfg(test)] mod` stay) are
+   reverse-applied onto the candidate in a temporary worktree; only if
+   they no longer apply there, onto a worktree at `fix_commit`
+   (`control_tree: head|fix_commit` in `promote.json`). Then every ref runs
+   and at least one must be **red** at its assertion. A control that stays
+   green, or whose reversal does not build, is refused (split the fix commit
+   so tests do not need its new API, or promote nothing). A hunk straddling
+   the test-module boundary is refused. Graphical refs run in the control on
+   the real client.
+5. The restore, always on a worktree of the exact candidate (never at
+   `fix_commit`): every ref is **green**, so a regression after the fix
+   refuses promotion. A ref already passed by the supplied client receipt (same
+   `HEAD`) is not rerun, unless it carried the red control. A client ref is red
+   only when the failed receipt carries an explicitly failing verdict for that
+   profile check; a timeout, a client that never reached play (`in_play`), a
+   missing prerequisite or any failure without a negative verdict is
+   unrunnable and cannot be a control. Scenario refs have no such verdict, so a
+   row's control needs a cargo ref or a profile verdict ref. Control worktrees
+   are temporary `git worktree`s beside the other worktrees (`<work>/wt/`),
+   one promotion at a time (a lock), at fixed paths (`ledger-control-candidate`,
+   `ledger-control-fix`). Every cargo build or test for such a tree runs through
+   `mem-run.sh` with `cwd=<tree>` and without the caller's `CARGO_TARGET_DIR`, so
+   the runner gives the tree its own slot (marks it, touches on a switch) and
+   the fixed path reuses it instead of growing the target dir; the release
+   server build checks the slot marker against the tree actually built. No
+   incremental cache.
+   Each has its own copy of `data/vanilla` (never links into the source tree)
+   and is removed afterwards.
+
+On success it writes `docs/bugs/promotions/<ID>.json` (commit, files reversed,
+per-ref control and restore results, client receipt) and sets
+`status = "fixed"` and `promotion = "docs/bugs/promotions/<ID>.json"` in the
+row; commit both. `--dry-run` runs everything and writes only its receipts under
+`.analysis/validation/<stamp>-ledger-promote-*/` (`promote.json`), never the
+ledger; on an already `fixed` row it re-audits the fix (a reopened-row check).
+A refusal prints the reason and exits 1.
+
+```
+python3 -m tools.harness ledger promote ID [--client-receipt PATH] [--fix-patch PATH] [--dry-run]
+```
+
+Heavy: run it under the owner host's `mem-run.sh`, one at a time.
+
+## Probing rows before assignment
+
+`python3 -m tools.harness ledger probe <ID...>|--open [--client] [--out PATH]`
+runs each row's registered refs (`regression`) on the current tree, once per
+distinct ref, and prints one line per row:
+
+- `green`: every ref passed;
+- `red [ref: status]`: a ref failed; the row is still broken here;
+- `needs-real-client [cargo ref green, ...]`: a harness ref was not run (pass
+  `--client` to run it; it builds a release server and drives the real client);
+- `unrunnable(reason)`: no registered check, unknown or ignored test, build error,
+  or a ref that cannot run.
+
+`--out` writes the full per-ref result as JSON (also valid YAML). Hand a worker
+only rows that are not `green`: a row already green at base is fixed in
+practice and needs promotion (or a better check), not a fix. Probe never
+changes the ledger; it is not promotion.
+
+`--client` (and `promote` of a client row) needs the real-client environment of
+[real-client gates](../development/real-client-gates.md#3-environment-block):
+a pinned client/server pair of the same protocol, the data, resource and asset
+roots, and a fresh `XDG_DATA_HOME` whose `solaris-client/` symlinks `facts
+assets data resources mojang`; run it through `scene-slot.sh` and `mem-run.sh`.
+The tool builds the release server itself and ignores `SOLARIS_SERVER_BINARY`;
+that is a second pinning mechanism next to `tools/dev/pin-release`, kept until
+its [open transition](../STATUS.md#open-transitions) closes. Do not extend it.
+A stale `target/debug` client fails with `target protocol mismatch`, a missing
+XDG with `missing content file`: both are reported `unrunnable`, never red.
 
 ## Block-entity packet privacy
 
@@ -123,9 +262,8 @@ promotions were gated with client branch `pauline/client-post-rc4` (`e1b22a5`);
 the released client `5d34e88` lacks those fixes, so point `SOLARIS_CLIENT_ROOT`
 at a checkout of that branch or later.
 
-Only promote a row after recording its fixed-build and failing pre-fix
-receipts. Repeat timing-variable probes at least three times. A probe's
-registration or screenshot alone is not acceptance evidence.
+A probe's registration or screenshot alone is not acceptance evidence; repeat
+timing-variable probes at least three times before `ledger promote`.
 An unchanged green pre-fix scene or a capture-only visual comparison is not a
 negative control: the scenario must fail at the affected assertion. Written
 visual review supplements that machine check; it does not replace it.
