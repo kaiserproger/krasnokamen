@@ -136,6 +136,8 @@ and retains failure artifacts under the configured receipts directory (default
 manifest, requested and attempted seeds, and any reductions. Every attempted
 seed retains its command, step and bot counts, server commit and binary SHA,
 harness tree fingerprint and result; full receipts are pruned for passes only.
+When the disk budget requires pruning older campaigns, their compact
+`result.json` seed records remain; older failure artifacts may be removed.
 The configured disk budget is checked between seeds, not enforced as a hard
 filesystem quota during a running seed; a single seed or reduction may exceed
 it before the campaign stops.

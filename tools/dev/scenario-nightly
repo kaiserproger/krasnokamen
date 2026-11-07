@@ -31,16 +31,26 @@ def passed_receipt(record, path, receipt):
 
 
 def prune(root, current, maximum):
-    """Evict oldest completed campaigns, never an in-flight campaign."""
+    """Evict old heavy artifacts while preserving each completed campaign summary."""
     campaigns = sorted(path for path in root.glob('campaign-*') if path.is_dir())
     total = sum(size(path) for path in campaigns)
     for path in campaigns:
         if total <= maximum:
             break
-        if path == current:
+        if path == current or not (path / 'result.json').is_file():
             continue
-        total -= size(path)
-        shutil.rmtree(path)
+        before = size(path)
+        for child in path.iterdir():
+            if child.name == 'result.json':
+                continue
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+        summary = json.loads((path / 'result.json').read_text())
+        summary['artifacts_retained'] = False
+        (path / 'result.json').write_text(json.dumps(summary, indent=2) + '\n')
+        total -= before - size(path)
     return total
 
 

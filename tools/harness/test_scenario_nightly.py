@@ -81,9 +81,13 @@ class ScenarioNightlyTests(unittest.TestCase):
             unrelated = root / 'unrelated'
             for directory in (old, current, unrelated):
                 directory.mkdir()
-                (directory / 'result.json').write_bytes(b'abcde')
-            self.assertEqual(nightly.prune(root, current, 5), 5)
-            self.assertFalse(old.exists())
+                (directory / 'result.json').write_text(json.dumps({'seeds_run': 1, 'seed': 7}))
+            (old / 'world').mkdir()
+            (old / 'world' / 'data').write_bytes(b'x' * 1000)
+            nightly.prune(root, current, 200)
+            self.assertEqual(json.loads((old / 'result.json').read_text()),
+                             {'seeds_run': 1, 'seed': 7, 'artifacts_retained': False})
+            self.assertFalse((old / 'world').exists())
             self.assertTrue(current.exists())
             self.assertTrue(unrelated.exists())
 
