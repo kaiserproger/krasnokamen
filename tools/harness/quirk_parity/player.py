@@ -27,7 +27,7 @@ class VanillaMatrixServer(VanillaOracle):
 
     def dashboard_stats(self):
         feedback = self.query('time query gametime')
-        match = re.search(r'The time is (\d+)', feedback)
+        match = re.search(r'The (?:game )?time is (\d+)', feedback)
         if match is None:
             raise RuntimeError('vanilla did not acknowledge the game-time fence: ' + feedback)
         return {'simulation_tick': int(match.group(1))}

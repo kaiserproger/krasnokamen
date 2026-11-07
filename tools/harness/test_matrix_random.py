@@ -18,6 +18,11 @@ from .quirk_parity.fuzz import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_A
 
 
 class RandomMatrixTests(unittest.TestCase):
+    def test_vanilla_game_time_fence_parses_actual_feedback(self):
+        oracle = object.__new__(player.VanillaMatrixServer)
+        oracle.query = lambda _: 'System chat: The game time is 642 tick(s)'
+        self.assertEqual(oracle.dashboard_stats(), {'simulation_tick': 642})
+
     def test_vanilla_network_fixture_disables_default_whitelist(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
