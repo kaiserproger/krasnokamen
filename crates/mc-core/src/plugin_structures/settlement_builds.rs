@@ -19,18 +19,37 @@ pub(crate) fn prepare(
     settlement: SettlementId,
     blueprint: String,
     bounds: ScriptWorldBounds,
+    site: ScriptWorldBounds,
     cells: Vec<PlannedCell>,
 ) -> Result<String, Failure> {
     if state.settlements.get(settlement).is_none() || cells.is_empty() || cells.len() > 32768 {
         return Err(Failure::InvalidRequest);
     }
+    let origin = crate::settlements::blueprints::get(&state.registry, &blueprint)
+        .map(|blueprint| {
+            let height = i32::from(
+                blueprint
+                    .footprint(crate::settlements::blueprints::Rotation::from_quarter_turns(0))[1],
+            );
+            [site.min[0], site.max[1] - height + 1, site.min[2]]
+        })
+        .unwrap_or(site.min);
     let mut ledger = ledger(state)?;
     if ledger.structures.values().any(|record| {
         record.snapshot.dimension == state.dimension.name()
             && record.snapshot.state != ScriptStructureState::Cancelled
-            && bounds_of_structure(record).is_ok_and(|existing| overlaps(existing, bounds))
+            && reserved_bounds(record).is_ok_and(|existing| {
+                overlaps(
+                    existing,
+                    if record.snapshot.state == ScriptStructureState::Committed {
+                        site
+                    } else {
+                        bounds
+                    },
+                )
+            })
             && !(record.settlement == Some(settlement)
-                && same_site(state, record, bounds.min)
+                && same_site(state, record, origin)
                 && record
                     .snapshot
                     .blueprint_id
@@ -91,9 +110,9 @@ pub(crate) fn prepare(
         state.dimension.name().into(),
         ScriptStructureState::Prepared,
         revision,
-        bounds.min,
+        site.min,
         0,
-        std::array::from_fn(|axis| bounds.max[axis] - bounds.min[axis] + 1),
+        std::array::from_fn(|axis| site.max[axis] - site.min[axis] + 1),
         stages,
         0,
         0,
@@ -111,6 +130,7 @@ pub(crate) fn prepare(
         Structure {
             owner: owner(settlement),
             settlement: Some(settlement),
+            settlement_preparation: (bounds != site).then_some(bounds),
             snapshot,
             blueprint_hash: inventories::hash(&batches),
             image,
@@ -128,7 +148,7 @@ pub(crate) fn area_reserved(state: &TickState, bounds: ScriptWorldBounds) -> boo
         ledger.structures.values().any(|record| {
             record.snapshot.dimension == state.dimension.name()
                 && record.snapshot.state != ScriptStructureState::Cancelled
-                && bounds_of_structure(record).is_ok_and(|existing| overlaps(existing, bounds))
+                && reserved_bounds(record).is_ok_and(|existing| overlaps(existing, bounds))
         })
     })
 }
@@ -229,6 +249,38 @@ pub(crate) fn next_cell(
         .map(|cell| cell.at))
 }
 
+/// Borrow the canonical stage rather than inferring clearing from a live tree:
+/// leaves may decay before their already-planned removal cell is reached.
+pub(crate) fn clearing(state: &TickState, settlement: SettlementId, handle: &str) -> bool {
+    let Some(record) = state
+        .plugins
+        .get_domain(OWNER, KEY)
+        .and_then(|ledger| ledger.get("structures"))
+        .and_then(|structures| structures.get(handle))
+    else {
+        return false;
+    };
+    if record.get("settlement").and_then(serde_json::Value::as_u64) != Some(settlement.0) {
+        return false;
+    }
+    let Some(snapshot) = record.get("snapshot") else {
+        return false;
+    };
+    let Some(index) = snapshot
+        .get("current_stage_index")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|index| usize::try_from(index).ok())
+    else {
+        return false;
+    };
+    snapshot
+        .get("stages")
+        .and_then(|stages| stages.get(index))
+        .and_then(|stage| stage.get("stage"))
+        .and_then(serde_json::Value::as_str)
+        == Some("clear")
+}
+
 pub(crate) fn advance(
     state: &mut TickState,
     settlement: SettlementId,
@@ -298,6 +350,7 @@ pub(super) fn debit(
     id: SettlementId,
     builder: &str,
     required: &BTreeMap<String, u64>,
+    cells: &[super::Cell],
 ) -> Result<(), Failure> {
     let uuid = uuid::Uuid::parse_str(builder).map_err(|_| Failure::InvalidRequest)?;
     if crate::settlements::economy::worker_reserved(state, Some(id), uuid) {
@@ -310,7 +363,27 @@ pub(super) fn debit(
     }) {
         return Err(Failure::Forbidden);
     }
-    if required.is_empty() {
+    let preparing = state
+        .settlements
+        .get(id)
+        .and_then(|record| record.project.as_ref())
+        .is_some_and(|project| project.building.is_none());
+    let mut drops = Vec::new();
+    if preparing {
+        for cell in cells
+            .iter()
+            .filter(|cell| cell.state == state.registry.states.air)
+        {
+            let block = state
+                .world
+                .block_at(cell.at[0], cell.at[1], cell.at[2])
+                .ok_or(Failure::Unloaded)?;
+            if crate::settlements::forestry::tree(state, block) {
+                drops.extend(crate::settlements::forestry::drops(state, cell.at, block)?);
+            }
+        }
+    }
+    if required.is_empty() && drops.is_empty() {
         return Ok(());
     }
     let before = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
@@ -337,7 +410,25 @@ pub(super) fn debit(
             return Err(Failure::InsufficientItems);
         }
     }
-    inventory::commit(state, vec![inventory::Change { before, after }])?;
+    let mut changes = Vec::new();
+    if before.slots != after {
+        changes.push(inventory::Change { before, after });
+    }
+    if !drops.is_empty() {
+        let images = source_images(state, id);
+        let mut post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
+        for stack in drops {
+            if !crate::settlements::construction_crafting::add_stack(state, &mut post, &stack) {
+                return Err(Failure::InsufficientItems);
+            }
+        }
+        changes.extend(images.into_iter().zip(post).filter_map(|(before, after)| {
+            (before.slots != after).then_some(inventory::Change { before, after })
+        }));
+    }
+    // Loot credit and material debit precede the infallible native block edit
+    // in the same tick transaction. Full storage leaves the tree untouched.
+    inventory::commit(state, changes)?;
     Ok(())
 }
 
@@ -439,7 +530,7 @@ fn same_site(state: &TickState, record: &Structure, origin: [i32; 3]) -> bool {
         return false;
     };
     let size = blueprint.footprint(crate::settlements::blueprints::Rotation::from_quarter_turns(0));
-    bounds_of_structure(record).is_ok_and(|bounds| {
+    bounds(record.snapshot.origin, record.snapshot.reserved_footprint).is_ok_and(|bounds| {
         origin
             == [
                 bounds.min[0],
@@ -610,7 +701,7 @@ pub(crate) fn fetch(
         return Err(Failure::Busy);
     }
     let carry = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
-    let plan = {
+    let (plan, mut remaining_bill) = {
         let ledger = ledger(state)?;
         let project = state
             .settlements
@@ -618,7 +709,28 @@ pub(crate) fn fetch(
             .and_then(|record| record.project.as_ref())
             .ok_or(Failure::Forbidden)?;
         let record = structure(&ledger, &owner(id), &project.structure)?;
-        haul_plan(state, record, &carry.slots)
+        let mut bill = remaining(record)
+            .into_iter()
+            .map(|material| {
+                let name = mc_data::Identifier::parse(&material.resource)
+                    .map_err(|_| Failure::InvalidRequest)?;
+                let item = state
+                    .registry
+                    .items
+                    .id_of(&name)
+                    .ok_or(Failure::InvalidRequest)?;
+                Ok((
+                    item,
+                    u32::try_from(material.quantity).map_err(|_| Failure::Capacity)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, Failure>>()?;
+        for stack in carry.slots.iter().filter(|stack| stack.count > 0) {
+            if let Some((_, count)) = bill.iter_mut().find(|(item, _)| *item == stack.item_id) {
+                *count = count.saturating_sub(stack.count as u32);
+            }
+        }
+        (haul_plan(state, record, &carry.slots), bill)
     };
     if !plan.iter().any(|(planned, _)| *planned == item) {
         return Err(Failure::Blocked);
@@ -639,25 +751,86 @@ pub(crate) fn fetch(
         let mut amount = wanted;
         let mut crafted = None;
         while amount > 0 {
+            let mut future = remaining_bill.clone();
+            if let Some((_, count)) = future.iter_mut().find(|(id, _)| *id == planned) {
+                *count = count.saturating_sub(amount);
+            }
+            let specific = crate::settlements::construction_crafting::wood_specific(state, planned);
+            let reserved = if specific {
+                Default::default()
+            } else if let Ok(reserved) = crate::settlements::construction_crafting::reserve_wood(
+                state,
+                &future,
+                &stock_after,
+            ) {
+                reserved
+            } else {
+                amount /= 2;
+                continue;
+            };
             let mut trial = stock_after.clone();
             if crate::settlements::construction_crafting::ensure_units(
                 state,
                 &mut trial,
                 planned,
                 amount as i32,
+                &reserved,
             ) {
-                crafted = Some(trial);
+                let reserved = if specific {
+                    // A recipe batch can also supply future cells. Check the
+                    // actual post-haul stock instead of reserving another
+                    // whole batch before crafting the current cell.
+                    let mut after_haul = trial.clone();
+                    let mut remove = amount as i32;
+                    for stack in after_haul
+                        .iter_mut()
+                        .flatten()
+                        .filter(|stack| stack.item_id == planned && stack.count > 0)
+                    {
+                        let take = remove.min(stack.count);
+                        stack.count -= take;
+                        remove -= take;
+                        if stack.count == 0 {
+                            *stack = mc_data::ItemStack::EMPTY;
+                        }
+                        if remove == 0 {
+                            break;
+                        }
+                    }
+                    match crate::settlements::construction_crafting::reserve_wood(
+                        state,
+                        &future,
+                        &after_haul,
+                    ) {
+                        Ok(reserved) => reserved,
+                        Err(_) => {
+                            amount /= 2;
+                            continue;
+                        }
+                    }
+                } else {
+                    reserved
+                };
+                crafted = Some((trial, reserved));
                 break;
             }
             amount /= 2;
         }
-        let Some(trial) = crafted else {
+        let Some((trial, reserved)) = crafted else {
             if planned == item {
                 return Err(Failure::InsufficientItems);
             }
             continue;
         };
         stock_after = trial;
+        let mut available = stock_after
+            .iter()
+            .flatten()
+            .filter(|stack| stack.item_id == planned && stack.count > 0)
+            .map(|stack| stack.count)
+            .sum::<i32>()
+            .saturating_sub(reserved.get(&planned).copied().unwrap_or(0))
+            .max(0);
         let mut moved = 0;
         for source in stock_after
             .iter_mut()
@@ -665,7 +838,7 @@ pub(crate) fn fetch(
             .filter(|stack| stack.item_id == planned && stack.count > 0)
         {
             let maximum = rules.max_stack(source);
-            while moved < amount as i32 && source.count > 0 {
+            while moved < amount as i32 && source.count > 0 && available > 0 {
                 let destination = carry_after
                     .iter()
                     .position(|stack| {
@@ -684,13 +857,15 @@ pub(crate) fn fetch(
                 }
                 let take = (amount as i32 - moved)
                     .min(source.count)
-                    .min(maximum - destination.count);
+                    .min(maximum - destination.count)
+                    .min(available);
                 if take <= 0 {
                     break;
                 }
                 destination.count += take;
                 source.count -= take;
                 moved += take;
+                available -= take;
             }
             if source.count == 0 {
                 *source = mc_data::ItemStack::EMPTY;
@@ -698,6 +873,9 @@ pub(crate) fn fetch(
         }
         if moved == 0 && planned == item {
             return Err(Failure::Capacity);
+        }
+        if let Some((_, count)) = remaining_bill.iter_mut().find(|(id, _)| *id == planned) {
+            *count = count.saturating_sub(moved as u32);
         }
     }
     let changes = images

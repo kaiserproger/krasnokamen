@@ -380,6 +380,151 @@ class VillageAutonomyQaTests(unittest.TestCase):
             self.assertEqual(ctx.exits, [0, 0])
 
 
+    def test_early_civilization_failure_retains_false_verdicts(self) -> None:
+        ctx = SimpleNamespace(client="java", client_evidence={})
+        with self.assertRaisesRegex(ValueError, "requires --client native"):
+            qa.run(ctx, civilization=True)
+        self.assertEqual(ctx.client_evidence["verdicts"], {
+            "new_house": False, "births": False, "second_building": False,
+            "iron_smelted": False, "all": False,
+        })
+        self.assertIn("checkpoint", ctx.client_evidence["verdict_limitations"]["births"])
+
+    def test_civilization_requires_snapshot_before_server_launch(self) -> None:
+        with TemporaryDirectory(prefix="civilization-preflight-", dir=qa.runtime.REPO_ROOT / ".analysis") as folder:
+            binary = Path(folder) / "server"
+            binary.write_bytes(b"test server")
+            ctx = SimpleNamespace(client="native", extra_args=[], platform=None, windowed=True,
+                                  timeout_seconds=10, artifact_dir=Path(folder), client_evidence={})
+            with (patch.dict(qa.os.environ, {"SOLARIS_SERVER_BINARY": str(binary), "SOLARIS_SNAPSHOT_BINARY": ""}),
+                  patch.object(qa.subprocess, "Popen") as launch,
+                  self.assertRaisesRegex(RuntimeError, "absolute SOLARIS_SNAPSHOT_BINARY")):
+                qa.run(ctx, civilization=True)
+            launch.assert_not_called()
+
+    def test_snapshot_preflight_rejects_pooled_and_nonexecutable_paths(self) -> None:
+        with TemporaryDirectory(prefix="snapshot-preflight-", dir=qa.runtime.REPO_ROOT / ".analysis") as folder:
+            root = Path(folder)
+            pooled = root / "targets" / "slot-a" / "snapshot"
+            pooled.parent.mkdir(parents=True)
+            pooled.write_bytes(b"unit test")
+            pooled.chmod(0o755)
+            with (patch.dict(qa.os.environ, {"SOLARIS_SNAPSHOT_BINARY": str(pooled)}),
+                  self.assertRaisesRegex(RuntimeError, "outside pooled")):
+                qa._snapshot_binary()
+            pinned = root / "snapshot"
+            pinned.write_bytes(b"unit test")
+            with (patch.dict(qa.os.environ, {"SOLARIS_SNAPSHOT_BINARY": str(pinned)}),
+                  self.assertRaisesRegex(RuntimeError, "not an executable")):
+                qa._snapshot_binary()
+
+    def test_birth_snapshot_supplies_required_view_distance(self) -> None:
+        with TemporaryDirectory(prefix="birth-snapshot-", dir=qa.runtime.REPO_ROOT / ".analysis") as folder:
+            root = Path(folder)
+            binary = root / "snapshot"
+            binary.write_bytes(b"snapshot")
+            digest = qa.hashlib.sha256(b"snapshot").hexdigest()
+            ctx = SimpleNamespace(commands=[], cwds=[], exits=[], logs=[])
+
+            def run(command, **_kwargs):
+                self.assertEqual(command[command.index("--view-distance") + 1], "1")
+                (root / "birth-snapshot.json").write_text('{"success": true, "mechanics": {}}')
+                return SimpleNamespace(returncode=0)
+
+            with patch.object(qa.subprocess, "run", side_effect=run):
+                self.assertEqual(qa._birth_snapshot(ctx, binary, digest, root, root / "world", 10), {})
+
+    def test_failed_civilization_keeps_verdicts_in_client_evidence(self) -> None:
+        from .backends import civilization_seed_qa
+
+        with TemporaryDirectory(prefix="civilization-lifecycle-", dir=qa.runtime.REPO_ROOT / ".analysis") as folder:
+            artifact = Path(folder)
+            binary = artifact / "server"
+            binary.write_bytes(b"unit-test binary identity")
+            snapshot_binary = artifact / "snapshot"
+            snapshot_binary.write_bytes(b"snapshot test identity")
+            snapshot_binary.chmod(0o755)
+            ctx = SimpleNamespace(
+                client="native", extra_args=[], platform=None, windowed=True,
+                timeout_seconds=10, artifact_dir=artifact, client_evidence={},
+                commands=[], cwds=[], exits=[], logs=[],
+            )
+            server, primary, primary_log = Mock(pid=101, returncode=0), Mock(pid=102, returncode=0), Mock()
+            mcp = Mock(token="")
+            mcp.call_tool.return_value = {"in_play": True}
+
+            def start_primary(*args, **kwargs):
+                ctx.client_evidence["command_index"] = 0
+                ctx.commands.append(["unit-test native client"])
+                ctx.exits.append(None)
+                return primary, primary_log, mcp
+
+            def fail(probe, detail, *args):
+                detail["verdicts"]["new_house"] = True
+                raise RuntimeError("civilization stalled")
+
+            with (
+                patch.dict(qa.os.environ, {"SOLARIS_SERVER_BINARY": str(binary), "SOLARIS_SNAPSHOT_BINARY": str(snapshot_binary)}),
+                patch.object(qa.subprocess, "Popen", return_value=server),
+                patch.object(qa.runtime, "reserve_port", return_value=25566),
+                patch.object(qa.runtime, "wait_port"),
+                patch.object(qa.runtime, "start_xvfb", return_value=(Mock(), ":100", Mock())),
+                patch.object(qa.runtime, "stop_process"),
+                patch.object(qa.native_client, "resolve_binary", return_value=Path("unit-test-client")),
+                patch.object(qa.native_client, "start", side_effect=start_primary),
+                patch.object(qa.native_client, "capture"),
+                patch.object(civilization_seed_qa, "scenario", side_effect=fail),
+                self.assertRaisesRegex(RuntimeError, "civilization stalled"),
+            ):
+                qa.run(ctx, civilization=True)
+            self.assertTrue(ctx.client_evidence["verdicts"]["new_house"])
+            self.assertFalse(ctx.client_evidence["verdicts"]["all"])
+
+    def test_birth_snapshot_failure_preserves_other_stage_verdicts(self) -> None:
+        from .backends import civilization_seed_qa
+        with TemporaryDirectory(prefix="civilization-snapshot-", dir=qa.runtime.REPO_ROOT / ".analysis") as folder:
+            artifact = Path(folder)
+            binary = artifact / "server"
+            snapshot_binary = artifact / "snapshot"
+            binary.write_bytes(b"server")
+            snapshot_binary.write_bytes(b"snapshot")
+            snapshot_binary.chmod(0o755)
+            ctx = SimpleNamespace(client="native", extra_args=[], platform=None, windowed=True,
+                                  timeout_seconds=10, artifact_dir=artifact, client_evidence={},
+                                  commands=[], cwds=[], exits=[], logs=[])
+            server, primary, primary_log, mcp = Mock(pid=101, returncode=0), Mock(pid=102, returncode=0), Mock(), Mock(token="")
+            mcp.call_tool.return_value = {"in_play": True}
+            def start_primary(*args, **kwargs):
+                ctx.client_evidence["command_index"] = 0
+                ctx.commands.append(["client"])
+                ctx.exits.append(None)
+                return primary, primary_log, mcp
+            def scenario(probe, detail, *args):
+                detail["verdicts"].update(new_house=True, second_building=True, iron_smelted=True)
+                detail.update(settlement_name="Test", baseline_population=2, baseline_server_tick=20,
+                              snapshots=[{"client_game_time": 100, "population": 4}],
+                              baby_observation={"entity": {"entity_uuid": "baby"}})
+            with (patch.dict(qa.os.environ, {"SOLARIS_SERVER_BINARY": str(binary),
+                                           "SOLARIS_SNAPSHOT_BINARY": str(snapshot_binary)}),
+                  patch.object(qa.subprocess, "Popen", return_value=server),
+                  patch.object(qa.runtime, "reserve_port", return_value=25566),
+                  patch.object(qa.runtime, "wait_port"),
+                  patch.object(qa.runtime, "start_xvfb", return_value=(Mock(), ":100", Mock())),
+                  patch.object(qa.runtime, "stop_process"),
+                  patch.object(qa.native_client, "resolve_binary", return_value=Path("client")),
+                  patch.object(qa.native_client, "start", side_effect=start_primary),
+                  patch.object(qa.native_client, "capture"),
+                  patch.object(civilization_seed_qa, "scenario", side_effect=scenario),
+                  patch.object(qa, "_birth_snapshot", return_value={"checkpoint_tick": 100}),
+                  patch.object(civilization_seed_qa, "verify_birth_snapshot",
+                               return_value={"verified": False, "status": "unverified", "reason": "not born here"}),
+                  self.assertRaisesRegex(RuntimeError, "births unverified")):
+                qa.run(ctx, civilization=True)
+            self.assertEqual(ctx.client_evidence["verdicts"], {
+                "new_house": True, "births": False, "second_building": True,
+                "iron_smelted": True, "all": False})
+            self.assertEqual(ctx.client_evidence["birth_verdict"]["status"], "unverified")
+
     def test_dialog_claim_is_confirmed_by_owner_not_by_chat_or_closed_screen(self) -> None:
         # The server answers a dialog Claim click by re-presenting the same
         # dialog (note inside the dialog body), so neither a "Claimed " chat

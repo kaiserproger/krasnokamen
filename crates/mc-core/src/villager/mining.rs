@@ -95,10 +95,8 @@ pub(super) fn needs_deposit(v: &VillagerState) -> bool {
         .any(|slot| slot.as_ref().is_some_and(|s| s.count >= 64))
 }
 
-/// A miner's load is mixed (dirt from the grass surface plus a little of every
-/// stone never fills one stack), so a total as heavy as a stack also sends it
-/// home; with the day clock stopped nothing else ever would.
-fn heavy_load(v: &VillagerState) -> bool {
+/// Mixed stone or wood can fill a haul without filling any individual stack.
+pub(super) fn heavy_load(v: &VillagerState) -> bool {
     needs_deposit(v) || v.inventory.iter().flatten().map(|s| s.count).sum::<i32>() >= 64
 }
 

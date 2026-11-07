@@ -55,6 +55,23 @@ fn chest(slots: Vec<ItemStack>) -> Vec<inventory::Image> {
 }
 
 #[test]
+fn stone_stairs_are_not_reserved_as_a_wood_family() {
+    let state = state();
+    let stairs = item(&state, "minecraft:cobblestone_stairs");
+    let cobble = item(&state, "minecraft:cobblestone");
+    let oak = item(&state, "minecraft:oak_stairs");
+    let images = chest(vec![stock(cobble, 6)]);
+    let post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
+    assert!(super::wood_specific(&state, oak));
+    assert!(!super::wood_specific(&state, stairs));
+    assert!(
+        super::reserve_wood(&state, &[(stairs, 4)], &post)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn logs_to_door_exact_yield_and_surplus() {
     let state = state();
     let log = item(&state, "minecraft:oak_log");

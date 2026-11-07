@@ -36,6 +36,10 @@ pub struct SettlementRecord {
     pub building_sequence: u64,
     #[serde(default)]
     pub buildings: BTreeMap<super::buildings::BuildingId, super::buildings::Building>,
+    /// Lumberjack sapling roots survive growth and restart; site preparation
+    /// never clears a tree growing from one of these positions.
+    #[serde(default)]
+    pub planted_trees: std::collections::BTreeSet<[i32; 3]>,
     #[serde(default)]
     pub district: Option<super::districts::DistrictPlan>,
     #[serde(default)]
@@ -89,6 +93,8 @@ pub struct Registry {
     /// Derived work queue: settlements whose resident count changed and whose
     /// radius must be re-checked against the growth rule.
     radius_pending: BTreeSet<SettlementId>,
+    /// Immutable generated evidence, populated off-tick and never persisted.
+    pub(crate) forest: std::sync::Mutex<super::forestry::Cache>,
 }
 
 impl SettlementRecord {
@@ -251,6 +257,7 @@ impl SettlementRecord {
                 self.buildings.len(),
                 size_of::<super::buildings::Building>(),
             );
+        let planted = root(self.planted_trees.len(), size_of::<[i32; 3]>());
         self.name.capacity()
             + opt(&self.owner)
             + opt(&self.village_source)
@@ -270,6 +277,7 @@ impl SettlementRecord {
             + contracts
             + shipments
             + buildings
+            + planted
     }
 }
 
@@ -301,6 +309,14 @@ pub fn validate_record(record: &SettlementRecord) -> Result<(), &'static str> {
         .is_some_and(|at| !record.contains(at))
     {
         return Err("bootstrap storage outside settlement radius");
+    }
+    if record.planted_trees.iter().any(|root| {
+        root.iter()
+            .zip(record.anchor)
+            .any(|(at, anchor)| at.abs_diff(anchor) > record.radius)
+            || !record.contains(*root)
+    }) {
+        return Err("planted sapling origin outside settlement radius");
     }
     super::construction::validate_record(record)?;
     super::households::validate_record(record)?;
@@ -446,6 +462,7 @@ impl Registry {
             households: BTreeMap::new(),
             building_sequence: 0,
             buildings: BTreeMap::new(),
+            planted_trees: Default::default(),
             district: None,
             economy: super::economy::State::default(),
             village_source: None,
@@ -491,6 +508,7 @@ impl Registry {
             households: BTreeMap::new(),
             building_sequence: 0,
             buildings: BTreeMap::new(),
+            planted_trees: Default::default(),
             district: None,
             economy: super::economy::State::default(),
             village_source: Some(source.to_owned()),

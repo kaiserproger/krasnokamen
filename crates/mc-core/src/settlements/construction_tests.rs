@@ -47,6 +47,85 @@ pub(crate) fn fixture() -> (TickState, SettlementId, EntitySlot) {
 }
 
 #[test]
+fn admitted_birch_camp_can_finish_from_the_same_mixed_stock() {
+    let (mut state, id, builder) = fixture();
+    open_plan(&mut state);
+    let item = |name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
+            .unwrap()
+    };
+    let birch = item("birch_log");
+    let oak = item("oak_log");
+    let chest = state.block_entities.get_mut(&(1, 201, 1)).unwrap();
+    for (slot, (item, count)) in [(birch, 64), (birch, 37), (oak, 34)]
+        .into_iter()
+        .enumerate()
+    {
+        chest.slots[slot] = ItemStack::new(item, count);
+    }
+    let materials = &blueprints::get(&state.registry, "lumber_camp")
+        .unwrap()
+        .level(1)
+        .unwrap()
+        .materials;
+    let bill = species_bill(&state, materials, "birch").unwrap();
+    assert!(super::super::construction_crafting::can_fund(
+        &state,
+        &bill,
+        &executor::source_images(&state, id)
+    ));
+    let outcome = request_build(&mut state, id, "lumber_camp").unwrap();
+    assert!(
+        state.settlements.get(id).unwrap().project.is_some(),
+        "funded admission: {outcome:?}"
+    );
+    for _ in 0..4096 {
+        if state.settlements.get(id).unwrap().project.is_none() {
+            break;
+        }
+        attempt(&mut state, id, builder);
+    }
+    let stock: Vec<_> = state.block_entities[&(1, 201, 1)]
+        .slots
+        .iter()
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            (
+                state.registry.items.name_of(s.item_id).unwrap().as_str(),
+                s.count,
+            )
+        })
+        .collect();
+    if let Some(project) = state.settlements.get(id).unwrap().project.as_ref() {
+        panic!(
+            "remaining stock: {stock:?}; status={:?}; next={:?}; material={:?}; carry={:?}",
+            project_status(&state, id),
+            executor::next_cell(&state, id, &project.structure),
+            executor::next_material(&state, id, &project.structure),
+            state
+                .entities
+                .row(builder)
+                .villager
+                .as_ref()
+                .unwrap()
+                .inventory
+        );
+    }
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .buildings
+            .values()
+            .any(|building| building.kind == BuildingKind::LumberCamp && !building.natural_zone)
+    );
+}
+
+#[test]
 fn storage_order_uses_acacia_logs_without_oak() {
     let (mut state, id, builder) = fixture();
     open_plan(&mut state);

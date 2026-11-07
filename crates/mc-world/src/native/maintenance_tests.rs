@@ -70,6 +70,38 @@ fn stored(store: &NativeStore, blocks: &BlockRegistry, x: i32, z: i32) -> bool {
 }
 
 #[test]
+fn forest_evidence_rejects_imported_but_accepts_generated_and_missing_baselines() {
+    let blocks = blocks();
+    let items = solaris_required_items();
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("state.redb");
+    let generated = chunk(&blocks, 1, 0, 0);
+    let imported = chunk(&blocks, 2, 0, 0);
+    let store = NativeStore::create(&path, [5; 32]).unwrap();
+    store
+        .fill_generated(0, &[generated], &blocks, &items)
+        .unwrap();
+    store.import_chunk(0, &imported, &blocks, &items).unwrap();
+    drop(store);
+    let store = NativeStore::open(&path, [5; 32]).unwrap();
+    assert!(
+        store
+            .generator_owns_baseline(0, ChunkPos { x: 0, z: 0 })
+            .unwrap()
+    );
+    assert!(
+        store
+            .generator_owns_baseline(0, ChunkPos { x: 1, z: 0 })
+            .unwrap()
+    );
+    assert!(
+        !store
+            .generator_owns_baseline(0, ChunkPos { x: 2, z: 0 })
+            .unwrap()
+    );
+}
+
+#[test]
 fn prune_forgets_only_untouched_uninhabited_chunks_outside_the_rectangle() {
     let blocks = blocks();
     let items = solaris_required_items();

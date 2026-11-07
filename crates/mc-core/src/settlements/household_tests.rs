@@ -2,6 +2,61 @@ use super::*;
 use crate::boundary::{BlockPos, ChangeSet, ChunkPos};
 use std::sync::Arc;
 
+#[derive(Clone, Default)]
+struct AuditLog(Arc<parking_lot::Mutex<Vec<u8>>>);
+
+impl std::io::Write for AuditLog {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn claim_logs_the_authoritative_settlement_and_tick() {
+    let mut state = state();
+    let connection = crate::boundary::ConnectionId(7);
+    crate::tick::run_tick(
+        &mut state,
+        &[crate::boundary::PlayerInput::Join {
+            connection,
+            uuid: uuid::Uuid::nil(),
+            name: "Mayor".into(),
+            permission_level: 0,
+        }],
+    );
+    let entity = state.connections.entity_of(connection).unwrap();
+    let pos = state
+        .entities
+        .pos(state.entities.slot_of(entity).unwrap())
+        .map(|v| v.floor() as i32);
+    let id = state
+        .settlements
+        .adopt_village(
+            &mut state.settlement_sequence,
+            "minecraft:overworld:audit-test",
+            pos,
+        )
+        .unwrap();
+    let log = AuditLog::default();
+    let writer = log.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .without_time()
+        .with_ansi(false)
+        .with_writer(move || writer.clone())
+        .finish();
+    tracing::subscriber::with_default(subscriber, || {
+        super::super::commands::claim(&mut state, connection, Some(id)).unwrap()
+    });
+    let output = String::from_utf8(log.0.lock().clone()).unwrap();
+    assert!(output.contains("settlement_claim"), "{output}");
+    assert!(output.contains(&format!("settlement={}", id.0)), "{output}");
+    assert!(output.contains(&format!("tick={}", state.tick)), "{output}");
+}
+
 fn state() -> TickState {
     let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
     let generator = Arc::new(mc_worldgen::TerrainGenerator::new(
@@ -111,7 +166,24 @@ fn birth_inherits_existing_household_and_keeps_its_individual_bed() {
     v.settlement = None;
     v.home = Some(home);
     v.age = -24_000;
-    inherit_birth(&mut state, child, [a, b]);
+    let log = AuditLog::default();
+    let writer = log.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .without_time()
+        .with_ansi(false)
+        .with_writer(move || writer.clone())
+        .finish();
+    let uuid = state.entities.row(slot).uuid;
+    tracing::subscriber::with_default(subscriber, || inherit_birth(&mut state, child, [a, b]));
+    let output = String::from_utf8(log.0.lock().clone()).unwrap();
+    assert!(output.contains("settlement_birth"), "{output}");
+    assert!(output.contains(&format!("child={uuid}")), "{output}");
+    assert!(
+        output.contains(&format!("settlement={}", town.0)),
+        "{output}"
+    );
+    assert!(output.contains(&format!("household={family}")), "{output}");
+    assert!(output.contains(&format!("tick={}", state.tick)), "{output}");
     assert_eq!(
         villager(&state, child).household.as_deref(),
         Some(family.as_str())

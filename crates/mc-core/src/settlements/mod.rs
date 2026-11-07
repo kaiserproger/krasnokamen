@@ -20,6 +20,7 @@ pub(crate) mod construction_crafting;
 pub(crate) mod economy;
 pub(crate) mod economy_commands;
 pub(crate) mod economy_customization;
+pub(crate) mod forestry;
 pub(crate) mod layout;
 pub mod presentation;
 mod production;
@@ -31,6 +32,7 @@ pub mod startup;
 pub(crate) mod ui;
 pub(crate) mod ui_text;
 pub(crate) fn tick(state: &mut TickState, changes: &mut crate::boundary::ChangeSet) -> u64 {
+    forestry::retire_missing(state);
     let elapsed = allocator::tick(state, changes);
     construction::tick(state);
     army::tick(state);
