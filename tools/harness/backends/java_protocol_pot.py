@@ -156,9 +156,11 @@ def run(client: Any, artifact: Path, timeout: float) -> dict[str, Any]:
             # not reuse the consumed drop provenance during creative echoes.
             steps.fixture('debug give minecraft:decorated_pot['
                           'minecraft:custom_name={text:"Protocol Pot"}] 1 0')
-            steps.call("minecraft_wait_for_inventory", {
-                "item_id": POT, "count": 1, "timeout_seconds": steps.remaining(),
-            })
+            # The dropped canonical pot may legitimately be picked up into a
+            # different slot; this branch concerns the newly seeded slot zero.
+            steps.wait(lambda state: any(row["slot"] == 0 and row["item_id"] == POT
+                                        and row["count"] == 1 for row in state["inventory"]),
+                       "plain_drop_fixture_received")
             plain = observe_menu(steps, "plain_pot_after_drop")["slots"][36]
             steps.check("drop_does_not_restore_stale_nested_components",
                         holds(plain, POT, 1) and plain["components"]["custom_name"] == "Protocol Pot"
@@ -185,9 +187,9 @@ def run(client: Any, artifact: Path, timeout: float) -> dict[str, Any]:
                         closed["slots"][36]["count"] == 0 and closed["carried"]["count"] == 0)
             steps.fixture('debug give minecraft:decorated_pot['
                           'minecraft:custom_name={text:"Protocol Pot"}] 1 0')
-            steps.call("minecraft_wait_for_inventory", {
-                "item_id": POT, "count": 1, "timeout_seconds": steps.remaining(),
-            })
+            steps.wait(lambda state: any(row["slot"] == 0 and row["item_id"] == POT
+                                        and row["count"] == 1 for row in state["inventory"]),
+                       "plain_close_fixture_received")
             steps.call("minecraft_open_inventory")
             steps.wait(lambda state: state["screen"]["class"].endswith(".CreativeModeInventoryScreen"),
                        "reopen_after_carried_close")
