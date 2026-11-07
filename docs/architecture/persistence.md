@@ -100,13 +100,11 @@ after a restart; recovery ignores journal records at or before the checkpoint
 tick, so keeping the WAL behind a committed checkpoint would not help.
 A chunk refused at runtime while it holds containers therefore declines every
 checkpoint until the server restarts, even with no edits, because its live
-records count. WAL container post-images recovered into an unloaded chunk
-mark that chunk dirty; the next checkpoint loads it and declines if it is
-unreadable, retaining the WAL (test
-`container_replay_into_unloadable_chunk_declines_checkpoint_and_keeps_wal`).
-A WAL block write or opaque block-entity record (campfire, hive,
-brushable block) into a chunk refused at load behaves differently: recovery
-needs that chunk resident to replay it, so it stops with the chunk's load error and the world
+records count. After a restart it is refused at load, so it is skipped unless
+the retained WAL replays edits into it, and then the declines continue; the
+exception is a WAL block write or opaque block-entity record (campfire, hive,
+brushable block) into a chunk refused at load: recovery needs that chunk
+resident to replay it, so it stops with the chunk's load error and the world
 does not open, nothing is checkpointed, and the WAL keeps the write until the
 stored chunk is valid again (test
 `opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal`). Solaris
