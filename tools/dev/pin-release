@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""Build or reuse one immutable pinned release binary: pin-release <worktree|repo-root> [--client].
+
+Owner-host tool (see tools/dev/README.md). The pin is identified by the tree's
+HEAD and a hash of its uncommitted changes; the same tree is built once and every
+later call prints the pinned binary. stdout carries only the final
+SOLARIS_SERVER_BINARY=<path> (or SOLARIS_CLIENT_BINARY=<path>) line.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import wtlib as w  # noqa: E402
+
+KINDS = {
+    "server": {"repo": "core", "package": "mc-edge", "bin": "solaris-v2", "env": "SOLARIS_SERVER_BINARY"},
+    "client": {"repo": "client", "package": "solaris-client", "bin": "solaris-client", "env": "SOLARIS_CLIENT_BINARY"},
+}
+# mem-run's pool lock files: slot-<l> is held through /tmp/solaris-mem-slots/<l>.
+SLOT_LOCKS = Path("/tmp/solaris-mem-slots")
+
+
+def say(message: str) -> None:
+    print(f"pin-release: {message}", file=sys.stderr)
+
+
+def check_tree(top: Path, kind: str) -> None:
+    if kind == "server" and not (top / "crates/mc-edge/Cargo.toml").is_file():
+        raise w.ToolError(f"{top} is not a core Solaris tree (no crates/mc-edge); use --client for the client")
+    if kind == "client":
+        manifest = top / "Cargo.toml"
+        if not manifest.is_file() or 'name = "solaris-client"' not in manifest.read_text():
+            raise w.ToolError(f"{top} is not a solaris-client tree; omit --client for the server")
+
+
+def provenance(top: Path) -> dict:
+    """HEAD plus a hash of the uncommitted changes (`git diff HEAD --binary`, untracked files included)."""
+    head = str(w.git(top, "rev-parse", "HEAD"))
+    tree, untracked = w.working_state(top)
+    diff = w.git(top, "diff", "--binary", "--no-ext-diff", "--no-textconv", "--no-color", "HEAD", tree, binary=True)
+    diff_sha = w.sha256_bytes(diff)
+    return {
+        "head": head, "tree": tree, "diff_sha256": diff_sha, "dirty": bool(diff), "untracked_files": len(untracked),
+        "id": head[:12] + (f"-{diff_sha[:8]}" if diff else ""),
+    }
+
+
+def existing_pin(pin_dir: Path, kind: str) -> Path | None:
+    """The binary of a valid existing pin, or None; a damaged pin is an error (pins are never overwritten)."""
+    manifest = pin_dir / "manifest.json"
+    if not manifest.is_file():
+        return None
+    info = json.loads(manifest.read_text())
+    binary = Path(info.get("binary", ""))
+    if info.get("repo") != KINDS[kind]["repo"]:
+        raise w.ToolError(f"{pin_dir} pins repo {info.get('repo')!r}, not {KINDS[kind]['repo']!r}")
+    if not binary.is_file() or w.sha256_file(binary) != info.get("binary_sha256"):
+        raise w.ToolError(f"pin {pin_dir} is damaged (binary missing or sha256 differs); pins are immutable, "
+                          "so it is not rebuilt: the owner must remove it deliberately")
+    return binary
+
+
+def build(top: Path, kind: str, target: Path | None = None) -> tuple[list[str], Path]:
+    """One runner build; a plain cargo argv keeps it preemptible. Without `target`
+    the runner picks a pooled slot (a caller's CARGO_TARGET_DIR is dropped)."""
+    spec = KINDS[kind]
+    cmd = [str(w.MEM_RUN), "-m", "6G", "env", "RUSTC_WRAPPER="]
+    if target is not None:
+        cmd.append(f"CARGO_TARGET_DIR={target}")
+    cmd += ["cargo", "build", "--release", "--locked", "-p", spec["package"], "--bin", spec["bin"],
+            "--message-format=json-render-diagnostics"]
+    env = dict(os.environ)
+    env.pop("CARGO_TARGET_DIR", None)
+    say(f"building: {shlex.join(cmd)} (cwd {top})")
+    artifact = None
+    with subprocess.Popen(cmd, cwd=top, env=env, stdout=subprocess.PIPE, text=True) as proc:
+        for line in proc.stdout:
+            try:
+                message = json.loads(line)
+            except ValueError:
+                print(line, end="", file=sys.stderr)
+                continue
+            target_info = message.get("target") or {}
+            if (message.get("reason") == "compiler-artifact" and target_info.get("name") == spec["bin"]
+                    and "bin" in target_info.get("kind", []) and message.get("executable")):
+                artifact = Path(message["executable"])
+    if proc.returncode != 0:
+        raise w.ToolError(f"build failed (exit {proc.returncode}); nothing pinned")
+    if artifact is None or not artifact.is_file():
+        raise w.ToolError(f"cargo reported no {spec['bin']} executable; nothing pinned")
+    return cmd, artifact
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Build once, pin immutably, print the binary path env line.")
+    parser.add_argument("tree", help="a worktree or repository root")
+    parser.add_argument("--client", action="store_true", help="pin the native client (default: the core server)")
+    args = parser.parse_args()
+    w.check_host()
+
+    kind = "client" if args.client else "server"
+    spec = KINDS[kind]
+    if not Path(args.tree).is_dir():
+        raise w.ToolError(f"{args.tree} is not a directory")
+    top = Path(str(w.git(args.tree, "rev-parse", "--show-toplevel")))
+    check_tree(top, kind)
+    before = provenance(top)
+    pin_dir = w.PINS / before["id"]
+
+    def done(binary: Path, built: bool) -> None:
+        w.in_use_add(pin_dir, top.name, "pin")  # owner: the tree that asked for the pin
+        say(f"{'built and pinned' if built else 'already pinned, not building'}: {pin_dir.name}")
+        print(f"{spec['env']}={binary}")
+
+    w.PINS.mkdir(parents=True, exist_ok=True)
+    with open(w.PINS / f".lock-{before['id']}", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)  # a concurrent build of the same tree is waited for, not repeated
+        binary = existing_pin(pin_dir, kind)
+        if binary:
+            return done(binary, False)
+        if pin_dir.exists():
+            raise w.ToolError(f"{pin_dir} exists without a manifest; refusing to touch it")
+
+        cmd, artifact = build(top, kind)
+        # The runner releases the slot when the build exits, and another tree may
+        # then replace the artifact. Take the slot's pool lock ourselves, make sure
+        # the slot holds this tree's build (rebuild under the lock: usually a no-op),
+        # and copy while still holding it.
+        slot = artifact.parents[1]
+        if not slot.name.startswith("slot-") or not w.is_under(slot, w.TARGETS):
+            raise w.ToolError(f"{artifact} is not in a pooled target slot; nothing pinned")
+        stage = w.PINS / f".tmp-{before['id']}-{os.getpid()}"
+        with open(SLOT_LOCKS / slot.name.removeprefix("slot-"), "w") as slot_lock:
+            fcntl.flock(slot_lock, fcntl.LOCK_EX)  # no new owner can take the slot now
+            marker = slot / ".solaris-tree"
+            if (marker.read_text().strip() if marker.is_file() else "") != str(top):
+                # Another tree used the slot since: wait for its remaining commands (they
+                # hold the use lock shared), then make cargo see this tree's sources as
+                # newer, exactly as the runner does on a tree switch (slot-select.sh).
+                with open(SLOT_LOCKS / f"{slot.name.removeprefix('slot-')}.use", "a") as use_lock:
+                    fcntl.flock(use_lock, fcntl.LOCK_EX)
+                    subprocess.run("git ls-files -z | xargs -0 -r touch -c --", shell=True, cwd=top, check=True)
+                    marker.write_text(f"{top}\n")
+            cmd, artifact = build(top, kind, target=slot)
+            after = provenance(top)
+            if after["tree"] != before["tree"]:
+                raise w.ToolError("the tree changed during the build; the binary does not match any single provenance, nothing pinned")
+            try:
+                stage.mkdir()
+                staged = stage / spec["bin"]
+                shutil.copyfile(artifact, staged)
+            except BaseException:
+                shutil.rmtree(stage, ignore_errors=True)
+                raise
+        try:
+            staged.chmod(0o555)
+            binary_sha = w.sha256_file(staged)
+            final_binary = pin_dir / spec["bin"]
+            manifest = {
+                "repo": spec["repo"], "head": before["head"], "diff_sha256": before["diff_sha256"],
+                "dirty": before["dirty"], "untracked_files": before["untracked_files"], "source": str(top),
+                "binary": str(final_binary), "binary_sha256": binary_sha,
+                "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "command": shlex.join(cmd),
+            }
+            (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+            (stage / "manifest.json").chmod(0o444)
+            os.rename(stage, pin_dir)  # atomic; fails rather than replacing an existing pin
+        finally:
+            shutil.rmtree(stage, ignore_errors=True)
+        return done(final_binary, True)
+
+
+if __name__ == "__main__":
+    w.run_tool(main)

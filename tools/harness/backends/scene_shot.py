@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import ctypes
 import ctypes.util
+import hashlib
 import json
 import math
 import os
@@ -174,6 +175,7 @@ def capture_native(probe: ProbeSteps, artifact: Path, name: str) -> str:
     return native_client.capture(probe.client, artifact, name)["retained_path"]
 
 
+@runtime.in_phase("join")
 def wait_play(probe: ProbeSteps) -> None:
     # Each MCP wait is capped at 120s; keep the same overall scenario deadline.
     while True:
@@ -184,17 +186,110 @@ def wait_play(probe: ProbeSteps) -> None:
             raise RuntimeError(f"client disconnected before play: {result['disconnect_reason']}")
 
 
+SCENE_TOOLS = {
+    "key": "minecraft_press_inputs",
+    "use_item_on": "minecraft_use_item_on",
+    "click_screen_button": "minecraft_click_screen_button",
+    "scan_blocks": "minecraft_scan_blocks",
+    "read_block": "minecraft_read_block",
+    "navigate_to_block": "minecraft_navigate_to_block",
+    "list_entities": "minecraft_list_entities",
+    "wait_terrain": "minecraft_wait_for_terrain",
+}
+
+
+def scene_mcp_calls(steps: list[dict[str, Any]]):
+    """Yield the input-derived MCP calls before launch for schema validation."""
+    for step in steps:
+        if set(step) == {"shot", "hold_keys"}:
+            yield "minecraft_press_inputs", {"keys": step["hold_keys"], "ticks": 1, "hold": True}
+            continue
+        kind, value = next(iter(step.items()))
+        if kind in ("key", "use_item_on", "click_screen_button"):
+            yield SCENE_TOOLS[kind], value
+        elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities", "wait_terrain"):
+            yield SCENE_TOOLS[kind], value["args"]
+        elif kind == "timed_entities":
+            yield "minecraft_list_entities", value["args"]
+        elif kind == "wait_ticks":
+            yield "minecraft_wait_ticks", {"ticks": min(value, 100)}
+        elif kind == "cmd":
+            yield "minecraft_send_chat", {"message": value, "command": True}
+        elif kind == "tp":
+            yield "minecraft_send_chat", {"message": "tp @s " + " ".join(map(str, value)), "command": True}
+
+
+def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
+    """Validate the same step contracts before any process is started."""
+    for step in steps:
+        if isinstance(step, dict) and set(step) == {"shot", "hold_keys"}:
+            name, keys = step["shot"], step["hold_keys"]
+            if client == "java":
+                raise ValueError("hold_keys screenshots unsupported for --client java")
+            if (not isinstance(name, str)
+                    or not re.fullmatch(r"[A-Za-z0-9_-]+", name)
+                    or not isinstance(keys, list) or not keys
+                    or any(not isinstance(key, str) for key in keys)):
+                raise ValueError(f"invalid held screenshot: {step!r}")
+            continue
+        if not isinstance(step, dict) or len(step) != 1:
+            raise ValueError(f"invalid scene step: {step!r}")
+        kind, value = next(iter(step.items()))
+        if kind in ("shot", "observe", "goat_horns_upright"):
+            valid = isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value)
+        elif kind == "cmd":
+            valid = isinstance(value, str) and bool(value) and not value.startswith("/")
+        elif kind == "tp":
+            valid = (isinstance(value, list) and len(value) == 5
+                     and all(type(n) in (int, float) and math.isfinite(n) for n in value))
+        elif kind == "wait_ticks":
+            valid = type(value) is int and value > 0
+        elif kind == "wait_play":
+            valid = value is True
+        elif kind == "wait_screen":
+            valid = isinstance(value, str) and bool(value)
+        elif kind == "key":
+            valid = isinstance(value, dict) and set(value) == {"keys", "ticks"}
+        elif kind in ("use_item_on", "click_screen_button"):
+            valid = isinstance(value, dict)
+        elif kind == "mob_motion":
+            valid = (isinstance(value, dict) and set(value) == {"samples", "name"}
+                     and isinstance(value["name"], str) and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and isinstance(value["samples"], list) and len(value["samples"]) == 3
+                     and all(isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_-]+", item)
+                             for item in value["samples"]))
+        elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities", "wait_terrain", "timed_entities"):
+            if kind == "wait_terrain" and client != "native":
+                raise ValueError("wait_terrain requires --client native")
+            valid = (isinstance(value, dict) and set(value) == {"name", "args"}
+                     and isinstance(value["name"], str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and isinstance(value["args"], dict))
+            if valid and kind == "wait_terrain":
+                args = value["args"]
+                sections = args.get("sections")
+                timeout = args.get("timeout_seconds", 30)
+                valid = (client == "native" and {"sections"} <= set(args) <= {"sections", "timeout_seconds"}
+                         and isinstance(sections, list) and 1 <= len(sections) <= 64
+                         and all(isinstance(section, list) and len(section) == 3
+                                 and all(type(n) is int and -(2**31) <= n < 2**31 for n in section)
+                                 for section in sections)
+                         and len({tuple(section) for section in sections}) == len(sections)
+                         and type(timeout) in (int, float) and math.isfinite(timeout)
+                         and 0.1 <= timeout <= 120)
+        else:
+            valid = False
+        if not valid:
+            raise ValueError(f"invalid scene step: {step!r}")
+
+
 def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], client: str = "native") -> list[str]:
+    validate_steps(steps, client)
     capture = capture_java if client == "java" else capture_native
     shots = []
     for step in steps:
         if isinstance(step, dict) and set(step) == {"shot", "hold_keys"}:
-            if client == "java":
-                raise ValueError("hold_keys screenshots need the native tab-list state; unsupported for --client java")
             name, keys = step["shot"], step["hold_keys"]
-            if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", name)
-                    or not isinstance(keys, list) or not keys or any(not isinstance(k, str) for k in keys)):
-                raise ValueError(f"invalid held screenshot: {step!r}")
             args = {"keys": keys, "ticks": 1, "hold": True}
             probe.call("minecraft_press_inputs", args)
             try:
@@ -206,20 +301,28 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             finally:
                 probe.call("minecraft_press_inputs", {**args, "hold": False})
             continue
-        if not isinstance(step, dict) or len(step) != 1:
-            raise ValueError(f"invalid scene step: {step!r}")
         kind, value = next(iter(step.items()))
         if kind in ("shot", "observe"):
-            if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", value):
-                raise ValueError(f"invalid {kind} name: {value!r}")
             if kind == "shot":
                 shots.append(capture(probe, artifact, value))
             else:
                 (artifact / f"{value}.json").write_text(json.dumps(probe.observe(), indent=2) + "\n")
-        elif kind == "cmd" and isinstance(value, str) and value and not value.startswith("/"):
+        elif kind == "goat_horns_upright":
+            from . import goat_horn_oracle
+
+            edges = goat_horn_oracle.horn_left_edges(artifact / "screenshots" / f"{value}.png")
+            probe.report["goat_horn_left_edges"] = edges
+            probe.check("goat_horns_upright", goat_horn_oracle.upright(edges))
+            body_edges = goat_horn_oracle.body_left_edges(artifact / "screenshots" / f"{value}.png")
+            probe.report["goat_body_left_edges"] = body_edges
+            probe.check("goat_body_aligned", goat_horn_oracle.body_aligned(body_edges))
+            ear_coverage = goat_horn_oracle.ear_lower_coverage(artifact / "screenshots" / f"{value}.png")
+            probe.report["goat_ear_lower_coverage"] = ear_coverage
+            probe.check("goat_ear_full_height", ear_coverage >= 25)
+        elif kind == "cmd":
             wait_play(probe)
             probe.call("minecraft_send_chat", {"message": value, "command": True})
-        elif kind == "tp" and isinstance(value, list) and len(value) == 5 and all(type(n) in (int, float) and math.isfinite(n) for n in value):
+        elif kind == "tp":
             probe.call("minecraft_send_chat", {"message": "tp @s " + " ".join(map(str, value)), "command": True})
             probe.wait(
                 lambda state: state.get("player") is not None
@@ -227,46 +330,28 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 and abs(state["player"]["z"] - value[2]) < 1.5,
                 "teleport_arrived", wait_for_play=True,
             )
-        elif kind == "wait_ticks" and type(value) is int and value > 0:
+        elif kind == "wait_ticks":
             remaining = value
             while remaining:
                 ticks = min(remaining, 100)
                 probe.call("minecraft_wait_ticks", {"ticks": ticks})
                 remaining -= ticks
-        elif kind == "wait_play" and value is True:
+        elif kind == "wait_play":
             wait_play(probe)
-        elif kind == "wait_screen" and isinstance(value, str) and value:
+        elif kind == "wait_screen":
             # Server-driven screens (dialogs, menus) open asynchronously; wait for
             # the client's own screen state whose class or title names `value`.
             probe.wait(lambda state: bool((state.get("screen") or {}).get("open"))
                        and (value in str(state["screen"].get("class", ""))
                             or value in str(state["screen"].get("title", ""))),
                        "screen_open")
-        elif kind == "key" and isinstance(value, dict) and set(value) == {"keys", "ticks"}:
-            probe.call("minecraft_press_inputs", value)
-        elif kind == "use_item_on" and isinstance(value, dict):
-            probe.call("minecraft_use_item_on", value)
-        elif kind == "click_screen_button" and isinstance(value, dict):
-            probe.call("minecraft_click_screen_button", value)
-        elif kind == "wait_terrain" and isinstance(value, dict):
-            if client != "native":
-                raise ValueError("wait_terrain requires --client native")
+        elif kind in ("key", "use_item_on", "click_screen_button"):
+            probe.call(SCENE_TOOLS[kind], value)
+        elif kind == "wait_terrain":
             name, args = value.get("name"), value.get("args")
-            if (set(value) != {"name", "args"} or not isinstance(name, str)
-                    or not re.fullmatch(r"[A-Za-z0-9_-]+", name) or not isinstance(args, dict)
-                    or not {"sections"} <= set(args) <= {"sections", "timeout_seconds"}):
-                raise ValueError(f"invalid wait_terrain step: {value!r}")
             sections = args["sections"]
             timeout = args.get("timeout_seconds", 30)
-            if (not isinstance(sections, list) or not 1 <= len(sections) <= 64
-                    or any(not isinstance(section, list) or len(section) != 3
-                           or any(type(n) is not int or not -(2**31) <= n < 2**31 for n in section)
-                           for section in sections)
-                    or len({tuple(section) for section in sections}) != len(sections)
-                    or type(timeout) not in (int, float) or not math.isfinite(timeout)
-                    or not 0.1 <= timeout <= 120):
-                raise ValueError(f"invalid wait_terrain arguments: {args!r}")
-            result = probe.call("minecraft_wait_for_terrain", {
+            result = probe.call(SCENE_TOOLS[kind], {
                 "sections": sections, "timeout_seconds": min(timeout, probe.remaining()),
             })
             if result.get("status") != "ready":
@@ -286,21 +371,32 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             receipt = artifact / f"{name}.json"
             receipt.write_text(json.dumps(result, indent=2) + "\n")
             probe.report.setdefault("terrain_waits", []).append({"receipt": str(receipt), "result": result})
-        elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities") and isinstance(value, dict):
+        elif kind == "timed_entities":
+            result = probe.call("minecraft_list_entities", value["args"])
+            if type(result.get("game_time")) is not int:
+                raise RuntimeError("entity snapshot omitted same-thread game_time")
+            receipt = {"game_time": result["game_time"], "snapshot": result}
+            (artifact / f"{value['name']}.json").write_text(json.dumps(receipt, indent=2) + "\n")
+        elif kind == "mob_motion":
+            from . import mob_motion_oracle
+
+            samples = [json.loads((artifact / f"{item}.json").read_text()) for item in value["samples"]]
+            measurement = mob_motion_oracle.measure(samples, ["minecraft:zombie", "minecraft:spider"])
+            (artifact / f"{value['name']}.json").write_text(json.dumps(measurement, indent=2) + "\n")
+            for entity, row in measurement.items():
+                probe.check("mob_moved_" + entity.split(":")[1], row["total_displacement_blocks"] > 0.1)
+        elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities"):
             name, args = value.get("name"), value.get("args")
-            if (set(value) != {"name", "args"} or not isinstance(name, str)
-                    or not re.fullmatch(r"[A-Za-z0-9_-]+", name) or not isinstance(args, dict)):
-                raise ValueError(f"invalid {kind} step: {value!r}")
-            result = probe.call("minecraft_" + kind, args)
+            result = probe.call(SCENE_TOOLS[kind], args)
             (artifact / f"{name}.json").write_text(json.dumps(result, indent=2) + "\n")
         else:
             raise ValueError(f"invalid scene step: {step!r}")
     return shots
 
 
-def start_java(ctx: ProfileContext, artifact: Path, address: str, username: str, timeout: float,
+def start_java(ctx: ProfileContext, artifact: Path, address: str | None, username: str, timeout: float,
                display: str, render_distance: int, fov: int) -> tuple[Any, Any, McpClient]:
-    """Launch the vanilla Java client (loader MCP) and connect it to `address`."""
+    """Launch the vanilla Java client, optionally connecting to a server."""
     game_dir = artifact / "game"
     game_dir.mkdir()
     (game_dir / "options.txt").write_text(java_options(render_distance, fov))
@@ -320,7 +416,8 @@ def start_java(ctx: ProfileContext, artifact: Path, address: str, username: str,
         runtime.wait_client_ready_for_connect(mcp, timeout)
         if "video driver: wayland" in log_path.read_text(errors="replace").lower():
             raise RuntimeError("Java client opened its window on Wayland (the owner's desktop), not the harness Xvfb")
-        mcp.call_tool("minecraft_connect", {"server_addr": address})
+        if address is not None:
+            mcp.call_tool("minecraft_connect", {"server_addr": address})
     except BaseException:
         if mcp is not None:
             mcp.close()
@@ -330,13 +427,8 @@ def start_java(ctx: ProfileContext, artifact: Path, address: str, username: str,
     return process, log, mcp
 
 
-def run(
-    ctx: ProfileContext,
-    scenario: dict[str, Any] | None = None,
-    script: Callable[[ProbeSteps, Path, list[dict[str, Any]], str], list[str]] = execute,
-) -> dict[str, Any]:
-    """Run one scene. Another real-client profile may pass its own `scenario`
-    (settings) and a Python `script` body in place of the JSON steps."""
+def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = None):
+    """Load and validate exactly the inputs used by the scene runner."""
     if ctx.client not in ("native", "java") or not ctx.windowed or ctx.platform is not None:
         raise ValueError("scene-shot requires --client native|java --windowed")
     if scenario is None:
@@ -351,6 +443,12 @@ def run(
         scenario = json.loads(Path(scenario_path).read_text())
     if not isinstance(scenario, dict) or not isinstance(scenario.get("steps"), list):
         raise ValueError("scenario must contain a steps array")
+    if scenario.get("vanilla_singleplayer") is True:
+        if ctx.client != "java":
+            raise ValueError("vanilla singleplayer scenes require --client java")
+        from . import integrated_scene
+
+        return integrated_scene.run(ctx, scenario)
     seed = scenario.get("seed", 100)
     if type(seed) is not int:
         raise ValueError("seed must be an integer")
@@ -379,15 +477,29 @@ def run(
         settings["graphics_preset"] = preset.lower()
     if "render_distance" in settings and (type(settings["render_distance"]) is not int or not 2 <= settings["render_distance"] <= 32):
         raise ValueError("render_distance must be in 2..32")
+    validate_steps(scenario["steps"], ctx.client)
+    timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 600.0
+    if not 0 < timeout <= 3600:
+        raise ValueError("timeout must be in (0, 3600]")
+    if ctx.client == "java" and "graphics_preset" in settings:
+        raise ValueError("graphics_preset is a native-client setting; the Java client keeps its default")
+    return scenario, seed, server_view, spawn_protection, operator, username, client_latency_ms, settings, timeout
+
+
+def run(
+    ctx: ProfileContext,
+    scenario: dict[str, Any] | None = None,
+    script: Callable[[ProbeSteps, Path, list[dict[str, Any]], str], list[str]] = execute,
+) -> dict[str, Any]:
+    """Run one scene; other profiles can supply a scenario and Python script."""
+    (scenario, seed, server_view, spawn_protection, operator, username,
+     client_latency_ms, settings, timeout) = validate_scenario(ctx, scenario)
     binary_text = os.environ.get("SOLARIS_SERVER_BINARY")
     if not binary_text:
         raise RuntimeError("scene-shot requires SOLARIS_SERVER_BINARY")
     binary = Path(binary_text).expanduser().resolve()
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise RuntimeError(f"missing executable server binary: {binary}")
-    timeout = ctx.timeout_seconds or 600.0
-    if not 0 < timeout <= 3600:
-        raise ValueError("timeout must be in (0, 3600]")
     artifact = ctx.artifact_dir
     port = runtime.reserve_port()
     config = artifact / "scene-shot.toml"
@@ -410,19 +522,18 @@ def run(
         prepare_operator_fixture(ctx, [username])
     xdg = artifact / "xdg"
     settings_path = xdg / "solaris-client" / "client-settings.json"
-    source_root = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "solaris-client"
     settings_path.parent.mkdir(parents=True)
-    if source_root.is_dir():
-        # Downloaded content is read-only and ~650 MB: link it. Copy the rest
-        # (settings, caches the client writes) so runs never share state.
-        for entry in source_root.iterdir():
-            target = settings_path.parent / entry.name
-            if entry.name in {"facts", "assets", "resources", "mojang"}:
-                target.symlink_to(entry.resolve(), target_is_directory=entry.is_dir())
-            elif entry.is_dir():
-                shutil.copytree(entry, target, ignore_dangling_symlinks=True)
-            elif entry.exists():
-                shutil.copy2(entry, target)
+    if ctx.client == "native":
+        from ..preflight import CLIENT_CONTENT_DIRS, client_template
+
+        # Link the read-only content of the data root the env names (the one
+        # preflight checked). Settings are written below; caches (far-terrain),
+        # saved runs and window state must not leak between runs.
+        source_root = client_template()
+        for name in CLIENT_CONTENT_DIRS:
+            entry = source_root / name
+            if entry.exists():
+                (settings_path.parent / name).symlink_to(entry.resolve(), target_is_directory=entry.is_dir())
     original = os.environ.get("SOLARIS_CLIENT_SETTINGS")
     if original and Path(original).is_file():
         base = json.loads(Path(original).read_text())
@@ -443,7 +554,10 @@ def run(
     try:
         log = (artifact / "server.log").open("wb")
         ctx.logs.append(str(artifact / "server.log"))
-        server = subprocess.Popen(server_command, cwd=runtime.REPO_ROOT, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        with binary.open("rb") as server_executable:
+            server_hash = hashlib.file_digest(server_executable, "sha256").hexdigest()
+        ctx.client_evidence.update(server_binary_path=str(binary), server_binary_sha256=server_hash)
+        server = runtime.start_server(server_command, cwd=runtime.REPO_ROOT, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         runtime.wait_port(port, timeout, server, log_path=artifact / "server.log")
         client_port = port
         if client_latency_ms:

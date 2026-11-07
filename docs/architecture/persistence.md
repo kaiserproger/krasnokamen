@@ -58,6 +58,10 @@ for the entity checkpoint design.
 4. Only then start native serving. No Anvil files or old JSON manifests are a
    serving recovery source.
 
+Mob targets are runtime-only. Persisted zombie-family aggressive-arms metadata
+is reconciled with the live target on the first admitted hostile evaluation
+after restart; a changed appearance is journaled as usual.
+
 On genuine first start, `Core::open` writes and fsyncs
 `<world>/.solaris-first-start`, creates `native/state.redb.new` and renames the
 committed store into place. The marker is removed after the initial checkpoint

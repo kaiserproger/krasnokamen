@@ -65,18 +65,22 @@ def _wait_log(
     return lines[occurrences - 1]
 
 
+@runtime.in_phase("assertion")
 def _check(checks: dict[str, Any], name: str, condition: bool, detail: Any = None) -> None:
     checks[name] = {"passed": bool(condition), "detail": detail}
     if not condition:
         raise RuntimeError(f"check failed: {name}: {detail!r}")
 
 
-def run(ctx: ProfileContext) -> dict[str, Any]:
+def validate_args(ctx: ProfileContext) -> tuple[argparse.Namespace, float]:
     parser = argparse.ArgumentParser(prog="pause-empty")
     parser.add_argument("--pause-seconds", type=int, default=2)
     parser.add_argument("--join-name", default="PauseProbe")
     parser.add_argument("--command-timeout-seconds", type=float, default=120.0)
-    args = parser.parse_args(ctx.extra_args)
+    try:
+        args = parser.parse_args(ctx.extra_args)
+    except SystemExit as error:
+        raise ValueError("invalid pause-empty arguments") from error
     if args.pause_seconds <= 0:
         raise ValueError("--pause-seconds must be positive")
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 300.0
@@ -84,6 +88,11 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         raise ValueError("timeout must be positive")
     if ctx.platform is not None or ctx.plugins_dir is not None:
         raise ValueError("pause-empty runs the bare server without Loader/plugins")
+    return args, timeout
+
+
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    args, timeout = validate_args(ctx)
 
     artifact = ctx.artifact_dir
     artifact.mkdir(parents=True, exist_ok=True)
@@ -134,14 +143,12 @@ seed = 81
     ctx.cwds.append(str(runtime.REPO_ROOT))
     ctx.exits.append(None)
     ctx.logs.append(str(log_path.relative_to(runtime.REPO_ROOT)))
-    server = subprocess.Popen(
-        argv,
-        cwd=runtime.REPO_ROOT,
-        stdin=subprocess.PIPE,
-        stdout=log_handle,
-        stderr=subprocess.STDOUT,
-        start_new_session=True,
-    )
+    server = runtime.start_server(argv,
+    cwd=runtime.REPO_ROOT,
+    stdin=subprocess.PIPE,
+    stdout=log_handle,
+    stderr=subprocess.STDOUT,
+    start_new_session=True,)
     checks: dict[str, Any] = {}
     report: dict[str, Any] = {
         "scope": "empty-server pause: log event, frozen tick, console save, status, protocol join resume",
@@ -189,18 +196,17 @@ seed = 81
             status["version"],
         )
 
-        joined_sock, joined = wire.join_offline_socket(
-            ("127.0.0.1", port),
-            args.join_name,
-            timeout=args.command_timeout_seconds,
-        )
-        try:
-            # LoginPlay proves the core processed Join; the first KeepAlive
-            # proves the join burst finished and the play loop owns the
-            # socket, so closing it below takes the ordinary leave path.
-            wire.wait_play_loop(joined_sock, timeout=args.command_timeout_seconds)
-        finally:
-            joined_sock.close()
+        with runtime.phase("join"):
+            joined_sock, joined = wire.join_offline_socket(
+                ("127.0.0.1", port),
+                args.join_name,
+                timeout=args.command_timeout_seconds,
+            )
+            try:
+                # The first KeepAlive proves the join burst reached the play loop.
+                wire.wait_play_loop(joined_sock, timeout=args.command_timeout_seconds)
+            finally:
+                joined_sock.close()
         after_join = _server_stats(dashboard_port)
         report["join"] = {
             "client": joined,

@@ -6,6 +6,60 @@ with [the architecture](../ARCHITECTURE.md), the relevant native owner and
 and vanilla facts from the appropriate local oracle before implementing it.
 Do not infer packet IDs or field layouts from memory.
 
+## Open transitions
+
+[STATUS](../STATUS.md#open-transitions) lists every transition in flight whose
+target the owner has decided: what replaces what, the evidence, and when the
+old side is deleted. Before changing an area, look for its row. This covers
+every area of the repository, the harness and tools included, not only
+gameplay.
+
+- Fixes and changes required on a currently supported surface are always
+  allowed, including on the old side of a transition (26.1.2 support, for
+  example, is a standing contract, not a transition).
+- What the row stops is building new features or new mechanisms on the old
+  side of a decided transition: a change in that area moves it forward, or
+  at least adds no new caller, case or copy of the old mechanism.
+- No new transition starts in an area that already has one open. Finish it,
+  drop it, or get the owner's decision first.
+- A change that opens a transition adds its row to STATUS in the same change.
+- Finishing a transition deletes the old side in the same change (code, config,
+  tests, docs) and deletes its row.
+
+### Mechanisms, not code
+
+The rules above are about *mechanisms*: parallel infrastructure or authority
+for one responsibility (pinning, server launch, persistence paths, observers,
+config). Unify those. Duplicated *code* at call sites is fine, and preferred
+to the wrong abstraction ([Metz](https://sandimetz.com/blog/2016/1/20/the-wrong-abstraction)).
+A parameter that carries a fact of the shared semantics (environment state, a
+game rule, input data, as in `Vitals::tick(eye_in_water, can_drown, ...)`) is
+fine. If a new caller needs a mode, flag or boolean that makes the shared
+function do something different for that caller, or a caller-specific branch,
+the abstraction is wrong: inline the shared code into its callers and delete
+the part each caller does not use. The fastest way forward is back, and how
+much the shared code cost or how complex it has grown is no reason to keep it.
+Never do that to gameplay authority: a rule implemented in two places is
+worse, so split the function by behaviour instead.
+
+## New dependencies and components
+
+A new external crate, toolchain or component (nightly Rust, `cargo-component`),
+language or runtime (each layer already has one: Rust for the product, Python
+stdlib for the harness and `tools/dev` with bash only for thin wrappers, Java
+only for client mods and vanilla oracles), persistent format, daemon or
+service, or new required
+prerequisite binary spends one of very few innovation tokens
+([McKinley](https://mcfunley.com/choose-boring-technology)). Before adding one,
+write a short decision record (a new ADR or a section of the owning one) that
+answers:
+
+1. How would we solve this with what we already have?
+2. What exactly makes the current stack prohibitively hard or expensive?
+3. What existing thing does it replace, and what is the commitment and plan to
+   migrate? A replacement is a row in
+   [open transitions](../STATUS.md#open-transitions).
+
 ## Trace the actual path
 
 For a client-triggered block placement, trace this example end to end:
@@ -60,9 +114,11 @@ to bypass native validation.
 
 ## Regression and acceptance
 
-1. Write a focused failing-first regression against the existing real tick
-   path and the intended behaviour. A compile failure or a test that only
-   asserts a helper's own output is not a behavioural reproduction.
+1. Write a focused regression against the existing real tick path and the
+   intended behaviour. It must go red when only the fix hunks are reverted
+   (negative control); record whether you also saw it fail first. A compile
+   failure or a test that only asserts a helper's own output is not a
+   behavioural reproduction.
 2. Put substantial tests in a focused sibling `*_tests.rs`, following the
    owning module's existing test registration. For an input action, exercise
    the actual `PlayerInput` through the tick, and assert resulting state and

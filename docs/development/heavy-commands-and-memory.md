@@ -58,10 +58,15 @@ to keep that from happening again without idling the machine.
   compilers instead of `nproc` each.
 - **Pooled target dirs.** A command that sets `CARGO_TARGET_DIR` keeps it.
   Otherwise it gets a free shared dir `<work>/targets/slot-a..slot-z`
-  (`SOLARIS_SLOT_TARGETS` overrides the root), preferring the slot its source
-  tree used last. On a tree switch every tracked file of the new tree is
-  touched so its workspace crates rebuild (see the 2026-11-04 entry in
-  [lessons](lessons.md)). With all 26 busy the command is refused.
+  (`SOLARIS_SLOT_TARGETS` overrides the root): the slot its source tree used
+  last, else any existing free slot, else a new one if `df` reports at least
+  `SOLARIS_SLOT_MIN_FREE_GB` (default 80 GiB, the free-space floor below; rounded up) free. This check does
+  not reserve space or limit growth of existing slots. Each running command
+  holds its own slot (15-40 GB once built): on 2026-11-07 agents running
+  several commands in parallel created 12 slots and filled the disk, so run one
+  heavy command at a time per agent. On a tree switch every tracked file of the
+  new tree is touched so its workspace crates rebuild (see the 2026-11-04 entry
+  in [lessons](lessons.md)).
 - **Incremental** compilation is forced on for debug/test builds and off for
   `--release`/`--profile`. Measured once: cold `mc-core --tests` 26m48s to 19m07s.
 - **Lanes.** `-p` is the perf lane: one at a time (perf lock), pinned to CPUs
@@ -71,7 +76,8 @@ to keep that from happening again without idling the machine.
   command, the runner waits for the rest to finish and holds new commands at
   start until it ends. `-x` is about quiet, not memory.
 - **Exit 75** now means one of: the slice has no cgroup, `-x` without a running
-  watchdog, or all 26 target dirs busy. The only other legitimate wait at start is a
+  watchdog, or no usable target dir (all existing ones busy and too little disk
+  for a new one). The only other legitimate wait at start is a
   `-p` command queued on the serialized perf lane (`flock $dir/perf`); anything else is a regression.
 - The runner prints one `mem-run: scope ...` line (props, lane, target, expected
   peak, signature). Copy it into receipts.
@@ -135,7 +141,7 @@ code, start the unit (agents' runner calls may restart it in between).
   (`systemd-run --user --scope --slice=app.slice sccache --start-server`).
 - rust-analyzer (about 5 GB, agents auto-start it) and the agent host (about
   4 GB) sit outside the slice. Killing rust-analyzer, leaked Minecraft clients
-  and idle Gradle daemons is safe; codegraph serves the MCP session, keep it.
+  and idle Gradle daemons is safe.
 - Agent tool calls default to a 300 s deadline: run long commands with
   `async: true` plus `timeout: 0`/`3600`, never by changing harness timeouts.
 
@@ -170,20 +176,38 @@ from 2026-10-26 to 2026-10-28). Find rustc processes outside the slice
   target dirs in `<work>/targets/`, sccache on the games disk. `/tmp` is on the
   root disk. `git worktree move` fails across devices; use rsync.
 - `/dev/shm` has a per-user quota: `df` free space is not usable headroom.
-- Keep ample free space on the games disk (at least 50 GB for load runs; R&D
-  scale runs used a 60 GiB floor). The disk filled to 100% several times:
-  per-run plugin `.wasm` copies in scenario runs (7 of 11 GB on 2026-10-28),
-  650 MB of client content copied into every scene-shot receipt (now
-  symlinked), nested `sdk/rust/target` in rsync'd worktrees, 66 GB of stale
-  debug targets.
+- **Keep 80-100 GB free on the games disk** (owner, 2026-11-07; it is a
+  DRAM-less Samsung 980 whose fast write cache shrinks as it fills: at 92%
+  full writes took over a second each). Below 80 GB, thin finished runs before
+  starting more work. The disk filled to 100% several times: 12 parallel
+  target slots (2026-11-07), per-run plugin `.wasm` copies in scenario runs (7
+  of 11 GB on 2026-10-28), 650 MB of client content copied into every
+  scene-shot receipt (now symlinked), nested `sdk/rust/target` in rsync'd
+  worktrees, 66 GB of stale debug targets.
+- **Slot cleanup and rotation.** Below `SOLARIS_SLOT_MIN_FREE_GB` + 10 GiB free
+  (90 GiB by default), the runner (except `-x`/`-p`) invokes `slot-gc --delete`;
+  failures are logged and do not stop the command. Each pass removes attributable
+  dead artifacts and superseded finalized incremental sessions. If space remains
+  below the threshold, idle slots are rotated least recently used first: their
+  incremental dirs, then the rest except `tmp/` if needed. A slot is skipped
+  while its pool lock or its use lock is held (every runner command on the slot
+  holds the use lock, an explicit `CARGO_TARGET_DIR` included), or while a live
+  process has it as `CARGO_TARGET_DIR`; run cargo through the runner, because a
+  bare cargo started after that scan is not protected. Rotation can
+  discard live-tree caches; slots ignore the in-use registry. See
+  [`tools/dev/README.md`](../../tools/dev/README.md#slot-gc---delete--v-slot).
 
 Cleanup while agents run:
 
-- **Worktrees:** removable only if its agent finished, it has no tracked
-  changes (a stray `.pyc` aside) and its HEAD is in a branch
-  (`git branch --contains`). Check handoffs/configs for absolute paths into it
-  first (e.g. an ALSA pkg-config shim, a `SOLARIS_LOADER_ROOT`). Move its
-  `.analysis/` to `<work>/receipts/<wt>-analysis` and publish outputs to
+- **Worktrees:** use `wt-done <Name>` (verified `final.patch`, then removal). It
+  refuses a worktree another owner marked in the in-use registry
+  (`tools/dev/in-use`; `wt-gc` shows the marks), so mark a client/loader checkout
+  or a receipt binary you run with `in-use add` and drop it with `in-use remove`.
+  By hand, only if its agent finished, it has no tracked changes (a stray `.pyc`
+  aside) and its HEAD is in a branch (`git branch --contains`). Check
+  handoffs/configs for absolute paths into it first (e.g. an ALSA pkg-config
+  shim, a `SOLARIS_LOADER_ROOT`). Move its `.analysis/` to
+  `<work>/receipts/<wt>-analysis` and publish outputs to
   `<work>/release-artifacts/` (call them "built", never "published"), then
   `git worktree remove --force` and `git worktree prune`.
 - **Target dirs:** candidates only with zero users across `/proc` (cwd, exe,
@@ -191,9 +215,12 @@ Cleanup while agents run:
   pooled `slot-<l>` only under its lock:
   `flock -n /tmp/solaris-mem-slots/<l> rm -rf <work>/targets/slot-<l>`. Keep
   dirs named in active tasks and dirs holding binaries other agents run.
-- **Receipts:** delete duplicated `.wasm`, `world/`, `pristine-world/`,
-  `journal/` and `xdg/` of finished runs; keep logs, worlds you still need and
-  JSON receipts. Never delete `result.json`, logs or `perf.data` you cite.
+- **Receipts and scenarios** (owner, 2026-11-07): a finished run keeps only its
+  reports, logs and `result.json` (text reports such as `.md`, `.yaml`,
+  `.json`, `.txt`, plus `.log` files, delivered `.patch` files and screenshots);
+  everything else (worlds, `journal/`, `xdg/`, client data roots, binaries,
+  jars, `.wasm`, `perf.data`, archives) is deleted. Keep the full run only while
+  its work is active or a named next task needs it (e.g. a fixture world).
 - Don't touch the owner's main checkouts and their `target/`, sccache, or other
   projects' caches in `/tmp`.
 

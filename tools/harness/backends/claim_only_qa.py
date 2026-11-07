@@ -32,14 +32,21 @@ USERNAME = "VillageAuto"
 SECOND_USERNAME = "VillageAutoB"
 
 
-def run(ctx: ProfileContext) -> dict[str, Any]:
+def validate_args(ctx: ProfileContext) -> float:
     if ctx.client != "native":
         raise ValueError("claim-only-qa requires --client native")
     if not ctx.windowed:
         raise ValueError("claim-only-qa requires --windowed")
+    if ctx.extra_args or ctx.platform is not None:
+        raise ValueError("claim-only-qa does not accept extra arguments or platform")
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 600.0
     if not 0 < timeout <= 3600:
         raise ValueError("claim-only-qa --timeout-seconds must be in (0, 3600]")
+    return timeout
+
+
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    timeout = validate_args(ctx)
     artifact = ctx.artifact_dir
     resume_world = os.environ.get("VILLAGE_AUTONOMY_RESUME_WORLD", "")
     if not resume_world:
@@ -106,14 +113,12 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         server_log = server_log_path.open("wb")
         env = os.environ.copy()
         env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
-        server = subprocess.Popen(
-            [str(binary), "--config", str(config), "--no-console"],
-            cwd=runtime.REPO_ROOT,
-            stdout=server_log,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-            env=env,
-        )
+        server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
+        cwd=runtime.REPO_ROOT,
+        stdout=server_log,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+        env=env,)
         ctx.logs.append(str(server_log_path))
         runtime.wait_port(server_port, timeout, server, log_path=server_log_path)
         xvfb, display, _ = runtime.start_xvfb(artifact)
@@ -249,11 +254,9 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             server_log.close()
             server_log_path = artifact / "server-restart.log"
             server_log = server_log_path.open("wb")
-            server = subprocess.Popen(
-                [str(binary), "--config", str(config), "--no-console"],
-                cwd=runtime.REPO_ROOT, stdout=server_log, stderr=subprocess.STDOUT,
-                start_new_session=True, env=env,
-            )
+            server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
+            cwd=runtime.REPO_ROOT, stdout=server_log, stderr=subprocess.STDOUT,
+            start_new_session=True, env=env,)
             ctx.logs.append(str(server_log_path))
             runtime.wait_port(server_port, timeout, server, log_path=server_log_path)
             restart_ctx = replace(ctx, artifact_dir=artifact / "restart-client", client_evidence={})

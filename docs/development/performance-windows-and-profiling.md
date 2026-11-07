@@ -1,7 +1,7 @@
 # Performance windows and profiling
 
-Binding rules: [AGENTS.md](../../AGENTS.md) (measurement windows need Main's GO
-on a frozen integrated tree; compare only matching lanes; narrow optimisation
+Binding rules: [AGENTS.md](../../AGENTS.md) (measurement lanes serialize
+themselves, no GO; a frozen tree named in the brief; compare only matching lanes; narrow optimisation
 hacks document bottleneck, fence, effect and removal path) and the
 [definition of done](../DEFINITION_OF_DONE.md) "Performance And Multithreading
 DoD" section. Published workloads and their
@@ -14,20 +14,14 @@ commands are in [PROFILES.md](../performance/PROFILES.md) and
    and smoke-tests the profiler capture outside the window on a short unmeasured
    run: absolute output path, exit 0, samples > 0. Cargo integration tests run
    with the crate as cwd; a relative perf output path made perf exit 255.
-2. Agent to Main: `READY FOR WINDOW` (binaries built, expected duration).
-3. Main tells only the agents running heavy work (not idle agents, not
-   `agent://all`) that a window is starting, waits for their acks, then sends
-   `GO` to exactly one agent. Number the windows to avoid out-of-order
-   confusion.
-4. During the window: no builds on any CPU, including the bot CPUs; servers,
-   imports and world upgrades are gated too. A rustc on the bot CPUs
-   contaminated a MIX replay once. With the current runner, `mem-run.sh -x`
-   freezes preemptible builds and waits for running tests and servers (see
-   [heavy commands](heavy-commands-and-memory.md)).
-5. Run the canonical scene **unshortened**.
-6. Agent to Main: `WINDOW DONE` with gate status, p50/p95/p99, stage breakdown,
-   CPU time per tick, profile path. Main sends `WINDOW CLOSED` to the same
-   agents.
+2. Run the measurement in `mem-run.sh -x`: it freezes preemptible builds and
+   waits for running tests and servers before starting (see
+   [heavy commands](heavy-commands-and-memory.md)); `-x` commands run one at a
+   time. No GO or announcement is needed. A rustc on the bot CPUs once
+   contaminated a MIX replay; that is why measurements never run outside `-x`.
+3. Run the canonical scene **unshortened**.
+4. Report gate status, p50/p95/p99, stage breakdown, CPU time per tick and the
+   profile path in the result.
 
 In-process single-agent micro-benches pinned to the perf lane (`mem-run.sh -p`,
 CPUs 8-11) may run without a window if `uptime` is recorded; their numbers are
@@ -149,7 +143,7 @@ in-process tick workload, not the real-protocol native-100 capacity gate.
 measures 60 real ticks. For the 100k-mob/20k-villager PGO comparison set
 `N100_MOBS=100000 N100_VILLAGERS=20000` for both training and every candidate.
 Build the release test executable in the ordinary build lane, then run it with
-`--ignored --nocapture native100_like_entity_phase_micro` in a Main-approved
+`--ignored --nocapture native100_like_entity_phase_micro` in an
 `-x -p` window. Each `NATIVE100` sample reports total milliseconds and existing
 test-only villager brain/roster microseconds; the seven `villager_phase_us`
 entries are refresh, admission, evaluation, social, acquisition, full and

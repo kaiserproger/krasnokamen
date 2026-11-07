@@ -33,7 +33,8 @@ client prerequisites, graphical gates, the render oracle),
   prepared data root; see the prerequisites block in
   [real-client gates](development/real-client-gates.md#prerequisites).
 - Real-client and scale profiles need a **release** `solaris-v2` as
-  `SOLARIS_SERVER_BINARY` (`cargo build --release -p mc-edge --bin solaris-v2`).
+  `SOLARIS_SERVER_BINARY` (`cargo build --release --locked -p mc-edge --bin
+  solaris-v2`; on the owner host a path from `tools/dev/pin-release`).
 - Free loopback ports (default MCP `39095`, scenario servers such as
   `25565`/`25567`, per-run bridge ports); a run that cannot bind fails closed.
   Readiness on Linux uses inotify/pidfd event waits, Xvfb process management and
@@ -51,6 +52,7 @@ python3 -m tools.harness run PROFILE [--release] [--timeout-seconds N] [--client
 python3 -m tools.harness run scenario <id>
 python3 -m tools.harness client [--check] [--platform fabric|neoforge|forge]
 python3 -m tools.harness mcp [--server-address host:port] [--exercise-input] [--disconnect] [--scenario-id ID]
+python3 -m tools.harness plan [--base REV] [--paths PATH...] [--json]
 ```
 
 Typed-option constraints (the run fails closed with exit 2 on violation; the
@@ -76,6 +78,14 @@ completion is `passed`. `--check`/`--prepare` (and other preparation-only modes)
 report `prepared` with exit 0, never a gameplay pass. Unknown profiles,
 unlaunchable or nonzero commands, and missing scenario evidence fail closed with
 a nonzero exit. Every timeout is failure, never success.
+
+Real-client and functional-native runs check prerequisites before their
+profile launches: set `SOLARIS_SERVER_BINARY` to a pinned executable and, for
+native clients, `SOLARIS_CLIENT_BINARY` and the client data paths described in
+the real-client guide. Pooled `targets/slot-*` binary paths are refused. Scene
+JSON step contracts are checked before startup. Failed receipts include
+`details.failure` with available binary hashes, logs and child exit or signal;
+`phase: unknown` means the failing backend has not identified its phase.
 
 The shared Java client launcher sets both `HOME` and JVM `user.home` to `.home`
 inside that client's game directory. Forge's home-derived Minecraft assets
@@ -113,8 +123,8 @@ per-command cwds, engine counts (`selected`/`executed`/`passed`/`failed`/
 
 Each of these is a limit on what a green receipt means; never state more.
 
-- `correctness` is the L2 close gate (fmt, strict workspace Clippy,
-  `code-health`, then the nextest suite). `code-health` is a fail-only
+- `correctness` is the L2 close gate (`regressions`, fmt, strict workspace
+  Clippy, `code-health`, then the nextest suite). `code-health` is a fail-only
   structural tripwire, not gameplay evidence.
 - `core-client` is the server/own-chat continuity subset only (Java default,
   native subset). Its receipt explicitly excludes Wasm, economy and
@@ -156,6 +166,39 @@ Each of these is a limit on what a green receipt means; never state more.
   workloads. Debug numbers are not optimized performance evidence.
 - Artifact-building utilities (extract/dump scripts, fixture generators,
   `prepare-real-client-scenario.sh`) are not validation entrypoints.
+
+## Validation plan (`plan`)
+
+`python3 -m tools.harness plan [--base REV] [--paths PATH...] [--json]` prints the
+validation a change requires, before you start and again before you report.
+It reads the changed files (default: `git diff --name-only` against `--base`,
+default `HEAD`, plus untracked files, in the cwd tree; `--paths` replaces the
+diff, and `../solaris-client/...` names a sibling repository) and prints one
+deduplicated list. Each entry has the exact gate, `why` (the rule's doc path
+and section), `runs` (1, or 3 for a variable profile), whether a negative control
+is required, and whether an independent reviewer is required and of which kind
+(persistence, protocol, custody, ledger batch of five or more rows, innovation).
+Rules of several paths are unioned; the strictest run count wins.
+
+The rules are the `RULES` table in `tools/harness/plan.py`, one row per rule with its
+doc source; it restates AGENTS.md (levels L0/L1/L2, reviewers, gate hygiene),
+`docs/architecture/persistence.md`, `docs/development/protocol-changes.md`,
+[real-client gates](development/real-client-gates.md), the
+[bug ledger](bugs/README.md) and the sibling repositories' own docs. It adds no
+policy: change a row only when its cited document changes. A gate that maps to a
+real-client profile comes from `AREAS`, `BACKEND_PROFILES` and the scenario
+catalog; otherwise the entry reads `no mapped gate: choose from ...`. A profile is
+*variable* when it appears in `VARIABLE_PROFILES` (timing-, seed- or
+concurrency-dependent behaviour, [gate hygiene](QA_AGENT_PROTOCOL.md#gate-hygiene)).
+
+The path tables are minimal, not exhaustive. A changed file that no rule names, or
+that falls in two or more risk domains (persistence, protocol, custody, gate),
+is printed as `manual classification required: <files>`; so is any change whose
+domain its path does not show, which you must classify yourself. A new direct
+dependency, a toolchain change or a new required prerequisite prints `decision
+record required` and a reviewer (see
+[adding a feature](development/adding-a-feature.md), "New dependencies and components").
+Run it from inside the tree to be judged; `plan` is read-only.
 
 ## Test gate (nextest)
 
@@ -212,6 +255,42 @@ coverage. Missing or ambiguous function coverage is unknown, not zero or 100%.
 The owner's `CRAP < 10` rule for new or changed functions applies only after 1.0
 ships; it is not a pre-release gate.
 
+## Code-health ratchets
+
+`cargo run -p xtask -- code-health` (harness `run code-health`) measures
+`mc-core` production code with `syn`, never text. Comments, doc comments,
+attributes, `#[cfg(test)]` and `#[test]` items and `*_tests.rs` files are outside
+every number. `--root <dir>` measures another checkout read-only. Five ratchets
+fail when they rise above their ceiling in
+`crates/xtask/src/code_health/ratchet.rs`:
+
+- modules in the largest cycle of top-level modules (Tarjan over
+  `crate::`/`super::` paths and root re-exports): no module may join it
+  ([ADR 0021](decisions/0021-build-time-and-crate-split.md#cycle-ratchet-implemented-2026-11-07));
+- string literals whose value starts with `minecraft:`;
+- `==` or `!=` with a `.path()` call on either side;
+- `panic!`;
+- `.push(..)` on `merge_block_writes`.
+
+Macro bodies count too: a body that parses as comma-separated expressions
+(`format!`, `matches!`, `assert!`) is visited like code; any other body
+(`macro_rules!`, `vec![x; n]`, tracing fields) is read token by token.
+
+A value below its ceiling prints `ceiling can drop to N`: lower the constant in
+the same change. Raising a ceiling is an explicit edit of the constant with a
+reason comment; there is no flag or override. The cycle's production lines are
+a printed trend, never a failure: features inside cycle modules add lines.
+
+The report prints a per-module breakdown for each count and these known false
+positives: vanilla ids in data and registry tables and in protocol, NBT and
+Anvil schemas; `path()` on a non-identity type (matched by method name); a
+panic on a truly impossible internal state; the push inside
+`TickState::write_block` itself. Not seen: a module dependency through a type's
+methods without a module path, ids without the `minecraft:` prefix, and a
+`.path()` right operand inside a macro body that is not expressions. For the
+cycle it prints the most connected modules and decoupling hints: the modules
+that leave the cycle for the fewest cut edges.
+
 ## Resource bounds
 
 `run` and `client` put the whole invocation into one bounded systemd user scope
@@ -254,6 +333,29 @@ and `error`. An unknown profile still writes a `failed` (`unknown-profile`)
 receipt listing the known profiles. Graphical profiles share one process/readiness
 implementation and clean up their owned server, client and Xvfb processes;
 readiness is driven by process, log and client-state events.
+
+For a failed run, `details.failure` records the observed lifecycle `phase`
+(`preflight`, `server_start`, `client_start`, `join`, `scenario`, `assertion`,
+`teardown`, or `unknown`), child `exit_code` or terminating `signal` when
+observed, log paths, and server/client binary paths and SHA-256 hashes when
+available. A null field means the information was not observed; a cleanup
+exit must not be confused with the failure that preceded it. Coverage is
+currently limited to instrumented shared helpers and probe sections: an
+unclassified failure remains `unknown`.
+
+Preflight selects prerequisites from the profile's declaration in
+`tools/harness/profiles.py`, not from its scope label. Native profiles that
+launch a client read its schemas with `solaris-client mcp-schema`; the command
+prints JSON with `tools` (windowed) and `headless_tools` arrays from the same
+catalog as MCP `tools/list`, without starting a game. A release that predates
+the command (it answers `unknown_command: mcp-schema`) still runs, with
+`details.mcp_schema` recorded as not validated; any other export failure fails
+preflight. For Java MCP profiles, preflight
+compiles the selected Loader checkout's `ClientMcpTools` definitions using the
+checkout's cached Gson dependency. Scene-shot input-derived MCP calls and
+literal calls in the selected backend and named scenario sources are checked
+against those definitions. Computed calls and dynamically supplied values are
+not proven by static validation.
 
 - Start from `result.json`: take the nonzero entry in `exits`, read the matching
   `commands` argv and `logs` file. `details.error` names the failing backend;
@@ -367,12 +469,13 @@ subprocesses so readiness events and per-run captured logs stay available
 
 ## Code and client tools
 
-CodeGraph (symbol graph: callers, mutation paths, blast radius; its index lives in
-ignored `.codegraph/`, refresh with `codegraph sync .` after edits) and the
-Minecraft client MCP (embedded in the Loader dev client and the native client)
-are optional helpers; normal work uses the repository rules, the harness and the
-agent's own tools. Owner-workstation extras are never required. Do not route
-provider traffic through proxies or enable MCPs the owner did not ask for.
+The Minecraft client MCP (embedded in the Loader dev client and the native
+client) is an optional helper; normal work uses the repository rules, the
+harness and the agent's own tools. Owner-workstation extras are never required.
+Do not route provider traffic through proxies or enable MCPs the owner did not
+ask for. The CodeGraph MCP server is disabled on the owner host; the CLI remains
+installed for occasional questions. Build its ignored `.codegraph/` index with
+`codegraph init` when needed.
 
 ## Other tools in the repository
 
@@ -394,8 +497,11 @@ provider traffic through proxies or enable MCPs the owner did not ask for.
 
 ## Negative-code gate
 
-For any non-trivial change, the one independent final review required by
-`AGENTS.md` includes negative-code checks: scope fit, duplication, fake
-abstractions, wider-than-needed config and stale docs. Never run multiple
-reviewer roles unless the owner explicitly asks. Final reports say whether the
-negative-code review ran and what it found.
+The reviewer that AGENTS.md "Working rules" requires (a promotion batch of five
+or more rows; a persistence, protocol or custody change before commit; a
+release) includes negative-code checks: scope fit, duplicate mechanisms (not
+repeated call-site code), fake abstractions and wrong ones (caller-specific
+flags or branches in shared code), wider-than-needed config and stale docs.
+Slices without a review point (docs-only, test-only) get no reviewer. Never
+run multiple reviewer roles unless the owner explicitly asks. A reviewed
+change's report says what the negative-code review found.

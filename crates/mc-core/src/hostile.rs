@@ -113,68 +113,82 @@ pub(crate) fn refresh_targets(state: &mut TickState) {
         15
     };
     let mut targets = std::mem::take(&mut state.hostile.targets);
+    let mut dropped = Vec::new();
     targets.retain(|&actor, ((target, at), dist)| {
-        let Some(slot) = state.entities.slot_of(actor) else {
-            return false;
-        };
-        let EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
-            return false;
-        };
-        let Some(blueprint) = state.registry.blueprint(type_id) else {
-            return false;
-        };
-        if !retains_target(blueprint)
-            || state.entities.row(slot).controls.no_ai
-            || (blueprint.capabilities.dark_aggro_only
-                && !state
-                    .entities
-                    .row(slot)
-                    .last_player_hit
-                    .is_some_and(|(_, tick)| state.tick.saturating_sub(tick) < 100)
-                && {
-                    let pos = state.entities.pos(slot);
-                    !state
-                        .world
-                        .light_at(
-                            pos[0].floor() as i32,
-                            pos[1].floor() as i32,
-                            pos[2].floor() as i32,
-                        )
-                        .is_some_and(|(sky, block)| block.max(sky.saturating_sub(sky_darken)) < 8)
-                })
-            || (blueprint.category == crate::blueprint::MobCategory::Monster
-                && state.difficulty == Difficulty::Peaceful)
-        {
-            return false;
-        }
-        let Some(victim) = state.entities.slot_of(*target) else {
-            return false;
-        };
-        if actor == *target
-            || state.entities.row(victim).health <= 0.0
-            || crate::axolotl::playing_dead(state.entities.row(victim))
-        {
-            return false;
-        }
-        if matches!(state.entities.body(victim).kind, EntityKind::Player { .. }) {
-            let Some(player) = state.players.get(target) else {
+        let keep = (|| {
+            let Some(slot) = state.entities.slot_of(actor) else {
                 return false;
             };
-            if !admits_target(player)
-                || state.session_locked(player.connection)
-                || matches!(
-                    state.entities.row(slot).special_mob.as_deref(),
-                    Some(crate::special_mobs::Retained::PlayerIronGolem)
-                )
+            let EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
+                return false;
+            };
+            let Some(blueprint) = state.registry.blueprint(type_id) else {
+                return false;
+            };
+            if !retains_target(blueprint)
+                || state.entities.row(slot).controls.no_ai
+                || (blueprint.capabilities.dark_aggro_only
+                    && !state
+                        .entities
+                        .row(slot)
+                        .last_player_hit
+                        .is_some_and(|(_, tick)| state.tick.saturating_sub(tick) < 100)
+                    && {
+                        let pos = state.entities.pos(slot);
+                        !state
+                            .world
+                            .light_at(
+                                pos[0].floor() as i32,
+                                pos[1].floor() as i32,
+                                pos[2].floor() as i32,
+                            )
+                            .is_some_and(|(sky, block)| {
+                                block.max(sky.saturating_sub(sky_darken)) < 8
+                            })
+                    })
+                || (blueprint.category == crate::blueprint::MobCategory::Monster
+                    && state.difficulty == Difficulty::Peaceful)
             {
                 return false;
             }
+            let Some(victim) = state.entities.slot_of(*target) else {
+                return false;
+            };
+            if actor == *target
+                || state.entities.row(victim).health <= 0.0
+                || crate::axolotl::playing_dead(state.entities.row(victim))
+            {
+                return false;
+            }
+            if matches!(state.entities.body(victim).kind, EntityKind::Player { .. }) {
+                let Some(player) = state.players.get(target) else {
+                    return false;
+                };
+                if !admits_target(player)
+                    || state.session_locked(player.connection)
+                    || matches!(
+                        state.entities.row(slot).special_mob.as_deref(),
+                        Some(crate::special_mobs::Retained::PlayerIronGolem)
+                    )
+                {
+                    return false;
+                }
+            }
+            *at = state.entities.pos(victim);
+            *dist = crate::target_grid::distance(state.entities.pos(slot), *at);
+            *dist <= f64::from(state.entities.row(slot).sight_range)
+        })();
+        if !keep {
+            dropped.push(actor);
         }
-        *at = state.entities.pos(victim);
-        *dist = crate::target_grid::distance(state.entities.pos(slot), *at);
-        *dist <= f64::from(state.entities.row(slot).sight_range)
+        keep
     });
     state.hostile.targets = targets;
+    for actor in dropped {
+        if let Some(slot) = state.entities.slot_of(actor) {
+            set_zombie_aggressive(state, slot, false);
+        }
+    }
 }
 
 /// The damage commit, not a polling sensor, replaces a goal-based mob's target.
@@ -209,6 +223,7 @@ pub(crate) fn retaliate(state: &mut TickState, victim: EntitySlot, attacker: Ent
             .hostile
             .targets
             .insert(body.id, ((attacker, state.entities.pos(target)), 0.0));
+        set_zombie_aggressive(state, victim, true);
         if crate::llama::is_llama(type_id) {
             state.entities.body_mut(victim).attack_cooldown = 40;
         }
@@ -444,6 +459,44 @@ fn set_extra(
     match appearance.extra.iter_mut().find(|(at, _)| *at == index) {
         Some(entry) => entry.1 = value,
         None => appearance.extra.push((index, value)),
+    }
+}
+
+/// Publish the zombie chase pose without disturbing unrelated mob-flag bits.
+pub(crate) fn set_zombie_aggressive(state: &mut TickState, slot: EntitySlot, aggressive: bool) {
+    let body = state.entities.body(slot);
+    let EntityKind::Mob { type_id } = body.kind else {
+        return;
+    };
+    if !state
+        .registry
+        .blueprint(type_id)
+        .is_some_and(|blueprint| blueprint.capabilities.aggressive_arms)
+    {
+        return;
+    }
+    let id = body.id;
+    let flags = state
+        .entities
+        .row(slot)
+        .appearance
+        .extra
+        .iter()
+        .find_map(|(index, value)| match (index, value) {
+            (15, EntityDataValue::Byte(flags)) => Some(*flags),
+            _ => None,
+        })
+        .unwrap_or(0);
+    let next = if aggressive { flags | 4 } else { flags & !4 };
+    if next != flags {
+        set_extra(
+            state,
+            slot,
+            15,
+            EntityDataValue::Byte(0),
+            EntityDataValue::Byte(next),
+        );
+        state.appearance_changed.push(id);
     }
 }
 

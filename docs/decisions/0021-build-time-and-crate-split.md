@@ -3,7 +3,9 @@
 **Date:** 2026-11-05  
 **Status:** Step 1 accepted by the owner and implemented (2026-11-05). Step 2
 (settlements crate pilot) designed and not started: the design recommends
-against it at today's coupling. Step 3 is the future plan below.  
+against it at today's coupling. Step 3 is the future plan below. The cycle
+ratchet (owner-approved 2026-11-07, implemented) makes code-health fail when
+the module cycle grows.  
 **Related:** [0011](0011-core-crate-topology-and-threading.md) (rejected
 one-crate-per-domain without an enforceable boundary),
 [0013](0013-core-model-v2.md) (current crate ownership),
@@ -42,9 +44,14 @@ on, mold, no sccache, and one run each. Receipts are in
   rebuilds `mc-data`, `mc-world`, `mc-worldgen`, `mc-script` and
   `mc-plugin-host` again, about 3–4 minutes. Cargo's
   `resolver.feature-unification` is unstable on 1.99.
-- **`mc-core`'s modules are one dependency cycle.** 189 of 421 top-level
-  modules (185k of 201k production lines) are one strongly connected
-  component; `tick` alone reaches 148 modules.
+- **`mc-core`'s modules are one dependency cycle.** 189 of its 197 top-level
+  modules (185k of 201k lines) are one strongly connected component; `tick`
+  alone reaches 148 modules. The first version of this ADR said "of 421": that
+  was the number of top-level file and directory names in `src/`, 194 test
+  files included. The line figures are raw lines: 201k of every
+  non-`*_tests.rs` file, 185k of each cycle module's `<m>.rs` and `<m>/` files,
+  inline tests included. The cycle ratchet below counts by the module tree,
+  tests excluded: 188k of 195k.
 
 ## Step 1 (implemented): line-table debuginfo
 
@@ -121,3 +128,35 @@ qualify. The order, each step measured with the Step 1 method before the next:
 4. **Stop rule:** stop when a domain's unit-test loop is under about 30 s and
    the server-binary loop under about 45 s. Further splitting is not a goal in
    itself.
+
+## Cycle ratchet (implemented 2026-11-07)
+
+The owner approved a gate that keeps the cycle from growing while Step 3 waits.
+`cargo run -p xtask -- code-health` builds `mc-core`'s top-level module graph
+from production code with `syn`. Edges are `crate::` and `super::` paths in
+`use` items, expressions, types and macro bodies; root re-exports resolve to
+their module. `#[cfg(test)]` items and `*_tests.rs` files are skipped. Tarjan
+gives the strongly connected components.
+
+- **Gate:** no module may join the largest component. Ceiling set on
+  `ffd52010`: 189 modules. Receipts: `receipts/CoherenceRatchet/`, outside
+  Git. The component's production lines (188,451 on `ffd52010`) are a printed
+  trend, never a failure: every feature inside a cycle module adds lines, so a
+  line ceiling would only be raised by ritual.
+- **Ceilings only go down by default.** A lower measurement prints
+  `ceiling can drop to N`, and that change lowers the constant. Raising a
+  ceiling is an explicit edit of the constant in
+  `crates/xtask/src/code_health/ratchet.rs` with a reason comment.
+- **Hints:** the report prints the most connected modules in the cycle and the
+  modules that leave it for the fewest cut edges. On `ffd52010`, cutting
+  `config -> block_log` frees 4 modules.
+- **Limit:** only named module paths are edges. A dependency through a type's
+  methods without a module path does not count.
+- **New xtask dependencies: `syn` and `proc-macro2`.** Before: text counters that
+  missed macro bodies, counted comments and could not resolve modules. That
+  made a failing gate impossible: no exact count, no module graph. `syn`
+  replaces the text counters, which are deleted; both crates were already in
+  `Cargo.lock` through other crates.
+
+The same gate ratchets four anti-pattern counts; see
+[agent tooling](../AGENT_TOOLING.md#code-health-ratchets).

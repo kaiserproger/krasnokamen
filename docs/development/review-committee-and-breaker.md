@@ -1,8 +1,10 @@
 # Advisor, reviewer, breaker and committee
 
 Four independent roles check builders' work. [AGENTS.md](../../AGENTS.md) fixes
-when review happens (one independent read-only reviewer per major phase; no
-reviewer carousel) and the [break-it QA protocol](../QA_AGENT_PROTOCOL.md) is
+when review happens (a promotion batch of five or more rows, persistence,
+protocol or custody changes before commit, two reviewers before a tag; no
+reviewer for docs-only or test-only slices; no reviewer carousel) and the
+[break-it QA protocol](../QA_AGENT_PROTOCOL.md) is
 the breaker's contract. This page records the roles' prompts and practice.
 Models are the owner's choice and are not named here; agent definitions live in
 the agent runtime's user agent directory as Markdown files with frontmatter
@@ -46,6 +48,12 @@ ignored, owner-maintained `WATCHDOG.yml` (rewritten on the owner's request,
   usage limits (looping or extra agents, parallel edits of one file);
   `concern` for needless complexity without immediate harm; `nit` for minor
   points. No style or naming notes without effect on correctness.
+- **One STOP per topic (owner, 2026-11-07):** while a topic is open, a repeat
+  STOP or blocker needs evidence the first one lacked; a topic the executor
+  fixed or rejected with a reason stays closed without new evidence. Each
+  concern or blocker, and later its disposition (adopted, rejected with reason,
+  ignored), is appended to the ignored `.analysis/advisor-ledger.jsonl`, so the
+  false-positive rate becomes measurable.
 
 An advisor lesson (2026-10-24): verify definitions and callers at the pinned
 commit before escalating a worker's "baseline is broken" report.
@@ -69,9 +77,11 @@ both YAML results under `.analysis/releases/<tag>/`.
 
 ## Independent reviewer
 
-One read-only reviewer per major completed phase; it neither edits nor
-delegates, and fixing its findings does not trigger another reviewer. The
-negative-code checks it must include are in
+One read-only reviewer at each review point in AGENTS.md "Working rules" (a
+ledger promotion batch of five or more rows; a persistence, protocol or custody
+change before Main commits it); docs-only and test-only slices get none. It
+neither edits nor delegates, and fixing its findings does not trigger another
+reviewer. The negative-code checks it must include are in
 [AGENT_TOOLING.md](../AGENT_TOOLING.md) "Negative-code gate". Rubric used for
 Solaris reviews:
 
@@ -85,12 +95,31 @@ Solaris reviews:
   stale artifacts, and unit tests substituted for required oracle, client,
   performance, persistence or concurrency evidence. Ignore style unless it hides
   a defect.
+- **What the fix newly allows.** For a persistence, custody or protocol fix,
+  name the state, path or ordering the fix makes possible that was impossible
+  before, and check it for loss or dupes: change brings new failure modes
+  ([Cook](https://how.complexsystems.fail/), point 14). Example, 2026-11-07:
+  letting a checkpoint skip a refused chunk first opened a dupe through a
+  truncated WAL.
+- **Second way.** Does this change add a second mechanism for something that
+  already exists (pinning, server launch, observers, ledger or proof paths,
+  config, test helpers)? If so, either migrate the old one in the same change
+  or reject it. A mechanism is parallel infrastructure or authority for one
+  responsibility; duplicated code at call sites is not one
+  ([rule](adding-a-feature.md#mechanisms-not-code)). Example, 2026-11-07: the
+  ledger's `.analysis/ledger-builds` registry and private release build next
+  to `tools/dev/pin-release` made three pinning mechanisms for one idea
+  ([STATUS](../STATUS.md#open-transitions)). The reverse is the same defect: a
+  caller-specific flag, mode or branch added to a shared function. Also check
+  the touched area's open-transition row
+  ([adding a feature](adding-a-feature.md#open-transitions)).
 - At most one small read-only confirmation batch; never repeat a green command
   for the same tree identity. At most eight concrete findings with file/symbol
   or reproduction evidence. `pass` means no material finding and no missing
   required evidence.
 - Result: `verdict: pass|changes|blocked`, `findings`, `validation_gaps`,
-  `confidence`.
+  `confidence`, plus the common reviewer fields of
+  [running agents](agent-fleet.md#briefs).
 
 ## Breaker
 
@@ -215,32 +244,46 @@ subagents.
 
 ## Worker role prompt
 
-All Solaris implementation workers share this prompt (bounded, long-slice and
-fast variants differ only in model and in whether they may spawn the fast
-worker):
+All Solaris workers share this prompt; variants differ only in model, in a
+line on spawning, and in the extra lines below:
 
-> You are a Solaris implementation worker. Execute the assigned slice end to
-> end: read the repository AGENTS.md first and follow it (no commits, heavy
-> Cargo via Main's `<work>/solaris/tools/dev/mem-run.sh`, measurement windows only on Main's GO), make
-> the smallest correct change, add failing-first regression tests for behaviour
-> changes, run focused tests and strict clippy for touched crates, and return
-> one compact result: verdict (pass|changes|blocked), changed files, validation
-> commands with results, receipt paths, open issues. Never stop at an
-> intermediate checkpoint; report blockers with exact evidence.
+> You are a Solaris worker. Read the repo AGENTS.md first and follow it; the
+> brief overrides the defaults below.
+> - Paths: absolute paths only; work only in the worktree the brief names. A
+>   worktree you create comes from `tools/dev/wt-new` and ends with
+>   `tools/dev/wt-done` only when the brief says so; release binaries for gates
+>   come only from `tools/dev/pin-release`.
+> - Commits: the brief sets the commit policy. Default: no commits; leave the
+>   diff and report `git diff <base> --binary | sha256sum`.
+> - Heavy commands (Cargo, harness, Gradle): one at a time, through Main's
+>   `<work>/solaris/tools/dev/mem-run.sh` with `env RUSTC_WRAPPER=`. The
+>   `-x`/`-p` measurement lanes serialize themselves; no GO is needed.
+> - Change: the smallest correct change. A behaviour change gets a regression
+>   test that goes red when the fix hunks are reverted (negative control); note
+>   whether you saw it fail first, but do not block on that.
+> - Ledger: never set a row to `fixed`; only add regression and repro
+>   references. Promotion is `ledger promote`, run by Main.
+> - Gaps are work, not an ending: close every gap within your reach before
+>   returning, including test, observer or harness support your evidence needs.
+>   Only what needs owner action, hardware or credentials may stay open: return
+>   `partial` naming the exact blocker instead of asking. Two failed graphical
+>   starts before the repro: fix the start if you can, otherwise `blocked` with
+>   the receipts.
+> - Messages: at most 3 to Main. Acks and replies to peers go through `write`
+>   and never become your final text.
+> - Result: your LAST message is the result YAML of
+>   [running agents](agent-fleet.md#briefs).
 
-Worker prompts or skills kept outside the repository that name
-`.analysis/tools/mem-run.sh` are stale: that ignored runner is retired and the
-tracked one is `tools/dev/mem-run.sh`. If such a prompt conflicts with
-AGENTS.md or the prompt above, follow those.
+Spawning line, bounded fast workers: "Subagents: none unless the brief allows
+them, and never for a part under 30 minutes." Workers with `spawns:`: "only when
+the brief allows them: the fast worker for parallel or mechanical parts of at
+least 30 minutes, with exact files, acceptance and disjoint write sets; review
+every child diff and run its tests yourself." The audit worker adds: "Read-only
+tasks: never edit or run mutating commands; return `verdict: pass|changes` with
+findings (`file:line`, concrete failure scenario)." The design-heavy worker
+adds: "State the invariant, the simplest design that keeps it and what it
+replaces before writing code."
 
-Workers allowed to delegate add: "You may spawn the fast worker for parallel or
-mechanical parts (test ports, data or config moves, bounded refactors, larger
-well-specified pieces). Give each a self-contained task with exact files and
-acceptance and disjoint write sets; never delegate your immediate blocker and
-idle. You own the result: review every diff it returns yourself (read the
-changes, run its tests) before accepting it." A read-only audit worker variant
-adds: "If the task says read-only, never edit or run mutating commands; report
-findings with `file:line` evidence and a concrete failure scenario." The
-design-heavy worker (rendering, GPU compute, protocol design) uses the short
-form: "Follow the repository AGENTS.md. Design simply, implement end to end,
-prove with tests and real runs, report compact YAML."
+Managed skills that describe mem-run slots, admission or a GO for windows are
+stale (14 were deleted on 2026-11-07); if one conflicts with AGENTS.md, follow
+AGENTS.md.

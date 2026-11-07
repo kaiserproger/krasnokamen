@@ -58,7 +58,7 @@ def _open_direct_connect(probe: _TitleProbeSteps) -> dict[str, Any]:
                       "direct_connect_screen_open")
 
 
-def run(ctx: ProfileContext) -> dict[str, Any]:
+def validate_args(ctx: ProfileContext) -> float:
     if ctx.client != "native":
         raise ValueError("title-connect requires --client native")
     if ctx.extra_args or ctx.platform is not None:
@@ -66,6 +66,11 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 120.0
     if not 0 < timeout <= 120:
         raise ValueError("title-connect --timeout-seconds must be in (0, 120]")
+    return timeout
+
+
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    timeout = validate_args(ctx)
     artifact = ctx.artifact_dir
     override = __import__("os").environ.get("SOLARIS_SERVER_BINARY")
     if override:
@@ -103,7 +108,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     try:
         server_log = (artifact / "server.log").open("wb")
         import subprocess as _sp
-        server = _sp.Popen([str(binary), "--config", str(config), "--no-console"],
+        server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                            cwd=runtime.REPO_ROOT, stdout=server_log,
                            stderr=_sp.STDOUT, start_new_session=True)
         ctx.logs.append(str(artifact / "server.log"))

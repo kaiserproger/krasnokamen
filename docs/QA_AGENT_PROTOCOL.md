@@ -20,13 +20,15 @@ writing to a file on the games disk when audio must be recorded).
 
 ## Roles
 
-- **Builder** implements the change and its focused/failing-first tests and gates.
+- **Builder** implements the change and its focused regression tests and gates.
 - **Breaker** is a separate agent whose only goal is a reproducible failure. It
   gets the change, the claims (commit message, release notes, ADR text) and this
   protocol, not the builder's test plan. It does not edit production code.
 - **Main** routes findings back to the builder and decides on release. A change
-  that touches player-visible behaviour is not pushed to `main`, and a release
-  candidate is not tagged, until a breaker has reported on it.
+  that touches player-visible behaviour is not accepted (no `fixed` ledger row,
+  no release-ready claim), and a release candidate is not tagged, until a
+  breaker has reported on it. Pushing unaccepted work to `main` is allowed
+  ([owner contract](development/owner-contract.md)).
 
 Use a normal player's/admin's expectations and vanilla 26.3 evidence
 (minecraft.wiki, `javap`) where vanilla applies. For Solaris-specific features,
@@ -143,7 +145,8 @@ A gate counts as evidence only when all of these hold:
    branches. Time-box expiry is not coverage: if a required attack remains
    unexercised, return `blocked`, not `pass`, with its prerequisite and next step.
 
-Findings are fixed by the builder with a failing-first test, and a confirmed
+Findings are fixed by the builder with a regression test that goes red when the
+fix is reverted, and a confirmed
 consumer-visible failure is added to the nearest gate or scenario. The breaker
 does not fix the implementation it is judging. After a relevant fix, re-run the
 failed attack; a second independent review is not required for the same checkpoint.
@@ -186,6 +189,10 @@ findings:
     actual: <observed>
     evidence: [<server log, client log, result.json, screenshots>]
 ```
+
+The breaker's YAML also carries the common result fields of
+[running agents](development/agent-fleet.md#briefs) (`base`, `changed_files: []`,
+`validation`, `gaps`, `asks`, `noticed`).
 
 Final line: `QA_RESULT=PASS`, `QA_RESULT=CHANGES`, or `QA_RESULT=BLOCKED`.
 

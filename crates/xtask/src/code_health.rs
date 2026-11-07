@@ -3,6 +3,8 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod core_ast;
+mod module_graph;
 mod ownership_rules;
 mod ratchet;
 
@@ -50,11 +52,16 @@ const BLOCK_PLACEMENT_SEMANTICS: &[&str] = &[
     "sign_state_for_direction",
 ];
 
-pub(super) fn run_code_health() -> Result<(), i32> {
-    let root = workspace_root().map_err(|err| {
-        eprintln!("code-health: {err}");
-        2
-    })?;
+/// Runs every check on the workspace at `root`, or on the workspace that
+/// contains the current directory.
+pub(super) fn run_code_health(root: Option<PathBuf>) -> Result<(), i32> {
+    let root = match root {
+        Some(root) => root,
+        None => workspace_root().map_err(|err| {
+            eprintln!("code-health: {err}");
+            2
+        })?,
+    };
     let mut findings = Vec::new();
     scan_ownership(&root, LOWER_CRATE_OWNERSHIP, &mut findings);
     scan_block_placement_semantics(&root, &mut findings);
@@ -62,9 +69,9 @@ pub(super) fn run_code_health() -> Result<(), i32> {
     scan_harness_catalog_ownership(&root, &mut findings);
     scan_api_manifests(&root, &mut findings);
 
-    println!("Solaris code-health report");
+    println!("Solaris code-health report ({})", root.display());
     println!();
-    ratchet::report(&root);
+    ratchet::check(&root, &ratchet::CEILINGS, &mut findings);
 
     if findings.is_empty() {
         println!("summary: 0 fail");
@@ -73,12 +80,12 @@ pub(super) fn run_code_health() -> Result<(), i32> {
     }
 
     for finding in &findings {
-        println!(
-            "FAIL: {}:{}: {}",
-            display_path(&root, &finding.path),
-            finding.line,
-            finding.message
-        );
+        let path = display_path(&root, &finding.path);
+        if finding.line == 0 {
+            println!("FAIL: {path}: {}", finding.message);
+        } else {
+            println!("FAIL: {path}:{}: {}", finding.line, finding.message);
+        }
     }
 
     println!();

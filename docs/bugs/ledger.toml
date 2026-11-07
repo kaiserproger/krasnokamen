@@ -893,7 +893,7 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-2"
-regression = []
+regression = ["cargo:mc-core:vehicles::tests::hopper_pulling_from_a_container_vehicle_refreshes_its_open_menu"]
 
 [[bug]]
 id = "HS-3"
@@ -903,7 +903,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-3"
-regression = []
+regression = ["cargo:mc-core:falling::tests::restored_due_gravity_tick_starts_the_fall_without_nearby_writes"]
 
 [[bug]]
 id = "GOLEM-GOSSIP"
@@ -913,7 +913,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-GOSSIP"
-regression = []
+regression = ["cargo:mc-core:villager::brain::tests::golem_gossip_summoning_requires_five_recently_sleeping_villagers"]
 
 [[bug]]
 id = "GOLEM-AABB"
@@ -923,7 +923,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-AABB"
-regression = []
+regression = ["cargo:mc-core:villager::brain::tests::golem_detection_uses_axis_aligned_range_and_ignores_dead_golems"]
 
 [[bug]]
 id = "GOLEM-REPAIR"
@@ -933,7 +933,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-REPAIR"
-regression = []
+regression = ["cargo:mc-core:golems::tests::iron_ingot_repairs_golem_from_either_hand_without_overhealing"]
 
 [[bug]]
 id = "GOLEM-DIFFICULTY"
@@ -943,7 +943,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-DIFFICULTY"
-regression = []
+regression = ["cargo:mc-core:golems::tests::natural_golem_player_damage_scales_with_difficulty"]
 
 [[bug]]
 id = "P4"
@@ -953,7 +953,7 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P4"
-regression = []
+regression = ["cargo:mc-edge:screen::tests::leave_cancels_an_unanswered_request"]
 
 [[bug]]
 id = "INTERACT-001"
@@ -963,7 +963,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#INTERACT-001"
-regression = []
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_axes_preserve_properties_and_wear"]
 
 [[bug]]
 id = "PLACE-001"
@@ -973,7 +973,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PLACE-001"
-regression = []
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_spawn_protection_with_operator"]
 
 [[bug]]
 id = "FALL-001"
@@ -983,7 +983,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FALL-001"
-regression = []
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_use_teleports", "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_conserves_block_before_falling"]
 
 [[bug]]
 id = "FALL-002"
@@ -993,7 +993,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FALL-002"
-regression = []
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_brushing_completes_once"]
 
 [[bug]]
 id = "FIRE-001"
@@ -1003,7 +1003,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FIRE-001"
-regression = []
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_eternal_fire_magma_and_end_bedrock"]
 
 [[bug]]
 id = "SPECIAL-001"
@@ -1013,7 +1013,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPECIAL-001"
-regression = []
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_decorated_pot_stores_one_item", "cargo:mc-core:shelf::tests::shelf_checkpoint_native_chunk_restart_preserves_stacks_and_alignment"]
 
 [[bug]]
 id = "SPONGE"
@@ -1023,7 +1023,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPONGE"
-regression = []
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_sponge_absorbs_adjacent_water"]
 
 [[bug]]
 id = "PAINTINGS"
@@ -1033,7 +1033,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PAINTINGS"
-regression = []
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_painting_places_on_wall"]
 
 [[bug]]
 id = "SPAWN-PEACEFUL-REMOVAL"
@@ -1043,7 +1043,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-PEACEFUL-REMOVAL"
-regression = []
+regression = ["cargo:mc-core:natural_spawn_tests::fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled"]
 
 [[bug]]
 id = "SPAWN-SPAWNER-EGG"
@@ -1053,7 +1053,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-SPAWNER-EGG"
-regression = []
+regression = ["cargo:mc-core:spawn_egg::tests::fix_mobs_spawn_egg_configures_spawner_without_spawning_adjacent_mob"]
 
 [[bug]]
 id = "SPAWN-SPAWNER-CATEGORIES"
@@ -1063,7 +1063,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-SPAWNER-CATEGORIES"
-regression = []
+regression = ["cargo:mc-core:monster_spawner::tests::fix_mobs_passive_spawner_hydrates_and_spawns_in_peaceful", "cargo:mc-core:monster_spawner::tests::fix_mobs_spawner_accepts_custom_light_rules", "cargo:mc-core:monster_spawner::tests::fix_mobs_weighted_spawn_potential_replaces_current_data_on_reset"]
 
 [[bug]]
 id = "TOTEM"
@@ -1073,7 +1073,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TOTEM"
-regression = []
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::fix_mobs_totem_intercepts_lethal_damage_in_either_hand_but_not_void"]
 
 [[bug]]
 id = "KILL-TYPE"
@@ -1083,7 +1083,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#KILL-TYPE"
-regression = []
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes"]
 
 [[bug]]
 id = "DAMAGE-IDENTITIES"
@@ -1103,7 +1103,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-COMPONENT"
-regression = []
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes"]
 
 [[bug]]
 id = "DEATH-NOTIFY"
@@ -1113,7 +1113,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-NOTIFY"
-regression = []
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_death_notification_ignores_broadcast_rule"]
 
 [[bug]]
 id = "SCORE-FOOD"
@@ -1123,7 +1123,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-FOOD"
-regression = []
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_auto_criteria_accept_authoritative_values"]
 
 [[bug]]
 id = "SCORE-CRITERIA-WRITABLE"
@@ -1133,7 +1133,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-CRITERIA-WRITABLE"
-regression = []
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_counter_criteria_allow_writes_and_swap_sources"]
 
 [[bug]]
 id = "SCORE-TOTAL-KILLS"
@@ -1143,7 +1143,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-TOTAL-KILLS"
-regression = []
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_actual_mob_and_player_deaths_credit_distinct_kill_counters_once"]
 
 [[bug]]
 id = "TEAM-DEATH-VISIBILITY"
@@ -1153,7 +1153,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEAM-DEATH-VISIBILITY"
-regression = []
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes"]
 
 [[bug]]
 id = "CONTAINERS-001"
@@ -1163,7 +1163,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-001"
-regression = []
+regression = ["cargo:mc-core:mounts::tests::mount_inventory_opens_for_each_tamed_mount", "cargo:mc-core:mounts::tests::mount_inventory_equipment_cargo_and_ridden_open_share_native_custody"]
 
 [[bug]]
 id = "CONTAINERS-002"
@@ -1173,7 +1173,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-002"
-regression = []
+regression = ["cargo:mc-core:books::tests::lectern_insert_read_turn_take_preserves_exact_book"]
 
 [[bug]]
 id = "CONTAINERS-003"
@@ -1183,7 +1183,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-003"
-regression = []
+regression = ["cargo:mc-core:tick_tests::predicted_table_use_waits_for_accepted_placement"]
 
 [[bug]]
 id = "CUSTODY-ENTITY-MENU-FLOOR"
@@ -1193,7 +1193,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CUSTODY-ENTITY-MENU-FLOOR"
-regression = []
+regression = ["cargo:mc-core:plugin_inventories::tests::entity_menu_clicks_preserve_reserved_player_inventory_and_resync"]
 
 [[bug]]
 id = "CUSTODY-MOUNT-EXPORT"
@@ -1214,7 +1214,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SETBLOCK-SNBT"
-regression = []
+regression = ["cargo:mc-core:command_world::tests::setblock_snbt_installs_native_chest_contents_and_replaces_same_block"]
 
 [[bug]]
 id = "FORCELOAD-RING"
@@ -1224,7 +1224,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FORCELOAD-RING"
-regression = []
+regression = ["cargo:mc-core:forceload::tests::forced_neighbour_ticks_blocks_but_freezes_entity_motion_and_age"]
 
 [[bug]]
 id = "DATA-QUERY"
@@ -1234,7 +1234,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-QUERY"
-regression = []
+regression = ["cargo:mc-core:command_data::tests::data_player_queries_read_live_inventory_vitals_and_absent_paths", "cargo:mc-core:command_data::tests::data_block_accepts_every_registered_block_entity_kind"]
 
 [[bug]]
 id = "EXECUTE-STORE"
@@ -1244,7 +1244,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#EXECUTE-STORE"
-regression = []
+regression = ["cargo:mc-core:command_data::tests::execute_store_give_and_clear_execute_once_and_return_real_counts"]
 
 [[bug]]
 id = "P1"
@@ -1568,7 +1568,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DAMAGE-COMMAND"
-regression = []
+regression = ["cargo:mc-core:command_damage::tests::damage_command_commits_default_damage_and_reports_actual_rejection"]
 
 [[bug]]
 id = "HC-4"
@@ -1618,7 +1618,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-AGE"
-regression = []
+regression = ["cargo:mc-core:command_summon::age_tests::summon_age_water_families", "cargo:mc-core:command_summon::age_tests::summon_age_horse_families"]
 
 [[bug]]
 id = "SUMMON-ISBABY"
@@ -1628,7 +1628,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-ISBABY"
-regression = []
+regression = ["cargo:mc-core:command_summon::age_tests::summon_is_baby_zombie_family", "cargo:mc-core:command_summon::age_tests::summon_is_baby_piglin_and_zoglin"]
 
 [[bug]]
 id = "DEATH-PROTECTION-COMPONENT"
@@ -1638,7 +1638,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-PROTECTION-COMPONENT"
-regression = []
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::death_protection_component_rescues_any_held_item_without_default_totem_effects"]
 
 [[bug]]
 id = "SHUTDOWN-ERROR-LOG"
@@ -1825,7 +1825,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#REDSTONE-DAYLIGHT"
-regression = []
+regression = ["cargo:mc-core:redstone::tests::gap_tests::gap_daylight_detector_requires_local_sky_and_overworld"]
 
 [[bug]]
 id = "GOLEM-SNOW-SHEAR"
@@ -2022,7 +2022,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOAT-RAM-ABSENT"
-regression = []
+regression = ["cargo:mc-core:mob_lanes::tests::goat_rams_a_nearby_living_target", "cargo:mc-core:mob_lanes::tests::goat_ram_into_stone_drops_one_horn_with_instrument_and_updates_metadata"]
 
 [[bug]]
 id = "TURTLE-LAY-EGG-ABSENT"
@@ -2204,7 +2204,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+regression = ["harness:village-qa:miner_deposit", "harness:village-qa:lumberjack"]
 
 [[bug]]
 id = "ISSUE-1-08"
@@ -2274,7 +2274,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+regression = ["harness:entities:native-v2-craft-drag", "harness:entities:native-v2-craft-drag-paced"]
+failing_first = "reported"
 
 [[bug]]
 id = "ISSUE-1-15"
@@ -2284,7 +2285,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+regression = ["harness:settlement-map-qa:all"]
 
 [[bug]]
 id = "ISSUE-1-16"
@@ -2294,7 +2295,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+regression = ["harness:buildings-qa:wall.L1_built"]
 
 [[bug]]
 id = "ISSUE-1-17"
@@ -2324,7 +2325,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+regression = ["cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval", "cargo:mc-core:hostile_tests::zombie_chase_publishes_and_clears_aggressive_pose_metadata", "cargo:mc-core:journal_touched::tests::zombie_chase_pose_is_journaled_and_repaired_after_recovery"]
+failing_first = "reported"
 
 [[bug]]
 id = "ISSUE-1-20"
@@ -2354,7 +2356,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+regression = ["harness:autocraft-qa:all"]
 
 [[bug]]
 id = "ISSUE-1-23"
@@ -2404,7 +2406,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+regression = ["harness:village-qa:miner_deposit"]
 
 [[bug]]
 id = "ISSUE-1-28"
@@ -2414,7 +2416,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+regression = ["harness:village-qa:door_walk", "harness:village-qa:farmer_harvest", "harness:village-qa:miner_deposit", "harness:village-qa:lumberjack"]
 
 [[bug]]
 id = "HUNT-REJOIN-LOCALE"
@@ -2739,7 +2741,7 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-DIMENSION-BIOME"
-regression = []
+regression = ["cargo:mc-core:dimensions::tests::native_dimension_spawn_tables_and_census_are_local"]
 
 [[bug]]
 id = "TEST-FALLING-TORCH"
@@ -2749,7 +2751,7 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-FALLING-TORCH"
-regression = []
+regression = ["cargo:mc-core:falling::tests::empty_collision_attachment_is_not_a_floor_and_slab_landing_drops_instead"]
 
 [[bug]]
 id = "TEST-END-RESTART-OBSERVER"

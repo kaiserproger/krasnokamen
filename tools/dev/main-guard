@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""Report changes in Main's guarded paths since a recorded baseline: main-guard [--baseline].
+
+Owner-host tool (see tools/dev/README.md), meant for Main at checkpoints; no
+daemon. The guarded paths are crates/, sdk/ and tools/harness/backends/ of the core
+checkout (<work>/solaris). `--baseline` snapshots every modified or untracked file
+there with a hash of its content; a later run prints each file that is dirty now
+and was not in the snapshot (NEW), whose content differs from the snapshot
+(CHANGED), or that was dirty then and is clean now (GONE: committed or reverted).
+Exit status 1 when anything is NEW or CHANGED, so a checkpoint script can stop on
+it. Read-only: git runs with optional locks off, so Main's index is not rewritten.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import wtlib as w  # noqa: E402
+
+GUARDED = ("crates", "sdk", "tools/harness/backends")
+BASELINE = w.RECEIPTS / ".main-guard-baseline.json"
+DELETED = "deleted"
+
+
+def dirty_state(repo: Path) -> dict[str, str]:
+    """Path -> content hash (`deleted` for a removed file) of every modified, staged
+    or untracked non-ignored file under the guarded paths."""
+    raw = w.git(repo, "status", "--porcelain=v1", "-z", "-uall", "--", *GUARDED,
+                env={"GIT_OPTIONAL_LOCKS": "0"}, binary=True)
+    fields = [item.decode(errors="surrogateescape") for item in raw.split(b"\0")]
+    state: dict[str, str] = {}
+    i = 0
+    while i < len(fields) and fields[i]:
+        code, path = fields[i][:2], fields[i][3:]
+        paths = [path]
+        if code[0] in "RC":  # the old path follows; it is gone, the new one is the dirty file
+            paths.append(fields[i + 1])
+            i += 1
+        i += 1
+        for p in paths:
+            full = repo / p
+            if full.is_symlink():
+                state[p] = "link:" + os.readlink(full)
+            else:
+                state[p] = w.sha256_file(full) if full.is_file() else DELETED
+    return state
+
+
+def compare(baseline: dict[str, str], now: dict[str, str]) -> tuple[list[str], list[str], list[str]]:
+    new = sorted(p for p in now if p not in baseline)
+    changed = sorted(p for p in now if p in baseline and now[p] != baseline[p])
+    gone = sorted(p for p in baseline if p not in now)
+    return new, changed, gone
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="List new/changed dirty files in Main's crates/, sdk/ and harness backends since a baseline.")
+    parser.add_argument("--baseline", action="store_true", help="record the current dirty files as the baseline")
+    parser.add_argument("--repo", type=Path, default=w.REPOS["core"], help=argparse.SUPPRESS)
+    parser.add_argument("--baseline-file", type=Path, default=BASELINE, help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    w.check_host()
+
+    now = dirty_state(args.repo)
+    if args.baseline:
+        args.baseline_file.parent.mkdir(parents=True, exist_ok=True)
+        tmp = args.baseline_file.with_name(args.baseline_file.name + ".tmp")
+        tmp.write_text(json.dumps({"repo": str(args.repo), "head": str(w.git(args.repo, "rev-parse", "HEAD")),
+                                   "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "files": now},
+                                  indent=1, sort_keys=True) + "\n")
+        os.replace(tmp, args.baseline_file)
+        print(f"main-guard: baseline of {len(now)} dirty files under {', '.join(GUARDED)} written to {args.baseline_file}")
+        return
+    if not args.baseline_file.is_file():
+        raise w.ToolError(f"no baseline at {args.baseline_file}; run `main-guard --baseline` first")
+    info = json.loads(args.baseline_file.read_text())
+    new, changed, gone = compare(info["files"], now)
+    for label, items in (("NEW", new), ("CHANGED", changed), ("GONE", gone)):
+        for path in items:
+            print(f"{label}\t{path}")
+    print(f"main-guard: {len(new)} new, {len(changed)} changed, {len(gone)} gone since baseline of {info['at']} (HEAD {info['head'][:12]})",
+          file=sys.stderr)
+    sys.exit(1 if new or changed else 0)
+
+
+if __name__ == "__main__":
+    w.run_tool(main)

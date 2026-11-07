@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""Create an agent worktree: wt-new <Name> [base] [--repo core|client|loader|plugins].
+
+Owner-host tool (see tools/dev/README.md). Creates <work>/wt/<Name> on a new
+branch wt/<Name> from `base` (default: the repo's main checkout HEAD), a receipts
+directory, a per-worktree environment file, and for core a hard-linked copy of
+data/vanilla. Refuses a name that is already taken.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import wtlib as w  # noqa: E402
+
+NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def ensure_excluded(repo: Path, pattern: str) -> None:
+    """Keep a local-only file out of `git status` of every worktree of `repo` (info/exclude is shared)."""
+    exclude = Path(str(w.git(repo, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude")))
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    text = exclude.read_text() if exclude.exists() else ""
+    if pattern not in text.splitlines():
+        exclude.write_text(text + ("" if not text or text.endswith("\n") else "\n") + pattern + "\n")
+
+
+def provision_vanilla(wt: Path) -> None:
+    source = w.REPOS["core"] / "data/vanilla"
+    (wt / "data").mkdir(exist_ok=True)
+    subprocess.run(["cp", "-al", "--", str(source), str(wt / "data/vanilla")], check=True)
+    links = [p for p in (wt / "data/vanilla").rglob("*") if p.is_symlink()]
+    if links:
+        print(f"wt-new: warning: {len(links)} symlinks inside the main checkout's data/vanilla "
+              f"(the harness rejects sidecar symlinks), first: {links[0]}", file=sys.stderr)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Create an agent worktree, receipts and environment.")
+    parser.add_argument("name", help="worktree name (also the branch wt/<name>)")
+    parser.add_argument("base", nargs="?", default=None, help="base revision (default: the repo's HEAD)")
+    parser.add_argument("--repo", choices=sorted(w.REPOS), default="core")
+    args = parser.parse_args()
+    w.check_host()
+
+    name = args.name
+    if not NAME_RE.match(name) or not w.git_ok(w.WORK, "check-ref-format", "--branch", f"wt/{name}"):
+        raise w.ToolError(f"invalid name {name!r}: use letters, digits, '.', '_', '-' (it becomes branch wt/{name})")
+    repo = w.REPOS[args.repo]
+    if not (repo / ".git").exists():
+        raise w.ToolError(f"no {args.repo} checkout at {repo}")
+    base = str(w.git(repo, "rev-parse", "--verify", "--quiet", f"{args.base or 'HEAD'}^{{commit}}", check=False))
+    if not base:
+        raise w.ToolError(f"base {args.base!r} is not a commit in {repo}")
+
+    wt = w.WT / name
+    target = w.TARGETS / name
+    home = w.HOMES / name
+    receipts = w.RECEIPTS / name
+    branch = f"wt/{name}"
+    taken = [str(p) for p in (wt, target, home) if os.path.lexists(p)]
+    if (receipts / "final.patch").exists():
+        taken.append(f"{receipts}/final.patch (a finished worktree used this name)")
+    for key, other in w.REPOS.items():
+        if (other / ".git").exists() and w.git_ok(other, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"):
+            taken.append(f"branch {branch} in {key}")
+    if taken:
+        raise w.ToolError(f"name {name!r} is taken: " + "; ".join(taken))
+    vanilla = w.REPOS["core"] / "data/vanilla"
+    if args.repo == "core" and (vanilla.is_symlink() or not vanilla.is_dir()):
+        raise w.ToolError(f"{vanilla} must be a real directory (not a symlink) to hard-link into the worktree")
+
+    w.WT.mkdir(parents=True, exist_ok=True)
+    w.git(repo, "worktree", "add", "-q", "-b", branch, str(wt), base)
+    made = [receipts] if not receipts.exists() else []
+    try:
+        ensure_excluded(repo, "/.wt-env")
+        if args.repo == "core":
+            provision_vanilla(wt)
+        receipts.mkdir(parents=True, exist_ok=True)
+        for sub in ("gradle", "xdg/config", "xdg/cache", "xdg/data", "xdg/state"):
+            (home / sub).mkdir(parents=True, exist_ok=True)
+        made.append(home)
+        env = {
+            "WT_NAME": name,
+            "WT_REPO": args.repo,
+            "WT_BASE": base,
+            "WT_RECEIPTS": str(receipts),
+            "GRADLE_USER_HOME": str(home / "gradle"),
+            "XDG_CONFIG_HOME": str(home / "xdg/config"),
+            "XDG_CACHE_HOME": str(home / "xdg/cache"),
+            "XDG_DATA_HOME": str(home / "xdg/data"),
+            "XDG_STATE_HOME": str(home / "xdg/state"),
+        }
+        text = "# Written by wt-new; load with: . " + str(wt / ".wt-env") + "\n"
+        text += "".join(f"export {key}={shlex.quote(value)}\n" for key, value in env.items())
+        (wt / ".wt-env").write_text(text)
+        (receipts / "wt.json").write_text(json.dumps({
+            "name": name, "repo": args.repo, "branch": branch, "base": base, "base_arg": args.base or "HEAD",
+            "worktree": str(wt), "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }, indent=2) + "\n")
+        w.in_use_add(wt, name, "worktree")
+    except BaseException:
+        subprocess.run(["git", "-C", str(repo), "worktree", "remove", "--force", str(wt)], capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "branch", "-D", branch], capture_output=True)
+        for path in made:
+            shutil.rmtree(path, ignore_errors=True)
+        shutil.rmtree(wt, ignore_errors=True)
+        raise
+
+    print(f"worktree:  {wt}")
+    print(f"branch:    {branch} (from {base[:12]} = {args.base or 'HEAD of ' + str(repo)})")
+    print(f"receipts:  {receipts}")
+    print(f"env file:  {wt}/.wt-env   (load: . {wt}/.wt-env)")
+    if args.repo == "core":
+        print(f"data:      {wt}/data/vanilla (hard-link copy; replace files, never edit them in place)")
+    # No CARGO_TARGET_DIR: mem-run gives the worktree a pooled target dir (shared
+    # crates.io builds, per-tree marker, disk floor). Twelve target dirs filled
+    # the disk on 2026-11-07.
+    print("heavy commands (one at a time, from the worktree):")
+    print(f"  cd {wt} && {w.MEM_RUN} -m 6G env RUSTC_WRAPPER= <command>")
+    print(f"finish:    {w.TOOLS / 'wt-done'} {name}")
+
+
+if __name__ == "__main__":
+    w.run_tool(main)

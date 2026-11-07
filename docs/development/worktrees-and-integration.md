@@ -7,8 +7,18 @@ authorization, preserve the owner's dirty files. This page is the procedure.
 ## Creating a worktree
 
 ```sh
-git -C <work>/solaris worktree add --detach <work>/wt/<Name> <base-commit>
+<work>/solaris/tools/dev/wt-new <Name> <base-commit> [--repo core|client|loader|plugins]
+<work>/solaris/tools/dev/wt-done <Name>   # verified final.patch, then removal
 ```
+
+`wt-new` creates the branch `wt/<Name>`, the hard-link `data/vanilla`,
+`<work>/receipts/<Name>/` and a private Gradle/XDG home; `wt-done` archives
+everything not in the base as one verified patch, copies `.analysis` evidence
+(`result.json`, logs, reports, screenshots) into the receipts and refuses while
+other ignored files remain, all before it removes anything; `wt-gc` lists stale
+worktrees. Details: [tools/dev](../../tools/dev/README.md).
+Release binaries for gates come from `tools/dev/pin-release`, never from a
+pooled target dir.
 
 - **Absolute paths in every edit/write tool call.** Agent file tools resolve
   relative paths against the session root (the main checkout), not the
@@ -17,10 +27,8 @@ git -C <work>/solaris worktree add --detach <work>/wt/<Name> <base-commit>
   parents forward it to children. Audit a suspect agent by searching its
   transcript for successful edits/writes with relative `crates/...` paths.
 - **`data/vanilla` must be a real directory**, not a symlink: the registry
-  refuses symlinked sidecar dirs. Copy or hard-link it from another tree:
-  `mkdir -p <wt>/data && cp -al <other>/data/vanilla <wt>/data/vanilla`
-  (create `data/` first, otherwise the contents land in the wrong place). It
-  must contain `data/minecraft/advancement/`; extract a full set with
+  refuses symlinked sidecar dirs (`wt-new` hard-links it). It must contain
+  `data/minecraft/advancement/`; extract a full set with
   `tools/extract-vanilla-data.sh` from the local server jar.
 - **`SOLARIS_LOADER_ROOT`** must point at a Loader checkout in worktree gates;
   without it the `real_client_manifest` tests in `mc-test-harness` fail on the
@@ -115,18 +123,14 @@ For any gate set that must describe one build (release, perf round, QA wave):
 1. Announce the freeze; no new patches. Unproven work goes to the next round.
    Pending edits go to the agents' own `pending.patch`; sibling repos are not
    frozen unless stated.
-2. Fingerprint the source (tracked + untracked non-ignored files, excluding
-   `target/`, `.analysis/`, `.git/`, `data/vanilla/`, logs, tmp, `__pycache__`):
-   `find ... -print0 | sort -z | xargs -0 sha256sum | sha256sum`.
-3. Build once (release server, plus plugin pack when WIT changed:
-   `../solaris-default-plugins/tools/build_standard_pack.py`), copy the binary
-   to an immutable path named with its short SHA.
-4. Recompute the fingerprint after the build; seal only if it is unchanged,
-   otherwise discard the binary and build from a snapshot.
-5. Announce path + SHA-256 + fingerprint. Every gate and receipt cites them.
-   Never overwrite a busy frozen binary or relabel a preflight package as final.
-   Compare binary SHAs when agents reuse private target dirs: cargo can return
-   the previous binary.
+2. Pin the server with `tools/dev/pin-release <tree>` (`--client` for the
+   native client). It records HEAD plus the hash of the uncommitted diff
+   (untracked files included), builds once in a pooled slot, refuses to pin if
+   the tree changed during the build, and publishes the binary and
+   `manifest.json` to an immutable `<work>/pins/<id>/`. Build the plugin pack
+   separately when WIT changed (`../solaris-default-plugins/tools/build_standard_pack.py`).
+3. Announce the pin path, binary SHA-256 and manifest. Every gate and receipt
+   cites them. Never relabel a preflight package as final.
 
 The identity is the `solaris-v2` binary from `mc-edge`. Older freeze or snapshot
 recipes in external skills or notes that build or copy `mc-server` describe the
