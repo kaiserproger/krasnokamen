@@ -1084,6 +1084,35 @@ fn partial_delivery_funds_a_blueprint_proven_upgrade_without_mutating_stock() {
 }
 
 #[test]
+fn an_already_funded_candidate_does_not_send_each_harvested_log_home() {
+    for active in [false, true] {
+        let (mut state, id, _) = fixture();
+        fund(&mut state, "storage", 1);
+        if active {
+            start(&mut state, id, "storage", 1, None);
+            assert!(super::super::construction_crafting::can_fund(
+                &state,
+                &active_project_bill(&state, id).unwrap(),
+                &executor::source_images(&state, id),
+            ));
+        } else {
+            assert!(has_funded_candidate(&state, id));
+        }
+        let log = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+            .unwrap();
+        let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+        assert!(
+            !candidate_funded_by_delivery(&state, id, &[Some(mc_data::ItemStack::new(log, 1))]),
+            "a funded project must not force a partial delivery (active={active})",
+        );
+        assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    }
+}
+
+#[test]
 fn invalid_or_stale_owner_targets_leave_no_request_to_obstruct_planning() {
     let (mut state, id, _) = fixture();
     open_plan(&mut state);

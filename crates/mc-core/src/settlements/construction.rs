@@ -592,18 +592,31 @@ pub(crate) fn candidate_funded_by_delivery(
         return false;
     }
     let mut images = executor::source_images(state, id);
+    let active_bill = record
+        .project
+        .as_ref()
+        .and_then(|_| active_project_bill(state, id));
+    let funded = |images: &[super::inventory::Image]| {
+        if record.project.is_some() {
+            active_bill
+                .as_ref()
+                .is_some_and(|bill| super::construction_crafting::can_fund(state, bill, images))
+        } else {
+            funded_candidate(state, record, images)
+        }
+    };
+    // The partial load must close a shortfall, not interrupt harvesting every
+    // time an already-funded candidate is still waiting for a legal site.
+    if funded(&images) {
+        return false;
+    }
     let Some(chest) = images.first_mut() else {
         return false;
     };
     // This is a read-only funding probe; only the regular inventory authority
     // can transfer the actual carry to the real container.
     chest.slots.extend(carry.iter().flatten().cloned());
-    if record.project.is_some() {
-        active_project_bill(state, id)
-            .is_some_and(|bill| super::construction_crafting::can_fund(state, &bill, &images))
-    } else {
-        funded_candidate(state, record, &images)
-    }
+    funded(&images)
 }
 
 fn funding_error(state: &TickState, id: SettlementId, materials: &[(u32, u32)]) -> Option<String> {

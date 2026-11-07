@@ -3343,6 +3343,17 @@ regression = ["cargo:mc-core:villager::brain::tests::exhausted_spare_bed_search_
 fix_commit = "01767ab8714af7c27792790897f885f40e2e2971"
 
 [[bug]]
+id = "CIVILIZATION-PREMATURE-LOG-DELIVERY"
+title = "An already-funded construction candidate sends the lumberjack home after each harvested log while it still has no legal site."
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "open"
+source = "Seed-24 funded/no-site stall .analysis/validation/20261107T140655-civilization-seed-qa-t5znkkd9/result.json; delivery-trigger failing-first .analysis/validation/civsim3-premature-delivery-failing-first.log; reverting only the funding-gap guard fails .analysis/validation/civsim3-premature-delivery-negative-control.log."
+failing_first = "reported"
+regression = ["cargo:mc-core:settlements::construction::planner_tests::an_already_funded_candidate_does_not_send_each_harvested_log_home"]
+
+[[bug]]
 id = "CIV-SEED24-FURNACE-OUTPUT"
 title = "Completed settlement furnace output remains stranded after the nearby tender takes a vanilla profession."
 area = "gameplay"
