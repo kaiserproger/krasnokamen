@@ -1494,6 +1494,138 @@ fn opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal()
     );
 }
 
+// Vault rewards and trial-spawner pending items have opaque WAL custody, not
+// BlockEntities slots. Exercise the same unreadable-chunk recovery guard.
+fn opaque_item_owner_refuses_unloadable_replay(kind: &str) {
+    use mc_nbt::Tag;
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    let pos = TRANSFER_POS;
+    let chunk = CONTAINER_CHUNK;
+    world.tick(|state| {
+        state
+            .world
+            .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+        let id = crate::crafter::tests::block(state, kind, &[]);
+        state.world.set_block(pos.x, pos.y, pos.z, id);
+        state.world.fold_overlay();
+    });
+    world.checkpoint();
+    let committed = world.manifest.tick;
+    let source = world.state.world.chunk_source();
+    let store = Arc::clone(source.native.as_ref().unwrap());
+    let valid = source.load_native(chunk).unwrap().unwrap();
+    let base = source.resolve_base(chunk).unwrap();
+    let registry = Arc::clone(&world.state.registry);
+    let diamond = mc_data::ItemStack::new(
+        registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+            .unwrap(),
+        3,
+    );
+    let item = mc_data::item_nbt::stack_to_fields(&registry.items, &diamond).unwrap();
+    let fields = if kind == "vault" {
+        mc_data::trial_nbt::VaultData {
+            items: vec![diamond],
+            total_ejections: 1,
+            resumes: 1000,
+            ..Default::default()
+        }
+        .to_fields(&registry.items)
+    } else {
+        vec![(
+            "solaris:ominous_item".into(),
+            Tag::Compound(vec![
+                (
+                    "uuid".into(),
+                    mc_data::trial_nbt::uuid_list(
+                        &[uuid::Uuid::from_u128(77)].into_iter().collect(),
+                    ),
+                ),
+                ("item".into(), Tag::Compound(item)),
+                ("eject_at".into(), Tag::Long(1000)),
+                (
+                    "position".into(),
+                    Tag::List(mc_nbt::ListTag {
+                        element_type: mc_nbt::tag_type::DOUBLE,
+                        elements: vec![Tag::Double(40.0), Tag::Double(200.0), Tag::Double(40.0)],
+                    }),
+                ),
+            ]),
+        )]
+    };
+    let bytes =
+        mc_data::trial_nbt::encode(fields, &format!("minecraft:{kind}"), [pos.x, pos.y, pos.z]);
+    world.tick(|state| {
+        state
+            .world
+            .set_opaque_block_entity(pos, Some(bytes.clone()));
+        state.opaque_changes.push((pos, Some(bytes.clone())));
+    });
+    let config = world.config.clone();
+    drop(world);
+    let replay = || {
+        crate::native_checkpoint::recover_with_reader(
+            &config,
+            Arc::clone(&registry),
+            store.checkpoint_reader().unwrap(),
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        replay().dimensions[&Dimension::Overworld].opaque_block_entities[&(pos.x, pos.y, pos.z)],
+        Some(bytes.clone())
+    );
+    let mut corrupt = valid.clone();
+    let conduit = mc_world::BlockPos { x: 46, ..pos };
+    let mut record = Vec::new();
+    mc_nbt::write_network(
+        &mut record,
+        &Tag::Compound(vec![
+            ("id".into(), Tag::String("minecraft:conduit".into())),
+            ("x".into(), Tag::Int(conduit.x)),
+            ("y".into(), Tag::Int(conduit.y)),
+            ("z".into(), Tag::Int(conduit.z)),
+            ("Target".into(), Tag::IntArray(vec![1, 2, 3])),
+        ]),
+    )
+    .unwrap();
+    corrupt.block_entities.insert(conduit, record);
+    store
+        .apply_offline_snapshot(
+            source.dimension,
+            &base,
+            &mut corrupt,
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
+    let refusal = source.load_native(chunk).unwrap_err().to_string();
+    for _ in 0..2 {
+        let Err(error) = recover_dimension_state(&config, Dimension::Overworld) else {
+            panic!("{kind}: recovery accepted an unloadable chunk");
+        };
+        assert!(error.to_string().contains(&refusal), "{error}");
+        assert_eq!(read_manifest(&config).unwrap().tick, committed);
+        assert_eq!(
+            replay().dimensions[&Dimension::Overworld].opaque_block_entities
+                [&(pos.x, pos.y, pos.z)],
+            Some(bytes.clone())
+        );
+    }
+}
+
+#[test]
+fn vault_opaque_replay_refuses_unloadable_chunk() {
+    opaque_item_owner_refuses_unloadable_replay("vault");
+}
+
+#[test]
+fn trial_spawner_opaque_replay_refuses_unloadable_chunk() {
+    opaque_item_owner_refuses_unloadable_replay("trial_spawner");
+}
+
 const CONTAINER_CHUNK: mc_world::ChunkPos = mc_world::ChunkPos { x: 2, z: 2 };
 const CONTAINER_PLAYER: uuid::Uuid = uuid::Uuid::from_u128(0xc0570d1);
 
@@ -1667,15 +1799,20 @@ fn native_container_slots(
     let mc_nbt::Tag::Compound(fields) = mc_nbt::read_network(&mut bytes.as_slice()).unwrap() else {
         panic!("container compound");
     };
-    if kind == "jukebox" {
-        return vec![match mc_data::item_nbt::field(&fields, "RecordItem") {
+    if matches!(kind, "jukebox" | "decorated_pot" | "lectern") {
+        let field = match kind {
+            "jukebox" => "RecordItem",
+            "decorated_pot" => "item",
+            _ => "Book",
+        };
+        return vec![match mc_data::item_nbt::field(&fields, field) {
             Some(mc_nbt::Tag::Compound(item)) => {
                 mc_data::item_nbt::stack_from_fields(&registry.items, item)
                     .unwrap()
                     .unwrap()
             }
             None => mc_data::ItemStack::EMPTY,
-            other => panic!("jukebox RecordItem: {other:?}"),
+            other => panic!("{kind} {field}: {other:?}"),
         }];
     }
     mc_data::storage_blocks::decode_slots(&fields, &registry.items, size).unwrap()
@@ -1715,16 +1852,30 @@ fn container_transfer_fixture(
     ];
     let jukebox = case.name == "jukebox";
     let shelf = case.name == "oak_shelf";
+    let pot = case.name == "decorated_pot";
+    let chiseled = case.name == "chiseled_bookshelf";
+    let lectern = case.name == "lectern";
     if shelf {
         slots[0][1] = item("diamond", 9);
-    } else if !jukebox {
+    } else if !(jukebox || pot || chiseled || lectern) {
         slots[0][if case.name == "brewing_stand" { 3 } else { 0 }] = item("diamond", 2);
         slots[0][case.size - 1] = item("diamond", 7);
     }
     slots[1][0] = item("diamond", 3);
     slots[1][26] = item("diamond", 8);
-    if jukebox {
-        let disc = item("music_disc_cat", 1);
+    if jukebox || pot || chiseled || lectern {
+        let disc = item(
+            if jukebox {
+                "music_disc_cat"
+            } else if pot {
+                "diamond"
+            } else if lectern {
+                "writable_book"
+            } else {
+                "book"
+            },
+            1,
+        );
         world
             .state
             .players
@@ -1744,7 +1895,7 @@ fn container_transfer_fixture(
         let id = crate::crafter::tests::block(
             &world.state,
             kind,
-            if shelf && pos == TRANSFER_POS {
+            if (shelf || chiseled) && pos == TRANSFER_POS {
                 &[("facing", "south")]
             } else {
                 &[]
@@ -1761,6 +1912,14 @@ fn container_transfer_fixture(
         );
     }
     world.state.world.fold_overlay();
+    if pot || chiseled || lectern {
+        let id = world
+            .state
+            .world
+            .block_at(TRANSFER_POS.x, TRANSFER_POS.y, TRANSFER_POS.z)
+            .unwrap();
+        crate::block_entity_defaults::after_blocks(&mut world.state, &[(TRANSFER_POS, id)]);
+    }
     crate::redstone::containers::register(&mut world.state, TRANSFER_POS);
     if case.name == "crafter" {
         crate::crafter::register(&mut world.state, TRANSFER_POS);
@@ -1775,7 +1934,11 @@ fn container_transfer_fixture(
         case,
         slots,
         player: world.state.players[&entity].inventory.slots.clone(),
-        total: if jukebox { 12 } else { 20 },
+        total: if jukebox || pot || chiseled || lectern {
+            12
+        } else {
+            20
+        },
     };
     world.tick(|_| {});
     expected.assert(&world.state, None);
@@ -1794,10 +1957,13 @@ fn container_transfer_fixture(
         cursor,
         sequence: 1,
     };
-    if shelf || jukebox {
-        world.run(&[use_on(if shelf { 3 } else { 1 }, [0.5; 3])]);
-        if jukebox {
-            expected.slots[0][0] = expected.player[0].clone();
+    if shelf || jukebox || pot || chiseled || lectern {
+        let face = if shelf || chiseled { 3 } else { 1 };
+        let cursor = if chiseled { [0.5, 0.75, 0.5] } else { [0.5; 3] };
+        world.run(&[use_on(face, cursor)]);
+        if jukebox || pot || chiseled || lectern {
+            let index = usize::from(chiseled);
+            expected.slots[0][index] = expected.player[0].clone();
             expected.player[0] = mc_data::ItemStack::EMPTY;
         } else {
             expected.player[0] = expected.slots[0][1].clone();
@@ -1873,11 +2039,12 @@ fn container_replay_checkpoint(case: ContainerCase, refused: bool) {
     };
     let tail = replay();
     let tail = &tail.dimensions[&Dimension::Overworld];
-    if case.name == "jukebox" {
+    if matches!(case.name, "jukebox" | "chiseled_bookshelf" | "lectern") {
         assert_eq!(
             tail.blocks.keys().copied().collect::<Vec<_>>(),
             vec![(TRANSFER_POS.x, TRANSFER_POS.y, TRANSFER_POS.z)],
-            "jukebox transfer journals its has_record block property"
+            "{} transfer journals a block property",
+            case.name
         );
     } else {
         assert!(
@@ -2078,4 +2245,7 @@ container_replay_cases!(
     (shulker_box, "shulker_box", 27, true),
     (shelf, "oak_shelf", 3, true),
     (jukebox, "jukebox", 1, true),
+    (decorated_pot, "decorated_pot", 1, true),
+    (chiseled_bookshelf, "chiseled_bookshelf", 6, true),
+    (lectern, "lectern", 1, true),
 );

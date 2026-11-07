@@ -52,6 +52,10 @@ hydration holds the entire checkpoint and its WAL; it never commits a partial
 container image. Behavioural coverage:
 `container_transfer_replay_holds_unloadable_chunk_and_wal` and
 `container_transfer_replay_materializes_full_healthy_chunk`.
+The matrix includes decorated pots, chiseled bookshelves and lecterns; their
+opaque WAL images require a resident chunk and refuse recovery if it cannot load.
+Campfire items, vault rewards and trial-spawner pending items instead use
+opaque-only custody and are covered by the unreadable-chunk recovery refusal.
 
 The custody hole combined lazy container replay, a dirty-chunk-only capture,
 and pruning by the whole-world fence: an omitted chunk's WAL was no longer a
