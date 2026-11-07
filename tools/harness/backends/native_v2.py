@@ -572,6 +572,24 @@ def _destroyed_chest(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     destroyed_chest(steps, origin)
 
 
+def _destroyed_chest_race(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_custody import destroyed_chest_race
+
+    destroyed_chest_race(steps, origin)
+
+
+def _duplicate_login(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_duplicate_login import run
+
+    run(steps, origin)
+
+
+def _corrupt_block_entities(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_corrupt_block_entities import run
+
+    run(steps, origin)
+
+
 def _promotion_banner(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_promotion_items import banner_placement
 
@@ -624,6 +642,9 @@ RUNNERS = {
     "native-v2-end-restart": _promotion_world,
     "native-v2-entity-gallery": _promotion_world,
     "native-v2-destroyed-chest": _destroyed_chest,
+    "native-v2-destroyed-chest-race": _destroyed_chest_race,
+    "native-v2-duplicate-login": _duplicate_login,
+    "native-v2-corrupt-block-entities": _corrupt_block_entities,
     "native-v2-craft-drag": _craft_drag,
     "native-v2-settlement-storage": _settlement_storage,
     "native-v2-redstone": _redstone, "native-v2-stations": _stations,
