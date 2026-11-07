@@ -974,37 +974,66 @@ fn debug_menu_reads_live_chest_and_carried_stack_through_command_path() {
     let storage = state.block_entities[&(pos.x, pos.y, pos.z)].slots.clone();
     let registry = Arc::clone(&state.registry);
     let player = state.players.get_mut(&entity).unwrap();
-    player.open_menu(&registry.item_rules(), MenuKind::Chest { rows: 3 }, "Cargo".into(), &storage);
+    player.open_menu(
+        &registry.item_rules(),
+        MenuKind::Chest { rows: 3 },
+        "Cargo".into(),
+        &storage,
+    );
     player.open.as_mut().unwrap().carried = cursor;
     let window = player.open.as_ref().unwrap().window;
     state.open_containers.insert(entity, (pos.x, pos.y, pos.z));
-    let (_, outbox, _) = crate::tick::run_tick(&mut state, &[PlayerInput::Command {
-        connection: ConnectionId(7),
-        command: "debug menu".into(),
-        permission_level: 4,
-    }]);
-    let answer = outbox.iter().flat_map(|(connection, changes)| {
-        changes.iter().filter_map(move |change| match change {
-            crate::boundary::PlayerChange::Chat { message } if *connection == ConnectionId(7) =>
-                message.strip_prefix("SOLARIS_MENU "),
-            _ => None,
+    let (_, outbox, _) = crate::tick::run_tick(
+        &mut state,
+        &[PlayerInput::Command {
+            connection: ConnectionId(7),
+            command: "debug menu".into(),
+            permission_level: 4,
+        }],
+    );
+    let answer = outbox
+        .iter()
+        .flat_map(|(connection, changes)| {
+            changes.iter().filter_map(move |change| match change {
+                crate::boundary::PlayerChange::Chat { message }
+                    if *connection == ConnectionId(7) =>
+                {
+                    message.strip_prefix("SOLARIS_MENU ")
+                }
+                _ => None,
+            })
         })
-    }).next().expect("menu reply");
+        .next()
+        .expect("menu reply");
     let image: serde_json::Value = serde_json::from_str(answer).unwrap();
     assert_eq!(image["container_id"], window);
     assert_eq!(image["slots"].as_array().unwrap().len(), 63);
-    assert_eq!(image["slots"][0], serde_json::json!({"item":"minecraft:diamond","count":5}));
-    assert_eq!(image["carried"], serde_json::json!({"item":"minecraft:stone","count":1}));
+    assert_eq!(
+        image["slots"][0],
+        serde_json::json!({"item":"minecraft:diamond","count":5})
+    );
+    assert_eq!(
+        image["carried"],
+        serde_json::json!({"item":"minecraft:stone","count":1})
+    );
     state.block_entities.remove(&(pos.x, pos.y, pos.z));
-    let (_, missing, _) = crate::tick::run_tick(&mut state, &[PlayerInput::Command {
-        connection: ConnectionId(7),
-        command: "debug menu".into(),
-        permission_level: 4,
-    }]);
-    assert!(missing.iter().flat_map(|(_, changes)| changes).any(|change| {
-        matches!(change, crate::boundary::PlayerChange::Chat { message }
+    let (_, missing, _) = crate::tick::run_tick(
+        &mut state,
+        &[PlayerInput::Command {
+            connection: ConnectionId(7),
+            command: "debug menu".into(),
+            permission_level: 4,
+        }],
+    );
+    assert!(
+        missing
+            .iter()
+            .flat_map(|(_, changes)| changes)
+            .any(|change| {
+                matches!(change, crate::boundary::PlayerChange::Chat { message }
             if message == "Cannot inspect menu: container storage is unavailable")
-    }));
+            })
+    );
 }
 
 fn spawned_item_count(state: &TickState, ids: &[EntityId], item: u32) -> i32 {

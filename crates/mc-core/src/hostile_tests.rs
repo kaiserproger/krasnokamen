@@ -105,15 +105,26 @@ fn zombie_chase_speed_matches_java_263_moving_interval() {
         run_tick(&mut state, &[]);
     }
     let end = state.entities.pos(slot);
-    assert!((end[2] - start[2]).abs() < 1e-6, "chase departed the straight path");
+    assert!(
+        (end[2] - start[2]).abs() < 1e-6,
+        "chase departed the straight path"
+    );
     let per_tick = (start[0] - end[0]) / 20.0;
     // Java 26.3 integrated-world moving interval measured 0.11645 blocks/client tick.
-    assert!((0.105..=0.13).contains(&per_tick), "zombie chase: {per_tick}");
+    assert!(
+        (0.105..=0.13).contains(&per_tick),
+        "zombie chase: {per_tick}"
+    );
 }
 
 #[test]
 fn zombie_chase_publishes_and_clears_aggressive_pose_metadata() {
-    for name in ["minecraft:zombie", "minecraft:husk", "minecraft:drowned", "minecraft:zombie_villager"] {
+    for name in [
+        "minecraft:zombie",
+        "minecraft:husk",
+        "minecraft:drowned",
+        "minecraft:zombie_villager",
+    ] {
         let (mut state, player, centre) = setup(12.0);
         state.day_time = 18_000;
         let zombie_type = type_id(&state, name);
@@ -121,10 +132,16 @@ fn zombie_chase_publishes_and_clears_aggressive_pose_metadata() {
         for _ in 0..20 {
             run_tick(&mut state, &[]);
         }
-        assert!(matches!(extra(&state, zombie, 15), Some(EntityDataValue::Byte(flags)) if flags & 4 != 0), "{name}");
+        assert!(
+            matches!(extra(&state, zombie, 15), Some(EntityDataValue::Byte(flags)) if flags & 4 != 0),
+            "{name}"
+        );
         state.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
         run_tick(&mut state, &[]);
-        assert!(!matches!(extra(&state, zombie, 15), Some(EntityDataValue::Byte(flags)) if flags & 4 != 0), "{name}");
+        assert!(
+            !matches!(extra(&state, zombie, 15), Some(EntityDataValue::Byte(flags)) if flags & 4 != 0),
+            "{name}"
+        );
     }
 }
 
@@ -135,11 +152,18 @@ fn zombie_chase_pose_preserves_other_mob_flags() {
     let zombie = state.spawn_mob(zombie_type, centre, 20.0);
     let slot = state.entities.slot_of(zombie).unwrap();
     Arc::make_mut(&mut state.entities.row_mut(slot).appearance)
-        .extra.push((15, EntityDataValue::Byte(2)));
+        .extra
+        .push((15, EntityDataValue::Byte(2)));
     crate::hostile::set_zombie_aggressive(&mut state, slot, true);
-    assert!(matches!(extra(&state, zombie, 15), Some(EntityDataValue::Byte(6))));
+    assert!(matches!(
+        extra(&state, zombie, 15),
+        Some(EntityDataValue::Byte(6))
+    ));
     crate::hostile::set_zombie_aggressive(&mut state, slot, false);
-    assert!(matches!(extra(&state, zombie, 15), Some(EntityDataValue::Byte(2))));
+    assert!(matches!(
+        extra(&state, zombie, 15),
+        Some(EntityDataValue::Byte(2))
+    ));
 }
 
 #[test]

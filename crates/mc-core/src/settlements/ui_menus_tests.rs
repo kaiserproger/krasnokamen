@@ -207,7 +207,10 @@ fn debug_menu_uses_settlement_icons_and_falls_through_stale_window() {
     let registry = std::sync::Arc::clone(&state.registry);
     let slots = state.block_entities[&(6, 201, 4)].slots.clone();
     state.players.get_mut(&actor).unwrap().open_menu(
-        &registry.item_rules(), MenuKind::Chest { rows: 3 }, "Chest".into(), &slots,
+        &registry.item_rules(),
+        MenuKind::Chest { rows: 3 },
+        "Chest".into(),
+        &slots,
     );
     state.open_containers.insert(actor, (6, 201, 4));
     let image = crate::tick::debug_menu_snapshot(&state, actor).unwrap();

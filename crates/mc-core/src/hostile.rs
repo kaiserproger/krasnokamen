@@ -142,7 +142,9 @@ pub(crate) fn refresh_targets(state: &mut TickState) {
                                 pos[1].floor() as i32,
                                 pos[2].floor() as i32,
                             )
-                            .is_some_and(|(sky, block)| block.max(sky.saturating_sub(sky_darken)) < 8)
+                            .is_some_and(|(sky, block)| {
+                                block.max(sky.saturating_sub(sky_darken)) < 8
+                            })
                     })
                 || (blueprint.category == crate::blueprint::MobCategory::Monster
                     && state.difficulty == Difficulty::Peaceful)
@@ -466,19 +468,34 @@ pub(crate) fn set_zombie_aggressive(state: &mut TickState, slot: EntitySlot, agg
     let EntityKind::Mob { type_id } = body.kind else {
         return;
     };
-    if !state.registry.blueprint(type_id).is_some_and(|blueprint| blueprint.capabilities.aggressive_arms) {
+    if !state
+        .registry
+        .blueprint(type_id)
+        .is_some_and(|blueprint| blueprint.capabilities.aggressive_arms)
+    {
         return;
     }
     let id = body.id;
-    let flags = state.entities.row(slot).appearance.extra.iter().find_map(|(index, value)| {
-        match (index, value) {
+    let flags = state
+        .entities
+        .row(slot)
+        .appearance
+        .extra
+        .iter()
+        .find_map(|(index, value)| match (index, value) {
             (15, EntityDataValue::Byte(flags)) => Some(*flags),
             _ => None,
-        }
-    }).unwrap_or(0);
+        })
+        .unwrap_or(0);
     let next = if aggressive { flags | 4 } else { flags & !4 };
     if next != flags {
-        set_extra(state, slot, 15, EntityDataValue::Byte(0), EntityDataValue::Byte(next));
+        set_extra(
+            state,
+            slot,
+            15,
+            EntityDataValue::Byte(0),
+            EntityDataValue::Byte(next),
+        );
         state.appearance_changed.push(id);
     }
 }

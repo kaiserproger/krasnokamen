@@ -60,28 +60,40 @@ pub(crate) fn debug_menu_snapshot(
     use std::borrow::Cow;
     let container: Cow<'_, [mc_data::ItemStack]> = if menu.kind.container_size() == 0 {
         Cow::Borrowed(&[])
-    } else if let Some((_, icons)) = state.settlement_menus.get(&player.connection)
+    } else if let Some((_, icons)) = state
+        .settlement_menus
+        .get(&player.connection)
         .map(|open| open.snapshot())
         .filter(|(window, _)| *window == menu.window)
     {
         Cow::Borrowed(icons)
     } else if crate::vehicles::is_open(state, entity) {
-        Cow::Borrowed(crate::vehicles::container_slots_for_player(state, entity)
-            .ok_or("vehicle menu storage is unavailable")?)
+        Cow::Borrowed(
+            crate::vehicles::container_slots_for_player(state, entity)
+                .ok_or("vehicle menu storage is unavailable")?,
+        )
     } else if let crate::inventory::MenuKind::Mount { entity: mount, .. } = menu.kind {
-        let slot = state.entities.slot_of(mount).ok_or("mount is unavailable")?;
+        let slot = state
+            .entities
+            .slot_of(mount)
+            .ok_or("mount is unavailable")?;
         if crate::mounts::menus::kind(state, slot) != Some(menu.kind) {
             return Err("mount menu is stale");
         }
         Cow::Owned(crate::mounts::menus::slots(state, slot))
     } else if crate::ender_chest::is_open(state, entity) {
-        Cow::Owned(crate::ender_chest::contents(&player.opaque_player_fields, &state.registry.items)
-            .map_err(|_| "ender chest storage is invalid")?)
+        Cow::Owned(
+            crate::ender_chest::contents(&player.opaque_player_fields, &state.registry.items)
+                .map_err(|_| "ender chest storage is invalid")?,
+        )
     } else if let Some(position) = state.open_containers.get(&entity) {
         let cells = container_cells(state, *position);
         let mut slots = Vec::with_capacity(menu.kind.container_size());
         for cell in cells {
-            let record = state.block_entities.get(&cell).ok_or("container storage is unavailable")?;
+            let record = state
+                .block_entities
+                .get(&cell)
+                .ok_or("container storage is unavailable")?;
             slots.extend(record.slots.iter().cloned());
         }
         Cow::Owned(slots)
@@ -95,20 +107,26 @@ pub(crate) fn debug_menu_snapshot(
         if item.is_empty() {
             return Ok(serde_json::json!({"item": null, "count": 0, "components": null}));
         }
-        let name = state.registry.items.name_of(item.item_id).ok_or("unknown item in menu")?;
+        let name = state
+            .registry
+            .items
+            .name_of(item.item_id)
+            .ok_or("unknown item in menu")?;
         Ok(serde_json::json!({"item": name.as_str(), "count": item.count, "components": item}))
     };
-    let slots = (0..menu.kind.slot_count()).map(|index| {
-        use crate::inventory::SlotRef;
-        let item = match menu.kind.slot(index) {
-            Some(SlotRef::Result) => &menu.result,
-            Some(SlotRef::Grid(i)) => &menu.grid[i],
-            Some(SlotRef::Inventory(i)) => &player.inventory.slots[i],
-            Some(SlotRef::Container(i)) => &container[i],
-            None => &mc_data::ItemStack::EMPTY,
-        };
-        stack(item)
-    }).collect::<Result<Vec<_>, _>>()?;
+    let slots = (0..menu.kind.slot_count())
+        .map(|index| {
+            use crate::inventory::SlotRef;
+            let item = match menu.kind.slot(index) {
+                Some(SlotRef::Result) => &menu.result,
+                Some(SlotRef::Grid(i)) => &menu.grid[i],
+                Some(SlotRef::Inventory(i)) => &player.inventory.slots[i],
+                Some(SlotRef::Container(i)) => &container[i],
+                None => &mc_data::ItemStack::EMPTY,
+            };
+            stack(item)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(serde_json::json!({
         "container_id": menu.window,
         "carried": stack(&menu.carried)?,

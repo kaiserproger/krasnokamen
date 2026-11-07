@@ -1290,7 +1290,10 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
         dark_aggro_only: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
         aggressive_arms: matches!(
             name,
-            "minecraft:zombie" | "minecraft:husk" | "minecraft:drowned" | "minecraft:zombie_villager"
+            "minecraft:zombie"
+                | "minecraft:husk"
+                | "minecraft:drowned"
+                | "minecraft:zombie_villager"
         ),
         resists_magic: name == "minecraft:witch",
         hurt_by_water: name == "minecraft:enderman",

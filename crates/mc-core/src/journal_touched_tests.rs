@@ -200,8 +200,11 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
     let dir = std::env::temp_dir().join(format!("mc-core-zombie-pose-{}", uuid::Uuid::new_v4()));
     let mut state = fixture();
     spawn_idle_cow(&mut state, 9.5);
-    let zombie_type = state.registry.entity_types
-        .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap()).unwrap();
+    let zombie_type = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap())
+        .unwrap();
     let zombie = state.spawn_mob(zombie_type, [8.5, 65.0, 8.5], 20.0);
     let slot = state.entities.slot_of(zombie).unwrap();
     state.entities.row_mut(slot).controls.no_ai = true;
@@ -221,12 +224,15 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
     assert!(record.appearance.extra.iter().any(|(index, value)| *index == 15
         && matches!(value, crate::journal::EntityDataValueImage::Byte(flags) if flags & 4 != 0)));
     let mut restored = fixture();
-    crate::tick::run_tick(&mut restored, &[crate::boundary::PlayerInput::Join {
-        connection: ConnectionId(1),
-        uuid: uuid::Uuid::new_v4(),
-        name: "observer".into(),
-        permission_level: 0,
-    }]);
+    crate::tick::run_tick(
+        &mut restored,
+        &[crate::boundary::PlayerInput::Join {
+            connection: ConnectionId(1),
+            uuid: uuid::Uuid::new_v4(),
+            name: "observer".into(),
+            permission_level: 0,
+        }],
+    );
     let player = restored.connections.entity_of(ConnectionId(1)).unwrap();
     restored.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
     restored.world.ensure_blocking(&restored.desired_chunks());

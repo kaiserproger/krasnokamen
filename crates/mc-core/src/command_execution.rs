@@ -507,9 +507,12 @@ pub(crate) fn execute(
             };
             match crate::tick::debug_menu_snapshot(state, issuer) {
                 Ok(snapshot) => {
-                    state.push_player(connection, PlayerChange::Chat {
-                        message: format!("SOLARIS_MENU {snapshot}"),
-                    });
+                    state.push_player(
+                        connection,
+                        PlayerChange::Chat {
+                            message: format!("SOLARIS_MENU {snapshot}"),
+                        },
+                    );
                     return CommandResult::Completed;
                 }
                 Err(reason) => {
