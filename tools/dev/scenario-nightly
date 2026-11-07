@@ -82,6 +82,11 @@ def run_campaign(args):
                'server_pin': json.loads((args.server_bin.parent / 'manifest.json').read_text()),
                'repo': str(args.repo), 'requested_seeds': args.seeds, 'seeds_run': 0,
                'passed': 0, 'failed': 0, 'failures': [], 'reductions': {}, 'stop_reason': 'seed_count'}
+    if prune(args.receipts, root, args.max_bytes) >= args.max_bytes:
+        summary.update(status='failed', stop_reason='disk_budget_before_start')
+        (root / 'result.json').write_text(json.dumps(summary, indent=2) + '\n')
+        print(root / 'result.json', flush=True)
+        return 1
     deadline = time.monotonic() + args.budget_seconds
     common = [str(MEM_RUN), '-m', '6G', 'env', 'RUSTC_WRAPPER=', 'nice', '-n', '19',
               'ionice', '-c', '3', sys.executable, '-m', 'tools.harness', 'run', 'matrix-random',
