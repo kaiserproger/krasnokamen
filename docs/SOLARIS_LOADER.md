@@ -137,7 +137,7 @@ Operators find out which packages need Loader from each package's validated
 paths, sizes, hashes) and the actual Configuration negotiation. There is no
 native server `--check` report; startup validates the real component and client
 deployment, and `content verify` covers only the vanilla cache. See
-[plugin deployment](PLUGINS.md#operator-deployment).
+[plugin deployment](plugins/OPERATIONS.md#operator-deployment).
 
 ## Troubleshooting
 

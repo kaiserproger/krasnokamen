@@ -364,7 +364,7 @@ not a proof of rendered assets, and is independent of Loader bundle negotiation.
   until the plugin unlocks that exact session. Pending sessions cannot trigger
   pressure plates, travel dimensions or ask for LOD terrain, and are excluded
   from persistence and the authenticated roster. Deployment details are in
-  [PLUGINS.md](PLUGINS.md#operator-deployment).
+  [plugin operations](plugins/OPERATIONS.md#operator-deployment).
 - Chat and native communication commands share a per-sender spam counter: 20
   points per input, one removed per tick, disconnect at 200 (vanilla's
   threshold). Operators share it; console commands are not charged.

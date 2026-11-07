@@ -156,7 +156,8 @@ vanilla clients.
 > All the Mods 11, 215 of 289 mods ship server-side Java and 152 rewrite Minecraft
 > internals with Mixins; there is no JVM to host them. Server features are written
 > as [Wasm plugins](docs/PLUGINS.md), in Rust with the [SDK](sdk/rust/) or any
-> language that compiles to WebAssembly components.
+> language that compiles to WebAssembly components. Start with the
+> [plugin quickstart](docs/plugins/QUICKSTART.md).
 
 ## Performance
 
