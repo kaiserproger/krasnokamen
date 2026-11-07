@@ -37,3 +37,13 @@ The supply recipes from the same decision (saddle, hay block) are implemented; s
 - One arrow is returned at most once.
 - Swapping, reconnecting or redeploying never restores stamina.
 - A native arrow range limit is defined.
+
+## Forest site preparation — 2026-11-08
+
+> Да, расчищать лес под стройку
+
+- Funded construction may physically clear natural forest from its lot and access path; admission itself changes no blocks.
+- Logs, saplings and other vanilla drops go to settlement storage without loss or duplication.
+- A block must match this world's deterministic generator and have no retained player placement record. Imported/unknown generator identities and persisted lumberjack sapling roots are protected after restart.
+- Water, lava, steep terrain and other existing terrain refusals remain refusals.
+- An identical player replacement at a former natural coordinate after history expiry may be felled with its drops conserved; see [the construction policy](construction.md#planning-and-streets).

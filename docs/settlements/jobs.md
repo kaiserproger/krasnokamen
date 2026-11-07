@@ -62,7 +62,7 @@ Builder workshops, mines and lumber camps can use a crafting table or barrel; mi
 - The saved search cursor advances and wraps; a natural camp starts its sweep at its certified grove footprint. A search attempt examines at most **128 simulated columns**. Trees in inactive chunks are not targets.
 - An unreachable tree is released after a completed failed approach, or after **2,400 working ticks** outside cutting reach, and the sweep continues. Arrival, deposit and off-shift time reset that work window.
 - Certified structures protect their footprints; only the worker's own natural lumber-camp zone permits cutting within its bounds. The crown and protections are checked again before each cut.
-- Lumberjacks return when a stack reaches 64, at day end, when another log cannot fit, or when their carried items and stock can fund a construction candidate. Full or unreachable storage retains the carry.
+- Lumberjacks return when one stack reaches 64 or the mixed load totals 64, at day end, when another log cannot fit, or when their delivery closes a construction candidate's funding gap. An already-funded candidate does not trigger a trip after each log. Full or unreachable storage retains the carry.
 
 Miners appear to clients as toolsmiths and lumberjacks as fletchers, with the corresponding vanilla trade pools.
 

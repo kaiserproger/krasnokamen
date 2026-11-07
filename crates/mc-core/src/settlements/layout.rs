@@ -212,7 +212,13 @@ fn level_inside(record: &SettlementRecord, x: i32, z: i32) -> bool {
     inside(record, [x, record.anchor[1], z])
 }
 
-fn sample(state: &TickState, record: &SettlementRecord, x: i32, z: i32) -> Column {
+fn sample(
+    state: &TickState,
+    record: &SettlementRecord,
+    x: i32,
+    z: i32,
+    prepare_forest: bool,
+) -> Column {
     let anchor_y = record.anchor[1];
     if state.world.physics_block_at(x, anchor_y, z).is_none() {
         return Column::Unloaded;
@@ -244,10 +250,15 @@ fn sample(state: &TickState, record: &SettlementRecord, x: i32, z: i32) -> Colum
     if name == "farmland" {
         return Column::Occupied;
     }
-    let headroom = state
-        .world
-        .physics_block_at(x, y + 2, z)
-        .is_some_and(|block| construction::clearable(state, block));
+    let headroom = [y + 1, y + 2].into_iter().all(|above| {
+        state
+            .world
+            .physics_block_at(x, above, z)
+            .is_some_and(|block| {
+                construction::clearable(state, block)
+                    || (prepare_forest && super::forestry::clearable(state, [x, above, z]))
+            })
+    });
     if ground.has_fluid()
         || NOT_FOOTING.iter().any(|suffix| name.ends_with(suffix))
         || !headroom
@@ -362,6 +373,7 @@ pub(crate) struct Network<'a> {
     cells: Vec<[i32; 3]>,
     parents: Vec<usize>,
     index: HashMap<(i32, i32), usize>,
+    prepare_forest: bool,
 }
 
 impl<'a> Network<'a> {
@@ -369,9 +381,20 @@ impl<'a> Network<'a> {
     /// steps of at most one block, inside the territory, on loaded ground.
     /// An existing village obstacle may block the road without its shoulder.
     pub(crate) fn walk(state: &'a TickState, record: &'a SettlementRecord) -> Self {
+        Self::build(state, record, false)
+    }
+
+    /// Forecast only: every obstructing natural tree must become paid-project
+    /// removal work before this corridor is actually walkable.
+    pub(crate) fn for_construction(state: &'a TickState, record: &'a SettlementRecord) -> Self {
+        Self::build(state, record, true)
+    }
+
+    fn build(state: &'a TickState, record: &'a SettlementRecord, prepare_forest: bool) -> Self {
         let mut network = Self {
             state,
             record,
+            prepare_forest,
             columns: HashMap::new(),
             cells: Vec::new(),
             parents: Vec::new(),
@@ -424,11 +447,11 @@ impl<'a> Network<'a> {
     }
 
     fn column(&mut self, x: i32, z: i32) -> Column {
-        let (state, record) = (self.state, self.record);
+        let (state, record, prepare_forest) = (self.state, self.record, self.prepare_forest);
         *self
             .columns
             .entry((x, z))
-            .or_insert_with(|| sample(state, record, x, z))
+            .or_insert_with(|| sample(state, record, x, z, prepare_forest))
     }
 
     /// Lot candidates in walking order: a reached road edge column and the
@@ -491,6 +514,32 @@ impl<'a> Network<'a> {
             origin: [ox, floor, oz],
             rotation,
         })
+    }
+
+    /// The funded building's future walking corridor, plaza first. Trees on
+    /// this route become ordinary executor removal cells, never admission edits.
+    pub(crate) fn construction_access(&self, project: &Project) -> Option<Vec<[i32; 3]>> {
+        let blueprint = blueprints::get(&self.state.registry, &project.blueprint)?;
+        let turn = Rotation::from_quarter_turns(project.rotation);
+        let [ex, _, ez] = blueprint.level(1)?.rotated(turn).entrance.map(i32::from);
+        let [nx, nz] = COMPASS[(front(blueprint)? + usize::from(project.rotation)) % 4];
+        let (x, z) = (project.origin[0] + ex, project.origin[2] + ez);
+        let mut at = (1..=LOT_FRONT + LOT_DEPTH)
+            .find_map(|step| self.street_index(x + step * nx, z + step * nz))?;
+        let mut route = Vec::new();
+        loop {
+            route.push(self.cells[at]);
+            if self.parents[at] == SEED {
+                break;
+            }
+            at = self.parents[at];
+        }
+        route.reverse();
+        for [cx, cz] in [[x + nx, z + nz], [x, z]] {
+            let y = construction::surface_y(self.state, self.record.anchor[1], cx, cz)?;
+            route.push([cx, y, cz]);
+        }
+        Some(route)
     }
 
     /// A verge may carry a detour, but a door still fronts an actual street.

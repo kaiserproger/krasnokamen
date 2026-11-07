@@ -29,6 +29,14 @@ allocation uses resident POIs and shares the native tick decision/path budget
 with villager brains; denied work does not authorize loading arbitrary chunks.
 Certified building work points own the corresponding job slots.
 
+Construction checks the remaining active-project bill against physical storage
+and exact Builder carry. If extraction is needed, the allocator staffs the
+missing role; when the only suitable worker was borrowed by that project, the
+worker returns to extraction without cancelling the structure, and is not
+borrowed again until its remaining bill is funded. Lumber search for an active
+wood shortage follows the project's selected wood family. Partial loads return
+through the ordinary storage transaction when they can fund the remaining work.
+
 ## Durability and plugin boundary
 
 Touched settlement post-images and deletions share the dimension-wrapped tick

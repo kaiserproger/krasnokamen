@@ -335,6 +335,7 @@ pub(crate) fn claim(
         })
         .ok_or("Stand inside an autonomous settlement to claim it.")?;
     state.settlements.claim(id, owner, at)?;
+    tracing::info!(target: "settlement_audit", settlement = id.0, tick = state.tick, "settlement_claim");
     super::refresh_owner_names(state);
     let name = &state.settlements.get(id).expect("claimed settlement").name;
     Ok(format!("Claimed {name}."))

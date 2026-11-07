@@ -535,8 +535,57 @@ def _verdict(
     if repro:
         detail["repro"][name] = repro
 
+def _snapshot_binary() -> tuple[Path, str]:
+    raw = os.environ.get("SOLARIS_SNAPSHOT_BINARY", "")
+    if not raw or not os.path.isabs(raw):
+        raise RuntimeError("civilization-seed-qa requires an absolute SOLARIS_SNAPSHOT_BINARY")
+    binary = Path(raw).resolve()
+    if any(part == "targets" and i + 1 < len(binary.parts) and binary.parts[i + 1].startswith("slot-")
+           for i, part in enumerate(binary.parts)):
+        raise RuntimeError("SOLARIS_SNAPSHOT_BINARY must be pinned outside pooled targets/slot-*")
+    if not binary.is_file() or not os.access(binary, os.X_OK):
+        raise RuntimeError(f"SOLARIS_SNAPSHOT_BINARY is not an executable file: {binary}")
+    with binary.open("rb") as executable:
+        return binary, hashlib.file_digest(executable, "sha256").hexdigest()
+
+
+def _birth_snapshot(ctx: ProfileContext, binary: Path, expected_hash: str, artifact: Path,
+                    world: Path, timeout: float) -> dict[str, Any]:
+    with binary.open("rb") as executable:
+        if hashlib.file_digest(executable, "sha256").hexdigest() != expected_hash:
+            raise RuntimeError("SOLARIS_SNAPSHOT_BINARY changed after preflight")
+    revision_source = (runtime.REPO_ROOT / "crates/mc-worldgen/src/lib.rs").read_text()
+    match = re.search(r"pub const WORLDGEN_REVISION: u32 = (\d+);", revision_source)
+    if match is None:
+        raise RuntimeError("native worldgen revision is unavailable")
+    spec = artifact / "birth-snapshot-spec.json"
+    result = artifact / "birth-snapshot.json"
+    log = artifact / "birth-snapshot.log"
+    spec.write_text(json.dumps({"native_seed": SEED, "native_worldgen_revision": int(match.group(1)),
+                                "blocks": [], "containers": []}))
+    command = [str(binary), "--addr", "127.0.0.1:1", "--clients", "1", "--view-distance", "1",
+               "--native-snapshot", str(world), "--mechanic-spec", str(spec), "--report", str(result)]
+    ctx.commands.append(command)
+    ctx.cwds.append(str(runtime.REPO_ROOT))
+    with log.open("wb") as output:
+        completed = subprocess.run(command, cwd=runtime.REPO_ROOT, stdout=output, stderr=subprocess.STDOUT,
+                                   timeout=timeout, check=False)
+    ctx.exits.append(completed.returncode)
+    ctx.logs.append(str(log))
+    if completed.returncode:
+        raise RuntimeError(f"native birth snapshot failed: {log}")
+    data = json.loads(result.read_text())
+    if data.get("success") is not True or not isinstance(data.get("mechanics"), dict):
+        raise RuntimeError("native birth snapshot report is incomplete")
+    return data["mechanics"]
+
 
 def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = False) -> dict[str, Any]:
+    if civilization:
+        from . import civilization_seed_qa
+        ctx.client_evidence["verdicts"] = {**dict.fromkeys(civilization_seed_qa.STAGES, False), "all": False}
+        ctx.client_evidence["verdict_limitations"] = {"births": civilization_seed_qa.BIRTHS_LIMITATION}
+        ctx.client_evidence["birth_verdict"] = {"status": "unverified", "reason": civilization_seed_qa.BIRTHS_LIMITATION}
     if ctx.client != "native":
         raise ValueError("village-autonomy-qa requires --client native")
     if ctx.extra_args or ctx.platform is not None:
@@ -551,12 +600,17 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
     if owner_order and (SEED != 100 or QA_VILLAGE or os.environ.get("VILLAGE_AUTONOMY_RESUME_WORLD")):
         raise ValueError("village-owner-order-qa requires a fresh seed-100 world and default center")
     resume_world = os.environ.get("VILLAGE_AUTONOMY_RESUME_WORLD", "")
+    if civilization and resume_world:
+        raise ValueError("civilization-seed-qa requires a fresh world for the server game-time baseline")
     override = os.environ.get("SOLARIS_SERVER_BINARY")
     if not override:
         raise RuntimeError("village-autonomy-qa requires SOLARIS_SERVER_BINARY")
     binary = Path(override).expanduser().resolve()
     if not binary.is_file():
         raise RuntimeError(f"missing executable server binary: {binary}")
+    if civilization:
+        snapshot_binary, snapshot_hash = _snapshot_binary()
+        ctx.client_evidence.update(snapshot_binary_path=str(snapshot_binary), snapshot_binary_sha256=snapshot_hash)
     server_port = runtime.reserve_port()
     address = f"127.0.0.1:{server_port}"
     config = artifact / "village-autonomy-qa.toml"
@@ -620,6 +674,8 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
         server_log = server_log_path.open("wb")
         env = os.environ.copy()
         env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+        if civilization:
+            env["RUST_LOG"] = (env.get("RUST_LOG") or "info") + ",settlement_audit=info"
         server = subprocess.Popen(
             [str(binary), "--config", str(config)],
             cwd=runtime.REPO_ROOT,
@@ -651,8 +707,35 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
                 return _read_storage_container(server, server_log_path, pos, min(15.0, probe.remaining()))
 
             if civilization:
-                from . import civilization_seed_qa
+                detail["verdicts"] = ctx.client_evidence["verdicts"]
                 civilization_seed_qa.scenario(probe, detail, artifact, server, server_log_path, read_container)
+                mcp.close()
+                mcp = None
+                runtime.stop_process(client_process)
+                ctx.exits[active_client_evidence["command_index"]] = client_process.returncode
+                _client_log.close()
+                client_process = None
+                runtime.stop_process(server, interrupt=True, timeout_seconds=min(120.0, probe.remaining(limit=None)))
+                if server.returncode != 0:
+                    raise RuntimeError(f"server did not stop cleanly for birth snapshot: {server.returncode}")
+                if server.stdin is not None:
+                    server.stdin.close()
+                server = None
+                server_log.flush()
+                snapshot = _birth_snapshot(ctx, snapshot_binary, snapshot_hash, artifact, artifact / "world",
+                                           probe.remaining(limit=None))
+                final_row = detail["snapshots"][-1]
+                if snapshot.get("checkpoint_tick", -1) < final_row["client_game_time"]:
+                    raise RuntimeError("birth snapshot checkpoint predates the final client observation")
+                with server_log_path.open(encoding="utf-8", errors="replace") as log:
+                    proof = civilization_seed_qa.verify_birth_snapshot(
+                        snapshot, detail["settlement_name"], detail["baseline_population"], final_row["population"],
+                        detail["baby_observation"]["entity"]["entity_uuid"], detail["baseline_server_tick"], log)
+                detail["birth_verdict"] = ctx.client_evidence["birth_verdict"] = proof
+                detail["verdicts"]["births"] = proof["verified"]
+                detail["verdicts"]["all"] = all(detail["verdicts"][name] for name in civilization_seed_qa.STAGES)
+                if not proof["verified"]:
+                    raise RuntimeError(f"births unverified: {proof['reason']}")
                 return {"scenario": probe.report}
             if owner_order:
                 _owner_order_before_restart(probe, detail, artifact)

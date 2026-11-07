@@ -56,6 +56,7 @@ fn nonempty_building_roundtrips_touched_wal_and_checkpoint_row() {
         let record = state.settlements.get_mut(settlement).unwrap();
         record.building_sequence = 1;
         record.buildings.insert(id, building(id, settlement));
+        record.planted_trees.insert([12, 201, 12]);
         record.revision += 1;
     }
     let before = state.settlements.get(settlement).unwrap().clone();
@@ -78,6 +79,7 @@ fn nonempty_building_roundtrips_touched_wal_and_checkpoint_row() {
     assert_eq!(row.value, before);
     assert_eq!(row.value.building_sequence, 1);
     assert_eq!(row.value.buildings[&id].work_points, vec![[4, 201, 4]]);
+    assert!(row.value.planted_trees.contains(&[12, 201, 12]));
 
     let replay = crate::journal::apply_batch_images(Replay::default(), &[(2, 2, entries)]);
     let mut restored = self::state();
@@ -114,7 +116,7 @@ fn legacy_row_without_buildings_decodes_to_empty_map() {
         .unwrap();
     let record = state.settlements.get(settlement).unwrap().clone();
     let mut value = serde_json::to_value(&record).unwrap();
-    for key in ["building_sequence", "buildings"] {
+    for key in ["building_sequence", "buildings", "planted_trees"] {
         value.as_object_mut().unwrap().remove(key);
     }
     let row = Row {
@@ -133,4 +135,5 @@ fn legacy_row_without_buildings_decodes_to_empty_map() {
     let restored = reopened.settlements.get(settlement).unwrap();
     assert_eq!(restored.building_sequence, 0);
     assert!(restored.buildings.is_empty());
+    assert!(restored.planted_trees.is_empty());
 }

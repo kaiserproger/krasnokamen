@@ -54,11 +54,74 @@ fn storage_target(
     executor::pickup_point(state, id, item, state.entities.pos(slot)).map(block_pos)
 }
 
-fn site_target(
+fn preparation_footing(
     state: &TickState,
     project: &construction::Project,
     next: [i32; 3],
 ) -> Option<BlockPos> {
+    (project.building.is_none()
+        && executor::clearing(state, project.settlement, &project.structure))
+    .then(|| crate::settlements::forestry::footing(state, project.settlement, next))
+    .flatten()
+}
+
+fn preparation_target(
+    state: &TickState,
+    slot: EntitySlot,
+    project: &construction::Project,
+    next: [i32; 3],
+) -> Option<BlockPos> {
+    let here = state.entities.pos(slot);
+    let mut best: Option<(f64, BlockPos)> = None;
+    for dx in -3_i32..=3 {
+        for dz in -3_i32..=3 {
+            if dx * dx + dz * dz > 9 {
+                continue;
+            }
+            let Some(at) = crate::settlements::forestry::footing(
+                state,
+                project.settlement,
+                [next[0] + dx, next[1], next[2] + dz],
+            ) else {
+                continue;
+            };
+            let clear = [at.y, at.y + 1].into_iter().all(|y| {
+                state
+                    .world
+                    .physics_block_at(at.x, y, at.z)
+                    .is_some_and(|block| {
+                        state
+                            .registry
+                            .collision_boxes
+                            .get(block as usize)
+                            .is_some_and(|boxes| boxes.is_empty())
+                            && state
+                                .registry
+                                .blocks
+                                .by_id(mc_world::BlockStateId(block))
+                                .is_some_and(|definition| !definition.has_fluid())
+                    })
+            });
+            let distance = (here[0] - f64::from(at.x) - 0.5).powi(2)
+                + (here[1] - f64::from(at.y)).powi(2)
+                + (here[2] - f64::from(at.z) - 0.5).powi(2);
+            if clear && best.as_ref().is_none_or(|(known, _)| distance < *known) {
+                best = Some((distance, at));
+            }
+        }
+    }
+    best.map(|(_, at)| at)
+}
+
+fn site_target(
+    state: &TickState,
+    project: &construction::Project,
+    next: [i32; 3],
+    slot: EntitySlot,
+) -> Option<BlockPos> {
+    if preparation_footing(state, project, next).is_some() {
+        return preparation_target(state, slot, project, next);
+    }
     if project.blueprint == construction::furnace::NAME {
         return construction::furnace::stand(state, project, next).map(block_pos);
     }
@@ -122,7 +185,7 @@ pub(crate) fn work(
         });
     }
     Some(WorkTarget {
-        pos: site_target(state, project, next)?,
+        pos: site_target(state, project, next, slot)?,
         exact: true,
     })
 }
@@ -136,6 +199,11 @@ fn in_reach(
     project: &construction::Project,
     next: [i32; 3],
 ) -> bool {
+    if let Some(base) = preparation_footing(state, project, next) {
+        // As with lumberjacks, felling is rooted at the trunk's footing; its
+        // crown need not be reachable as an independently placed roof block.
+        return super::mining::near(state, slot, base, 4.0);
+    }
     let pos = state.entities.pos(slot);
     let width = state.entities.body(slot).half_width;
     if layout::infra(&project.blueprint) || project.blueprint == construction::furnace::NAME {

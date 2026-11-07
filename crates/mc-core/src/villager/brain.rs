@@ -782,6 +782,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             None
         };
         let ration_due = needs_ration
+            && state.tick >= resident.ration_at
             && (storage_route.is_some_and(|target| {
                 resident.navigation_search_failed || super::mining::near(state, slot, target, 2.5)
             }) || (storage_route.is_none() && state.tick >= resident.navigation_repath_at));
@@ -795,6 +796,11 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             false
         };
         let mut v = state.entities.row_mut(slot).villager.take().unwrap();
+        if ration_due {
+            // The independent cadence leaves navigation budget on later ticks
+            // even when an unreachable spare bed exhausts this search.
+            v.ration_at = state.tick.saturating_add(40);
+        }
         let baby = v.age < 0;
         let old_data = v.data;
         let old_activity = v.activity;
