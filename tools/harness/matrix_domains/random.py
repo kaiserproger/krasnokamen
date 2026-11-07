@@ -408,6 +408,11 @@ def _action(ctx, step):
         actor.open_inventory()
         _click(actor, _slot(actor, 'minecraft:oak_log'))
         _click(actor, 1, button=1)
+        # Vanilla can send the craft-result update before the input-slot
+        # update. A changed state ID alone may still expose the old cursor.
+        actor.wait_until(lambda: any(s['slot'] == 1 and s['item_id'] == 'minecraft:oak_log'
+                                     for s in actor.snapshot()['menu']['slots']),
+                         description='received crafting input')
         if actor.snapshot().get('cursor'):
             _click(actor, 23)
         actor.wait_until(lambda: any(s['slot'] == 0 for s in actor.snapshot()['menu']['slots']),

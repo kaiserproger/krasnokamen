@@ -12,7 +12,7 @@ from unittest.mock import patch
 from .backends import matrix_random
 from .quirk_parity import player
 
-from .matrix_domains.random import invariant_checks, mutate_observation, stock, _published, setup, recovery_matches, _mine, _exact_slots
+from .matrix_domains.random import invariant_checks, mutate_observation, stock, _published, setup, recovery_matches, _mine, _exact_slots, _action
 from .quirk_parity.fuzz import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_ACTIONS,
                                 shrink_player_scenario, failure_identity)
 
@@ -51,6 +51,30 @@ class RandomMatrixTests(unittest.TestCase):
             self.assertTrue(predicate())
         actor.wait_until = wait
         _mine(actor, (1, 2, 3))
+
+    def test_craft_waits_for_input_after_early_result_packet(self):
+        pending = {'cursor': {'item_id': 'minecraft:oak_log', 'count': 1},
+                   'menu': {'slots': [{'slot': 0, 'item_id': 'minecraft:oak_planks'}]}}
+        applied = {'cursor': None, 'menu': {'slots': [
+            {'slot': 0, 'item_id': 'minecraft:oak_planks'},
+            {'slot': 1, 'item_id': 'minecraft:oak_log'}]}}
+        state = [pending]
+        clicks = []
+        def wait(predicate, *, description):
+            if description == 'received crafting input':
+                self.assertFalse(predicate())
+                state[0] = applied
+            self.assertTrue(predicate())
+        actor = SimpleNamespace(teleport_to=lambda *args: None, open_inventory=lambda: None,
+                                snapshot=lambda: state[0], wait_until=wait)
+        ctx = SimpleNamespace(clients=[actor])
+        with patch('tools.harness.matrix_domains.random._supply'), \
+             patch('tools.harness.matrix_domains.random._slot', return_value=36), \
+             patch('tools.harness.matrix_domains.random._click',
+                   side_effect=lambda actor, slot, **kw: clicks.append(slot)), \
+             patch('tools.harness.matrix_domains.random._close'):
+            _action(ctx, {'actor': 0, 'verb': 'craft', 'count': 1, 'target': 0})
+        self.assertEqual(clicks, [36, 1, 0])
 
     def test_ddmin_keeps_exact_failure_and_reduces_parameters(self):
         row = player_scenario(1, 40, 4)
