@@ -3496,3 +3496,15 @@ status = "open"
 source = "Same RC5 Windows VM smoke as SP-START-TIMEOUT-SLOW-MACHINE (Play #3); the session was stopped without seeing the overlay clear. Software rendering may be the whole cause."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "CORE-CONTAINER-REPLAY-CUSTODY"
+title = "Container-only WAL recovery can advance the checkpoint past an unloaded chunk; dirtying it alone can erase untouched chest, furnace, hopper and brewing inventories from a partial capture."
+area = "gameplay"
+repro = "cargo"
+severity = "blocker"
+status = "open"
+source = "core/recovery.rs container replay and core/journal.rs snapshot ordering; contributing factors and defenses: docs/architecture/persistence.md#checkpoints"
+regression = []
+repro_check = ["cargo:mc-core:core::checkpoint_custody_tests::container_transfer_replay_holds_unloadable_chunk_and_wal", "cargo:mc-core:core::checkpoint_custody_tests::container_transfer_replay_materializes_full_healthy_chunk"]
+failing_first = "reported"

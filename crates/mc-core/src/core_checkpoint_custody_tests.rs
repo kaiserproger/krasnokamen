@@ -878,3 +878,391 @@ fn randomized_custody_matches_full_capture_at_every_fence() {
     world.tick(|_| {});
     world.checkpoint();
 }
+
+const CONTAINER_CHUNK: mc_world::ChunkPos = mc_world::ChunkPos { x: 2, z: 2 };
+const CONTAINER_PLAYER: uuid::Uuid = uuid::Uuid::from_u128(0xc0570d1);
+
+fn container_positions() -> [(crate::boundary::BlockPos, &'static str, usize); 5] {
+    let kinds = ["chest", "chest", "furnace", "hopper", "brewing_stand"];
+    let sizes = [27, 27, 3, 5, 5];
+    std::array::from_fn(|index| {
+        (
+            crate::boundary::BlockPos {
+                x: 34 + index as i32 * 2,
+                y: 200,
+                z: 40,
+            },
+            kinds[index],
+            sizes[index],
+        )
+    })
+}
+
+/// Real chest -> player quick-move, with four untouched neighbours. Only the
+/// emptied chest and player belong to the WAL tail, not a fabricated image.
+fn container_transfer_fixture(
+    directory: &std::path::Path,
+) -> (World, Vec<Vec<mc_data::ItemStack>>) {
+    use crate::boundary::{ClickMode, ConnectionId, Hand, PlayerInput};
+    let mut world = World::new(directory);
+    world.run(&[PlayerInput::Join {
+        connection: ConnectionId(1),
+        uuid: CONTAINER_PLAYER,
+        name: "custody".into(),
+        permission_level: 0,
+    }]);
+    let entity = world.state.connections.entity_of(ConnectionId(1)).unwrap();
+    let slot = world.state.entities.slot_of(entity).unwrap();
+    world.state.entities.set_pos(slot, [34.5, 200.0, 42.5]);
+    let diamond = world
+        .state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+        .unwrap();
+    let mut expected = Vec::new();
+    world
+        .state
+        .world
+        .ensure_blocking(&[(CONTAINER_CHUNK, 0)].into_iter().collect());
+    for (index, (pos, kind, size)) in container_positions().into_iter().enumerate() {
+        let block = world
+            .state
+            .registry
+            .blocks
+            .block(&mc_data::Identifier::parse(format!("minecraft:{kind}")).unwrap())
+            .unwrap()
+            .default
+            .0;
+        world.state.world.set_block(pos.x, pos.y, pos.z, block);
+        let mut slots = vec![mc_data::ItemStack::EMPTY; size];
+        slots[if kind == "brewing_stand" { 3 } else { 0 }] =
+            mc_data::ItemStack::new(diamond, index as i32 + 2);
+        slots[size - 1] = mc_data::ItemStack::new(diamond, index as i32 + 7);
+        world.state.block_entities.insert(
+            (pos.x, pos.y, pos.z),
+            crate::tick::BlockEntityState {
+                slots: slots.clone(),
+                furnace: (kind == "furnace").then(Default::default),
+            },
+        );
+        if kind == "brewing_stand" {
+            world
+                .state
+                .brewing
+                .insert((pos.x, pos.y, pos.z), Default::default());
+        }
+        expected.push(slots);
+    }
+    world.state.world.fold_overlay();
+    for (pos, _, _) in container_positions() {
+        crate::redstone::containers::register(&mut world.state, pos);
+    }
+    world.tick(|_| {});
+    assert_container_slots(&world.state, &expected);
+    world.checkpoint();
+    // Journal checkpoint-generated automation metadata before the base fence.
+    // The transfer's tail must contain only actual subsequent mutations.
+    world.tick(|_| {});
+    world.checkpoint();
+    world.run(&[PlayerInput::UseItemOn {
+        connection: ConnectionId(1),
+        position: container_positions()[0].0,
+        hand: Hand::Main,
+        face: 1,
+        cursor: [0.5; 3],
+        sequence: 1,
+    }]);
+    for index in [0, 26] {
+        let menu = world.state.players[&entity].open.as_ref().unwrap();
+        let click = PlayerInput::ContainerClick {
+            connection: ConnectionId(1),
+            window: menu.window,
+            state_id: menu.state_id,
+            slot: index as i16,
+            button: 0,
+            mode: ClickMode::QuickMove,
+        };
+        world.run(&[click]);
+        expected[0][index] = mc_data::ItemStack::EMPTY;
+        assert_container_slots(&world.state, &expected);
+    }
+    world.run(&[PlayerInput::Leave {
+        connection: ConnectionId(1),
+    }]);
+    assert_container_slots(&world.state, &expected);
+    assert_container_player(&world.state);
+    (world, expected)
+}
+
+fn assert_container_player(state: &TickState) {
+    let inventory = &state.offline_players[&CONTAINER_PLAYER].inventory;
+    let diamond = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+        .unwrap();
+    let nonempty: Vec<_> = inventory
+        .iter()
+        .filter(|s| !s.is_empty())
+        .cloned()
+        .collect();
+    assert_eq!(nonempty, vec![mc_data::ItemStack::new(diamond, 9)]);
+}
+
+fn assert_container_slots(state: &TickState, expected: &[Vec<mc_data::ItemStack>]) {
+    let mut total = 0;
+    for ((pos, kind, _), slots) in container_positions().into_iter().zip(expected) {
+        let actual = &state.block_entities[&(pos.x, pos.y, pos.z)].slots;
+        assert_eq!(actual, slots, "{kind} at {pos:?}");
+        total += actual.iter().map(|s| s.count.max(0)).sum::<i32>();
+    }
+    let player_total: i32 = state
+        .players
+        .values()
+        .flat_map(|player| &player.inventory.slots)
+        .chain(
+            state
+                .offline_players
+                .values()
+                .flat_map(|player| &player.inventory),
+        )
+        .map(|stack| stack.count.max(0))
+        .sum();
+    assert_eq!(total + player_total, 65);
+}
+
+/// Unloaded neighbours remain owned by the unchanged checkpoint image; the
+/// live WAL entry overrides that base even when every one of its slots is empty.
+fn assert_unloaded_container_custody(
+    state: &TickState,
+    base: &mc_world::Chunk,
+    expected: &[Vec<mc_data::ItemStack>],
+) {
+    let mut total = 0;
+    for ((pos, kind, _), slots) in container_positions().into_iter().zip(expected) {
+        let image = if let Some(record) = state.block_entities.get(&(pos.x, pos.y, pos.z)) {
+            record.slots.clone()
+        } else {
+            native_container_slots(base, pos, kind)
+        };
+        assert_eq!(&image, slots, "{kind} retained custody");
+        total += image.iter().map(|stack| stack.count.max(0)).sum::<i32>();
+    }
+    assert_eq!(total, 56);
+    assert_container_player(state);
+    assert_eq!(
+        total
+            + state.offline_players[&CONTAINER_PLAYER]
+                .inventory
+                .iter()
+                .map(|s| s.count.max(0))
+                .sum::<i32>(),
+        65
+    );
+}
+
+fn native_container_slots(
+    chunk: &mc_world::Chunk,
+    pos: crate::boundary::BlockPos,
+    kind: &str,
+) -> Vec<mc_data::ItemStack> {
+    let slots: &[_] = match kind {
+        "chest" => &chunk.chests.get(&pos).expect("stored chest").slots,
+        "furnace" => &chunk.furnaces.get(&pos).expect("stored furnace").slots,
+        "hopper" => &chunk.hoppers.get(&pos).expect("stored hopper").slots,
+        "brewing_stand" => {
+            &chunk
+                .brewing_stands
+                .get(&pos)
+                .expect("stored brewing stand")
+                .slots
+        }
+        _ => unreachable!(),
+    };
+    slots
+        .iter()
+        .map(crate::tick::furnace_slot_to_stack)
+        .collect()
+}
+
+fn assert_stored_container_custody(
+    source: &crate::chunk_loader::ChunkSource,
+    expected: &[Vec<mc_data::ItemStack>],
+) {
+    let chunk = source.load_native(CONTAINER_CHUNK).unwrap().unwrap();
+    let mut total = 0;
+    for ((pos, kind, _), slots) in container_positions().into_iter().zip(expected) {
+        let actual = native_container_slots(&chunk, pos, kind);
+        assert_eq!(&actual, slots, "durable {kind} at {pos:?}");
+        total += actual.iter().map(|stack| stack.count.max(0)).sum::<i32>();
+    }
+    assert_eq!(total, 56);
+}
+
+fn hydrate_container_chunk(world: &mut World) {
+    world
+        .state
+        .world
+        .ensure_blocking(&[(CONTAINER_CHUNK, 0)].into_iter().collect());
+    crate::tick::sync_chunk_block_entities(&mut world.state);
+}
+
+fn container_replay_checkpoint(refused: bool) {
+    let directory = tempfile::tempdir().unwrap();
+    let (world, expected) = container_transfer_fixture(directory.path());
+    let config = world.config.clone();
+    let committed = world.manifest.tick;
+    let source = world.state.world.chunk_source();
+    let store = Arc::clone(source.native.as_ref().unwrap());
+    let registry = Arc::clone(&world.state.registry);
+    let valid = source.load_native(CONTAINER_CHUNK).unwrap().unwrap();
+    let base = source.resolve_base(CONTAINER_CHUNK).unwrap();
+    drop(world);
+    {
+        let replay = crate::native_checkpoint::recover_with_reader(
+            &config,
+            Arc::clone(&registry),
+            store.checkpoint_reader().unwrap(),
+        )
+        .unwrap();
+        let replay = &replay.dimensions[&Dimension::Overworld];
+        assert!(
+            replay.blocks.is_empty(),
+            "fixture must not force a block replay load: {:?}",
+            replay.blocks
+        );
+        assert!(
+            replay.opaque_block_entities.is_empty(),
+            "fixture must not force an opaque replay load: {:?}",
+            replay.opaque_block_entities.keys()
+        );
+        assert_eq!(
+            replay.block_entities.len(),
+            1,
+            "only the transferred chest belongs to the tail"
+        );
+    }
+    if refused {
+        let mut corrupt = valid.clone();
+        let pos = mc_world::BlockPos {
+            x: 46,
+            y: 200,
+            z: 40,
+        };
+        let mut bytes = Vec::new();
+        mc_nbt::write_network(
+            &mut bytes,
+            &mc_nbt::Tag::Compound(vec![
+                ("id".into(), mc_nbt::Tag::String("minecraft:conduit".into())),
+                ("x".into(), mc_nbt::Tag::Int(pos.x)),
+                ("y".into(), mc_nbt::Tag::Int(pos.y)),
+                ("z".into(), mc_nbt::Tag::Int(pos.z)),
+                ("Target".into(), mc_nbt::Tag::IntArray(vec![1, 2, 3])),
+            ]),
+        )
+        .unwrap();
+        corrupt.block_entities.insert(pos, bytes);
+        store
+            .apply_offline_snapshot(
+                source.dimension,
+                &base,
+                &mut corrupt,
+                &registry.blocks,
+                &registry.items,
+            )
+            .unwrap();
+        assert!(source.load_native(CONTAINER_CHUNK).is_err());
+    }
+    let mut reopened = World::open(config.clone());
+    assert!(
+        !reopened
+            .state
+            .world
+            .has_chunk(CONTAINER_CHUNK.x, CONTAINER_CHUNK.z)
+    );
+    let pos = container_positions()[0].0;
+    assert_eq!(
+        reopened.state.block_entities[&(pos.x, pos.y, pos.z)].slots,
+        expected[0]
+    );
+    assert_container_player(&reopened.state);
+    assert_unloaded_container_custody(&reopened.state, &valid, &expected);
+    if refused {
+        let (work_tx, work_rx) = journal_work_channel();
+        let (done_tx, _done_rx) = std::sync::mpsc::channel();
+        let tick = reopened.state.tick;
+        assert!(
+            !start_checkpoint(&mut reopened.state, &work_tx, &done_tx, tick),
+            "unreadable container checkpoint must hold"
+        );
+        assert!(work_rx.try_recv().is_err());
+        assert_eq!(read_manifest(&config).unwrap().tick, committed);
+        assert_eq!(
+            reopened.state.block_entities[&(pos.x, pos.y, pos.z)].slots,
+            expected[0]
+        );
+        assert_container_player(&reopened.state);
+        assert_unloaded_container_custody(&reopened.state, &valid, &expected);
+        drop(reopened);
+        let replay = crate::native_checkpoint::recover_with_reader(
+            &config,
+            Arc::clone(&registry),
+            store.checkpoint_reader().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            replay.dimensions[&Dimension::Overworld].block_entities[&(pos.x, pos.y, pos.z)].slots,
+            expected[0],
+            "WAL still owns the emptied chest"
+        );
+        assert_eq!(
+            replay.dimensions[&Dimension::Overworld].players[&CONTAINER_PLAYER.to_string()]
+                .inventory
+                .iter()
+                .map(|s| s.count.max(0))
+                .sum::<i32>(),
+            9
+        );
+        let mut repaired = valid.clone();
+        store
+            .apply_offline_snapshot(
+                source.dimension,
+                &base,
+                &mut repaired,
+                &registry.blocks,
+                &registry.items,
+            )
+            .unwrap();
+        reopened = World::open(config.clone());
+        assert_container_player(&reopened.state);
+        assert_unloaded_container_custody(&reopened.state, &valid, &expected);
+    }
+    reopened.checkpoint();
+    assert_stored_container_custody(&source, &expected);
+    assert_container_slots(&reopened.state, &expected);
+    assert_container_player(&reopened.state);
+    drop(reopened);
+    let mut reopened = World::open(config);
+    hydrate_container_chunk(&mut reopened);
+    assert_container_slots(&reopened.state, &expected);
+    assert_container_player(&reopened.state);
+    reopened.checkpoint();
+    assert_stored_container_custody(&source, &expected);
+    let config = reopened.config.clone();
+    drop(reopened);
+    let mut reopened = World::open(config);
+    hydrate_container_chunk(&mut reopened);
+    assert_container_slots(&reopened.state, &expected);
+    assert_container_player(&reopened.state);
+}
+
+#[test]
+fn container_transfer_replay_holds_unloadable_chunk_and_wal() {
+    container_replay_checkpoint(true);
+}
+
+#[test]
+fn container_transfer_replay_materializes_full_healthy_chunk() {
+    container_replay_checkpoint(false);
+}
