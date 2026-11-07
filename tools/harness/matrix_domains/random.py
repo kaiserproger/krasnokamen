@@ -14,7 +14,7 @@ import zlib
 
 from .. import runtime
 from ..matrix_api import Adapter, Check, MissingCapability
-from ..backends.village_autonomy_qa import _container_totals
+from ..backends.village_autonomy_qa import _container_totals, _snbt_fields, _snbt_parts
 from .session import data
 
 CHEST = (34, 80, 32)
@@ -56,12 +56,11 @@ def mutate_observation(observed, fault):
     elif fault == 'recovery_atomic_durable':
         recovery = observed.get('recovery')
         if recovery is not None:
-            recovered = recovery['recovered_image']
-            inventory = recovered['inventories'][recovery['actor_index']]
-            inventory['minecraft:dirt'] = inventory.get('minecraft:dirt', 0) + 1
-            observed['recovery_ok'] = recovery_matches(
-                recovery['expected_committed_image'], recovered,
-                recovery['actor_index'], recovery['cursor'])
+            recovered = recovery['recovered_exact_image']
+            recovered['inventories'][recovery['actor_index']]['planted_slot'] = {'id': '"minecraft:dirt"'}
+            observed['recovery_ok'] = (
+                recovery['cursor_recovery_ok']
+                and recovery['expected_exact_image'] == recovered)
             recovery['exact_post_image'] = observed['recovery_ok']
     elif fault is not None:
         raise ValueError('unknown observation fault: ' + fault)
@@ -91,6 +90,29 @@ def _inventory(ctx, actor):
 
 def _chest(ctx):
     return _container_totals(data(ctx, 'block ' + ' '.join(map(str, CHEST))))
+
+
+def _exact_slots(items):
+    items = items.strip()
+    if not (items.startswith('[') and items.endswith(']')):
+        raise ValueError('expected item list')
+    slots = {}
+    for item in _snbt_parts(items[1:-1]):
+        fields = _snbt_fields(item)
+        slot = fields.get('Slot')
+        if slot is None or slot in slots:
+            raise ValueError('missing or duplicate item slot')
+        slots[slot] = fields
+    return slots
+
+
+def _exact_image(ctx, blocks):
+    inventories = [_exact_slots(data(ctx, 'entity ' + client.name, 'Inventory'))
+                   for client in ctx.clients]
+    chest = _snbt_fields(data(ctx, 'block ' + ' '.join(map(str, CHEST))))
+    return {'inventories': inventories,
+            'container': _exact_slots(chest.get('Items', '[]')),
+            'blocks': copy.deepcopy(blocks)}
 
 
 def _items(values):
@@ -249,13 +271,28 @@ def _recover(ctx, actor):
         client.disconnect()
         client.reconnect()
     after = observe(ctx)
-    exact = recovery_matches(expected, after['authority'], ctx.clients.index(actor), cursor)
+    cursor_ok = recovery_matches(expected, after['authority'], ctx.clients.index(actor), cursor)
+    # Also crash a fully settled transfer: this permits comparing exact slots and
+    # components, without guessing where disconnect returns a carried stack.
+    expected_exact = _exact_image(ctx, after['authority']['blocks'])
+    exact_tick = _fence(ctx)
+    exact_published = _published(ctx, exact_tick)
+    exact_kill = ctx.server.kill9_restart()
+    for client in ctx.clients:
+        client.disconnect()
+        client.reconnect()
+    settled = observe(ctx)
+    recovered_exact = _exact_image(ctx, settled['authority']['blocks'])
+    exact = cursor_ok and expected_exact == recovered_exact
     ctx.state['recovery_ok'] = exact
     ctx.state['recovery'] = {'published_after_ack': published, 'last_ack': last_ack,
                              'expected_committed_image': expected, 'cursor': cursor,
                              'actor_index': ctx.clients.index(actor),
-                             'recovered_image': after['authority'], 'exact_post_image': exact,
-                             'kill': killed}
+                             'recovered_image': after['authority'], 'cursor_recovery_ok': cursor_ok,
+                             'expected_exact_image': expected_exact,
+                             'recovered_exact_image': recovered_exact, 'exact_post_image': exact,
+                             'exact_tick': exact_tick, 'exact_published': exact_published,
+                             'kill': killed, 'exact_kill': exact_kill}
 
 
 def _mine(actor, position):

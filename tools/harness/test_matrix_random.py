@@ -12,7 +12,7 @@ from unittest.mock import patch
 from .backends import matrix_random
 from .quirk_parity import player
 
-from .matrix_domains.random import invariant_checks, mutate_observation, stock, _published, setup, recovery_matches, _mine
+from .matrix_domains.random import invariant_checks, mutate_observation, stock, _published, setup, recovery_matches, _mine, _exact_slots
 from .quirk_parity.fuzz import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_ACTIONS,
                                 shrink_player_scenario, failure_identity)
 
@@ -96,6 +96,17 @@ class RandomMatrixTests(unittest.TestCase):
         wrong_item['inventories'][1] = {'minecraft:oak_planks': 4}
         self.assertFalse(recovery_matches(committed, wrong_item, 0, cursor))
 
+    def test_exact_post_image_distinguishes_slots_and_components(self):
+        image = _exact_slots('[{Slot: 2b, id: "minecraft:dirt", count: 1, '
+                             'components: {"example:key": {count: 5}}}]')
+        self.assertNotEqual(image, _exact_slots('[{Slot: 3b, id: "minecraft:dirt", count: 1, '
+                                                'components: {"example:key": {count: 5}}}]'))
+        self.assertNotEqual(image, _exact_slots('[{Slot: 2b, id: "minecraft:dirt", count: 1, '
+                                                'components: {"example:key": {count: 6}}}]'))
+        with self.assertRaises(ValueError):
+            _exact_slots('[{Slot: 2b, id: "minecraft:dirt"}, {Slot: 2b, id: "minecraft:stone"}]')
+
+
     def test_fixture_commands_follow_received_chunk_loading(self):
         events = []
         actor = SimpleNamespace(teleport_to=lambda *args: events.append('teleport'),
@@ -112,6 +123,9 @@ class RandomMatrixTests(unittest.TestCase):
                 'sources': {'earth': 4}, 'refusals': [], 'progress': True,
                 'authority': authority, 'observer': copy.deepcopy(authority), 'recovery_ok': True,
                 'recovery': {'exact_post_image': True, 'actor_index': 0, 'cursor': None,
+                             'cursor_recovery_ok': True,
+                             'expected_exact_image': {'inventories': [{}]},
+                             'recovered_exact_image': {'inventories': [{}]},
                              'expected_committed_image': copy.deepcopy(authority),
                              'recovered_image': copy.deepcopy(authority)}}
 
