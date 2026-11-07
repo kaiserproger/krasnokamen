@@ -101,10 +101,10 @@ Adapter guidance: [matrix domains](../tools/harness/matrix_domains/README.md),
 
 The true-vanilla Java lane requires Loader's vanilla premain event transformer
 and a direct, non-symlink `SOLARIS_LEGACY_CONTENT_CACHE` for protocol 775.
-The real client reached Play in
-`/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T173128-java-matrix-hymtay_4/`;
-that run blocked later on missing player eye-height observation and is not a
-passing gameplay check.
+The real-client `block_place.full_block` fixture returns players to its raised
+platform after construction; the Java client can otherwise fall before its
+placement actions begin. The eye-height observation comes from Loader's Java
+agent.
 `matrix-random` is experimental. When at least two actor bots are available,
 its generated actions include conflicting quick-move clicks on the same chest
 slot. The isolated server's opt-in input log records each consumed input and

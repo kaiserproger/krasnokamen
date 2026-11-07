@@ -102,6 +102,22 @@ class BlocksContractTests(unittest.TestCase):
         self.assertEqual(commands[0],('tp',(.5,160,2.5)))
         self.assertEqual(commands[1][0],'loaded')
         self.assertTrue(any(isinstance(text,str) and 'run fill ' in text for text in commands))
+    def test_full_block_fixture_repositions_after_floor_is_built(self):
+        from .matrix_domains import block_place
+        ctx = self.context()
+        events = []
+        client = ctx.clients[0]
+        client.teleport_to = lambda *pos: events.append(('teleport', pos))
+        client.select_hotbar = lambda slot: None
+        client.snapshot = lambda: {'inventory': [{'slot': 36, 'item_id': 'minecraft:stone', 'count': 16}]}
+        ctx.server.ensure_loaded = lambda area: events.append(('loaded', area))
+        ctx.server.command = lambda text: events.append(('command', text))
+        ctx.server.query = lambda text: events.append(('fixture_ready', text)) or 'MatrixPlacementFixtureReady'
+        ctx.wait_until = lambda predicate, **kwargs: self.assertTrue(predicate())
+        block_place.setup(ctx)
+        ready = next(i for i, event in enumerate(events) if event[0] == 'fixture_ready')
+        self.assertEqual(events[ready + 1], ('teleport', (4.5, 80, 8.5)))
+
 
     def test_checks_remain_json_serializable(self):
         ctx=self.context(); ctx.state['block_checks']=[]

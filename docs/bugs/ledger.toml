@@ -3620,7 +3620,7 @@ area = "gameplay"
 repro = "client"
 severity = "major"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T163619-protocol-matrix-3xalnot6/result.json"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/FuzzE2E/analysis/.analysis/validation/20261107T163619-protocol-matrix-3xalnot6/result.json; harness movement decoding fixed in a2b8c53b and ab886042 (tools/harness/test_protocol_entities.py ProtocolEntitiesTests.test_263_linear_and_stepped_movement); current harness passes on original pin: /run/media/kaiserroman/games/solaris-work/receipts/ScenarioCampaign/mob-old/20261107T194030-protocol-matrix-qhw5sez7/result.json; and new pin: /run/media/kaiserroman/games/solaris-work/receipts/ScenarioCampaign/mob/20261107T193607-protocol-matrix-8plhzjf1/result.json"
 regression = []
 failing_first = "reported"
 
@@ -3631,7 +3631,7 @@ area = "harness"
 repro = "source"
 severity = "major"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T172634-matrix-random-u9k17kiz/result.json"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/FuzzE2E/analysis/.analysis/validation/20261107T172634-matrix-random-u9k17kiz/result.json; fixed by harness cursor synchronization 09c0d0d7; seed 19 replay on pin 79c0db4aa0b4: /run/media/kaiserroman/games/solaris-work/receipts/ScenarioCampaign/craft/20261107T193838-matrix-random-sznl7n7e/result.json"
 regression = []
 failing_first = "reported"
 
