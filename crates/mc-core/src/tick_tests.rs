@@ -33,6 +33,23 @@ mod movement_tests;
 #[path = "tick/statistics_tests.rs"]
 mod statistics_tests;
 
+/// Jump to one block's actual scheduled deadline. Only use in isolated tests
+/// where other tick-driven activity during the skipped interval is irrelevant.
+pub(crate) fn warp_to_block_tick(state: &mut TickState, pos: crate::boundary::BlockPos) -> u64 {
+    let due = state
+        .block_ticks
+        .image()
+        .chunks
+        .iter()
+        .flat_map(|chunk| &chunk.ticks)
+        .filter(|tick| tick.pos == [pos.x, pos.y, pos.z])
+        .map(|tick| tick.trigger_tick)
+        .min()
+        .expect("block must have a scheduled tick");
+    state.tick = state.tick.max(due);
+    due
+}
+
 #[test]
 fn integrity_lethal_damage_rejects_staged_pickup_before_respawn() {
     let mut state = test_state();

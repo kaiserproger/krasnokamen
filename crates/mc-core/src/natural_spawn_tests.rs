@@ -460,7 +460,17 @@ impl mc_world::ChunkGenerator for GrassWorld {
 }
 
 fn grass_state(west_biome: &'static str, east_biome: &'static str) -> TickState {
-    let registry = Arc::new(CoreRegistry::load(None).expect("registry"));
+    grass_state_with_radius(west_biome, east_biome, 5)
+}
+
+fn grass_state_with_radius(
+    west_biome: &'static str,
+    east_biome: &'static str,
+    radius: i32,
+) -> TickState {
+    static REGISTRY: std::sync::LazyLock<CoreRegistry> =
+        std::sync::LazyLock::new(|| CoreRegistry::load(None).expect("registry"));
+    let registry = Arc::new(REGISTRY.clone());
     let generator: Arc<dyn mc_world::ChunkGenerator> = Arc::new(GrassWorld {
         air: registry.states.air,
         grass: registry.states.grass_block,
@@ -475,12 +485,12 @@ fn grass_state(west_biome: &'static str, east_biome: &'static str) -> TickState 
         [0, 65, 0],
         mc_world::OVERWORLD_GEOMETRY,
     );
-    let want = crate::world::chunks_in_radius(mc_world::ChunkPos { x: 0, z: 0 }, 5)
+    let want = crate::world::chunks_in_radius(mc_world::ChunkPos { x: 0, z: 0 }, radius)
         .into_iter()
         .map(|pos| (pos, 0))
         .collect();
     world.ensure_blocking(&want);
-    TickState::new(registry, world, 5, 512)
+    TickState::new(registry, world, radius, 512)
 }
 
 #[test]
@@ -1125,7 +1135,7 @@ fn fused_fixture(
     expiring_items: bool,
     filler: usize,
 ) -> (TickState, Vec<EntityId>) {
-    let mut state = grass_state("minecraft:plains", "minecraft:plains");
+    let mut state = grass_state_with_radius("minecraft:plains", "minecraft:plains", 2);
     let around = join(&mut state);
     state.gamerules.insert("spawn_mobs".into(), "false".into());
     if peaceful {

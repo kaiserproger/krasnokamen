@@ -212,7 +212,7 @@ fn slot_freed_and_reused_inside_one_batch_changes_both_identities() {
 #[test]
 fn parallel_batch_matches_one_at_a_time_publication() {
     let appearance = Arc::new(EntityAppearance::default());
-    let initial: Vec<_> = (0..20_000)
+    let initial: Vec<_> = (0..8_000)
         .map(|id| {
             (
                 id * 2,
@@ -238,7 +238,7 @@ fn parallel_batch_matches_one_at_a_time_publication() {
     let before = parallel.clone();
 
     let mut batch = Vec::new();
-    for id in 0..44_000 {
+    for id in 0..19_000 {
         match id % 11 {
             // Mostly moving, some crossing chunks.
             0..=6 if id % 2 == 0 => {
@@ -262,7 +262,11 @@ fn parallel_batch_matches_one_at_a_time_publication() {
             _ => {}
         }
     }
-    assert!(batch.len() >= PARALLEL_PAGE_MIN_ENTRIES && batch.len() >= PARALLEL_RESOLVE_MIN);
+    assert!(
+        batch.len() >= PARALLEL_PAGE_MIN_ENTRIES
+            && batch.len() >= PARALLEL_RESOLVE_MIN
+            && batch.len() >= PARALLEL_SORT_MIN
+    );
     apply(&mut model, &batch);
     for single in &batch {
         publish(&mut serial, vec![single.clone()]);

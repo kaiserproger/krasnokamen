@@ -237,6 +237,13 @@ closed. Trailing package/target/name selectors use the same runner, for example
 explicit `cargo bench` remains the performance-measurement path. Per-test
 durations are retained in `test.log`.
 
+For a long, isolated scheduled-block simulation, use
+`crate::tick_tests::warp_to_block_tick` to jump to the target block's real
+queued deadline, then run the native tick and assert the outcome. This does
+not advance other simulation systems: do not use it if movement, random ticks,
+other deadlines, or elapsed per-tick effects matter. `/tick sprint`, including
+the civilization-seed QA sprint, removes waits but still executes every tick.
+
 Concurrency: `RUST_TEST_THREADS` (first priority), else `NEXTEST_TEST_THREADS`
 (default `num-cpus`), selects the gate default; nextest's `--test-threads=N`
 overrides it (place it before any `--`). Unsupported Cargo/libtest and
