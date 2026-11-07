@@ -5,6 +5,7 @@ Run with the pinned26.1.2 data installed by canonical content import.
 import json
 import os
 from pathlib import Path
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -19,8 +20,18 @@ VANILLA=Path(os.environ.get('SOLARIS_VANILLA_DATA',
 
 
 class MobOracleTests(unittest.TestCase):
+    def test_mob_guard_uses_gameplay_not_protocol_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/'version.json').write_text('{"id":"26.3"}')
+            (root/'gameplay_version.json').write_text('{"id":"26.1.2"}')
+            mobs.require_gameplay_version(root)
+            (root/'gameplay_version.json').write_text('{"id":"26.3"}')
+            with self.assertRaisesRegex(AssertionError, 'requires exact26.1.2'):
+                mobs.require_gameplay_version(root)
+
     def test_exact_version_and_all_species_have_real_loot_sources(self):
-        self.assertEqual(json.loads((VANILLA/'version.json').read_text())['id'],'26.1.2')
+        self.assertEqual(json.loads((VANILLA/'gameplay_version.json').read_text())['id'],'26.1.2')
         self.assertEqual(len(CONTRACTS),91)
         self.assertEqual(set(mobs.ADAPTERS),{'mobs.'+name for name in CONTRACTS})
         for name in CONTRACTS:

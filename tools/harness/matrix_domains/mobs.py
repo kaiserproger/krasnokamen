@@ -24,6 +24,13 @@ DEFENDERS={'iron_golem','snow_golem'}
 VICTIM='12345678-1234-1234-1234-123456789d02'
 
 
+def require_gameplay_version(vanilla):
+    import json
+    version=json.loads((Path(vanilla)/'gameplay_version.json').read_text())
+    if version['id']!='26.1.2':
+        raise AssertionError('mob oracle requires exact26.1.2 vanilla loot data')
+
+
 def observed_health(ctx, uuid):
     row=entity(ctx,uuid)
     if row is None or row.get('health') is None:
@@ -74,10 +81,7 @@ def setup(ctx):
     vanilla=getattr(ctx.server,'vanilla_data',None)
     if vanilla is None:
         raise MissingCapability('vanilla_data_path')
-    import json
-    version=json.loads((Path(vanilla)/'version.json').read_text())
-    if version['id']!='26.1.2':
-        raise AssertionError('mob oracle requires exact26.1.2 vanilla loot data')
+    require_gameplay_version(vanilla)
     ctx.state['vanilla']=str(vanilla)
     if name in DEFENDERS:
         victim_type='blaze' if name=='snow_golem' else 'zombie'

@@ -33,12 +33,14 @@ def stock(stacks):
 
 def invariant_checks(observed):
     """Pure oracle boundary, also used for harness-level negative controls."""
-    return [Check('no_server_error', observed['running'] and not observed['errors'], observed['errors']),
-            Check('conservation', observed['resources'] == observed['sources'], observed),
-            Check('legal_action', not observed['refusals'] and observed['progress'], observed['refusals']),
-            Check('observer_authority', observed['observer'] == observed['authority'],
-                  {'observer': observed['observer'], 'authority': observed['authority']}),
-            Check('recovery_atomic_durable', observed['recovery_ok'], observed.get('recovery'))]
+    checks = [Check('no_server_error', observed['running'] and not observed['errors'], observed['errors']),
+              Check('conservation', observed['resources'] == observed['sources'], observed),
+              Check('legal_action', not observed['refusals'] and observed['progress'], observed['refusals']),
+              Check('observer_authority', observed['observer'] == observed['authority'],
+                    {'observer': observed['observer'], 'authority': observed['authority']})]
+    if observed.get('recovery') is not None:
+        checks.append(Check('recovery_atomic_durable', observed['recovery_ok'], observed['recovery']))
+    return checks
 
 
 def mutate_observation(observed, fault):
@@ -53,7 +55,15 @@ def mutate_observation(observed, fault):
     elif fault == 'observer_authority':
         observed['observer']['container']['minecraft:dirt'] = -1
     elif fault == 'recovery_atomic_durable':
-        observed['recovery_ok'] = False
+        recovery = observed.get('recovery')
+        if recovery is not None:
+            recovered = recovery['recovered_image']
+            inventory = recovered['inventories'][recovery['actor_index']]
+            inventory['minecraft:dirt'] = inventory.get('minecraft:dirt', 0) + 1
+            observed['recovery_ok'] = recovery_matches(
+                recovery['expected_committed_image'], recovered,
+                recovery['actor_index'], recovery['cursor'])
+            recovery['exact_post_image'] = observed['recovery_ok']
     elif fault is not None:
         raise ValueError('unknown observation fault: ' + fault)
     return observed
@@ -243,6 +253,7 @@ def _recover(ctx, actor):
     ctx.state['recovery_ok'] = exact
     ctx.state['recovery'] = {'published_after_ack': published, 'last_ack': last_ack,
                              'expected_committed_image': expected, 'cursor': cursor,
+                             'actor_index': ctx.clients.index(actor),
                              'recovered_image': after['authority'], 'exact_post_image': exact,
                              'kill': killed}
 
@@ -267,9 +278,39 @@ def _mine(actor, position):
     actor.break_block(position, phase='stop')
 
 
+def _concurrent_chest(ctx):
+    actors = ctx.clients[:2]
+    if len(ctx.clients) < 3:
+        raise MissingCapability('concurrent:two_actors_and_observer')
+    actor = actors[0]
+    _supply(ctx, actor, 'minecraft:dirt', 8)
+    actor.teleport_to(33.5, 80, 32.5)
+    actor.open_container(CHEST)
+    _click(actor, _slot(actor, 'minecraft:dirt'), kind='quick_move')
+    _close(actor)
+    for player in actors:
+        player.teleport_to(33.5, 80, 32.5)
+        player.open_container(CHEST)
+    slots = [stack['slot'] for stack in actors[0].snapshot()['menu']['slots']
+             if stack['slot'] < 27 and stack['item_id'] == 'minecraft:dirt']
+    if not slots:
+        raise AssertionError('concurrent chest fixture did not receive dirt')
+    slot = slots[0]
+    actors[1].wait_until(lambda: any(stack['slot'] == slot and stack['item_id'] == 'minecraft:dirt'
+                                    for stack in actors[1].snapshot()['menu']['slots']),
+                         description='second actor received conflicting chest stack')
+    ctx.concurrently([(player, 'click_slot', {'slot': slot, 'kind': 'quick_move'})
+                      for player in actors])
+    for player in actors:
+        _close(player)
+
+
 def _action(ctx, step):
     actor = ctx.clients[step['actor']]
     verb, count = step['verb'], step['count']
+    if verb == 'concurrent':
+        _concurrent_chest(ctx)
+        return
     position = (32 + step['target'] % 4, 80, 34 + step['target'] // 4 % 3)
     actor.teleport_to(position[0] + .5, 80, position[2] - 1.5)
     if verb in {'place', 'break'}:

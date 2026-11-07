@@ -84,7 +84,16 @@ class RandomMatrixTests(unittest.TestCase):
         authority = {'inventories': [{'minecraft:dirt': 4}], 'container': {}, 'blocks': {}}
         return {'running': True, 'errors': [], 'resources': {'earth': 4},
                 'sources': {'earth': 4}, 'refusals': [], 'progress': True,
-                'authority': authority, 'observer': copy.deepcopy(authority), 'recovery_ok': True}
+                'authority': authority, 'observer': copy.deepcopy(authority), 'recovery_ok': True,
+                'recovery': {'exact_post_image': True, 'actor_index': 0, 'cursor': None,
+                             'expected_committed_image': copy.deepcopy(authority),
+                             'recovered_image': copy.deepcopy(authority)}}
+
+    def test_recovery_is_not_reported_without_a_restart(self):
+        observation = self.observation()
+        observation['recovery'] = None
+        self.assertNotIn('recovery_atomic_durable',
+                         [check.name for check in invariant_checks(observation)])
 
     def test_every_oracle_passes_valid_state_and_rejects_its_own_mutation(self):
         good = self.observation()
@@ -100,7 +109,7 @@ class RandomMatrixTests(unittest.TestCase):
         first = player_scenario(101, 100, 4)
         self.assertEqual(first, player_scenario(101, 100, 4))
         self.assertNotEqual(first['actions'], player_scenario(102, 100, 4)['actions'])
-        self.assertEqual(set(PLAYER_ACTIONS), {a['verb'] for a in first['actions']})
+        self.assertEqual(set(PLAYER_ACTIONS) | {'concurrent'}, {a['verb'] for a in first['actions']})
         self.assertTrue(all(a['actor'] < 3 for a in first['actions']))
         self.assertTrue(set(a['verb'] for a in player_scenario(101, 100, 4, differential=True)['actions'])
                         <= set(DETERMINISTIC_ACTIONS))
