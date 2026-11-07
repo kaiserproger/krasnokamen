@@ -384,7 +384,11 @@ pub(crate) fn data(
         Ok(message) => (message, crate::command_execution::CommandResult::Success(1)),
         Err(message) => (message, crate::command_execution::CommandResult::Failed),
     };
-    state.push_player(connection, PlayerChange::Chat { message });
+    if outcome == crate::command_execution::CommandResult::Failed
+        || crate::command_execution::accepts_success(state, connection)
+    {
+        state.push_player(connection, PlayerChange::Chat { message });
+    }
     outcome
 }
 

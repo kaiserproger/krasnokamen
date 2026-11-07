@@ -643,7 +643,7 @@ pub(crate) fn run(
                     }
                     if text.trim().is_empty() {
                         let value = if subcommand == "if" { count } else { 1 };
-                        crate::command_execution::feedback(
+                        crate::command_execution::success_feedback(
                             state,
                             context.connection,
                             if numeric && subcommand == "if" {

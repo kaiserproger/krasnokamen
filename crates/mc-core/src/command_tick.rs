@@ -92,7 +92,7 @@ pub(crate) fn parse(args: &[&str]) -> Result<TickCommand, CommandError> {
 }
 
 fn success(state: &mut TickState, connection: ConnectionId, key: &str, arguments: Vec<Tag>) {
-    crate::command_execution::feedback(state, connection, key, arguments);
+    crate::command_execution::success_feedback(state, connection, key, arguments);
 }
 
 /// `CommandSourceStack.sendFailure`: red translated component.

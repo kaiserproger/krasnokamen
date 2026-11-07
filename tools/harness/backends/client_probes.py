@@ -92,6 +92,8 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         required = required | {"minecraft_open_inventory", "client_capture"}
     if ctx.scenario_id in ("native-v2-craft-drag", "native-v2-craft-drag-paced"):
         required = required | {"minecraft_open_inventory", "client_capture"}
+    if ctx.scenario_id == "native-v2-chest-drag-disconnect":
+        required = required | {"minecraft_connect", "minecraft_wait_for_no_visible_item", "client_capture"}
     if ctx.scenario_id == "native-v2-settlement-storage":
         required = required | {"client_capture"}
     if ctx.scenario_id == "native-v2-custody-mount-export":
@@ -400,6 +402,7 @@ seed = 81
         elif v2_scenario:
             from . import native_p4
             mcp.p4_window = evidence.get("window_focus")
+            mcp.server_address = client_address
 
             mcp.server_log_path = server_log_path
             if (ctx.scenario_id in native_p4.RESTART_SCENARIOS

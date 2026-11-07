@@ -211,17 +211,19 @@ pub(crate) fn execute(
             state.appearance_changed.push(*entity);
         }
     }
-    state.push_player(
-        connection,
-        crate::boundary::PlayerChange::StyledChat {
-            content: Tag::Compound(vec![(
-                "text".into(),
-                Tag::String(format!(
-                    "Attribute {} {message}: {value}",
-                    command.attribute
-                )),
-            )]),
-        },
-    );
+    if crate::command_execution::accepts_success(state, connection) {
+        state.push_player(
+            connection,
+            crate::boundary::PlayerChange::StyledChat {
+                content: Tag::Compound(vec![(
+                    "text".into(),
+                    Tag::String(format!(
+                        "Attribute {} {message}: {value}",
+                        command.attribute
+                    )),
+                )]),
+            },
+        );
+    }
     Ok((value * scale) as i32)
 }

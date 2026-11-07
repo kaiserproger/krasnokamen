@@ -81,9 +81,12 @@ refused chunk still creates no unsaved custody.
 4. Only then start native serving. No Anvil files or old JSON manifests are a
    serving recovery source.
 
-Mob targets are runtime-only. Persisted zombie-family aggressive-arms metadata
-is reconciled with the live target on the first admitted hostile evaluation
-after restart; a changed appearance is journaled as usual.
+Mob targets are runtime-only. Zombie-family aggressive-arms appearance is
+present in WAL entity post-images but is not stored in checkpoint entity
+records. A WAL-recovered pose is reconciled with the live target on the first
+admitted hostile evaluation after restart, and a changed appearance is
+journaled as usual. A checkpoint-only restart instead reconstructs the default
+pose and the hostile tick derives it again from live targeting.
 
 On genuine first start, `Core::open` writes and fsyncs
 `<world>/.solaris-first-start`, creates `native/state.redb.new` and renames the

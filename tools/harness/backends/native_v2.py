@@ -573,6 +573,12 @@ def _craft_drag_paced(steps: ProbeSteps, _origin: tuple[int, int, int]) -> None:
     native_craft_drag_paced.run(steps, steps.artifact_dir.parent, steps.client.p4_window)
 
 
+def _chest_drag_disconnect(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from . import native_chest_drag_disconnect
+
+    native_chest_drag_disconnect.run(steps, origin, steps.artifact_dir.parent)
+
+
 def _settlement_storage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from . import native_settlement_storage
 
@@ -668,6 +674,7 @@ RUNNERS = {
     "native-v2-corrupt-chunk-near-camera": _corrupt_chunk_near_camera,
     "native-v2-craft-drag": _craft_drag,
     "native-v2-craft-drag-paced": _craft_drag_paced,
+    "native-v2-chest-drag-disconnect": _chest_drag_disconnect,
     "native-v2-settlement-storage": _settlement_storage,
     "native-v2-redstone": _redstone, "native-v2-stations": _stations,
     "native-v2-brewing": _brewing, "native-v2-jukebox": _jukebox,

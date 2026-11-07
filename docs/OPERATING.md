@@ -529,6 +529,10 @@ packets, comparator result output and command minecarts are not implemented.
 
 Map-making command surface (full status in [COMPATIBILITY.md](COMPATIBILITY.md)):
 
+- `send_command_feedback false` suppresses player-source success replies for
+  the native command paths that honor it; failures remain visible and console
+  success remains enabled. Command execution and ordinary chat are unchanged.
+
 - `/data get entity|block` (level 2) reads native owners, including live
   inventory and timers, without editing state; paths accept dotted keys, indices
   and compound filters and must select one value. `/data merge block` writes only
