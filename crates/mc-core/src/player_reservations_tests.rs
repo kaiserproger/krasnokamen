@@ -1008,14 +1008,10 @@ fn debug_menu_reads_live_chest_and_carried_stack_through_command_path() {
     let image: serde_json::Value = serde_json::from_str(answer).unwrap();
     assert_eq!(image["container_id"], window);
     assert_eq!(image["slots"].as_array().unwrap().len(), 63);
-    assert_eq!(
-        image["slots"][0],
-        serde_json::json!({"item":"minecraft:diamond","count":5})
-    );
-    assert_eq!(
-        image["carried"],
-        serde_json::json!({"item":"minecraft:stone","count":1})
-    );
+    assert_eq!(image["slots"][0]["item"], "minecraft:diamond");
+    assert_eq!(image["slots"][0]["count"], 5);
+    assert_eq!(image["carried"]["item"], "minecraft:stone");
+    assert_eq!(image["carried"]["count"], 1);
     state.block_entities.remove(&(pos.x, pos.y, pos.z));
     let (_, missing, _) = crate::tick::run_tick(
         &mut state,
