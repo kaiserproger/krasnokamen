@@ -347,6 +347,11 @@ fn replant(state: &mut TickState, changes: &mut ChangeSet, v: &mut VillagerState
     let soil = block_path(state, x, y - 1, z).is_some_and(is_soil);
     if empty && soil {
         mining::replace(state, changes, BlockPos { x, y, z }, sapling);
+        if let Some(record) = v.settlement.and_then(|id| state.settlements.get_mut(id))
+            && record.planted_trees.insert([x, y, z])
+        {
+            record.revision = record.revision.saturating_add(1);
+        }
     }
 }
 

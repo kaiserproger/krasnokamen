@@ -990,9 +990,17 @@ pub(super) fn site_free(
                     return false;
                 };
                 if state.block_entities.contains_key(&(x, y, z))
+                    || (super::forestry::tree(state, block)
+                        && !super::forestry::clearable(state, [x, y, z]))
                     || (y == origin[1] && !floor_replaceable(state, block))
-                    || (y > origin[1] && !clearable(state, block) && !excavatable(state, block))
-                    || (y > height && y <= origin[1] && !clearable(state, block))
+                    || (y > origin[1]
+                        && !clearable(state, block)
+                        && !excavatable(state, block)
+                        && !super::forestry::clearable(state, [x, y, z]))
+                    || (y > height
+                        && y <= origin[1]
+                        && !clearable(state, block)
+                        && !super::forestry::clearable(state, [x, y, z]))
                 {
                     return false;
                 }
@@ -1102,13 +1110,29 @@ fn planned_cells(
         return None;
     }
     apply_species(state, &mut cells, species)?;
+    if project.building.is_none() {
+        let mut preparation = super::forestry::cells(state, project, size)?;
+        if !preparation.is_empty() {
+            let removed: std::collections::BTreeSet<_> =
+                preparation.iter().map(|cell| cell.at).collect();
+            cells.retain(|cell| {
+                cell.state != state.registry.states.air || !removed.contains(&cell.at)
+            });
+            preparation.append(&mut cells);
+            cells = preparation;
+        }
+    }
     // Include the whole placement extent (roof crowns/yards) in executor
     // interference fencing; certification uses the narrower authored bounds.
-    let bounds = ScriptWorldBounds::new(
-        [project.origin[0], bottom, project.origin[2]],
-        std::array::from_fn(|axis| project.origin[axis] + i32::from(size[axis]) - 1),
-    )
-    .ok()?;
+    let mut min = [project.origin[0], bottom, project.origin[2]];
+    let mut max = std::array::from_fn(|axis| project.origin[axis] + i32::from(size[axis]) - 1);
+    for cell in &cells {
+        for axis in 0..3 {
+            min[axis] = min[axis].min(cell.at[axis]);
+            max[axis] = max[axis].max(cell.at[axis]);
+        }
+    }
+    let bounds = ScriptWorldBounds::new(min, max).ok()?;
     Some((bounds, cells))
 }
 
@@ -1210,11 +1234,26 @@ fn begin_cells(
     bounds: ScriptWorldBounds,
     cells: Vec<executor::PlannedCell>,
 ) -> bool {
+    let site = blueprints::get(&state.registry, &project.blueprint)
+        .map(|blueprint| {
+            let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
+            ScriptWorldBounds::new(
+                [
+                    project.origin[0],
+                    bounds.min[1].min(project.origin[1]),
+                    project.origin[2],
+                ],
+                std::array::from_fn(|axis| project.origin[axis] + i32::from(size[axis]) - 1),
+            )
+            .expect("authored lot bounds")
+        })
+        .unwrap_or(bounds);
     let Ok(handle) = executor::prepare(
         state,
         project.settlement,
         project.blueprint.clone(),
         bounds,
+        site,
         cells,
     ) else {
         return false;
@@ -1319,15 +1358,18 @@ pub(super) fn surface_y(state: &TickState, anchor_y: i32, x: i32, z: i32) -> Opt
         .rev()
         .find(|&y| {
             state.world.physics_block_at(x, y, z).is_some_and(|ground| {
-                state
-                    .registry
-                    .collision_boxes
-                    .get(ground as usize)
-                    .is_some_and(|boxes| !boxes.is_empty())
+                !super::forestry::tree(state, ground)
+                    && state
+                        .registry
+                        .collision_boxes
+                        .get(ground as usize)
+                        .is_some_and(|boxes| !boxes.is_empty())
             }) && state
                 .world
                 .physics_block_at(x, y + 1, z)
-                .is_some_and(|above| clearable(state, above))
+                .is_some_and(|above| {
+                    clearable(state, above) || super::forestry::clearable(state, [x, y + 1, z])
+                })
         })
 }
 
@@ -1350,7 +1392,7 @@ fn site_project<'a>(
     images: &[super::inventory::Image],
 ) -> (Option<FundedSite>, u32) {
     let share = attempts / blueprints.len().max(1) as u32;
-    let mut network = layout::Network::walk(state, record);
+    let mut network = layout::Network::for_construction(state, record);
     let fronts = network.frontage();
     let count = u32::try_from(fronts.len()).unwrap_or(u32::MAX);
     if count == 0 {

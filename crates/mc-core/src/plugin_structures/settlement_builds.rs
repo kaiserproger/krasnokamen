@@ -19,18 +19,37 @@ pub(crate) fn prepare(
     settlement: SettlementId,
     blueprint: String,
     bounds: ScriptWorldBounds,
+    site: ScriptWorldBounds,
     cells: Vec<PlannedCell>,
 ) -> Result<String, Failure> {
     if state.settlements.get(settlement).is_none() || cells.is_empty() || cells.len() > 32768 {
         return Err(Failure::InvalidRequest);
     }
+    let origin = crate::settlements::blueprints::get(&state.registry, &blueprint)
+        .map(|blueprint| {
+            let height = i32::from(
+                blueprint
+                    .footprint(crate::settlements::blueprints::Rotation::from_quarter_turns(0))[1],
+            );
+            [site.min[0], site.max[1] - height + 1, site.min[2]]
+        })
+        .unwrap_or(site.min);
     let mut ledger = ledger(state)?;
     if ledger.structures.values().any(|record| {
         record.snapshot.dimension == state.dimension.name()
             && record.snapshot.state != ScriptStructureState::Cancelled
-            && bounds_of_structure(record).is_ok_and(|existing| overlaps(existing, bounds))
+            && reserved_bounds(record).is_ok_and(|existing| {
+                overlaps(
+                    existing,
+                    if record.snapshot.state == ScriptStructureState::Committed {
+                        site
+                    } else {
+                        bounds
+                    },
+                )
+            })
             && !(record.settlement == Some(settlement)
-                && same_site(state, record, bounds.min)
+                && same_site(state, record, origin)
                 && record
                     .snapshot
                     .blueprint_id
@@ -91,9 +110,9 @@ pub(crate) fn prepare(
         state.dimension.name().into(),
         ScriptStructureState::Prepared,
         revision,
-        bounds.min,
+        site.min,
         0,
-        std::array::from_fn(|axis| bounds.max[axis] - bounds.min[axis] + 1),
+        std::array::from_fn(|axis| site.max[axis] - site.min[axis] + 1),
         stages,
         0,
         0,
@@ -111,6 +130,7 @@ pub(crate) fn prepare(
         Structure {
             owner: owner(settlement),
             settlement: Some(settlement),
+            settlement_preparation: (bounds != site).then_some(bounds),
             snapshot,
             blueprint_hash: inventories::hash(&batches),
             image,
@@ -128,7 +148,7 @@ pub(crate) fn area_reserved(state: &TickState, bounds: ScriptWorldBounds) -> boo
         ledger.structures.values().any(|record| {
             record.snapshot.dimension == state.dimension.name()
                 && record.snapshot.state != ScriptStructureState::Cancelled
-                && bounds_of_structure(record).is_ok_and(|existing| overlaps(existing, bounds))
+                && reserved_bounds(record).is_ok_and(|existing| overlaps(existing, bounds))
         })
     })
 }
@@ -229,6 +249,38 @@ pub(crate) fn next_cell(
         .map(|cell| cell.at))
 }
 
+/// Borrow the canonical stage rather than inferring clearing from a live tree:
+/// leaves may decay before their already-planned removal cell is reached.
+pub(crate) fn clearing(state: &TickState, settlement: SettlementId, handle: &str) -> bool {
+    let Some(record) = state
+        .plugins
+        .get_domain(OWNER, KEY)
+        .and_then(|ledger| ledger.get("structures"))
+        .and_then(|structures| structures.get(handle))
+    else {
+        return false;
+    };
+    if record.get("settlement").and_then(serde_json::Value::as_u64) != Some(settlement.0) {
+        return false;
+    }
+    let Some(snapshot) = record.get("snapshot") else {
+        return false;
+    };
+    let Some(index) = snapshot
+        .get("current_stage_index")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|index| usize::try_from(index).ok())
+    else {
+        return false;
+    };
+    snapshot
+        .get("stages")
+        .and_then(|stages| stages.get(index))
+        .and_then(|stage| stage.get("stage"))
+        .and_then(serde_json::Value::as_str)
+        == Some("clear")
+}
+
 pub(crate) fn advance(
     state: &mut TickState,
     settlement: SettlementId,
@@ -298,6 +350,7 @@ pub(super) fn debit(
     id: SettlementId,
     builder: &str,
     required: &BTreeMap<String, u64>,
+    cells: &[super::Cell],
 ) -> Result<(), Failure> {
     let uuid = uuid::Uuid::parse_str(builder).map_err(|_| Failure::InvalidRequest)?;
     if crate::settlements::economy::worker_reserved(state, Some(id), uuid) {
@@ -310,7 +363,27 @@ pub(super) fn debit(
     }) {
         return Err(Failure::Forbidden);
     }
-    if required.is_empty() {
+    let preparing = state
+        .settlements
+        .get(id)
+        .and_then(|record| record.project.as_ref())
+        .is_some_and(|project| project.building.is_none());
+    let mut drops = Vec::new();
+    if preparing {
+        for cell in cells
+            .iter()
+            .filter(|cell| cell.state == state.registry.states.air)
+        {
+            let block = state
+                .world
+                .block_at(cell.at[0], cell.at[1], cell.at[2])
+                .ok_or(Failure::Unloaded)?;
+            if crate::settlements::forestry::tree(state, block) {
+                drops.extend(crate::settlements::forestry::drops(state, cell.at, block)?);
+            }
+        }
+    }
+    if required.is_empty() && drops.is_empty() {
         return Ok(());
     }
     let before = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
@@ -337,7 +410,25 @@ pub(super) fn debit(
             return Err(Failure::InsufficientItems);
         }
     }
-    inventory::commit(state, vec![inventory::Change { before, after }])?;
+    let mut changes = Vec::new();
+    if before.slots != after {
+        changes.push(inventory::Change { before, after });
+    }
+    if !drops.is_empty() {
+        let images = source_images(state, id);
+        let mut post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
+        for stack in drops {
+            if !crate::settlements::construction_crafting::add_stack(state, &mut post, &stack) {
+                return Err(Failure::InsufficientItems);
+            }
+        }
+        changes.extend(images.into_iter().zip(post).filter_map(|(before, after)| {
+            (before.slots != after).then_some(inventory::Change { before, after })
+        }));
+    }
+    // Loot credit and material debit precede the infallible native block edit
+    // in the same tick transaction. Full storage leaves the tree untouched.
+    inventory::commit(state, changes)?;
     Ok(())
 }
 
@@ -439,7 +530,7 @@ fn same_site(state: &TickState, record: &Structure, origin: [i32; 3]) -> bool {
         return false;
     };
     let size = blueprint.footprint(crate::settlements::blueprints::Rotation::from_quarter_turns(0));
-    bounds_of_structure(record).is_ok_and(|bounds| {
+    bounds(record.snapshot.origin, record.snapshot.reserved_footprint).is_ok_and(|bounds| {
         origin
             == [
                 bounds.min[0],

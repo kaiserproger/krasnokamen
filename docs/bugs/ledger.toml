@@ -3554,3 +3554,14 @@ status = "open"
 source = "Same RC5 Windows VM smoke as SP-START-TIMEOUT-SLOW-MACHINE (Play #3); the session was stopped without seeing the overlay clear. Software rendering may be the whole cause."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "CIVILIZATION-NATURAL-FOREST-SITE-PREPARATION"
+title = "Funded seed-24 housing cannot grow because natural forest blocks both legal lots and their walking access."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 .analysis/validation/20261107T163639-civilization-seed-qa-uo17691i/result.json: 185 house lots, none free; diagnostic civsim3-mixed-load-site-diagnosis.log. Owner authorized physical natural-forest site preparation, 2026-11-08."
+failing_first = "reported"
+regression = ["cargo:mc-core:settlements::forestry::tests::natural_forest_lot_and_access_are_felled_into_storage_before_construction", "cargo:mc-core:settlements::forestry::tests::player_log_under_natural_canopy_is_protected_with_empty_or_expired_history", "cargo:mc-core:settlements::forestry::tests::grown_lumberjack_tree_stays_protected_after_settlement_checkpoint_recovery", "cargo:mc-core:settlements::forestry::tests::imported_world_without_matching_generator_identity_clears_nothing", "cargo:mc-core:settlements::forestry::tests::identical_replacement_after_history_expiry_is_felled_and_conserved", "cargo:mc-core:settlements::forestry::tests::retained_player_placement_vetoes_an_identical_worldgen_log", "cargo:mc-core:settlements::forestry::tests::full_storage_refuses_felling_without_losing_or_duplicating_the_log", "cargo:mc-core:settlements::forestry::tests::protected_crown_above_access_headroom_stays_while_the_building_finishes", "cargo:mc-core:settlements::forestry::tests::disabled_block_history_protects_natural_forest_near_a_live_player", "cargo:mc-core:villager::lumber_tests::lumberjack_routes_then_cuts_full_trunk_and_replants_matching_sapling"]

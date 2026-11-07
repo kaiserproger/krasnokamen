@@ -20,6 +20,7 @@ pub(crate) mod construction_crafting;
 pub(crate) mod economy;
 pub(crate) mod economy_commands;
 pub(crate) mod economy_customization;
+pub(crate) mod forestry;
 pub(crate) mod layout;
 pub mod presentation;
 mod production;

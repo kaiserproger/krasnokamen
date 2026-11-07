@@ -231,6 +231,7 @@ fn stored_structure(state: &mut TickState) -> String {
         Structure {
             owner: "demo".into(),
             settlement: None,
+            settlement_preparation: None,
             snapshot,
             blueprint_hash: blueprint.content_hash().into(),
             image,

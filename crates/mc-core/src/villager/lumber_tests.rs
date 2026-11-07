@@ -197,9 +197,38 @@ fn lumberjack_routes_then_cuts_full_trunk_and_replants_matching_sapling() {
         assert_eq!(path(&state, 10, y, 10), "air");
     }
     assert_eq!(path(&state, 10, 201, 10), "oak_sapling");
+    assert!(
+        state
+            .settlements
+            .get(v.settlement.unwrap())
+            .unwrap()
+            .planted_trees
+            .contains(&[10, 201, 10])
+    );
     assert_eq!(path(&state, 11, 205, 10), "oak_leaves", "crowns stay up");
     let oak = mining::item_id(&state, "oak_log").unwrap();
     assert_eq!(count(&v, oak), 5, "every trunk block collected");
+    let settlement = v.settlement.unwrap();
+    let rows = crate::settlements::persistence::checkpoint_rows(&state, state.tick).unwrap();
+    state.settlements = Default::default();
+    crate::settlements::persistence::hydrate_dimension(
+        &mut state,
+        &rows,
+        &Default::default(),
+        settlement.0,
+    )
+    .unwrap();
+    // Model the planted oak after growth, with a matching deterministic
+    // baseline: only the recovered sapling origin may prevent site clearing.
+    crate::settlements::forestry::tests::grown_world(&mut state, vec![[10, 201, 10]], "oak");
+    assert!(!crate::settlements::forestry::clearable(
+        &state,
+        [10, 201, 10]
+    ));
+    assert!(!crate::settlements::forestry::clearable(
+        &state,
+        [11, 205, 10]
+    ));
 }
 #[test]
 fn lumberjack_drops_tree_target_when_radius_shrinks_or_camp_unbinds() {

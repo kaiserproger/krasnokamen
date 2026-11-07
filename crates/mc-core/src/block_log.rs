@@ -123,6 +123,9 @@ struct PendingContainer {
 pub struct BlockLog {
     settings: Settings,
     records: VecDeque<Record>,
+    /// Retained player block history, indexed without scanning the log during
+    /// construction site evaluation. Counts follow the same retention policy.
+    player_blocks: HashMap<[i32; 3], usize>,
     next_seq: u64,
     names: HashSet<Arc<str>>,
     blocks: Vec<PendingBlock>,
@@ -150,6 +153,7 @@ impl BlockLog {
         Self {
             settings,
             records: VecDeque::new(),
+            player_blocks: HashMap::default(),
             next_seq: 0,
             names: HashSet::default(),
             blocks: Vec::new(),
@@ -183,7 +187,7 @@ impl BlockLog {
         log.next_seq = next_seq;
         for mut record in records.into_values() {
             record.actor = log.intern(&record.actor);
-            log.records.push_back(record);
+            log.push_record(record);
         }
         log.evict(unix_now());
         log
@@ -198,9 +202,43 @@ impl BlockLog {
         name
     }
 
+    fn push_record(&mut self, record: Record) {
+        if !record.actor.starts_with('#') && matches!(record.change, Change::Block { .. }) {
+            *self.player_blocks.entry(record.pos).or_default() += 1;
+        }
+        self.records.push_back(record);
+    }
+
+    fn pop_record(&mut self) {
+        if let Some(record) = self.records.pop_front()
+            && !record.actor.starts_with('#')
+            && matches!(record.change, Change::Block { .. })
+            && let Some(count) = self.player_blocks.get_mut(&record.pos)
+        {
+            *count -= 1;
+            if *count == 0 {
+                self.player_blocks.remove(&record.pos);
+            }
+        }
+    }
+
+    /// A retained player edit or an accepted edit still awaiting this tick's
+    /// seal vetoes forest preparation, including identical worldgen blocks.
+    pub(crate) fn player_touched(&self, at: [i32; 3]) -> bool {
+        self.player_blocks.contains_key(&at)
+            || self.blocks.iter().any(|pending| {
+                !pending.actor.starts_with('#')
+                    && [pending.pos.x, pending.pos.y, pending.pos.z] == at
+            })
+    }
+
+    pub(crate) fn enabled(&self) -> bool {
+        self.settings.enabled
+    }
+
     pub(crate) fn evict(&mut self, now: u64) {
         while self.records.len() > self.settings.max_records {
-            self.records.pop_front();
+            self.pop_record();
         }
         if self.settings.retention_secs > 0 {
             let cutoff = now.saturating_sub(self.settings.retention_secs);
@@ -209,7 +247,7 @@ impl BlockLog {
                 .front()
                 .is_some_and(|record| record.time < cutoff)
             {
-                self.records.pop_front();
+                self.pop_record();
             }
         }
     }
@@ -427,7 +465,9 @@ pub(crate) fn journal(state: &mut TickState, entries: &mut Vec<crate::journal::J
         record.seq = log.next_seq;
         log.next_seq += 1;
     }
-    log.records.extend(records.iter().cloned());
+    for record in &records {
+        log.push_record(record.clone());
+    }
     log.evict(now);
     let delta = Delta {
         records,

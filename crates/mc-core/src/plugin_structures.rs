@@ -159,6 +159,9 @@ struct Structure {
     owner: String,
     #[serde(default)]
     settlement: Option<crate::settlements::SettlementId>,
+    /// Temporary clearing fence; the public snapshot keeps the authored lot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    settlement_preparation: Option<ScriptWorldBounds>,
     snapshot: ScriptStructureSnapshot,
     blueprint_hash: String,
     image: String,
@@ -253,6 +256,12 @@ fn bounds(origin: [i32; 3], size: [i32; 3]) -> Result<ScriptWorldBounds, Failure
             .ok_or(Failure::InvalidRequest)?;
     }
     ScriptWorldBounds::new(origin, max).map_err(|_| Failure::InvalidRequest)
+}
+fn reserved_bounds(record: &Structure) -> Result<ScriptWorldBounds, Failure> {
+    if record.snapshot.state == ScriptStructureState::Committed {
+        return bounds(record.snapshot.origin, record.snapshot.reserved_footprint);
+    }
+    bounds_of_structure(record)
 }
 fn overlaps(a: ScriptWorldBounds, b: ScriptWorldBounds) -> bool {
     (0..3).all(|i| a.min[i] <= b.max[i] && b.min[i] <= a.max[i])
@@ -650,7 +659,7 @@ fn survey(
         .filter(|s| {
             s.snapshot.state != ScriptStructureState::Cancelled
                 && s.snapshot.dimension == dimension
-                && bounds_of_structure(s).is_ok_and(|b| overlaps(b, bounds))
+                && reserved_bounds(s).is_ok_and(|b| overlaps(b, bounds))
         })
         .count() as u32;
     let token = uuid::Uuid::new_v4().simple().to_string();
@@ -689,7 +698,10 @@ fn survey(
     ))
 }
 fn bounds_of_structure(record: &Structure) -> Result<ScriptWorldBounds, Failure> {
-    bounds(record.snapshot.origin, record.snapshot.reserved_footprint)
+    record
+        .settlement_preparation
+        .map(Ok)
+        .unwrap_or_else(|| bounds(record.snapshot.origin, record.snapshot.reserved_footprint))
 }
 
 pub(crate) fn execute(
@@ -811,7 +823,7 @@ fn execute_operation(
             if ledger.structures.values().any(|s| {
                 s.snapshot.dimension == *dimension
                     && s.snapshot.state != ScriptStructureState::Cancelled
-                    && bounds_of_structure(s).is_ok_and(|b| overlaps(b, bounds))
+                    && reserved_bounds(s).is_ok_and(|b| overlaps(b, bounds))
             }) {
                 return Err(Failure::Blocked);
             }
@@ -867,6 +879,7 @@ fn execute_operation(
                 Structure {
                     owner: owner.to_owned(),
                     settlement: None,
+                    settlement_preparation: None,
                     snapshot: snapshot.clone(),
                     blueprint_hash: blueprint.content_hash().to_owned(),
                     image,
@@ -985,7 +998,7 @@ fn execute_operation(
             // Debit and placement are preflighted on the same single tick owner.
             // Their queues and the durable receipt join the root tick WAL image.
             if let Some(settlement) = record.settlement {
-                settlement_builds::debit(state, settlement, reservation_ref, &consumed)?;
+                settlement_builds::debit(state, settlement, reservation_ref, &consumed, portion)?;
             } else {
                 let reservation = inventories::reservation(state, owner, reservation_ref)?;
                 inventories::commit_reserved_debit(
@@ -1331,6 +1344,15 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
         }
         record.snapshot.validate().map_err(|_| malformed())?;
         let bounds = bounds_of_structure(record).map_err(|_| malformed())?;
+        let site = self::bounds(record.snapshot.origin, record.snapshot.reserved_footprint)
+            .map_err(|_| malformed())?;
+        if record.settlement_preparation.is_some_and(|preparation| {
+            record.settlement.is_none()
+                || preparation.validate().is_err()
+                || !contains(preparation, site)
+        }) {
+            return Err(malformed());
+        }
         for (stage, cells) in record.snapshot.stages.iter().zip(&record.cells) {
             if cells.len() as u64 != stage.work_units || cells.len() as u32 != stage.block_count {
                 return Err(malformed());
