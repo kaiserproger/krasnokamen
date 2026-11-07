@@ -105,6 +105,12 @@ class SlotSelectTests(unittest.TestCase):
         self.running(self.tree_a, slot)
         self.assertEqual(self.marker("a"), str(self.tree_a))
 
+    def test_target_nested_inside_a_slot_is_refused(self):
+        slot = self.slot("a", self.tree_b)
+        err = self.refused(self.tree_a, slot / "subdir")
+        self.assertIn("inside pooled slot-a/subdir", err)
+        self.assertEqual(self.marker("a"), str(self.tree_b))
+
     def test_picked_slot_skips_a_slot_a_same_tree_sharer_still_uses(self):
         slot_a = self.slot("a")
         owner, _ = self.running(self.tree_a, slot_a)

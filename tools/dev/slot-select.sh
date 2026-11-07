@@ -83,6 +83,11 @@ select_slot() {
   slots_real=$(realpath -m "$slots")
   case $real in
     "$slots_real"/slot-[a-z]) l=${real##*/slot-} ;;
+    "$slots_real"/slot-[a-z]/*)
+      # slot-gc treats it as part of the slot, but no lock would protect it.
+      echo "mem-run: CARGO_TARGET_DIR $target is inside pooled ${real#"$slots_real"/}; use the slot itself or drop CARGO_TARGET_DIR (exit 75)" >&2
+      exit 75
+      ;;
     *) return 0 ;;  # not a pooled slot: nothing to own
   esac
   for attempt in 1 2; do
