@@ -148,12 +148,24 @@ and conduit records by the block that owns them, never by the record's own id.
 
 The `container_transfer_replay_*` regressions exercise actual transfers for chest,
 trapped chest, barrel, copper chest, furnace, smoker, blast furnace, hopper,
-brewing stand, dispenser, dropper, crafter, shulker box, shelf and jukebox, with an
-untouched chest in the same chunk. Typed-only WAL tails hold a refused checkpoint
+brewing stand, dispenser, dropper, crafter, shulker box, shelf, jukebox,
+decorated pot, chiseled bookshelf and lectern, with an untouched chest in the same chunk.
+Typed-only WAL tails hold a refused checkpoint
 and materialize healthy unloaded chunks before capture. Owners that also emit an
 opaque WAL image already require a resident chunk at recovery, so an unreadable
 chunk refuses startup instead. Both routes retain full container/player contents
 and total custody through repair, checkpoints and repeated restarts.
+
+In RC5, a chiseled bookshelf with books confined to slots 1–3 could load
+through both the ordinary three-slot shelf decoder and its six-slot owner.
+Hydration applied the ordinary shelf first; interaction replaced that
+wrong-length record with an empty six-slot record, losing its books. Books in
+slots 4–6 instead made the three-slot decode reject the chunk. The storage
+format did not change. The owner classification fix removes the overlapping
+decoder; `chiseled_bookshelf_old_save_interaction_preserves_all_books` tests
+an old stored record without a live or WAL substitute through interaction and
+restart. Prior load and custody tests did not cover this combination; the
+slot-6 refusal was a different failure, not proof against this data loss.
 
 ## Backup and restore
 
