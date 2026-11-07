@@ -1,0 +1,348 @@
+schema: solaris-world-adapter-index/1
+domain: fluids
+note:
+  Documentation index only; execution is the shared Python Adapter interface, not a YAML DSL. Registration is
+  not coverage. Original matrix contexts and all oracle clauses remain acceptance obligations.
+subjects_specified: 12
+matrix_rows: 19
+adapter_path: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py
+subjects:
+  - id: fluids.water_flow
+    matrix_ids:
+      - pw:fluids.water_flow/protocol_bot/survival/the_end/normal/2/normal/hot_backup_during_action/op_2
+      - tr.restart_x_inflight.clean_restart_mid_action:fluids.water_flow/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inflight.crash_kill9_wal_replay:fluids.water_flow/protocol_bot/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/fluids.rs
+      - crates/mc-core/src/fluid_ticks.rs
+      - crates/mc-core/src/fluid_buckets.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:6-25
+    actions:
+      callable: tools.harness.matrix_domains.fluids.water_flow
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:6-25
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Water#Spreading
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: fluids.lava_flow_by_dimension
+    matrix_ids:
+      - pw:fluids.lava_flow_by_dimension/fabric_distant_horizons/spectator/the_nether/normal/2/reconnect_mid_action/pause_when_empty_resume/op_4
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/fluids.rs
+      - crates/mc-core/src/fluid_ticks.rs
+      - crates/mc-core/src/fluid_buckets.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:28-35
+    actions:
+      callable: tools.harness.matrix_domains.fluids.lava_flow_by_dimension
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:28-35
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Lava#Flow
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: fluids.infinite_water_source
+    matrix_ids:
+      - pw:fluids.infinite_water_source/fabric_solaris_loader/adventure/overworld/easy/1/slow_reader_backpressure/steady/op_1
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/fluids.rs
+      - crates/mc-core/src/fluid_ticks.rs
+      - crates/mc-core/src/fluid_buckets.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:48-50
+    actions:
+      callable: tools.harness.matrix_domains.fluids.infinite_water_source
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:48-50
+      expected_version: Java 26.1.2
+      sources: []
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: fluids.lava_source_conversion
+    matrix_ids:
+      - pw:fluids.lava_source_conversion/native_windows/spectator/overworld/easy/N8/normal/clean_restart_mid_action/op_3
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/fluids.rs
+      - crates/mc-core/src/fluid_ticks.rs
+      - crates/mc-core/src/fluid_buckets.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:53-56
+    actions:
+      callable: tools.harness.matrix_domains.fluids.lava_source_conversion
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:53-56
+      expected_version: Java 26.1.2
+      sources: []
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: fluids.water_lava_interaction
+    matrix_ids:
+      - pw:fluids.water_lava_interaction/forge_solaris_loader/adventure/overworld/easy/2/duplicate_login/pause_when_empty_resume/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/fluids.rs
+      - crates/mc-core/src/fluid_ticks.rs
+      - crates/mc-core/src/fluid_buckets.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:59-76
+    actions:
+      callable: tools.harness.matrix_domains.fluids.water_lava_interaction
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:59-76
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Basalt#Post-generation
+        - https://minecraft.wiki/w/Fluid#Mixing
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: fluids.buckets
+    matrix_ids:
+      - pw:fluids.buckets/vanilla_java_26_1_2/spectator/the_end/normal/2/normal/clean_restart_mid_action/op_4
+      - tr.dupe.two_players_take_same_tick:fluids.buckets/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.destroy_during_interaction:fluids.buckets/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.restart_after_interaction:fluids.buckets/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.multiplayer_x_same_block:fluids.buckets/native_linux/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.multiplayer_x_same_block:fluids.buckets/protocol_bot/survival/overworld/normal/N8/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/fluid_buckets.rs
+      - crates/mc-core/src/fluids.rs
+      - crates/mc-core/src/fluid_ticks.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:79-93
+    actions:
+      callable: tools.harness.matrix_domains.fluids.buckets
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:79-93
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Bucket
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: fluids.water_in_nether
+    matrix_ids:
+      - bl:fluids.water_in_nether/vanilla_java_26_1_2/survival/the_nether/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/fluids.rs
+      - crates/mc-core/src/fluid_ticks.rs
+      - crates/mc-core/src/fluid_buckets.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:96-101
+    actions:
+      callable: tools.harness.matrix_domains.fluids.water_in_nether
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:96-101
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Water#Natural_generation
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: fluids.waterlogging
+    matrix_ids:
+      - bl:fluids.waterlogging/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/fluids.rs
+      - crates/mc-core/src/fluid_ticks.rs
+      - crates/mc-core/src/fluid_buckets.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:104-115
+    actions:
+      callable: tools.harness.matrix_domains.fluids.waterlogging
+      optional_client_verbs:
+        - break_block
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:104-115
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Waterlogging
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: fluids.entity_push_items
+    matrix_ids:
+      - pw:fluids.entity_push_items/native_linux/survival/overworld/easy/1/malformed_or_stale_packet/crash_kill9_wal_replay/op_3
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/item_motion.rs
+      - crates/mc-core/src/entity_motion.rs
+      - crates/mc-core/src/fluids.rs
+      - crates/mc-core/src/fluid_ticks.rs
+      - crates/mc-core/src/fluid_buckets.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:118-129
+    actions:
+      callable: tools.harness.matrix_domains.fluids.entity_push_items
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:118-129
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Water#Current
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: fluids.fire_extinguish
+    matrix_ids:
+      - pw:fluids.fire_extinguish/fabric_svc/adventure/the_nether/peaceful/N8/duplicate_login/save_all_checkpoint/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/fire.rs
+      - crates/mc-core/src/fluids.rs
+      - crates/mc-core/src/fluid_ticks.rs
+      - crates/mc-core/src/fluid_buckets.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:132-140
+    actions:
+      callable: tools.harness.matrix_domains.fluids.fire_extinguish
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:132-140
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Campfire#Extinguishing
+        - https://minecraft.wiki/w/Water#Spreading
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: fluids.concrete_powder
+    matrix_ids:
+      - pw:fluids.concrete_powder/neoforge_solaris_loader/creative/the_nether/hard/N8/reconnect_mid_action/hot_backup_during_action/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/falling.rs
+      - crates/mc-core/src/fluids.rs
+      - crates/mc-core/src/fluid_ticks.rs
+      - crates/mc-core/src/fluid_buckets.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:143-150
+    actions:
+      callable: tools.harness.matrix_domains.fluids.concrete_powder
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:143-150
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Concrete_Powder#Creating_concrete
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: fluids.sponge
+    matrix_ids:
+      - bl:fluids.sponge/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: server_gap
+    server_evidence:
+      - crates/mc-core/src/fluids.rs
+      - crates/mc-core/src/fluid_ticks.rs
+      - crates/mc-core/src/fluid_buckets.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:153-164
+    actions:
+      callable: tools.harness.matrix_domains.fluids.sponge
+      optional_client_verbs: [close_container]
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/fluids.py:153-164
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Sponge#Absorbing_water
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence:
+      - scenarios/subjects3.py:121
+      - crates/mc-core/src/fluids.rs (no sponge absorption dispatch)
+      - crates/mc-core/src/inventory/furnace.rs:278-284 (wet sponge drying only)

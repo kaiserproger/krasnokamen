@@ -76,6 +76,11 @@ pub struct ChunkWorld {
     /// resident (load-native-or-generate) and writes them; eviction
     /// retains them until flushed.
     dirty_absent: HashSet<ChunkPos>,
+    /// Chunks whose block-entity custody changed (edit or removal) since their
+    /// last committed checkpoint. Unlike `dirty` it carries no metadata dirt
+    /// (debt, light, inhabited time), so a quarantined chunk can tell real
+    /// unsaved container edits from bookkeeping.
+    block_entity_dirty: HashSet<ChunkPos>,
     /// 001 slice0 active-only catch-up debt authority (001-d/e): per-chunk
     /// `{ last_sim, remaining }`. `active` membership is parent-managed via
     /// [`Self::set_active_chunks`]; strict empty default (never implicit).
@@ -496,6 +501,7 @@ impl ChunkWorld {
             route_touched: Vec::new(),
             dirty: HashSet::default(),
             dirty_absent: HashSet::default(),
+            block_entity_dirty: HashSet::default(),
             dirty_sections: HashMap::default(),
             inhabited_time: HashMap::default(),
             inhabited_tick: 0,
@@ -675,6 +681,7 @@ impl ChunkWorld {
             x: pos.x.div_euclid(16),
             z: pos.z.div_euclid(16),
         };
+        self.block_entity_dirty.insert(chunk);
         if self.chunks.contains_key(&chunk) {
             self.dirty.insert(chunk);
             self.bump_storage_revision(chunk);
@@ -724,8 +731,16 @@ impl ChunkWorld {
         pos: ChunkPos,
         capture: &'a mut ChunkCapture,
     ) -> Option<&'a mut DeferredChunkCapture> {
-        if let Some(error) = self.failed.get(&pos) {
-            capture.load_error = Some(error.clone());
+        if self.failed.contains_key(&pos) {
+            // Quarantined: the chunk-local projection of its scheduled work cannot be
+            // written; the manifest scheduler image keeps the queues. Counted.
+            if let Some(entry) = capture
+                .refused
+                .iter_mut()
+                .find(|entry| entry.error.pos == pos)
+            {
+                entry.scheduled += 1;
+            }
             return None;
         }
         self.in_flight.remove(&pos);
@@ -1375,6 +1390,27 @@ struct DeferredChunkCapture {
     fluid_ticks: Option<Vec<mc_world::ScheduledFluidTick>>,
 }
 
+/// A quarantined chunk a checkpoint met: `unsaved` entries (block writes,
+/// block-entity records, dirty marks) decline the checkpoint; `scheduled`
+/// counts changed scheduled-work projections skipped for the unloadable chunk
+/// (the manifest scheduler images still keep the queues).
+#[derive(Debug, Clone)]
+pub(crate) struct RefusedChunk {
+    pub(crate) error: ChunkLoadError,
+    pub(crate) unsaved: usize,
+    pub(crate) scheduled: usize,
+}
+
+impl std::fmt::Display for RefusedChunk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} ({} unsaved entries, {} scheduled projections skipped)",
+            self.error, self.unsaved, self.scheduled
+        )
+    }
+}
+
 /// Dirty chunks captured for one checkpoint: immutable, written off the
 /// tick thread (the journal thread, after the WAL gate).
 pub struct ChunkCapture {
@@ -1382,10 +1418,18 @@ pub struct ChunkCapture {
     chunks: Vec<CapturedChunk>,
     deferred: HashMap<ChunkPos, DeferredChunkCapture>,
     load_error: Option<ChunkLoadError>,
+    /// Quarantined chunks this checkpoint skipped: their stored record stays
+    /// byte-identical and they are never loaded or rewritten.
+    refused: Vec<RefusedChunk>,
     generated_bases: bool,
 }
 
 impl ChunkCapture {
+    /// Quarantined chunks left out of this checkpoint, with their reasons.
+    pub(crate) fn refused(&self) -> &[RefusedChunk] {
+        &self.refused
+    }
+
     pub(crate) fn load_error(&self) -> Option<&ChunkLoadError> {
         self.load_error.as_ref()
     }

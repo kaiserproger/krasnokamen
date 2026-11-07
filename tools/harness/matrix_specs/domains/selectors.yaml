@@ -1,0 +1,579 @@
+domain: selectors
+vanilla_version: 26.1.2
+port_range:
+  - 26460
+  - 26479
+execution: shared matrix_api Adapter only; YAML is specification, not a second runner/DSL
+evidence_scope: Specifications and blocked requirements are not runtime passes; see canonical receipts and ledger.
+subjects:
+  - id: selectors.at_a
+    matrix_ids:
+      - pw:selectors.at_a/neoforge_solaris_loader/spectator/overworld/hard/N8/normal/save_all_checkpoint/console
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.at_a]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @a 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases: []
+  - id: selectors.at_e
+    matrix_ids:
+      - pw:selectors.at_e/fabric_distant_horizons/creative/the_nether/peaceful/2/malformed_or_stale_packet/hot_backup_during_action/op_1
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.at_e]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @e 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases: []
+  - id: selectors.at_p
+    matrix_ids:
+      - pw:selectors.at_p/fabric_solaris_loader/survival/the_end/normal/2/slow_reader_backpressure/clean_restart_mid_action/op_4
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.at_p]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @p 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases: []
+  - id: selectors.at_s
+    matrix_ids:
+      - pw:selectors.at_s/native_windows/adventure/the_end/easy/1/duplicate_login/steady/non_op_0
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.at_s]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @s 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases: []
+  - id: selectors.at_r
+    matrix_ids:
+      - pw:selectors.at_r/fabric_svc/creative/the_end/peaceful/N8/slow_reader_backpressure/pause_when_empty_resume/op_2
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.at_r]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @r 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases: []
+  - id: selectors.invalid_selector
+    matrix_ids:
+      - pw:selectors.invalid_selector/protocol_bot/survival/overworld/normal/1/reconnect_mid_action/crash_kill9_wal_replay/op_3
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.invalid_selector]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as @x run scoreboard players add MatrixCount matrix_sel 1
+      - verb: command
+        text: execute as @e[foo=1] run scoreboard players add MatrixCount matrix_sel 1
+      - verb: command
+        text: execute as @e[limit=1,limit=2] run scoreboard players add MatrixCount matrix_sel 1
+      - verb: command
+        text: execute as @e[limit=0] run scoreboard players add MatrixCount matrix_sel 1
+      - verb: command
+        text: execute as @e[distance=-1] run scoreboard players add MatrixCount matrix_sel 1
+    oracle:
+      score.MatrixCount.matrix_sel: 0
+      error_substrings:
+        - Unknown selector
+        - Unknown option
+        - isn't applicable
+        - must not be less than 1
+        - Distance cannot be negative
+      each_case_required: true
+    additional_cases:
+      - "@x"
+      - "@e[foo=1]"
+      - "@e[limit=1,limit=2]"
+      - "@e[limit=0]"
+      - "@e[distance=-1]"
+    live_finding:
+      id: REPLAY-FIXTURE-LOSS
+      receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomCommands/20261024T033030-protocol-matrix-x33wfm_l/protocol-result.json
+      status: fail
+      observed: all5 invalid syntax rejections pass; score objective missing after same-world SIGKILL restart
+  - id: selectors.nonop_selector_msg
+    matrix_ids:
+      - pw:selectors.nonop_selector_msg/native_linux/adventure/the_end/easy/2/malformed_or_stale_packet/pause_when_empty_resume/op_3@vanilla
+      - pw:selectors.nonop_selector_msg/native_linux/adventure/the_end/easy/2/malformed_or_stale_packet/pause_when_empty_resume/op_3@live
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.nonop_selector_msg]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: msg @a MatrixForbiddenSelector
+        actor_permission: matrix actor, level<2
+    oracle:
+      actor.feedback.contains: Selector not allowed
+      recipient.marker_count: 0
+    additional_cases: []
+    plugin_profiles:
+      changed_by:
+        - solaris-essentials
+      vanilla: 767fbd3331effa358e238e39e2a88ed1345d5623207015671228536e53975f00
+      live: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+    plugin_profile_oracle:
+      vanilla: core private messaging semantics; selectors forbidden below op2
+      live:
+        solaris-essentials exact-name resolution; @a produces Online player not found or ambiguous.; messages
+        use [to target] and [from sender] prefixes
+      source: /run/media/kaiserroman/games/solaris-work/solaris-default-plugins/sources/solaris-essentials/src/lib.rs:450-471,607-610,636-645,853-863
+    additional_executable_cases: zero delivery to every connected recipient
+  - id: selectors.opt_distance
+    matrix_ids:
+      - pw:selectors.opt_distance/forge_solaris_loader/spectator/the_end/peaceful/N8/slow_reader_backpressure/crash_kill9_wal_replay/op_3
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.opt_distance]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @e[type=pig,x=0,y=80,z=0,distance=2..5] 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases:
+      - negative distance rejected
+      - inclusive2..5 endpoints
+    additional_executable_cases: negative distance rejection + no side effect
+  - id: selectors.opt_dxdydz
+    matrix_ids:
+      - pw:selectors.opt_dxdydz/vanilla_java_26_1_2/adventure/the_nether/hard/1/reconnect_mid_action/hot_backup_during_action/op_2
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.opt_dxdydz]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @e[type=pig,x=0,y=80,z=0,dx=4,dy=1,dz=1] 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases:
+      - negative extent
+      - AABB intersection includes pig centered5.1 when max box edge5
+    server_gap:
+      id: SELECTOR-AABB
+      evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:128-134
+      description: Position point containment instead of entity bounding-box intersection.
+      status: source-confirmed on original Hotfix tree; live receipts separate
+    additional_executable_cases: negative extent; pig origin outside box whose width intersects it
+  - id: selectors.player_name
+    matrix_ids:
+      - bl:selectors.player_name/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.player_name]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp {actor} 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases: []
+  - id: selectors.opt_xyz
+    matrix_ids:
+      - bl:selectors.opt_xyz/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.opt_xyz]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @e[type=pig,x=4,y=80,z=0,distance=..1] 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases: []
+  - id: selectors.opt_type
+    matrix_ids:
+      - bl:selectors.opt_type/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.opt_type]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @e[type=pig] 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases:
+      - type=!pig must exclude all pigs
+    additional_executable_cases: type=!pig exact known membership
+  - id: selectors.opt_name
+    matrix_ids:
+      - bl:selectors.opt_name/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.opt_name]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @e[name=MatrixNear] 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases:
+      - name=!MatrixNear excludes named entity
+    additional_executable_cases: name=!MatrixNear exact known membership
+  - id: selectors.opt_limit
+    matrix_ids:
+      - bl:selectors.opt_limit/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.opt_limit]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @e[type=pig,sort=nearest,limit=2] 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases: []
+    additional_executable_cases: limit0 rejection + no side effect
+  - id: selectors.sort_nearest
+    matrix_ids:
+      - bl:selectors.sort_nearest/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.sort_nearest]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @e[type=pig,sort=nearest,limit=1] 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases: []
+  - id: selectors.sort_furthest
+    matrix_ids:
+      - bl:selectors.sort_furthest/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.sort_furthest]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @e[type=pig,sort=furthest,limit=1] 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases: []
+  - id: selectors.sort_random
+    matrix_ids:
+      - bl:selectors.sort_random/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.sort_random]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @e[type=pig,sort=random,limit=1] 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases: []
+  - id: selectors.sort_arbitrary
+    matrix_ids:
+      - bl:selectors.sort_arbitrary/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.sort_arbitrary]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - fill -8 80 -8 8 85 8 air
+        - summon pig 1 80 0 {NoAI:1b,CustomName:"MatrixNear"}
+        - summon pig 4 80 0 {NoAI:1b,CustomName:"MatrixMid"}
+        - summon pig 7 80 0 {NoAI:1b,CustomName:"MatrixFar"}
+        - summon cow 2 80 0 {NoAI:1b,CustomName:"MatrixCow"}
+        - tp {p} 0 80 2
+    source:
+      - https://minecraft.wiki/w/Target_selectors
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute as {p} at @s run tp @e[type=pig,sort=arbitrary,limit=2] 0 80 6
+    oracle:
+      query:
+        execute if entity @e[name=<fixture>,x=0,y=80,z=6,distance=..0.25] run scoreboard players set <fixture>
+        matrix_sel 1
+      checks:
+        selectors.oracle exact known-name membership; random/arbitrary enforce cardinality and excluded names,
+        not random sequence
+    additional_cases: []
+phase2_checkpoint:
+  "41 distinct focused tests exercised: 39 passed before split; 4 affected split regressions passed
+  afterward. No new live pass."

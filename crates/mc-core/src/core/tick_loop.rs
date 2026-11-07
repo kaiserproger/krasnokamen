@@ -288,7 +288,9 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             channels
                 .generated_busy
                 .store(true, std::sync::atomic::Ordering::Release);
-            let _ = channels.work_tx.send(JournalWork::SaveGenerated(batch));
+            let _ = channels
+                .work_tx
+                .send(JournalWork::SaveGenerated(Box::new(batch)));
         }
         // Timings ride in the output they describe (never a shared
         // last-tick slot a reader could pair with the wrong tick).
@@ -587,7 +589,10 @@ pub(super) fn send_shutdown(
         "core tick owner stopping"
     );
     while let Some(batch) = crate::dimensions::checkpoint::take_generated(state, 0) {
-        if work_tx.send(JournalWork::SaveGenerated(batch)).is_err() {
+        if work_tx
+            .send(JournalWork::SaveGenerated(Box::new(batch)))
+            .is_err()
+        {
             tracing::error!(
                 cause = "journal work channel closed",
                 "core shutdown could not save generated chunks"

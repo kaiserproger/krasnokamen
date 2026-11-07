@@ -139,15 +139,45 @@ pub(super) fn start_checkpoint_with_reply(
     let dimensions = crate::dimensions::checkpoint::capture(state, tick);
     let tombstones = checkpoint_tombstones(state);
     let dimensions_time = capture_start.elapsed();
-    if regions.load_error().is_some()
-        || dimensions
+    let refused: Vec<&crate::world::RefusedChunk> = regions
+        .refused()
+        .iter()
+        .chain(
+            dimensions
+                .values()
+                .flat_map(|capture| capture.regions.refused()),
+        )
+        .collect();
+    let blocked = regions.load_error().or_else(|| {
+        dimensions
             .values()
-            .any(|capture| capture.regions.load_error().is_some())
-    {
+            .find_map(|capture| capture.regions.load_error())
+    });
+    if let Some(error) = blocked {
+        tracing::error!(
+            tick,
+            %error,
+            chunks = %refused.iter().map(|chunk| chunk.to_string()).collect::<Vec<_>>().join("; "),
+            "checkpoint declined: a chunk cannot be written and holds unsaved state; the journal is retained"
+        );
         if let Some(reply) = reply {
             let _ = reply.send(false);
         }
         return false;
+    }
+    if !refused.is_empty() {
+        // The checkpoint commits without these chunks: their stored records
+        // stay byte-identical and they stay refused until repaired.
+        tracing::error!(
+            tick,
+            count = refused.len(),
+            chunks = %refused
+                .iter()
+                .map(|error| error.to_string())
+                .collect::<Vec<_>>()
+                .join("; "),
+            "checkpoint skipped quarantined chunks; repair required"
+        );
     }
     let job = CheckpointJob {
         tick,
@@ -565,7 +595,7 @@ pub(super) enum NativeWork {
         job: Box<CheckpointJob>,
         plugins: Result<Box<crate::plugin::PluginState>, CoreError>,
     },
-    SaveGenerated(crate::world::ChunkCapture),
+    SaveGenerated(Box<crate::world::ChunkCapture>),
     /// Copy the last committed checkpoint and the WAL after it (hot backup).
     Backup {
         job: BackupJob,

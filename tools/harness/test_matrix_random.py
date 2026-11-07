@@ -1,0 +1,131 @@
+"""Seed reproducibility and independent fault controls for every invariant."""
+import copy
+from pathlib import Path
+import struct
+import tempfile
+from types import SimpleNamespace
+import unittest
+import zlib
+from unittest.mock import patch
+
+from .backends import matrix_random
+
+from .matrix_domains.random import invariant_checks, mutate_observation, stock, _published, setup, recovery_matches, _mine
+from .quirk_parity.fuzz import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_ACTIONS,
+                                shrink_player_scenario, failure_identity)
+
+
+class RandomMatrixTests(unittest.TestCase):
+    def test_mining_waits_for_exact_ack_including_sequence_zero(self):
+        snapshots = iter([{'block_ack_sequence': None}, {'block_ack_sequence': 0}])
+        actor = SimpleNamespace(look_at=lambda *args: None, break_block=lambda *args, **kwargs: 0,
+                                snapshot=lambda: next(snapshots), wait_ticks=lambda count: None)
+        def wait(predicate, **kwargs):
+            self.assertFalse(predicate())
+            self.assertTrue(predicate())
+        actor.wait_until = wait
+        _mine(actor, (1, 2, 3))
+
+    def test_ddmin_keeps_exact_failure_and_reduces_parameters(self):
+        row = player_scenario(1, 40, 4)
+        row['actions'][27]['verb'] = 'craft'
+        original = copy.deepcopy(row)
+        minimal = shrink_player_scenario(row, lambda value:
+                                        any(step['verb'] == 'craft' for step in value['actions']))
+        self.assertEqual(minimal['actions'], [{'verb': 'craft', 'actor': 0, 'count': 1, 'target': 0}])
+        self.assertEqual(row, original)
+        self.assertIsNone(failure_identity({'status': 'blocked', 'note': 'random:conservation:step=0:'}))
+        self.assertEqual(failure_identity({'status': 'fail', 'note': 'random:conservation:step=22: bad'}),
+                         'random:conservation')
+
+    def test_reduced_repro_retains_trial_selectors(self):
+        row = player_scenario(1, 1, 2)
+        report = {'status': 'fail', 'note': 'random:conservation:step=0: planted', 'row': row}
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / 'shrink').mkdir()
+            ctx = SimpleNamespace(artifact_dir=Path(directory))
+            argv = ['python3', '-m', 'tools.harness', 'run', 'matrix-random',
+                    '--server-bin', '/pin/server', '--script', '/trial/script.json',
+                    '--vanilla-data', '/data', '--differential', '--vanilla-jar', '/vanilla.jar',
+                    '--plugins-dir', '/plugins']
+            with patch.object(matrix_random, 'replay', return_value=(report, '/trial/result.json', argv)):
+                result = matrix_random.shrink(ctx, report)
+            self.assertEqual(result['status'], 'reproduced')
+            self.assertIn('--differential', result['repro_command'])
+            self.assertIn('--vanilla-jar /vanilla.jar', result['repro_command'])
+            self.assertIn('--plugins-dir /plugins', result['repro_command'])
+            self.assertIn(result['minimal_script'], result['repro_command'])
+
+    def test_recovery_rejects_lost_published_transfer_and_craft_equivalent_substitution(self):
+        committed = {'inventories': [{}, {'minecraft:oak_log': 1}],
+                     'container': {}, 'blocks': {'32,80,34': 'minecraft:dirt'}}
+        cursor = {'item_id': 'minecraft:dirt', 'count': 8}
+        recovered = copy.deepcopy(committed)
+        recovered['inventories'][0] = {'minecraft:dirt': 8}
+        self.assertTrue(recovery_matches(committed, recovered, 0, cursor))
+        lost_transfer = copy.deepcopy(committed)
+        lost_transfer['container'] = {'minecraft:dirt': 8}
+        self.assertFalse(recovery_matches(committed, lost_transfer, 0, cursor))
+        wrong_item = copy.deepcopy(recovered)
+        wrong_item['inventories'][1] = {'minecraft:oak_planks': 4}
+        self.assertFalse(recovery_matches(committed, wrong_item, 0, cursor))
+
+    def test_fixture_commands_follow_received_chunk_loading(self):
+        events = []
+        actor = SimpleNamespace(teleport_to=lambda *args: events.append('teleport'),
+                                ensure_loaded=lambda *args: None)
+        server = SimpleNamespace(ensure_loaded=lambda *args: events.append('loaded'),
+                                 command=lambda text: events.append(text))
+        setup(SimpleNamespace(clients=[actor, actor], server=server, state={}))
+        self.assertLess(events.index('loaded'), events.index('fill 28 79 28 40 79 40 stone'))
+        self.assertIn('gamerule spawn_mobs false', events)
+
+    def observation(self):
+        authority = {'inventories': [{'minecraft:dirt': 4}], 'container': {}, 'blocks': {}}
+        return {'running': True, 'errors': [], 'resources': {'earth': 4},
+                'sources': {'earth': 4}, 'refusals': [], 'progress': True,
+                'authority': authority, 'observer': copy.deepcopy(authority), 'recovery_ok': True}
+
+    def test_every_oracle_passes_valid_state_and_rejects_its_own_mutation(self):
+        good = self.observation()
+        self.assertTrue(all(check.passed for check in invariant_checks(good)))
+        for check in invariant_checks(good):
+            with self.subTest(oracle=check.name):
+                mutated = mutate_observation(good, check.name)
+                failed = [result.name for result in invariant_checks(mutated) if not result.passed]
+                self.assertEqual(failed, [check.name])
+                self.assertTrue(all(result.passed for result in invariant_checks(good)))
+
+    def test_seed_and_serialized_actions_replay_exactly(self):
+        first = player_scenario(101, 100, 4)
+        self.assertEqual(first, player_scenario(101, 100, 4))
+        self.assertNotEqual(first['actions'], player_scenario(102, 100, 4)['actions'])
+        self.assertEqual(set(PLAYER_ACTIONS), {a['verb'] for a in first['actions']})
+        self.assertTrue(all(a['actor'] < 3 for a in first['actions']))
+        self.assertTrue(set(a['verb'] for a in player_scenario(101, 100, 4, differential=True)['actions'])
+                        <= set(DETERMINISTIC_ACTIONS))
+
+    def test_explicit_resource_units_preserve_crafting_inputs_and_outputs(self):
+        self.assertEqual(stock([{'item_id': 'minecraft:oak_log', 'count': 2}]),
+                         stock([{'item_id': 'minecraft:oak_planks', 'count': 8}]))
+        self.assertNotEqual(stock([{'item_id': 'minecraft:oak_log', 'count': 2}]),
+                            stock([{'item_id': 'minecraft:oak_planks', 'count': 9}]))
+
+    def test_published_wal_fence_checks_framing_checksum_and_tick(self):
+        with tempfile.TemporaryDirectory() as directory:
+            world = Path(directory)
+            journal = world / 'journal'
+            journal.mkdir()
+            payload = b'{}\n'
+            path = journal / 'batch-1-12.bin'
+            header = struct.pack('<IIQQII', 0x534F4C4A, 1, 1, 12, len(payload), zlib.crc32(payload))
+            path.write_bytes(header + payload)
+            ctx = SimpleNamespace(server=SimpleNamespace(world_dir=world))
+            self.assertEqual(_published(ctx, 12)['high'], 12)
+            path.write_bytes(header + b'bad')
+            with self.assertRaisesRegex(AssertionError, 'invalid published'):
+                _published(ctx, 12)
+
+
+if __name__ == '__main__':
+    unittest.main()

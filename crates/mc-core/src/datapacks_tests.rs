@@ -507,3 +507,43 @@ fn datapack_idle_and_execute_microbench() {
         idle[3], execute[3]
     );
 }
+
+/// One function that tells 600 chat lines to two online players in one tick
+/// must reach both of them: the per-connection reliable cap protects the server
+/// from a sender flood, never from an operator's own datapack.
+#[test]
+fn function_chat_flood_in_one_tick_reaches_every_recipient() {
+    const LINES: usize = 600;
+    let directory = tempfile::tempdir().unwrap();
+    let body = "tellraw @a {\"text\":\"flood\"}\n".repeat(LINES);
+    pack(
+        directory.path(),
+        "test",
+        &[("test/function/flood.mcfunction", body.as_str())],
+    );
+    let mut state = fixture(PackSet::load(directory.path(), Selection::default()).unwrap());
+    state.outbox_cap = 512;
+    crate::tick::run_tick(
+        &mut state,
+        &[crate::boundary::PlayerInput::Join {
+            connection: ConnectionId(2),
+            uuid: uuid::Uuid::new_v4(),
+            name: "second".into(),
+            permission_level: 0,
+        }],
+    );
+    state.outbox.clear();
+    run(&mut state, "function test:flood");
+    assert!(state.disconnects.is_empty(), "{:?}", state.disconnects);
+    for connection in [ConnectionId(1), ConnectionId(2)] {
+        let lines: usize = state.outbox[&connection]
+            .iter()
+            .map(|change| match change {
+                PlayerChange::StyledChat { .. } => 1,
+                PlayerChange::TextBurst { lines } => lines.len(),
+                _ => 0,
+            })
+            .sum();
+        assert_eq!(lines, LINES, "{connection:?}");
+    }
+}

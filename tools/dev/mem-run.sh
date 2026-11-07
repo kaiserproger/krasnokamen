@@ -197,13 +197,31 @@ echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf 
 # command uses: cargo's build lock would chain them), releases the shared -x lock,
 # runs the command without the runner's lock fds (stdin kept; TERM/INT/HUP
 # forwarded), then records the scope's peak. A -x wrapper also ends the window.
+# The guardian is a separate user service, outside both the scope and the job's
+# process tree, so a job kill cannot kill it before it tears the scope down.
+guard_dir=$(mktemp -d "${TMPDIR:-/tmp}/solaris-mem-guard.XXXXXXXX")
+unit="solaris-mem-run-${guard_dir##*.}.scope"
+mkfifo "$guard_dir/events" "$guard_dir/ready"
+if ! systemd-run --user --quiet --collect --unit="${unit%.scope}-guard" \
+  python3 "$here/mem-run-guard.py" "$guard_dir" "/sys/fs/cgroup$cgroup/$unit" "$$" "$PPID" \
+  || ! timeout 10 bash -c 'read -r ready < "$1/ready"' _ "$guard_dir"; then
+  rm -rf "$guard_dir"
+  echo "mem-run: failed to start scope guardian" >&2
+  exit 75
+fi
+if ! python3 "$here/mem-run-guard.py" --send-locks "$guard_dir"; then
+  echo "mem-run: failed to transfer locks to scope guardian" >&2
+  exit 75
+fi
+export MEMRUN_GUARD_DIR="$guard_dir"
 # systemd-run would otherwise expand $NAME (and turn $$ into $) in the argv.
 export MEMRUN_DIR="$dir" MEMRUN_KEY="$key" MEMRUN_EST_KIB="$est_kib" MEMRUN_PREEMPTIBLE="$preemptible" MEMRUN_EXCLUSIVE="$exclusive" \
   MEMRUN_TARGET="$(realpath -m "$target")"
-exec systemd-run --user --scope --quiet --expand-environment=no --slice="$slice" "${props[@]}" \
+exec systemd-run --user --scope --quiet --unit="$unit" --expand-environment=no --slice="$slice" "${props[@]}" \
   nice -n "$niceness" "${cpu_pin[@]}" bash -c '
 notify() { local fd; exec {fd}<>"$MEMRUN_DIR/events"; printf "%s\n" "$1" >&"$fd"; exec {fd}>&-; }
 cg=$(sed -n "s/^0:://p" /proc/self/cgroup)
+[ -w "/sys/fs/cgroup$cg/cgroup.kill" ] || { echo "mem-run: scope cgroup.kill is not writable" >&2; exit 75; }
 printf "%s\t%s\t%s\t%s\n" "$cg" "$MEMRUN_EST_KIB" "$MEMRUN_PREEMPTIBLE" "$MEMRUN_TARGET" > "$MEMRUN_DIR/run/$$"
 [ "$MEMRUN_EXCLUSIVE" = 1 ] || { flock -u 3; exec 3>&-; }
 notify start
@@ -219,4 +237,7 @@ peak=$(cat "/sys/fs/cgroup$cg/memory.peak" 2>/dev/null || echo 0)
 rm -f "$MEMRUN_DIR/run/$$"
 [ "$MEMRUN_EXCLUSIVE" = 1 ] && rm -f "$MEMRUN_DIR/exclusive"
 notify exit
+exec {guard_fd}<>"$MEMRUN_GUARD_DIR/events"
+printf "done\n" >&"$guard_fd"
+exec {guard_fd}>&-
 exit "$st"' mem-run "$@"

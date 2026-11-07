@@ -1,0 +1,237 @@
+schema: solaris-domain-adapter-index/1
+domain: fire
+subjects_specified: 5
+vanilla_provenance: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/version.json
+shared_interface: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_api.py
+execution: canonical tools.harness run protocol-matrix/java/native; no second runner or DSL
+observation_contract: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py
+missing_query_capabilities_on_original_binary:
+  - data_get_entity
+  - data_get_block
+sync:
+  Exact received BlockChangedAck sequence fences use/mine admission; machine-checkable world/inventory oracles
+  determine success. No revision or submission-only ACK inference. Fixtures wait received block state.
+subjects:
+  - subject: fire.fire_spread
+    matrix_ids:
+      - pw:fire.fire_spread/neoforge_solaris_loader/survival/the_nether/hard/N8/malformed_or_stale_packet/hot_backup_during_action/non_op_0
+      - pw:fire.fire_spread/fabric_distant_horizons/survival/the_end/hard/2/slow_reader_backpressure/save_all_checkpoint/non_op_0
+      - tr.restart_x_inflight.clean_restart_mid_action:fire.fire_spread/vanilla_java_26_1_2/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inflight.crash_kill9_wal_replay:fire.fire_spread/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected:
+      Java 26.1.2 fire_spread_radius_around_player=0 disables updates near players; -1 enables without proximity
+      restriction; flammable wood burns.
+    vanilla_source:
+      - https://minecraft.wiki/w/Fire
+    solaris_sources: &id001
+      - core:fire.rs
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/fire.py
+      function: fire_spread
+      line: 11
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - command(ctx,'gamerule fire_spread_radius_around_player 0')
+        - setblock(ctx,'netherrack',(1,143,0))
+        - setblock(ctx,'fire')
+        - setblock(ctx,'oak_planks',(2,144,0))
+        - command(ctx,'gamerule fire_spread_radius_around_player -1')
+    actions:
+      - boundary(ctx)
+      - ticks(ctx,200)
+      - "ctx.wait_until(lambda:not block_is(ctx,(2,144,0),'oak_planks'),\n                   description='flammable\
+        \ block burns with enabled fire spread',timeout_seconds=120)"
+    machine_checks:
+      - block(ctx,POS,'fire')
+      - block(ctx,(2,144,0),'oak_planks')
+      - check(ctx,'wood_burned',not block_is(ctx,(2,144,0),'oak_planks'))
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities: []
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes: see cited adapter branch
+  - subject: fire.eternal_fire
+    matrix_ids:
+      - pw:fire.eternal_fire/protocol_bot/spectator/the_end/easy/N8/slow_reader_backpressure/crash_kill9_wal_replay/op_3
+      - pw:fire.eternal_fire/fabric_svc/survival/the_end/normal/1/normal/crash_kill9_wal_replay/op_4
+    status: server_gap
+    server_gap:
+      - FIRE-001
+    vanilla_version: 26.1.2
+    expected: never burns out
+    vanilla_source:
+      - https://minecraft.wiki/w/Fire
+    solaris_sources: *id001
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/fire.py
+      function: eternal_fire
+      line: 23
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - command(ctx,'gamerule fire_spread_radius_around_player -1')
+        - setblock(ctx,base,(1,143,0))
+        - setblock(ctx,fire)
+        - setblock(ctx,'bedrock',(1,143,0))
+        - setblock(ctx,'fire[age=15]')
+    actions:
+      - boundary(ctx)
+      - ticks(ctx,700)
+      - ticks(ctx,80)
+    machine_checks:
+      - block(ctx,POS,fire)
+      - block(ctx,POS,'fire')
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities: []
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes: see cited adapter branch
+  - subject: fire.lava_ignites
+    matrix_ids:
+      - pw:fire.lava_ignites/forge_solaris_loader/spectator/the_end/normal/2/duplicate_login/clean_restart_mid_action/op_1
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: nearby flammables ignite
+    vanilla_source:
+      - https://minecraft.wiki/w/Lava
+    solaris_sources: *id001
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/fire.py
+      function: lava_ignites
+      line: 33
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - command(ctx,'gamerule fire_spread_radius_around_player -1')
+        - command(ctx,'gamerule random_tick_speed 128')
+        - setblock(ctx,'lava',(1,144,0))
+        - setblock(ctx,'oak_planks',(1,146,0))
+    actions:
+      - boundary(ctx)
+      - "ctx.wait_until(lambda:any(block_is(ctx,p,'fire') for p in cells),\n                   description='lava ignites\
+        \ adjacent fuel air',timeout_seconds=120)"
+    machine_checks:
+      - check(ctx,'lava_ignition_observed',any(block_is(ctx,p,'fire') for p in cells))
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities: []
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes: see cited adapter branch
+  - subject: fire.entity_burning
+    matrix_ids:
+      - pw:fire.entity_burning/native_windows/creative/the_nether/peaceful/2/normal/steady/op_2
+      - pw:fire.entity_burning/native_linux/creative/overworld/easy/N8/reconnect_mid_action/steady/op_4
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: on_fire ticks; extinguished by water/rain
+    vanilla_source:
+      - https://minecraft.wiki/w/Fire
+    solaris_sources:
+      - core:contact_hazards.rs
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/fire.py
+      function: entity_burning
+      line: 43
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival','adventure')
+        - setblock(ctx,'netherrack',(1,143,0))
+        - setblock(ctx,hazard)
+        - command(ctx,f'tp {actor(ctx).name} 1.5 144 .5')
+        - setblock(ctx,'water',(3,144,0))
+        - command(ctx,f'tp {actor(ctx).name} 3.5 144 .5')
+        - command(ctx,f'effect give {actor(ctx).name} instant_health 1 10 true')
+        - command(ctx,'time set noon')
+        - command(ctx,'weather clear')
+        - command(ctx,'summon zombie 2.5 144 .5 {NoAI:1b}')
+        - command(ctx,'weather rain')
+    actions:
+      - boundary(ctx)
+      - ticks(ctx,25)
+      - ticks(ctx,2)
+      - ticks(ctx,40)
+    machine_checks:
+      - check(ctx,'burning:'+hazard,scalar(ctx,f'entity {actor(ctx).name}','Fire')>0)
+      - check(ctx,'water_extinguishes:'+hazard,scalar(ctx,f'entity {actor(ctx).name}','Fire')<=0)
+      - check(ctx,'undead_sunlight',scalar(ctx,'entity @e[type=zombie,limit=1]','Fire')>0)
+      - check(ctx,'rain_extinguishes',scalar(ctx,'entity @e[type=zombie,limit=1]','Fire')<=0)
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - data_get_entity
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+      - adventure
+  - subject: fire.candles_campfire_light
+    matrix_ids:
+      - pw:fire.candles_campfire_light/vanilla_java_26_1_2/adventure/overworld/normal/1/reconnect_mid_action/save_all_checkpoint/op_4
+      - pw:fire.candles_campfire_light/fabric_solaris_loader/adventure/the_nether/easy/N8/slow_reader_backpressure/pause_when_empty_resume/op_1
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: lit state; light level
+    vanilla_source:
+      - https://minecraft.wiki/w/Candle
+    solaris_sources: *id001
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/fire.py
+      function: candles_campfire_light
+      line: 59
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival','creative','adventure')
+        - setblock(ctx,item+'[lit=false]')
+        - equip(ctx,'flint_and_steel')
+        - equip(ctx,'iron_shovel' if 'campfire' in item else None)
+    actions:
+      - use(ctx)
+    machine_checks:
+      - block(ctx,POS,item+'[lit=true]')
+      - check(ctx,'light_level:'+item,lights.get('1,144,0')==light,lights)
+      - block(ctx,POS,item+'[lit=false]')
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - snapshot:block_light
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+      - creative
+      - adventure
+fixture_location: Arena floor y=143, interactions y=144; outside shop auto-open y=60..100. All ten plugins retained.
+shared_interface_revision: d4cba654
+common_required_capabilities:
+  - client:teleport_to
+  - client:read_block_state
+  - server:ensure_loaded
+  - snapshot:inventory
+  - snapshot:block_ack_sequence
+  - dashboard:simulation_tick
+adapter_commit: a7485690
+multiplayer_contract:
+  "Ordinary N2 actor+observer supported for seven simple block_interact state subjects and block_place
+  extras: exact received observer state checked. Other subjects/N8/concurrent triples remain explicit partial coverage."

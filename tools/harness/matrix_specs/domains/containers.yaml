@@ -1,0 +1,1023 @@
+kind: adapter-index
+domain: containers
+vanilla_version: 26.1.2
+note:
+  Metadata only; executable Python uses shared matrix_api, not a second DSL. Check names include conditional
+  branches of shared action functions; only reached branches produce receipts. Registration does not imply runtime
+  coverage.
+adapter_path: /run/media/kaiserroman/games/solaris-work/wt/dom-containers/tools/harness/matrix_domains/containers.py
+matrix_rows: 268
+protocol_rows: 79
+server_gap:
+  - containers.mount_inventory
+  - containers.lectern
+  - containers.crafting_table
+missing_capabilities:
+  - same_tick_admission_fence
+  - container_break_while_open_custody
+  - observer_subject_receipt
+  - observation.menu.transition_ticks
+  - observation.plugin_menu_click
+subjects:
+  - id: containers.chest
+    preconditions: containers.setup(ctx, subject='chest')
+    actions: storage(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - authoritative_deposit_count
+      - barrel_closed
+      - barrel_open
+      - deposit_16
+      - finite_stock_conserved
+      - golem_empties_copper_source
+      - golem_sorts_16_into_wooden_chest
+      - nested_shulker_refused
+      - power_equals_viewers
+      - power_zero_after_close
+      - refused_box_stays_on_cursor
+      - reopened_storage_preserves_16
+      - sorting_destination_initially_empty
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - withdraw_empties_storage
+    expected_value_source: https://minecraft.wiki/w/Chest#Container
+    status: executable_adapter
+    matrix_ids:
+      - pw:containers.chest/forge_solaris_loader/survival/the_nether/normal/N8/disconnect_during_menu/clean_restart_mid_action/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.chest/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.chest/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.chest/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.clean_restart_mid_action:containers.chest/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:containers.chest/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:containers.chest/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.chest/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.chest/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.chest/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+      - tr.multiplayer_x_same_block:containers.chest/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.multiplayer_x_same_block:containers.chest/native_linux/survival/overworld/normal/N8/normal/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.trapped_chest
+    preconditions: containers.setup(ctx, subject='trapped_chest')
+    actions: storage(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - authoritative_deposit_count
+      - barrel_closed
+      - barrel_open
+      - deposit_16
+      - finite_stock_conserved
+      - golem_empties_copper_source
+      - golem_sorts_16_into_wooden_chest
+      - nested_shulker_refused
+      - power_equals_viewers
+      - power_zero_after_close
+      - refused_box_stays_on_cursor
+      - reopened_storage_preserves_16
+      - sorting_destination_initially_empty
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - withdraw_empties_storage
+    expected_value_source: https://minecraft.wiki/w/Trapped_Chest#Redstone_component
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.trapped_chest/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.trapped_chest/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.trapped_chest/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.trapped_chest/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.trapped_chest/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.trapped_chest/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.trapped_chest/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.double_chest
+    preconditions: containers.setup(ctx, subject='double_chest')
+    actions: storage(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - authoritative_deposit_count
+      - barrel_closed
+      - barrel_open
+      - deposit_16
+      - finite_stock_conserved
+      - golem_empties_copper_source
+      - golem_sorts_16_into_wooden_chest
+      - nested_shulker_refused
+      - power_equals_viewers
+      - power_zero_after_close
+      - refused_box_stays_on_cursor
+      - reopened_storage_preserves_16
+      - sorting_destination_initially_empty
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - withdraw_empties_storage
+    expected_value_source: https://minecraft.wiki/w/Chest#Container
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.double_chest/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.double_chest/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.double_chest/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.double_chest/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.clean_restart_mid_action:containers.double_chest/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:containers.double_chest/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:containers.double_chest/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.double_chest/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.double_chest/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.double_chest/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.barrel
+    preconditions: containers.setup(ctx, subject='barrel')
+    actions: storage(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - authoritative_deposit_count
+      - barrel_closed
+      - barrel_open
+      - deposit_16
+      - finite_stock_conserved
+      - golem_empties_copper_source
+      - golem_sorts_16_into_wooden_chest
+      - nested_shulker_refused
+      - power_equals_viewers
+      - power_zero_after_close
+      - refused_box_stays_on_cursor
+      - reopened_storage_preserves_16
+      - sorting_destination_initially_empty
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - withdraw_empties_storage
+    expected_value_source: https://minecraft.wiki/w/Barrel#Container
+    status: executable_adapter
+    matrix_ids:
+      - pw:containers.barrel/fabric_svc/spectator/the_nether/peaceful/1/disconnect_during_menu/crash_kill9_wal_replay/op_3
+      - tr.dupe.two_players_same_slot_same_tick:containers.barrel/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.barrel/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.barrel/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.barrel/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.barrel/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.barrel/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.copper_chest
+    preconditions: containers.setup(ctx, subject='copper_chest')
+    actions: storage(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - authoritative_deposit_count
+      - barrel_closed
+      - barrel_open
+      - deposit_16
+      - finite_stock_conserved
+      - golem_empties_copper_source
+      - golem_sorts_16_into_wooden_chest
+      - nested_shulker_refused
+      - power_equals_viewers
+      - power_zero_after_close
+      - refused_box_stays_on_cursor
+      - reopened_storage_preserves_16
+      - sorting_destination_initially_empty
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - withdraw_empties_storage
+    expected_value_source: https://minecraft.wiki/w/Copper_Chest#Usage
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.copper_chest/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.copper_chest/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.copper_chest/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.copper_chest/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.copper_chest/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.copper_chest/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.copper_chest/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+    oracle_direction_source: https://minecraft.wiki/w/Copper_Golem#Chest_interactions_and_item_transportation
+    oracle_clarification: Golem takes 16 items FROM copper chest and deposits INTO empty wooden chest; not the reverse.
+  - id: containers.ender_chest
+    preconditions: containers.setup(ctx, subject='ender_chest')
+    actions: storage(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - authoritative_deposit_count
+      - barrel_closed
+      - barrel_open
+      - deposit_16
+      - finite_stock_conserved
+      - golem_empties_copper_source
+      - golem_sorts_16_into_wooden_chest
+      - nested_shulker_refused
+      - power_equals_viewers
+      - power_zero_after_close
+      - refused_box_stays_on_cursor
+      - reopened_storage_preserves_16
+      - sorting_destination_initially_empty
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - withdraw_empties_storage
+    expected_value_source: https://minecraft.wiki/w/Ender_Chest#Usage
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.ender_chest/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.ender_chest/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.ender_chest/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.ender_chest/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.clean_restart_mid_action:containers.ender_chest/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:containers.ender_chest/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:containers.ender_chest/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.ender_chest/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.ender_chest/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.ender_chest/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.shulker_box
+    preconditions: containers.setup(ctx, subject='shulker_box')
+    actions: storage(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - authoritative_deposit_count
+      - barrel_closed
+      - barrel_open
+      - deposit_16
+      - finite_stock_conserved
+      - golem_empties_copper_source
+      - golem_sorts_16_into_wooden_chest
+      - nested_shulker_refused
+      - power_equals_viewers
+      - power_zero_after_close
+      - refused_box_stays_on_cursor
+      - reopened_storage_preserves_16
+      - sorting_destination_initially_empty
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - withdraw_empties_storage
+    expected_value_source: https://minecraft.wiki/w/Shulker_Box#Usage
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.shulker_box/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.shulker_box/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.shulker_box/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.shulker_box/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.clean_restart_mid_action:containers.shulker_box/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:containers.shulker_box/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:containers.shulker_box/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.shulker_box/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.shulker_box/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.shulker_box/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.player_inventory_2x2
+    preconditions: containers.setup(ctx, subject='player_inventory_2x2')
+    actions: crafting(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - grid_returned_on_close
+      - matching_head_slot
+      - nonarmor_refused
+      - offhand_accepts_stack
+      - offhand_returns_stack
+      - personal_inventory_window_zero
+      - recipe_recomputed_after_removal
+      - recipe_recomputed_after_restore
+      - recipe_result
+      - shift_craft_inputs_consumed
+      - shift_craft_maximum_output
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+    expected_value_source: https://minecraft.wiki/w/Inventory#Crafting
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.player_inventory_2x2/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.player_inventory_2x2/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.player_inventory_2x2/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.player_inventory_2x2/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.player_inventory_2x2/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.player_inventory_2x2/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.player_inventory_2x2/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.crafting_table
+    status: executable_adapter
+    evidence: containers-bugs.md#containers-003--crafting-table-closes-on-first-inventory-click
+    preconditions: containers.setup(ctx, subject='crafting_table')
+    actions: crafting(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - grid_returned_on_close
+      - matching_head_slot
+      - nonarmor_refused
+      - offhand_accepts_stack
+      - offhand_returns_stack
+      - personal_inventory_window_zero
+      - recipe_recomputed_after_removal
+      - recipe_recomputed_after_restore
+      - recipe_result
+      - shift_craft_inputs_consumed
+      - shift_craft_maximum_output
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+    expected_value_source: https://minecraft.wiki/w/Crafting_Table#Crafting
+    matrix_ids:
+      - bl:containers.crafting_table/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.crafting_table/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.crafting_table/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.crafting_table/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.crafting_table/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.crafting_table/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.crafting_table/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.hopper
+    preconditions: containers.setup(ctx, subject='hopper')
+    actions: hopper(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - destination_received_all_three
+      - powered_hopper_locked
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+    expected_value_source: https://minecraft.wiki/w/Hopper#Transferring_items
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.hopper/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.hopper/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.hopper/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.hopper/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.clean_restart_mid_action:containers.hopper/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:containers.hopper/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:containers.hopper/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.hopper/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.hopper/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.hopper/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: real_but_partial
+    unproved_clause:
+      capability: observation.menu.transition_ticks
+      clause: eight-tick transfer cadence
+  - id: containers.dispenser
+    preconditions: containers.setup(ctx, subject='dispenser')
+    actions: redstone_output(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - arrow_projectile_spawned
+      - dropper_transferred_one
+      - held_signal_does_not_repeat
+      - one_item_per_rising_edge
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+    expected_value_source: https://minecraft.wiki/w/Dispenser#Usage
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.dispenser/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.dispenser/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.dispenser/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.dispenser/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.dispenser/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.dispenser/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.dispenser/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.dropper
+    preconditions: containers.setup(ctx, subject='dropper')
+    actions: redstone_output(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - arrow_projectile_spawned
+      - dropper_transferred_one
+      - held_signal_does_not_repeat
+      - one_item_per_rising_edge
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+    expected_value_source: https://minecraft.wiki/w/Dropper#Usage
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.dropper/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.dropper/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.dropper/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.dropper/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.dropper/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.dropper/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.dropper/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.crafter
+    preconditions: containers.setup(ctx, subject='crafter')
+    actions: crafter(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - crafted_four_planks
+      - disabled_slots
+      - held_signal_no_second_craft
+      - one_craft_consumes_one_log
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+    expected_value_source: https://minecraft.wiki/w/Crafter#Usage
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.crafter/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.crafter/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.crafter/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.crafter/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.clean_restart_mid_action:containers.crafter/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:containers.crafter/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:containers.crafter/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.crafter/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.crafter/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.crafter/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.furnace
+    preconditions: containers.setup(ctx, subject='furnace')
+    actions: cooking(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - fuel_consumed
+      - fuel_property_ticks
+      - fuel_timer_positive
+      - ineligible_input_retained
+      - ineligible_recipe_no_output
+      - input_consumed
+      - output_exactly_one
+      - output_in_inventory
+      - output_take_debits_slot
+      - progress_property_ticks
+      - recipe_duration_ticks
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - xp_rounding_bounds
+    expected_value_source: https://minecraft.wiki/w/Smelting#Smelting_times
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.furnace/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.furnace/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.furnace/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.furnace/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.clean_restart_mid_action:containers.furnace/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:containers.furnace/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:containers.furnace/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.furnace/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.furnace/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.furnace/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+      - tr.multiplayer_x_same_block:containers.furnace/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.multiplayer_x_same_block:containers.furnace/vanilla_java_26_1_2/survival/overworld/normal/N8/normal/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.smoker
+    preconditions: containers.setup(ctx, subject='smoker')
+    actions: cooking(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - fuel_consumed
+      - fuel_property_ticks
+      - fuel_timer_positive
+      - ineligible_input_retained
+      - ineligible_recipe_no_output
+      - input_consumed
+      - output_exactly_one
+      - output_in_inventory
+      - output_take_debits_slot
+      - progress_property_ticks
+      - recipe_duration_ticks
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - xp_rounding_bounds
+    expected_value_source: https://minecraft.wiki/w/Smoker#Smelting
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.smoker/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.smoker/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.smoker/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.smoker/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.smoker/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.smoker/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.smoker/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.blast_furnace
+    preconditions: containers.setup(ctx, subject='blast_furnace')
+    actions: cooking(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - fuel_consumed
+      - fuel_property_ticks
+      - fuel_timer_positive
+      - ineligible_input_retained
+      - ineligible_recipe_no_output
+      - input_consumed
+      - output_exactly_one
+      - output_in_inventory
+      - output_take_debits_slot
+      - progress_property_ticks
+      - recipe_duration_ticks
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - xp_rounding_bounds
+    expected_value_source: https://minecraft.wiki/w/Blast_Furnace#Smelting
+    status: executable_adapter
+    matrix_ids:
+      - pw:containers.blast_furnace/protocol_bot/adventure/the_end/normal/1/malformed_or_stale_packet/pause_when_empty_resume/op_2
+      - tr.dupe.two_players_same_slot_same_tick:containers.blast_furnace/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.blast_furnace/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.blast_furnace/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.blast_furnace/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.blast_furnace/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.blast_furnace/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.brewing_stand
+    preconditions: containers.setup(ctx, subject='brewing_stand')
+    actions: brewing(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - brew_progress_400_tick_range
+      - ingredient_debited
+      - nineteen_brews_remaining
+      - one_bottle_preserved
+      - powder_debited
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+    expected_value_source: https://minecraft.wiki/w/Brewing_Stand#Brewing
+    status: executable_adapter
+    matrix_ids:
+      - pw:containers.brewing_stand/native_linux/adventure/the_end/easy/2/duplicate_login/save_all_checkpoint/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.brewing_stand/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.brewing_stand/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.brewing_stand/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.clean_restart_mid_action:containers.brewing_stand/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:containers.brewing_stand/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:containers.brewing_stand/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.brewing_stand/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.brewing_stand/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.brewing_stand/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: real_but_partial
+    unproved_clause:
+      capability: observation.menu.transition_ticks
+      clause: exact 400-tick brew interval
+  - id: containers.enchanting_table
+    preconditions: containers.setup(ctx, subject='enchanting_table')
+    actions: enchanting(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - enchant_seed_rerolled
+      - lapis_cost
+      - level_cost
+      - same_seed_same_offers
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - sword_is_enchanted
+      - third_offer_requires_30
+      - three_offers_with_fifteen_shelves
+      - viewing_does_not_reroll_seed
+    expected_value_source: https://minecraft.wiki/w/Enchanting_Table#Enchanting
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.enchanting_table/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.enchanting_table/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.enchanting_table/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.enchanting_table/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.enchanting_table/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.enchanting_table/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.enchanting_table/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.anvil
+    preconditions: containers.setup(ctx, subject='anvil')
+    actions: anvil(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - anvil_degrades_at_most_one_stage
+      - fresh_rename_cost
+      - rename_component
+      - rename_level_debit
+      - repair_cost_at_least_40
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - too_expensive_result_empty
+    expected_value_source: https://minecraft.wiki/w/Anvil_mechanics
+    status: executable_adapter
+    matrix_ids:
+      - pw:containers.anvil/fabric_solaris_loader/survival/the_end/hard/N8/slow_reader_backpressure/clean_restart_mid_action/op_4
+      - tr.dupe.two_players_same_slot_same_tick:containers.anvil/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.anvil/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.anvil/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.anvil/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.anvil/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.anvil/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.grindstone
+    preconditions: containers.setup(ctx, subject='grindstone')
+    actions: grindstone(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - curse_only_in_result
+      - disenchant_awards_xp
+      - disenchant_input_consumed
+      - repair_capped_at_full_durability
+      - repair_combines_matching_tools
+      - repair_consumes_both_tools
+      - repair_returns_one_tool
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+    expected_value_source: https://minecraft.wiki/w/Grindstone#Usage
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.grindstone/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.grindstone/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.grindstone/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.grindstone/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.grindstone/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.grindstone/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.grindstone/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.smithing_table
+    preconditions: containers.setup(ctx, subject='smithing_table')
+    actions: smithing(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - three_trim_inputs_consumed
+      - three_upgrade_inputs_consumed
+      - trim_component
+      - upgrade_damage_preserved
+      - upgrade_name_preserved
+      - upgrade_result
+    expected_value_source: https://minecraft.wiki/w/Smithing_Table#Smithing
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.smithing_table/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.smithing_table/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.smithing_table/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.smithing_table/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.smithing_table/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.smithing_table/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.smithing_table/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.loom
+    preconditions: containers.setup(ctx, subject='loom')
+    actions: loom(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - banner_and_dye_consumed
+      - banner_pattern_result
+      - pattern_item_reusable
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+    expected_value_source: https://minecraft.wiki/w/Loom#Usage
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.loom/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.loom/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.loom/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.loom/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.loom/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.loom/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.loom/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.stonecutter
+    preconditions: containers.setup(ctx, subject='stonecutter')
+    actions: stonecutter(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - all_three_inputs_consumed
+      - six_slabs_received
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - two_slabs_per_stone
+    expected_value_source: https://minecraft.wiki/w/Stonecutter#Stonecutting
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.stonecutter/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.stonecutter/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.stonecutter/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.stonecutter/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.stonecutter/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.stonecutter/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.stonecutter/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.cartography_table
+    preconditions: containers.setup(ctx, subject='cartography_table')
+    actions: cartography(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - clone_two_maps
+      - lock_consumed_glass
+      - locked_map_exists
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - zoom_consumed_paper
+      - zoom_scale_one
+    expected_value_source: https://minecraft.wiki/w/Cartography_Table#Usage
+    status: executable_adapter
+    matrix_ids:
+      - pw:containers.cartography_table/native_windows/creative/overworld/easy/2/normal/hot_backup_during_action/op_1
+      - tr.dupe.two_players_same_slot_same_tick:containers.cartography_table/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.cartography_table/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.cartography_table/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.cartography_table/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.cartography_table/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.cartography_table/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.beacon
+    preconditions: containers.setup(ctx, subject='beacon')
+    actions: beacon(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - beacon_payment_consumed
+      - outside_beacon_range_no_effects
+      - primary_and_secondary_applied
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+    expected_value_source: https://minecraft.wiki/w/Beacon#Powers
+    status: executable_adapter
+    matrix_ids:
+      - pw:containers.beacon/fabric_distant_horizons/creative/overworld/easy/2/reconnect_mid_action/steady/op_1
+      - tr.dupe.two_players_same_slot_same_tick:containers.beacon/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.beacon/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.beacon/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.beacon/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.beacon/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.beacon/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.merchant_villager
+    preconditions: containers.setup(ctx, subject='merchant_villager')
+    actions: merchant(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - exhausted_trade_has_no_result
+      - exhausted_trade_retains_payments
+      - merchant_has_offers
+      - payments_consumed
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_cannot_trade
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - trade_result_matches_offer
+      - trade_use_incremented_once
+      - trader_does_not_level
+      - trader_offer_locks
+      - trader_reaches_max_uses
+      - villager_experience_increased
+      - villager_restock_resets_uses
+    expected_value_source: https://minecraft.wiki/w/Trading#Mechanics
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.merchant_villager/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.merchant_villager/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.merchant_villager/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.merchant_villager/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.merchant_villager/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.merchant_villager/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.merchant_villager/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.merchant_wandering_trader
+    preconditions: containers.setup(ctx, subject='merchant_wandering_trader')
+    actions: merchant(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - exhausted_trade_has_no_result
+      - exhausted_trade_retains_payments
+      - merchant_has_offers
+      - payments_consumed
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_cannot_trade
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - trade_result_matches_offer
+      - trade_use_incremented_once
+      - trader_does_not_level
+      - trader_offer_locks
+      - trader_reaches_max_uses
+      - villager_experience_increased
+      - villager_restock_resets_uses
+    expected_value_source: https://minecraft.wiki/w/Wandering_Trader#Trading
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.merchant_wandering_trader/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.merchant_wandering_trader/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.merchant_wandering_trader/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.merchant_wandering_trader/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.merchant_wandering_trader/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.merchant_wandering_trader/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.merchant_wandering_trader/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.chest_boat
+    preconditions: containers.setup(ctx, subject='chest_boat')
+    actions: vehicle(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - collected_items_removed_from_world
+      - destroyed_boat_does_not_duplicate_contents
+      - destroyed_boat_drops_all_16
+      - disabled_cart_preserves_dropped_stock
+      - hopper_cart_collects_items
+      - loaded_cart_moves
+      - powered_activator_disables_pull
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - spectator_storage_unchanged
+      - vehicle_deposit
+      - vehicle_storage_retained
+    expected_value_source: https://minecraft.wiki/w/Boat_with_Chest#Usage
+    status: executable_adapter
+    matrix_ids:
+      - pw:containers.chest_boat/neoforge_solaris_loader/survival/the_nether/normal/N8/normal/clean_restart_mid_action/op_1
+      - tr.dupe.two_players_same_slot_same_tick:containers.chest_boat/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.chest_boat/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.chest_boat/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.clean_restart_mid_action:containers.chest_boat/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:containers.chest_boat/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:containers.chest_boat/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.chest_boat/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.chest_boat/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.chest_boat/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.chest_minecart
+    preconditions: containers.setup(ctx, subject='chest_minecart')
+    actions: vehicle(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - collected_items_removed_from_world
+      - destroyed_boat_does_not_duplicate_contents
+      - destroyed_boat_drops_all_16
+      - disabled_cart_preserves_dropped_stock
+      - hopper_cart_collects_items
+      - loaded_cart_moves
+      - powered_activator_disables_pull
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - spectator_storage_unchanged
+      - vehicle_deposit
+      - vehicle_storage_retained
+    expected_value_source: https://minecraft.wiki/w/Minecart_with_Chest#Usage
+    status: executable_adapter
+    matrix_ids:
+      - pw:containers.chest_minecart/vanilla_java_26_1_2/creative/the_end/easy/N8/disconnect_during_menu/clean_restart_mid_action/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.chest_minecart/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.chest_minecart/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.chest_minecart/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.clean_restart_mid_action:containers.chest_minecart/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:containers.chest_minecart/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:containers.chest_minecart/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.chest_minecart/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.chest_minecart/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.chest_minecart/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.hopper_minecart
+    preconditions: containers.setup(ctx, subject='hopper_minecart')
+    actions: vehicle(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - collected_items_removed_from_world
+      - destroyed_boat_does_not_duplicate_contents
+      - destroyed_boat_drops_all_16
+      - disabled_cart_preserves_dropped_stock
+      - hopper_cart_collects_items
+      - loaded_cart_moves
+      - powered_activator_disables_pull
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+      - spectator_storage_unchanged
+      - vehicle_deposit
+      - vehicle_storage_retained
+    expected_value_source: https://minecraft.wiki/w/Minecart_with_Hopper#Usage
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.hopper_minecart/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.hopper_minecart/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.hopper_minecart/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.hopper_minecart/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.hopper_minecart/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.hopper_minecart/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.hopper_minecart/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.plugin_chest_menu
+    preconditions: containers.setup(ctx, subject='plugin_chest_menu')
+    actions: plugin_menu(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - display_stock_not_leaked
+      - plugin_menu_has_stock
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+    expected_value_source: scenarios/live-plugins/basic-economy/README.md:6-9 (plugin contract, not vanilla)
+    status: executable_adapter
+    matrix_ids:
+      - bl:containers.plugin_chest_menu/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.plugin_chest_menu/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.plugin_chest_menu/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.plugin_chest_menu/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.plugin_chest_menu/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.plugin_chest_menu/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.plugin_chest_menu/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: real_but_partial
+    unproved_clause:
+      capability: observation.plugin_menu_click
+      clause: click delivered to owning plugin
+  - id: containers.mount_inventory
+    preconditions: containers.setup(ctx, subject='mount_inventory')
+    actions: mount(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - mount_cargo_deposit_16
+      - mount_cargo_retained_16
+      - mount_cargo_withdrawn
+      - mount_chest_consumed
+      - mount_finite_stock_conserved
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+    expected_value_source: https://minecraft.wiki/w/Chest#Donkey,_mule,_or_llama_pack
+    status: server_gap
+    matrix_ids:
+      - bl:containers.mount_inventory/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.mount_inventory/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.mount_inventory/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.mount_inventory/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.clean_restart_mid_action:containers.mount_inventory/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:containers.mount_inventory/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:containers.mount_inventory/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.mount_inventory/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.mount_inventory/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.mount_inventory/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+  - id: containers.lectern
+    preconditions: containers.setup(ctx, subject='lectern')
+    actions: lectern(ctx)
+    oracle: containers.oracle(ctx)
+    checks:
+      - lectern_initial_page
+      - lectern_next_page
+      - lectern_take_returns_book
+      - spectator_can_view_storage
+      - spectator_cannot_open_workstation
+      - spectator_inventory_read_only
+      - spectator_menu_read_only
+    expected_value_source: https://minecraft.wiki/w/Lectern#Holding_books
+    status: server_gap
+    matrix_ids:
+      - bl:containers.lectern/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_same_slot_same_tick:containers.lectern/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.break_container_while_open:containers.lectern/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.kill9_between_click_and_checkpoint:containers.lectern/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_container.disconnect_during_menu:containers.lectern/protocol_bot/survival/overworld/normal/1/disconnect_during_menu/steady/non_op_0
+      - tr.disconnect_x_container.reconnect_mid_action:containers.lectern/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_container.duplicate_login:containers.lectern/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    implementation_class: complete_adapter
+implementation_counts:
+  unit: subjects; base oracle, not all context combinations
+  spec_only: 0
+  registered_stub: 0
+  complete_adapter: 30
+  real_but_partial: 3
+conditional_driver_prerequisites:
+  - block_ack_sequence
+  - data_get_block
+  - data_get_entity
+  - observation.stack.components
+  - observation.menu.recipes
+  - observation.maps

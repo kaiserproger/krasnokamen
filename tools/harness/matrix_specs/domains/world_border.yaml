@@ -1,0 +1,208 @@
+domain: world_border
+vanilla_version: 26.1.2
+port_range:
+  - 26460
+  - 26479
+execution: shared matrix_api Adapter only; YAML is specification, not a second runner/DSL
+evidence_scope: Specifications and blocked requirements are not runtime passes; see canonical receipts and ledger.
+subjects:
+  - id: world_border.block_actions_outside
+    matrix_ids:
+      - pw:world_border.block_actions_outside/fabric_distant_horizons/adventure/the_end/hard/2/reconnect_mid_action/steady/console
+      - pw:world_border.block_actions_outside/native_linux/adventure/overworld/peaceful/N8/normal/hot_backup_during_action/op_1
+    adapter: tools.harness.matrix_domains.world_border:ADAPTERS[world_border.block_actions_outside]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - worldborder center 0 0
+        - worldborder set 100
+    source:
+      - https://minecraft.wiki/w/World_border
+    expected_version: Java 26.1.2
+    actions:
+      - setblock 3 80 0 stone
+      - worldborder set 4
+      - break_block 3 80 0
+      - use_item_on 3 80 0 up
+    oracle:
+      block[3,80,0]: stone
+      block[3,81,0]: air
+      inventory_dirt_count: 8
+    operator_fixture_contract:
+      border server commands use console; actor mode/permission unchanged; block actions
+      require actual received block_ack_sequence
+  - id: world_border.border_persistence
+    matrix_ids:
+      - pw:world_border.border_persistence/protocol_bot/survival/the_nether/normal/N8/normal/hot_backup_during_action/op_4
+      - pw:world_border.border_persistence/fabric_svc/survival/overworld/easy/2/normal/hot_backup_during_action/op_4
+    adapter: tools.harness.matrix_domains.world_border:ADAPTERS[world_border.border_persistence]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - worldborder center 0 0
+        - worldborder set 100
+    source:
+      - https://minecraft.wiki/w/World_border
+    expected_version: Java 26.1.2
+    actions:
+      - worldborder center 8 9
+      - worldborder set 50
+      - worldborder warning distance 7
+      - worldborder damage buffer 2
+      - save_all
+      - disconnect all clients; clean_restart; reconnect all clients
+      - worldborder set 100 2400t
+      - wait_dashboard_ticks 40
+      - save_all; disconnect all clients; clean_restart; reconnect all clients
+    oracle:
+      size: 50
+      center:
+        - 8
+        - 9
+      warning_distance: 7
+      damage_buffer: 2
+      additional_case: start nonzero lerp, save+restart midflight; target/remaining ticks preserved
+    server_gap:
+      id: BORDER-PERSIST
+      evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_border.rs:7-11
+      description: Only center and size are stored; no lerp state.
+      status: source-confirmed on original Hotfix tree; live receipts separate
+    operator_fixture_contract:
+      border server commands use console; actor mode/permission unchanged; block actions
+      require actual received block_ack_sequence
+  - id: world_border.center
+    matrix_ids:
+      - pw:world_border.center/native_windows/spectator/overworld/peaceful/1/duplicate_login/save_all_checkpoint/op_3
+      - pw:world_border.center/forge_solaris_loader/survival/overworld/easy/1/slow_reader_backpressure/steady/console
+    adapter: tools.harness.matrix_domains.world_border:ADAPTERS[world_border.center]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - worldborder center 0 0
+        - worldborder set 100
+    source:
+      - https://minecraft.wiki/w/World_border
+    expected_version: Java 26.1.2
+    actions:
+      - worldborder center 8 9
+    oracle:
+      client_border_packet.center:
+        - 8
+        - 9
+      health: after shifting center, outside survival/adventure actor takes damage; invulnerable modes do not
+    operator_fixture_contract:
+      border server commands use console; actor mode/permission unchanged; block actions
+      require actual received block_ack_sequence
+  - id: world_border.damage_buffer_warning
+    matrix_ids:
+      - pw:world_border.damage_buffer_warning/neoforge_solaris_loader/creative/the_nether/easy/N8/slow_reader_backpressure/clean_restart_mid_action/non_op_0
+    adapter: tools.harness.matrix_domains.world_border:ADAPTERS[world_border.damage_buffer_warning]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - worldborder center 0 0
+        - worldborder set 100
+    source:
+      - https://minecraft.wiki/w/World_border
+    expected_version: Java 26.1.2
+    actions:
+      - worldborder set 20
+      - worldborder damage buffer 0
+      - worldborder damage amount 1
+      - worldborder warning distance 7
+      - worldborder warning time 3
+      - worldborder damage buffer 3; tp actor 12 80 0; wait_dashboard_ticks 20
+      - worldborder damage buffer 0; wait_dashboard_ticks 20
+    oracle:
+      health: decreases only survival/adventure
+      warning_distance: 7
+      warning_time: 3
+      red_border_warning_visible: true from actual client observation, never inferred from configuration
+    missing_capabilities:
+      - snapshot:border_warning_visible
+    server_gap:
+      id: BORDER-OPTIONS
+      evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_border.rs:48-53,63-85
+      description: No damage/warning grammar or runtime border fields.
+      status: source-confirmed on original Hotfix tree; live receipts separate
+    operator_fixture_contract:
+      border server commands use console; actor mode/permission unchanged; block actions
+      require actual received block_ack_sequence
+  - id: world_border.set_and_lerp
+    matrix_ids:
+      - pw:world_border.set_and_lerp/vanilla_java_26_1_2/creative/overworld/peaceful/2/malformed_or_stale_packet/pause_when_empty_resume/op_2
+    adapter: tools.harness.matrix_domains.world_border:ADAPTERS[world_border.set_and_lerp]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - worldborder center 0 0
+        - worldborder set 100
+    source:
+      - https://minecraft.wiki/w/World_border
+    expected_version: Java 26.1.2
+    actions:
+      - worldborder set 50 200t
+      - wait_dashboard_ticks 100
+      - worldborder get
+      - wait_dashboard_ticks 110
+      - worldborder get
+    oracle:
+      mid_size:
+        - 70
+        - 80
+      final_size: 50
+      client_border_packet.target: 50
+    server_gap:
+      id: BORDER-LERP
+      evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_border.rs:81-83
+      description: Nonzero transition time rejected.
+      status: source-confirmed on original Hotfix tree; live receipts separate
+    operator_fixture_contract:
+      border server commands use console; actor mode/permission unchanged; block actions
+      require actual received block_ack_sequence
+  - id: world_border.teleport_outside_clamped
+    matrix_ids:
+      - pw:world_border.teleport_outside_clamped/fabric_solaris_loader/survival/the_end/normal/N8/slow_reader_backpressure/crash_kill9_wal_replay/op_1
+    adapter: tools.harness.matrix_domains.world_border:ADAPTERS[world_border.teleport_outside_clamped]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      commands:
+        - fill -8 79 -8 8 79 8 stone
+        - worldborder center 0 0
+        - worldborder set 100
+    source:
+      - https://minecraft.wiki/w/World_border
+    expected_version: Java 26.1.2
+    actions:
+      - worldborder set 20
+      - worldborder damage buffer 0
+      - tp actor 15 80 0; wait_dashboard_ticks 20
+      - observe position and actual health
+      - tp actor 8 80 0
+      - give actor ender_pearl 1
+      - look_at 15 80 0
+      - use_item
+      - wait_dashboard_ticks 40
+    oracle:
+      tp_x: 15
+      pearl_final_x: 8 < x <= 10
+      tp_health: outside-border survival/adventure actor takes damage, invulnerable modes do not
+      pearl_inventory: consumed in survival/adventure, retained in creative
+      matrix_correction: command tp is allowed outside; pearl collision is a separate oracle
+    operator_fixture_contract:
+      border server commands use console; actor mode/permission unchanged; block actions
+      require actual received block_ack_sequence
+phase2_checkpoint:
+  "57 distinct focused tests exercised; border/chat regressions cover custody, actual style, observer reconnects, and explicit 26.1.2 TimeArgument ticks.
+  No new live pass. Live runs paused by Main for critical compile admission."

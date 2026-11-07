@@ -1,4 +1,4 @@
-"""Driver for one real 26.1.2 vanilla server used as the parity oracle.
+"""Driver for one real vanilla server used as the parity oracle.
 
 The world is a void superflat world; every scenario force-loads its box, runs
 setup/phase commands through the server console, advances time with
@@ -17,9 +17,10 @@ import time
 from pathlib import Path
 
 from . import anvil
+from .. import runtime
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-MEM_RUN = REPO_ROOT / ".analysis" / "tools" / "mem-run.sh"
+MEM_RUN = Path("/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh")
 DEFAULT_JAR = REPO_ROOT / ".analysis" / "server.jar"
 
 _ERROR_MARKERS = (
@@ -65,6 +66,7 @@ class VanillaOracle:
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
+        self.port = port
         properties = {
             "online-mode": "false", "server-ip": "127.0.0.1", "server-port": str(port),
             "level-name": "world", "level-seed": str(self.seed),
@@ -83,7 +85,7 @@ class VanillaOracle:
         argv = [self.java, "-Xms256M", "-Xmx1280M", "-jar", str(self.jar), "nogui"]
         if self.use_mem_run:
             argv = [str(MEM_RUN), "-m", "2G"] + argv
-        self.process = subprocess.Popen(
+        self.process = runtime.start_server(
             argv, cwd=self.workdir, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, text=True, bufsize=1)
 

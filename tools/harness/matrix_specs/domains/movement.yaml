@@ -1,0 +1,441 @@
+schema: solaris-world-adapter-index/1
+domain: movement
+note:
+  Documentation index only; execution is the shared Python Adapter interface, not a YAML DSL. Registration is
+  not coverage. Original matrix contexts and all oracle clauses remain acceptance obligations.
+subjects_specified: 15
+matrix_rows: 19
+adapter_path: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py
+subjects:
+  - id: movement.walk_sprint_jump
+    matrix_ids:
+      - bl:movement.walk_sprint_jump/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.disconnect_x_transient_state.reconnect_mid_action:movement.walk_sprint_jump/native_linux/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_transient_state.duplicate_login:movement.walk_sprint_jump/protocol_bot/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:19-32
+    actions:
+      callable: tools.harness.matrix_domains.movement.walk_sprint_jump
+      optional_client_verbs:
+        - jump
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:19-32
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Hunger#Exhaustion_level_increase
+        - https://minecraft.wiki/w/Jumping
+        - https://minecraft.wiki/w/Sprinting
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - movement.max_y
+    server_gap_evidence: []
+  - id: movement.sneak_edge
+    matrix_ids:
+      - bl:movement.sneak_edge/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:35-43
+    actions:
+      callable: tools.harness.matrix_domains.movement.sneak_edge
+      optional_client_verbs:
+        - sneak
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:35-43
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Sneaking
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: movement.swim_and_sink
+    matrix_ids:
+      - bl:movement.swim_and_sink/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/entity_motion.rs
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:46-61
+    actions:
+      callable: tools.harness.matrix_domains.movement.swim_and_sink
+      optional_client_verbs:
+        - jump
+        - move
+        - sneak
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:46-61
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Swimming
+        - https://minecraft.wiki/w/Water#Swimming
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - pose
+    server_gap_evidence: []
+  - id: movement.climb
+    matrix_ids:
+      - pw:movement.climb/native_linux/survival/overworld/easy/2/reconnect_mid_action/pause_when_empty_resume/op_3
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:64-78
+    actions:
+      callable: tools.harness.matrix_domains.movement.climb
+      optional_client_verbs:
+        - jump
+        - move
+        - sneak
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:64-78
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Climbing
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: movement.step_up_slab_stairs
+    matrix_ids:
+      - bl:movement.step_up_slab_stairs/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:81-89
+    actions:
+      callable: tools.harness.matrix_domains.movement.step_up_slab_stairs
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:81-89
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Slab
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: movement.surface_modifiers
+    matrix_ids:
+      - bl:movement.surface_modifiers/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:92-107
+    actions:
+      callable: tools.harness.matrix_domains.movement.surface_modifiers
+      optional_client_verbs:
+        - sneak
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:92-107
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Magma_Block
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - health
+    server_gap_evidence: []
+  - id: movement.entangling_blocks
+    matrix_ids:
+      - pw:movement.entangling_blocks/vanilla_java_26_1_2/adventure/overworld/easy/N8/malformed_or_stale_packet/steady/op_1
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:110-124
+    actions:
+      callable: tools.harness.matrix_domains.movement.entangling_blocks
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:110-124
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Powder_Snow#Freezing
+        - https://minecraft.wiki/w/Sweet_Berries
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - health
+    server_gap_evidence: []
+  - id: movement.bubble_column
+    matrix_ids:
+      - pw:movement.bubble_column/forge_solaris_loader/creative/the_nether/hard/1/slow_reader_backpressure/save_all_checkpoint/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/fluids.rs
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:127-138
+    actions:
+      callable: tools.harness.matrix_domains.movement.bubble_column
+      optional_client_verbs:
+        - move
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:127-138
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Bubble_Column
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: movement.chunk_boundary_crossing
+    matrix_ids:
+      - pw:movement.chunk_boundary_crossing/fabric_distant_horizons/spectator/the_end/normal/N8/malformed_or_stale_packet/hot_backup_during_action/op_4
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-edge/src/chunks.rs
+      - crates/mc-core/src/chunk_loader.rs
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:141-149
+    actions:
+      callable: tools.harness.matrix_domains.movement.chunk_boundary_crossing
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:141-149
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Chunk
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - movement.corrections
+    server_gap_evidence: []
+  - id: movement.illegal_move_correction
+    matrix_ids:
+      - pw:movement.illegal_move_correction/protocol_bot/survival/overworld/hard/1/slow_reader_backpressure/pause_when_empty_resume/op_3
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:152-162
+    actions:
+      callable: tools.harness.matrix_domains.movement.illegal_move_correction
+      optional_client_verbs:
+        - move_to
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:152-162
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Player#Movement
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: movement.teleport_confirm
+    matrix_ids:
+      - bl:movement.teleport_confirm/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:165-174
+    actions:
+      callable: tools.harness.matrix_domains.movement.teleport_confirm
+      optional_client_verbs:
+        - move
+        - move_to
+        - set_teleport_confirmation
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:165-174
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Commands/teleport
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: movement.elytra_glide
+    matrix_ids:
+      - pw:movement.elytra_glide/native_windows/creative/the_end/peaceful/1/normal/crash_kill9_wal_replay/op_1
+      - tr.disconnect_x_transient_state.reconnect_mid_action:movement.elytra_glide/protocol_bot/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_transient_state.duplicate_login:movement.elytra_glide/vanilla_java_26_1_2/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/tick/elytra.rs
+      - crates/mc-core/src/elytra_tests.rs
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:177-189
+    actions:
+      callable: tools.harness.matrix_domains.movement.elytra_glide
+      optional_client_verbs:
+        - start_fall_flying
+        - use_item
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:177-189
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Elytra
+        - https://minecraft.wiki/w/Elytra#Flying
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - pose
+    server_gap_evidence: []
+  - id: movement.riptide
+    matrix_ids:
+      - pw:movement.riptide/fabric_svc/creative/overworld/peaceful/1/duplicate_login/save_all_checkpoint/op_4
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/projectiles/weapons.rs
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:192-205
+    actions:
+      callable: tools.harness.matrix_domains.movement.riptide
+      optional_client_verbs:
+        - release_use_item
+        - use_item
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:192-205
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Riptide
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: movement.movement_enchantments
+    matrix_ids:
+      - pw:movement.movement_enchantments/neoforge_solaris_loader/creative/overworld/hard/1/normal/steady/op_3
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/enchantments.rs
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:208-228
+    actions:
+      callable: tools.harness.matrix_domains.movement.movement_enchantments
+      optional_client_verbs:
+        - sneak
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:208-228
+      expected_version: Java 26.1.2
+      sources: []
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: movement.collision_entities
+    matrix_ids:
+      - pw:movement.collision_entities/fabric_solaris_loader/adventure/overworld/peaceful/2/duplicate_login/clean_restart_mid_action/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/tick_collision_tests.rs
+      - crates/mc-core/src/tick/input/movement.rs
+      - crates/mc-core/src/contact_hazards.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:231-241
+    actions:
+      callable: tools.harness.matrix_domains.movement.collision_entities
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/movement.py:231-241
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Damage#Entity_cramming
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []

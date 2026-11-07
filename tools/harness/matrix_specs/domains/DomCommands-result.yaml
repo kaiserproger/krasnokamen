@@ -1,0 +1,239 @@
+verdict: blocked
+phase1:
+  subjects_specified: 158
+  matrix_rows_bound: 164
+  per_domain:
+    commands: 66
+    selectors: 18
+    gamerules: 58
+    chat: 10
+    world_border: 6
+  spec_directory: /run/media/kaiserroman/games/solaris-work/scenarios/domains
+  reference_version: 26.1.2
+  reference_jar_sha256: 4723380bd2a0a0206719b50f2e390383afdaf82b0a76a0d573baf788e6aa3e86
+phase2:
+  adapter_registrations: 158
+  fully_exercised_matrix_rows: 1
+  matrix_passes: 0
+  gamerule_behaviors_blocked_by_controlled_fixtures: 32
+  important:
+    Registration is not completion or parity. Missing observations/controlled stimuli raise MissingCapability;
+    no registration-only gamerule can pass. Full command syntax/permission subcases and extra selector cases remain
+    specification obligations, not proven coverage.
+findings:
+  - id: REPLAY-FIXTURE-LOSS
+    kind: observed real-server failure
+    scenario: pw:selectors.invalid_selector/protocol_bot/survival/overworld/normal/1/reconnect_mid_action/crash_kill9_wal_replay/op_3
+    evidence:
+      - /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomCommands/20261024T033030-protocol-matrix-x33wfm_l/server.log:30,72
+      - /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomCommands/20261024T033030-protocol-matrix-x33wfm_l/protocol-result.json:52-123
+    scenario_detail:
+      After created/initialized scoreboard fixture and invalid @x rejection, shared SIGKILL(-9)/same-world
+      restart loses matrix_sel objective. All5 rejection checks pass; score query fails. Actor also returns original
+      spawn. Cause unestablished.
+  - id: DATA-ENTITY
+    subject: commands.data
+    kind: source-audit gap on original binary
+    evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_blocks.rs:255-287
+    description: Only get|merge block on command blocks; generic entity/storage paths unsupported on original binary.
+  - id: DATAPACK-ENABLE
+    subject: commands.datapack
+    kind: source-audit gap on original binary
+    evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/datapacks.rs:549-553
+    description: list only; enable/disable rejects.
+  - id: DEBUG-PROFILER
+    subject: commands.debug
+    kind: source-audit gap on original binary
+    evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/commands.rs:963-975
+    description: Vanilla profiler root replaced with Solaris give fixture.
+  - id: BORDER-LERP
+    subject: world_border.set_and_lerp
+    kind: source-audit gap on original binary
+    evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_border.rs:81-83
+    description: Nonzero transition time rejected.
+  - id: BORDER-OPTIONS
+    subject: world_border.damage_buffer_warning
+    kind: source-audit gap on original binary
+    evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_border.rs:48-53,63-85
+    description: No damage/warning grammar or runtime border fields.
+  - id: BORDER-PERSIST
+    subject: world_border.border_persistence
+    kind: source-audit gap on original binary
+    evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_border.rs:7-11
+    description: Only center and size are stored; no lerp state.
+  - id: SELECTOR-AABB
+    subject: selectors.opt_dxdydz
+    kind: source-audit gap on original binary
+    evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_execution.rs:128-134
+    description: Position point containment instead of entity bounding-box intersection.
+  - id: RULE-COMMAND-BUDGET
+    subject: gamerules.max_command_sequence_length
+    kind: source-audit gap on original binary
+    evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_context.rs:9,127-136
+    description: Runtime charges constant65536 rather than configured rule.
+changed_files:
+  worktree: /run/media/kaiserroman/games/solaris-work/wt/dom-commands
+  python:
+    - tools/harness/matrix_domains/commands.py
+    - tools/harness/matrix_domains/selectors.py
+    - tools/harness/matrix_domains/gamerules.py
+    - tools/harness/matrix_domains/chat.py
+    - tools/harness/matrix_domains/world_border.py
+    - tools/harness/matrix_domains/test_commands.py
+  specifications:
+    - /run/media/kaiserroman/games/solaris-work/scenarios/domains/commands.yaml
+    - /run/media/kaiserroman/games/solaris-work/scenarios/domains/selectors.yaml
+    - /run/media/kaiserroman/games/solaris-work/scenarios/domains/gamerules.yaml
+    - /run/media/kaiserroman/games/solaris-work/scenarios/domains/chat.yaml
+    - /run/media/kaiserroman/games/solaris-work/scenarios/domains/world_border.yaml
+  bug_reports:
+    - /run/media/kaiserroman/games/solaris-work/scenarios/domains/commands-bugs.md
+    - /run/media/kaiserroman/games/solaris-work/scenarios/domains/selectors-bugs.md
+    - /run/media/kaiserroman/games/solaris-work/scenarios/domains/gamerules-bugs.md
+    - /run/media/kaiserroman/games/solaris-work/scenarios/domains/chat-bugs.md
+    - /run/media/kaiserroman/games/solaris-work/scenarios/domains/world_border-bugs.md
+validation:
+  unit:
+    initial:
+      command: python3 -m unittest tools.harness.matrix_domains.test_commands -v
+      passed: 15
+    targeted_after_corrections:
+      command:
+        python3 -m unittest tools.harness.matrix_domains.test_commands.DomainContractTests.test_action_preserves_client_authority
+        tools.harness.matrix_domains.test_commands.DomainContractTests.test_console_authority_and_single_boundary
+        tools.harness.matrix_domains.test_commands.DomainContractTests.test_exact_list_count_and_names tools.harness.matrix_domains.test_commands.DomainContractTests.test_each_invalid_selector_error_survives_boundary
+        tools.harness.matrix_domains.test_commands.DomainContractTests.test_solaris_debug_fixture_is_not_vanilla_profiler_pass
+        -v
+      passed: 5
+    distinct_test_methods_exercised: 21
+    scope: pure Python contract/oracle tests; no real-server coverage implied
+    rust_clippy: not applicable; no Rust crates touched
+    shared_api_6efc6448:
+      command:
+        python3 -m unittest tools.harness.matrix_domains.test_commands.DomainContractTests.test_gamerule_state_satisfies_shared_json_contract
+        tools.harness.matrix_domains.test_commands.DomainContractTests.test_registration_is_not_behavioral_pass
+        -v
+      passed: 2
+      change: Store gamerule baseline/changed Check payloads as JSON dictionaries; reconstruct Check only in oracle.
+    plugin_profile_24fcc5c1:
+      passed: 2
+      tests:
+        - test_nonop_msg_rejection_tracks_exact_plugin_profile
+        - test_live_private_message_requires_essentials_format
+  static: /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/static-validation.json
+  supplemental_probe:
+    subject: commands.list
+    status: pass
+    receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomCommands/20261024T032315-protocol-matrix-lc8s9uns/protocol-result.json
+    scope:
+      Earlier listed-name predicate passed on real release. Exact count/name predicate subsequently added and
+      regression-tested against recorded output. Supplemental only; not entered as matrix coverage.
+  matrix_runs:
+    - status: fail
+      receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomCommands/20261024T032542-protocol-matrix-9llti78v/protocol-result.json
+      cause: adapter predicate omitted valid negative-distance message; corrected and regression-tested
+    - status: fail
+      receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomCommands/20261024T033030-protocol-matrix-x33wfm_l/protocol-result.json
+      cause: real observed missing scoreboard fixture after SIGKILL restart
+  ledger:
+    Two validated append-only receipt-derived lines recorded; latest is replay state-loss failure. No fake
+    pass or supplemental matrix record.
+missing_capabilities:
+  - admin_chat_observer:command_block_output
+  - aimed_projectile:decorated_pot
+  - chunk_generation_census
+  - client:break_block
+  - client:chat_burst
+  - client:configure_chat
+  - client:move
+  - client:respawn
+  - client:send_raw_chat
+  - client:send_signed_chat
+  - client:use_item
+  - controlled_creeper_detonation
+  - controlled_explosion:block_drop_census
+  - controlled_explosion:mob_drop_census
+  - controlled_explosion:tnt_drop_census
+  - controlled_monster_spawn_attempt
+  - controlled_natural_spawn_attempt
+  - controlled_patrol_spawn_attempt
+  - controlled_snow_precipitation_tick
+  - controlled_trader_spawn_attempt
+  - data_get_block
+  - data_get_entity
+  - entity_collision_census:cramming
+  - execute_store
+  - fixture_datapack:branching_function
+  - fixture_datapack:matrix:command_probe
+  - fixture_datapack:three_command_function
+  - lower_permission_command_tree_probe
+  - multi_client_3:team_nonrecipient
+  - multi_client_entity_id:attack
+  - neutral_mob_anger:second_player
+  - neutral_mob_anger:target_and_death
+  - owned_projectile:inflight_death
+  - player_food_fixture:full_food_damaged
+  - player_insomnia_fixture:phantom_attempt
+  - raw_move:elytra_overspeed
+  - raw_move:ground_overspeed
+  - recipe_unlock_and_crafting:locked_recipe
+  - respawn_without_personal_spawn
+  - sculk_shrieker_warning_fixture
+  - server_log:admin_command_records
+  - sleeping_clients:quorum
+  - snapshot:advancements
+  - snapshot:block_log_inspection_mode
+  - snapshot:checkpoint_flushed
+  - snapshot:command_roots
+  - snapshot:connected
+  - snapshot:debug_profiler_running
+  - snapshot:dimension
+  - snapshot:dimension_change_tick
+  - snapshot:disconnect_reason
+  - snapshot:effects
+  - snapshot:enabled_datapacks
+  - snapshot:game_mode
+  - snapshot:held_enchantments
+  - snapshot:located_biome
+  - snapshot:portal_enter_tick
+  - snapshot:reduced_debug_info
+  - snapshot:respawn_position
+  - snapshot:screen
+  - snapshot:server_exit_code
+  - snapshot:tick_rate
+  - snapshot:title
+  - snapshot:transfer
+  - snapshot:waypoints
+  - snapshot:weather
+  - snapshot:world_border
+  - snapshot:world_seed
+  - snapshot:world_spawn
+  - sound_events:remote_boss_spawn
+  - spawner_nbt_fixture:guaranteed_attempt
+  - village_raid_trigger:raid_omen
+integration:
+  base_tree: 24fcc5c1cf012bb87a9af77396382b9466f5c871
+  worktree: /run/media/kaiserroman/games/solaris-work/wt/dom-commands
+  diff_hash: 4fdac003d5bdb3c5af1d9147d1716174dd6cf98bb80e5925d42ba3c14273040f
+  files:
+    tools/harness/matrix_domains/commands.py: d5ef9f10c9820354c15a041eecc335d961650087091a45c7347473e21c5fe16e
+    tools/harness/matrix_domains/selectors.py: c026b0fcf78391071289f771994fcfea25d3b1da742186fc735af303a0e6b5bb
+    tools/harness/matrix_domains/gamerules.py: 0fcd47a290f4f48717a9cca9f4c53e01fefccb3b91f332eeb8cf51a6f2264dff
+    tools/harness/matrix_domains/chat.py: 4c5da50358ea66ad81fc00a93a1110a3cb15afb18ea9cec5ecbd85c5c569c3e6
+    tools/harness/matrix_domains/world_border.py: bcb154036414dba314285d58725acf7fbe7d91fd711a1e232ea9dc36eb4baada
+    tools/harness/matrix_domains/test_commands.py: 267d7351f560fbf689d7ad1976894779915d59e3c87ae618ff7ae15ee5a2fbda
+  patch: /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/DomCommands.patch
+  server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+no_product_changes: true
+no_commits_created: true
+next_action:
+  Integrate the six new domain Python files from DomCommands.patch; add controlled fixtures/rich observations
+  through shared drivers; rebuild announced product fixes before affected replay/query probes. Do not count unexercised
+  registrations as scenario passes.
+report_path: /run/media/kaiserroman/games/solaris-work/scenarios/domains/DomCommands-result.yaml
+shared_api_update:
+  base: 24fcc5c1cf012bb87a9af77396382b9466f5c871
+  profile_changes:
+    commands.msg, chat.private_message, selectors.nonop_selector_msg branch on exact plugin_profile;
+    no blanket plugin exclusions
+  validation: 2 focused profile regression tests passed; no new live runs
