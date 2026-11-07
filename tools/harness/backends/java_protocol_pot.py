@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from .menu_observer import holds, observe_menu
 from .native_craft_drag import Pointer
 from .native_promotion_wire import read_nbt
 from .probe_steps import ProbeSteps
+from .village_autonomy_qa import _snbt_fields
 
 SCENARIO = "java-protocol-pot-creative-echo"
 REQUIRED_TOOLS = frozenset({
@@ -34,6 +36,29 @@ def creative_packet_observer(report_path: Path, artifact: Path):
             (artifact / "creative-wire.json").write_text(json.dumps(events, indent=2) + "\n")
 
     return observe
+
+
+def dropped_pot(steps: ProbeSteps) -> dict[str, Any]:
+    """Query the real dropped entity; no inventory fixture supplies this result."""
+    marker = "pot-drop-" + uuid.uuid4().hex
+    steps.call("minecraft_send_chat", {"message": marker, "command": False})
+    steps.wait(lambda state: any(marker in line for line in state["recent_chat"]),
+               "drop_query_fence")
+    steps.call("minecraft_send_chat", {
+        "message": "data get entity @e[type=minecraft:item,limit=1,sort=nearest] Item",
+        "command": True,
+    })
+
+    def reply(state):
+        lines = state["recent_chat"]
+        boundary = next((i for i, line in enumerate(lines) if marker in line), None)
+        return boundary is not None and any("has the following entity data:" in line
+                                           for line in lines[:boundary])
+
+    state = steps.wait(reply, "dropped_entity_data")
+    raw = next(line for line in state["recent_chat"] if "has the following entity data:" in line)
+    steps.report["dropped_pot_snbt"] = raw
+    return _snbt_fields(raw[raw.index("{"):])
 
 
 def run(client: Any, artifact: Path, timeout: float) -> dict[str, Any]:
@@ -103,9 +128,73 @@ def run(client: Any, artifact: Path, timeout: float) -> dict[str, Any]:
                 steps.check(label + "_only_one_authoritative_pot",
                             sum(row["count"] for row in returned["slots"] if row["item"] == POT) == 1
                             and returned["carried"]["count"] == 0)
+            # Drop the physically carried projection outside the native menu.
+            pointer.move(left + 17 * scale, top + 120 * scale)
+            pointer.button(True)
+            steps.wait(lambda state: state["container"]["carried"]["count"] == 1
+                       and not any(row["slot"] == 0 for row in state["inventory"]),
+                       "drop_physical_pickup")
+            pointer.button(False)
+            pointer.move(25, 25)
+            pointer.button(True)
+            pointer.button(False)
+            steps.wait(lambda state: state["container"]["carried"]["count"] == 0,
+                       "physical_outside_drop")
+            dropped = dropped_pot(steps)
+            java_p5.capture(steps, "protocol-pot-dropped")
+            dropped_components = _snbt_fields(dropped["components"])
+            dropped_sides = _snbt_fields(dropped_components["minecraft:pot_decorations"])
+            back = _snbt_fields(dropped_sides["back"])
+            nested_components = _snbt_fields(back["components"])
+            nested_name = _snbt_fields(nested_components["minecraft:custom_name"])
+            steps.check("drop_restores_canonical_nested_stack",
+                        json.loads(dropped["id"]) == POT and dropped["count"] == "1"
+                        and set(dropped_sides) == {"back"}
+                        and json.loads(back["id"]) == "minecraft:brick" and back["count"] == "3"
+                        and json.loads(nested_name["text"]) == "Nested Protocol Pot")
+            # The same old-client projection without hidden nested data must
+            # not reuse the consumed drop provenance during creative echoes.
+            steps.fixture('debug give minecraft:decorated_pot['
+                          'minecraft:custom_name={text:"Protocol Pot"}] 1 0')
+            steps.call("minecraft_wait_for_inventory", {
+                "item_id": POT, "count": 1, "timeout_seconds": steps.remaining(),
+            })
+            plain = observe_menu(steps, "plain_pot_after_drop")["slots"][36]
+            steps.check("drop_does_not_restore_stale_nested_components",
+                        holds(plain, POT, 1) and plain["components"]["custom_name"] == "Protocol Pot"
+                        and plain != canonical)
+            # Re-seed only the next branch, then close with the real cursor full.
+            steps.fixture('debug give minecraft:decorated_pot['
+                          'minecraft:pot_decorations={back:{id:"minecraft:brick",count:3,'
+                          'components:{"minecraft:custom_name":{text:"Nested Protocol Pot"}}}},'
+                          'minecraft:custom_name={text:"Protocol Pot"}] 1 0')
+            steps.wait(lambda state: any(row["slot"] == 0 and row["item_id"] == POT
+                                        for row in state["inventory"]), "close_fixture_received")
+            before_close = observe_menu(steps, "before_close_with_carried")
+            steps.check("close_fixture_canonical_received", before_close["slots"][36] == canonical)
+            pointer.move(left + 17 * scale, top + 120 * scale)
+            pointer.button(True)
+            steps.wait(lambda state: state["container"]["carried"]["count"] == 1
+                       and not any(row["slot"] == 0 for row in state["inventory"]),
+                       "close_physical_pickup")
+            pointer.button(False)
+            java_p5.capture(steps, "protocol-pot-close-carried")
             steps.call("minecraft_close_screen")
             closed = observe_menu(steps, "after_creative_close")
-            steps.check("close_keeps_authoritative_components", closed["slots"][36] == canonical)
+            steps.check("creative_close_does_not_invent_server_cursor_custody",
+                        closed["slots"][36]["count"] == 0 and closed["carried"]["count"] == 0)
+            steps.fixture('debug give minecraft:decorated_pot['
+                          'minecraft:custom_name={text:"Protocol Pot"}] 1 0')
+            steps.call("minecraft_wait_for_inventory", {
+                "item_id": POT, "count": 1, "timeout_seconds": steps.remaining(),
+            })
+            steps.call("minecraft_open_inventory")
+            steps.wait(lambda state: state["screen"]["class"].endswith(".CreativeModeInventoryScreen"),
+                       "reopen_after_carried_close")
+            reopened = observe_menu(steps, "plain_pot_after_close")
+            steps.check("close_does_not_restore_stale_nested_components",
+                        reopened["slots"][36] == plain and reopened["carried"]["count"] == 0)
+            steps.call("minecraft_close_screen")
             java_p5.capture(steps, "protocol-pot-after-close")
         finally:
             pointer.close()
