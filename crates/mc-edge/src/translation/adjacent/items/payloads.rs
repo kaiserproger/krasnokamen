@@ -9,6 +9,7 @@ pub(super) fn registry(
     r: &mut &[u8],
     w: &mut Vec<u8>,
     holder: bool,
+    lossy: &mut bool,
 ) -> Result<()> {
     let raw = r.read_varint()?;
     let offset = i32::from(holder);
@@ -21,6 +22,7 @@ pub(super) fn registry(
         .get(name)
         .with_context(|| format!("missing {name} translation"))?;
     let id = map(ids, to, raw - offset).with_context(|| format!("unmapped {name} id {raw}"))?;
+    *lossy |= to == To::Legacy && ids.back(id) != Some(raw - offset);
     w.write_varint(id + offset);
     Ok(())
 }
@@ -63,44 +65,66 @@ pub(super) fn extra(
     r: &mut &[u8],
     w: &mut Vec<u8>,
     depth: usize,
+    lossy: &mut bool,
 ) -> Result<()> {
     match shape {
         Payload::Container => {
             let n = list_len(r, w)?;
             for _ in 0..n {
-                optional(r, w, |r, w| template_at(t, to, r, w, depth + 1))?;
+                optional(r, w, |r, w| template_at(t, to, r, w, depth + 1, lossy))?;
             }
         }
-        Payload::PotDecorations => match to {
-            To::Legacy => {
+        Payload::PotDecorations => {
+            let (source, target) = match to {
+                To::Legacy => (t.formats.upper, t.formats.lower),
+                To::Canonical => (t.formats.lower, t.formats.upper),
+            };
+            let brick = match to {
+                To::Legacy => t.legacy_brick,
+                To::Canonical => t.items.back(t.legacy_brick).context("unmapped brick")?,
+            };
+            if source < 777 && target < 777 {
+                let n = list_len(r, w)?;
+                for _ in 0..n {
+                    w.write_varint(mapped_item(t, to, r.read_varint()?, lossy)?);
+                }
+            } else if source >= 777 && target >= 777 {
+                for _ in 0..4 {
+                    optional(r, w, |r, w| template_at(t, to, r, w, depth + 1, lossy))?;
+                }
+            } else if source >= 777 {
                 w.write_varint(4);
                 for _ in 0..4 {
                     if r.read_bool()? {
                         let mut out = Vec::new();
-                        template_at(t, to, r, &mut out, depth + 1)?;
-                        w.write_varint(out.as_slice().read_varint()?);
+                        template_at(t, to, r, &mut out, depth + 1, lossy)?;
+                        let mut mapped = out.as_slice();
+                        w.write_varint(mapped.read_varint()?);
+                        *lossy |= mapped.read_varint()? != 1;
+                        *lossy |= mapped.read_varint()? != 0;
+                        *lossy |= mapped.read_varint()? != 0;
                     } else {
-                        w.write_varint(t.legacy_brick);
+                        *lossy = true;
+                        w.write_varint(brick);
                     }
                 }
-            }
-            To::Canonical => {
+            } else {
                 let n = r.read_varint()?;
                 ensure!((0..=4).contains(&n), "pot decoration count");
                 for side in 0..4 {
                     let id = if side < n {
-                        r.read_varint()?
+                        mapped_item(t, to, r.read_varint()?, lossy)?
                     } else {
-                        t.legacy_brick
+                        brick
                     };
                     w.write_bool(true);
-                    w.write_varint(t.items.back(id).context("unmapped pot item")?);
+                    w.write_varint(id);
                     w.write_varint(1);
                     w.write_varint(0);
                     w.write_varint(0);
                 }
             }
-        },
+        }
         Payload::DeathProtection => {
             // Native admission currently permits only an empty ConsumeEffect
             // list. Never treat an unknown nonempty list as an empty one.
@@ -114,7 +138,7 @@ pub(super) fn extra(
         Payload::StewEffects => {
             let n = list_len(r, w)?;
             for _ in 0..n {
-                registry(t, to, "mob_effect", r, w, false)?;
+                registry(t, to, "mob_effect", r, w, false, lossy)?;
                 w.write_varint(r.read_varint()?);
             }
         }
@@ -134,13 +158,13 @@ pub(super) fn extra(
             }
         }
         Payload::Trim => {
-            registry(t, to, "trim_material", r, w, true)?;
-            registry(t, to, "trim_pattern", r, w, true)?;
+            registry(t, to, "trim_material", r, w, true, lossy)?;
+            registry(t, to, "trim_pattern", r, w, true, lossy)?;
         }
         Payload::BannerPatterns => {
             let n = list_len(r, w)?;
             for _ in 0..n {
-                registry(t, to, "banner_pattern", r, w, true)?;
+                registry(t, to, "banner_pattern", r, w, true, lossy)?;
                 w.write_varint(r.read_varint()?);
             }
         }

@@ -35,7 +35,7 @@ async fn run(cli: Cli, mut cfg: mc_edge::config::EdgeConfig) -> anyhow::Result<(
     if mc_edge::operator_cli::run_offline(&cli, &mut cfg).await? {
         return Ok(());
     }
-    mc_edge::server::resolve_content_config(&mut cfg)?;
+    mc_edge::content_cache::prepare_startup(&mut cfg).await?;
     let data = mc_edge::server::load_vanilla_data(&cfg)?;
     let tags = mc_edge::server::load_tags(&cfg, &data)?;
     let core_config = mc_edge::server::core_config(&cfg);

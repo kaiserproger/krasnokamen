@@ -381,8 +381,9 @@ class ProtocolEntities:
     """Pure clientbound entity-state accumulator; parent-owned, no I/O."""
 
     def __init__(self, decode_stack: DecodeStack | None = None, *,
-                 local_entity_id: int | None = None) -> None:
+                 local_entity_id: int | None = None, protocol: int = 775) -> None:
         self._decode_stack = decode_stack
+        self._protocol = protocol
         self._entities: dict[int, dict[str, Any]] = {}
         self._xp: dict[str, Any] | None = None
         self._local = {'id': local_entity_id} if local_entity_id is not None else None
@@ -483,10 +484,27 @@ class ProtocolEntities:
     def _relative(self, raw: bytes, *, with_rotation: bool) -> None:
         cur = _Cursor(raw)
         entity_id = cur.varint()
-        delta = [cur.i16() / 4096.0, cur.i16() / 4096.0, cur.i16() / 4096.0]
-        if with_rotation:
-            cur.take(2)  # packed yaw/pitch; orientation not snapshotted
-        cur.boolean()
+        if self._protocol == 777:
+            # 26.3 VecDelta.read: properties contain onGround and step count;
+            # each stepped delta is a VarInt tick offset followed by three shorts.
+            # Verified against the 26.3 server jar's VecDelta javap.
+            properties = cur.varint()
+            count = properties >> 1
+            if count > cur.remaining() // 7:
+                raise _DecodeError('bad_movement_step_count')
+            delta = [0, 0, 0]
+            for _ in range(count or 1):
+                if count:
+                    cur.varint()  # step duration; end position is cumulative
+                for axis in range(3):
+                    delta[axis] += cur.i16() / 4096.0
+            if with_rotation:
+                cur.take(2)
+        else:
+            delta = [cur.i16() / 4096.0, cur.i16() / 4096.0, cur.i16() / 4096.0]
+            if with_rotation:
+                cur.take(2)
+            cur.boolean()
         cur.end()
         entry = self._entities.get(entity_id)
         if entry is None:
@@ -498,16 +516,34 @@ class ProtocolEntities:
     def _rotation(self, raw: bytes) -> None:
         cur = _Cursor(raw)
         cur.varint()
-        cur.take(2)
-        cur.boolean()
+        if self._protocol == 777:
+            cur.boolean()
+            cur.take(2)
+        else:
+            cur.take(2)
+            cur.boolean()
         cur.end()
 
     def _absolute(self, raw: bytes) -> None:
         cur = _Cursor(raw)
         entity_id = cur.varint()
-        position = [cur.f64(), cur.f64(), cur.f64()]
-        cur.take(24)  # per-tick velocity; not snapshotted
-        cur.take(8)  # yaw/pitch; not snapshotted
+        if self._protocol == 777:
+            path_type = cur.varint()
+            if path_type == 0:
+                position = [cur.f64(), cur.f64(), cur.f64()]
+            elif path_type == 1:
+                count = cur.varint()
+                if count < 1 or count > cur.remaining() // 25:
+                    raise _DecodeError('bad_position_step_count')
+                for _ in range(count):
+                    position = [cur.f64(), cur.f64(), cur.f64()]
+                    cur.varint()
+            else:
+                raise _DecodeError('unsupported_position_path')
+        else:
+            position = [cur.f64(), cur.f64(), cur.f64()]
+            cur.take(24)
+        cur.take(8)
         cur.boolean()
         cur.end()
         entry = self._entities.get(entity_id)

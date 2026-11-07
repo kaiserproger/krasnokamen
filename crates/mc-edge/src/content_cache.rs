@@ -4,9 +4,9 @@
 //! by guesswork, so every registry, tag, loot table, structure set/template and
 //! report the server runs on must come from one cache derived from the
 //! operator's own licensed Minecraft artifact. `content_import` is the only
-//! writer of that cache; this module only chooses and validates it. Startup
-//! reuses a complete cache offline and otherwise stops with an explicit import
-//! instruction. There is no automatic download or embedded-subset startup.
+//! writer of that cache; this module chooses and validates it. Fresh startup
+//! installs the whole supported window through that importer; existing caches
+//! remain offline and an unusable existing canonical cache fails closed.
 
 use std::path::{Path, PathBuf};
 
@@ -20,7 +20,7 @@ use crate::startup_data::{validate_startup_data, validate_vanilla_sidecar_versio
 pub const CONTENT_CACHE_ENV: &str = "SOLARIS_CONTENT_CACHE";
 
 /// The command an operator runs to produce a cache by hand.
-pub const IMPORT_COMMAND: &str = "solaris-v2 content import --version 26.3 --download";
+pub const IMPORT_COMMAND: &str = "solaris-v2 content import --download";
 
 /// User-level cache root: `$XDG_DATA_HOME` (or `~/.local/share`), then
 /// `solaris/content/<target release>`.
@@ -205,6 +205,31 @@ impl ContentSearch {
             .cloned()
             .unwrap_or_else(|| PathBuf::from(WORKING_CACHE_SUBDIR))
     }
+}
+
+/// First start installs a new cache/window. Never overwrite an existing broken
+/// cache automatically or fall through an explicit operator-selected location.
+pub async fn prepare_startup(cfg: &mut crate::config::EdgeConfig) -> Result<()> {
+    let search = ContentSearch::for_config(cfg)?;
+    let candidates = search.candidates();
+    let authoritative = search.explicit.is_some() || search.environment.is_some();
+    let first = if authoritative {
+        candidates.first().filter(|path| path.exists())
+    } else {
+        candidates.iter().find(|path| path.exists())
+    };
+    if first.is_none() {
+        crate::content_import::import_window(&crate::content_import::ImportRequest {
+            version: mc_protocol::TARGET_RELEASE.into(),
+            source: crate::content_import::ContentSource::Download,
+            gameplay_source: crate::content_import::ContentSource::Download,
+            cache: search.import_target(),
+        })
+        .await?;
+    }
+    let cache = discover_content_cache(&search)?;
+    cfg.data.vanilla_data_dir = cache.root().to_path_buf();
+    Ok(())
 }
 
 /// Resolve the one content cache the server runs on.

@@ -150,7 +150,7 @@ async fn mismatched_status_protocol_receives_supported_version_metadata() {
             .unwrap()
             .unwrap();
         assert_eq!(outcome.next, NextState::Status);
-        crate::status::handle_status(&mut server, "motd", 20, 3, false)
+        crate::status::handle_status(&mut server, "motd", 20, 3, outcome.status_version)
             .await
             .unwrap();
     });

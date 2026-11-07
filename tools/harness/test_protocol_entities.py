@@ -53,6 +53,27 @@ def fake_stack_decoder(data, offset):
 
 
 class ProtocolEntitiesTests(unittest.TestCase):
+    def test_263_linear_and_stepped_movement(self):
+        tracker = ProtocolEntities(protocol=777)
+        self.consume_add(tracker, x=1.0, y=2.0, z=3.0)
+        linear = varint(7) + varint(1) + struct.pack('>hhh', 4096, 0, -2048)
+        self.assertTrue(tracker.consume(0x35, linear), tracker.snapshot())
+        stepped = (varint(7) + varint(4) + varint(2) + struct.pack('>hhh', 4096, 0, 0)
+                   + varint(3) + struct.pack('>hhh', 0, 2048, 0))
+        self.assertTrue(tracker.consume(0x35, stepped), tracker.snapshot())
+        self.assertEqual(tracker.snapshot()['entities'][0]['position'], [3.0, 2.5, 2.5])
+        absolute = varint(7) + varint(0) + struct.pack('>dddff', 4.0, 5.0, 6.0, 0.0, 0.0) + bytes([1])
+        self.assertTrue(tracker.consume(0x23, absolute), tracker.snapshot())
+        self.assertEqual(tracker.snapshot()['entities'][0]['position'], [4.0, 5.0, 6.0])
+        stepped_absolute = (varint(7) + varint(1) + varint(2)
+                            + struct.pack('>ddd', 7.0, 8.0, 9.0) + varint(1)
+                            + struct.pack('>ddd', 10.0, 11.0, 12.0) + varint(2)
+                            + struct.pack('>ff', 0.0, 0.0) + bytes([1]))
+        self.assertTrue(tracker.consume(0x23, stepped_absolute), tracker.snapshot())
+        self.assertEqual(tracker.snapshot()['entities'][0]['position'], [10.0, 11.0, 12.0])
+        self.assertFalse(tracker.consume(0x35, varint(7) + varint(2)))
+        self.assertEqual(tracker.snapshot()['unavailable'], 'bad_movement_step_count')
+
     def setUp(self):
         self.tracked = ProtocolEntities(decode_stack=fake_stack_decoder)
 

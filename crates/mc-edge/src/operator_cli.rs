@@ -49,8 +49,9 @@ pub enum Command {
 
 #[derive(Debug, Subcommand)]
 pub enum ContentCommand {
-    /// Derive a cache from your licensed server bundles; requires JDK 25.
+    /// Install every supported client cache and adjacent step; requires JDK 25.
     Import {
+        /// Canonical release; companions in the supported window are also installed.
         #[arg(long, default_value = mc_protocol::TARGET_RELEASE)]
         version: String,
         /// Server bundle of `--version` (protocol identity and reports).
@@ -252,7 +253,7 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                             crate::content_import::ContentSource::LocalJar,
                         )
                     };
-                    let report = crate::content_import::import_content(
+                    let reports = crate::content_import::import_window(
                         &crate::content_import::ImportRequest {
                             version: version.clone(),
                             source: source(from),
@@ -261,12 +262,14 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                         },
                     )
                     .await?;
-                    println!(
-                        "content import complete: {} ({} registries, {} entries)",
-                        report.cache.display(),
-                        report.registries,
-                        report.entries
-                    );
+                    for report in reports {
+                        println!(
+                            "content import complete: {} ({} registries, {} entries)",
+                            report.cache.display(),
+                            report.registries,
+                            report.entries
+                        );
+                    }
                 }
                 ContentCommand::Verify { .. } => {
                     let cache = crate::content_cache::discover_content_cache(&search)?;

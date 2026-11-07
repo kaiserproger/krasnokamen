@@ -227,6 +227,8 @@ def run(ctx, *, random_mode=False):
                     args.capability=='server_pause_empty' or lifecycle=='pause_when_empty_resume' else 0,
                     command_timeout_seconds=30,port_range=(min(args.port,args.dashboard_port),max(args.port,args.dashboard_port)))
         server.enabled_plugins = enabled_plugins
+        if random_mode:
+            server.config_overrides = {'server': {'input_log': True}}
         ctx.commands.append([str(ctx.server_bin),'--config',str(server.config_path)])
         ctx.cwds.append(str(runtime.REPO_ROOT)); ctx.exits.append(None); ctx.logs.append(str(server.log_path))
         server.start()
@@ -250,6 +252,9 @@ def run(ctx, *, random_mode=False):
             server.dimension = row['context']['dimension']
             matrix_context = MatrixContext(row,server,clients,ctx.artifact_dir,
                                            state={'enabled_plugins': enabled_plugins})
+            if random_mode:
+                from ..protocol_concurrency import concurrent_clicks
+                matrix_context.concurrent_hook = concurrent_clicks
             report['checks'] = run_subject(matrix_context)
             report['adapter_state'] = matrix_context.state
             report['observations'] = [client.snapshot() for client in clients]

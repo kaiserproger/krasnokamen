@@ -374,9 +374,34 @@ impl IdMap {
     }
 }
 
+/// Codec source/target releases. `upper`/`lower` name the default downgrade
+/// orientation; an upgrade profile is rebuilt from opposite source reports.
+#[derive(Debug, Clone, Copy)]
+pub struct Formats {
+    pub upper: i32,
+    pub lower: i32,
+}
+
+impl Formats {
+    pub fn upgrades(self) -> bool {
+        self.upper < self.lower
+    }
+}
+
+impl Default for Formats {
+    fn default() -> Self {
+        // Synthetic codec tests exercise the complete measured delta.
+        Self {
+            upper: 777,
+            lower: 775,
+        }
+    }
+}
+
 /// Every id table the translator needs.
 #[derive(Debug, Default)]
 pub struct Tables {
+    pub formats: Formats,
     pub packets: Packets,
     /// Global block-state ids; total (every canonical state has a legacy one).
     pub block_states: IdMap,
@@ -389,12 +414,15 @@ pub struct Tables {
     /// Canonical entity type -> metadata policy (absent = same layout).
     pub entity_metadata: HashMap<i32, Metadata>,
     pub block_entities: IdMap,
+    pub decorated_pot: Option<i32>,
     pub sounds: IdMap,
     pub particles: IdMap,
     pub components: IdMap,
     pub attributes: IdMap,
     pub argument_types: IdMap,
     pub argument_names: Vec<String>,
+    pub slot_display_names: Vec<String>,
+    pub recipe_display_names: Vec<String>,
     /// Other built-in and synced registry ids used by components and displays.
     pub registry_ids: HashMap<String, IdMap>,
     pub biomes: IdMap,
@@ -439,6 +467,7 @@ impl Tables {
         canonical_data: &mc_data::VanillaData,
         legacy_data: &mc_data::VanillaData,
     ) -> Result<Self> {
+        let formats = Formats::default();
         let none = |_: &str| None;
         let registry = |name: &str, polyfill: &dyn Fn(&str) -> Option<String>| -> Result<IdMap> {
             Ok(IdMap::by_name(
@@ -507,6 +536,7 @@ impl Tables {
             .map_or(0, |registry| registry.entries.len());
         Ok(Self {
             packets: Packets::new(canonical, legacy),
+            formats,
             block_states: block_states(canonical, legacy)?,
             legacy_block_bits: bits_for(legacy.blocks.values().map(|b| b.states.len()).sum()),
             blocks: registry("minecraft:block", &polyfill_block)?,
@@ -519,6 +549,10 @@ impl Tables {
             entities,
             entity_metadata,
             block_entities: registry("minecraft:block_entity_type", &none)?,
+            decorated_pot: canonical
+                .registry("minecraft:block_entity_type")?
+                .get("minecraft:decorated_pot")
+                .map(|entry| entry.protocol_id),
             sounds: registry("minecraft:sound_event", &none)?,
             particles: registry("minecraft:particle_type", &none)?,
             components: registry("minecraft:data_component_type", &none)?,
@@ -527,6 +561,8 @@ impl Tables {
                 (name == "team_color").then(|| "color".into())
             })?,
             argument_names: names_by_id(canonical.registry("minecraft:command_argument_type")?),
+            slot_display_names: names_by_id(canonical.registry("minecraft:slot_display")?),
+            recipe_display_names: names_by_id(canonical.registry("minecraft:recipe_display")?),
             registry_ids: {
                 let mut ids = HashMap::new();
                 for name in [
@@ -559,6 +595,36 @@ impl Tables {
             particle_names,
             component_shapes,
         })
+    }
+
+    pub fn registry_id(&self, registry: &str, id: i32) -> Result<i32> {
+        self.registry_ids
+            .get(registry)
+            .and_then(|ids| ids.get(id))
+            .with_context(|| {
+                format!(
+                    "unmapped {registry} id {id} in {} -> {}",
+                    self.formats.upper, self.formats.lower
+                )
+            })
+    }
+
+    /// Both measured 26.2/26.3 hierarchies are Entity(8), LivingEntity(7),
+    /// Mob(1), AgeableMob(2), AbstractCubeMob.ID_SIZE(18). In 26.1.2 Slime
+    /// extends Mob directly and owns ID_SIZE(16). Rewrite only 776 -> 775.
+    pub fn configure_metadata(&mut self, upper: &Reports) -> Result<()> {
+        if self.formats.lower >= 776 {
+            self.entity_metadata
+                .retain(|_, policy| *policy != Metadata::Cube);
+        } else {
+            let entities = upper.registry("minecraft:entity_type")?;
+            for name in ["slime", "magma_cube", "sulfur_cube"] {
+                if let Some(id) = entities.get(&namespaced(name)) {
+                    self.entity_metadata.insert(id.protocol_id, Metadata::Cube);
+                }
+            }
+        }
+        Ok(())
     }
 }
 

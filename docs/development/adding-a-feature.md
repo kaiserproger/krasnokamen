@@ -68,7 +68,7 @@ For a client-triggered block placement, trace this example end to end:
    `crates/mc-edge/src/decode.rs` decodes `ServerboundUseItemOn` into
    `PlayerInput::UseItemOn`; the edge associates the authenticated connection.
    If the packet or its encoding changes, check protocol and edge decoding,
-   including 26.1.2 translation in `crates/mc-edge/src/legacy/` when applicable.
+   including the supported-window chain in `crates/mc-edge/src/translation/`.
 2. `crates/mc-core/src/boundary.rs` defines inputs and results. `tick.rs`
    dispatches into `tick/input/interact.rs` and its `use_item_on` handler.
    Inspect the handler's other branches before changing a shared action.

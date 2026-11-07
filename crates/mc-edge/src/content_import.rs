@@ -1,8 +1,8 @@
 //! The packaged vanilla-content importer.
 //!
-//! Explicit operator command deriving the pinned release from a local server
-//! bundle or Mojang's size/sha1-verified download. Startup only discovers an
-//! existing cache; it never invokes this importer or downloads content.
+//! Explicit import and fresh-start installation derive the supported release
+//! window from local licensed bundles or Mojang's size/sha1-verified downloads.
+//! Existing caches are reused offline; imports publish atomically.
 //! Derivation uses the bundle's datagen, Solaris Java extractors and an exact
 //! RegistryData wire capture. A sibling staging tree is validated before
 //! publication, leaving the previous cache untouched on derivation failure.
@@ -29,6 +29,9 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail, ensure};
 use sha1::{Digest, Sha1};
+
+mod window;
+pub use window::import_window;
 
 /// Mojang's public launcher metadata; the same endpoints a launcher uses.
 const VERSION_MANIFEST_URL: &str =
@@ -220,12 +223,13 @@ fn finish_import(
     })
 }
 
-/// Solaris derives content for exactly one release.
+/// Only releases in the measured support window may be derived.
 fn require_target_version(version: &str) -> Result<()> {
     ensure!(
-        version == mc_protocol::TARGET_RELEASE,
-        "Solaris targets {} and cannot derive content for {}",
-        mc_protocol::TARGET_RELEASE,
+        mc_data::protocol_versions::SUPPORTED
+            .iter()
+            .any(|entry| entry.release == version),
+        "Solaris supports 26.1.2 through 26.3 and cannot derive content for {}",
         version,
     );
     Ok(())
@@ -255,6 +259,9 @@ async fn derive_into(request: &ImportRequest, staging: &Path) -> Result<ImportRe
     let staging = fs::canonicalize(staging)
         .with_context(|| format!("resolve the staging tree {}", staging.display()))?;
     let staging = staging.as_path();
+    if request.version != mc_protocol::TARGET_RELEASE {
+        return window::derive_profile(request, staging).await;
+    }
     // The licensed jars are scratch, never part of the published cache.
     let work = staging.join(".work");
     let identity_work = work.join("identity");
@@ -1136,7 +1143,7 @@ fn validate_staged_cache(staging: &Path) -> Result<()> {
 
 /// Atomically replace `cache` with `staging`, keeping the previous tree until
 /// the swap has succeeded.
-fn publish(staging: &Path, cache: &Path) -> Result<()> {
+pub(crate) fn publish(staging: &Path, cache: &Path) -> Result<()> {
     let parent = cache
         .parent()
         .filter(|path| !path.as_os_str().is_empty())

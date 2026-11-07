@@ -14,7 +14,7 @@ import zlib
 
 from .. import runtime
 from ..matrix_api import Adapter, Check, MissingCapability
-from ..backends.village_autonomy_qa import _container_totals
+from ..backends.village_autonomy_qa import _container_totals, _snbt_fields, _snbt_parts
 from .session import data
 
 CHEST = (34, 80, 32)
@@ -25,20 +25,21 @@ WEIGHT = {'minecraft:dirt': ('earth', 1), 'minecraft:oak_log': ('wood', 4),
 def stock(stacks):
     result = Counter()
     for stack in stacks:
-        if stack['item_id'] in WEIGHT:
-            resource, weight = WEIGHT[stack['item_id']]
-            result[resource] += weight * stack['count']
+        resource, weight = WEIGHT.get(stack['item_id'], (stack['item_id'], 1))
+        result[resource] += weight * stack['count']
     return result
 
 
 def invariant_checks(observed):
     """Pure oracle boundary, also used for harness-level negative controls."""
-    return [Check('no_server_error', observed['running'] and not observed['errors'], observed['errors']),
-            Check('conservation', observed['resources'] == observed['sources'], observed),
-            Check('legal_action', not observed['refusals'] and observed['progress'], observed['refusals']),
-            Check('observer_authority', observed['observer'] == observed['authority'],
-                  {'observer': observed['observer'], 'authority': observed['authority']}),
-            Check('recovery_atomic_durable', observed['recovery_ok'], observed.get('recovery'))]
+    checks = [Check('no_server_error', observed['running'] and not observed['errors'], observed['errors']),
+              Check('conservation', observed['resources'] == observed['sources'], observed),
+              Check('legal_action', not observed['refusals'] and observed['progress'], observed['refusals']),
+              Check('observer_authority', observed['observer'] == observed['authority'],
+                    {'observer': observed['observer'], 'authority': observed['authority']})]
+    if observed.get('recovery') is not None:
+        checks.append(Check('recovery_atomic_durable', observed['recovery_ok'], observed['recovery']))
+    return checks
 
 
 def mutate_observation(observed, fault):
@@ -53,7 +54,14 @@ def mutate_observation(observed, fault):
     elif fault == 'observer_authority':
         observed['observer']['container']['minecraft:dirt'] = -1
     elif fault == 'recovery_atomic_durable':
-        observed['recovery_ok'] = False
+        recovery = observed.get('recovery')
+        if recovery is not None:
+            recovered = recovery['recovered_exact_image']
+            recovered['inventories'][recovery['actor_index']]['planted_slot'] = {'id': '"minecraft:dirt"'}
+            observed['recovery_ok'] = (
+                recovery['cursor_recovery_ok']
+                and recovery['expected_exact_image'] == recovered)
+            recovery['exact_post_image'] = observed['recovery_ok']
     elif fault is not None:
         raise ValueError('unknown observation fault: ' + fault)
     return observed
@@ -82,6 +90,29 @@ def _inventory(ctx, actor):
 
 def _chest(ctx):
     return _container_totals(data(ctx, 'block ' + ' '.join(map(str, CHEST))))
+
+
+def _exact_slots(items):
+    items = items.strip()
+    if not (items.startswith('[') and items.endswith(']')):
+        raise ValueError('expected item list')
+    slots = {}
+    for item in _snbt_parts(items[1:-1]):
+        fields = _snbt_fields(item)
+        slot = fields.get('Slot')
+        if slot is None or slot in slots:
+            raise ValueError('missing or duplicate item slot')
+        slots[slot] = fields
+    return slots
+
+
+def _exact_image(ctx, blocks):
+    inventories = [_exact_slots(data(ctx, 'entity ' + client.name, 'Inventory'))
+                   for client in ctx.clients]
+    chest = _snbt_fields(data(ctx, 'block ' + ' '.join(map(str, CHEST))))
+    return {'inventories': inventories,
+            'container': _exact_slots(chest.get('Items', '[]')),
+            'blocks': copy.deepcopy(blocks)}
 
 
 def _items(values):
@@ -160,7 +191,8 @@ def observe(ctx):
             resources.update(stock([{'item_id': block, 'count': 1}]))
     entities = observer.snapshot()
     if 'entities' not in entities:
-        raise MissingCapability('random:received_item_entities')
+        raise MissingCapability('random:received_item_entities:' +
+                                str(entities.get('observation_errors', {}).get('entities', 'unknown')))
     for entity in entities['entities']:
         if 'item' in entity:
             resources.update(stock([entity['item']]))
@@ -177,7 +209,7 @@ def observe(ctx):
 def setup(ctx):
     if len(ctx.clients) < 2:
         raise ValueError('random scenarios require an independent observer')
-    ctx.state.update(sources={'earth': 0, 'wood': 0}, source_events=[], touched=[], checks=[], steps=[])
+    ctx.state.update(sources={'earth': 0, 'wood': 0}, source_events=[], sink_events=[], checks=[], steps=[], touched=[])
     for index, client in enumerate(ctx.clients):
         client.teleport_to(30.5 + index, 80, 30.5)
     ctx.server.ensure_loaded_callback = ctx.clients[-1].ensure_loaded
@@ -239,12 +271,28 @@ def _recover(ctx, actor):
         client.disconnect()
         client.reconnect()
     after = observe(ctx)
-    exact = recovery_matches(expected, after['authority'], ctx.clients.index(actor), cursor)
+    cursor_ok = recovery_matches(expected, after['authority'], ctx.clients.index(actor), cursor)
+    # Also crash a fully settled transfer: this permits comparing exact slots and
+    # components, without guessing where disconnect returns a carried stack.
+    expected_exact = _exact_image(ctx, after['authority']['blocks'])
+    exact_tick = _fence(ctx)
+    exact_published = _published(ctx, exact_tick)
+    exact_kill = ctx.server.kill9_restart()
+    for client in ctx.clients:
+        client.disconnect()
+        client.reconnect()
+    settled = observe(ctx)
+    recovered_exact = _exact_image(ctx, settled['authority']['blocks'])
+    exact = cursor_ok and expected_exact == recovered_exact
     ctx.state['recovery_ok'] = exact
     ctx.state['recovery'] = {'published_after_ack': published, 'last_ack': last_ack,
                              'expected_committed_image': expected, 'cursor': cursor,
-                             'recovered_image': after['authority'], 'exact_post_image': exact,
-                             'kill': killed}
+                             'actor_index': ctx.clients.index(actor),
+                             'recovered_image': after['authority'], 'cursor_recovery_ok': cursor_ok,
+                             'expected_exact_image': expected_exact,
+                             'recovered_exact_image': recovered_exact, 'exact_post_image': exact,
+                             'exact_tick': exact_tick, 'exact_published': exact_published,
+                             'kill': killed, 'exact_kill': exact_kill}
 
 
 def _mine(actor, position):
@@ -267,9 +315,39 @@ def _mine(actor, position):
     actor.break_block(position, phase='stop')
 
 
+def _concurrent_chest(ctx):
+    actors = ctx.clients[:2]
+    if len(ctx.clients) < 3:
+        raise MissingCapability('concurrent:two_actors_and_observer')
+    actor = actors[0]
+    _supply(ctx, actor, 'minecraft:dirt', 8)
+    actor.teleport_to(33.5, 80, 32.5)
+    actor.open_container(CHEST)
+    _click(actor, _slot(actor, 'minecraft:dirt'), kind='quick_move')
+    _close(actor)
+    for player in actors:
+        player.teleport_to(33.5, 80, 32.5)
+        player.open_container(CHEST)
+    slots = [stack['slot'] for stack in actors[0].snapshot()['menu']['slots']
+             if stack['slot'] < 27 and stack['item_id'] == 'minecraft:dirt']
+    if not slots:
+        raise AssertionError('concurrent chest fixture did not receive dirt')
+    slot = slots[0]
+    actors[1].wait_until(lambda: any(stack['slot'] == slot and stack['item_id'] == 'minecraft:dirt'
+                                    for stack in actors[1].snapshot()['menu']['slots']),
+                         description='second actor received conflicting chest stack')
+    ctx.concurrently([(player, 'click_slot', {'slot': slot, 'kind': 'quick_move'})
+                      for player in actors])
+    for player in actors:
+        _close(player)
+
+
 def _action(ctx, step):
     actor = ctx.clients[step['actor']]
     verb, count = step['verb'], step['count']
+    if verb == 'concurrent':
+        _concurrent_chest(ctx)
+        return
     position = (32 + step['target'] % 4, 80, 34 + step['target'] // 4 % 3)
     actor.teleport_to(position[0] + .5, 80, position[2] - 1.5)
     if verb in {'place', 'break'}:
@@ -297,6 +375,7 @@ def _action(ctx, step):
         else:
             ctx.server.command(f'setblock {position[0]} 80 {position[2]} dirt')
             ctx.state['sources']['earth'] += 1
+            ctx.state['source_events'].append({'block': list(position), 'item': 'minecraft:dirt', 'count': 1})
             actor.wait_until(lambda: actor.read_block_state(position)['block_id'] == 'minecraft:dirt',
                              description='received declared block source')
             _mine(actor, position)
