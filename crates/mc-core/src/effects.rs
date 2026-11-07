@@ -780,16 +780,18 @@ pub(crate) fn execute_command(
             sync_appearance(state, entity);
         }
     }
-    state.push_player(
-        connection,
-        crate::boundary::PlayerChange::Chat {
-            message: if affected == 0 {
-                "No entities were affected".into()
-            } else {
-                format!("Updated effects for {affected} entities")
+    if affected == 0 || crate::command_execution::accepts_success(state, connection) {
+        state.push_player(
+            connection,
+            crate::boundary::PlayerChange::Chat {
+                message: if affected == 0 {
+                    "No entities were affected".into()
+                } else {
+                    format!("Updated effects for {affected} entities")
+                },
             },
-        },
-    );
+        );
+    }
     if affected == 0 {
         Failed
     } else {

@@ -71,6 +71,27 @@ pub(crate) fn feedback(
         },
     );
 }
+/// Success replies to player command sources respect the world gamerule;
+/// the console remains an accepting source. Failure and chat use `feedback`.
+pub(crate) fn success_feedback(
+    state: &mut TickState,
+    connection: ConnectionId,
+    key: &str,
+    arguments: Vec<Tag>,
+) {
+    if accepts_success(state, connection) {
+        feedback(state, connection, key, arguments);
+    }
+}
+
+pub(crate) fn accepts_success(state: &TickState, connection: ConnectionId) -> bool {
+    connection == crate::command_console::CONNECTION
+        || crate::command_rules::boolean(
+            state,
+            crate::command_rules::BoolRule::SEND_COMMAND_FEEDBACK,
+        )
+}
+
 
 pub(crate) fn error(state: &mut TickState, connection: ConnectionId, message: impl Into<String>) {
     state.push_player(
@@ -368,7 +389,8 @@ pub(crate) fn execute(
             } else {
                 ("many", vec![text(ids.len()), label])
             };
-            feedback(
+            let send = if count == 0 { feedback } else { success_feedback };
+            send(
                 state,
                 connection,
                 &format!("commands.advancement.{operation}.{subject}.to.{destination}.{result}"),
@@ -482,7 +504,7 @@ pub(crate) fn execute(
                         .floor() as i32,
                 )
             };
-            feedback(
+            success_feedback(
                 state,
                 connection,
                 key,
@@ -689,7 +711,7 @@ pub(crate) fn execute(
                 args.extend(to.map(text));
                 "location"
             };
-            feedback(
+            success_feedback(
                 state,
                 connection,
                 &format!("commands.teleport.success.{kind}.{suffix}"),
@@ -703,7 +725,7 @@ pub(crate) fn execute(
             } else {
                 *ticks
             };
-            feedback(
+            success_feedback(
                 state,
                 connection,
                 "commands.time.set.absolute",
@@ -717,7 +739,7 @@ pub(crate) fn execute(
                 state
                     .day_time
                     .saturating_add(if delta > 0 { delta } else { delta + 24000 });
-            feedback(
+            success_feedback(
                 state,
                 connection,
                 "commands.time.set.time_marker",
@@ -727,7 +749,7 @@ pub(crate) fn execute(
         }
         Command::TimeQuery(query) => {
             let value = query.value(state.tick_control.game_ticks(state.tick), state.day_time);
-            feedback(state, connection, "commands.time.query", vec![text(value)]);
+            success_feedback(state, connection, "commands.time.query", vec![text(value)]);
             return Success((value % i64::from(i32::MAX)) as i32);
         }
         Command::Weather {
@@ -741,7 +763,7 @@ pub(crate) fn execute(
             } else {
                 crate::weather::set_command(state, *weather, *duration_ticks);
             }
-            feedback(
+            success_feedback(
                 state,
                 connection,
                 match weather {
@@ -778,7 +800,7 @@ pub(crate) fn execute(
                     },
                 );
             }
-            feedback(
+            success_feedback(
                 state,
                 connection,
                 "commands.difficulty.success",
@@ -787,7 +809,7 @@ pub(crate) fn execute(
             return Success(1);
         }
         Command::DifficultyQuery => {
-            feedback(
+            success_feedback(
                 state,
                 connection,
                 "commands.difficulty.query",
@@ -814,7 +836,7 @@ pub(crate) fn execute(
                 "false" => Success(0),
                 _ => value.parse::<i32>().map_or(Unavailable, Success),
             };
-            feedback(
+            success_feedback(
                 state,
                 connection,
                 if matches!(command, Command::GameRule { value: Some(_), .. }) {
@@ -832,7 +854,9 @@ pub(crate) fn execute(
                 |(position, _)| position,
             );
             let message = crate::command_border::execute(&mut state.border, *command, origin);
-            state.push_player(connection, PlayerChange::Chat { message });
+            if accepts_success(state, connection) {
+                state.push_player(connection, PlayerChange::Chat { message });
+            }
             if matches!(command, crate::command_border::BorderCommand::Get) {
                 return Success((state.border.size + 0.5).floor() as i32);
             }
@@ -908,7 +932,7 @@ pub(crate) fn execute(
                     }
                 }
                 changes.entities_spawned.push(id);
-                feedback(
+                success_feedback(
                     state,
                     connection,
                     "commands.summon.success",
@@ -931,7 +955,7 @@ pub(crate) fn execute(
             let id = state.spawn_mob(type_id, at, health);
             crate::command_summon::apply(state, id, image);
             changes.entities_spawned.push(id);
-            feedback(
+            success_feedback(
                 state,
                 connection,
                 "commands.summon.success",
@@ -964,7 +988,7 @@ pub(crate) fn execute(
                     ));
                 }
             }
-            feedback(
+            success_feedback(
                 state,
                 connection,
                 if targets.len() == 1 {
@@ -1010,13 +1034,15 @@ pub(crate) fn execute(
                 );
                 return Failed;
             } else {
-                feedback(state, connection, reply.key, args);
+                success_feedback(state, connection, reply.key, args);
                 return Success(1);
             }
         }
         Command::Scoreboard(command) => {
             let (message, result) = crate::scoreboard::execute(state, executor, command);
-            error(state, connection, message);
+            if result == Failed || accepts_success(state, connection) {
+                error(state, connection, message);
+            }
             return result;
         }
         Command::Say(message) | Command::Me { message, .. } => {
@@ -1177,7 +1203,7 @@ pub(crate) fn execute(
         Command::Settlement(command) => {
             settlement(state, connection, executor, command);
         }
-        Command::Seed => feedback(
+        Command::Seed => success_feedback(
             state,
             connection,
             "commands.seed.success",
@@ -1283,7 +1309,7 @@ fn experience_success(
         success_suffix(targets)
     );
     let label = targets_label(state, targets);
-    feedback(state, connection, &key, vec![text(amount), label]);
+    success_feedback(state, connection, &key, vec![text(amount), label]);
 }
 
 fn game_mode(
@@ -1303,7 +1329,7 @@ fn game_mode(
         changed += 1;
         apply_player_command(state, target, command, changes);
         if target == executor {
-            feedback(
+            success_feedback(
                 state,
                 connection,
                 "commands.gamemode.success.self",
@@ -1312,7 +1338,7 @@ fn game_mode(
             continue;
         }
         let name = entity_name(state, target);
-        feedback(
+        success_feedback(
             state,
             connection,
             "commands.gamemode.success.other",
@@ -1374,7 +1400,7 @@ fn give(
         item_name(state, &item.item),
         targets_label(state, targets),
     ];
-    feedback(state, connection, &key, args);
+    success_feedback(state, connection, &key, args);
     Success(targets.len() as i32)
 }
 
@@ -1467,7 +1493,7 @@ fn clear(
         Failed
     } else {
         let mode = if max == Some(0) { "test" } else { "success" };
-        feedback(
+        success_feedback(
             state,
             connection,
             &format!("commands.clear.{mode}.{suffix}"),

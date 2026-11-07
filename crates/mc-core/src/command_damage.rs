@@ -201,7 +201,7 @@ pub(crate) fn report(
         return;
     };
     if accepted && let Some(target) = target {
-        crate::command_execution::feedback(
+        crate::command_execution::success_feedback(
             state,
             connection,
             "commands.damage.success",

@@ -174,7 +174,7 @@ fn list(
         ["datapack", "list", "enabled"] => "Enabled",
         _ => "Enabled",
     };
-    crate::command_execution::feedback(
+    crate::command_execution::success_feedback(
         state,
         connection,
         "commands.datapack.list",

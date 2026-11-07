@@ -428,14 +428,14 @@ fn title_feedback(
     };
     if targets.len() == 1 {
         let label = crate::command_execution::entity_name(state, targets[0]);
-        crate::command_execution::feedback(
+        crate::command_execution::success_feedback(
             state,
             connection,
             &format!("commands.title.{kind}.single"),
             vec![label],
         );
     } else {
-        crate::command_execution::feedback(
+        crate::command_execution::success_feedback(
             state,
             connection,
             &format!("commands.title.{kind}.multiple"),

@@ -178,6 +178,8 @@ Each of these is a limit on what a green receipt means; never state more.
 - `core-client` is the server/own-chat continuity subset only (Java default,
   native subset). Its receipt explicitly excludes Wasm, economy and
   Loader-required rejection evidence.
+- `entities` summons its combat fixture with a fresh UUID and waits for that
+  exact received entity; naturally spawned pigs do not identify the fixture.
 - `logical-native` and `native-scale` are functional-native: a cheap headless
   movement/look/rejected-use subset and non-exclusive CPU/RSS canaries. Neither
   is `playable`, `regression` or `replay`; `logical-native --windowed` is

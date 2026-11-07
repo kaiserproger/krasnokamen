@@ -63,7 +63,7 @@ pub(crate) fn start(
     }
     state.debug_profiler.start_tick = Some(state.tick);
     state.debug_profiler.start_nanos = Some(wall_nanos());
-    crate::command_execution::feedback(state, connection, "commands.debug.started", Vec::new());
+    crate::command_execution::success_feedback(state, connection, "commands.debug.started", Vec::new());
     CommandResult::Success(0)
 }
 
@@ -91,7 +91,7 @@ pub(crate) fn stop(
     let average_tps = ((ticks as u128 * 1_000_000_000).checked_div(elapsed_nanos.max(1)))
         .map(|tps| tps.min(20) as i32)
         .unwrap_or(20);
-    crate::command_execution::feedback(
+    crate::command_execution::success_feedback(
         state,
         connection,
         "commands.debug.stopped",
@@ -203,7 +203,7 @@ pub(crate) fn trace_function(
     state.debug_tracing = false;
     let (name, commands) = (artifact.name.clone(), artifact.commands);
     state.debug_traces.push(artifact);
-    crate::command_execution::feedback(
+    crate::command_execution::success_feedback(
         state,
         connection,
         "commands.debug.function.traced",

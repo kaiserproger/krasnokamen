@@ -303,7 +303,7 @@ pub(crate) fn query(
             (format!("commands.data.{kind}.get"), value)
         }
     };
-    crate::command_execution::feedback(state, context.connection, &key, args);
+    crate::command_execution::success_feedback(state, context.connection, &key, args);
     Ok(value)
 }
 
