@@ -8,17 +8,22 @@ from pathlib import Path
 import select
 import shutil
 import signal
+import subprocess
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from .. import runtime
 from ..profiles import ProfileContext
 from . import native_client
+from . import singleplayer_slow
 from .title_connect import TITLE_CLASS, _TitleProbeSteps
 
 SELECT = "net.minecraft.client.gui.screens.worldselection.SelectWorldScreen"
 CREATE = "net.minecraft.client.gui.screens.worldselection.CreateWorldScreen"
 FIRST = "native-world-first-start-interrupted"
 LEASE = "native-sp-relaunch-lease-race"
+SLOW = "native-sp-slow-machine"
+WEAK = "native-sp-weak-hardware"
 
 
 def _click(probe, state, label):
@@ -69,7 +74,7 @@ def _play(probe, state):
 def validate_args(ctx: ProfileContext) -> float:
     if ctx.client != "native" or not ctx.windowed:
         raise ValueError("singleplayer regressions require --client native --windowed")
-    if ctx.scenario_id not in (FIRST, LEASE):
+    if ctx.scenario_id not in (FIRST, LEASE, SLOW, WEAK):
         raise ValueError("select a registered singleplayer regression scenario")
     if ctx.extra_args or ctx.platform:
         raise ValueError("singleplayer regressions do not accept extra arguments or platform")
@@ -94,10 +99,15 @@ def run(ctx: ProfileContext) -> dict:
     client_copy = stage / "solaris-client"
     shutil.copy2(client_binary, client_copy)
     server_link = stage / "solaris-v2"
-    server_link.symlink_to(server)
+    pidfile = unit = None
+    if ctx.scenario_id in (SLOW, WEAK):
+        pidfile, unit = singleplayer_slow.stage_server(server, stage, artifact, slow=ctx.scenario_id == SLOW)
+    else:
+        server_link.symlink_to(server)
     root = artifact / "data" / "solaris-client"
     content = root / "servers" / "content"
     content.mkdir(parents=True)
+    # The server's sidecar validation rejects directory symlinks.
     shutil.copytree((runtime.REPO_ROOT / "data" / "vanilla").resolve(), content / "26.3")
     for name in ("home", "cache", "config"):
         (artifact / name).mkdir()
@@ -108,12 +118,16 @@ def run(ctx: ProfileContext) -> dict:
     env = {"SOLARIS_CLIENT_ROOT": str(root), "XDG_DATA_HOME": str(root.parent),
            "HOME": str(artifact / "home"), "XDG_CACHE_HOME": str(artifact / "cache"),
            "XDG_CONFIG_HOME": str(artifact / "config"), "ALSOFT_DRIVERS": "null"}
+    if ctx.scenario_id in (SLOW, WEAK):
+        env.update({"LIBGL_ALWAYS_SOFTWARE": "1", "VK_ICD_FILENAMES": "/usr/share/vulkan/icd.d/lvp_icd.json",
+                    "VK_DRIVER_FILES": "/usr/share/vulkan/icd.d/lvp_icd.json"})
     previous = {name: os.environ.get(name) for name in env}
     os.environ.update(env)
     ctx.client_evidence.update(server_binary_path=str(server), server_binary_sha256=server_hash)
     xvfb = client = mcp = None
     holder = None
     holder_fd = None
+    world = None
     try:
         xvfb, display, _ = runtime.start_xvfb(artifact)
         ctx.logs.append(str(artifact / "xvfb.log"))
@@ -126,6 +140,12 @@ def run(ctx: ProfileContext) -> dict:
             state = probe.wait(lambda s: s["screen"].get("class") == SELECT, "select_world")
             _click(probe, state, "Create New World")
             state = probe.wait(lambda s: s["screen"].get("class") == CREATE, "create_world")
+            if ctx.scenario_id in (SLOW, WEAK):
+                probe.call("minecraft_set_screen_input", {
+                    "expected_screen_class": CREATE, "expected_title": state["screen"]["title"],
+                    "input_label": "Seed", "value": "42",
+                })
+                probe.report["seed"] = 42
             _click(probe, state, "Create New World")
             state = probe.wait(lambda s: s["screen"].get("class") == SELECT, "world_created")
             native_client.capture(mcp, artifact, "singleplayer-created")
@@ -133,7 +153,71 @@ def run(ctx: ProfileContext) -> dict:
             if len(worlds) != 1:
                 raise RuntimeError(f"expected one fresh world, found {len(worlds)}")
             world = worlds[0].parent
-            if ctx.scenario_id == FIRST:
+            if ctx.scenario_id in (SLOW, WEAK):
+                singleplayer_slow.capture(probe, artifact, "slow-before-play")
+                started = time.monotonic()
+                _click(probe, state, "Play Selected World")
+                if ctx.scenario_id == SLOW:
+                    starting = probe.wait(
+                        lambda s: s["screen"].get("class") == "net.minecraft.client.gui.screens.GenericMessageScreen",
+                        "slow_start_screen")
+                    probe.report["slow_start_observation"] = starting
+                    singleplayer_slow.capture(probe, artifact, "slow-starting")
+                log = world / "logs" / "server.log"
+                try:
+                    def startup_progress(text):
+                        probe.report["server_startup_progress_log"] = text
+                        probe.wait(
+                            lambda s: s["state_version"] > starting["state_version"],
+                            "startup_progress_published")
+                        singleplayer_slow.capture(probe, artifact, "slow-server-progress")
+
+                    result = singleplayer_slow.wait_server(
+                        pidfile, log, probe.remaining(limit=None),
+                        on_progress=startup_progress if ctx.scenario_id == SLOW else None)
+                    probe.report["server_outcome"] = result
+                    probe.report["server_wait_seconds"] = time.monotonic() - started
+                    quota_path = artifact / "slow-server-cpu.max"
+                    quota = quota_path.read_text().split() if quota_path.is_file() else []
+                    probe.report["server_cpu_max"] = quota
+                    if ctx.scenario_id == SLOW:
+                        probe.check("server_cpu_quota_1_percent",
+                                    len(quota) == 2 and all(part.isdigit() for part in quota)
+                                    and int(quota[0]) * 100 == int(quota[1]))
+                        if result == "listening":
+                            probe.check("startup_crossed_former_deadline",
+                                        probe.report["server_wait_seconds"] > 180)
+                            singleplayer_slow.release_startup_quota(unit)
+                            probe.report["startup_quota_released_after_listening"] = True
+                    if result == "listening":
+                        # This canonical wait follows the connection epoch across
+                        # title-to-Play; a plain observe can race that handoff.
+                        probe.call("minecraft_wait_for_play", {"timeout_seconds": probe.remaining()})
+                    final = probe.wait(
+                        lambda s: (s.get("in_play") is True and s["screen"].get("open") is False)
+                        or s["screen"].get("class") == SELECT,
+                        "slow_world_play_or_failure")
+                    probe.report["slow_final_observation"] = final
+                    probe.check("slow_server_listened", result == "listening")
+                    probe.check("slow_entered_world", final.get("in_play") is True)
+                    probe.report["play_to_first_view_seconds"] = time.monotonic() - started
+                    probe.check("terrain_overlay_cleared", final["screen"].get("open") is False)
+                    player = final["player"]
+                    yaw = 10 if abs(player["yaw"] - 10) > 1 else 0
+                    probe.call("minecraft_look", {"yaw_deg": yaw, "pitch_deg": 0})
+                    probe.wait(lambda s: abs(s["player"]["yaw"] - yaw) < 0.1, "ordinary_look_controls_player")
+                    probe.report["play_to_control_seconds"] = time.monotonic() - started
+                    probe.report["rss"] = singleplayer_slow.rss(
+                        client.pid, int((artifact / "server-process.pid").read_text()))
+                    singleplayer_slow.capture(probe, artifact, "slow-final")
+                except BaseException:
+                    try:
+                        probe.report["slow_failure_observation"] = probe.call("minecraft_observe")
+                        singleplayer_slow.capture(probe, artifact, "slow-failure")
+                    except Exception as capture_error:
+                        probe.report["slow_failure_capture_error"] = str(capture_error)
+                    raise
+            elif ctx.scenario_id == FIRST:
                 database = world / "world" / "native" / "state.redb"
                 marker = world / "world" / ".solaris-first-start"
                 def interrupt():
@@ -221,6 +305,13 @@ def run(ctx: ProfileContext) -> dict:
         if mcp is not None:
             mcp.close()
         runtime.stop_process(client)
+        if unit is not None:
+            subprocess.run(["systemctl", "--user", "stop", unit + ".scope"],
+                           check=False, capture_output=True, timeout=30)
+        if world is not None:
+            log = world / "logs" / "server.log"
+            if log.is_file():
+                shutil.copy2(log, artifact / "singleplayer-server.log")
         runtime.stop_process(xvfb)
         for name, value in previous.items():
             if value is None:

@@ -21,7 +21,7 @@ from typing import Any
 from tools.coreperf import compare
 from tools.harness.backends import catalog_load as load
 
-PROFILES = {"idle": (0, 0, 0, 8), "explore-20": (20, 0, 0, 8),
+PROFILES = {"idle": (0, 0, 0, 8), "explore-3": (3, 0, 0, 8), "explore-20": (20, 0, 0, 8),
             "native-100": (100, 100000, 0, 6), "villager-heavy": (100, 100000, 20000, 6)}
 
 
@@ -228,7 +228,7 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
             raise ValueError("bot schedule failed or incomplete")
         if bots.get("movements_sent", 0) == 0:
             raise ValueError("requested active profile sent no movement")
-        if args.profile == "explore-20" and bots.get("chunk_boundaries_crossed", 0) == 0:
+        if args.profile in ("explore-3", "explore-20") and bots.get("chunk_boundaries_crossed", 0) == 0:
             raise ValueError("exploration did not cross a chunk boundary")
     snapshot = await compare.snapshot(args, directory, world, config)
     result["entity_counts_after"] = {kind: group["active"] for kind, group in snapshot["entities"].items()}

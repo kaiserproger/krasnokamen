@@ -37,6 +37,7 @@ _ARGUMENT_VALIDATORS = {
     'survival': 'gameplay',
     'title-connect': 'title_connect',
     'village-qa': 'village_qa',
+    'weak-first-view': 'weak_first_view',
 }
 
 

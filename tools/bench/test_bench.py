@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tools.bench import common, profile_runs, worldgen_runs
 
@@ -134,6 +135,36 @@ class ProfileRunTests(unittest.TestCase):
         self.assertEqual(row["status"], "failed")
         self.assertIn("server exited", row["error"])
         self.assertNotIn("tps", row)
+
+
+class FirstViewTests(unittest.TestCase):
+    def test_real_harness_receipt_is_required_and_keeps_the_requested_limits(self):
+        split = common.split_cpus([0, 1], 1, "logical", lambda c: [c])
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            ctx = profile_runs.Context(root, root / "server", root / "bots", root / "build.json",
+                                       root / "content", root / "fixtures", [0, 1], 30, 120, 1800,
+                                       "8G", None, 8192)
+            artifact = root / "harness"
+            artifact.mkdir()
+            (artifact / "result.json").write_text(json.dumps({
+                "status": "passed", "details": {"first_view_seconds": 12.5}}))
+
+            def measured(command, log):
+                self.assertEqual(command[1], f"SOLARIS_SERVER_BINARY={ctx.server_bin}")
+                self.assertEqual(command[-6:], ["--server-cpus", "0", "--client-cpus", "1", "--memory", "2G"])
+                log.write_text(f"[harness] PASS artifact={artifact} in 13s\n")
+                return 0, None
+
+            with patch.object(profile_runs, "_bounded_run", side_effect=measured):
+                row = profile_runs.run_first_view(ctx, split, "2G")
+                self.assertEqual(row["first_view_seconds"], 12.5)
+                self.assertEqual(row["status"], "ok")
+                (artifact / "result.json").write_text(json.dumps({"status": "failed", "error": "no presented frame"}))
+                row = profile_runs.run_first_view(ctx, split, "2G")
+                self.assertEqual(row["status"], "failed")
+                self.assertEqual(row["error"], "no presented frame")
+                self.assertNotIn("first_view_seconds", row)
 
 
 class RemoteSessionTests(unittest.TestCase):

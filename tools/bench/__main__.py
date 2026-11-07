@@ -322,6 +322,9 @@ def cmd_weak_hw(args: argparse.Namespace) -> int:
             run.setdefault("profile", profile)
             run.setdefault("cores", cores)
             run.setdefault("cpu_mode", args.cpu_mode)
+        first_view = None
+        if not vps and memory and os.environ.get("SOLARIS_CLIENT_BINARY"):
+            first_view = guard(profile_runs.run_first_view, ctx, split, memory)
         worldgen = None
         if radius:
             worldgen = run_worldgen_once(args, out, ctx, remote, server_pool, cores, memory, radius, vps)
@@ -329,10 +332,12 @@ def cmd_weak_hw(args: argparse.Namespace) -> int:
         if remote:
             remote.close()
     ok = all(r["status"] == "ok" for r in runs) and (worldgen is None or worldgen["status"] == "ok")
+    ok = ok and (first_view is None or first_view["status"] == "ok")
     doc = document(args, hw, source, started, ok=ok, limits={**split, "memory_max": memory, "remote_host": args.host if vps else None},
                    windows={"warmup_seconds": args.warmup_seconds, "measure_seconds": args.measure_seconds},
                    workload={"profiles": profiles, "profile_seed": 42, "worldgen_seed": args.seed, "worldgen_radius_blocks": radius},
-                   runs=runs, worldgen=worldgen, **({"bots_host_hardware": local_hw} if vps else {}))
+                   runs=runs, worldgen=worldgen, first_view=first_view,
+                   **({"bots_host_hardware": local_hw} if vps else {}))
     md = header(args, hw, source, f"{args.command}: {cores} {args.cpu_mode} CPU(s), {memory or 'no'} memory cap",
                 "Server host (remote)" if vps else "Host")
     md += ["## Limits", "", *limits_lines(split, memory, args.host if vps else None), ""]
@@ -343,6 +348,11 @@ def cmd_weak_hw(args: argparse.Namespace) -> int:
     md += [f"## Workloads (seed 42, warmup {args.warmup_seconds}s + window {args.measure_seconds}s)", "",
            table(PROFILE_HEADERS, [profile_row(r) for r in runs]), "",
            "Resident chunks/s is a proxy (resident-chunk delta, reloads included), not generation throughput.", ""]
+    if first_view is not None:
+        md += ["## Fresh world to a usable view", "",
+               (f"- **{first_view['first_view_seconds']:.2f} s** from server launch to a "
+                f"GPU-confirmed playable view; receipt `{first_view['receipt']}`."
+                if first_view["status"] == "ok" else f"- FAILED: {first_view.get('error')}"), ""]
     if worldgen is not None:
         md += ["## Chunk generation under the same limits", "", worldgen_line(worldgen), ""]
     common.finish(out, doc, "\n".join(md))

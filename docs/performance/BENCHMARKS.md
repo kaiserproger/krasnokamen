@@ -48,18 +48,29 @@ Build once (the bench never builds), non-PGO release, exactly as in
 [PROFILES.md](PROFILES.md#build-once-and-retain-provenance):
 
 ```sh
-CARGO_TARGET_DIR=<dir> cargo build --release --bin solaris-v2 --bin player-scale-bots -j 2
+CARGO_TARGET_DIR=<dir> cargo build --release --locked --bin solaris-v2 --bin player-scale-bots -j 2
 ```
+
+On the owner host use immutable pins instead of retaining pooled build paths:
+
+```sh
+export "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /absolute/core/tree)"
+export "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /absolute/core/tree --bots)"
+python3 -m tools.bench weak-hw --server-bin "$SOLARIS_SERVER_BINARY" --bots-bin "$SOLARIS_BOTS_BINARY"
+```
+
+The pin manifest distinguishes binary kind and Rust target; `--target` also
+supports the Windows software-renderer repro without reusing a host executable.
 
 Defaults: `--server-bin`/`--bots-bin` = `$CARGO_TARGET_DIR/release/…` or `./target/release/…`.
 Results go to a new `.analysis/bench/<UTC>-<command>-<pid>/` (`--out` to choose; never overwritten):
 `result.json`, `result.md`, `build-receipt.json`, per-run receipts under `runs/` (the full
 `tools.coreperf.profiles` receipt: `samples.jsonl`, bot reports, server config, logs).
 
-On the shared agent host wrap any invocation in `tools/dev/mem-run.sh -m 8G` for a smoke, or
-get Main's GO and use `-x` for a real window (the bench then sees all CPUs; under the shared lane
-it only sees `0-7`). The memory-capped server/fixture scopes are created with `systemd-run
---scope`; pass `--slice solaris-heavy.slice` on the shared host so they count in that slice.
+On the shared agent host wrap any invocation in `tools/dev/mem-run.sh -x -m 6G`
+for a quiet measurement; the lane serializes itself, without a separate GO.
+The memory-capped server/fixture scopes use `systemd-run --scope`; pass
+`--slice solaris-heavy.slice` on the shared host so they count in that slice.
 
 ## `weak-hw`: the "$6 VPS" shape
 
@@ -67,6 +78,7 @@ it only sees `0-7`). The memory-capped server/fixture scopes are created with `s
 python3 -m tools.bench weak-hw                        # 2 logical CPUs, 4G, idle + explore-20 + native-100
 python3 -m tools.bench weak-hw --cores 1 --memory 2G --profiles idle,explore-20
 python3 -m tools.bench weak-hw --cpu-mode physical --cores 2
+python3 -m tools.bench weak-hw --cores 1 --memory 2G --profiles idle,explore-3
 ```
 
 The server is pinned with `taskset -c <cpuset>` and runs inside `systemd-run --scope -p
@@ -92,6 +104,24 @@ chunks (reloads included), see [PROFILES.md](PROFILES.md#windows-and-metric-defi
 `world pregenerate` of the square around block (0,0) with seed 42 (generated chunks / seconds from
 the first generation progress line to completion; world open excluded, light bake and store writes
 included).
+
+`explore-3` keeps `explore-20`'s seed, view/simulation distance, spacing and
+per-player open-loop movement; only the player count is three. Keep both results
+labeled: fewer players are a different workload, not an optimization speedup.
+
+For fresh-world **usable-view time**, set the existing `SOLARIS_CLIENT_BINARY`
+override to a pinned native client and provide its verified content environment
+([real-client setup](../development/real-client-gates.md#prerequisites)).
+Each local memory-capped `weak-hw` cell then runs the canonical
+`weak-first-view` graphical harness profile. The dedicated server gets the same
+CPU set and memory cap, while the client gets the bot CPU set. The clock starts
+before server launch and ends at a GPU-confirmed Play view with no loading
+overlay, including server startup, Xvfb and client startup. Seed 42 and view
+distance 8 are fixed; every cell has a new world and private client settings.
+The screenshot, native/server binary identities, process RSS and exact command
+are in the linked harness receipt. This is not a protocol-bot readiness proxy.
+The first-view field is absent when no client was supplied; it is never filled
+from an all-bot login deadline.
 
 ## `scaling`: one workload at 1, 2, 4, 6, 8, 12 CPUs
 

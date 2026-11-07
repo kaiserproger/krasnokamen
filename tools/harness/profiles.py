@@ -358,6 +358,12 @@ def run_singleplayer_regressions(ctx: ProfileContext) -> dict[str, Any]:
     return singleplayer_regressions.run(ctx)
 
 
+def run_weak_first_view(ctx: ProfileContext) -> dict[str, Any]:
+    from .backends import weak_first_view
+
+    return weak_first_view.run(ctx)
+
+
 def run_dialogs(ctx: ProfileContext) -> dict[str, Any]:
     """Server-driven dialog round trip (show_dialog -> custom_click_action) on the native client."""
     from .backends import dialogs
@@ -886,13 +892,18 @@ PROFILES: dict[str, dict[str, Any]] = {
     },
     "singleplayer-regressions": {
         "scope": "real-client",
-        "description": "Graphical singleplayer interrupted-start and held-lease regressions",
+        "description": "Graphical singleplayer interrupted-start, held-lease and weak-hardware regressions",
         "run": run_singleplayer_regressions,
     },
     "village-qa": {
         "scope": "real-client",
         "description": "Issue #1 settlement acceptance: house/workshop/storage/mine/camp, bind, door/sleep/harvest/mine/lumber PASS-FAIL (native --client, windowed for screenshots)",
         "run": run_village_qa,
+    },
+    "weak-first-view": {
+        "scope": "real-client",
+        "description": "Fresh memory/CPU-capped dedicated server to a presented native-client view",
+        "run": run_weak_first_view,
     },
     "village-autonomy-qa": {
         "scope": "real-client",
@@ -1131,6 +1142,7 @@ PROFILE_PREREQUISITES = {
     "survival": _SHARED_BUILD,
     "title-connect": _NATIVE,
     "singleplayer-regressions": _NATIVE,
+    "weak-first-view": _NATIVE,
     "village-qa": _NATIVE,
     "village-autonomy-qa": _NATIVE,
     "civilization-seed-qa": _NATIVE,
