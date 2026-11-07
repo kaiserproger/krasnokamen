@@ -41,9 +41,10 @@ checkpoint. See [ADR 0020](../decisions/0020-entity-checkpoints-at-one-million.m
 for the entity checkpoint design.
 
 Container WAL post-images can restore live custody without loading their chunk.
-Before freezing a checkpoint's container snapshot, materialize those chunks and
-hydrate their complete persisted inventories. Hydration fills only vacant live
-entries, so newer WAL slots (including an emptied inventory) retain priority.
+Before freezing a checkpoint's container snapshot, materialize their dirty chunks
+and hydrate their complete persisted inventories. Clean evicted chunks stay unloaded.
+Hydration fills only vacant live entries, so newer WAL slots (including an emptied
+inventory) retain priority.
 Do this in every dimension before projecting chest/furnace slots and the
 hopper/brewing owners' opaque records. Otherwise a partial live snapshot can
 erase untouched neighbours when typed maps are rebuilt. A refused load or
