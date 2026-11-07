@@ -86,7 +86,7 @@ def verify_birth_snapshot(snapshot: dict[str, Any], name: str, baseline: int, fi
             claims.append((int(claim.group(1)), int(claim.group(2))))
         birth = re.search(r"\bsettlement_audit:\s+settlement_birth child=(\S+) settlement=(\d+) household=(\S+) tick=(\d+)\b", line)
         if birth:
-            births.append((birth.group(1), int(birth.group(2)), int(birth.group(4))))
+            births.append((birth.group(1), int(birth.group(2)), birth.group(3), int(birth.group(4))))
     if len(claims) != 1 or claims[0][0] != settlement or claims[0][1] > snapshot["checkpoint_tick"]:
         return fail("claim audit event is missing or ambiguous")
     claim_tick = claims[0][1]
@@ -104,13 +104,14 @@ def verify_birth_snapshot(snapshot: dict[str, Any], name: str, baseline: int, fi
         return fail("population growth is below two")
     by_id = {row["uuid"]: row["payload"]["solaris:VillagerRuntime"] for row in rows}
     proven: set[str] = set()
-    for child, born_in, tick in births:
+    for child, born_in, household, tick in births:
         info = by_id.get(child)
         if born_in != settlement or not baseline_tick < tick <= snapshot["checkpoint_tick"] or info is None:
             continue
         sequence = info.get("birth_sequence")
         parents = info.get("birth_parents")
-        if (info.get("birth_tick") == tick and isinstance(sequence, int) and sequence // 65536 == tick
+        if (info.get("household") == household and info.get("birth_tick") == tick
+                and isinstance(sequence, int) and sequence // 65536 == tick
                 and sequence % 65536 != 0 and isinstance(parents, list) and len(parents) == 2
                 and all(isinstance(parent, str) and parent for parent in parents) and len(set(parents)) == 2):
             proven.add(child)

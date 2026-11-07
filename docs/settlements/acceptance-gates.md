@@ -31,6 +31,12 @@ Building evidence requires a new non-natural certificate and an observed planner
 
 For House, second-building and baby captures the observer walks to the target, aims, and requires the client's crosshair raycast to identify the bed, a block within the building bounds, or the baby UUID respectively; it then walks back to the observation position. An obstructed or unreachable target fails rather than claiming a screenshot of it. Reviewers still check the resulting pixels.
 
+### Negative controls
+
+Run the same seed-24, fresh-world, windowed `civilization-seed-qa` command with an immutable `pin-release` server built from local `main` before the wave/civ ration-starvation and mixed-wood funding fixes. Keep the same client, snapshot reader, stock, observation bounds and timeout. The old server must fail a construction/growth milestone or the sustained-stall oracle; a startup or prerequisite failure is not evidence that the gate detects these bugs. Retain both `result.json` and the scenario observations.
+
+For birth attribution, run `python3 -m unittest tools.harness.test_civilization_seed_qa.CivilizationEvidenceTests.test_birth_events_exclude_children_born_in_other_settlements`. Its complete two-birth checkpoint and audit fixture first passes, then separately rebinds one child to another settlement and another household while keeping the claimed growth. Both must reject the birth verdict; a changed census alone cannot authorize growth. The household in each counted birth audit event must match the child's checkpoint household. This is a focused oracle control, not an additional graphical gameplay pass.
+
 ## Completion and production observations
 
 The autonomy completion oracle derives legal origins and rotations from certificate bounds, using the maximum width and depth across all authored levels as the rotation frame. It compares every authored non-air cell and stable rotated properties, including cells outside the certificate bounds. Oak-authored components must match one wood species throughout; normal mutable gameplay states are allowed. For a project completed after restart, the derived origin must match the saved project origin, which need not be the certificate minimum. Symmetric layouts can match more than one rotation.

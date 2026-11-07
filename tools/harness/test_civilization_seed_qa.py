@@ -1,4 +1,5 @@
 """Evidence scanning must not turn generated/natural geometry into stage proof."""
+import copy
 import unittest
 from unittest.mock import Mock, patch
 from tempfile import TemporaryDirectory
@@ -47,7 +48,7 @@ class CivilizationEvidenceTests(unittest.TestCase):
 
     def test_birth_events_exclude_children_born_in_other_settlements(self):
         def member(uuid, birth_tick=None):
-            runtime = {"settlement": 1}
+            runtime = {"settlement": 1, "household": "1-1"}
             if birth_tick is not None:
                 runtime.update(birth_tick=birth_tick, birth_sequence=birth_tick * 65536 + 1,
                                birth_parents=["a", "b"])
@@ -69,6 +70,11 @@ class CivilizationEvidenceTests(unittest.TestCase):
         self.assertFalse(verify(log, {**snapshot, "entities": snapshot["entities"][:-1]})["verified"])
         self.assertFalse(verify(log.replace("settlement_claim", "missing_claim"))["verified"])
         self.assertFalse(qa.verify_birth_snapshot(snapshot, "Test", 2, 4, "baby", 155, log)["verified"])
+        for field, foreign in (("settlement", 2), ("household", "1-2")):
+            with self.subTest(foreign_binding=field):
+                rebound = copy.deepcopy(snapshot)
+                rebound["entities"][-1]["payload"]["solaris:VillagerRuntime"][field] = foreign
+                self.assertFalse(verify(log, rebound)["verified"])
 
     def test_new_certificate_requires_matching_observed_project(self):
         building = {"id": 2, "kind": "house", "level": 1, "natural": False}
