@@ -10,7 +10,7 @@ from .light_wire import Reader
 from .menu_observer import holds, observe_menu
 from .native_craft_drag import Pointer
 from .native_promotion_wire import read_nbt
-from .probe_steps import ProbeSteps, container_slot
+from .probe_steps import ProbeSteps
 
 SCENARIO = "java-protocol-pot-creative-echo"
 REQUIRED_TOOLS = frozenset({
@@ -83,7 +83,7 @@ def run(client: Any, artifact: Path, timeout: float) -> dict[str, Any]:
                 pointer.button(True)
                 steps.wait(lambda state: state["container"]["carried"].get("item_id") == POT
                            and state["container"]["carried"]["count"] == 1
-                           and container_slot(state, 36 + source)["count"] == 0,
+                           and not any(row["slot"] == source for row in state["inventory"]),
                            label + "_physical_pickup")
                 pointer.button(False)
                 picked = observe_menu(steps, label + "_picked_up")
@@ -91,10 +91,11 @@ def run(client: Any, artifact: Path, timeout: float) -> dict[str, Any]:
                 java_p5.capture(steps, "protocol-pot-" + label + "-carried")
                 pointer.move(left + (17 + 18 * target) * scale, top + 120 * scale)
                 pointer.button(True)
-                steps.wait(lambda state: state["container"]["carried"]["count"] == 0
-                           and container_slot(state, 36 + target).get("item_id") == POT,
-                           label + "_physical_return")
                 pointer.button(False)
+                steps.wait(lambda state: state["container"]["carried"]["count"] == 0
+                           and any(row["slot"] == target and row["item_id"] == POT
+                                   for row in state["inventory"]),
+                           label + "_physical_return")
                 returned = observe_menu(steps, label + "_returned")
                 java_p5.capture(steps, "protocol-pot-" + label + "-returned")
                 steps.check(label + "_authoritative_components_unchanged",
