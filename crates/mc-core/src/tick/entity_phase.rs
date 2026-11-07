@@ -1112,6 +1112,9 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     let mut intents = Vec::new();
     let physical_profiles = state.registry.item_facts.has_physical_profiles();
     for slot in resting.drain(..) {
+        let id = state.entities.body(slot).id;
+        let aggressive = state.hostile.targets.contains_key(&id);
+        crate::hostile::set_zombie_aggressive(state, slot, aggressive);
         // A quiet row's writeback is a no-op; the hot flag spares the cold
         // row (a cache miss per resting body).
         if state.entities.motion_flags(slot) & crate::entities::MOTION_QUIET_TIMERS != 0 {
@@ -1133,6 +1136,10 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
                 .targets
                 .insert(state.entities.body(write.slot).id, target);
             crate::hostile::set_zombie_aggressive(state, write.slot, true);
+        } else {
+            let id = state.entities.body(write.slot).id;
+            let aggressive = state.hostile.targets.contains_key(&id);
+            crate::hostile::set_zombie_aggressive(state, write.slot, aggressive);
         }
         let attack_cooldown = raw
             .iter()

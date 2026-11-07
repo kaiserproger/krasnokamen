@@ -196,9 +196,10 @@ fn vehicle_motion_and_rotation_only_changes_survive_wal_replay() {
 }
 
 #[test]
-fn zombie_chase_pose_is_journaled_and_cleared_on_recovery() {
+fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
     let dir = std::env::temp_dir().join(format!("mc-core-zombie-pose-{}", uuid::Uuid::new_v4()));
     let mut state = fixture();
+    spawn_idle_cow(&mut state, 9.5);
     let zombie_type = state.registry.entity_types
         .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap()).unwrap();
     let zombie = state.spawn_mob(zombie_type, [8.5, 65.0, 8.5], 20.0);
@@ -220,8 +221,21 @@ fn zombie_chase_pose_is_journaled_and_cleared_on_recovery() {
     assert!(record.appearance.extra.iter().any(|(index, value)| *index == 15
         && matches!(value, crate::journal::EntityDataValueImage::Byte(flags) if flags & 4 != 0)));
     let mut restored = fixture();
-    assert!(crate::core::restore_entity(&mut restored, zombie.0, record).unwrap());
+    crate::tick::run_tick(&mut restored, &[crate::boundary::PlayerInput::Join {
+        connection: ConnectionId(1),
+        uuid: uuid::Uuid::new_v4(),
+        name: "observer".into(),
+        permission_level: 0,
+    }]);
+    let player = restored.connections.entity_of(ConnectionId(1)).unwrap();
+    restored.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
+    restored.world.ensure_blocking(&restored.desired_chunks());
+    crate::core::restore_entity(&mut restored, zombie.0, record).unwrap();
     let slot = restored.entities.slot_of(zombie).unwrap();
+    assert!(restored.entities.row(slot).appearance.extra.iter().any(|(index, value)| *index == 15
+        && matches!(value, crate::boundary::EntityDataValue::Byte(flags) if flags & 4 != 0)));
+    restored.entities.row_mut(slot).controls.no_ai = false;
+    step(&mut restored);
     assert!(!restored.entities.row(slot).appearance.extra.iter().any(|(index, value)| *index == 15
         && matches!(value, crate::boundary::EntityDataValue::Byte(flags) if flags & 4 != 0)));
     let _ = std::fs::remove_dir_all(dir);

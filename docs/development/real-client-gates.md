@@ -269,10 +269,11 @@ recorded in `result.json`; settings and world are isolated per run.
   are client-observed rates, not authoritative server-clock speeds: client time
   can be corrected by server packets, and curved paths make net displacement a
   lower bound on traveled distance.
-- Zombie chase uses a server-sent aggressive mob flag to drive the client arm
-  pose. It is cleared when the target is lost and on recovery because targets
-  are runtime-only; the changed appearance is journaled. The focused metadata
-  and WAL tests do not substitute for a matched animated visual comparison.
+- Zombie-family chase uses a blueprint capability to send the aggressive-arms
+  mob flag. It is cleared when the target is lost or on the first hostile
+  evaluation after restart, because targets are runtime-only; the changed
+  appearance is journaled. The focused metadata and WAL tests do not substitute
+  for a matched animated visual comparison.
 
 - With a client supporting held MCP input,
   `{"shot":"tab","hold_keys":["key.keyboard.tab"]}` captures the visible player

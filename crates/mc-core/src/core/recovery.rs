@@ -473,18 +473,6 @@ pub(crate) fn restore_entity(
         }
     };
     let mut appearance = restore_appearance(record);
-    // Targets are runtime-only, so a restored zombie cannot retain a chase pose.
-    let mut cleared_zombie_aggression = false;
-    if state.registry.entity_type_name(record.type_id) == Some("minecraft:zombie") {
-        for (index, value) in &mut appearance.extra {
-            if let (15, crate::boundary::EntityDataValue::Byte(flags)) = (index, value)
-                && *flags & 4 != 0
-            {
-                *flags &= !4;
-                cleared_zombie_aggression = true;
-            }
-        }
-    }
     // Item entities mirror their stack on the appearance (as live spawns do):
     // views read the stack from there.
     if matches!(kind, EntityKind::Item { .. }) {
@@ -552,7 +540,7 @@ pub(crate) fn restore_entity(
             attack_reach: reach,
         },
     );
-    let mut rebased = cleared_zombie_aggression;
+    let mut rebased = false;
     if let Some(slot) = state.entities.slot_of(entity_id) {
         let baby = record.appearance.baby
             || (record.state.entity_life.child_ticks != 0

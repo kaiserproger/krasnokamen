@@ -466,7 +466,7 @@ pub(crate) fn set_zombie_aggressive(state: &mut TickState, slot: EntitySlot, agg
     let EntityKind::Mob { type_id } = body.kind else {
         return;
     };
-    if state.registry.entity_type_name(type_id) != Some("minecraft:zombie") {
+    if !state.registry.blueprint(type_id).is_some_and(|blueprint| blueprint.capabilities.aggressive_arms) {
         return;
     }
     let id = body.id;

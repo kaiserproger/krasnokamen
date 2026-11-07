@@ -127,6 +127,8 @@ pub struct Capabilities {
     pub resists_magic: bool,
     /// Acquires targets below local brightness eight; retaliation bypasses it.
     pub dark_aggro_only: bool,
+    /// Uses the zombie-family aggressive-arms metadata while chasing.
+    pub aggressive_arms: bool,
     /// One drowning damage per tick in water or rain (vanilla
     /// `isSensitiveToWater`).
     pub hurt_by_water: bool,
@@ -1286,6 +1288,10 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
                 | "minecraft:phantom"
         ),
         dark_aggro_only: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
+        aggressive_arms: matches!(
+            name,
+            "minecraft:zombie" | "minecraft:husk" | "minecraft:drowned" | "minecraft:zombie_villager"
+        ),
         resists_magic: name == "minecraft:witch",
         hurt_by_water: name == "minecraft:enderman",
         fall_damage_immune: FALL_DAMAGE_IMMUNE.contains(&name),
