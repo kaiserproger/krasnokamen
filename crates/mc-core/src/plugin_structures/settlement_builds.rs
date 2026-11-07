@@ -610,7 +610,7 @@ pub(crate) fn fetch(
         return Err(Failure::Busy);
     }
     let carry = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
-    let plan = {
+    let (plan, mut remaining_bill) = {
         let ledger = ledger(state)?;
         let project = state
             .settlements
@@ -618,7 +618,28 @@ pub(crate) fn fetch(
             .and_then(|record| record.project.as_ref())
             .ok_or(Failure::Forbidden)?;
         let record = structure(&ledger, &owner(id), &project.structure)?;
-        haul_plan(state, record, &carry.slots)
+        let mut bill = remaining(record)
+            .into_iter()
+            .map(|material| {
+                let name = mc_data::Identifier::parse(&material.resource)
+                    .map_err(|_| Failure::InvalidRequest)?;
+                let item = state
+                    .registry
+                    .items
+                    .id_of(&name)
+                    .ok_or(Failure::InvalidRequest)?;
+                Ok((
+                    item,
+                    u32::try_from(material.quantity).map_err(|_| Failure::Capacity)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, Failure>>()?;
+        for stack in carry.slots.iter().filter(|stack| stack.count > 0) {
+            if let Some((_, count)) = bill.iter_mut().find(|(item, _)| *item == stack.item_id) {
+                *count = count.saturating_sub(stack.count as u32);
+            }
+        }
+        (haul_plan(state, record, &carry.slots), bill)
     };
     if !plan.iter().any(|(planned, _)| *planned == item) {
         return Err(Failure::Blocked);
@@ -639,25 +660,86 @@ pub(crate) fn fetch(
         let mut amount = wanted;
         let mut crafted = None;
         while amount > 0 {
+            let mut future = remaining_bill.clone();
+            if let Some((_, count)) = future.iter_mut().find(|(id, _)| *id == planned) {
+                *count = count.saturating_sub(amount);
+            }
+            let specific = crate::settlements::construction_crafting::wood_specific(state, planned);
+            let reserved = if specific {
+                Default::default()
+            } else if let Ok(reserved) = crate::settlements::construction_crafting::reserve_wood(
+                state,
+                &future,
+                &stock_after,
+            ) {
+                reserved
+            } else {
+                amount /= 2;
+                continue;
+            };
             let mut trial = stock_after.clone();
             if crate::settlements::construction_crafting::ensure_units(
                 state,
                 &mut trial,
                 planned,
                 amount as i32,
+                &reserved,
             ) {
-                crafted = Some(trial);
+                let reserved = if specific {
+                    // A recipe batch can also supply future cells. Check the
+                    // actual post-haul stock instead of reserving another
+                    // whole batch before crafting the current cell.
+                    let mut after_haul = trial.clone();
+                    let mut remove = amount as i32;
+                    for stack in after_haul
+                        .iter_mut()
+                        .flatten()
+                        .filter(|stack| stack.item_id == planned && stack.count > 0)
+                    {
+                        let take = remove.min(stack.count);
+                        stack.count -= take;
+                        remove -= take;
+                        if stack.count == 0 {
+                            *stack = mc_data::ItemStack::EMPTY;
+                        }
+                        if remove == 0 {
+                            break;
+                        }
+                    }
+                    match crate::settlements::construction_crafting::reserve_wood(
+                        state,
+                        &future,
+                        &after_haul,
+                    ) {
+                        Ok(reserved) => reserved,
+                        Err(_) => {
+                            amount /= 2;
+                            continue;
+                        }
+                    }
+                } else {
+                    reserved
+                };
+                crafted = Some((trial, reserved));
                 break;
             }
             amount /= 2;
         }
-        let Some(trial) = crafted else {
+        let Some((trial, reserved)) = crafted else {
             if planned == item {
                 return Err(Failure::InsufficientItems);
             }
             continue;
         };
         stock_after = trial;
+        let mut available = stock_after
+            .iter()
+            .flatten()
+            .filter(|stack| stack.item_id == planned && stack.count > 0)
+            .map(|stack| stack.count)
+            .sum::<i32>()
+            .saturating_sub(reserved.get(&planned).copied().unwrap_or(0))
+            .max(0);
         let mut moved = 0;
         for source in stock_after
             .iter_mut()
@@ -665,7 +747,7 @@ pub(crate) fn fetch(
             .filter(|stack| stack.item_id == planned && stack.count > 0)
         {
             let maximum = rules.max_stack(source);
-            while moved < amount as i32 && source.count > 0 {
+            while moved < amount as i32 && source.count > 0 && available > 0 {
                 let destination = carry_after
                     .iter()
                     .position(|stack| {
@@ -684,13 +766,15 @@ pub(crate) fn fetch(
                 }
                 let take = (amount as i32 - moved)
                     .min(source.count)
-                    .min(maximum - destination.count);
+                    .min(maximum - destination.count)
+                    .min(available);
                 if take <= 0 {
                     break;
                 }
                 destination.count += take;
                 source.count -= take;
                 moved += take;
+                available -= take;
             }
             if source.count == 0 {
                 *source = mc_data::ItemStack::EMPTY;
@@ -698,6 +782,9 @@ pub(crate) fn fetch(
         }
         if moved == 0 && planned == item {
             return Err(Failure::Capacity);
+        }
+        if let Some((_, count)) = remaining_bill.iter_mut().find(|(id, _)| *id == planned) {
+            *count = count.saturating_sub(moved as u32);
         }
     }
     let changes = images

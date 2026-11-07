@@ -332,6 +332,42 @@ fn preempt(state: &mut TickState, id: SettlementId) -> Result<(), String> {
     Ok(())
 }
 
+fn wood_part(path: &str) -> Option<(&str, i64)> {
+    [
+        ("_pressure_plate", 1),
+        ("_fence_gate", 1),
+        ("_trapdoor", 1),
+        ("_planks", 1),
+        ("_stairs", 1),
+        ("_slab", 1),
+        ("_fence", 1),
+        ("_door", 1),
+        ("_log", 4),
+    ]
+    .into_iter()
+    .find_map(|(suffix, weight)| path.strip_suffix(suffix).map(|s| (s, weight)))
+}
+
+fn wood_species_name<'a>(
+    state: &TickState,
+    name: &'a mc_data::Identifier,
+) -> Option<(&'a str, i64)> {
+    if name.namespace() != "minecraft" {
+        return None;
+    }
+    let (species, weight) = wood_part(name.path())?;
+    if species.starts_with("stripped_") {
+        return None;
+    }
+    let log = mc_data::Identifier::parse(format!("minecraft:{species}_log")).ok()?;
+    state.registry.items.id_of(&log)?;
+    Some((species, weight))
+}
+
+pub(super) fn wood_species(state: &TickState, item: u32) -> Option<&str> {
+    wood_species_name(state, state.registry.items.name_of(item)?).map(|(species, _)| species)
+}
+
 /// Prefer a fully funded wood family, then (for gathering/diagnostics only)
 /// the largest existing partial stock. Admission never accepts a partial bill.
 fn select_species<'a>(
@@ -349,34 +385,9 @@ fn select_species<'a>(
         let Some(name) = state.registry.items.name_of(stack.item_id) else {
             continue;
         };
-        if !name.as_str().starts_with("minecraft:") {
-            continue;
-        }
-        let path = name.path();
-        let Some((species, weight)) = [
-            ("_pressure_plate", 1),
-            ("_fence_gate", 1),
-            ("_trapdoor", 1),
-            ("_planks", 1),
-            ("_stairs", 1),
-            ("_slab", 1),
-            ("_fence", 1),
-            ("_door", 1),
-            ("_log", 4),
-        ]
-        .into_iter()
-        .find_map(|(suffix, weight)| path.strip_suffix(suffix).map(|s| (s, weight))) else {
+        let Some((species, weight)) = wood_species_name(state, name) else {
             continue;
         };
-        if species.starts_with("stripped_")
-            || state
-                .registry
-                .items
-                .id_of(&mc_data::Identifier::parse(format!("minecraft:{species}_log")).ok()?)
-                .is_none()
-        {
-            continue;
-        }
         let amount = i64::from(stack.count) * weight;
         if let Some((_, total)) = candidates.iter_mut().find(|(known, _)| *known == species) {
             *total += amount;
@@ -577,7 +588,7 @@ pub(crate) fn candidate_funded_by_delivery(
     let Some(record) = state.settlements.get(id) else {
         return false;
     };
-    if record.project.is_some() || carry.iter().all(Option::is_none) {
+    if carry.iter().all(Option::is_none) {
         return false;
     }
     let mut images = executor::source_images(state, id);
@@ -587,7 +598,12 @@ pub(crate) fn candidate_funded_by_delivery(
     // This is a read-only funding probe; only the regular inventory authority
     // can transfer the actual carry to the real container.
     chest.slots.extend(carry.iter().flatten().cloned());
-    funded_candidate(state, record, &images)
+    if record.project.is_some() {
+        active_project_bill(state, id)
+            .is_some_and(|bill| super::construction_crafting::can_fund(state, &bill, &images))
+    } else {
+        funded_candidate(state, record, &images)
+    }
 }
 
 fn funding_error(state: &TickState, id: SettlementId, materials: &[(u32, u32)]) -> Option<String> {
@@ -1442,22 +1458,9 @@ fn plan(state: &mut TickState, id: SettlementId) {
     let images = executor::source_images(state, id);
     // Do not repeatedly loan the worker supplying the priority bill to cheaper
     // buildings or streets. Unsupported needs still permit other funded work.
-    if gatherer_demand(state, record, &images).is_some_and(|profession| {
-        self::residents(state, id).any(|slot| {
-            resident_simulated(state, slot)
-                && state.entities.body(slot).alive
-                && state.entities.row(slot).villager.as_ref().is_some_and(|v| {
-                    v.age >= 0
-                        && v.settlement == Some(id)
-                        && v.conversion_time.is_none()
-                        && v.data.profession == profession
-                        && v.job_site.is_some_and(|job| {
-                            buildings::job_profession(&state.settlements, Some(id), job)
-                                == Some(profession)
-                        })
-                })
-        })
-    }) {
+    if gatherer_demand(state, record, &images)
+        .is_some_and(|profession| has_staffed_gatherer(state, id, profession))
+    {
         return;
     }
     let catalog = blueprints::all(&state.registry);
@@ -1653,10 +1656,64 @@ fn resident_simulated(state: &TickState, slot: crate::entities::EntitySlot) -> b
         .is_active(at.x.div_euclid(16), at.z.div_euclid(16))
 }
 
+fn has_staffed_gatherer(state: &TickState, id: SettlementId, profession: Profession) -> bool {
+    residents(state, id).any(|slot| {
+        resident_simulated(state, slot)
+            && state.entities.body(slot).alive
+            && state.entities.row(slot).villager.as_ref().is_some_and(|v| {
+                v.age >= 0
+                    && v.settlement == Some(id)
+                    && v.conversion_time.is_none()
+                    && v.data.profession == profession
+                    && v.job_site.is_some_and(|job| {
+                        buildings::job_profession(&state.settlements, Some(id), job)
+                            == Some(profession)
+                    })
+            })
+    })
+}
+
+fn restore_borrowed_gatherer(state: &mut TickState, id: SettlementId, profession: Profession) {
+    if has_staffed_gatherer(state, id, profession) {
+        return;
+    }
+    let borrowed = state
+        .settlements
+        .get(id)
+        .and_then(|record| record.project.as_ref())
+        .and_then(|project| project.borrowed_builder);
+    let Some((uuid, original)) = borrowed else {
+        return;
+    };
+    release_builder(state, id, borrowed);
+    if state.entities.slot_of_uuid(uuid).is_some_and(|slot| {
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .is_some_and(|v| v.data.profession == original)
+    }) {
+        let record = state.settlements.get_mut(id).expect("active settlement");
+        record
+            .project
+            .as_mut()
+            .expect("active project")
+            .borrowed_builder = None;
+        record.revision = record.revision.saturating_add(1);
+    }
+}
+
 fn assign_builder(state: &mut TickState, id: SettlementId) {
     if release_trapped_builder(state, id) {
         return;
     }
+    let protected = state.settlements.get(id).and_then(|record| {
+        record
+            .project
+            .as_ref()
+            .and_then(|_| needed_gatherer(state, id))
+    });
     let mut candidates = Vec::new();
     for slot in residents(state, id) {
         if !resident_simulated(state, slot)
@@ -1668,6 +1725,13 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
         let Some(v) = state.entities.row(slot).villager.as_ref() else {
             continue;
         };
+        if protected.is_some_and(|needed| {
+            v.job_site.is_some_and(|job| {
+                buildings::job_profession(&state.settlements, Some(id), job) == Some(needed)
+            })
+        }) {
+            continue;
+        }
         if body.alive && v.settlement == Some(id) && v.age >= 0 && v.conversion_time.is_none() {
             if v.data.profession == Profession::Builder {
                 return;
@@ -1689,7 +1753,9 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
                 {
                     Some(2)
                 }
-                Profession::Miner | Profession::Lumberjack if !super::allocator::traded(v) => {
+                Profession::Miner | Profession::Lumberjack
+                    if !super::allocator::traded(v) && Some(v.data.profession) != protected =>
+                {
                     Some(3)
                 }
                 _ => None,
@@ -1777,6 +1843,8 @@ pub(crate) fn tick(state: &mut TickState) {
         && let Some(id) = selected(state, state.tick / PLAN_CADENCE)
     {
         if let Some(profession) = needed_gatherer(state, id) {
+            super::allocator::staff_gatherer(state, id, profession);
+            restore_borrowed_gatherer(state, id, profession);
             super::allocator::staff_gatherer(state, id, profession);
         }
         plan(state, id);
@@ -1891,16 +1959,63 @@ pub(crate) struct WaitingNeed {
     pub(crate) no_source: Option<SourceReason>,
 }
 
-/// Only one real bill drives gathering: an owner order, otherwise the first
-/// autonomous candidate. The shared proof consumes virtual stock once across
-/// the whole bill, so intermediate planks cannot also pay for raw-log cells.
+/// Remaining physical project requirements after subtracting exact items in
+/// builder carry. Ingredients in carry are not craftable until deposited.
+fn active_project_bill(state: &TickState, id: SettlementId) -> Option<Vec<(u32, u32)>> {
+    let project = state.settlements.get(id)?.project.as_ref()?;
+    let snapshot = executor::status(state, id, &project.structure).ok()?;
+    let mut bill: Vec<_> = snapshot
+        .remaining
+        .into_iter()
+        .map(|material| {
+            let name = mc_data::Identifier::parse(&material.resource).ok()?;
+            Some((
+                state.registry.items.id_of(&name)?,
+                u32::try_from(material.quantity).ok()?,
+            ))
+        })
+        .collect::<Option<_>>()?;
+    for slot in residents(state, id) {
+        let Some(v) = state.entities.row(slot).villager.as_ref() else {
+            continue;
+        };
+        if v.data.profession != Profession::Builder {
+            continue;
+        }
+        for stack in v.inventory.iter().flatten().filter(|stack| stack.count > 0) {
+            if let Some((_, count)) = bill.iter_mut().find(|(item, _)| *item == stack.item_id) {
+                *count = count.saturating_sub(stack.count as u32);
+            }
+        }
+    }
+    bill.retain(|(_, count)| *count != 0);
+    Some(bill)
+}
+
+/// One real bill drives gathering, including a previously funded project
+/// whose stock was spent or withdrawn after admission.
 pub(crate) fn needed_gatherer(state: &TickState, id: SettlementId) -> Option<Profession> {
     let record = state.settlements.get(id)?;
+    let images = executor::source_images(state, id);
     if record.project.is_some() {
+        let bill = active_project_bill(state, id)?;
+        super::construction_crafting::needed_gatherer(state, &bill, &images)
+    } else {
+        gatherer_demand(state, record, &images)
+    }
+}
+
+/// The active blueprint's fixed wood family while it needs more logs.
+pub(crate) fn active_project_wood(state: &TickState, id: SettlementId) -> Option<&str> {
+    let bill = active_project_bill(state, id)?;
+    let images = executor::source_images(state, id);
+    if super::construction_crafting::needed_gatherer(state, &bill, &images)
+        != Some(Profession::Lumberjack)
+    {
         return None;
     }
-    let images = executor::source_images(state, id);
-    gatherer_demand(state, record, &images)
+    bill.into_iter()
+        .find_map(|(item, _)| wood_species(state, item))
 }
 
 fn gatherer_demand(

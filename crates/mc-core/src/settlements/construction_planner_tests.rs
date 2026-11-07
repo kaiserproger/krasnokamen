@@ -21,6 +21,26 @@ fn certificate(record: &mut SettlementRecord, kind: BuildingKind, level: u8, nat
 }
 
 #[test]
+fn active_stone_stairs_do_not_mask_the_project_wood_shortfall() {
+    let (mut state, id, _) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "barracks", 1);
+    start(&mut state, id, "barracks", 1, None);
+    let plank = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_planks").unwrap())
+        .unwrap();
+    for stack in &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots {
+        if stack.item_id == plank {
+            *stack = mc_data::ItemStack::EMPTY;
+        }
+    }
+    assert_eq!(needed_gatherer(&state, id), Some(Profession::Lumberjack));
+    assert_eq!(active_project_wood(&state, id), Some("oak"));
+}
+
+#[test]
 fn partial_birch_house_bill_drives_the_same_family_as_funded_construction() {
     let (mut state, id, worker) = fixture();
     open_plan(&mut state);
@@ -1942,6 +1962,227 @@ fn funded_house_can_borrow_the_only_untraded_gatherer_as_builder() {
             .profession,
         Profession::Lumberjack,
         "an ordered house must release its borrowed gatherer, not permanently strand extraction"
+    );
+}
+
+#[test]
+fn borrowed_lumberjack_replenishes_an_unfunded_active_project_through_ticks() {
+    use crate::settlements::allocator::tests::block;
+    let (mut state, id, worker) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "lumber_camp", 1);
+    let replacements: Vec<_> = state.block_entities[&(1, 201, 1)]
+        .slots
+        .iter()
+        .map(|stack| {
+            let mut stack = stack.clone();
+            if !stack.is_empty() {
+                stack.item_id = species_item(&state, stack.item_id, "birch").unwrap();
+            }
+            stack
+        })
+        .collect();
+    state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots = replacements;
+    state
+        .world
+        .set_block(3, 200, 8, block(&state, "minecraft:dirt", &[]));
+    for y in 201..205 {
+        state
+            .world
+            .set_block(3, y, 8, block(&state, "minecraft:birch_log", &[]));
+    }
+    state
+        .world
+        .set_block(3, 205, 8, block(&state, "minecraft:birch_leaves", &[]));
+    state
+        .world
+        .set_block(2, 200, 9, block(&state, "minecraft:dirt", &[]));
+    for y in 201..205 {
+        state
+            .world
+            .set_block(2, y, 9, block(&state, "minecraft:oak_log", &[]));
+    }
+    state
+        .world
+        .set_block(2, 205, 9, block(&state, "minecraft:oak_leaves", &[]));
+    state.world.fold_overlay();
+    buildings::certify_zone(
+        &mut state,
+        id,
+        BuildingKind::LumberCamp,
+        ScriptWorldBounds::new([2, 200, 8], [3, 206, 8]).unwrap(),
+        [2, 201, 8],
+    )
+    .unwrap();
+    let v = state.entities.row_mut(worker).villager.as_mut().unwrap();
+    v.data.profession = Profession::Lumberjack;
+    v.job_site = Some(crate::boundary::BlockPos { x: 2, y: 201, z: 8 });
+    v.job_site_dimension = state.dimension.name().into();
+    request_build(&mut state, id, "lumber_camp").unwrap();
+    state.tick = PLAN_CADENCE;
+    tick(&mut state);
+    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    assert_eq!(
+        project.borrowed_builder,
+        Some((state.entities.row(worker).uuid, Profession::Lumberjack))
+    );
+    let plank = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:birch_planks").unwrap())
+        .unwrap();
+    for stack in &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots {
+        if stack.item_id == plank {
+            stack.count -= 9;
+        }
+    }
+    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    assert!(
+        !executor::missing(&state, id, &project.structure)
+            .unwrap()
+            .is_empty()
+    );
+    let birch = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:birch_log").unwrap())
+        .unwrap();
+    let mut restored = false;
+    let mut harvested = false;
+    let mut resumed = false;
+    for _ in 0..36000 {
+        let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+        let v = state.entities.row(worker).villager.as_ref().unwrap();
+        restored |= v.data.profession == Profession::Lumberjack;
+        harvested |= v.data.profession == Profession::Lumberjack
+            && (output.changes.blocks.iter().any(|change| {
+                change.position.x == 3
+                    && change.position.z == 8
+                    && (201..205).contains(&change.position.y)
+                    && change.state == state.registry.states.air
+            }) || v
+                .inventory
+                .iter()
+                .flatten()
+                .any(|stack| stack.item_id == birch && stack.count > 0));
+        resumed |= restored && harvested && v.data.profession == Profession::Builder;
+        if state.settlements.get(id).unwrap().project.is_none() {
+            assert!(
+                restored && harvested && resumed,
+                "the real worker must gather, deliver and resume construction"
+            );
+            assert!(
+                state
+                    .settlements
+                    .get(id)
+                    .unwrap()
+                    .buildings
+                    .values()
+                    .any(|building| building.kind == BuildingKind::LumberCamp
+                        && !building.natural_zone)
+            );
+            assert_eq!(
+                state.world.block_at(2, 201, 9),
+                Some(block(&state, "minecraft:oak_log", &[])),
+                "the active birch project must not consume the earlier oak tree"
+            );
+            return;
+        }
+    }
+    panic!(
+        "active project did not recover: restored={restored} harvested={harvested} resumed={resumed}"
+    );
+}
+
+#[test]
+fn active_wood_shortfall_can_retask_a_borrowed_miner_through_ticks() {
+    use crate::settlements::allocator::tests::block;
+    let (mut state, id, worker) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "lumber_camp", 1);
+    state
+        .world
+        .set_block(3, 200, 8, block(&state, "minecraft:dirt", &[]));
+    for y in 201..205 {
+        state
+            .world
+            .set_block(3, y, 8, block(&state, "minecraft:oak_log", &[]));
+    }
+    state
+        .world
+        .set_block(3, 205, 8, block(&state, "minecraft:oak_leaves", &[]));
+    state.world.fold_overlay();
+    buildings::certify_zone(
+        &mut state,
+        id,
+        BuildingKind::LumberCamp,
+        ScriptWorldBounds::new([2, 200, 8], [3, 206, 8]).unwrap(),
+        [2, 201, 8],
+    )
+    .unwrap();
+    state
+        .entities
+        .row_mut(worker)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::Miner;
+    request_build(&mut state, id, "lumber_camp").unwrap();
+    state.tick = PLAN_CADENCE;
+    tick(&mut state);
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .unwrap()
+            .borrowed_builder,
+        Some((state.entities.row(worker).uuid, Profession::Miner))
+    );
+    let plank = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_planks").unwrap())
+        .unwrap();
+    for stack in &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots {
+        if stack.item_id == plank {
+            stack.count -= 9;
+        }
+    }
+    assert_eq!(
+        needed_gatherer(&state, id),
+        Some(Profession::Lumberjack),
+        "stock withdrawal must leave a wood shortfall"
+    );
+    let mut restored = false;
+    let mut harvested = false;
+    let mut resumed = false;
+    for _ in 0..36000 {
+        let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+        let v = state.entities.row(worker).villager.as_ref().unwrap();
+        restored |= v.data.profession == Profession::Lumberjack;
+        harvested |= restored
+            && output.changes.blocks.iter().any(|change| {
+                change.position.x == 3
+                    && change.position.z == 8
+                    && (201..205).contains(&change.position.y)
+                    && change.state == state.registry.states.air
+            });
+        resumed |= harvested && v.data.profession == Profession::Builder;
+        if state.settlements.get(id).unwrap().project.is_none() {
+            assert!(
+                restored && harvested && resumed,
+                "worker must gather, deliver and resume"
+            );
+            return;
+        }
+    }
+    panic!(
+        "borrowed miner did not recover: restored={restored}, harvested={harvested}, resumed={resumed}, worker={:?}",
+        state.entities.row(worker).villager.as_ref().unwrap()
     );
 }
 

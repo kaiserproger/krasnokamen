@@ -3305,6 +3305,28 @@ failing_first = "reported"
 regression = ["cargo:mc-core:settlements::allocator::tests::claimed_village_with_storage_assigns_its_free_adult_to_forestry_before_workshops"]
 
 [[bug]]
+id = "CIVILIZATION-MIXED-WOOD-FUNDING-STALL"
+title = "A funded mixed-wood building can consume its selected wood on generic recipes and stall before completion."
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "open"
+source = "Mixed birch/oak lumber-camp construction: 176/183 cells complete, seven birch planks missing while 34 oak logs remain."
+failing_first = "reported"
+regression = ["cargo:mc-core:settlements::construction::tests::admitted_birch_camp_can_finish_from_the_same_mixed_stock"]
+
+[[bug]]
+id = "VILLAGER-RATION-PATH-STARVATION"
+title = "Repeated spare-bed searches can exhaust the shared path budget and prevent a worker from delivering carried resources."
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization worker repeatedly selects a delivery target without an admitted path search."
+failing_first = "reported"
+regression = ["cargo:mc-core:villager::brain::tests::exhausted_spare_bed_search_does_not_starve_a_lumber_delivery"]
+
+[[bug]]
 id = "CIV-SEED24-FURNACE-OUTPUT"
 title = "Completed settlement furnace output remains stranded after the nearby tender takes a vanilla profession."
 area = "gameplay"

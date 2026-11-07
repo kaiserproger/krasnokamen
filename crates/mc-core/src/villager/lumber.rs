@@ -225,6 +225,7 @@ fn scan_column(
     radius: u32,
     settlement: Option<crate::settlements::SettlementId>,
     camp: u64,
+    wood: Option<&str>,
     [x, z]: [i32; 2],
 ) -> Option<([i32; 3], u32, u16)> {
     let dx = i64::from(x) - i64::from(anchor[0]);
@@ -247,7 +248,10 @@ fn scan_column(
         {
             base -= 1;
         }
-        if let Some((sapling, height)) = mature_tree(state, x, base, z) {
+        if wood.is_none_or(|wanted| {
+            block_path(state, x, base, z).and_then(|path| path.strip_suffix("_log")) == Some(wanted)
+        }) && let Some((sapling, height)) = mature_tree(state, x, base, z)
+        {
             // A certified footprint over the base protects even a
             // natural-looking tree: player buildings are never harvestable.
             if !base_protected(state, settlement, camp, [x, base, z]) {
@@ -271,6 +275,7 @@ fn search(
     anchor: [i32; 3],
     radius: u32,
     settlement: Option<crate::settlements::SettlementId>,
+    wood: Option<&str>,
     progress: &mut Progress,
 ) -> Option<([i32; 3], u32, u16)> {
     let total = columns_total(radius);
@@ -287,9 +292,15 @@ fn search(
         }
         progress.cursor = (slot + 1) % total;
         scanned += 1;
-        if let Some(tree) =
-            scan_column(state, anchor, radius, settlement, progress.building, [x, z])
-        {
+        if let Some(tree) = scan_column(
+            state,
+            anchor,
+            radius,
+            settlement,
+            progress.building,
+            wood,
+            [x, z],
+        ) {
             return Some(tree);
         }
     }
@@ -423,8 +434,16 @@ pub(super) fn work(
         }
         v.harvest_at = state.tick + PERIOD;
         let settlement = v.settlement;
-        let (base, sapling, height) =
-            search(state, anchor, radius, settlement, &mut v.lumber_progress)?;
+        let wood = settlement
+            .and_then(|id| crate::settlements::construction::active_project_wood(state, id));
+        let (base, sapling, height) = search(
+            state,
+            anchor,
+            radius,
+            settlement,
+            wood,
+            &mut v.lumber_progress,
+        )?;
         v.lumber_progress.base = base;
         v.lumber_progress.sapling = sapling;
         v.lumber_progress.height = height;

@@ -14,6 +14,7 @@ use super::inventory;
 use crate::tick::TickState;
 use mc_data::ItemStack;
 use mc_data::recipes::{Ingredient, RecipeKind};
+use std::collections::BTreeMap;
 
 /// Deepest allowed craft chain (log -> planks -> door is depth 2).
 const MAX_DEPTH: u8 = 8;
@@ -25,10 +26,11 @@ const MAX_BATCHES: i32 = 32;
 const MAX_SLOT: i32 = 99;
 
 #[derive(Default)]
-struct Work {
+struct Work<'a> {
     count: usize,
     trace: bool,
     missing_gatherer: Option<crate::villager::VillagerProfession>,
+    reserved: Option<&'a BTreeMap<u32, i32>>,
 }
 
 /// Plan post-craft slots in exact image order, guaranteeing one unit of
@@ -61,8 +63,12 @@ pub(crate) fn ensure_units(
     post: &mut Vec<Vec<ItemStack>>,
     item: u32,
     need: i32,
+    reserved: &BTreeMap<u32, i32>,
 ) -> bool {
-    let mut work = Work::default();
+    let mut work = Work {
+        reserved: Some(reserved),
+        ..Work::default()
+    };
     ensure(state, post, &mut work, item, need, 0)
 }
 
@@ -97,6 +103,17 @@ fn funding(
     images: &[inventory::Image],
     trace: bool,
 ) -> (bool, Option<crate::villager::VillagerProfession>) {
+    let mut post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
+    simulate_bill(state, requirements, &mut post, trace, true)
+}
+
+fn simulate_bill(
+    state: &TickState,
+    requirements: &[(u32, u32)],
+    post: &mut Vec<Vec<ItemStack>>,
+    trace: bool,
+    protect: bool,
+) -> (bool, Option<crate::villager::VillagerProfession>) {
     if requirements
         .iter()
         .map(|(_, count)| u64::from(*count))
@@ -105,38 +122,81 @@ fn funding(
     {
         return (false, None);
     }
-    let mut post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
-    for (item, count) in requirements {
+    for (index, (item, count)) in requirements.iter().enumerate() {
+        let reserve_future = protect && !wood_specific(state, *item);
         let mut remaining = *count;
         while remaining > 0 {
-            // The executor crafts one requested unit per haul. Match that
-            // bounded search budget while retaining the shared virtual stock,
-            // rather than rejecting a fundable building after many cells.
+            let reserved = if reserve_future {
+                match reserve_wood(state, &requirements[index + 1..], post) {
+                    Ok(reserved) => reserved,
+                    Err(missing) => return (false, missing),
+                }
+            } else {
+                BTreeMap::new()
+            };
             let mut work = Work {
                 trace,
+                reserved: Some(&reserved),
                 ..Work::default()
             };
-            if !ensure(state, &mut post, &mut work, *item, 1, 0) {
+            if !ensure(state, post, &mut work, *item, 1, 0) {
                 return (false, work.missing_gatherer);
             }
+            let mut available =
+                (total(post, *item) - reserved.get(item).copied().unwrap_or(0)).max(0);
             for stack in post
                 .iter_mut()
                 .flatten()
                 .filter(|stack| stack.item_id == *item && stack.count > 0)
             {
-                let take = remaining.min(stack.count as u32);
+                let take = remaining.min(stack.count as u32).min(available as u32);
                 remaining -= take;
+                available -= take as i32;
                 stack.count -= take as i32;
                 if stack.count == 0 {
                     *stack = ItemStack::EMPTY;
                 }
-                if remaining == 0 {
+                if remaining == 0 || available == 0 {
                     break;
                 }
             }
         }
     }
     (true, None)
+}
+
+pub(crate) fn wood_specific(state: &TickState, item: u32) -> bool {
+    super::construction::wood_species(state, item).is_some()
+}
+
+/// Reserve actual inputs consumed by the same proof for later wood-specific
+/// cells. Generic recipes may use only the unreserved physical remainder.
+pub(crate) fn reserve_wood(
+    state: &TickState,
+    requirements: &[(u32, u32)],
+    post: &[Vec<ItemStack>],
+) -> Result<BTreeMap<u32, i32>, Option<crate::villager::VillagerProfession>> {
+    let strict: Vec<_> = requirements
+        .iter()
+        .copied()
+        .filter(|(item, count)| *count > 0 && wood_specific(state, *item))
+        .collect();
+    if strict.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let mut after = post.to_vec();
+    let (funded, missing) = simulate_bill(state, &strict, &mut after, true, false);
+    if !funded {
+        return Err(missing);
+    }
+    let mut reserved = BTreeMap::new();
+    for stack in post.iter().flatten().filter(|stack| !stack.is_empty()) {
+        reserved.entry(stack.item_id).or_insert_with(|| {
+            total(post, stack.item_id).saturating_sub(total(&after, stack.item_id))
+        });
+    }
+    reserved.retain(|_, count| *count > 0);
+    Ok(reserved)
 }
 
 /// Simple stock gap for explicit requirements: `(item, still-missing)` in
@@ -176,23 +236,43 @@ fn total(post: &[Vec<ItemStack>], item: u32) -> i32 {
     sum
 }
 
+fn available(post: &[Vec<ItemStack>], item: u32, work: &Work<'_>) -> i32 {
+    (total(post, item)
+        - work
+            .reserved
+            .and_then(|reserved| reserved.get(&item))
+            .copied()
+            .unwrap_or(0))
+    .max(0)
+}
+
 /// Consume one unit satisfying a vanilla ingredient, scanning images then
 /// slots in order for determinism.
-fn take_matching(state: &TickState, post: &mut [Vec<ItemStack>], ingredient: &Ingredient) -> bool {
-    for image in post.iter_mut() {
-        for slot in image.iter_mut() {
-            if slot.is_empty() {
+fn take_matching(
+    state: &TickState,
+    post: &mut [Vec<ItemStack>],
+    work: &Work<'_>,
+    ingredient: &Ingredient,
+) -> bool {
+    for image in 0..post.len() {
+        for index in 0..post[image].len() {
+            let slot = &post[image][index];
+            if slot.is_empty()
+                || !mc_data::recipes::ingredient_accepts_stack(
+                    &state.registry.items,
+                    &state.registry.item_facts,
+                    &state.registry.tags,
+                    slot,
+                    ingredient,
+                )
+                || (work
+                    .reserved
+                    .is_some_and(|reserved| reserved.contains_key(&slot.item_id))
+                    && available(post, slot.item_id, work) == 0)
+            {
                 continue;
             }
-            if !mc_data::recipes::ingredient_accepts_stack(
-                &state.registry.items,
-                &state.registry.item_facts,
-                &state.registry.tags,
-                slot,
-                ingredient,
-            ) {
-                continue;
-            }
+            let slot = &mut post[image][index];
             slot.count -= 1;
             if slot.count <= 0 {
                 *slot = ItemStack::EMPTY;
@@ -314,7 +394,7 @@ fn result_identity(state: &TickState, recipe: &mc_data::recipes::Recipe) -> Opti
 fn ensure(
     state: &TickState,
     post: &mut Vec<Vec<ItemStack>>,
-    work: &mut Work,
+    work: &mut Work<'_>,
     target: u32,
     need: i32,
     depth: u8,
@@ -325,10 +405,10 @@ fn ensure(
     if depth > MAX_DEPTH || work.count > MAX_WORK {
         return false;
     }
-    if total(post, target) >= need {
+    if available(post, target, work) >= need {
         return true;
     }
-    let deficit = need - total(post, target);
+    let deficit = need - available(post, target, work);
     let previous_missing = work.missing_gatherer;
     for recipe in state.registry.recipes.iter() {
         if !is_grid(recipe) {
@@ -361,7 +441,7 @@ fn ensure(
                     ok = false;
                     break;
                 }
-                if take_matching(state, post, ingredient) {
+                if take_matching(state, post, work, ingredient) {
                     continue;
                 }
                 if !ensure_ingredient(state, post, work, ingredient, depth + 1) {
@@ -384,7 +464,7 @@ fn ensure(
                 break;
             }
         }
-        if ok && total(post, target) >= need {
+        if ok && available(post, target, work) >= need {
             work.missing_gatherer = previous_missing;
             return true;
         }
@@ -404,11 +484,11 @@ fn ensure(
 fn ensure_ingredient(
     state: &TickState,
     post: &mut Vec<Vec<ItemStack>>,
-    work: &mut Work,
+    work: &mut Work<'_>,
     ingredient: &Ingredient,
     depth: u8,
 ) -> bool {
-    if take_matching(state, post, ingredient) {
+    if take_matching(state, post, work, ingredient) {
         return true;
     }
     if depth > MAX_DEPTH || work.count > MAX_WORK {
@@ -431,7 +511,9 @@ fn ensure_ingredient(
             continue;
         }
         let snapshot = post.clone();
-        if ensure(state, post, work, id, 1, depth + 1) && take_matching(state, post, ingredient) {
+        if ensure(state, post, work, id, 1, depth + 1)
+            && take_matching(state, post, work, ingredient)
+        {
             work.missing_gatherer = previous_missing;
             return true;
         }
