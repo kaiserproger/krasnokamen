@@ -1,17 +1,43 @@
 # Contributing to Solaris
 
-Solaris is a draft project developed by the owner. Read [AGENTS.md](AGENTS.md)
-for the working contract, project invariants and validation tiers, and use the
-[documentation index](docs/README.md) to find the guide for the area you change.
-Keep changes focused; discuss material scope or design choices before expanding
-an issue. Core production builds must not require sibling repositories.
+Solaris is developed by its owner and a fleet of coding agents. Read
+[AGENTS.md](AGENTS.md) for the working contract, project invariants and
+validation tiers, and use the [documentation index](docs/README.md) to find the
+guide for the area you change. Keep changes focused; discuss material scope or
+design choices before expanding an issue. Core production builds must not
+require sibling repositories.
+
+## Contributors and the owner
+
+Outside contributors fork the repository, work on a branch and open a pull
+request. The repository owner reviews and merges; nothing lands on `main`
+without that review, and pushing, tagging and publishing releases are owner
+actions. Make each commit a revertible Conventional Commit and leave hooks and
+signing alone. Coding agents running on the owner's host follow AGENTS.md
+instead: they do not commit, push or merge without the owner's explicit
+authorization, and they use the host's shared build slots.
+
+## Prerequisites
+
+- **Rust** at the version pinned in [`rust-toolchain.toml`](rust-toolchain.toml)
+  (rustup installs it on first use), with `rustfmt` and `clippy`.
+- **Clang and mold** on Linux x86-64; the [Cargo config](.cargo/config.toml)
+  links with them and sets the debug test stack size. Other platforms use their
+  default linker.
+- **JDK 25** (`java` and `javac`) for content import and the Java-backed
+  harness profiles.
+- **cargo-nextest** (`cargo install cargo-nextest --locked`): the test runner
+  behind `correctness`.
+- **Python 3** for `python3 -m tools.harness`.
+- **Xvfb**, only for the graphical real-client gates.
+
+Downloaded or extracted Mojang content must never enter Git.
 
 ## Development setup
 
-Follow the [source quick start](README.md#quick-start-from-source). Use debug
-builds for normal development. The workspace's [Cargo config](.cargo/config.toml)
-selects Clang/mold on Linux x86-64 and the debug test stack size. Content import
-requires JDK 25; downloaded/extracted Mojang content must never enter Git.
+Follow [Build from source](README.md#build-from-source) in the README and use
+debug builds for normal development. Content import needs JDK 25 and the
+licensed server bundles; see the [content cache](docs/OPERATING.md#vanilla-content-cache).
 
 ## Validation
 
@@ -43,10 +69,7 @@ coverage with protocol bots to turn a failing gate green.
   keeping duplicate authorities or compatibility shims.
 - Preserve unrelated local changes. Do not stage ignored agent state, runtime
   worlds or Mojang content; change `Cargo.lock` only for a concrete dependency reason.
-- Commits require explicit owner authorization. When authorized, use one
-  revertible Conventional Commit per completed checkpoint. Pushing, merging to
-  `main`, tagging and publication each require explicit permission; preserve hooks
-  and signing.
+- Use one revertible Conventional Commit per completed checkpoint.
 
 ## Documentation
 

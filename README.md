@@ -3,7 +3,9 @@
 **A Minecraft Java Edition server written from scratch in Rust.**
 
 Solaris is a replacement for the vanilla server (and Paper/Spigot-style servers).
-Players join with the normal, unmodified Minecraft **Java 26.3** client; there
+Players join with the normal, unmodified Minecraft **Java 26.3** client (protocol
+777); 26.1.2 clients can still join when a 26.1.2 content cache is retained (see
+[the operating guide](docs/OPERATING.md#client-protocol-compatibility)). There
 are no client mods to install. Solaris reimplements the game itself: world
 generation, mobs, redstone, villages, combat and inventories. It is built for two
 things the vanilla server is bad at:
@@ -17,9 +19,9 @@ things the vanilla server is bad at:
   a player and a chest. Only the last few ticks that had not reached the disk
   yet may roll back.
 
-> **Status: Solaris 1.0 "Pauline", release candidate 4 (prerelease).**
-> Adversarial release validation is in progress; required blocked checks are not
-> passes. Not bit-identical to vanilla, and Java mods do not run (see below).
+> **Status: Solaris 1.0 "Pauline", release candidate 5 (prerelease).**
+> Not bit-identical to vanilla, and Java mods do not run (see below). Each
+> release's notes list what was validated and what is known to be unsupported.
 
 ## Performance
 
@@ -49,7 +51,7 @@ hardware and workload, not guarantees or vanilla-parity/capacity claims.
 
 - **Survival basics:** mining, crafting, smelting, farming, breeding, enchanting,
   anvils, brewing, trading, beds, death and respawn, statistics, advancements.
-- **World:** vanilla 26.1 terrain, biomes, caves, villages and structures. The
+- **World:** vanilla-style terrain, biomes, caves, villages and structures. The
   Nether and the End include portals and the ender dragon fight.
 - **Mobs:** passive, neutral and hostile mobs, mounts and vehicles, raids, piglin
   bartering, golems (including player-built iron and snow golems), the warden
@@ -65,10 +67,13 @@ Gameplay aims to feel like vanilla, not to be bit-identical. Exact AI timing and
 vanilla bugs are not reproduced. The network protocol and world file formats
 *are* exact, so normal clients and normal world saves work.
 
-Partial map-making support: directory `/function` datapacks, schedules and
-unconditional command blocks. See [the limits and setup](docs/OPERATING.md#datapacks-and-command-blocks).
-General `/data`, `/clone`, conditional command blocks and other map-making
-commands are not there yet.
+Map-making support is partial: directory `/function` datapacks with schedules,
+command blocks (impulse, chain, repeating and conditional; off by default),
+`/clone`, `/data get` and storage `/data` commands, and `/execute` with score
+stores work within documented limits. ZIP and worldgen datapacks, `/place`,
+general `/data modify` on entities and blocks, command minecarts and the
+command-block editor are not there yet. See
+[the limits and setup](docs/OPERATING.md#datapacks-and-command-blocks).
 
 ## Settlements
 
@@ -104,9 +109,11 @@ Details: the [operating guide](docs/OPERATING.md).
 
 Forge, Fabric and NeoForge mods do not run on Solaris: in All the Mods 11,
 215 of 289 mods ship server-side Java and 152 rewrite Minecraft internals with
-Mixins. A limited set of datapack content (recipes, loot overrides) loads
-today; full datapack support and worldgen datapacks are next. Server-side
-features are written as [Wasm plugins](#plugins).
+Mixins. Directory datapacks load a limited set (functions, recipes, plain block
+loot); ZIP and worldgen datapacks do not. Server-side features are written as
+[Wasm plugins](#plugins). An experimental offline converter handles one narrow
+Bukkit slice and one Forge block-break handler; it is not mod compatibility (see
+the [plugin guide](docs/PLUGINS.md#converting-bukkit-and-forge-input-experimental)).
 
 ## How it works
 
@@ -147,8 +154,10 @@ Plugins are **WebAssembly components** running in the Wasmtime sandbox:
 
 Ready-made packages live in
 [solaris-default-plugins](https://github.com/kaiserproger/solaris-default-plugins):
-permissions, essentials, economy, towns with land claims, and audit. Plugins
-that add client-side content use the optional
+a standard pack of permissions, essentials, economy, towns (chunk claims
+enforced natively) and audit, plus optional packages for offline-mode
+authentication, death graves, a chisel addon and a basic shop. Plugins that add
+client-side content use the optional
 [Solaris Loader](https://github.com/kaiserproger/solaris-loader) client mod
 (Fabric, NeoForge, Forge). Server-only plugins work with vanilla clients. See
 the [plugin guide](docs/PLUGINS.md).
@@ -160,10 +169,10 @@ Linux x86-64 and AArch64 binaries are published on
 `curl`, `tar`, a SHA-256 utility and **JDK 25** (used once to extract game data):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.4/install.sh \
-  | SOLARIS_VERSION=v1.0.0-rc.4 bash
+curl -fsSL https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.5/install.sh \
+  | SOLARIS_VERSION=v1.0.0-rc.5 bash
 curl -fsSLo example.toml \
-  https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.4/example.toml
+  https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.5/example.toml
 ```
 
 Solaris does not ship any Mojang files. Before the first start, download the
@@ -222,7 +231,7 @@ python3 -m tools.harness run correctness
 
 More: the [documentation index](docs/README.md), the
 [architecture overview](docs/ARCHITECTURE.md) and the
-[RC4 release notes](docs/releases/v1.0.0-rc.4.md) (upgrading from v0.0.8 is
+[RC5 release notes](docs/releases/v1.0.0-rc.5.md) (upgrading from v0.0.8 is
 covered in the [RC1 notes](docs/releases/v1.0.0-rc.1.md)).
 
 ## License

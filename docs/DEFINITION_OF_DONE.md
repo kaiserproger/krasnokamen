@@ -23,7 +23,7 @@ If in doubt, label the work `draft`.
 ## Autonomous Preflight
 
 Run this before milestone code, before a closeout, and before any claim
-that a manual/client gate is ready:
+that a manual/client gate is ready. The baseline applies to any checkout:
 
 ```sh
 pwd
@@ -33,18 +33,34 @@ rustc --version
 cargo --version
 cargo fmt --version
 java --version
-javap -version
-test -f .analysis/server.jar
 test -d data/vanilla/reports || test -d data/vanilla
 ```
 
-Also check, when relevant:
+The last line checks the git-ignored licensed content cache
+([how to build it](OPERATING.md#vanilla-content-cache)). Also check, when
+relevant:
 
 - Port `25565` is free before starting `solaris-v2`.
-- `.analysis/test-world` is present, or tests are expected to skip.
 - The current branch matches the milestone branch named in the plan.
-- Local-only files such as `.serena/`, `.analysis/`, `data/vanilla/`,
-  `YOLO_MODE.md`, `log.log`, and `opencode.json` will not be staged.
+- Local-only files such as `.analysis/`, `data/vanilla/` and `opencode.json`
+  are git-ignored and will not be staged.
+
+### Owner-host-only preflight
+
+Oracle and graphical gates additionally need artifacts that exist only on the
+owner's workstation (git-ignored, never shipped in the repository). A
+contributor without them reports the affected gate as `blocked` or `degraded`,
+never as a pass:
+
+```sh
+javap -version
+test -f .analysis/server.jar   # licensed vanilla server bundle used by oracle checks
+test -d .analysis/test-world   # created by tools/generate-test-world.sh from that jar
+```
+
+`.analysis/test-world` may be absent when the tests that use it are expected to
+skip. A real-client gate also needs the client prerequisites listed in
+[real-client gates](development/real-client-gates.md).
 
 Report the preflight as `full`, `degraded`, or `blocked`. A degraded
 preflight must name the missing item and the validation it weakens.
@@ -55,10 +71,10 @@ Closeouts must include this matrix, even for drafts:
 
 | Gate | Required wording |
 |---|---|
-| Cargo baseline | Exact `fmt`, `xtask code-health`, `clippy`, and `test` commands run after the last code change, or why not. |
+| Cargo baseline | Exact `fmt`, `xtask code-health`, `clippy`, and `test` commands (or the `correctness` harness profile) run after the last code change, or why not. |
 | Focused tests | Which behavior they prove, and why they are not pass-by-construction. |
 | Vanilla oracle | `wire-probe`, `javap`, decompiled source, vanilla server capture, or explicit `not run`. |
-| Client/manual gate | PrismLauncher or approved real-client automation status: owner-run, agent-run, prepared only, or not run. |
+| Client/manual gate | Real-client harness profile or owner-run PrismLauncher status: owner-run, agent-run, prepared only, or not run; name the client release (26.3 or legacy 26.1.2). |
 | Performance | Metrics for latency/TPS/lock contention when the slice touches hot paths. |
 | Concurrency | Evidence for no global lock regression or blocking tick/network path when relevant. |
 | Data/protocol facts | Packet IDs/layouts, registry IDs, sidecar version/schema, and stale/missing-data behavior cited or marked not run. |
@@ -83,7 +99,9 @@ harness gates cannot downgrade a failed real-client observation.
 Solaris is not a bit-perfect clone, but the release target is hard:
 
 - At least 80% coverage of scoped vanilla overworld-survival mechanics
-  that a normal 26.1.2 client can observe.
+  that a normal vanilla Java client can observe. The server's canonical
+  release is 26.3 (protocol 777); 26.1.2 clients are served through the
+  retained legacy profile, so state which release a claim was observed on.
 - The remaining 20% must be documented as non-goal, deferred, or
   knowingly divergent Solaris semantics.
 - A mechanic counts toward the 80% only when its normal path is covered
@@ -129,20 +147,17 @@ A stabilization milestone is done only when:
   are reviewed when the slice touches worldgen, storage, networking,
   entities, physics, lighting, or chunk streaming.
 
-## Client Automation Direction
+## Real-Client Evidence
 
-Manual PrismLauncher gates are still owner-run by default. To make them
-autonomous, build an MCP server or equivalent harness that drives a real
-vanilla 26.1.2 client and records:
-
-- Connection, join/rejoin, movement, block edits, inventory/container
-  actions, combat, death/respawn, save/restart, and two-client visibility.
-- Screenshots or structured client observations for visual desyncs.
-- Packet/client logs tied to the server run and git commit.
-- A deterministic scenario file that can be rerun after fixes.
-
-Headless mocks or protocol-only bots are not a replacement for this gate;
-they are harness evidence, not client/manual evidence.
+Real-client gates are driven by the harness, which runs the actual client under
+an MCP-controlled automation agent and records join/rejoin, movement, block
+edits, inventory and container actions, combat, death/respawn, save/restart and
+screenshots or structured observations tied to the server run. The profile
+catalog and receipts are in [AGENT_TOOLING.md](AGENT_TOOLING.md#native-client-gameplay)
+and the procedure and traps in
+[real-client gates](development/real-client-gates.md). Manual PrismLauncher
+play is owner-run. Headless mocks and protocol-only bots are harness evidence,
+not client/manual evidence.
 
 ## Performance And Multithreading DoD
 

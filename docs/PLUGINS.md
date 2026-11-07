@@ -35,6 +35,10 @@ and non-regular files (including FIFOs), and bounds the bytes actually read by
 `PluginLimits::text_bytes` (8192 by default). Only a missing file means empty
 configuration; unsafe, unreadable, oversized or non-UTF-8 files refuse loading.
 
+A configured plugin directory that does not exist yet (the first start from
+`example.toml`) is created empty and logged; the server then runs without
+plugins.
+
 ### Native server
 
 `solaris-v2` uses the production component host with a directory-only deployment:
@@ -90,9 +94,10 @@ an authentication plugin unlocks that session. Until then only `/register`,
 `/login` and `/changepassword` run; every other command and chat line is
 refused with a short Russian/English hint and nothing is broadcast. `UnlockSession`
 requires the explicit manifest capability `auth`; observing `player.joined`
-alone grants no unlock authority. Only `solaris-auth` in the standard pack
-declares `auth`. It does not register a `before-build` hook: the native login
-gate is the single login-lock enforcement path.
+alone grants no unlock authority. Of the first-party packages only the optional
+`solaris-auth` (not part of the standard pack) declares `auth`. It does not
+register a `before-build` hook: the native login gate is the single login-lock
+enforcement path.
 
 Registered commands are advertised in the actual client Commands tree and
 dispatch to the loaded component. For player sources, a manifest-owned root takes
@@ -186,6 +191,16 @@ public after a timer - belongs to that package and uses the zone owner above. On
 deployment may declare the capability once; a second declaring package refuses
 startup.
 
+The first-party `graves` package protects the grave for its owner through the
+zone owner above and removes that protection after `public_after_seconds`
+(default 300, range 1..=604800). Custody is verifiable on a saved world without
+starting the server: stop it normally, then run
+[`world probe`](OPERATING.md#probing-a-stopped-world). The harness profile
+`graves` runs the whole scenario (real protocol death, clean stop, probe,
+fail-closed assertions that the `grave-<x>-<y>-<z>` barrel holds exactly the
+given stacks, that the stored player inventory keeps no copy and that no item
+entity remains): `python3 -m tools.harness run graves -- --plugins-dir DEPLOYED_PACK`.
+
 ## Package manifest
 
 A minimal server-only component package can declare no subscriptions,
@@ -257,10 +272,13 @@ Authors implement `solaris_plugin_sdk::Plugin` (or bindings for the same WIT
 world) and use the WIT and SDK definitions as the API reference. Do not copy
 internal host types into a guest or rely on a host implementation detail.
 
-WIT record layout changes require regenerating both host and guest bindings.
-Rebuild every guest that uses `client-presentation` after the optional marker
-position extension; an older component's record layout is not a compatible
-fallback. Rebuild every guest against `solaris:plugin@0.8.0`.
+The contract is `solaris:plugin@0.8.0`: WIT record layout changes require
+regenerating host and guest bindings, and every guest must be rebuilt and
+re-encoded against it (the Rust SDK workspace is 0.8.0; add `mob_blueprints:
+None` to existing full `StartupContribution` literals and update the manifest
+`api`). This applies to the first-party `solaris-default-plugins` packages too;
+no 0.7.0 component or old record-layout shim is accepted, and an older
+component's record layout is not a compatible fallback.
 
 ## Lifecycle and configuration
 
@@ -351,12 +369,6 @@ spawn weight. Native checkpoints retain their custom identity; Anvil export uses
 the vanilla presentation id and a `solaris:MobBlueprint` marker, not custom
 gameplay on a vanilla server.
 
-**Rebuild all guests for 0.8.0.** The Rust SDK workspace version is 0.8.0.
-Regenerate WIT bindings, add `mob_blueprints: None` to existing full
-`StartupContribution` literals, update manifest `api`, and rebuild/re-encode
-every component. This also applies to `../solaris-default-plugins`; no 0.7.0
-component or old record-layout shim is accepted.
-
 ## Events, commands, and capability boundaries
 
 A manifest subscribes only to the named events it needs and claims only its own
@@ -379,8 +391,6 @@ destination dimension and only moves a player already in that dimension;
 otherwise its typed result is `dimension-mismatch` and no teleport occurs. This
 check happens when the request is applied, including after asynchronous storage
 callbacks. Cross-dimension plugin teleports are not supported.
-Rebuild and redeploy components against this record layout before enabling them;
-older component binaries do not have these fields.
 
 ### Command permission nodes
 
@@ -472,7 +482,23 @@ the same world and account data. Do not disable required login as a recovery
 shortcut. Other retired components retain the isolated command-unavailable
 behavior above.
 
-## Bukkit compatibility (experimental)
+## Converting Bukkit and Forge input (experimental)
+
+### Converter support at a glance
+
+| Input | `--inspect-mod` | Conversion |
+|---|---|---|
+| Bukkit/Spigot plugin JAR (`plugin.yml`) | n/a | A small API slice (below): join event, break event, manifest commands. |
+| Forge mod JAR (`META-INF/mods.toml`) | Metadata and bytecode inventory | One server `BlockEvent.BreakEvent` handler (`--convert-mod`). |
+| NeoForge mod JAR (`META-INF/neoforge.mods.toml`) | Metadata and bytecode inventory | **Not implemented.** |
+| Fabric mod JAR (`fabric.mod.json`) | Metadata (entrypoints) and bytecode inventory | **Not implemented.** |
+
+For every input, Mixins and access transformers are never applied, client-only
+code is never converted, and nothing runs mod code at inspection time. A
+converted package is unproven until you have exercised it; none of these paths
+is CraftBukkit, Spigot, Paper, Forge or Fabric compatibility in general.
+
+### How the converter works
 
 `tools/bukkit/convert.py` is an **explicit offline converter**, not a JVM server
 backend. It takes an ordinary Bukkit/Spigot plugin JAR, reads `plugin.yml` and
@@ -486,6 +512,8 @@ automatically; native plugins and core gameplay remain unchanged.
 This is a small API compatibility slice, **not CraftBukkit, Spigot or Paper
 compatibility in general**. There is no CraftServer/NMS implementation, embedded
 JVM, Java agent, or second Wasmtime backend.
+
+### Bukkit/Spigot plugin JARs
 
 Supported surface:
 
@@ -562,26 +590,40 @@ compatibility, source-version support or equivalent behavior. Declared Mixins
 are reported, not silently treated as supported. Inspection requires Python 3.11+
 and the existing Maven/ASM dependencies cached locally; it does not download them.
 
-### Converting a supported Forge handler
+### Converting a Forge mod (`--convert-mod`)
 
 `--convert-mod` uses the same offline TeaVM compiler, Rust adapter, WIT component
 encoder and normal plugin host as the Bukkit path; it does not install Forge or
 start a JVM in the server. Supply the same build inputs and target blocks report
-as below, replacing the plugin JAR and adding `--convert-mod`.
+as below, replacing the plugin JAR and adding `--convert-mod`. Conversion first
+builds the same bytecode inventory as `--inspect-mod`, bound to the JAR's SHA-256.
 
-The currently supported Forge slice is one statically registered, public static
-`NORMAL` `BlockEvent.BreakEvent` subscriber. The callback may read block position
-coordinates and inspect or set event cancellation, plus use supported primitive
-or string state and static helpers. Only player-authored non-air-to-air changes
-are mapped; cancellation rejects the native build batch. This is not a general
-Forge API or cross-version compatibility claim. Unproven registration, additional
-server handlers, world/player access, unsupported reachable bytecode, access
-transformers and missing server dependencies are rejected. Fabric and NeoForge
-conversion are not yet implemented.
+The only supported Forge slice is **one** statically registered, public static,
+`NORMAL` priority, `receiveCanceled = false` `BlockEvent.BreakEvent` handler,
+annotated directly on a public `@Mod.EventBusSubscriber` for the Forge bus on
+`Dist.DEDICATED_SERVER` (or both distributions). The callback may read block
+position coordinates, inspect or set cancellation, and use primitive or string
+mod fields and static helpers. Only player-authored non-air-to-air changes are
+mapped, and a cancellation rejects the whole native build batch. The generated
+package declares the `before-build` hook and no commands or events. This is not
+a general Forge API, Forge event-bus ordering, or cross-version compatibility
+claim.
 
-Declared Mixins and client-only subscribers are omitted, not executed, and are
-listed in `conversion.json`; inspect these omissions before deployment. A
-successful conversion does not imply that a mod remains useful without them.
+Conversion is refused (not partially applied) for: a JAR that is not a Forge
+mod with exactly one mod identity; a mod version that is missing or an unresolved
+`${...}` placeholder; access transformers, embedded JARs or a manifest
+`Class-Path`; a mandatory server dependency other than `minecraft` and `forge`;
+a bundled `net.minecraft`, `net.minecraftforge` or `net.neoforged` class; more
+than one server handler or any other server handler or registration;
+dynamic registration, reflection, dynamic invocation or class constants,
+synchronized or native reachable methods, and any reachable API outside the small
+shim. Fabric and NeoForge conversion are **not implemented**: a NeoForge or
+Fabric JAR can only be inspected.
+
+Explicit omissions, written to `conversion.json` (`omissions`) rather than
+executed: declared **Mixins** and handlers or subscriber classes that are
+**client-only**. Inspect them before deployment; a successful conversion does
+not imply the mod remains useful without them.
 
 
 ### Offline build and receipt

@@ -1,246 +1,165 @@
 # Install Solaris Loader on a client
 
 Solaris Loader is an optional **client-side** mod for Solaris plugins that ship
-verified UI (screens/HUD), assets, sounds, items, blocks, or UI/keyboard interactions. It is not
-needed when every selected server plugin is `server_only`.
+verified UI (screens/HUD), assets, sounds, items, blocks, or UI/keyboard
+interactions. It is not needed when every selected server plugin is
+`server_only`.
 
-The current Loader prototype targets exactly **Minecraft Java Edition 26.1.2**
-and **Java 25**. Use the adapter matching the mod loader in that Minecraft
-instance; do not install more than one Solaris Loader adapter in the same
-profile.
+## Current target
+
+| | |
+|---|---|
+| Loader version | `0.1.0` (jars are named `loader-<platform>-0.1.0.jar`) |
+| Minecraft | Java Edition **26.1.2**, exactly; Java **25** |
+| Loader wire protocol | **3**, with client artifact index **schema 2** |
+| Server plugin API | WASM component API `solaris:plugin@0.8.0` only |
+
+These values are read from the `solaris-loader` repository (`gradle.properties`,
+its README). Its Git history and release version are independent of core: a
+server tag is not a Loader revision, and the alpha protocol and bundle contracts
+can change between revisions (there is no protocol-1/2 compatibility path;
+schema-1 bundles and the removed UI/interaction content kinds fail closed). The
+plugin API version does not change the wire protocol or artifact schema.
+
+The Loader targets **26.1.2, one release behind the server's canonical 26.3**.
+A 26.1.2 client speaks protocol 775, and a 26.3 server serves it only while it
+retains a separate 26.1.2 content cache; otherwise the client is disconnected as
+incompatible. See
+[Retaining 26.1.2 clients](OPERATING.md#retaining-2612-clients-after-upgrading-to-263).
+Install the Loader only in a Minecraft 26.1.2 instance; do not use a nearby
+Minecraft version.
 
 ## Compatibility matrix
 
-The repository currently builds and tests against:
+The repository builds and tests against:
 
-| Client platform | Supported baseline for 26.1.2 | Solaris jar |
+| Client platform | Baseline for 26.1.2 | Solaris jar |
 | --- | --- | --- |
 | Fabric | Fabric Loader `0.19.3`, Fabric API `0.155.2+26.1.2` | `loader-fabric-0.1.0.jar` |
 | NeoForge | NeoForge `26.1.2.76` | `loader-neoforge-0.1.0.jar` |
 | Forge | Forge `26.1.2-64.1.0` | `loader-forge-0.1.0.jar` |
 
 The mod metadata requires Minecraft 26.1.2. Fabric also requires Fabric API and
-Fabric Loader 0.19.3 or newer; the validated baseline above is preferred.
-NeoForge requires 26.1.2.76 or newer within the 26.1.2 line. Forge requires
-loader major 64 within the 26.1 line. The exact versions in the table are the
-field-tested development matrix; other newer compatible loader builds are not a
-Solaris alpha release claim.
+Fabric Loader 0.19.3 or newer; NeoForge requires 26.1.2.76 or newer within the
+26.1.2 line; Forge requires loader major 64 within the 26.1 line. The exact
+versions above are the field-tested matrix; other builds are not a release claim.
 
 ## Download or build the client jars
 
 Download the matching platform JAR and `SHA256SUMS` from
-[Solaris Loader releases](https://github.com/kaiserproger/solaris-loader/releases).
-The server's curl installer does not install client mods. Select the release
-required by your server, not GitHub's source-code ZIP, and keep only one Solaris
-Loader adapter in the instance. Verify the selected JAR's SHA-256 against
-`SHA256SUMS` before installation.
-
-To build instead, use
-[`solaris-loader`](https://github.com/kaiserproger/solaris-loader). Its Git
-history and release version are independent of core: a server tag is not a
-Loader revision. Alpha protocol and bundle contracts can change between
-revisions. Current Loader wire protocol is **3** with artifact index schema 2,
-with no protocol-1/2 compatibility path. The server plugin frontend is the WASM
-component API `0.8.0`; the Luau `0.6.0` frontend is retired
-([PLUGINS.md](PLUGINS.md)). The plugin API version does not
-change the client wire protocol or artifact schema.
-Declared keyboard actions leave vanilla movement, menus, screenshots and
-fullscreen handling intact. They are suppressed in menus/overlays or without
-window focus; bindings reset on reconnect. Rebinding, chords and
-mouse/gamepad actions are not implemented.
-
-Schema-2 overlays may additionally declare
-`view_request_bindings: [{key, view}]`. Pressing a bound key sends the
-additive wire-3 `view_request` message on `solaris:loader/view_action`; the
-server accepts it only after this connection completed Loader negotiation and
-the declared owner has `views` plus `present_views`. The core-owned native
-settlements bundle is appended to an already-required plugin Loader manifest,
-never making Loader mandatory by itself. Its overview binds <kbd>C</kbd> to
-`solaris-settlements:overview`, which opens the same dialog as
-`/settlement menu`. The binding is fixed: it adds no Controls rebinding UI.
-
-Sound bundles request `play_sounds` alongside `load_assets`; they support
-personal and world-positioned one-shots, volume, pitch and owner-local stop.
-Playback respects master volume and ends on disconnect. Loops and moving sound
-sources are not implemented.
-From that source checkout:
+[Solaris Loader releases](https://github.com/kaiserproger/solaris-loader/releases)
+(not GitHub's source ZIP) and verify the JAR's SHA-256 before installing. The
+server's curl installer does not install client mods. To build instead, from a
+`solaris-loader` checkout:
 
 ```sh
-cd ../solaris-loader
-./gradlew --no-configuration-cache \
-  :loader-fabric:jar \
-  :loader-neoforge:jar \
-  :loader-forge:jar
+./gradlew --no-configuration-cache :loader-fabric:jar :loader-neoforge:jar :loader-forge:jar
 ```
 
-Use only the jar for the chosen platform:
+and use only the jar for the chosen platform
+(`loader-<platform>/build/libs/loader-<platform>-0.1.0.jar`). These are client
+mods, not server plugins: never put them in the server's `[plugins].directory`.
 
-```text
-loader-fabric/build/libs/loader-fabric-0.1.0.jar
-loader-neoforge/build/libs/loader-neoforge-0.1.0.jar
-loader-forge/build/libs/loader-forge-0.1.0.jar
-```
+## Install
 
-These are client mods, not Solaris server plugins. Do not put them in the
-server's `[plugins].directory`.
+1. Close Minecraft. Create or select a **26.1.2** instance for exactly one
+   platform (Fabric, NeoForge or Forge) using Java 25; use the baselines above to
+   reproduce a field test. Fabric also needs the Fabric API mod.
+2. Open **that instance's game directory** and its `mods/` folder (create it if
+   needed) and copy the one matching Solaris Loader jar there. Remove any older
+   Solaris Loader jar from the same instance so exactly one remains. Do not
+   unzip it, and do not use the Fabric jar in a NeoForge or Forge profile (or
+   NeoForge's in Forge's: their networking adapters differ although both use TOML
+   metadata).
+3. Start that same instance, connect to the server and review the permission
+   prompt.
 
-## Choose the correct launcher instance
-
-Solaris Loader is installed like another mod for the chosen platform. It does
-not require an MCP token or the development client agent.
-
-| Launcher | Destination |
+| Launcher | Where to place the JAR |
 | --- | --- |
-| PrismLauncher | Instance → Edit → Mods → add the JAR; choose its loader under Version. |
-| MultiMC | Instance → Edit → Loader mods → add the JAR; use a loader/version the launcher actually supports. |
-| Official Minecraft Launcher | Install the selected platform's client profile, then use that installation's configured Game Directory and its `mods/` folder. |
-| Modrinth App | Open the matching instance folder and use `mods/`. |
-| CurseForge App | Open the matching custom profile folder and use `mods/`; preserve the modpack's platform/version. |
+| PrismLauncher | Edit the instance, then Mods (or the instance's `minecraft/mods/` folder); choose the mod loader under Version. |
+| MultiMC | Edit the instance, then Loader mods; use only a loader/version the launcher offers. |
+| Official Minecraft Launcher | Install the chosen platform's client profile with its installer, then use that installation's configured Game Directory and `mods/`. |
+| Modrinth App | The matching instance's folder, `mods/`. |
+| CurseForge App | The matching custom profile's folder, `mods/`; do not replace a managed pack's loader. |
+| Other launchers | The launched profile's game directory, not the launcher's application directory or a global `.minecraft`. |
 
-Close Minecraft before replacing a JAR. Do not unzip it. For any other launcher,
-open the launched profile's game directory rather than guessing an operating
-system-wide `.minecraft` path. If the launcher lacks the required 26.1.2/Java
-25/platform combination, use a compatible launcher, not a near-match version.
-These are manual installation instructions, not graphical validation claims
-for every launcher.
-
-## Install in Fabric
-
-1. Create/select a Minecraft **26.1.2** Fabric instance using Java 25.
-2. Install Fabric Loader and Fabric API; use the validated versions above when
-   reproducing a Solaris field test.
-3. Open that instance's game directory and create `mods/` if needed.
-4. Copy `loader-fabric-0.1.0.jar` into `mods/`.
-5. Start that same instance and connect to the Solaris server.
-
-For PrismLauncher, right-click the instance, choose **Folder**, and place the jar
-in that folder's `minecraft/mods/` directory (or use the instance's Mods page).
-Installing it in another instance or the global launcher directory has no
-effect.
-
-## Install in NeoForge
-
-1. Create/select a Minecraft **26.1.2** NeoForge instance using Java 25.
-2. Use NeoForge `26.1.2.76` for the validated matrix.
-3. Copy `loader-neoforge-0.1.0.jar` into that instance's `mods/` directory.
-4. Start the instance and connect.
-
-Do not use the Fabric or Forge jar in a NeoForge profile.
-
-## Install in Forge
-
-1. Create/select a Minecraft **26.1.2** Forge instance using Java 25.
-2. Use Forge `26.1.2-64.1.0` for the validated matrix.
-3. Copy `loader-forge-0.1.0.jar` into that instance's `mods/` directory.
-4. Start the instance and connect.
-
-Do not use the NeoForge jar merely because Forge and NeoForge both use TOML mod
-metadata; their networking adapters are different.
+Installing in another instance has no effect. These are manual instructions, not
+graphical validation of every launcher. Loader needs no MCP token or development
+client agent.
 
 ## First connection and permissions
 
-When the server requires Loader content, Solaris sends a manifest during the
-Minecraft Configuration phase. On the first connection for an exact normalized
-server address and requested permission set, Loader opens a Minecraft
-confirmation screen.
+When the server requires Loader content, it sends a manifest during the
+Configuration phase. On the first connection for an exact normalized server
+address and requested permission set, Loader opens a confirmation screen:
 
 - **Allow:** Loader requests missing exact bundle identities, verifies each
-  declared size and SHA-256, publishes it atomically in the cache, activates the
-  permitted content, then completes login.
-- **Deny:** no artifact is requested or staged, and the connection closes
-  without acknowledgement.
-- A different server address or changed permission set prompts again.
-- A previous allow/deny decision is reused only for that address and exact
-  permission set.
+  declared size and SHA-256, publishes them atomically in the cache, activates
+  the permitted content, then completes login.
+- **Deny:** nothing is requested or staged and the connection closes without
+  acknowledgement.
 
-The default cache is:
+A previous decision is reused only for that address and exact permission set; a
+different address or changed permissions prompt again. The default cache is
+`~/.solaris/loader-cache/` (`permissions.properties` plus content-addressed
+bundle data); `-Dsolaris.loader.cacheDir=/absolute/path` overrides it for an
+isolated profile. Do not copy a permission file between untrusted server
+addresses; cached bytes are still checked against the server manifest before
+activation. The server allows up to two minutes for this confirmation and
+transfer. Loader clears activated registries, HUD state and transient resources
+when the connection closes.
 
-```text
-~/.solaris/loader-cache/
-```
+What bundles can use: declared keyboard actions leave vanilla movement, menus,
+screenshots and fullscreen handling intact (suppressed in menus and without
+window focus, reset on reconnect; no rebinding, chords or mouse/gamepad actions).
+Schema-2 overlays may declare `view_request_bindings: [{key, view}]`; the key
+sends the additive `view_request` message and the server accepts it only for a
+connection that completed Loader negotiation, from an owner with the `views` and
+`present_views` capabilities. The native settlements bundle is appended to an
+already-required plugin Loader manifest and never makes Loader mandatory by
+itself; its overview is bound to <kbd>C</kbd> and opens the same dialog as
+`/settlement menu`. Sound bundles request `play_sounds` with `load_assets` and
+support personal and world-positioned one-shots with volume and pitch; loops and
+moving sources are not implemented.
 
-It contains `permissions.properties` plus content-addressed bundle data. The JVM
-property below overrides the cache for an isolated profile:
+## Required-client behavior
 
-```text
--Dsolaris.loader.cacheDir=/absolute/path/to/loader-cache
-```
+A server with no client bundles sends no Loader payload and works with a vanilla
+client. If any selected plugin declares `[client].bundles`, the deployment is
+`server_and_client` and Loader is required. A missing Loader, wrong
+platform/version, denied permission, missing acknowledgement, invalid bundle,
+size/hash mismatch or activation failure stops login during Configuration; the
+disconnect reason names the supported platforms and required bundle identities
+where available. Solaris never silently substitutes vanilla content.
 
-Do not copy a permission file between untrusted server addresses. Cached bundle
-bytes are still checked against the server manifest before activation. The
-server allows up to two minutes for this Loader-only confirmation/transfer
-exchange.
-
-## Required-client and disconnect behavior
-
-A server with no client bundles sends no Loader payload and remains compatible
-with an ordinary vanilla 26.1.2 client. If one or more selected plugins declare
-`[client].bundles`, the deployment is `server_and_client` and Loader is required.
-
-A missing Loader, wrong platform/version, denied permission, missing
-acknowledgement, invalid bundle, size/hash mismatch, or activation failure stops
-login during Configuration. The server disconnect reason names the supported
-loader platforms and required bundle identities where available; Solaris does
-not silently replace custom content with vanilla content.
-
-Loader clears activated registries, HUD state, and transient resources when the
-connection closes, so one server's content cannot be reused by a later
-connection merely because the Minecraft process stayed open.
-
-## How operators know Loader is required
-
-Inspect each selected package's validated `[client]` bundle declarations and
-the actual startup/Configuration negotiation. A package without bundles is
-`server_only`; a package with bundles is `server_and_client` and requires the
-matching adapter and player permission approval. The declarations identify
-supported loaders, permissions, artifact identities, paths, sizes and hashes.
-
-There is no native server `--check` or `discovered_plugins` JSON check report.
-Startup validates the real component/client deployment; `content verify`
-validates only the vanilla content cache. See
-[Plugin deployment](PLUGINS.md#operator-deployment).
+Operators find out which packages need Loader from each package's validated
+`[client]` declarations (supported loaders, permissions, artifact identities,
+paths, sizes, hashes) and the actual Configuration negotiation. There is no
+native server `--check` report; startup validates the real component and client
+deployment, and `content verify` covers only the vanilla cache. See
+[plugin deployment](PLUGINS.md#operator-deployment).
 
 ## Troubleshooting
 
-### The client says Loader is required
-
-Confirm the jar is in the `mods/` directory of the instance that was actually
-launched, confirm Minecraft reports 26.1.2, and confirm the adapter matches
-Fabric/NeoForge/Forge. Fabric also needs Fabric API. Check the client log for
-`solaris_loader` loading before retrying.
-
-### No permission prompt appears
-
-A stored allow/deny decision may already match. Close Minecraft, inspect the
-correct cache directory and `permissions.properties`, and remove only the entry
-for the intended test server if you deliberately want to prompt again. Also
-confirm the selected package actually declares client bundles; server-only
-packages do not start a Loader handshake.
-
-### The prompt was denied
-
-Reconnect and change the stored decision for that exact server only after
-reviewing the permissions with the server operator. Denial intentionally causes
-a disconnect and no download.
-
-### Bundle verification or activation fails
-
-The operator should validate the deployment at startup and verify each artifact
-exists and matches `size_bytes` and `sha256`. The client should not edit
-cached ZIPs. Remove the failing exact cache identity and reconnect only after the
-server artifact is corrected; changing artifact bytes requires a new matching
-manifest identity.
-
-### Platform/version mismatch
-
-Use the compatibility table above. Do not rename one platform jar to make a
-loader accept it. Capture both the Minecraft client log and Solaris disconnect
-reason when reporting a failure.
+- **"Loader is required":** confirm the jar is in the `mods/` of the instance
+  actually launched, that it reports Minecraft 26.1.2, that the platform matches,
+  and (Fabric) that Fabric API is installed; check the client log for
+  `solaris_loader` loading.
+- **No permission prompt:** a stored decision may already match, or the plugin
+  declares no client bundles. Close Minecraft and remove only the entry for that
+  server from `permissions.properties` to prompt again.
+- **Prompt denied:** reconnect and change the stored decision for that exact
+  server only after reviewing the permissions with the operator.
+- **Bundle verification or activation fails:** the operator verifies each
+  artifact exists and matches `size_bytes` and `sha256`; the client does not edit
+  cached ZIPs. Changing artifact bytes needs a new matching manifest identity;
+  remove the failing cache identity and reconnect.
+- **Platform/version mismatch:** use the matrix above and never rename one
+  platform's jar. Report both the client log and the disconnect reason.
 
 ## Developer compatibility gate
 
-The repository includes a Loader-required fixture and isolated real-client
-checks:
+The repository includes a Loader-required fixture and isolated real-client checks:
 
 ```sh
 python3 -m tools.harness run loader-live --platform fabric
@@ -248,5 +167,5 @@ python3 -m tools.harness run loader-live --platform neoforge
 python3 -m tools.harness run loader-live --platform forge
 ```
 
-See [`../examples/loader-live-gate/README.md`](../examples/loader-live-gate/README.md)
-for the fixture. These development gates are not an end-user auto-installer.
+See [`examples/loader-live-gate/README.md`](../examples/loader-live-gate/README.md)
+for the fixture. These gates are not an end-user installer.
