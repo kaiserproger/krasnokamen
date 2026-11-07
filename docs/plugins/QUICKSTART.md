@@ -19,14 +19,15 @@ available throughout. Use an isolated test server and world, not production.
 export SOLARIS="$(pwd)"
 export SERVER="$SOLARIS/target/release/solaris-v2"
 rustup target add wasm32-unknown-unknown
-mkdir -p /tmp/solaris-plugin-tutorial
-cd /tmp/solaris-plugin-tutorial
+export TUTORIAL="$(mktemp -d /tmp/solaris-plugin-tutorial.XXXXXX)"
+cd "$TUTORIAL"
 cargo new --lib hello
 ```
 
 Run the first two exports from the Solaris checkout; if your server is elsewhere,
-set `SERVER` to its absolute path instead. `hello` must not already exist in the
-tutorial directory. Replace `hello/Cargo.toml` with:
+set `SERVER` to its absolute path instead. `TUTORIAL` is a fresh directory each
+run, so the guide can be repeated. Keep this shell open: later steps use these
+variables. Replace `hello/Cargo.toml` with:
 
 ```sh
 cat > hello/Cargo.toml <<EOF
@@ -49,7 +50,7 @@ Write `hello/src/lib.rs`:
 ```sh
 cat > hello/src/lib.rs <<'EOF'
 use solaris_plugin_sdk::{
-    export_plugin, log, message_player, Command, Config, Event, EventContext,
+    export_plugin, log, message_session, Command, Config, Event, EventContext,
     Failure, InitContext, LogLevel, Plugin,
 };
 
@@ -66,11 +67,13 @@ impl Plugin for Hello {
         let mut commands = Vec::new();
         for event in events {
             match event {
-                Event::PlayerJoined(joined) => commands.push(message_player(
-                    &joined.player, format!("Welcome! {}", joined.name),
+                // Reply to the session that sent the event, not the player's UUID:
+                // after a reconnect the UUID may belong to a newer session.
+                Event::PlayerJoined(joined) => commands.push(message_session(
+                    joined.session, format!("Welcome! {}", joined.name),
                 )),
                 Event::CommandInvoked(invoked) if invoked.name == "hello" => commands.push(
-                    message_player(&invoked.player, "Hello from a WASM plugin."),
+                    message_session(invoked.session, "Hello from a WASM plugin."),
                 ),
                 _ => {}
             }
@@ -123,9 +126,9 @@ port = 25565
 [auth]
 online_mode = false
 [plugins]
-directory = "/tmp/solaris-plugin-tutorial/plugins"
+directory = "$TUTORIAL/plugins"
 [data]
-world_dir = "/tmp/solaris-plugin-tutorial/world"
+world_dir = "$TUTORIAL/world"
 vanilla_data_dir = "$SOLARIS/data/vanilla"
 EOF
 ```
@@ -133,7 +136,7 @@ EOF
 Start it:
 
 ```sh
-"$SERVER" --config /tmp/solaris-plugin-tutorial/server.toml
+"$SERVER" --config "$TUTORIAL/server.toml"
 ```
 
 Look for `hello plugin ready`. Join with a compatible player client: chat shows
