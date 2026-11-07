@@ -32,6 +32,8 @@ failing_first = "not recorded"
   `harness:<profile>:<scenario>` checks; initially it may be empty.
 - `repro_check` is optional: a nonempty string or list of nonempty strings for
   known-red reproducers, kept out of the green regression gate.
+- `ingress_proof` is optional: a nonempty string or list of strings (`file:line` write paths with what each
+  validates). See the unreachable-state rule below.
 - `failing_first` is optional and, when present, is `reported` or `not recorded`;
   report the actual pre-fix evidence, never infer it from a passing test.
 
@@ -44,6 +46,10 @@ an exact test; `harness:<profile>:<scenario>` names an existing runnable
 scenario. Every green Cargo check in `regression`, even for an open row,
 runs on every integration; scenario checks run in the client tier. Keep a known-red reproducer in `repro_check`
 instead; it is not a gate. Never weaken or delete checks to make a run green.
+
+A manual/source row whose state no ingress can produce (importer, commands, WAL replay, plugins,
+structure placement all validate) is closed by a Cargo check through the real tick path plus a
+recorded ingress proof (refs to each validating write path).
 
 A row is fixed only when its check passes and is the same or stricter than the
 original repro. Owner/manual and real-client repros, and all client-surface
@@ -106,14 +112,17 @@ The `entities` profile includes windowed native-client probes:
   one core with seven CPU hogs (the descheduling of a loaded host), so Argon2 takes several
   times its idle wall time. The plugin's reply must arrive and ordinary chat, refused while
   locked, must then be echoed. The unfixed host retires the plugin and kicks the player.
-- `native-v2-corrupt-block-entities`: a jukebox, sculk shrieker, crafter, oak shelf, conduit and
-  beacon, each alone in its own chunk, are saved, exported to Anvil, corrupted by one field in
-  the exported copy, imported again and loaded beside the rejoining player. Crafter, shelf and
-  conduit records get a foreign block entity id because the importer validates them by id and
-  would refuse the import. The server must refuse exactly the five undecodable chunks (one error
-  naming each record), never panic, keep ticking past the beacon's 80-tick pass and keep the
-  player's own chunk. The beacon record is decodable by construction: that fixture is the
-  runtime-path control and must not be refused.
+- `native-v2-corrupt-block-entities`: a jukebox, sculk shrieker and beacon, each alone in its own
+  chunk, are saved, exported to Anvil, corrupted by one field in the exported copy, imported
+  again and loaded beside the rejoining player. The server must refuse exactly the two
+  undecodable chunks (one error naming each record), never panic, keep ticking past the beacon's
+  80-tick pass and keep the player's own chunk. The checkpoint after the refusal and the shutdown
+  checkpoint must both commit (one error lists every refused chunk), and a restarted server
+  refuses the same chunks again. The beacon record is decodable by construction: that fixture is
+  the runtime-path control and must not be refused. Crafter, shelf, shulker box and conduit
+  records are validated by the importer through their block and never reach the server.
+- `native-v2-corrupt-chunk-near-camera`: known-red repro, not a gate. The same corruption in the
+  player's own chunk keeps the native client on its loading screen.
 - `native-v2-cursor-close`: pick up exactly three apples, close and reopen both
   ordinary inventory and crafting table, and require an empty received cursor
   before any repair click while retaining exactly three inventory apples.

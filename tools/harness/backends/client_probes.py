@@ -70,6 +70,7 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
                        else 1200.0 if ctx.scenario_id == "native-v2-settlement-storage"
                        else 900.0 if ctx.scenario_id in ("native-v2-destroyed-chest-race",
                                                          "native-v2-corrupt-block-entities",
+                                                         "native-v2-corrupt-chunk-near-camera",
                                                          "native-v2-duplicate-login")
                        else (180.0 if v2_scenario else 120.0))
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else default_timeout
@@ -402,7 +403,8 @@ seed = 81
             if (ctx.scenario_id in native_p4.RESTART_SCENARIOS
                     or ctx.scenario_id in (native_light.SCENARIO_ID, "native-v2-end-restart",
                                            "native-v2-custody-mount-export",
-                                           "native-v2-corrupt-block-entities")):
+                                           "native-v2-corrupt-block-entities",
+                                           "native-v2-corrupt-chunk-near-camera")):
                 def restart_server(remaining: float) -> str:
                     nonlocal server, server_log
                     old_pid = server.pid
@@ -410,8 +412,10 @@ seed = 81
                     if server.returncode != 0:
                         raise RuntimeError(f"P4 server did not stop cleanly: {server.returncode}")
                     server_log.close()
-                    if ctx.scenario_id in ("native-v2-custody-mount-export",
-                                           "native-v2-corrupt-block-entities"):
+                    if (ctx.scenario_id == "native-v2-custody-mount-export"
+                            or (ctx.scenario_id in ("native-v2-corrupt-block-entities",
+                                                    "native-v2-corrupt-chunk-near-camera")
+                                and getattr(mcp, "corrupt_fixture", None))):
                         from .native_promotion_custody import convert_world
 
                         convert_world(ctx, binary, config, evidence,

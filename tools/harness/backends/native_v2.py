@@ -590,6 +590,12 @@ def _corrupt_block_entities(steps: ProbeSteps, origin: tuple[int, int, int]) -> 
     run(steps, origin)
 
 
+def _corrupt_chunk_near_camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_corrupt_block_entities import run_near_camera
+
+    run_near_camera(steps, origin)
+
+
 def _promotion_banner(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_promotion_items import banner_placement
 
@@ -645,6 +651,7 @@ RUNNERS = {
     "native-v2-destroyed-chest-race": _destroyed_chest_race,
     "native-v2-duplicate-login": _duplicate_login,
     "native-v2-corrupt-block-entities": _corrupt_block_entities,
+    "native-v2-corrupt-chunk-near-camera": _corrupt_chunk_near_camera,
     "native-v2-craft-drag": _craft_drag,
     "native-v2-settlement-storage": _settlement_storage,
     "native-v2-redstone": _redstone, "native-v2-stations": _stations,
