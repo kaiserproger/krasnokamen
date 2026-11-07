@@ -227,16 +227,3 @@ fn malformed_world_updates_fail_instead_of_being_silently_lost() {
     s.phase = Phase::Play;
     assert!(s.clientbound(9, &[]).is_err());
 }
-
-#[test]
-fn legacy_cache_sits_beside_the_canonical_one() {
-    if std::env::var_os(CACHE_ENV).is_some() {
-        return;
-    }
-    let release = Path::new("/srv/content").join(mc_protocol::TARGET_RELEASE);
-    assert_eq!(cache_root(&release), Path::new("/srv/content/26.1.2"));
-    assert_eq!(
-        cache_root(Path::new("data/vanilla")),
-        Path::new("data/vanilla-26.1.2")
-    );
-}

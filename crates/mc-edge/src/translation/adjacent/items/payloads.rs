@@ -71,6 +71,12 @@ pub(super) fn extra(
                 optional(r, w, |r, w| template_at(t, to, r, w, depth + 1))?;
             }
         }
+        Payload::PotDecorations if t.formats.upper < 777 => {
+            let n = list_len(r, w)?;
+            for _ in 0..n {
+                w.write_varint(map(&t.items, to, r.read_varint()?).context("unmapped pot item")?);
+            }
+        }
         Payload::PotDecorations => match to {
             To::Legacy => {
                 w.write_varint(4);

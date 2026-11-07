@@ -50,7 +50,9 @@ fn slot(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>, depth: usize) -> Result<()> 
         6 => {
             // Native 26.3 TagSlotDisplay uses HolderSet(ITEM); 26.1.2 uses
             // a bare tag identifier. Solaris emits only named tag sets.
-            ensure!(r.read_varint()? == 0, "direct recipe tag display");
+            if t.formats.upper >= 777 {
+                ensure!(r.read_varint()? == 0, "direct recipe tag display");
+            }
             string(r, w)?;
         }
         10 => {
@@ -200,6 +202,10 @@ fn advancements(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
             if flags & 1 != 0 {
                 string(r, w)?;
             }
+            if t.formats.upper < 777 {
+                w.write_f32(r.read_f32()?);
+                w.write_f32(r.read_f32()?);
+            }
         }
         let mut requirements = Vec::new();
         for _ in 0..count(r, &mut requirements)? {
@@ -208,11 +214,13 @@ fn advancements(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
             }
         }
         requirements.write_bool(r.read_bool()?);
-        let x = r.read_f32()?;
-        let y = r.read_f32()?;
-        if display {
-            w.write_f32(x);
-            w.write_f32(y);
+        if t.formats.upper >= 777 {
+            let x = r.read_f32()?;
+            let y = r.read_f32()?;
+            if display {
+                w.write_f32(x);
+                w.write_f32(y);
+            }
         }
         w.extend(requirements);
     }

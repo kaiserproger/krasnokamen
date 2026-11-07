@@ -137,7 +137,7 @@ fn login_drops_online_mode_and_narrows_game_modes() {
     body.write_varint(0);
     body.write_varint(63);
     let spawn_end = body.len();
-    body.write_bool(true); // onlineMode (26.3 only)
+    body.write_bool(true); // onlineMode (introduced in 26.2)
     body.write_bool(false); // enforcesSecureChat
     let out = clientbound(&mut s, "minecraft:login", &body)
         .unwrap()
@@ -151,6 +151,36 @@ fn login_drops_online_mode_and_narrows_game_modes() {
     expected.extend_from_slice(&body[spawn_end - 5..spawn_end]);
     expected.write_bool(false);
     assert_eq!(out, expected);
+    let mut upper = session();
+    std::sync::Arc::get_mut(&mut upper.profile)
+        .unwrap()
+        .tables
+        .formats = super::super::tables::Formats {
+        upper: 777,
+        lower: 776,
+    };
+    let intermediate = clientbound(&mut upper, "minecraft:login", &body)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        intermediate.len(),
+        expected.len() + 1,
+        "26.2 retains onlineMode"
+    );
+    let mut lower = session();
+    std::sync::Arc::get_mut(&mut lower.profile)
+        .unwrap()
+        .tables
+        .formats = super::super::tables::Formats {
+        upper: 776,
+        lower: 775,
+    };
+    assert_eq!(
+        clientbound(&mut lower, "minecraft:login", &intermediate)
+            .unwrap()
+            .unwrap(),
+        expected
+    );
 }
 
 #[test]
@@ -560,5 +590,83 @@ fn creative_polyfill_tracks_player_inventory_images_and_updates() {
         serverbound(&mut reader, "set_creative_mode_slot", &echo)
             .unwrap()
             .is_some()
+    );
+}
+
+#[test]
+fn unchanged_776_to_775_teleports_do_not_accumulate_777_echo_state() {
+    let mut session = test_session(Tables {
+        formats: super::super::tables::Formats {
+            upper: 776,
+            lower: 775,
+        },
+        ..Tables::default()
+    });
+    let mut body = Vec::new();
+    body.write_varint(4);
+    for value in [1.5, 70.0, -2.5, 0.0, 0.0, 0.0] {
+        body.write_f64(value);
+    }
+    body.write_f32(90.0);
+    body.write_f32(10.0);
+    body.write_i32(0);
+    assert_eq!(
+        clientbound(&mut session, "minecraft:player_position", &body)
+            .unwrap()
+            .unwrap(),
+        body
+    );
+    assert!(session.teleports.lock().sent.is_empty());
+    assert_eq!(
+        serverbound(&mut session, "minecraft:accept_teleportation", &[4])
+            .unwrap()
+            .unwrap(),
+        [4]
+    );
+    let mut position = Vec::new();
+    for value in [1.5, 70.0, -2.5] {
+        position.write_f64(value);
+    }
+    position.write_u8(1);
+    assert_eq!(
+        serverbound(&mut session, "minecraft:move_player_pos", &position)
+            .unwrap()
+            .unwrap(),
+        position
+    );
+    assert!(session.teleports.lock().pose.is_none());
+}
+
+#[test]
+fn spectator_entity_option_is_added_only_at_the_775_to_776_boundary() {
+    let mut lower = test_session(Tables {
+        formats: super::super::tables::Formats {
+            upper: 776,
+            lower: 775,
+        },
+        ..Tables::default()
+    });
+    let converted = serverbound(&mut lower, "minecraft:spectate_entity", &[7])
+        .unwrap()
+        .unwrap();
+    assert_eq!(converted, [8]);
+    let mut upper = test_session(Tables {
+        formats: super::super::tables::Formats {
+            upper: 777,
+            lower: 776,
+        },
+        ..Tables::default()
+    });
+    assert_eq!(
+        serverbound(&mut upper, "minecraft:spectator_action", &converted)
+            .unwrap()
+            .unwrap(),
+        [8]
+    );
+    assert_eq!(
+        serverbound(&mut upper, "minecraft:spectator_action", &[0])
+            .unwrap()
+            .unwrap(),
+        [0]
     );
 }

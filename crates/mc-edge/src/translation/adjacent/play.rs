@@ -5,6 +5,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use bytes::Buf;
 use mc_protocol::codec::{ReadMc, WriteMc};
+use std::borrow::Cow;
 
 use super::chunk::{Container, rewrite_biome_sections, rewrite_sections};
 use super::items::{self, To, copy_nbt};
@@ -23,22 +24,22 @@ pub(super) fn legacy_name(canonical: &str) -> &str {
 }
 
 /// Translate one canonical clientbound Play body. `Ok(None)` drops it.
-pub(super) fn clientbound(
+pub(super) fn clientbound_body<'a>(
     session: &mut Session,
     name: &str,
-    body: &[u8],
-) -> Result<Option<Vec<u8>>> {
+    body: &'a [u8],
+) -> Result<Option<Cow<'a, [u8]>>> {
     let t = &session.profile.tables;
     let mut r = body;
-    let mut w = Vec::with_capacity(body.len() + 8);
+    let mut w = Vec::new();
     match name.strip_prefix("minecraft:").unwrap_or(name) {
         // 26.3-only packets.
         "add_transient_block" | "post_effects" => return Ok(None),
         // Play-state tags carry canonical ids; the Configuration tags stand.
         "update_tags" => return Ok(None),
-        "login" => login(&mut r, &mut w)?,
+        "login" => login(t, &mut r, &mut w)?,
         "respawn" => {
-            spawn_info(&mut r, &mut w)?;
+            spawn_info(t, &mut r, &mut w)?;
             w.extend_from_slice(r);
             r = &[];
         }
@@ -46,7 +47,7 @@ pub(super) fn clientbound(
         "light_update" => {
             w.write_varint(r.read_varint()?);
             w.write_varint(r.read_varint()?);
-            light_data(&mut r, &mut w)?;
+            light_data(t, &mut r, &mut w)?;
         }
         "chunks_biomes" => {
             let n = r.read_varint()?;
@@ -80,7 +81,11 @@ pub(super) fn clientbound(
                 return Ok(None);
             };
             w.write_varint(kind);
-            copy_block_entity_nbt(native_kind, &mut r, &mut w)?;
+            if t.formats.upper >= 777 {
+                copy_block_entity_nbt(native_kind, &mut r, &mut w)?;
+            } else {
+                copy_nbt(&mut r, &mut w)?;
+            }
         }
         "block_event" => {
             w.write_i64(r.read_i64()?);
@@ -150,7 +155,7 @@ pub(super) fn clientbound(
                 .unwrap_or(Metadata::Same);
             entity_data(t, policy, &mut r, &mut w)?;
         }
-        "entity_position_sync" => {
+        "entity_position_sync" if t.formats.upper >= 777 => {
             w.write_varint(r.read_varint()?);
             let position = match r.read_varint()? {
                 0 => [r.read_f64()?, r.read_f64()?, r.read_f64()?],
@@ -167,7 +172,7 @@ pub(super) fn clientbound(
             w.write_f32(r.read_f32()?);
             w.write_bool(r.read_bool()?);
         }
-        "move_entity_pos" | "move_entity_pos_rot" => {
+        "move_entity_pos" | "move_entity_pos_rot" if t.formats.upper >= 777 => {
             w.write_varint(r.read_varint()?);
             let on_ground = moved_delta(&mut r, &mut w)?;
             if name.ends_with("_rot") {
@@ -176,14 +181,14 @@ pub(super) fn clientbound(
             }
             w.write_bool(on_ground);
         }
-        "move_entity_rot" => {
+        "move_entity_rot" if t.formats.upper >= 777 => {
             w.write_varint(r.read_varint()?);
             let on_ground = r.read_bool()?;
             w.write_u8(r.read_u8()?);
             w.write_u8(r.read_u8()?);
             w.write_bool(on_ground);
         }
-        "animate" => {
+        "animate" if t.formats.upper >= 777 => {
             w.write_varint(r.read_varint()?);
             // 26.3: 0 wake up, 1 critical hit, 2 magic critical hit.
             w.write_u8(match r.read_u8()? {
@@ -193,7 +198,7 @@ pub(super) fn clientbound(
                 _ => return Ok(None),
             });
         }
-        "swing_animation" => {
+        "swing_animation" if t.formats.upper >= 777 => {
             // -> 26.1.2 `animate` swing main (0) / off hand (3) (see `legacy_name`).
             w.write_varint(r.read_varint()?);
             w.write_u8(if r.read_varint()? == 0 { 0 } else { 3 });
@@ -201,8 +206,9 @@ pub(super) fn clientbound(
             r.read_varint()?;
         }
         "level_particles" => {
+            let modern = t.formats.upper >= 777;
             let mut particle = Vec::new();
-            if !particle_options(t, &mut r, &mut particle)? {
+            if modern && !particle_options(t, &mut r, &mut particle)? {
                 return Ok(None);
             }
             w.write_bool(r.read_bool()?);
@@ -214,12 +220,21 @@ pub(super) fn clientbound(
                 w.write_f32(r.read_f32()?);
             }
             let speed = r.read_f32()?;
-            r.read_f32()?;
-            r.read_f32()?;
+            if modern {
+                r.read_f32()?;
+                r.read_f32()?;
+            }
             w.write_f32(speed);
-            w.write_i32(r.read_varint()?);
-            r.read_varint()?;
-            w.extend_from_slice(&particle);
+            if modern {
+                w.write_i32(r.read_varint()?);
+                r.read_varint()?;
+                w.extend_from_slice(&particle);
+            } else {
+                w.write_i32(r.read_i32()?);
+                if !particle_options(t, &mut r, &mut w)? {
+                    return Ok(None);
+                }
+            }
         }
         "explode" => {
             for _ in 0..3 {
@@ -250,7 +265,9 @@ pub(super) fn clientbound(
                 w.write_f32(r.read_f32()?);
                 w.write_varint(r.read_varint()?);
             }
-            r.read_bool()?;
+            if t.formats.upper >= 777 {
+                r.read_bool()?;
+            }
         }
         "sound" | "sound_entity" => {
             sound_holder(t, &mut r, &mut w)?;
@@ -290,7 +307,7 @@ pub(super) fn clientbound(
             w.extend_from_slice(r);
             r = &[];
         }
-        "set_player_team" => team(&mut r, &mut w)?,
+        "set_player_team" if t.formats.upper >= 777 => team(&mut r, &mut w)?,
         "container_set_content" => {
             let window = r.read_varint()?;
             w.write_varint(window);
@@ -343,7 +360,7 @@ pub(super) fn clientbound(
                 }
             }
         }
-        "player_position" => {
+        "player_position" if t.formats.upper >= 777 => {
             let id = r.read_varint()?;
             let position = [r.read_f64()?, r.read_f64()?, r.read_f64()?];
             let rest = r;
@@ -361,7 +378,7 @@ pub(super) fn clientbound(
                     relative,
                 },
             );
-            return Ok(Some(body.to_vec()));
+            return Ok(Some(Cow::Borrowed(body)));
         }
         "merchant_offers" => {
             w.write_varint(r.read_varint()?);
@@ -401,23 +418,23 @@ pub(super) fn clientbound(
                 &mut w,
             )?;
         }
-        _ => return Ok(Some(body.to_vec())),
+        _ => return Ok(Some(Cow::Borrowed(body))),
     }
     ensure!(r.is_empty(), "{} trailing bytes", r.len());
-    Ok(Some(w))
+    Ok(Some(Cow::Owned(w)))
 }
 
 /// Translate one legacy serverbound Play body. `Ok(None)` drops it.
-pub(super) fn serverbound(
+pub(super) fn serverbound_body<'a>(
     session: &mut Session,
     name: &str,
-    body: &[u8],
-) -> Result<Option<Vec<u8>>> {
+    body: &'a [u8],
+) -> Result<Option<Cow<'a, [u8]>>> {
     let t = &session.profile.tables;
     let mut r = body;
-    let mut w = Vec::with_capacity(body.len() + 40);
+    let mut w = Vec::new();
     match name.strip_prefix("minecraft:").unwrap_or(name) {
-        "swing" => {
+        "swing" if t.formats.upper >= 777 => {
             let hand = r.read_varint()?;
             ensure!((0..=1).contains(&hand), "invalid swing hand");
             // 26.3 handles punching without a hand field.
@@ -426,7 +443,7 @@ pub(super) fn serverbound(
             let entity = r.read_varint()?;
             w.write_varint(entity.checked_add(1).context("spectator entity overflow")?);
         }
-        "accept_teleportation" => {
+        "accept_teleportation" if t.formats.upper >= 777 => {
             let id = r.read_varint()?;
             w.write_varint(id);
             let mut teleports = session.teleports.lock();
@@ -443,7 +460,7 @@ pub(super) fn serverbound(
             w.write_f32(rotation[0]);
             w.write_f32(rotation[1]);
         }
-        "move_player_pos" | "move_player_pos_rot" | "move_player_rot" => {
+        "move_player_pos" | "move_player_pos_rot" | "move_player_rot" if t.formats.upper >= 777 => {
             let mut teleports = session.teleports.lock();
             let (mut position, mut rotation) = teleports.pose.unwrap_or(([0.0; 3], [0.0; 2]));
             let mut peek = body;
@@ -454,16 +471,16 @@ pub(super) fn serverbound(
                 rotation = [peek.read_f32()?, peek.read_f32()?];
             }
             teleports.pose = Some((position, rotation));
-            return Ok(Some(body.to_vec()));
+            return Ok(Some(Cow::Borrowed(body)));
         }
-        "player_action" => {
+        "player_action" if t.formats.upper >= 777 => {
             // 26.3 inserts CHANGE_DESTROY_DIRECTION at ordinal 1.
             let action = r.read_varint()?;
             w.write_varint(if action >= 1 { action + 1 } else { action });
             w.extend_from_slice(r);
             r = &[];
         }
-        "sign_update" => {
+        "sign_update" if t.formats.upper >= 777 => {
             w.write_i64(r.read_i64()?);
             let front = r.read_bool()?;
             for _ in 0..4 {
@@ -499,10 +516,20 @@ pub(super) fn serverbound(
             }
             items::hashed_stack(t, &mut r, &mut w)?;
         }
-        _ => return Ok(Some(body.to_vec())),
+        _ => return Ok(Some(Cow::Borrowed(body))),
     }
     ensure!(r.is_empty(), "{} trailing bytes", r.len());
-    Ok(Some(w))
+    Ok(Some(Cow::Owned(w)))
+}
+
+#[cfg(test)]
+fn clientbound(session: &mut Session, name: &str, body: &[u8]) -> Result<Option<Vec<u8>>> {
+    clientbound_body(session, name, body).map(|body| body.map(Cow::into_owned))
+}
+
+#[cfg(test)]
+fn serverbound(session: &mut Session, name: &str, body: &[u8]) -> Result<Option<Vec<u8>>> {
+    serverbound_body(session, name, body).map(|body| body.map(Cow::into_owned))
 }
 
 /// Record only lossy item-id substitutions, not ordinary legacy stacks.
@@ -581,7 +608,7 @@ fn copy_identifier(r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
     Ok(())
 }
 
-fn login(r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
+fn login(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
     w.write_i32(r.read_i32()?);
     w.write_bool(r.read_bool()?);
     let levels = r.read_varint()?;
@@ -596,24 +623,32 @@ fn login(r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
     for _ in 0..3 {
         w.write_bool(r.read_bool()?);
     }
-    spawn_info(r, w)?;
-    r.read_bool()?; // 26.3 onlineMode
+    spawn_info(t, r, w)?;
+    let online = r.read_bool()?;
+    if t.formats.lower >= 776 {
+        w.write_bool(online);
+    }
     w.write_bool(r.read_bool()?);
     Ok(())
 }
 
 /// `CommonPlayerSpawnInfo`: 26.3 game modes are VarInt + optional VarInt
 /// (0 none, id + 1); 26.1.2 writes byte + byte (-1 none).
-fn spawn_info(r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
+fn spawn_info(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
     w.write_varint(r.read_varint()?);
     copy_identifier(r, w)?;
     w.write_i64(r.read_i64()?);
-    let mode = r.read_varint()?;
-    ensure!((0..=3).contains(&mode), "game mode {mode}");
-    w.write_u8(mode as u8);
-    let previous = r.read_varint()?;
-    ensure!((0..=4).contains(&previous), "previous game mode {previous}");
-    w.write_i8(previous as i8 - 1);
+    if t.formats.upper >= 777 {
+        let mode = r.read_varint()?;
+        ensure!((0..=3).contains(&mode), "game mode {mode}");
+        w.write_u8(mode as u8);
+        let previous = r.read_varint()?;
+        ensure!((0..=4).contains(&previous), "previous game mode {previous}");
+        w.write_i8(previous as i8 - 1);
+    } else {
+        w.write_u8(r.read_u8()?);
+        w.write_i8(r.read_i8()?);
+    }
     w.write_bool(r.read_bool()?);
     w.write_bool(r.read_bool()?);
     if r.read_bool()? {
@@ -658,7 +693,11 @@ fn chunk(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
         let native_kind = r.read_varint()?;
         let kind = t.block_entities.get(native_kind);
         let mut nbt = Vec::new();
-        copy_block_entity_nbt(native_kind, r, &mut nbt)?;
+        if t.formats.upper >= 777 {
+            copy_block_entity_nbt(native_kind, r, &mut nbt)?;
+        } else {
+            copy_nbt(r, &mut nbt)?;
+        }
         if let Some(kind) = kind {
             out.write_u8(xz);
             out.write_i16(y);
@@ -669,7 +708,7 @@ fn chunk(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
     }
     w.write_varint(kept);
     w.extend_from_slice(&out);
-    light_data(r, w)?;
+    light_data(t, r, w)?;
     Ok(())
 }
 
@@ -714,7 +753,12 @@ fn copy_block_entity_nbt(kind: i32, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()
 
 /// 26.3 ByteBufCodecs.BIT_SET uses little-endian byte arrays; 26.1.2
 /// FriendlyByteBuf.writeBitSet uses a big-endian long array instead.
-fn light_data(r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
+fn light_data(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
+    if t.formats.upper < 777 {
+        w.extend_from_slice(r);
+        *r = &[];
+        return Ok(());
+    }
     for _ in 0..4 {
         let len = r.read_varint()?;
         ensure!((0..=32768).contains(&len), "light mask byte length {len}");

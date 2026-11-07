@@ -84,7 +84,7 @@ pub fn load_effective_tags(
 /// the published tag set. A client binds those references while loading its
 /// registries (even from its own known pack) and disconnects in Configuration
 /// on a missing tag, so a cache that lacks one is rejected here.
-fn validate_payload_tag_references(
+pub(crate) fn validate_payload_tag_references(
     vanilla_data_dir: &Path,
     data: &mc_data::VanillaData,
     tags: &mc_data::tags::TagsData,

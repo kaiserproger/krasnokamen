@@ -374,9 +374,27 @@ impl IdMap {
     }
 }
 
+/// Layout endpoints, independent of the core's canonical version.
+#[derive(Debug, Clone, Copy)]
+pub struct Formats {
+    pub upper: i32,
+    pub lower: i32,
+}
+
+impl Default for Formats {
+    fn default() -> Self {
+        // Synthetic codec tests exercise the complete measured delta.
+        Self {
+            upper: 777,
+            lower: 775,
+        }
+    }
+}
+
 /// Every id table the translator needs.
 #[derive(Debug, Default)]
 pub struct Tables {
+    pub formats: Formats,
     pub packets: Packets,
     /// Global block-state ids; total (every canonical state has a legacy one).
     pub block_states: IdMap,
@@ -439,6 +457,7 @@ impl Tables {
         canonical_data: &mc_data::VanillaData,
         legacy_data: &mc_data::VanillaData,
     ) -> Result<Self> {
+        let formats = Formats::default();
         let none = |_: &str| None;
         let registry = |name: &str, polyfill: &dyn Fn(&str) -> Option<String>| -> Result<IdMap> {
             Ok(IdMap::by_name(
@@ -507,6 +526,7 @@ impl Tables {
             .map_or(0, |registry| registry.entries.len());
         Ok(Self {
             packets: Packets::new(canonical, legacy),
+            formats,
             block_states: block_states(canonical, legacy)?,
             legacy_block_bits: bits_for(legacy.blocks.values().map(|b| b.states.len()).sum()),
             blocks: registry("minecraft:block", &polyfill_block)?,
@@ -559,6 +579,23 @@ impl Tables {
             particle_names,
             component_shapes,
         })
+    }
+
+    /// Slime metadata changed in 26.2, not 26.3. Never rewrite it twice
+    /// while composing 777 -> 776 -> 775.
+    pub fn configure_metadata(&mut self, upper: &Reports) -> Result<()> {
+        if self.formats.lower >= 776 {
+            self.entity_metadata
+                .retain(|_, policy| *policy != Metadata::Cube);
+        } else {
+            let entities = upper.registry("minecraft:entity_type")?;
+            for name in ["slime", "magma_cube", "sulfur_cube"] {
+                if let Some(id) = entities.get(&namespaced(name)) {
+                    self.entity_metadata.insert(id.protocol_id, Metadata::Cube);
+                }
+            }
+        }
+        Ok(())
     }
 }
 

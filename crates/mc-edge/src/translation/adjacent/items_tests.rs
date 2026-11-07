@@ -126,7 +126,7 @@ fn native_only_components_are_consumed_before_legacy_omission() {
         ("interact_animation", vec![1, 6]),
         ("block_transformer", vec![0]),
         ("villager_food", vec![130, 1]),
-        ("sulfur_cube_content", vec![11, 2, 1, 0, 120]),
+        ("sulfur_cube_content", vec![11, 2, 1, 0, 1, 120]),
         ("compostable", vec![1, 0, 0, 0, 2]),
         ("cooking_fuel", fuel.clone()),
         ("brewing_fuel", fuel),
@@ -159,4 +159,22 @@ fn native_only_components_are_consumed_before_legacy_omission() {
     let t = tables(&["attack_animation"]);
     let mut truncated = [1, 10, 1, 0, 0, 2].as_slice();
     assert!(stack(&t, To::Legacy, &mut truncated, &mut Vec::new()).is_err());
+}
+
+#[test]
+fn intermediate_sulfur_content_retains_and_remaps_its_nested_template() {
+    let mut t = tables(&["sulfur_cube_content", "max_stack_size"]);
+    t.formats = super::super::tables::Formats {
+        upper: 777,
+        lower: 776,
+    };
+    let source = [1, 10, 1, 0, 0, 11, 2, 1, 0, 1, 32];
+    let mut input = source.as_slice();
+    let mut intermediate = Vec::new();
+    stack(&t, To::Legacy, &mut input, &mut intermediate).unwrap();
+    assert!(input.is_empty());
+    assert_eq!(intermediate, [1, 3, 1, 0, 0, 4, 2, 1, 0, 1, 32]);
+    let mut back = Vec::new();
+    stack(&t, To::Canonical, &mut intermediate.as_slice(), &mut back).unwrap();
+    assert_eq!(back, source);
 }
