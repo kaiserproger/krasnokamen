@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""Run canonical matrix-random seeds; retain only failing receipts and reductions."""
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+
+WORK = Path('/run/media/kaiserroman/games/solaris-work')
+MEM_RUN = WORK / 'solaris/tools/dev/mem-run.sh'
+
+
+def size(directory):
+    return sum(path.stat().st_size for path in directory.rglob('*') if path.is_file())
+
+
+def prune(root, current, maximum):
+    """Evict oldest completed campaigns, never an in-flight campaign."""
+    campaigns = sorted(path for path in root.glob('campaign-*') if path.is_dir())
+    total = sum(size(path) for path in campaigns)
+    for path in campaigns:
+        if total <= maximum:
+            break
+        if path == current:
+            continue
+        total -= size(path)
+        shutil.rmtree(path)
+    return total
+
+
+def install(args):
+    if args.disable:
+        subprocess.run(['systemctl', '--user', 'disable', '--now', 'solaris-scenario.timer'], check=True)
+        return
+    config = Path.home() / '.config/systemd/user'
+    config.mkdir(parents=True, exist_ok=True)
+    command = [sys.executable, str(Path(__file__).resolve()), '--repo', str(args.repo),
+               '--server-bin', str(args.server_bin), '--vanilla-data', str(args.vanilla_data),
+               '--receipts', str(args.receipts), '--seeds', str(args.seeds), '--steps', str(args.steps),
+               '--bots', str(args.bots), '--budget-seconds', str(args.budget_seconds),
+               '--max-bytes', str(args.max_bytes), '--port', str(args.port)]
+    # systemd's command grammar is not a shell; JSON quoting handles whitespace,
+    # and percent is doubled to prevent a path from becoming a unit specifier.
+    quoted = ' '.join(json.dumps(value.replace('%', '%%')) for value in command)
+    (config / 'solaris-scenario.service').write_text(
+        '[Unit]\nDescription=Solaris seeded network invariant campaign\n'
+        '[Service]\nType=oneshot\nNice=19\nIOSchedulingClass=idle\n'
+        f'WorkingDirectory={args.repo}\nExecStart={quoted}\nTimeoutStartSec=infinity\n')
+    (config / 'solaris-scenario.timer').write_text(
+        '[Unit]\nDescription=Solaris network fuzz nightly at 03:00 local\n'
+        '[Timer]\nOnCalendar=*-*-* 03:00:00\nPersistent=true\n'
+        '[Install]\nWantedBy=timers.target\n')
+    subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
+    subprocess.run(['systemctl', '--user', 'enable', '--now', 'solaris-scenario.timer'], check=True)
+
+
+def campaign(args):
+    args.receipts.mkdir(parents=True, exist_ok=True)
+    with (args.receipts / '.campaign.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit('another fuzz campaign owns the receipt directory')
+        return run_campaign(args)
+
+
+def run_campaign(args):
+    root = args.receipts / ('campaign-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S-%fZ'))
+    root.mkdir()
+    summary = {'server_bin': str(args.server_bin),
+               'server_sha256': hashlib.sha256(args.server_bin.read_bytes()).hexdigest(),
+               'server_pin_manifest': str(args.server_bin.parent / 'manifest.json'),
+               'server_pin': json.loads((args.server_bin.parent / 'manifest.json').read_text()),
+               'repo': str(args.repo), 'requested_seeds': args.seeds, 'seeds_run': 0,
+               'passed': 0, 'failed': 0, 'failures': [], 'reductions': {}, 'stop_reason': 'seed_count'}
+    deadline = time.monotonic() + args.budget_seconds
+    common = [str(MEM_RUN), '-m', '6G', 'env', 'RUSTC_WRAPPER=', 'nice', '-n', '19',
+              'ionice', '-c', '3', sys.executable, '-m', 'tools.harness', 'run', 'matrix-random',
+              '--server-bin', str(args.server_bin), '--vanilla-data', str(args.vanilla_data),
+              '--port', str(args.port), '--dashboard-port', str(args.port + 1)]
+    from tools.harness.quirk_parity.fuzz import failure_identity
+    for seed in range(args.start_seed, args.start_seed + args.seeds):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            summary['stop_reason'] = 'time_budget'
+            break
+        directory = root / f'seed-{seed}'
+        directory.mkdir()
+        env = dict(os.environ, SOLARIS_VALIDATION_ROOT=str(directory / 'receipts'))
+        argv = common + ['--seed', str(seed), '--steps', str(args.steps), '--bots', str(args.bots)]
+        record = {'seed': seed, 'command': shlex.join(argv)}
+        with (directory / 'campaign.log').open('w') as log:
+            try:
+                process = subprocess.run(argv, cwd=args.repo, env=env, stdout=log,
+                                         stderr=subprocess.STDOUT, timeout=remaining)
+                record['exit'] = process.returncode
+            except subprocess.TimeoutExpired:
+                record['exit'] = 'timeout'
+                summary['stop_reason'] = 'time_budget'
+        receipts = list((directory / 'receipts').glob('*/result.json'))
+        receipt = json.loads(receipts[0].read_text()) if len(receipts) == 1 else {}
+        report = receipt.get('details', {}).get('protocol_matrix', {})
+        summary['seeds_run'] += 1
+        if record['exit'] == 0 and receipt.get('status') == 'passed' and report.get('status') == 'pass':
+            summary['passed'] += 1
+            shutil.rmtree(directory)
+        else:
+            summary['failed'] += 1
+            identity = failure_identity(report)
+            record.update(identity=identity, receipt=str(receipts[0]) if receipts else None)
+            summary['failures'].append(record)
+            # Reduce a distinct oracle failure once, not every duplicate seed.
+            if identity is not None and identity not in summary['reductions']:
+                script = next((directory / 'receipts').glob('*/random-script.json'), None)
+                remaining = deadline - time.monotonic()
+                if script is not None and remaining > 0:
+                    reduction = directory / 'reduction'
+                    reduction.mkdir()
+                    reduce_env = dict(os.environ, SOLARIS_VALIDATION_ROOT=str(reduction / 'receipts'))
+                    with (reduction / 'campaign.log').open('w') as log:
+                        try:
+                            subprocess.run(common + ['--script', str(script), '--shrink'], cwd=args.repo,
+                                           env=reduce_env, stdout=log, stderr=subprocess.STDOUT,
+                                           timeout=remaining)
+                        except subprocess.TimeoutExpired:
+                            summary['stop_reason'] = 'time_budget'
+                    reduced = list((reduction / 'receipts').glob('*/shrink/result.json'))
+                    summary['reductions'][identity] = str(reduced[0]) if reduced else None
+            (directory / 'campaign-result.json').write_text(json.dumps(record, indent=2) + '\n')
+        (root / 'result.json').write_text(json.dumps(summary, indent=2) + '\n')
+        if prune(args.receipts, root, args.max_bytes) > args.max_bytes:
+            summary['stop_reason'] = 'disk_budget'
+            break
+    summary['status'] = ('passed' if summary['seeds_run'] == args.seeds
+                         and not summary['failed'] else 'failed')
+    (root / 'result.json').write_text(json.dumps(summary, indent=2) + '\n')
+    print(root / 'result.json', flush=True)
+    return 0 if summary['status'] == 'passed' else 1
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--repo', type=Path, default=Path(__file__).resolve().parents[2])
+    parser.add_argument('--server-bin', type=Path)
+    parser.add_argument('--vanilla-data', type=Path)
+    parser.add_argument('--receipts', type=Path, default=WORK / 'receipts/scenarios')
+    parser.add_argument('--seeds', type=int, default=200)
+    parser.add_argument('--start-seed', type=int, default=0)
+    parser.add_argument('--steps', type=int, default=16)
+    parser.add_argument('--bots', type=int, default=3)
+    parser.add_argument('--budget-seconds', type=float, default=21600)
+    parser.add_argument('--max-bytes', type=int, default=5 * 1024**3)
+    parser.add_argument('--port', type=int, default=27380)
+    parser.add_argument('--install', action='store_true')
+    parser.add_argument('--disable', action='store_true')
+    args = parser.parse_args()
+    args.repo = args.repo.resolve()
+    args.receipts = args.receipts.resolve()
+    if not args.disable:
+        if args.server_bin is None or args.vanilla_data is None:
+            parser.error('--server-bin (pin-release output) and --vanilla-data are required')
+        args.server_bin = args.server_bin.resolve()
+        args.vanilla_data = args.vanilla_data.resolve()
+        if not args.vanilla_data.is_dir():
+            parser.error('--vanilla-data must be an existing content directory')
+        manifest = args.server_bin.parent / 'manifest.json'
+        if not manifest.is_file():
+            parser.error('--server-bin must be an immutable pin-release binary')
+        pin = json.loads(manifest.read_text())
+        actual = hashlib.sha256(args.server_bin.read_bytes()).hexdigest()
+        if (args.server_bin.parent.parent != WORK / 'pins' or pin.get('repo') != 'core'
+                or pin.get('binary') != str(args.server_bin) or pin.get('binary_sha256') != actual):
+            parser.error('pin-release manifest does not match the server binary')
+        if args.seeds < 1 or args.steps < 1 or args.bots < 2 or args.budget_seconds <= 0 or args.max_bytes <= 0:
+            parser.error('positive seeds, steps, time/disk budgets and at least two bots are required')
+    if args.install or args.disable:
+        install(args)
+        return 0
+    sys.path.insert(0, str(args.repo))
+    return campaign(args)
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
