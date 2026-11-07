@@ -18,6 +18,164 @@ FOUNDING_STOCK = {"minecraft:oak_log": 32, "minecraft:bread": 16,
                   "minecraft:raw_iron": 8, "minecraft:coal": 8,
                   "minecraft:cobblestone": 32}
 
+STAGES = ("new_house", "births", "second_building", "iron_smelted")
+BIRTHS_LIMITATION = "Birth proof requires retained server claim/birth audit events and a current clean checkpoint."
+
+
+def acceptance_verdict(stages: dict[str, bool], *, stalled: bool) -> dict[str, bool]:
+    verdict = {name: stages.get(name, False) for name in STAGES}
+    verdict["all"] = all(verdict.values()) and not stalled
+    return verdict
+
+
+def population(lines: list[str], name: str) -> int:
+    match = re.search(rf"(?m)^{re.escape(name)} \|[^\n]*\bmembers=(\d+)\b", "\n".join(lines))
+    if match is None:
+        raise RuntimeError(f"settlement info for {name!r} has no member count")
+    return int(match.group(1))
+
+
+def newborn(entities: dict[str, Any], baseline_villagers: set[str],
+            baseline_complete: bool) -> dict[str, Any] | None:
+    if not baseline_complete:
+        return None
+    return next((e for e in entities.get("entities", [])
+                 if e.get("entity_type") == "minecraft:villager"
+                 and e.get("received_baby") is True and e.get("entity_uuid")
+                 and e["entity_uuid"] not in baseline_villagers), None)
+
+def baseline_server_tick(server: Any, log_path: Path, timeout: float) -> int:
+    """Query the server after the population count; client clocks interpolate."""
+    offset = log_path.stat().st_size
+    item_merge._console(server, "time query gametime")
+
+    def replied() -> tuple[bool, int]:
+        with log_path.open("rb") as stream:
+            stream.seek(offset)
+            lines = stream.read().decode(errors="replace").splitlines()
+        for line in lines:
+            match = re.fullmatch(r"The time is (\d+)", line.strip())
+            if match:
+                value = int(match.group(1))
+                if value >= 2_147_483_647:
+                    raise RuntimeError("server game time exceeds the unwrapped query range")
+                return True, value
+        return False, 0
+
+    return village.runtime.wait_for_path_condition(log_path, timeout, replied)
+
+
+def verify_birth_snapshot(snapshot: dict[str, Any], name: str, baseline: int, final: int,
+                          baby_uuid: str, baseline_tick: int, log: Any) -> dict[str, Any]:
+    def fail(reason: str) -> dict[str, Any]:
+        return {"verified": False, "status": "unverified", "reason": reason}
+
+    if snapshot.get("read_only") is not True or not isinstance(snapshot.get("checkpoint_tick"), int):
+        return fail("clean read-only checkpoint is unavailable")
+    towns = [row.get("payload", {}).get("value", {}) for key, row in snapshot.get("globals", {}).items()
+             if key.startswith("settlement/") and row.get("payload", {}).get("value", {}).get("name") == name]
+    if len(towns) != 1 or not isinstance(towns[0].get("id"), int):
+        return fail("settlement identity is missing or ambiguous")
+    settlement = towns[0]["id"]
+    claims = []
+    births = []
+    lines = log.splitlines() if isinstance(log, str) else log
+    for line in lines:
+        claim = re.search(r"\bsettlement_audit:\s+settlement_claim settlement=(\d+) tick=(\d+)\b", line)
+        if claim:
+            claims.append((int(claim.group(1)), int(claim.group(2))))
+        birth = re.search(r"\bsettlement_audit:\s+settlement_birth child=(\S+) settlement=(\d+) household=(\S+) tick=(\d+)\b", line)
+        if birth:
+            births.append((birth.group(1), int(birth.group(2)), int(birth.group(4))))
+    if len(claims) != 1 or claims[0][0] != settlement or claims[0][1] > snapshot["checkpoint_tick"]:
+        return fail("claim audit event is missing or ambiguous")
+    claim_tick = claims[0][1]
+    if (not isinstance(baseline_tick, int) or isinstance(baseline_tick, bool)
+            or not claim_tick <= baseline_tick <= snapshot["checkpoint_tick"]):
+        return fail("post-baseline tick is missing or outside the checkpoint")
+    rows = [row for row in snapshot.get("entities", []) if row.get("active") and
+            (row.get("payload") or {}).get("id") == "minecraft:villager" and
+            (row["payload"].get("solaris:VillagerRuntime") or {}).get("settlement") == settlement and
+            (row["payload"].get("Health") or 0) > 0]
+    ids = [row.get("uuid") for row in rows]
+    if len(rows) != final or any(not isinstance(uuid, str) or not uuid for uuid in ids) or len(set(ids)) != len(ids):
+        return fail("snapshot member census does not match the observed count")
+    if final < baseline + 2:
+        return fail("population growth is below two")
+    by_id = {row["uuid"]: row["payload"]["solaris:VillagerRuntime"] for row in rows}
+    proven: set[str] = set()
+    for child, born_in, tick in births:
+        info = by_id.get(child)
+        if born_in != settlement or not baseline_tick < tick <= snapshot["checkpoint_tick"] or info is None:
+            continue
+        sequence = info.get("birth_sequence")
+        parents = info.get("birth_parents")
+        if (info.get("birth_tick") == tick and isinstance(sequence, int) and sequence // 65536 == tick
+                and sequence % 65536 != 0 and isinstance(parents, list) and len(parents) == 2
+                and all(isinstance(parent, str) and parent for parent in parents) and len(set(parents)) == 2):
+            proven.add(child)
+    if len(proven) < final - baseline or baby_uuid not in proven:
+        return fail("net growth or pictured baby lacks a matching settlement birth event")
+    return {"verified": True, "status": "verified", "settlement_id": settlement,
+            "claim_tick": claim_tick, "baseline_tick": baseline_tick, "births": sorted(proven)}
+
+
+def completed_project(building: dict[str, Any], baseline_buildings: set[int],
+                      projects: list[dict[str, Any]],
+                      blueprints: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    if building["id"] in baseline_buildings or building["natural"]:
+        return None
+    return next((p for p in reversed(projects)
+                 if blueprints[p["blueprint"]]["kind"] == building["kind"]
+                 and p["level"] == building["level"]
+                 and village._blueprint_placements(building, blueprints[p["blueprint"]], p["origin"])), None)
+
+
+def capture_target(probe: ProbeSteps, artifact: Path, label: str,
+                   target: tuple[float, float, float], *,
+                   entity: dict[str, Any] | None = None,
+                   building: dict[str, Any] | None = None) -> dict[str, Any]:
+    probe.call("minecraft_close_screen", {})
+    initial = probe.observe()["player"]
+    if entity:
+        probe.call("minecraft_approach_entity", {"entity_id": entity["entity_id"], "timeout_seconds": 120.0})
+        seen = probe.call("minecraft_list_entities", {"radius": 128, "limit": 512})
+        current = next((e for e in seen.get("entities", [])
+                        if e.get("entity_uuid") == entity["entity_uuid"]), None)
+        if current is None or current.get("received_baby") is not True:
+            raise RuntimeError("baby no longer visible for milestone capture")
+        target = (current["x"], current["y"] + 0.5, current["z"])
+    else:
+        probe.call("minecraft_navigate_to_block", {
+            "x": math.floor(target[0]), "y": math.floor(target[1]), "z": math.floor(target[2]),
+            "timeout_seconds": 120.0,
+        })
+    player = probe.observe()["player"]
+    dx, dy, dz = target[0] - player["x"], target[1] - (player["y"] + 1.62), target[2] - player["z"]
+    probe.call("minecraft_look", {
+        "yaw_deg": int(round(math.degrees(math.atan2(-dx, dz)))),
+        "pitch_deg": int(round(-math.degrees(math.atan2(dy, math.hypot(dx, dz))))),
+    })
+    observed = probe.observe().get("target") or {}
+    if entity:
+        visible = observed.get("type") == "entity" and observed.get("entity_uuid") == entity["entity_uuid"]
+    elif building:
+        visible = observed.get("type") == "block" and all(
+            building["min"][i] <= observed.get(axis, building["min"][i] - 1) <= building["max"][i]
+            for i, axis in enumerate(("x", "y", "z")))
+    else:
+        visible = observed.get("type") == "block" and all(
+            observed.get(axis) == math.floor(target[i]) for i, axis in enumerate(("x", "y", "z")))
+    if not visible:
+        raise RuntimeError(f"milestone target is occluded or out of reach: {label}: {observed}")
+    shot = native_client.capture(probe.client, artifact, label)
+    shot["observed_target"] = observed
+    probe.call("minecraft_navigate_to_block", {
+        "x": math.floor(initial["x"]), "y": math.floor(initial["y"]), "z": math.floor(initial["z"]),
+        "timeout_seconds": 120.0,
+    })
+    return shot
+
 
 def inventory_totals(state: dict[str, Any]) -> dict[str, int]:
     result: dict[str, int] = {}
@@ -218,8 +376,8 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
              server_log: Path, read_container: Callable[[tuple[int, int, int]], dict[str, int]]) -> None:
     spawn = probe.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
     detail["player_spawn"] = {key: spawn["player"].get(key) for key in ("x", "y", "z")}
-    detail["spawn_entities"] = probe.call("minecraft_list_entities", {"radius": 128, "limit": 48})
-    detail["census_coverage"] = "Nearest at most 48 client-visible entities within 128 blocks of player; visible_count can exceed returned count, so this is not an exhaustive census."
+    detail["spawn_entities"] = probe.call("minecraft_list_entities", {"radius": 128, "limit": 512})
+    detail["census_coverage"] = "At most 512 client-visible entities within 128 blocks; membership counts come from settlement info."
     arrived = walk_to_village(probe, detail)
     detail["player_after_walk"] = {key: arrived["player"].get(key) for key in ("x", "y", "z")}
     detail["spawn_to_target_horizontal_blocks"] = math.dist(
@@ -252,6 +410,13 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
     claim = village._recent_chat(village._send(probe, "settlement claim"), 20)
     detail["claim_chat"] = claim
     probe.check("ordinary_player_claimed", any(line.startswith("Claimed ") for line in claim))
+    detail["baseline_info"] = village._recent_chat(village._send(probe, f"settlement info {name}"), 20)
+    detail["baseline_population"] = population(detail["baseline_info"], name)
+    detail["baseline_server_tick"] = baseline_server_tick(server, server_log, min(30.0, probe.remaining()))
+    detail["birth_verdict"] = {"status": "unverified", "reason": BIRTHS_LIMITATION}
+    detail["baseline_furnaces"] = workstation_blocks(probe, chest)
+    baseline_furnaces = {tuple(int(block[axis]) for axis in ("x", "y", "z"))
+                         for block in detail["baseline_furnaces"]}
     detail["claim_screenshot"] = native_client.capture(probe.client, artifact, "civilization-claim")
     fund(probe, detail, server, chest)
     # Claim and the conserved stock transfer above use ordinary survival play.
@@ -261,12 +426,21 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
     probe.report["fixture_commands"].append("console: " + command)
     item_merge._console(server, command)
     detail["observer_mode"] = "creative after claim and founding transfer; player survival is not tested"
-    entities = probe.call("minecraft_list_entities", {"radius": 128, "limit": 48})
+    entities = probe.call("minecraft_list_entities", {"radius": 128, "limit": 512})
     detail["initial_entities"] = entities
     detail["initial_sheep_count"] = sum(
         1 for entity in entities.get("entities", [])
         if isinstance(entity, dict) and entity.get("entity_type") == "minecraft:sheep"
     )
+    baseline_buildings = {b["id"] for b in detail["certified_buildings_before_stock"]}
+    baseline_villagers = {e["entity_uuid"] for e in entities.get("entities", [])
+                          if e.get("entity_type") == "minecraft:villager" and e.get("entity_uuid")}
+    detail["baseline_client_complete"] = (not entities.get("truncated", True)
+                                          and len(baseline_villagers) >= detail["baseline_population"])
+    blueprints = {b["id"]: b for b in village._authored_blueprints()}
+    projects: list[dict[str, Any]] = []
+    detail["milestones"] = {}
+    verdicts = detail.setdefault("verdicts", {**dict.fromkeys(STAGES, False), "all": False})
     detail["interpretation"] = "Initial buildings, beds and villagers are generated baseline, not later construction or births."
     started = time.monotonic()
     detail["snapshots"] = []
@@ -285,7 +459,10 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
             raise RuntimeError(f"cannot establish planner or storage state: {status}")
         if not project_shot:
             raise RuntimeError("project status dialog was not observed and captured")
-        entities = probe.call("minecraft_list_entities", {"radius": 128, "limit": 48})
+        project = status.get("project")
+        if project and project["blueprint"] in blueprints and project not in projects:
+            projects.append(project)
+        entities = probe.call("minecraft_list_entities", {"radius": 128, "limit": 512})
         ecology = village._probe_ecology(probe, detail, status["buildings_now"])
         blocks = building_blocks(probe, status["buildings_now"])
         workstations = workstation_blocks(probe, chest)
@@ -308,9 +485,14 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                 workstation_shots.append(native_client.capture(
                     probe.client, artifact, f"civilization-workstation-{advanced:06d}"))
                 seen_furnaces.add(pos)
-            if (furnace.get("container_totals") or {}).get("minecraft:iron_ingot", 0) > 0 and pos not in iron_captured:
+            if ((furnace.get("container_totals") or {}).get("minecraft:iron_ingot", 0) > 0
+                    and pos not in baseline_furnaces and pos not in iron_captured):
                 furnace["iron_menu"] = capture_iron_menu(probe, artifact, pos, advanced)
                 iron_captured.add(pos)
+                detail["milestones"].setdefault("iron_smelted", {
+                    "sprint_ticks": advanced, "screenshot": furnace["iron_menu"]["screenshot"],
+                    "furnace": pos, "menu": furnace["iron_menu"]["container"],
+                })
         shot = native_client.capture(probe.client, artifact, f"civilization-{advanced:06d}")
         row = {"sprint_ticks": advanced, "elapsed_seconds": time.monotonic() - started,
                "client_game_time": village._gametime(probe),
@@ -318,6 +500,53 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                "workstation_blocks": workstations, "workstation_screenshots": workstation_shots,
                "screenshot": shot, "project_screenshot": project_shot}
         detail["snapshots"].append(row)
+        probe.call("minecraft_close_screen", {})
+        info_now = village._recent_chat(village._send(probe, f"settlement info {name}"), 20)
+        current_population = population(info_now, name)
+        row["population"] = current_population
+        row["population_info"] = info_now
+        if current_population >= detail["baseline_population"] + 2 and "growth_observation" not in detail:
+            detail["growth_observation"] = {
+                "sprint_ticks": advanced, "population": current_population, "info": info_now,
+                "screenshot": native_client.capture(probe.client, artifact, f"civilization-census-{advanced:06d}"),
+            }
+        baby = newborn(entities, baseline_villagers, detail["baseline_client_complete"])
+        if baby and "baby_observation" not in detail:
+            target = (baby["x"], baby["y"] + 0.5, baby["z"])
+            detail["baby_observation"] = {
+                "sprint_ticks": advanced, "entity": baby,
+                "screenshot": capture_target(probe, artifact, f"civilization-births-{advanced:06d}", target, entity=baby),
+            }
+        if ("growth_observation" in detail and "baby_observation" in detail
+                and "births" not in detail["milestones"]):
+            detail["milestones"]["births"] = {
+                "sprint_ticks": advanced, "growth": detail["growth_observation"],
+                "baby": detail["baby_observation"], "limitation": BIRTHS_LIMITATION,
+                "screenshot": detail["baby_observation"]["screenshot"],
+            }
+        for evidence in blocks:
+            building = evidence["building"]
+            project = completed_project(building, baseline_buildings, projects, blueprints)
+            if project is None:
+                continue
+            if building["kind"] == "house":
+                bed = next((b for b in evidence.get("blocks", [])
+                            if str(b.get("block_id", "")).endswith("_bed")), None)
+                if bed and "new_house" not in detail["milestones"]:
+                    target = tuple(bed[axis] + 0.5 for axis in ("x", "y", "z"))
+                    detail["milestones"]["new_house"] = {
+                        "sprint_ticks": advanced, "building": building, "project": project, "bed": bed,
+                        "screenshot": capture_target(probe, artifact, f"civilization-house-{advanced:06d}", target),
+                    }
+            elif "second_building" not in detail["milestones"]:
+                target = tuple((building["min"][i] + building["max"][i] + 1) / 2 for i in range(3))
+                detail["milestones"]["second_building"] = {
+                    "sprint_ticks": advanced, "building": building, "project": project,
+                    "screenshot": capture_target(probe, artifact, f"civilization-building-{advanced:06d}", target, building=building),
+                }
+        candidate = acceptance_verdict({name: name in detail["milestones"] for name in STAGES}, stalled=False)
+        verdicts.update(candidate)
+        verdicts["births"] = verdicts["all"] = False
         # Unrelated resource growth must not conceal a stalled project.
         # Project UI retains its actual material blocker and progress.
         signature = (status.get("project"), status.get("project_ui"),
@@ -326,11 +555,17 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
             previous = signature
             unchanged_since = advanced
         elif advanced - unchanged_since >= STALL_TICKS:
+            verdicts["all"] = False
             detail["stop"] = {"reason": "unchanged project status and buildings over a full day", "since_sprint_tick": unchanged_since, "at_sprint_tick": advanced}
             raise RuntimeError("sustained unchanged project status and buildings for one full game day")
+        if candidate["all"] and advanced < MAX_TICKS:
+            detail["stop"] = {"reason": "client milestones reached; checkpoint verification pending", "at_sprint_tick": advanced}
+            return
         if advanced >= MAX_TICKS:
-            detail["stop"] = {"reason": "bounded observation limit; no sustained stall established", "at_sprint_tick": advanced}
-            raise RuntimeError("bounded observation ended without establishing a sustained stall")
+            verdicts["all"] = False
+            missing = [name for name in STAGES if not verdicts[name]]
+            detail["stop"] = {"reason": "bounded observation limit", "at_sprint_tick": advanced, "missing": missing}
+            raise RuntimeError(f"bounded observation limit reached; missing milestones: {', '.join(missing) or 'none (reached too late)'}")
         row["sprint_completions"] = []
         interval = 300 if advanced < 3000 else SPRINT_TICKS
         for _ in range(interval // 300):
