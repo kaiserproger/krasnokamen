@@ -13,8 +13,8 @@ and [mutations.md](mutations.md) for routes.
 | Scheduled block/fluid work | native core scheduled queues | gameplay reads and offline interchange | absolute native deadlines in WAL/checkpoint; Anvil export translates interchange delays |
 | World clock, weather, rules and dimensions | native tick owner | edge time/weather packets, console/admin reads | native domain images in the same tick stream |
 | Plugin KV, operation receipts and native plugin effects | native core plugin admission/merge | component callbacks and immutable observations | same native tick recovery boundary; no independent plugin state files |
-| Native NPC work, custody and settlement operations | native core admitted operation paths | guest policy receives opaque handles and outcomes | native records/effects journaled with their owning tick |
-| Product economic/colony policy | deployed component in its own repository | UI and guest callbacks | persisted only through admitted native plugin storage operations |
+| Native NPC work, custody and settlement operations | native core admitted operation paths, including [settlements](settlements.md) | guest policy receives opaque handles and outcomes | native records/effects journaled with their owning tick |
+| Other plugin product policy | deployed component in its own repository | UI and guest callbacks | persisted only through admitted native plugin storage operations |
 | Connection/session and Loader negotiation | `mc-edge` | routing, auth state, held wire baselines and queue credit | connection-scoped, not gameplay persistence |
 | Immutable content tables and definitions | validated startup data / native registry | gameplay, worldgen, wire encoders, component declarations | external licensed content cache; world identity rejects unsupported state |
 | Validation run and owned processes | canonical `tools/harness` | agents/CI inspect receipts | one `.analysis/validation/<stamp>-<profile>-<id>/result.json` plus command logs |
@@ -52,22 +52,24 @@ and [mutations.md](mutations.md) for routes.
    specific mutation or claiming a test covers it. Historical warehouse-pilot
    tests and old multi-journal recovery receipts do not prove native v2 behavior.
 
-## Entity wire publication performance fence
+## Entity wire publication optimization
 
-The 2026-10-17 native-100 profile attributed 4.61% of all CPU samples to
-`EntityViews::replace`, including 2.02% in its inlined ordered-map lookup.
-Replacing only the row map with a hash trie was insufficient: 100k moving-row
-publication still took about 53 ms in the isolated release microbenchmark.
-Dense pages plus identity-ordered candidate consumption reduce that retained-
-snapshot publication to p50 8.65–8.92 ms (old ordered-map path 57.48–58.53 ms);
-100k unchanged candidates take 5.51 ms versus 32.14 ms. Sorting is included.
+The wire projection uses dense copy-on-write pages and mutation-owned candidate
+IDs instead of persistent-tree updates. Equal candidates do not advance the
+revision; the ordered chunk/ID index preserves publication order. Snapshot and
+ordering parity are the correctness fence. Revert the collection together if
+that fence fails.
 
-The microbenchmark compiles the actual projection source with the same wire-row
-field layout and a simplified shared appearance payload; it excludes gameplay,
-entity-store column lookup, previous-snapshot destruction and edge planning.
-It is not a native TPS result. Receipts are under
-`.analysis/codex-logs/opt-views/` (`profile.txt`, `micro-final.json`, validation
-receipts). Main's native-100 A/B remains the end-to-end performance gate.
+Historical isolated 100k-row microbenchmarks reported 8.65–8.92 ms versus
+57.48–58.53 ms for moving-row publication; this excludes gameplay, edge and
+other server work and is not a TPS claim.
+
+`target_grid.rs` addresses repeated linear scans by building a non-authoritative
+per-class nearest-target index only above its consumer and table thresholds.
+Its first-minimum equivalence fence, test and linear fallback are documented in
+the source. Historical release horde measurements with 10k zombies, 5k
+villagers and 100 players reported entity-phase p50 74.1 to 13.5 ms; host load
+varied, and this is not a whole-server throughput guarantee.
 
 ## Recurring allocator and farming projections
 

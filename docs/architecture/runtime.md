@@ -64,20 +64,13 @@ small gaps. The journal worker owns fsync, generation/lighting workers own
 off-tick work, and edge fanout has its separate dashboard `publish` distribution;
 writer backpressure paid by the tick is visible in `journal_queue_us`.
 
-The five-headless-player local exploration profile identified synchronous
-admission seam lighting as a major chunk-phase cost, with the tiny cross-crate
-`LightLayer::get` accessor taking 13% of sampled tick-thread self CPU.
-That accessor permits ordinary cross-crate inlining; light equations, admission
-order, copy-on-write arrays and geometry checks are unchanged. Existing full
-recompute/seam oracle tests remain the correctness fence. This is not a new
-asynchronous lighting path: moving admission off-tick needs a separate
-authoritative revision/reconciliation design. Remove the inline hint if future
-profiles no longer justify it; timing receipts, including tail variance, live
-under `.analysis/codex-logs/tick-budget/`.
-Interleaved local A/B/A/B windows observed pooled tick p50/p99 of
-7.576/22.008 ms before and 6.145/19.864 ms after the inline hint. These are
-two-core-lane diagnostics with variable natural spawning and concurrent shared
-host work, not an isolated causal speedup or a VPS performance guarantee.
+Admission seam lighting remains synchronous on the tick: moving it off-tick
+requires revision/reconciliation design. A cross-crate `LightLayer::get`
+inline hint addresses sampled accessor cost; full recompute and seam oracle
+tests fence correctness. Remove the hint if a future profile no longer
+justifies it. Historical interleaved diagnostic windows reported tick p50/p99
+of 7.576/22.008 ms before and 6.145/19.864 ms after, with variable load; these
+are not an isolated speedup or a production guarantee.
 
 ## Persistent and external boundaries
 

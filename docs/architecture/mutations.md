@@ -20,6 +20,15 @@ These routes describe ownership, not a claim that a verification gate was run.
    edge projects ordered player outcomes and current world state; predictions
    are repaired from native authority, never installed as that authority.
 
+Menu transitions close or refund window-zero cursor and crafting inputs before
+opening another menu. Block-container clicks refuse and close a menu when its
+loaded storage no longer matches its slot count, including an unavailable
+double-chest half. Pickup rechecks collector liveness after damage; a partial
+allay pickup journals the ground remainder with the allay credit. Dimension
+travel removals become durable tombstones only if the entity is not live in
+that dimension at the journal boundary, preserving same-tick round trips.
+Dig and block use check native reach and protection before committing custody.
+
 ## Component operations and build hooks
 
 Components execute on the production Wasmtime worker outside the tick through
@@ -35,6 +44,12 @@ only once after live source/roster, native state and plugin-KV fences validate.
 Refusal repairs prediction without world edits. Unsupported hooks fail startup;
 no guest callback runs on a tick worker. See [PLUGINS.md](../PLUGINS.md).
 
+Operation receipts remain durable for the world's lifetime: a late retry returns
+its original outcome and conflicting reuse is refused. Do not evict receipts
+without a durable rule that refuses older identifiers. Required completions
+are bounded and fail closed on exhaustion; observation queues have a separate
+drop-newest policy and counter. See [persistence](persistence.md).
+
 ## Block entities, leaves and sign decoration
 
 Block/random/scheduled work runs through native core authority. Leaves use
@@ -43,6 +58,11 @@ foliage scan. Sign edits validate the editor's block/session/revision and retain
 side-aware dye/glow/wax semantics. Block-entity NBT post-images share the tick
 journal and native chunk checkpoint; Anvil export carries their interchange
 representation. Native tests are not graphical acceptance receipts.
+
+`tick/hydration.rs` owns pending block-entity hydration after residency or
+storage changes. Mutation owners must use the native block-write and hydration
+paths rather than creating a competing cache; block-entity post-images and
+chunk updates must describe the same committed state.
 
 ## Commit, publication and restart
 
