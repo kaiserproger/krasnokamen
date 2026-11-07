@@ -111,7 +111,8 @@ def run_campaign(args):
         directory.mkdir()
         env = dict(os.environ, SOLARIS_VALIDATION_ROOT=str(directory / 'receipts'))
         argv = common + ['--seed', str(seed), '--steps', str(args.steps), '--bots', str(args.bots)]
-        record = {'seed': seed, 'command': shlex.join(argv)}
+        record = {'seed': seed, 'steps': args.steps, 'bots': args.bots,
+                  'command': shlex.join(argv), 'server_sha256': summary['server_sha256']}
         with (directory / 'campaign.log').open('w') as log:
             try:
                 process = subprocess.run(argv, cwd=args.repo, env=env, stdout=log,

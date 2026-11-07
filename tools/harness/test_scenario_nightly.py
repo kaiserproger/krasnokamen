@@ -20,9 +20,13 @@ class ScenarioNightlyTests(unittest.TestCase):
             receipt = Path(tmp) / 'result.json'
             payload = {'status': 'passed', 'tree': {'head': 'abc', 'sha256': 'def'}}
             receipt.write_text(json.dumps(payload))
-            record = nightly.passed_receipt({'seed': 7, 'command': 'run --seed 7'},
-                                            receipt, payload)
+            record = nightly.passed_receipt({'seed': 7, 'steps': 16, 'bots': 3,
+                                             'server_sha256': 'serverhash',
+                                             'command': 'run --seed 7'}, receipt, payload)
             self.assertEqual(record['seed'], 7)
+            self.assertEqual(record['steps'], 16)
+            self.assertEqual(record['bots'], 3)
+            self.assertEqual(record['server_sha256'], 'serverhash')
             self.assertEqual(record['command'], 'run --seed 7')
             self.assertEqual(record['tree'], payload['tree'])
             self.assertFalse(record['original_receipt_retained'])
