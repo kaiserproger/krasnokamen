@@ -20,7 +20,7 @@ VANILLA=Path(os.environ.get('SOLARIS_VANILLA_DATA',
 
 class MobOracleTests(unittest.TestCase):
     def test_exact_version_and_all_species_have_real_loot_sources(self):
-        self.assertEqual(json.loads((VANILLA/'version.json').read_text())['id'],'26.1.2')
+        self.assertEqual(json.loads((VANILLA/'gameplay_version.json').read_text())['id'],'26.1.2')
         self.assertEqual(len(CONTRACTS),91)
         self.assertEqual(set(mobs.ADAPTERS),{'mobs.'+name for name in CONTRACTS})
         for name in CONTRACTS:

@@ -75,7 +75,7 @@ def setup(ctx):
     if vanilla is None:
         raise MissingCapability('vanilla_data_path')
     import json
-    version=json.loads((Path(vanilla)/'version.json').read_text())
+    version=json.loads((Path(vanilla)/'gameplay_version.json').read_text())
     if version['id']!='26.1.2':
         raise AssertionError('mob oracle requires exact26.1.2 vanilla loot data')
     ctx.state['vanilla']=str(vanilla)
