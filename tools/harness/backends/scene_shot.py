@@ -188,6 +188,8 @@ def wait_play(probe: ProbeSteps) -> None:
 
 SCENE_TOOLS = {
     "key": "minecraft_press_inputs",
+    "look": "minecraft_look",
+    "hotbar": "minecraft_set_hotbar_slot",
     "use_item_on": "minecraft_use_item_on",
     "click_screen_button": "minecraft_click_screen_button",
     "scan_blocks": "minecraft_scan_blocks",
@@ -205,7 +207,7 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
             yield "minecraft_press_inputs", {"keys": step["hold_keys"], "ticks": 1, "hold": True}
             continue
         kind, value = next(iter(step.items()))
-        if kind in ("key", "use_item_on", "click_screen_button"):
+        if kind in ("key", "look", "hotbar", "use_item_on", "click_screen_button"):
             yield SCENE_TOOLS[kind], value
         elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities", "wait_terrain"):
             yield SCENE_TOOLS[kind], value["args"]
@@ -250,7 +252,7 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
             valid = isinstance(value, str) and bool(value)
         elif kind == "key":
             valid = isinstance(value, dict) and set(value) == {"keys", "ticks"}
-        elif kind in ("use_item_on", "click_screen_button"):
+        elif kind in ("look", "hotbar", "use_item_on", "click_screen_button"):
             valid = isinstance(value, dict)
         elif kind == "mob_motion":
             valid = (isinstance(value, dict) and set(value) == {"samples", "name"}
@@ -345,7 +347,7 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                        and (value in str(state["screen"].get("class", ""))
                             or value in str(state["screen"].get("title", ""))),
                        "screen_open")
-        elif kind in ("key", "use_item_on", "click_screen_button"):
+        elif kind in ("key", "look", "hotbar", "use_item_on", "click_screen_button"):
             probe.call(SCENE_TOOLS[kind], value)
         elif kind == "wait_terrain":
             name, args = value.get("name"), value.get("args")

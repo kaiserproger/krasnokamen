@@ -280,15 +280,17 @@ pub(crate) fn execute(
         if count == 0 {
             return Err("argument.entity.notfound.player".into());
         }
-        state.push_player(
-            request.connection,
-            crate::boundary::PlayerChange::Chat {
-                message: format!(
-                    "Set spawn point for {count} player(s) to {}, {}, {}",
-                    location.0[0], location.0[1], location.0[2]
-                ),
-            },
-        );
+        if crate::command_execution::accepts_success(state, request.connection) {
+            state.push_player(
+                request.connection,
+                crate::boundary::PlayerChange::Chat {
+                    message: format!(
+                        "Set spawn point for {count} player(s) to {}, {}, {}",
+                        location.0[0], location.0[1], location.0[2]
+                    ),
+                },
+            );
+        }
         return Ok(Completed);
     }
     let title_action = match &request.command {
@@ -451,6 +453,6 @@ fn execute_title_global(
             .expect("executor world"),
         None => &mut *state,
     };
-    crate::command_execution::feedback(world, request.connection, &key, vec![label]);
+    crate::command_execution::success_feedback(world, request.connection, &key, vec![label]);
     Ok(())
 }

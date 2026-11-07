@@ -575,7 +575,7 @@ pub(crate) fn execute(
             .get_mut(&dimension)
             .expect("executor world")
     };
-    crate::command_execution::feedback(
+    crate::command_execution::success_feedback(
         world,
         request.connection,
         &format!("commands.teleport.success.{kind}.{suffix}"),

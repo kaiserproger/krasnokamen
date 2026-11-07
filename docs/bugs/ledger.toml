@@ -2282,7 +2282,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = ["harness:entities:native-v2-craft-drag", "harness:entities:native-v2-craft-drag-paced"]
+regression = ["harness:entities:native-v2-craft-drag", "harness:entities:native-v2-craft-drag-paced", "harness:entities:native-v2-chest-drag-disconnect"]
 failing_first = "reported"
 
 [[bug]]
@@ -3646,3 +3646,14 @@ source = "RC5 review of fe965d1c; contributing factors and failed defenses: docs
 regression = ["cargo:mc-core:core::checkpoint_custody_tests::chiseled_bookshelf_old_save_interaction_preserves_all_books"]
 failing_first = "not recorded"
 fix_commit = "fe965d1c"
+
+[[bug]]
+id = "COMMAND-SUCCESS-FEEDBACK-GAMERULE"
+title = "Player command success replies ignore send_command_feedback"
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "Native gait scene retained summon and effect success messages after send_command_feedback false"
+regression = ["cargo:mc-core:command_execution::tests::gamerule_suppresses_player_scene_success_but_not_failure_or_console", "cargo:mc-core:dimensions::tests::dimensional_teleport_success_obeys_player_feedback_rule"]
+failing_first = "reported"

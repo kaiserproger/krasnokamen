@@ -8,10 +8,12 @@ pub(crate) fn execute(state: &mut TickState, context: Context, input: &str) -> C
     let result = run(state, context, input);
     match result {
         Ok((count, message)) => {
-            state.push_player(
-                context.connection,
-                crate::boundary::PlayerChange::Chat { message },
-            );
+            if crate::command_execution::accepts_success(state, context.connection) {
+                state.push_player(
+                    context.connection,
+                    crate::boundary::PlayerChange::Chat { message },
+                );
+            }
             CommandResult::Success(count)
         }
         Err(message) => {

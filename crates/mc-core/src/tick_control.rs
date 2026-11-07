@@ -257,7 +257,7 @@ pub(crate) fn begin_tick(state: &mut TickState) {
         millis_per_tick = %report.millis_per_tick,
         "tick sprint finished"
     );
-    crate::command_execution::feedback(
+    crate::command_execution::success_feedback(
         state,
         report.requester,
         "commands.tick.sprint.report",

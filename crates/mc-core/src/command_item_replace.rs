@@ -328,14 +328,16 @@ pub(crate) fn execute(
         }
     };
     let count = write_slots(state, executor, &command.destination, &stack)?;
-    state.push_player(
-        connection,
-        PlayerChange::StyledChat {
-            content: Tag::Compound(vec![(
-                "text".into(),
-                Tag::String(format!("Replaced item in {count} slot(s)")),
-            )]),
-        },
-    );
+    if crate::command_execution::accepts_success(state, connection) {
+        state.push_player(
+            connection,
+            PlayerChange::StyledChat {
+                content: Tag::Compound(vec![(
+                    "text".into(),
+                    Tag::String(format!("Replaced item in {count} slot(s)")),
+                )]),
+            },
+        );
+    }
     Ok(count)
 }

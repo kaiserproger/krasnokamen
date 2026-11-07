@@ -388,7 +388,7 @@ pub(crate) fn feedback(
     key: &str,
     arguments: Vec<mc_nbt::Tag>,
 ) {
-    crate::command_execution::feedback(state, connection, key, arguments);
+    crate::command_execution::success_feedback(state, connection, key, arguments);
 }
 
 /// `CommandSourceStack.sendFailure`: red translated component.
@@ -574,7 +574,7 @@ pub(crate) fn member_names(state: &TickState, uuids: &[Uuid]) -> Vec<mc_nbt::Tag
 }
 
 fn unknown(state: &mut TickState, connection: ConnectionId, id: &str) {
-    feedback(
+    crate::command_execution::feedback(
         state,
         connection,
         "commands.bossbar.unknown",
@@ -591,7 +591,7 @@ pub(crate) fn execute(
     match command {
         Cmd::Add { id, name } => {
             if state.bossbars.bars.contains_key(id) {
-                feedback(
+                crate::command_execution::feedback(
                     state,
                     connection,
                     "commands.bossbar.create.failed",
@@ -907,7 +907,7 @@ pub(crate) fn execute(
                 Some(word) => match resolve_member_uuids(state, executor, word) {
                     Ok(uuids) => uuids.into_iter().collect(),
                     Err(key) => {
-                        feedback(state, connection, key, Vec::new());
+                        crate::command_execution::feedback(state, connection, key, Vec::new());
                         return;
                     }
                 },

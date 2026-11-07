@@ -67,10 +67,12 @@ fn source(state: &TickState, input: &mut &str) -> Result<Tag, String> {
 pub(crate) fn command(state: &mut TickState, context: Context, input: &str) -> CommandResult {
     match run(state, input) {
         Ok((count, message)) => {
-            state.push_player(
-                context.connection,
-                crate::boundary::PlayerChange::Chat { message },
-            );
+            if crate::command_execution::accepts_success(state, context.connection) {
+                state.push_player(
+                    context.connection,
+                    crate::boundary::PlayerChange::Chat { message },
+                );
+            }
             CommandResult::Success(count)
         }
         Err(message) => {

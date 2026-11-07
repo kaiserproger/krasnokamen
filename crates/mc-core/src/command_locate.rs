@@ -1400,7 +1400,7 @@ fn show_result(
         ),
     ]);
     let _ = origin;
-    crate::command_execution::feedback(
+    crate::command_execution::success_feedback(
         state,
         connection,
         key,
@@ -1438,7 +1438,7 @@ fn failure(state: &mut TickState, connection: ConnectionId, key: &str, arguments
 }
 
 fn feedback(state: &mut TickState, connection: ConnectionId, key: &str, arguments: Vec<Tag>) {
-    crate::command_execution::feedback(state, connection, key, arguments);
+    crate::command_execution::success_feedback(state, connection, key, arguments);
 }
 
 #[cfg(test)]
