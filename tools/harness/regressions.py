@@ -89,6 +89,7 @@ _BOOLEAN_PROFILE_VERDICTS = {
     }),
 }
 _PROFILE_VERDICTS = {
+    'chisel': ('chisel_admission', frozenset({'vanilla_optional_admission'})),
     'village-qa': ('settlement_acceptance', frozenset({
         'door_walk', 'sleep_return', 'farmer_harvest', 'miner_deposit', 'lumberjack',
     })),
@@ -140,8 +141,9 @@ def _profile_command(profile, verdict):
         valid = verdict in _PROFILE_VERDICTS.get(profile, (None, {'all'}))[1]
     if not valid:
         raise ValueError(f'unknown verdict {profile}:{verdict}')
+    client = 'java' if (profile, verdict) == ('chisel', 'vanilla_optional_admission') else 'native'
     return [sys.executable, '-m', 'tools.harness', 'run', profile,
-            '--client', 'native', '--windowed']
+            '--client', client, '--windowed']
 
 
 def _check_command(profile, check):
