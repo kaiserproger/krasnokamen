@@ -253,14 +253,14 @@ They are **not** publication evidence and cannot fill the pending table above.
 
 | Release | Workload | Result | Build | Host |
 |---|---|---|---|---|
-| v0.0.8 (tag `57b95ae9`, 2026-10-18) | 100 clients, about 100,000 mixed mobs (`native-100` shape) | about 16 TPS (15.87 in the working notes below); earlier runs below 10 TPS | frame-pointer build | reference host; exact CPU for this run unverified |
+| v0.0.8 (tag `57b95ae9`, 2026-10-18) | 100 clients, about 100,000 mixed mobs (`native-100` shape) | about 16 TPS; earlier runs below 10 TPS | frame-pointer build | reference host; exact CPU for this run unverified |
 
 Source: [v0.0.8 release notes at the tag](https://github.com/kaiserproger/solaris/blob/57b95ae9/docs/releases/v0.0.8.md#performance). They also
 report a more compact entity layout and hot passes that no longer scan every
 entity row; they do not establish whether either caused the measured gain.
 The current reference host uses a Ryzen 5 7535HS; the release notes do not
-identify the CPU for this particular run. The original `result.json`, MSPT
-percentiles and stage breakdown are not retained in the repository. The memory
+identify the CPU for this particular run. Its original `result.json`, MSPT
+percentiles and full stage breakdown have not been located. The memory
 figures for 100k-mob runs (server RSS about 2.3 GiB, cgroup peak about 8 GB
 including page cache; [profiling notes](../development/performance-windows-and-profiling.md#load-harness-and-the-frozen-old-core))
 are not known to come from the same run. The next comparable number is a
@@ -269,8 +269,8 @@ are not known to come from the same run. The next comparable number is a
 The working notes committed with the release
 ([`docs/MEMORY.md` at `1ada2ceb`](https://github.com/kaiserproger/solaris/blob/1ada2ceb/docs/MEMORY.md),
 lines 38–42) record the `native-100` rounds before the tag. Their reports and
-receipts lived in the ignored `.analysis/` directory and are gone; the host is
-not named per run.
+receipts were referenced under the ignored `.analysis/` directory and were not
+found in the paths searched; the host is not named per run.
 
 | Date | Change | Frame-pointer steady TPS | Other figures |
 |---|---|---:|---|
@@ -278,8 +278,11 @@ not named per run.
 | 2026-10-17 | r9–r10: single-lookup contact revision, page-batched parallel `EntityViews::publish`, parallel read-row prep, villager targets from index | 11.42 | release build 11.91 / 11.56 / 12.72 TPS steady / burst / recovery, p50 83 ms |
 | 2026-10-18 | entity layout (rare components boxed, sorted lanes instead of six `slots_where` scans, dense `Body` columns) | 14.52 → 15.87 | entity phase 29.6 → 24.8 ms, RSS −415 MiB |
 
-The last row is the only before/after pair for one change, so it is the only
-one that attributes a gain to a specific change (the layout, +1.35 TPS).
+The working notes associate the last row's 14.52 → 15.87 TPS change with the
+grouped entity-layout work. It is compatible with the release's rounded
+“about 16 TPS”, but the available sources do not establish that it is the same
+run. The missing report also leaves the contribution of individual changes
+unverified.
 
 ## In-process chunk generation
 
