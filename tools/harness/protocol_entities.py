@@ -385,6 +385,8 @@ class ProtocolEntities:
         self._decode_stack = decode_stack
         self._protocol = protocol
         self._entities: dict[int, dict[str, Any]] = {}
+        self._lifecycle: list[dict[str, Any]] = []
+        self._lifecycle_overflow = False
         self._xp: dict[str, Any] | None = None
         self._local = {'id': local_entity_id} if local_entity_id is not None else None
         self.unavailable: str | None = None
@@ -437,6 +439,12 @@ class ProtocolEntities:
             return False
         return True
 
+    def _lifecycle_event(self, event: dict[str, Any]) -> None:
+        if len(self._lifecycle) == 4096:
+            self._lifecycle_overflow = True
+        else:
+            self._lifecycle.append(event)
+
     def snapshot(self) -> dict[str, Any]:
         """JSON-ready entity array plus observation health."""
         entities = []
@@ -457,6 +465,8 @@ class ProtocolEntities:
             entities.append(item)
         return {
             "entities": entities,
+            "lifecycle": copy.deepcopy(self._lifecycle),
+            "lifecycle_overflow": self._lifecycle_overflow,
             "partial": any(entry.get("partial") for entry in self._entities.values()),
             "unavailable": self.unavailable,
             "xp": copy.deepcopy(self._xp),
@@ -480,6 +490,8 @@ class ProtocolEntities:
             "position": position,
             "spawn_position": list(position),
         }
+        self._lifecycle_event({"event": "spawn", "id": entity_id, "uuid": entity_uuid,
+                               "type": entity_type})
 
     def _relative(self, raw: bytes, *, with_rotation: bool) -> None:
         cur = _Cursor(raw)
@@ -559,7 +571,9 @@ class ProtocolEntities:
         ids = [cur.varint() for _ in range(count)]
         cur.end()
         for entity_id in ids:
-            self._entities.pop(entity_id, None)
+            previous = self._entities.pop(entity_id, None)
+            self._lifecycle_event({"event": "remove", "id": entity_id,
+                                   "uuid": previous["uuid"] if previous else None})
 
     def _motion(self, raw: bytes) -> None:
         cur = _Cursor(raw)

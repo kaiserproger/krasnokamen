@@ -294,9 +294,9 @@ seed = {self.seed}
         return [line for line in text.splitlines() if expect in line][-1]
 
     def command(self, text: str) -> str:
-        """Return exact fresh console feedback, fenced by a unique own echo.
+        """Return fresh console feedback, fenced by a private scoreboard query.
 
-        The echo proves input ordering, NOT command success. Domain oracles
+        The query proves input ordering, NOT command success. Domain oracles
         must inspect actual query feedback or received client state.
         """
         from ..matrix_api import MissingCapability
@@ -312,13 +312,13 @@ seed = {self.seed}
         self._command_number += 1
         marker = f"MatrixConsoleFence{self._command_number:08}"
         before = len(self.log_path.read_text(errors="replace"))
-        proc.stdin.write((text + "\nsay " + marker + "\n").encode())
+        proc.stdin.write((text + "\nscoreboard players list " + marker + "\n").encode())
         proc.stdin.flush()
         def reached():
             if proc.poll() is not None:
                 raise RuntimeError(f"server exited {proc.returncode} during command")
             fresh = self.log_path.read_text(errors="replace")[before:]
-            return marker in fresh, fresh
+            return f"Scores for {marker}:" in fresh, fresh
         fresh = runtime.wait_for_path_condition(self.log_path, self.command_timeout_seconds, reached)
         if any(token in fresh for token in ("not implemented", "Unknown command", "Unsupported execute")):
             raise MissingCapability("server_command:" + text.split(" ", 1)[0] + ":" + fresh)

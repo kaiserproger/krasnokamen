@@ -53,6 +53,17 @@ def fake_stack_decoder(data, offset):
 
 
 class ProtocolEntitiesTests(unittest.TestCase):
+    def test_spawn_then_removal_preserves_identity_even_when_census_empty(self):
+        identity=uuid.UUID('12345678-1234-5678-1234-567812345678')
+        tracker=ProtocolEntities()
+        self.assertTrue(tracker.consume(0x01,add_body(entity_id=42,entity_uuid=identity)))
+        self.assertTrue(tracker.consume(0x4D,varint(1)+varint(42)))
+        snapshot=tracker.snapshot()
+        self.assertEqual(snapshot['entities'],[])
+        self.assertEqual([(e['event'],e['uuid']) for e in snapshot['lifecycle']],
+                         [('spawn',str(identity)),('remove',str(identity))])
+        self.assertFalse(snapshot['lifecycle_overflow'])
+
     def test_263_linear_and_stepped_movement(self):
         tracker = ProtocolEntities(protocol=777)
         self.consume_add(tracker, x=1.0, y=2.0, z=3.0)

@@ -9,6 +9,30 @@ from .protocol_observations import decode_menu
 
 
 class ProtocolWireTests(unittest.TestCase):
+    def test_seed19_vanilla_craft_result_precedes_received_input(self):
+        a,b=socket.socketpair()
+        observer=None
+        try:
+            with patch.object(wire,'join_offline_socket',return_value=(a,{})):
+                observer=wire.PlayObserver(('unused',0),'Probe',account_uuid=None,timeout=1)
+            # Original seed-19 captured window-0 contents and SetSlot frames.
+            wire.send_compressed_frame(b,0x12,bytes.fromhex(
+                '00012e0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'))
+            wire.send_compressed_frame(b,0x14,bytes.fromhex('00040000043f0000'))
+            observer.wait(lambda p: p.menus.get(0,{}).get('state_id') == 4,
+                          description='received recipe result')
+            self.assertIsNone(observer.menus[0]['slots'][1])
+            self.assertEqual(observer.menus[0]['slots'][0]['count'],4)
+            wire.send_compressed_frame(b,0x14,bytes.fromhex('0005000101a3010000'))
+            observer.wait(lambda p: p.menus[0]['slots'][1] is not None,
+                          description='received actual craft input')
+            self.assertEqual(observer.menus[0]['slots'][1]['count'],1)
+            self.assertEqual(observer.menus[0]['state_id'],5)
+        finally:
+            if observer is not None: observer.close()
+            else: a.close()
+            b.close()
+
     def test_received_container_suffix_survives_menu_closure(self):
         observer = wire.PlayObserver.__new__(wire.PlayObserver)
         observer.menus = {0: {'slots': [None] * 46},

@@ -8,6 +8,57 @@ from tools.harness.backends import native_matrix
 
 
 class NativeMatrixTests(unittest.TestCase):
+    def test_pre_oracle_failure_is_blocked_and_not_counted_as_executed(self):
+        import yaml
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            rows=[{'id':'missing-facts','status':native_matrix.failure_status(False),
+                   'driver':'native_mcp','server_sha':'sha','note':'missing block_collision_shapes',
+                   'run_dir':str(root)},
+                  {'id':'oracle-failure','status':native_matrix.failure_status(True),
+                   'driver':'native_mcp','server_sha':'sha','note':'assertion failed',
+                   'run_dir':str(root)}]
+            ledger=root/'ledger.jsonl'
+            ledger.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+            native_matrix._write_summary({'all_native_ids':[r['id'] for r in rows],
+                'ledger':str(ledger),'server_sha':'sha','run_root':str(root),
+                'wave1_id_set_sha256':'a','matrix_sha256':'b','repro_prefix':['matrix']})
+            result=yaml.safe_load((root/'summary.yaml').read_text())
+            self.assertEqual((result['executed'],result['blocked'],result['fail']),(1,1,1))
+
+    def test_health_rejects_dead_server_errors_missing_metrics_and_disconnect(self):
+        from types import SimpleNamespace
+        from tools.harness.backends.probe_steps import ProbeSteps
+        with tempfile.TemporaryDirectory() as directory:
+            log=Path(directory)/'server.log'
+            log.write_text('INFO ready\n')
+            host=SimpleNamespace(running=True,log_path=log,
+                dashboard_full_stats=lambda:{'tick':{'samples':10,'p50_us':49000}})
+            client=SimpleNamespace(call_tool=lambda *args:{'in_play':True})
+            lane=SimpleNamespace(host=host,clients=[client])
+            def check():
+                steps=ProbeSteps(client,Path(directory),10,'health')
+                native_matrix.check_health(lane,steps)
+                return steps.report['assertions']
+            self.assertTrue(all(check().values()))
+            for message in ('ERROR broken', 'thread panicked'):
+                log.write_text(message)
+                with self.assertRaisesRegex(RuntimeError,'server_no_error_or_panic'):
+                    check()
+            log.write_text('')
+            host.running=False
+            with self.assertRaisesRegex(RuntimeError,'server_alive'):
+                check()
+            host.running=True
+            for tick in ({}, {'samples':0,'p50_us':1}, {'samples':1,'p50_us':50000}):
+                host.dashboard_full_stats=lambda tick=tick:{'tick':tick}
+                with self.assertRaisesRegex(RuntimeError,'server_mspt_below_50'):
+                    check()
+            host.dashboard_full_stats=lambda:{'tick':{'samples':1,'p50_us':1}}
+            client.call_tool=lambda *args:{}
+            with self.assertRaisesRegex(RuntimeError,'client_0_in_play'):
+                check()
+
     def test_native_selection_preserves_windows_as_explicit_blockers(self):
         rows = [{"id": "linux", "context": {"client_kind": "native_linux"}},
                 {"id": "windows", "context": {"client_kind": "native_windows"}},

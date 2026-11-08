@@ -44,6 +44,30 @@ def transport_blocker(scenario: dict[str, Any]) -> str | None:
         return 'malformed_packet_injection: ordinary native MCP does not expose raw/stale packet injection'
     return None
 
+def failure_status(oracle_started: bool) -> str:
+    """Startup failures have not exercised the scenario's product oracle."""
+    return 'fail' if oracle_started else 'blocked'
+
+
+def check_health(lane: Any, steps: ProbeSteps) -> None:
+    """Require observed server and client health before crediting any scenario."""
+    steps.check('server_alive', lane.host.running)
+    log = lane.host.log_path.read_text(errors='replace')
+    steps.check('server_no_error_or_panic', not any(
+        'ERROR' in line or 'panic' in line.lower() for line in log.splitlines()))
+    metrics = lane.host.dashboard_full_stats()
+    tick = metrics.get('tick')
+    samples = tick.get('samples') if isinstance(tick, dict) else None
+    p50 = tick.get('p50_us') if isinstance(tick, dict) else None
+    steps.report['server_health'] = {'tick': tick}
+    steps.check('server_mspt_below_50',
+                type(samples) is int and samples > 0 and type(p50) in (int, float)
+                and math.isfinite(p50) and 0 <= p50 < 50000)
+    for index, client in enumerate(lane.clients):
+        state = client.call_tool('minecraft_observe')
+        steps.check(f'client_{index}_in_play', state.get('in_play') is True)
+
+
 
 def record_receipt(receipt: dict[str, Any], receipt_path: Path) -> None:
     """Called by cmd_run only after its authoritative result.json exists."""
@@ -584,6 +608,7 @@ def run(ctx: Any) -> dict[str, Any]:
         if blocker:
             row['note']=blocker
         else:
+            oracle_started=False
             try:
                 with Lane(ctx,scenario,directory,binary,native,26301+(index%90),timeout,tuple(sorted(exclusions))) as lane:
                     from ..matrix_api import MissingCapability
@@ -595,6 +620,7 @@ def run(ctx: Any) -> dict[str, Any]:
                     row['excluded_plugins']=list(sorted(exclusions))
                     with ProbeSteps(lane.clients[0],directory/'probe',timeout,scenario['id']) as steps:
                         lane.steps=steps
+                        oracle_started=True
                         if storage_primitive:
                             storage(lane,scenario)
                         elif handler is not None:
@@ -614,12 +640,14 @@ def run(ctx: Any) -> dict[str, Any]:
                                     steps.check(check['name'],check['passed'])
                             finally:
                                 (directory/'adapter-transcript.json').write_text(json.dumps(transcript,indent=2))
+                        check_health(lane,steps)
                         native_client.capture(lane.clients[0],directory,'final')
                         row['status']='pass';row['note']='complete native probe; '+str(directory/'probe/scenario.json')
             except (NotImplementedError, MissingCapability) as error:
                 row['note']=str(error)
             except Exception as error:
-                row['status']='fail';row['note']=f'{type(error).__name__}: {error}; evidence={directory}'
+                row['status']=failure_status(oracle_started)
+                row['note']=f'{type(error).__name__}: {error}; evidence={directory}'
         (directory/'outcome.json').write_text(json.dumps(row,indent=2))
         print('[native-matrix]',row['status'],scenario['id'],row['note'][:180],flush=True)
     counts={status:sum(row['status']==status for row in outcomes) for status in ('pass','fail','blocked','skipped')}

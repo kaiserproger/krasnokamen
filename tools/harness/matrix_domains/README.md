@@ -150,6 +150,12 @@ factors. Package-specific configuration remains in the private package copy.
 `dashboard_full_stats()` exposes raw `/stats`; the smaller `dashboard_stats()`
 continues to provide `simulation_tick`, integer `players`, and `uptime_secs`.
 
+Native matrix startup failures before a subject oracle runs are blocked, not
+executed product failures. Before a native row passes, the harness checks the
+live server, its complete log for ERROR/panic, each client's Play state, and a
+nonempty dashboard tick sample with p50 MSPT below 50. The timing check is a
+final rolling-window observation, not proof of every tick throughout the run.
+
 Input submission is not completion. There is no general click/trade/button ACK.
 Wait on the exact expected inventory/cursor/menu/block/feedback state before
 `ctx.boundary()`. `snapshot.revision` is a received-packet revision, not a success
@@ -252,6 +258,11 @@ movement changes current position only; remove/respawn packets invalidate
 tracking. `xp` contains received progress/level/total. Local `effects` uses the
 actual LoginPlay entity ID, never an invented local spawn; effect keys are
 numeric-ID strings resolved with the mob-effect registry above.
+`entity_lifecycle` separately records received spawns and removals in order,
+including the UUID associated with a known removed ID. It is per connection;
+an unknown removal has a null UUID. On overflow (4096 events) the journal is
+omitted and `observation_errors.entity_lifecycle` reports `journal_overflow`.
+An empty final census alone cannot distinguish no spawn from later removal.
 
 Malformed/unsupported entity packets leave sticky
 `observation_errors.entities` and omit the entity/XP/effect observations until

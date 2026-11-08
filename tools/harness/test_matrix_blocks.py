@@ -1,6 +1,7 @@
 """Adapter-contract unit tests, not substitutes for live vanilla gameplay proof."""
 import importlib
 import json
+import pkgutil
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,6 +22,18 @@ class BlocksContractTests(unittest.TestCase):
             'dimension':'overworld','game_mode':'survival','network_condition':'normal',
             'server_lifecycle':'steady','permission':'non_op_0','player_count':'1'}}
         return MatrixContext(row,server,[client],Path('/run/media/kaiserroman/games/solaris-work/scenarios/runs/DomBlocks'))
+
+    def test_all_matrix_domains_import_and_health_requires_received_value(self):
+        from . import matrix_domains
+        for module in pkgutil.iter_modules(matrix_domains.__path__):
+            if not module.name.startswith('test_'):
+                with self.subTest(module=module.name):
+                    importlib.import_module(matrix_domains.__name__ + '.' + module.name)
+        ctx=self.context(snapshot={'entities':[{'type':'minecraft:iron_golem','health':42.0}]})
+        self.assertEqual(b.entity_health(ctx,'iron_golem'),42.0)
+        ctx=self.context(snapshot={'entities':[{'type':'minecraft:iron_golem'}]})
+        with self.assertRaisesRegex(MissingCapability,'health'):
+            b.entity_health(ctx,'iron_golem')
 
     def test_all_subjects_export_real_adapters(self):
         total=0

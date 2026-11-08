@@ -135,6 +135,10 @@ class ProtocolMatrixClient(ProtocolStationVerbs, ProtocolInputVerbs):
                 if observed['unavailable'] is not None:
                     result['observation_errors']['entities'] = observed['unavailable']
                 else:
+                    if observed['lifecycle_overflow']:
+                        result['observation_errors']['entity_lifecycle'] = 'journal_overflow'
+                    else:
+                        result['entity_lifecycle'] = observed['lifecycle']
                     entities = observed['entities']
                     for entity in entities:
                         type_id = entity['type']
