@@ -268,6 +268,15 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
         kind, value = next(iter(step.items()))
         if kind in ("shot", "observe", "goat_horns_upright", "goat_side_horn"):
             valid = isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value)
+        elif kind == "assert_chat":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"name", "contains", "excludes"}
+                     and isinstance(value["name"], str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and all(isinstance(value[key], list)
+                             and all(isinstance(item, str) and bool(item) for item in value[key])
+                             for key in ("contains", "excludes"))
+                     and bool(value["contains"]))
         elif kind == "cmd":
             valid = isinstance(value, str) and bool(value) and not value.startswith("/")
         elif kind == "tp":
@@ -388,6 +397,16 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 shots.append(capture(probe, artifact, value))
             else:
                 (artifact / f"{value}.json").write_text(json.dumps(probe.observe(), indent=2) + "\n")
+        elif kind == "assert_chat":
+            state = probe.observe()
+            lines = state.get("recent_chat")
+            if not isinstance(lines, list) or any(not isinstance(line, str) for line in lines):
+                raise RuntimeError("client observation omitted recent_chat")
+            (artifact / f"{value['name']}.json").write_text(json.dumps(state, indent=2) + "\n")
+            for index, text in enumerate(value["contains"]):
+                probe.check(f"{value['name']}_contains_{index}", any(text in line for line in lines))
+            for index, text in enumerate(value["excludes"]):
+                probe.check(f"{value['name']}_excludes_{index}", not any(text in line for line in lines))
         elif kind == "use_phases":
             name = value["name"]
             before = probe.observe()
@@ -459,12 +478,19 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 raise RuntimeError(f"walk phase not reached: {value['name']}")
             image = capture(probe, artifact, value["name"])
             after = probe.call("minecraft_list_entities", args)
-            first, last = matching_walk(before, value), matching_walk(after, value)
-            probe.check(f"{value['name']}_phase_bracket",
-                        first is not None and last is not None
-                        and first["entity_uuid"] == last["entity_uuid"])
+            frame_path = Path(image + ".gait.json") if client == "java" else Path(image).with_suffix(".json")
+            frame_data = json.loads(frame_path.read_text())
+            frame_entities = frame_data if client == "java" else frame_data["gait_frame"]
+            frame = {"entities": frame_entities}
+            first = matching_walk(before, value)
+            same_entity = [entity for entity in after.get("entities", [])
+                           if first is not None and first.get("entity_uuid")
+                           and entity.get("entity_uuid") == first["entity_uuid"]]
             (artifact / f"{value['name']}-walk.json").write_text(
-                json.dumps({"before": before, "after": after, "spec": value}, indent=2) + "\n")
+                json.dumps({"before": before, "after": after, "frame": frame,
+                            "frame_path": str(frame_path), "spec": value}, indent=2) + "\n")
+            probe.check(f"{value['name']}_same_entity", first is not None and len(same_entity) == 1)
+            probe.check(f"{value['name']}_render_phase", matching_walk(frame, value) is not None)
             shots.append(image)
         elif kind == "goat_horns_upright":
             from . import goat_horn_oracle
@@ -570,8 +596,8 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
 
 
 def start_java(ctx: ProfileContext, artifact: Path, address: str | None, username: str, timeout: float,
-               display: str, render_distance: int, fov: int) -> tuple[Any, Any, McpClient]:
-    """Launch the vanilla Java client, optionally connecting to a server."""
+               display: str, render_distance: int, fov: int, *, plain: bool = False) -> tuple[Any, Any, McpClient]:
+    """Launch the requested Java client, optionally connecting to a server."""
     game_dir = artifact / "game"
     game_dir.mkdir()
     (game_dir / "options.txt").write_text(java_options(render_distance, fov))
@@ -583,7 +609,10 @@ def start_java(ctx: ProfileContext, artifact: Path, address: str | None, usernam
     ctx.exits.append(None)
     ctx.logs.append(str(log_path))
     process, log = runtime.start_client(game_dir=game_dir, log_path=log_path, token=token,
-                                        mcp_port=mcp_port, username=username, display=display)
+                                        mcp_port=mcp_port, username=username, display=display,
+                                        client_profile="vanilla" if plain else None)
+    if plain:
+        ctx.commands[ctx.client_evidence["command_index"]] = list(process.args)
     mcp = None
     try:
         mcp = McpClient(f"http://127.0.0.1:{mcp_port}/mcp", token, timeout + 10)
@@ -606,7 +635,11 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     """Load and validate exactly the inputs used by the scene runner."""
     if ctx.client not in ("native", "java") or not ctx.windowed or ctx.platform is not None:
         raise ValueError("scene-shot requires --client native|java --windowed")
-    if scenario is None:
+    if ctx.scenario_id == "native-command-feedback":
+        if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
+            raise ValueError("native-command-feedback requires its registered native fixture without overrides")
+        scenario = json.loads((runtime.REPO_ROOT / "tools/harness/command_feedback_scene.json").read_text())
+    elif scenario is None:
         args = ctx.extra_args
         if args and args[0] == "--":
             args = args[1:]
@@ -618,6 +651,8 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         scenario = json.loads(Path(scenario_path).read_text())
     if not isinstance(scenario, dict) or not isinstance(scenario.get("steps"), list):
         raise ValueError("scenario must contain a steps array")
+    if type(scenario.get("java_plain", False)) is not bool or (scenario.get("java_plain") and ctx.client != "java"):
+        raise ValueError("java_plain requires --client java and a boolean value")
     if scenario.get("vanilla_singleplayer") is True:
         if ctx.client != "java":
             raise ValueError("vanilla singleplayer scenes require --client java")
@@ -748,7 +783,7 @@ def run(
             if ctx.client == "java":
                 client, client_log, mcp = start_java(
                     ctx, artifact, f"127.0.0.1:{client_port}", username, timeout, display,
-                    base.get("render_distance", 12), base["fov"])
+                    base.get("render_distance", 12), base["fov"], plain=scenario.get("java_plain", False))
             else:
                 client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f"127.0.0.1:{client_port}", username, timeout, display=display)
         finally:

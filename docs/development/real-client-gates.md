@@ -279,15 +279,22 @@ EOF reason when `eof` is true. `reconnect` targets the same private server.
 `server_eof` half-closes every client-facing socket in the harness-owned proxy,
 producing clean EOF without killing the server or approximating EOF with a reset.
 
-`walk_capture` samples one uniquely matching entity, waits for its reported raw
-walk position and minimum speed, and brackets the screenshot with observations.
-Both endpoints must match the requested tolerance for the same entity. Position
-is not wrapped: different renderers can apply a factor before calculating phase.
+`walk_capture` samples one uniquely matching entity and waits for its reported raw
+walk position and minimum speed. It retains the before/after observations and
+the screenshot's render-frame gait inputs; the frame, not a later state sample,
+must match the requested tolerance, and the observed entity identity must persist.
+Position is not wrapped: renderers can apply a factor before calculating phase.
 
 `goat_side_horn` checks a previously named screenshot from the fixed goat side
 pose against the measured Java horn edge; its four-row bracket shifts down one
 pixel when rasterization moves the horn top below the first row. It is not a
 general image comparator.
+`assert_chat` (native only) records the current observation and checks `contains`
+and `excludes` substrings against `recent_chat`. At least one expected substring
+is required; use an ordered chat fence after the commands under test before
+checking absence. `tools/harness/command_feedback_scene.json` exercises player
+success suppression, failure visibility and the enabled feedback control.
+
 
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains
   its same-client-thread `game_time` and entity positions. Missing timestamps fail.
@@ -315,11 +322,12 @@ general image comparator.
   `<artifact>/terrain-ready.json` and in `scenario.terrain_waits`; requested and
   mesh revisions must match. The completed frame is a readiness fence, not proof
   of visible pixels, and capture is not atomic with the fence.
-- `--client java --windowed` ordinarily connects the vanilla Java client to the
-  Solaris server (Loader `:fabric-agent:runClientMcp`): `shot` uses
-  `minecraft_screenshot` and matches the 1280x720 window, fov, GUI scale 3 and
-  render distance. It is a rendering oracle, not a vanilla-server AI or movement
-  oracle. Mojang's client is a test-time reference only, never a source for models.
+- `--client java --windowed` connects a NeoForge Java client with the Loader
+  automation mod to the Solaris server (`:fabric-agent:runClientMcp`): `shot`
+  uses `minecraft_screenshot` and matches the 1280x720 window, fov, GUI scale 3
+  and render distance. It is an instrumented rendering oracle, not an unmodified
+  vanilla client or a vanilla-server AI or movement oracle. Mojang's client is a
+  test-time reference only, never a source for models.
 - For a Java client **and vanilla server** oracle, set `vanilla_singleplayer: true`
   in the scenario and run `--client java --windowed`. No standalone server or
   EULA file is created. Begin the steps with `ui_click` (exact screen `class`,

@@ -138,6 +138,39 @@ class SceneShotTests(unittest.TestCase):
             self.assertIsNone(scene_shot.matching_walk({"entities": [{**entity, **values}]}, spec))
         self.assertIsNone(scene_shot.matching_walk({"entities": [entity, entity]}, spec))
 
+    def test_walk_capture_checks_render_frame_not_later_observation(self):
+        spec = {"name": "walk", "entity_type": "minecraft:zombie", "phase": 1.5,
+                "tolerance": 0.25, "min_speed": 0.1, "max_ticks": 30}
+        entity = {"entity_type": "minecraft:zombie", "entity_uuid": "mob",
+                  "walk_position": 1.5, "walk_speed": 0.2}
+
+        class Probe:
+            def __init__(self):
+                self.calls = 0
+            def call(self, name, args):
+                self.calls += 1
+                return {"entities": [entity if self.calls == 1 else {**entity, "walk_position": 3.0}]}
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            image = str(root / "walk.png")
+            for client in ("java", "native"):
+                frame_path = Path(image + ".gait.json") if client == "java" else Path(image).with_suffix(".json")
+                def write_frame(position):
+                    items = [{**entity, "walk_position": position}]
+                    frame_path.write_text(json.dumps(items if client == "java" else {"gait_frame": items}))
+                with patch.object(scene_shot, f"capture_{client}", return_value=image):
+                    write_frame(1.5)
+                    self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
+                    evidence = json.loads((root / "walk-walk.json").read_text())
+                    self.assertEqual(evidence["after"]["entities"][0]["walk_position"], 3.0)
+                    write_frame(2.5)
+                    with self.assertRaisesRegex(AssertionError, "walk_render_phase"):
+                        scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client)
+
     def test_steps_dispatch_and_retain_evidence(self):
         class Probe:
             def __init__(self):
@@ -162,6 +195,49 @@ class SceneShotTests(unittest.TestCase):
             self.assertEqual(json.loads((root / "state.json").read_text())["position"], [1, 2, 3])
             self.assertIn(("minecraft_send_chat", {"message": "tp @s 1 2 3 90 0", "command": True}), probe.calls)
             self.assertIn(("minecraft_wait_ticks", {"ticks": 5}), probe.calls)
+
+    def test_assert_chat_requires_fence_and_rejects_unexpected_feedback(self):
+        class Probe:
+            def __init__(self, lines):
+                self.lines = lines
+            def observe(self):
+                return {"recent_chat": self.lines}
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+        step = {"assert_chat": {"name": "disabled", "contains": ["fence"],
+                                "excludes": ["Set time"]}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scene_shot.execute(Probe(["fence"]), root, [step])
+            self.assertEqual(json.loads((root / "disabled.json").read_text())["recent_chat"], ["fence"])
+            with self.assertRaisesRegex(AssertionError, "disabled_excludes_0"):
+                scene_shot.execute(Probe(["fence", "Set time"]), root, [step])
+            with self.assertRaisesRegex(AssertionError, "disabled_contains_0"):
+                scene_shot.execute(Probe([]), root, [step])
+            with self.assertRaisesRegex(RuntimeError, "omitted recent_chat"):
+                scene_shot.execute(Probe(None), root, [step])
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([step], "java")
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([{"assert_chat": {"name": "x", "contains": [], "excludes": []}}], "native")
+
+    def test_named_feedback_scene_rejects_overrides(self):
+        class Context:
+            client = "native"
+            windowed = True
+            platform = None
+            scenario_id = "native-command-feedback"
+            extra_args = []
+            timeout_seconds = 180
+        with patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": ""}):
+            scenario = scene_shot.validate_scenario(Context())[0]
+            self.assertTrue(any("assert_chat" in step for step in scenario["steps"]))
+            with self.assertRaisesRegex(ValueError, "without overrides"):
+                scene_shot.validate_scenario(Context(), {"steps": []})
+            with patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": "/tmp/other.json"}):
+                with self.assertRaisesRegex(ValueError, "without overrides"):
+                    scene_shot.validate_scenario(Context())
 
     def test_wait_respawn_rejects_dead_or_open_screen(self):
         class Probe:
