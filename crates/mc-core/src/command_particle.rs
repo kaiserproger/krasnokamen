@@ -178,6 +178,10 @@ fn run(state: &mut TickState, context: Context, input: &str) -> Result<i32, Stri
             | "dragon_breath"
             | "effect"
             | "instant_effect"
+            | "geyser"
+            | "geyser_base"
+            | "geyser_poof"
+            | "geyser_plume"
     ) {
         return Err("Particle options are not supported".into());
     }
