@@ -845,6 +845,8 @@ def start_client(
                 start_new_session=True,
             )
         else:
+            from .java_launcher import modded_gradle_arguments
+
             gradlew = AGENT_ROOT / "gradlew"
             if not (gradlew.is_file() and os.access(gradlew, os.X_OK)):
                 raise RuntimeError(f"missing executable Gradle wrapper: {gradlew}")
@@ -857,7 +859,7 @@ def start_client(
                     str(AGENT_ROOT),
                     f"-Psolaris.clientMcp.gameDir={game_dir}",
                     f"-Psolaris.clientMcp.username={username}",
-                    task,
+                    *modded_gradle_arguments(task),
                 ],
                 cwd=REPO_ROOT,
                 env=env,

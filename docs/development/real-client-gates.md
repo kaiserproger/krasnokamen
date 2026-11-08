@@ -98,6 +98,15 @@ export SOLARIS_LOADER_ROOT=<solaris-loader checkout>            # Java/Loader cl
 export SOLARIS_DEFAULT_PLUGINS_ROOT=<solaris-default-plugins>   # standard-pack and plugin gates
 ```
 
+For an exact modded Java endpoint, set both `SOLARIS_JAVA_VERSION` and
+`SOLARIS_JAVA_PLATFORM`. Supported pairs are 26.1.2/Fabric (API 0.155.2),
+26.1.2/NeoForge, 26.2/NeoForge and 26.3/Fabric or NeoForge. The launch selects
+the matching `:loader-<platform>:runClientMcp` task and pinned Gradle properties;
+missing, conflicting or unsupported selectors fail before launch, with no
+neighbor-version fallback. `SOLARIS_CLIENT_JAR` must identify the matching
+local vanilla client jar for the development agent build. Plain vanilla
+`vanilla_command` separately accepts exact 26.1.2, 26.2 and 26.3 metadata.
+
 *Owner host:* builds land in a pooled target dir (`targets/slot-<l>`) that
 other trees reuse, so the harness refuses `SOLARIS_SERVER_BINARY` or
 `SOLARIS_CLIENT_BINARY` inside a slot. Pin instead:

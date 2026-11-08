@@ -112,6 +112,32 @@ class ProfileTaskTests(unittest.TestCase):
                     handle.close()
             self.assertEqual(seen["env"]["SOLARIS_CLIENT_MCP_USERNAME"], "SvcProfile")
 
+    def test_exact_selectors_reach_spawned_gradle_command(self) -> None:
+        endpoints = (("26.1.2", "fabric"), ("26.1.2", "neoforge"),
+                     ("26.2", "neoforge"), ("26.3", "fabric"), ("26.3", "neoforge"))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for version, platform in endpoints:
+                with self.subTest(version=version, platform=platform), \
+                        mock.patch.dict(os.environ, {
+                            "SOLARIS_JAVA_VERSION": version, "SOLARIS_JAVA_PLATFORM": platform,
+                            "SOLARIS_CLIENT_JAR": str(root / "client.jar"),
+                        }, clear=True), \
+                        _gradlew_present(), \
+                        mock.patch.object(runtime.os, "access", return_value=True), \
+                        mock.patch.object(runtime, "port_open", return_value=False), \
+                        mock.patch.object(runtime, "wait_port"), \
+                        mock.patch.object(runtime.subprocess, "Popen") as launch:
+                    _, handle = runtime.start_client(**_valid_kwargs(
+                        root / f"{version}-{platform}", root / "client.log"))
+                    try:
+                        argv = launch.call_args.args[0]
+                        self.assertEqual(argv[-1], f":loader-{platform}:runClientMcp")
+                        self.assertIn(f"-PminecraftVersion={version}", argv)
+                        self.assertIn(f"-Psolaris.clientJar={root / 'client.jar'}", argv)
+                    finally:
+                        handle.close()
+
     def test_vanilla_explicit_uses_direct_mojang_command(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

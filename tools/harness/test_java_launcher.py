@@ -70,6 +70,16 @@ class VanillaLauncherTest(unittest.TestCase):
             with self.assertRaisesRegex(MissingCapability, "26.3"):
                 self.command()
 
+    def test_explicit_262_requires_matching_metadata(self):
+        with mock.patch.dict("os.environ", {"SOLARIS_JAVA_VERSION": "26.2"}):
+            with self.assertRaisesRegex(MissingCapability, "26.2"):
+                self.command()
+            self.metadata["id"] = "26.2"
+            self.info.write_text(json.dumps(self.metadata))
+            (self.assets / "indexes/26.2-30.json").write_bytes(b'{"objects":{}}')
+            command = self.command()
+            self.assertEqual(command[command.index("--version") + 1], "26.2")
+
     def test_modified_client_bytes_fail_closed(self):
         self.client.write_bytes(b"tampered")
         with self.assertRaisesRegex(MissingCapability, "hash|size"):
@@ -100,6 +110,44 @@ class VanillaLauncherTest(unittest.TestCase):
         self.assertIn("JMatrix07", command)
         self.assertIn(str(self.game), command)
         self.assertIn("-Dsolaris.loader.cacheDir=" + str(self.game / "cache"), command)
+
+class ModdedLauncherTest(unittest.TestCase):
+    def test_exact_supported_version_and_platform(self):
+        for version, platform, neo, api in (
+            ("26.1.2", "fabric", "26.1.2.76", "0.155.2+26.1.2"),
+            ("26.1.2", "neoforge", "26.1.2.76", "0.155.2+26.1.2"),
+            ("26.2", "neoforge", "26.2.0.93", None),
+            ("26.3", "neoforge", "26.3.0.83", "0.163.0+26.3"),
+        ):
+            with self.subTest(version=version, platform=platform), mock.patch.dict(
+                "os.environ", {"SOLARIS_JAVA_VERSION": version, "SOLARIS_JAVA_PLATFORM": platform},
+                clear=True,
+            ):
+                args = launcher.modded_gradle_arguments(":fabric-agent:runClientMcp")
+                self.assertIn(f"-PminecraftVersion={version}", args)
+                self.assertIn(f"-PneoVersion={neo}", args)
+                self.assertEqual(args[-1], f":loader-{platform}:runClientMcp")
+                if api:
+                    self.assertIn(f"-PfabricApiVersion={api}", args)
+
+    def test_missing_unsupported_or_conflicting_endpoint_fails_closed(self):
+        for version, platform, task in (
+            ("26.2", "fabric", ":fabric-agent:runClientMcp"),
+            ("26.4", "neoforge", ":fabric-agent:runClientMcp"),
+            ("26.1.2", "", ":fabric-agent:runClientMcp"),
+            ("26.1.2", "fabric", ":loader-neoforge:runClientMcp"),
+        ):
+            with self.subTest(version=version, platform=platform), mock.patch.dict(
+                "os.environ", {"SOLARIS_JAVA_VERSION": version, "SOLARIS_JAVA_PLATFORM": platform},
+                clear=True,
+            ):
+                with self.assertRaises(MissingCapability):
+                    launcher.modded_gradle_arguments(task)
+
+    def test_unspecified_endpoint_preserves_existing_task(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(launcher.modded_gradle_arguments(":fabric-agent:runClientMcp"),
+                             [":fabric-agent:runClientMcp"])
 
 
 if __name__ == "__main__":
