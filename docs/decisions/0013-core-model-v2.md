@@ -110,10 +110,16 @@ lease and backup contract is in
 Backups retain database custody throughout the copy. The native redb backend
 and hot-backup reader share the exact lease-holding file handle (not a reopened
 path or duplicated Windows handle). Positioned reads have independent cursors;
-the native writer serializes the copy between committed jobs. Offline
-backup/restore likewise read through their database lease handle. No unlock/copy/
-relock interval is permitted. Windows directory durability uses the existing
-platform directory-sync helper, not an ordinary `File::open` on a directory.
+the native writer serializes the copy between committed jobs. The joined native
+writer owns the backup store; callers send only a destination and reply channel.
+A caller paused before admission must not retain a database owner past shutdown:
+both writer joins finish database destruction before the world lease is released.
+Offline backup/restore likewise read through their database lease handle. No
+unlock/copy/relock interval is permitted. Windows directory durability uses the
+existing platform directory-sync helper, not an ordinary `File::open` on a directory.
+Conversion syncs only its output staging files, opened with write access but
+without creation or truncation: Windows
+[FlushFileBuffers requires GENERIC_WRITE](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers).
 
 ## Plugin admission
 
