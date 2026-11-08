@@ -3906,3 +3906,25 @@ status = "open"
 source = "tools/coreperf/profiles.py pinned_binary unconditionally required the owner's absolute pin store. The relocated-pin regression failed before correction. Owner-host store and exact manifest path checks remain strict; other hosts verify the original manifest, binary name and SHA-256. Both host-boundary tests and a real release idle CLI lifecycle passed with the owner-host marker absent in a controlled local simulation, not on a second machine. Formal ledger promotion remains pending."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "NATIVE-NAV-WAYPOINT-CORNER-DEADZONE"
+title = "Native navigation skips required centering at an open door and exhausts replans despite a valid path"
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 bed route (166,75,-282) stayed outside an ordinarily opened door while every one of 24 replans found a path. The 0.22 waypoint tolerance skipped required centering, then the 0.12 movement deadzone suppressed the remaining alignment in the 13/16-block opening. The real-session regression failed before correction; the corrected client passed all 21 navigation tests and three windowed saved-world arrivals with the exact bed head visible. Native pin 75755212b117-3902797f and owned patch receipts/CivSimStallFix/native-nav-waypoint-centering.patch retain the evidence. Client integration, independent acceptance and formal ledger promotion remain pending; saved routes are not fresh civilization acceptance."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CIV-HOUSE-CAPTURE-CLOSED-ENTRANCE"
+title = "Civilization house milestone tries to reach an interior bed without opening its received entrance"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "The seed-24 fresh scenario built and received the new house and bed but its milestone capture navigated directly through a closed door, aborting the run. The wt/CivSim5 correction uses ordinary entrance approach/use, awaits both open halves, preserves the exact bed raycast and rendered capture, and returns to the observer. Three canonical saved-world closed/open flows passed, with the unprepared closed route and missing/stale entrance controls refusing capture; 72 affected contracts and doclinks passed. Source and commands are retained in receipts/CivSimStallFix/house-harness-capture.json. Full original fresh acceptance remains 0/3; integration and formal ledger promotion remain pending."
+regression = []
+failing_first = "reported"
