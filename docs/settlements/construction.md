@@ -22,6 +22,8 @@ The planner selects one active settlement every 20 ticks. It considers missing k
 
 An unfunded priority bill does not stop the search for funded buildings or upgrades. Its staffed extraction worker is protected from Builder recruitment for autonomous work, leaving another resident free to build; explicit owner projects retain their active-bill gathering rules. Optional street projects still wait for that priority bill.
 
+With `MC_CORE_PHASE_LOG` enabled, each planner cadence reports its current extraction demand, unmet bills and project, followed by resident activity, position, navigation and lumber progress. This distinguishes a blocked planner from an unfunded bill whose worker is still travelling.
+
 The street plan is fixed relative to the bell: roads are three blocks wide every 28 blocks on both axes, with a one-block verge, an open 9 × 9 plaza, and two back-to-back rows of lots up to 11 blocks deep. `/settlement layout` reports the plan, reachable and obstructed roads, paving, lamps, building access and next street work.
 
 - A frontage must be reachable from the plaza on loaded ground within eight blocks of the bell's elevation, with steps no higher than one block. A funded building may include natural-forest clearing on its lot and walking corridor; admission itself changes no blocks. Water, lava, steep terrain and unrelated obstructions still cut the network off.

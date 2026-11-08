@@ -2,11 +2,11 @@
 //! per work attempt, matching sapling replant and storage deposit.
 //!
 //! A bound [`VillagerProfession::Lumberjack`] with a certified `LumberCamp`
-//! scans its settlement radius a fixed number of columns per attempt, walks
-//! to the first mature tree (log column on valid soil with a wild
-//! `persistent=false` leaf crown outside every other certified building
-//! footprint), cuts the trunk bottom-up across ticks and replants the
-//! matching sapling. Protected bases and decorative crowns are rejected at
+//! searches outwards from its feet within the settlement radius, a fixed
+//! number of columns per attempt, and walks to a nearby mature tree (log column
+//! on valid soil with a wild `persistent=false` leaf crown outside every other
+//! certified building footprint), cuts the trunk bottom-up across ticks and
+//! replants the matching sapling. Protected bases and decorative crowns are rejected at
 //! search and rechecked before every cut. Target and cursor survive
 //! full-inventory and day-end deposit trips through the shared
 //! [`super::mining`] helpers.
@@ -21,7 +21,7 @@ use mc_data::ItemStack;
 const PERIOD: u64 = 20;
 /// Simulated tree columns scanned per work attempt; the cursor lives in [`Progress`].
 pub(super) const SEARCH_PER_TICK: u32 = 128;
-/// Inactive chunk strips skipped per work attempt, one lookup each.
+/// Inactive columns skipped per work attempt, one lookup each.
 const SKIP_PER_ATTEMPT: u32 = 1024;
 const REACH: f64 = 4.0;
 const MIN_TRUNK: u16 = 4;
@@ -35,6 +35,7 @@ pub struct Progress {
     pub building: u64,
     pub revision: u64,
     pub cursor: u32,
+    pub search_origin: Option<[i32; 2]>,
     pub base: [i32; 3],
     pub sapling: u32,
     pub height: u16,
@@ -52,6 +53,8 @@ struct StoredProgress {
     building: u64,
     revision: u64,
     cursor: u32,
+    #[serde(default)]
+    search_origin: Option<[i32; 2]>,
     #[serde(default)]
     #[allow(dead_code)]
     vertical: u32,
@@ -71,6 +74,7 @@ impl From<StoredProgress> for Progress {
             building: stored.building,
             revision: stored.revision,
             cursor: stored.cursor,
+            search_origin: stored.search_origin,
             base: stored.base,
             sapling: stored.sapling,
             height: stored.height,
@@ -207,12 +211,23 @@ fn columns_total(radius: u32) -> u32 {
     side.saturating_mul(side).max(1)
 }
 
-fn column_at(anchor: [i32; 3], radius: u32, index: u32) -> [i32; 2] {
-    let side = radius.saturating_mul(2).saturating_add(1).max(1);
-    let slot = index % columns_total(radius);
-    let dx = (slot / side) as i32 - radius as i32;
-    let dz = (slot % side) as i32 - radius as i32;
-    [anchor[0] + dx, anchor[2] + dz]
+/// Square rings visit nearby columns before crossing the settlement.
+fn column_at([x, z]: [i32; 2], index: u32) -> [i32; 2] {
+    if index == 0 {
+        return [x, z];
+    }
+    let ring = index.isqrt().div_ceil(2);
+    let edge = ring * 2;
+    let offset = index - (edge - 1).pow(2);
+    let r = ring as i32;
+    let n = (offset % edge) as i32;
+    let [dx, dz] = match offset / edge {
+        0 => [-r + n, -r],
+        1 => [r, -r + n],
+        2 => [r - n, r],
+        _ => [-r, r - n],
+    };
+    [x + dx, z + dz]
 }
 
 /// The first mature unprotected tree in one column of the settlement sphere.
@@ -263,34 +278,38 @@ fn scan_column(
     None
 }
 
-/// Scan at most [`SEARCH_PER_TICK`] simulated settlement columns from the
-/// persisted cursor, wrapping the radius square. Unloaded columns read as
-/// absent, never as trees, and columns outside the simulated area are never
-/// targets: a worker routed to a tree in a chunk that never ticks would freeze
-/// at its border with the target held. An inactive chunk strip is skipped in one
-/// step (bounded by [`SKIP_PER_ATTEMPT`]) so the sweep spends its budget only on
-/// columns that can actually be harvested.
+/// Scan a bounded number of active columns in rings around a saved search
+/// origin. Keep that origin while searching or skipping an inaccessible tree;
+/// restart at the worker's feet after a successful harvest. The outer ring
+/// covers the entire settlement even when the worker is away from its anchor.
 fn search(
     state: &TickState,
     anchor: [i32; 3],
     radius: u32,
     settlement: Option<crate::settlements::SettlementId>,
     wood: Option<&str>,
+    position: [i32; 2],
     progress: &mut Progress,
 ) -> Option<([i32; 3], u32, u16)> {
-    let total = columns_total(radius);
-    let side = radius.saturating_mul(2).saturating_add(1).max(1);
+    let origin = *progress.search_origin.get_or_insert_with(|| {
+        progress.cursor = 0;
+        position
+    });
+    let reach = radius.saturating_add(
+        origin[0]
+            .abs_diff(anchor[0])
+            .max(origin[1].abs_diff(anchor[2])),
+    );
+    let total = columns_total(reach);
     let (mut scanned, mut skipped) = (0, 0);
     while scanned < SEARCH_PER_TICK && skipped < SKIP_PER_ATTEMPT {
         let slot = progress.cursor % total;
-        let [x, z] = column_at(anchor, radius, slot);
+        let [x, z] = column_at(origin, slot);
+        progress.cursor = (slot + 1) % total;
         if !state.world.is_active(x.div_euclid(16), z.div_euclid(16)) {
-            let strip = (16 - z.rem_euclid(16)) as u32;
-            progress.cursor = (slot + strip.min(side - slot % side)) % total;
             skipped += 1;
             continue;
         }
-        progress.cursor = (slot + 1) % total;
         scanned += 1;
         if let Some(tree) = scan_column(
             state,
@@ -340,6 +359,8 @@ fn replant(state: &mut TickState, changes: &mut ChangeSet, v: &mut VillagerState
     let [x, y, z] = v.lumber_progress.base;
     let sapling = v.lumber_progress.sapling;
     drop_target(v);
+    v.lumber_progress.search_origin = None;
+    v.lumber_progress.cursor = 0;
     let empty = matches!(
         block_path(state, x, y, z),
         Some("air" | "cave_air" | "void_air")
@@ -372,15 +393,8 @@ pub(super) fn work(
     // Owned binding snapshot: the borrow of `state` ends before `v` mutates.
     let bound = buildings::building_for_job(state, v)
         .filter(|building| building.kind == buildings::BuildingKind::LumberCamp)
-        .map(|building| {
-            (
-                building.id.0,
-                building.revision,
-                building.natural_zone,
-                building.bounds.min,
-            )
-        });
-    let Some((id, revision, natural, source)) = bound else {
+        .map(|building| (building.id.0, building.revision));
+    let Some((id, revision)) = bound else {
         // Unbound or rebound away from the camp: never route to a stale tree.
         drop_target(v);
         return None;
@@ -391,18 +405,6 @@ pub(super) fn work(
             revision,
             ..Progress::default()
         };
-        if natural {
-            let record = state.settlements.get(v.settlement?)?;
-            // Start at the proved grove footprint, including a trunk west of
-            // its open work point, before advancing through the radius sweep.
-            let radius = i64::from(record.radius);
-            let side = radius * 2 + 1;
-            let x =
-                (i64::from(source[0]) - i64::from(record.anchor[0]) + radius).clamp(0, side - 1);
-            let z =
-                (i64::from(source[2]) - i64::from(record.anchor[2]) + radius).clamp(0, side - 1);
-            v.lumber_progress.cursor = (x * side + z) as u32;
-        }
     }
     v.lumber_progress.revision = revision;
     let working =
@@ -447,6 +449,10 @@ pub(super) fn work(
             radius,
             settlement,
             wood,
+            {
+                let [x, _, z] = state.entities.pos(slot);
+                [x.floor() as i32, z.floor() as i32]
+            },
             &mut v.lumber_progress,
         )?;
         v.lumber_progress.base = base;

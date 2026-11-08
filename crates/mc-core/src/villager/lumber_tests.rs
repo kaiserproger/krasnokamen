@@ -135,6 +135,43 @@ fn acquire(
     );
 }
 
+/// Seed 24: the radius sweep sent the worker 85 blocks away with a mature tree
+/// five blocks away, exhausting the workday on travel instead of funding a house.
+#[test]
+fn lumberjack_searches_near_worker_before_cross_village_sweep() {
+    let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
+    tree(&mut state, 1, 10, 5);
+    tree(&mut state, 10, 12, 5);
+    state.entities.set_pos(slot, [12.5, 201.0, 12.5]);
+    let mut changes = ChangeSet::default();
+    acquire(&mut state, slot, &mut v, &mut changes);
+    assert_eq!(v.lumber_progress.base, [10, 201, 12]);
+    assert!(
+        changes.blocks.is_empty(),
+        "selection must not harvest remotely"
+    );
+}
+
+#[test]
+fn lumberjack_restarts_nearby_search_after_harvest() {
+    let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
+    tree(&mut state, 10, 10, 5);
+    tree(&mut state, 8, 12, 5);
+    tree(&mut state, 11, 1, 5);
+    state.entities.set_pos(slot, [12.5, 201.0, 10.5]);
+    let mut changes = ChangeSet::default();
+    lumber::work(&mut state, slot, &mut v, &mut changes);
+    assert_eq!(v.lumber_progress.base, [10, 201, 10]);
+    for tick in 1..=5 {
+        state.tick = tick * 20;
+        lumber::work(&mut state, slot, &mut v, &mut changes);
+    }
+    assert!(!v.lumber_progress.has_target, "first trunk was harvested");
+    state.tick = 120;
+    lumber::work(&mut state, slot, &mut v, &mut changes);
+    assert_eq!(v.lumber_progress.base, [8, 201, 12]);
+}
+
 #[test]
 fn lumberjack_routes_then_cuts_full_trunk_and_replants_matching_sapling() {
     let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
@@ -275,19 +312,20 @@ fn lumberjack_drops_tree_target_when_radius_shrinks_or_camp_unbinds() {
 fn lumberjack_scan_is_bounded_per_attempt_and_wraps_radius() {
     let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
     let mut changes = ChangeSet::default();
-    // Fixture radius 16 spans 33x33 columns; only chunk (0, 0) simulates, so
-    // one attempt walks past the unsimulated strips and reads at most
-    // SEARCH_PER_TICK columns.
+    // A saved worker-centred sweep covers the settlement even from its edge.
+    // Only chunk (0, 0) simulates; inactive columns consume the skip budget.
+    let radius = state.settlements.get(v.settlement.unwrap()).unwrap().radius;
+    let total = ((radius + 5) * 2 + 1).pow(2);
     state.tick = 0;
     assert_eq!(lumber::work(&mut state, slot, &mut v, &mut changes), None);
     let first = v.lumber_progress.cursor;
-    assert!(first > 0 && first < 33 * 33);
+    assert!(first > 0 && first < total);
     assert!(changes.blocks.is_empty());
     // The cursor wraps the square without leaving it.
-    v.lumber_progress.cursor = 33 * 33 - 10;
+    v.lumber_progress.cursor = total - 10;
     state.tick = 60;
     assert_eq!(lumber::work(&mut state, slot, &mut v, &mut changes), None);
-    assert!(v.lumber_progress.cursor < 33 * 33);
+    assert!(v.lumber_progress.cursor < total);
     assert!(changes.blocks.is_empty());
 }
 

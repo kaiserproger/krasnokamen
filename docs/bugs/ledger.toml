@@ -3822,3 +3822,17 @@ status = "open"
 source = "Native gait scene retained summon and effect success messages after send_command_feedback false"
 regression = ["cargo:mc-core:command_execution::tests::gamerule_suppresses_player_scene_success_but_not_failure_or_console", "cargo:mc-core:dimensions::tests::dimensional_teleport_success_obeys_player_feedback_rule"]
 failing_first = "reported"
+
+[[bug]]
+id = "CIV-SEED24-CROSS-VILLAGE-TREE-SWEEP"
+title = "Lumberjack radius sweep wastes the workday walking past nearby trees, starving house funding and births."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa 20261107T213213: no house or birth. Checkpoint tick 32405 has 62 carried logs, target [153,76,-260] 85 blocks away, and an eligible tree at [148,75,-172] only 5.5 blocks away. Planner trace 32420-33200 remains unfunded; the 158-node path consumes the remaining shift before a single cut."
+failing_first = "reported"
+regression = [
+  "cargo:mc-core:villager::lumber_tests::lumberjack_searches_near_worker_before_cross_village_sweep",
+  "cargo:mc-core:villager::lumber_tests::lumberjack_restarts_nearby_search_after_harvest",
+]

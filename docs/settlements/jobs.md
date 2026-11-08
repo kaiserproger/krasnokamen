@@ -59,7 +59,7 @@ Builder workshops, mines and lumber camps can use a crafting table or barrel; mi
 ## Lumberjacks
 
 - Certified lumber camps assign lumberjacks. With `mob_griefing` enabled during work hours, they search simulated columns within the settlement radius for mature log trunks with natural, nonpersistent leaves, cut them and replant the matching sapling (a propagule for mangroves) if the soil and space remain suitable.
-- The saved search cursor advances and wraps; a natural camp starts its sweep at its certified grove footprint. A search attempt examines at most **128 simulated columns**. Trees in inactive chunks are not targets.
+- The saved search origin and cursor visit square rings outward from the worker, restarting nearby after each harvested trunk instead of zigzagging across the village. Failed approaches keep their search progress. A search attempt examines at most **128 simulated columns** and skips at most **1,024 inactive columns**; inactive chunks are never targets.
 - An unreachable tree is released after a completed failed approach, or after **2,400 working ticks** outside cutting reach, and the sweep continues. Arrival, deposit and off-shift time reset that work window.
 - Certified structures protect their footprints; only the worker's own natural lumber-camp zone permits cutting within its bounds. The crown and protections are checked again before each cut.
 - Lumberjacks return when one stack reaches 64 or the mixed load totals 64, at day end, when another log cannot fit, or when their delivery closes a construction candidate's funding gap. An already-funded candidate does not trigger a trip after each log. Full or unreachable storage retains the carry.
