@@ -1,8 +1,9 @@
 # Worktrees, patches and integration
 
 [AGENTS.md](../../AGENTS.md) "Git, local state and sibling repositories" sets
-the rules: worktrees under `<work>/wt/`, absolute paths, no commits without
-authorization, preserve the owner's dirty files. This page is the procedure.
+the rules: worktrees under `<work>/wt/`, Main's standing commit/push
+authorization does not extend to workers, and the owner's dirty files stay intact.
+This page is the procedure.
 
 ## Creating a worktree
 
@@ -114,7 +115,9 @@ no-commit slice:
    `git diff` and untracked files under `<work>/backups/`, find the overlap
    between dirty files and the branch's changed files, set aside only the
    overlapping files, `git merge --ff-only <branch>`, restore them, check for
-   conflict markers. Do not push without explicit permission.
+   conflict markers. Main's standing commit/push authorization comes from
+   `AGENTS.md`; workers do not commit or push. Tags and releases still need
+   explicit owner authorization.
 
 ## Freezing one acceptance identity
 
