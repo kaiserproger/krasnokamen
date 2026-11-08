@@ -268,6 +268,9 @@ recorded in `result.json`; settings and world are isolated per run.
 start and hold captures, releases it even on failure, and requires the client's
 `using` state to transition idle → active → active → idle.
 
+`resize` (native only) takes `name` and `size` in pixels, resizes the owned Xvfb
+window, and captures a frame whose dimensions must match the requested size.
+
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains
   its same-client-thread `game_time` and entity positions. Missing timestamps fail.
 - `mob_motion` reads three named `timed_entities` receipts and records horizontal

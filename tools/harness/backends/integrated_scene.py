@@ -50,7 +50,7 @@ def run(ctx: ProfileContext, scenario: dict[str, Any]) -> dict[str, Any]:
         if window is None:
             raise RuntimeError("vanilla Java opened no window on the harness Xvfb")
         owned = {"display": display, "window_id": window}
-        scene_shot.resize_java_window(owned)
+        scene_shot.resize_window(owned, scene_shot.WINDOW)
         mcp.p4_window = owned
         ctx.client_evidence["window_focus"] = owned
         ctx.client_evidence["oracle"] = "vanilla Java integrated singleplayer"

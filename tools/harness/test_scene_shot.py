@@ -145,6 +145,25 @@ class SceneShotTests(unittest.TestCase):
             self.assertEqual(failed.calls[-1],
                              ("minecraft_press_inputs", {"keys": ["use"], "ticks": 1, "hold": False}))
 
+    def test_resize_requires_owned_window_and_matching_frame_size(self):
+        class Probe:
+            def __init__(self):
+                self.client = type("Client", (), {"p4_window": {"display": ":99", "window_id": 1}})()
+            def call(self, name, args):
+                assert (name, args) == ("minecraft_wait_ticks", {"ticks": 5})
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+        step = {"resize": {"name": "small", "size": [960, 540]}}
+        with patch.object(scene_shot, "resize_window") as resize, \
+                patch.object(scene_shot, "capture_native", return_value="frame.png"), \
+                patch.object(scene_shot, "png_size", return_value=(1280, 720)):
+            with self.assertRaisesRegex(AssertionError, "small_dimensions"):
+                scene_shot.execute(Probe(), Path("/tmp"), [step])
+            resize.assert_called_once_with({"display": ":99", "window_id": 1}, (960, 540))
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([{"resize": {"name": "bad", "size": [0, 540]}}], "native")
+
     def test_look_is_validated_and_dispatched_to_real_client(self):
         step = {"look": {"yaw_deg": 45, "pitch_deg": -60}}
         self.assertEqual(list(scene_shot.scene_mcp_calls([step])),

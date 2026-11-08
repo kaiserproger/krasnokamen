@@ -140,8 +140,8 @@ def find_java_window(display: str) -> int | None:
     return max(windows)[1] if windows else None
 
 
-def resize_java_window(owned: dict[str, Any]) -> None:
-    """OpenGL Java clients (26.1.x Loader) launch at 854x480 despite options.txt; match the native window."""
+def resize_window(owned: dict[str, Any], size: tuple[int, int]) -> None:
+    """Resize only the window owned by this harness Xvfb."""
     x = ctypes.CDLL(ctypes.util.find_library("X11"))
     x.XOpenDisplay.restype = ctypes.c_void_p
     x.XOpenDisplay.argtypes = [ctypes.c_char_p]
@@ -150,9 +150,9 @@ def resize_java_window(owned: dict[str, Any]) -> None:
     x.XCloseDisplay.argtypes = [ctypes.c_void_p]
     connection = x.XOpenDisplay(owned["display"].encode())
     if not connection:
-        raise RuntimeError("cannot open the Java scenario's private Xvfb")
+        raise RuntimeError("cannot open the scenario's private Xvfb")
     try:
-        x.XResizeWindow(connection, owned["window_id"], *WINDOW)
+        x.XResizeWindow(connection, owned["window_id"], *size)
         x.XSync(connection, 0)
     finally:
         x.XCloseDisplay(connection)
@@ -220,6 +220,8 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
         elif kind == "use_phases":
             yield "minecraft_press_inputs", {"keys": ["use"], "ticks": 1, "hold": True}
             yield "minecraft_wait_ticks", {"ticks": value["ticks"]}
+        elif kind == "resize":
+            yield "minecraft_wait_ticks", {"ticks": 5}
         elif kind == "cmd":
             yield "minecraft_send_chat", {"message": value, "command": True}
         elif kind == "tp":
@@ -267,6 +269,15 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and isinstance(value["name"], str)
                      and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
                      and type(value["ticks"]) is int and 1 <= value["ticks"] <= 100)
+        elif kind == "resize":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"name", "size"}
+                     and isinstance(value["name"], str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and isinstance(value["size"], list) and len(value["size"]) == 2
+                     and all(type(n) is int for n in value["size"])
+                     and 320 <= value["size"][0] <= 1280
+                     and 240 <= value["size"][1] <= 720)
         elif kind == "mob_motion":
             valid = (isinstance(value, dict) and set(value) == {"samples", "name"}
                      and isinstance(value["name"], str) and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
@@ -346,6 +357,16 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             probe.check(f"{name}_released", released.get("using") is None)
             (artifact / f"{name}-release.json").write_text(json.dumps(released, indent=2) + "\n")
             shots.append(capture(probe, artifact, f"{name}-release"))
+        elif kind == "resize":
+            owned = getattr(probe.client, "p4_window", None)
+            if not owned:
+                raise RuntimeError("resize requires a harness-owned window")
+            size = tuple(value["size"])
+            resize_window(owned, size)
+            probe.call("minecraft_wait_ticks", {"ticks": 5})
+            path = capture(probe, artifact, value["name"])
+            probe.check(f"{value['name']}_dimensions", png_size(path) == size)
+            shots.append(path)
         elif kind == "goat_horns_upright":
             from . import goat_horn_oracle
 
@@ -639,11 +660,11 @@ def run(
                 if window_id is None:
                     raise RuntimeError(f"Java client opened no window on the harness Xvfb {display}; refusing to run")
                 ctx.client_evidence["window_focus"] = mcp.p4_window = {"display": display, "window_id": window_id}
-                resize_java_window(mcp.p4_window)
+                resize_window(mcp.p4_window, WINDOW)
                 probe.call("minecraft_wait_ticks", {"ticks": 10})
             else:
                 from . import native_focus
-                ctx.client_evidence["window_focus"] = native_focus.acquire(display, client.pid, probe.remaining())
+                ctx.client_evidence["window_focus"] = mcp.p4_window = native_focus.acquire(display, client.pid, probe.remaining())
             before = probe.observe()
             probe.call("minecraft_wait_for_state_change", {
                 "observed_version": before["state_version"], "timeout_seconds": probe.remaining(),
