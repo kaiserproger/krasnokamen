@@ -947,7 +947,11 @@ fn check_version(tag: &Tag, path: &Path) -> Result<(), CoreError> {
 }
 fn sync_tree(root: &Path) -> Result<(), CoreError> {
     for path in files(root)? {
-        File::open(root.join(path))
+        // Only the conversion's output staging is synced here. Windows
+        // FlushFileBuffers requires GENERIC_WRITE; never create or truncate.
+        OpenOptions::new()
+            .write(true)
+            .open(root.join(path))
             .map_err(fail)?
             .sync_all()
             .map_err(fail)?;
