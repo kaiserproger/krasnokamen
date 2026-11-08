@@ -195,6 +195,13 @@ not authoritative inventory/world identity. New-only attributes, statistics or
 block entities with no representation are filtered explicitly; unknown shapes
 fail closed rather than dropping an inventory/world update. This is not a
 claim that all arbitrary components or every vanilla mechanic are supported.
+Each adjacent step explicitly maps particle types absent from its target
+registry to the nearest available presentation. Preserve options when the
+target layout supports them; otherwise consume the source options and discard
+only those the stand-in cannot express. Any deliberate omission needs an
+explicit documented reason; an unknown id or unmapped type fails closed.
+Item particle options use the non-optional item-template codec, not an inventory
+slot's count-first codec. Unsupported vibration and trail options fail closed.
 
 Missing packet ids are not an omission policy: only `add_transient_block` and
 `post_effects` may be skipped for an older peer. Other missing target packets

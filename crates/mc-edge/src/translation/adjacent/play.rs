@@ -47,8 +47,12 @@ fn translate_clientbound<'a>(
     match name.strip_prefix("minecraft:").unwrap_or(name) {
         // 26.3-only packets.
         "add_transient_block" | "post_effects" => return Ok(None),
-        // Play-state tags carry canonical ids; the Configuration tags stand.
-        "update_tags" => return Ok(None),
+        // Configuration provides the initial tags; runtime updates need a codec.
+        "update_tags" => bail!(
+            "unsupported Play update_tags for {} -> {}",
+            t.formats.upper,
+            t.formats.lower
+        ),
         "login" => login(t, &mut r, &mut w)?,
         "respawn" => {
             spawn_info(t, &mut r, &mut w)?;
@@ -922,18 +926,52 @@ fn sound_holder(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
     Ok(())
 }
 
-/// `ParticleOptions`: type id then its payload. `Ok(false)` when 26.1.2 has
-/// no such particle (the packet is dropped).
+// Registry deltas: 26.3/26.2 and 26.2/26.1.2 reports. Stand-ins have no
+// options; geyser water depth and burst impulse cannot be represented there.
+const PARTICLE_POLYFILLS: &[(i32, i32, &str, &str)] = &[
+    (777, 776, "red_poplar_leaves", "cherry_leaves"),
+    (777, 776, "orange_poplar_leaves", "cherry_leaves"),
+    (777, 776, "yellow_poplar_leaves", "pale_oak_leaves"),
+    (776, 775, "sulfur_bubbles", "bubble"),
+    (776, 775, "noxious_gas", "smoke"),
+    (776, 775, "noxious_gas_cloud", "cloud"),
+    (776, 775, "geyser", "splash"),
+    (776, 775, "geyser_base", "splash"),
+    (776, 775, "geyser_poof", "poof"),
+    (776, 775, "geyser_plume", "splash"),
+    (776, 775, "sulfur_cube_goo", "item_slime"),
+];
+
+/// `ParticleOptions`: type id then its payload.
 fn particle_options(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<bool> {
     let kind = r.read_varint()?;
     let name = t
         .particle_names
         .get(kind as usize)
+        .filter(|name| !name.is_empty())
         .context("unknown particle type")?
         .as_str();
-    let legacy = t.particles.get(kind);
+    let bare_name = name.strip_prefix("minecraft:").unwrap_or(name);
+    let exact = t.particles.get(kind);
+    let legacy = match exact {
+        Some(id) => id,
+        None => {
+            let (_, _, _, target) = PARTICLE_POLYFILLS
+                .iter()
+                .find(|(upper, lower, source, _)| {
+                    (*upper, *lower) == (t.formats.upper, t.formats.lower)
+                        && *source == bare_name
+                })
+                .with_context(|| format!("no particle mapping for {name} in {} -> {}", t.formats.upper, t.formats.lower))?;
+            let source_id = t.particle_names.iter().position(|candidate| {
+                candidate.strip_prefix("minecraft:").unwrap_or(candidate) == *target
+            }).with_context(|| format!("particle stand-in {target} missing from source registry"))?;
+            t.particles.get(source_id as i32)
+                .with_context(|| format!("particle stand-in {target} missing from target registry"))?
+        }
+    };
     let mut payload = Vec::new();
-    match name.strip_prefix("minecraft:").unwrap_or(name) {
+    match bare_name {
         "block" | "block_marker" | "falling_dust" | "dust_pillar" | "block_crumble" => {
             payload.write_varint(state(t, r.read_varint()?)?);
         }
@@ -946,18 +984,30 @@ fn particle_options(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<bool> 
             payload.write_i32(r.read_i32()?);
             payload.write_f32(r.read_f32()?);
         }
+        // 26.2 javap: GeyserParticleOptions uses INT; GeyserBase adds FLOAT.
+        "geyser" | "geyser_plume" => {
+            let water_blocks = r.read_i32()?;
+            if exact.is_some() {
+                payload.write_i32(water_blocks);
+            }
+        }
+        "geyser_base" | "geyser_poof" => {
+            let water_blocks = r.read_i32()?;
+            let impulse = r.read_f32()?;
+            if exact.is_some() {
+                payload.write_i32(water_blocks);
+                payload.write_f32(impulse);
+            }
+        }
         "entity_effect" | "tinted_leaves" | "flash" => payload.write_i32(r.read_i32()?),
         "sculk_charge" => payload.write_f32(r.read_f32()?),
         "shriek" => payload.write_varint(r.read_varint()?),
-        "item" => items::stack(t, To::Legacy, r, &mut payload)?,
+        "item" => items::template(t, To::Legacy, r, &mut payload)?,
         "vibration" | "trail" | "dragon_breath" | "effect" | "instant_effect" => {
             return items::unsupported("particle payload");
         }
         _ => {}
     }
-    let Some(legacy) = legacy else {
-        return Ok(false);
-    };
     w.write_varint(legacy);
     w.extend_from_slice(&payload);
     Ok(true)

@@ -274,3 +274,7 @@ fn run(state: &mut TickState, context: Context, input: &str) -> Result<i32, Stri
     }
     Ok(sent)
 }
+
+#[cfg(test)]
+#[path = "command_particle_tests.rs"]
+mod tests;
