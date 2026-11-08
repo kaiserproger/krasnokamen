@@ -117,10 +117,10 @@ class LatencyProxy:
         async def close_write():
             if not self.downstreams:
                 raise RuntimeError("EOF requires a connected client")
-            writer = self.downstreams[-1]
-            self.eof_writers.add(writer)
-            writer.write_eof()
-            await writer.drain()
+            for writer in tuple(self.downstreams):
+                self.eof_writers.add(writer)
+                writer.write_eof()
+                await writer.drain()
         asyncio.run_coroutine_threadsafe(close_write(), self.loop).result(timeout=8)
 
     def close(self):
@@ -266,7 +266,7 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
         if not isinstance(step, dict) or len(step) != 1:
             raise ValueError(f"invalid scene step: {step!r}")
         kind, value = next(iter(step.items()))
-        if kind in ("shot", "observe", "goat_horns_upright"):
+        if kind in ("shot", "observe", "goat_horns_upright", "goat_side_horn"):
             valid = isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value)
         elif kind == "cmd":
             valid = isinstance(value, str) and bool(value) and not value.startswith("/")
@@ -479,6 +479,12 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             ear_coverage = goat_horn_oracle.ear_lower_coverage(artifact / "screenshots" / f"{value}.png")
             probe.report["goat_ear_lower_coverage"] = ear_coverage
             probe.check("goat_ear_full_height", ear_coverage >= 25)
+        elif kind == "goat_side_horn":
+            from . import goat_horn_oracle
+
+            edges = goat_horn_oracle.side_horn_left_edges(artifact / "screenshots" / f"{value}.png")
+            probe.report["goat_side_horn_left_edges"] = edges
+            probe.check("goat_side_horn_aligned", goat_horn_oracle.side_horn_aligned(edges))
         elif kind == "cmd":
             wait_play(probe)
             probe.call("minecraft_send_chat", {"message": value, "command": True})

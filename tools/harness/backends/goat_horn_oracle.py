@@ -25,6 +25,26 @@ def upright(edges: list[int]) -> bool:
     # A one-pixel tolerance admits rasterization but rejects the previous lean.
     return max(edges) - min(edges) <= 1
 
+def side_horn_left_edges(image: Path) -> list[int]:
+    from PIL import Image
+
+    with Image.open(image) as source:
+        frame = source.convert("RGB")
+        if frame.size != (1280, 720):
+            raise ValueError("goat oracle requires the matched 1280x720 frame")
+        edges = []
+        for y in (360, 365, 370, 375):
+            dark = [x for x in range(690, 740) if max(frame.getpixel((x, y))) < 180]
+            if len(dark) < 4:
+                raise ValueError(f"side goat horn silhouette missing at y={y}")
+            edges.append(dark[0])
+        return edges
+
+
+def side_horn_aligned(edges: list[int]) -> bool:
+    # Matched Java side frame: left edge x=701, one-pixel raster tolerance.
+    return all(700 <= x <= 702 for x in edges)
+
 
 def body_left_edges(image: Path) -> list[int]:
     from PIL import Image

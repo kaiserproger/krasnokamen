@@ -30,6 +30,18 @@ class GoatHornOracleTests(unittest.TestCase):
         self.assertTrue(goat_horn_oracle.body_aligned([447, 447, 447, 447]))
         self.assertFalse(goat_horn_oracle.body_aligned([443, 443, 443, 443]))
 
+    def test_side_horn_alignment_rejects_observed_offset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "side.png"
+            image = Image.new("RGB", (1280, 720), (190, 220, 255))
+            for y in range(360, 376):
+                for x in range(701, 723):
+                    image.putpixel((x, y), (50, 50, 50))
+            image.save(path)
+            edges = goat_horn_oracle.side_horn_left_edges(path)
+            self.assertTrue(goat_horn_oracle.side_horn_aligned(edges))
+            self.assertFalse(goat_horn_oracle.side_horn_aligned([edge + 8 for edge in edges]))
+
     def test_ear_coverage_distinguishes_grey_ear_from_grass(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "ear.png"

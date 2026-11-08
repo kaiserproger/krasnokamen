@@ -91,6 +91,39 @@ class SceneShotTests(unittest.TestCase):
             proxy.close()
             thread.join()
 
+    def test_proxy_eof_closes_every_isolated_connection(self):
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        def echo(connection):
+            with connection:
+                connection.sendall(connection.recv(32))
+                connection.recv(32)
+        def serve():
+            with listener:
+                workers = [threading.Thread(target=echo, args=(listener.accept()[0],)) for _ in range(2)]
+                for worker in workers:
+                    worker.start()
+                for worker in workers:
+                    worker.join()
+        thread = threading.Thread(target=serve)
+        thread.start()
+        proxy = scene_shot.LatencyProxy(listener.getsockname()[1], 0)
+        try:
+            port = proxy.start()
+            with socket.create_connection(("127.0.0.1", port), timeout=5) as first, \
+                    socket.create_connection(("127.0.0.1", port), timeout=5) as second:
+                for client in (first, second):
+                    client.sendall(b"ping")
+                for client in (first, second):
+                    self.assertEqual(client.recv(4), b"ping")
+                proxy.send_eof()
+                for client in (first, second):
+                    self.assertEqual(client.recv(1), b"")
+        finally:
+            proxy.close()
+            thread.join()
+
     def test_walk_phase_rejects_idle_missing_and_wrong_phase(self):
         spec = {"name": "walk", "entity_type": "minecraft:zombie", "phase": 0.0,
                 "tolerance": 0.25, "min_speed": 0.1, "max_ticks": 30}
