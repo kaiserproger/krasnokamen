@@ -133,13 +133,22 @@ class RandomMatrixTests(unittest.TestCase):
 
     def test_fixture_commands_follow_received_chunk_loading(self):
         events = []
+        snapshots = iter([{'entities': [{'type': 'minecraft:item'}]},
+                          {'entities': []}])
+        def wait(predicate, **kwargs):
+            self.assertFalse(predicate())
+            self.assertTrue(predicate())
+            events.append('empty_ground')
         actor = SimpleNamespace(teleport_to=lambda *args: events.append('teleport'),
-                                ensure_loaded=lambda *args: None)
+                                ensure_loaded=lambda *args: None,
+                                snapshot=lambda: next(snapshots), wait_until=wait)
         server = SimpleNamespace(ensure_loaded=lambda *args: events.append('loaded'),
                                  command=lambda text: events.append(text))
         setup(SimpleNamespace(clients=[actor, actor], server=server, state={}))
         self.assertLess(events.index('loaded'), events.index('fill 28 79 28 40 79 40 stone'))
         self.assertIn('gamerule spawn_mobs false', events)
+        self.assertLess(events.index('setblock 34 80 32 chest'), events.index('kill @e[type=item]'))
+        self.assertLess(events.index('kill @e[type=item]'), events.index('empty_ground'))
 
     def observation(self):
         authority = {'inventories': [{'minecraft:dirt': 4}], 'container': {}, 'blocks': {}}

@@ -100,7 +100,8 @@ Adapter guidance: [matrix domains](../tools/harness/matrix_domains/README.md),
 [platform coverage](../tools/harness/matrix_domains/platform.md).
 
 The true-vanilla Java lane requires Loader's vanilla premain event transformer
-and a direct, non-symlink `SOLARIS_LEGACY_CONTENT_CACHE` for protocol 775.
+and the server's protocol 775 endpoint and adjacent-step content caches beside
+the canonical vanilla data directory.
 The real-client `block_place.full_block` fixture returns players to its raised
 platform after construction; the Java client can otherwise fall before its
 placement actions begin. The eye-height observation comes from Loader's Java
@@ -110,6 +111,9 @@ its generated actions include conflicting quick-move clicks on the same chest
 slot. The isolated server's opt-in input log records each consumed input and
 tick; a missing or gapped log fails closed. Network scheduling is not
 deterministic merely because the action seed is fixed.
+Before actions, the isolated fixture removes pre-existing dropped items and
+waits until the observer sees no ground stock, so natural terrain drops are not
+mistaken for scenario-created resources.
 
 Inventory comparisons use each owning client's received inventory, not an
 independent observer of other players' private inventories. Do not infer replay

@@ -218,6 +218,17 @@ def setup(ctx):
                     'fill 28 79 28 40 79 40 stone', 'fill 28 80 28 40 85 40 air',
                     'setblock 34 80 32 chest'):
         ctx.server.command(command)
+    # Natural terrain can already have dropped items (for example kelp).
+    # Remove only pre-scenario stock, then fence the observer before actions.
+    ctx.server.command('kill @e[type=item]')
+    observer = ctx.clients[-1]
+    def no_ground_items():
+        snapshot = observer.snapshot()
+        if 'entities' not in snapshot:
+            raise MissingCapability('random:received_item_entities')
+        return not any(entity.get('type') == 'minecraft:item' or 'item' in entity
+                       for entity in snapshot['entities'])
+    observer.wait_until(no_ground_items, description='received empty initial ground stock')
 
 
 def _click(actor, slot, **kwargs):
