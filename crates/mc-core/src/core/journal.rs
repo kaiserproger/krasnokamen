@@ -625,8 +625,10 @@ pub(super) enum NativeWork {
 /// ([`native_writer_loop`]) so a later tick's `Append` is never parked behind
 /// it. The function returns only after that thread has drained, so a shutdown
 /// still completes the final checkpoint.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn journal_loop(
     world_dir: &std::path::Path,
+    store: Arc<mc_world::native::NativeStore>,
     work_rx: std::sync::mpsc::Receiver<JournalWork>,
     mut writer: JournalWriter,
     generated_busy: &std::sync::atomic::AtomicBool,
@@ -658,6 +660,7 @@ pub(super) fn journal_loop(
             .spawn_scoped(scope, || {
                 native_writer_loop(
                     world_dir,
+                    store,
                     native_rx,
                     generated_busy,
                     &committed_tick,
@@ -790,6 +793,7 @@ pub(super) fn journal_loop(
 /// `native_failed` makes the journal side halt, and this thread stops.
 pub(super) fn native_writer_loop(
     world_dir: &std::path::Path,
+    store: Arc<mc_world::native::NativeStore>,
     work_rx: std::sync::mpsc::Receiver<NativeWork>,
     generated_busy: &std::sync::atomic::AtomicBool,
     committed_tick: &std::sync::atomic::AtomicU64,
@@ -808,6 +812,7 @@ pub(super) fn native_writer_loop(
             run_native_work(
                 work,
                 world_dir,
+                &store,
                 generated_busy,
                 committed_tick,
                 &mut prev_manifest,
@@ -845,6 +850,7 @@ pub(super) fn native_writer_loop(
 pub(super) fn run_native_work(
     work: NativeWork,
     world_dir: &std::path::Path,
+    store: &mc_world::native::NativeStore,
     generated_busy: &std::sync::atomic::AtomicBool,
     committed_tick: &std::sync::atomic::AtomicU64,
     prev_manifest: &mut CheckpointManifest,
@@ -936,7 +942,7 @@ pub(super) fn run_native_work(
             let result = crate::hot_backup::copy_world(
                 world_dir,
                 &job.out,
-                &mut job.store.snapshot_reader(),
+                &mut store.snapshot_reader(),
                 prev_manifest.tick,
                 through,
             );

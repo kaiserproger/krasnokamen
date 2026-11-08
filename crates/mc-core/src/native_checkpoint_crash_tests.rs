@@ -163,6 +163,7 @@ fn durable_checkpoint_prunes_covered_batches_and_crash_replays_only_tail() {
                 plugins: Ok(Box::new(state.plugins.clone())),
             },
             directory.path(),
+            &crate::native_checkpoint::tests::fixture_store(&config).unwrap(),
             &std::sync::atomic::AtomicBool::new(false),
             &std::sync::atomic::AtomicU64::new(manifest.tick),
             &mut manifest,
@@ -338,9 +339,11 @@ async fn queued_save_requests_keep_one_capture_in_flight_and_both_receive_durabl
     // production channel applies real backpressure while draining.
     let (journal_tx, journal_rx) = crate::core::journal_work_channel();
     let root = config.world_dir.clone();
+    let journal_store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
     let journal = std::thread::spawn(move || {
         journal_loop(
             &root,
+            journal_store,
             journal_rx,
             JournalWriter::open(&root, 1).unwrap(),
             &journal_busy,
@@ -441,9 +444,11 @@ fn plugin_checkpoint_serialization_uses_fifo_mirror_not_later_tick_state() {
     // this thread sends, and FIFO order is preserved end to end.
     let (journal_tx, journal_rx) = crate::core::journal_work_channel();
     let root = config.world_dir.clone();
+    let journal_store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
     let journal = std::thread::spawn(move || {
         journal_loop(
             &root,
+            journal_store,
             journal_rx,
             JournalWriter::open(&root, 1).unwrap(),
             &std::sync::atomic::AtomicBool::new(false),
@@ -515,9 +520,11 @@ fn slow_native_commit_does_not_block_wal_appends() {
     *crate::core::DELAY_CHECKPOINT_COMMIT.lock() = Some((config.world_dir.clone(), delay));
     let (journal_tx, journal_rx) = crate::core::journal_work_channel();
     let root = config.world_dir.clone();
+    let journal_store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
     let journal = std::thread::spawn(move || {
         journal_loop(
             &root,
+            journal_store,
             journal_rx,
             JournalWriter::open(&root, 1).unwrap(),
             &std::sync::atomic::AtomicBool::new(false),
@@ -595,9 +602,11 @@ fn live_journal_with_checkpoint(config: &CoreConfig) -> LiveJournal {
     let queued: Vec<_> = capture_rx.try_iter().collect();
     let (tx, journal_rx) = crate::core::journal_work_channel();
     let root = config.world_dir.clone();
+    let journal_store = crate::native_checkpoint::tests::fixture_store(config).unwrap();
     let journal = std::thread::spawn(move || {
         journal_loop(
             &root,
+            journal_store,
             journal_rx,
             JournalWriter::open(&root, 1).unwrap(),
             &std::sync::atomic::AtomicBool::new(false),

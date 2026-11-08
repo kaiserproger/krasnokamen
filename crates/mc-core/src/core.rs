@@ -223,7 +223,6 @@ enum JournalWork {
 /// One hot backup request; the answer arrives once the native writer has copied.
 struct BackupJob {
     out: PathBuf,
-    store: Arc<mc_world::native::NativeStore>,
     reply: std::sync::mpsc::Sender<Result<crate::hot_backup::HotBackup, CoreError>>,
 }
 /// Bounded journal work queue: 128 queued batches (6.4 s of ticks) behind the
@@ -322,7 +321,13 @@ struct CoreInner {
     moderation_selector_tx: Sender<moderation_selector::Request>,
     checkpoint_tx: std::sync::mpsc::Sender<std::sync::mpsc::Sender<bool>>,
     backup_tx: std::sync::mpsc::Sender<BackupJob>,
-    backup_store: std::sync::Weak<mc_world::native::NativeStore>,
+    #[cfg(test)]
+    backup_admission_pause: std::sync::Mutex<
+        Option<(
+            std::sync::mpsc::SyncSender<()>,
+            std::sync::mpsc::Receiver<()>,
+        )>,
+    >,
     input_dropped: AtomicU64,
     /// Weak: only the tick thread owns the `Sender`, so its exit (halt or
     /// shutdown) closes every subscriber instead of leaving them waiting.
@@ -788,11 +793,13 @@ impl Core {
         // Seed the serialization mirror before the tick thread starts. Thereafter
         // only successfully appended post-images mutate it, in the work FIFO.
         let journal_plugins = tick_state.plugins.clone();
+        let journal_store = Arc::clone(&store);
         let journal_handle = std::thread::Builder::new()
             .name("mc-core-journal".to_owned())
             .spawn(move || {
                 journal_loop(
                     &journal_world_dir,
+                    journal_store,
                     work_rx,
                     journal_writer,
                     &journal_busy,
@@ -868,7 +875,8 @@ impl Core {
                 moderation_selector_tx,
                 checkpoint_tx,
                 backup_tx,
-                backup_store: Arc::downgrade(&store),
+                #[cfg(test)]
+                backup_admission_pause: std::sync::Mutex::new(None),
                 input_dropped: AtomicU64::new(0),
                 tick_tx: tick_tx.downgrade(),
                 timing_tx: timing_tx.downgrade(),
@@ -1210,13 +1218,19 @@ impl Core {
         let (reply, result) = std::sync::mpsc::channel();
         let job = BackupJob {
             out: out.to_path_buf(),
-            store: self
-                .inner
-                .backup_store
-                .upgrade()
-                .ok_or_else(|| CoreError::Storage("hot backup: native store stopped".into()))?,
             reply,
         };
+        #[cfg(test)]
+        if let Some((entered, resume)) = self
+            .inner
+            .backup_admission_pause
+            .lock()
+            .expect("backup admission pause")
+            .as_ref()
+        {
+            entered.send(()).expect("backup admission observer");
+            resume.recv().expect("resume backup admission");
+        }
         if self.inner.backup_tx.send(job).is_err() {
             return Err(CoreError::Storage("hot backup: the core stopped".into()));
         }

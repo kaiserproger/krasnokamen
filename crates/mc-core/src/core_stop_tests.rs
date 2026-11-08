@@ -27,6 +27,10 @@ fn capture(action: impl FnOnce()) -> String {
     String::from_utf8(log.0.lock().clone()).unwrap()
 }
 
+fn writer_store(root: &std::path::Path) -> Arc<mc_world::native::NativeStore> {
+    Arc::new(mc_world::native::NativeStore::create(&root.join("state.redb"), [0; 32]).unwrap())
+}
+
 #[test]
 fn native_writer_channel_close_logs_stop_cause() {
     let root = tempfile::tempdir().unwrap();
@@ -35,6 +39,7 @@ fn native_writer_channel_close_logs_stop_cause() {
     let log = capture(|| {
         native_writer_loop(
             root.path(),
+            writer_store(root.path()),
             receiver,
             &std::sync::atomic::AtomicBool::new(false),
             &AtomicU64::new(0),
@@ -58,6 +63,7 @@ fn native_writer_explicit_shutdown_logs_info_without_waiting_for_channel_close()
     let log = capture(|| {
         native_writer_loop(
             root.path(),
+            writer_store(root.path()),
             receiver,
             &std::sync::atomic::AtomicBool::new(false),
             &AtomicU64::new(0),
@@ -70,6 +76,46 @@ fn native_writer_explicit_shutdown_logs_info_without_waiting_for_channel_close()
     assert!(log.contains("shutdown requested"), "{log}");
     assert!(!log.contains("ERROR"), "{log}");
     drop(sender);
+}
+
+#[test]
+fn journal_io_failure_still_logs_error_and_never_acknowledges() {
+    let root = tempfile::tempdir().unwrap();
+    let writer = JournalWriter::open(root.path(), 1).unwrap();
+    let journal = root.path().join("journal");
+    std::fs::remove_dir(&journal).unwrap();
+    std::fs::write(&journal, b"injected non-directory").unwrap();
+    let (sender, receiver) = journal_work_channel();
+    let (ack, acknowledged) = std::sync::mpsc::channel();
+    sender
+        .send(JournalWork::Append {
+            tick_lo: 1,
+            tick_hi: 1,
+            entries: Vec::new(),
+            plugin_ack: Some(ack),
+            reserved: 0,
+        })
+        .unwrap();
+    drop(sender);
+    let log = capture(|| {
+        journal_loop(
+            root.path(),
+            writer_store(root.path()),
+            receiver,
+            writer,
+            &std::sync::atomic::AtomicBool::new(false),
+            &JournalBudget::new(crate::journal_budget::JOURNAL_QUEUE_BYTES),
+            CheckpointManifest::default(),
+            crate::plugin::PluginState::default(),
+        )
+    });
+    assert!(
+        log.contains("ERROR") && log.contains("journal append failed"),
+        "{log}"
+    );
+    assert!(log.contains("world halting (fail closed)"), "{log}");
+    assert!(acknowledged.recv().is_err());
+    assert_eq!(std::fs::read(journal).unwrap(), b"injected non-directory");
 }
 
 #[test]
@@ -87,6 +133,36 @@ fn graceful_shutdown_state_distinguishes_expected_broadcast_close() {
     let restored = Core::open(config).expect("orderly shutdown retains a readable checkpoint");
     assert!(!restored.shutdown_requested());
     restored.shutdown();
+}
+
+#[test]
+fn shutdown_releases_database_while_backup_admission_is_paused() {
+    let root = tempfile::tempdir().unwrap();
+    let output = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(root.path().to_owned(), 42);
+    let core = Core::open(config.clone()).unwrap();
+    std::thread::scope(|scope| {
+        let (entered, admission) = std::sync::mpsc::sync_channel(0);
+        let (resume, paused) = std::sync::mpsc::sync_channel(0);
+        *core.inner.backup_admission_pause.lock().unwrap() = Some((entered, paused));
+        let backup = scope.spawn(|| core.backup(output.path()));
+        admission
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .unwrap();
+        // The caller has constructed its job, but has not sent it. Shutdown
+        // must still finish every database owner's Drop before releasing the
+        // world lease: reopening must work while that caller remains paused.
+        core.shutdown();
+        let reopened = Core::open(config);
+        resume.send(()).unwrap();
+        assert!(
+            backup.join().unwrap().is_err(),
+            "late admission must be refused"
+        );
+        let reopened = reopened.expect("shutdown released both world and database leases");
+        assert_eq!(std::fs::read_dir(output.path()).unwrap().count(), 0);
+        reopened.shutdown();
+    });
 }
 
 #[test]
