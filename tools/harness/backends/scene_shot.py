@@ -246,7 +246,7 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and all(type(n) in (int, float) and math.isfinite(n) for n in value))
         elif kind == "wait_ticks":
             valid = type(value) is int and value > 0
-        elif kind == "wait_play":
+        elif kind in ("wait_play", "wait_respawn"):
             valid = value is True
         elif kind == "wait_screen":
             valid = isinstance(value, str) and bool(value)
@@ -340,6 +340,14 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 remaining -= ticks
         elif kind == "wait_play":
             wait_play(probe)
+        elif kind == "wait_respawn":
+            probe.wait(
+                lambda state: state.get("player") is not None
+                and state["player"].get("health") is not None
+                and state["player"]["health"] > 0
+                and state.get("screen", {}).get("open") is False,
+                "respawn_alive_screen_closed", wait_for_play=True,
+            )
         elif kind == "wait_screen":
             # Server-driven screens (dialogs, menus) open asynchronously; wait for
             # the client's own screen state whose class or title names `value`.

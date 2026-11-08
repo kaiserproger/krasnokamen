@@ -92,6 +92,19 @@ class SceneShotTests(unittest.TestCase):
             self.assertIn(("minecraft_send_chat", {"message": "tp @s 1 2 3 90 0", "command": True}), probe.calls)
             self.assertIn(("minecraft_wait_ticks", {"ticks": 5}), probe.calls)
 
+    def test_wait_respawn_rejects_dead_or_open_screen(self):
+        class Probe:
+            def wait(self, predicate, label, *, wait_for_play=False):
+                assert label == "respawn_alive_screen_closed"
+                assert wait_for_play
+                assert not predicate({"player": {"health": 0}, "screen": {"open": True}})
+                assert not predicate({"player": {"health": 20}, "screen": {"open": True}})
+                assert not predicate({"player": None, "screen": {"open": False}})
+                assert predicate({"player": {"health": 20}, "screen": {"open": False}})
+        scene_shot.execute(Probe(), Path("/tmp"), [{"wait_respawn": True}])
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([{"wait_respawn": False}], "native")
+
     def test_look_is_validated_and_dispatched_to_real_client(self):
         step = {"look": {"yaw_deg": 45, "pitch_deg": -60}}
         self.assertEqual(list(scene_shot.scene_mcp_calls([step])),
