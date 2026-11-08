@@ -246,6 +246,24 @@ an approved performance measurement. Use the ordinary memory-capped lane, not
   runs retain evidence and return nonzero; do not publish their partial summary
   as a successful profile.
 
+## Historical results
+
+These are earlier claims kept so later documentation cleanups do not lose them.
+They are **not** publication evidence and cannot fill the pending table above.
+
+| Release | Workload | Result | Build | Host |
+|---|---|---|---|---|
+| v0.0.8 (tag `57b95ae9`, 2026-10-18) | 100 clients, about 100,000 mixed mobs (`native-100` shape) | about 16 TPS; earlier runs below 10 TPS | frame-pointer release | reference host, Ryzen 5 7535HS |
+
+Source: [v0.0.8 release notes](../releases/v0.0.8.md#performance), which
+attribute the gain to a more compact entity layout and hot passes that no
+longer scan every entity row. The original `result.json`, MSPT percentiles and
+stage breakdown are not retained in the repository. The memory figures for
+100k-mob runs (server RSS about 2.3 GiB, cgroup peak about 8 GB including page
+cache; [profiling notes](../development/performance-windows-and-profiling.md#load-harness-and-the-frozen-old-core))
+are not known to come from the same run. The next comparable number is a
+`native-100` quiet-window run on a 1.0 release candidate.
+
 ## In-process chunk generation
 
 An existing **Gen32** quiet-window measurement on the same Ryzen 5 7535HS reports
