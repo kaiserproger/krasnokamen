@@ -6,7 +6,7 @@ use mc_protocol::codec::{ReadMc, WriteMc};
 const PACKETS: &str = r#"{
  "login":{"clientbound":{"minecraft:login_finished":{"protocol_id":2}},"serverbound":{"minecraft:login_acknowledged":{"protocol_id":3}}},
  "configuration":{"clientbound":{"minecraft:finish_configuration":{"protocol_id":3},"minecraft:registry_data":{"protocol_id":7}},"serverbound":{"minecraft:finish_configuration":{"protocol_id":3}}},
- "play":{"clientbound":{"minecraft:login":{"protocol_id":1},"minecraft:block_update":{"protocol_id":9},"minecraft:light_update":{"protocol_id":10}},"serverbound":{"minecraft:keep_alive":{"protocol_id":5},"minecraft:set_creative_mode_slot":{"protocol_id":57},"minecraft:accept_teleportation":{"protocol_id":45}}}
+ "play":{"clientbound":{"minecraft:login":{"protocol_id":1},"minecraft:block_update":{"protocol_id":9},"minecraft:light_update":{"protocol_id":10},"minecraft:level_particles":{"protocol_id":11}},"serverbound":{"minecraft:keep_alive":{"protocol_id":5},"minecraft:set_creative_mode_slot":{"protocol_id":57},"minecraft:accept_teleportation":{"protocol_id":45}}}
 }"#;
 
 fn measured_step(upper: i32, lower: i32, from_state: u32, to_state: u32) -> Step {
@@ -53,6 +53,67 @@ fn frame(id: i32, body: &[u8]) -> RawFrame {
 fn enter_play(session: &mut Session) {
     assert_eq!(session.serverbound(frame(3, &[])).unwrap().unwrap().id, 3);
     assert_eq!(session.serverbound(frame(3, &[])).unwrap().unwrap().id, 3);
+}
+
+fn geyser_step(upper: i32, lower: i32) -> Step {
+    use adjacent::tables::IdMap;
+    let reports = Reports::parse(PACKETS, "{}", "{}").unwrap();
+    let mut names = vec![String::new(); 81];
+    for (name, id) in [("geyser", 7), ("geyser_base", 8), ("geyser_poof", 9), ("geyser_plume", 10), ("splash", if upper == 777 { 80 } else { 77 }), ("poof", if upper == 777 { 69 } else { 66 })] {
+        names[id] = format!("minecraft:{name}");
+    }
+    let source = if upper == 777 {
+        vec![("geyser", 7), ("geyser_base", 8), ("geyser_poof", 9), ("geyser_plume", 10), ("splash", 80), ("poof", 69)]
+    } else {
+        vec![("geyser", 7), ("geyser_base", 8), ("geyser_poof", 9), ("geyser_plume", 10), ("splash", 77), ("poof", 66)]
+    };
+    let target = if lower == 776 {
+        vec![("geyser", 7), ("geyser_base", 8), ("geyser_poof", 9), ("geyser_plume", 10), ("splash", 77), ("poof", 66)]
+    } else {
+        vec![("splash", 70), ("poof", 59)]
+    };
+    Step {
+        upper,
+        lower,
+        factory: Box::new(adjacent::test_profile(Tables {
+            formats: Formats { upper, lower },
+            packets: Packets::new(&reports, &reports),
+            particle_names: names,
+            particles: IdMap::by_name(source, target, |_| None),
+            block_states: IdMap::by_name([("stone", 90), ("stone2", 40)], [("stone", 40), ("stone2", 7)], |_| None),
+            ..Tables::default()
+        })),
+    }
+}
+
+#[test]
+fn full_chain_geyser_options_translate_and_session_remains_usable() {
+    for (kind, target, options) in [
+        (7, 70, vec![0, 0, 0, 3]),
+        (8, 70, vec![0, 0, 0, 3, 0x3f, 0x80, 0, 0]),
+        (9, 59, vec![0, 0, 0, 3, 0x3f, 0x80, 0, 0]),
+        (10, 70, vec![0, 0, 0, 3]),
+    ] {
+        let mut session = session(vec![geyser_step(777, 776), geyser_step(776, 775)], 777, 775);
+        enter_play(&mut session);
+        let mut input = vec![kind];
+        input.extend(options);
+        input.extend([1, 0]);
+        for value in [1.0, 2.0, 3.0] { input.write_f64(value); }
+        for value in [0.25, 0.5, 0.75, 1.0, 1.0, 1.0] { input.write_f32(value); }
+        input.extend([2, 0]);
+        let (_, actual) = session.clientbound(11, &input).unwrap().unwrap();
+        let mut expected = vec![1, 0];
+        for value in [1.0, 2.0, 3.0] { expected.write_f64(value); }
+        for value in [0.25, 0.5, 0.75, 1.0] { expected.write_f32(value); }
+        expected.write_i32(2);
+        expected.push(target);
+        assert_eq!(actual, expected, "geyser kind {kind}");
+        let mut update = Vec::new();
+        update.write_i64(123);
+        update.write_varint(90);
+        assert!(session.clientbound(9, &update).unwrap().is_some());
+    }
 }
 
 #[test]

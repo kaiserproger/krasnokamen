@@ -1002,7 +1002,7 @@ fn particle_options(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<bool> 
         "entity_effect" | "tinted_leaves" | "flash" => payload.write_i32(r.read_i32()?),
         "sculk_charge" => payload.write_f32(r.read_f32()?),
         "shriek" => payload.write_varint(r.read_varint()?),
-        "item" => items::stack(t, To::Legacy, r, &mut payload)?,
+        "item" => items::template(t, To::Legacy, r, &mut payload)?,
         "vibration" | "trail" | "dragon_breath" | "effect" | "instant_effect" => {
             return items::unsupported("particle payload");
         }

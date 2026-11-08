@@ -99,6 +99,87 @@ fn particle_geyser_options_survive_when_type_exists() {
     assert!(remaining.is_empty());
 }
 
+// Packet and option codecs: local 26.3/26.2/26.1.2 javap
+// ClientboundLevelParticlesPacket, ParticleTypes, BlockParticleOption,
+// ItemParticleOption, DustParticleOptions, DustColorTransitionOptions,
+// VibrationParticleOption and TrailParticleOption. IDs: local registry reports.
+fn particle_packet(modern: bool, kind: u8, options: &[u8]) -> Vec<u8> {
+    let mut body = Vec::new();
+    if modern {
+        body.push(kind);
+        body.extend_from_slice(options);
+    }
+    body.extend([1, 0]);
+    for value in [1.0, 2.0, 3.0] {
+        body.write_f64(value);
+    }
+    for value in [0.25, 0.5, 0.75, 1.0] {
+        body.write_f32(value);
+    }
+    if modern {
+        body.write_f32(2.0);
+        body.write_f32(3.0);
+        body.extend([2, 0]);
+    } else {
+        body.write_i32(2);
+        body.push(kind);
+        body.extend_from_slice(options);
+    }
+    body
+}
+
+#[test]
+fn level_particles_complete_packets_preserve_supported_options_on_both_steps() {
+    let cases: &[(&str, u8, u8, u8, &[u8], &[u8])] = &[
+        ("block", 1, 1, 1, &[9], &[4]),
+        ("item", 57, 54, 47, &[10, 2, 0, 0], &[3, 2, 0, 0]),
+        ("dust", 21, 21, 14, &[1, 2, 3, 4, 0x3f, 0x80, 0, 0], &[1, 2, 3, 4, 0x3f, 0x80, 0, 0]),
+        ("dust_color_transition", 22, 22, 15, &[1, 2, 3, 4, 5, 6, 7, 8, 0x3f, 0x80, 0, 0], &[1, 2, 3, 4, 5, 6, 7, 8, 0x3f, 0x80, 0, 0]),
+    ];
+    for &(name, id777, id776, id775, options, expected_options) in cases {
+        for (upper, lower, source, target) in [(777, 776, id777, id776), (776, 775, id776, id775)] {
+            let mut names = vec![String::new(); usize::from(source) + 1];
+            names[usize::from(source)] = format!("minecraft:{name}");
+            let tables = Tables {
+                formats: super::super::tables::Formats { upper, lower },
+                particle_names: names,
+                particles: IdMap::by_name([(name, u32::from(source))], [(name, u32::from(target))], |_| None),
+                block_states: IdMap::by_name([("stone", 9)], [("stone", 4)], |_| None),
+                items: IdMap::by_name([("stick", 10)], [("stick", 3)], |_| None),
+                ..Tables::default()
+            };
+            let mut s = test_session(tables);
+            let input = particle_packet(upper == 777, source, options);
+            let expected = particle_packet(false, target, expected_options);
+            assert_eq!(clientbound(&mut s, "minecraft:level_particles", &input).unwrap().unwrap(), expected, "{name} {upper}->{lower}");
+        }
+    }
+}
+
+#[test]
+fn level_particles_explicitly_refuses_vibration_and_trail_on_both_steps() {
+    let vibration = [0, 0, 0, 0, 0, 0, 0, 0, 0, 5];
+    let mut trail = vec![0; 24]; // Vec3 destination
+    trail.extend([1, 2, 3, 4, 5]); // color INT, duration VAR_INT
+    for (name, id777, id776, id775, options) in [
+        ("vibration", 58, 55, 48, vibration.as_slice()),
+        ("trail", 59, 56, 49, trail.as_slice()),
+    ] {
+        for (upper, lower, source, target) in [(777, 776, id777, id776), (776, 775, id776, id775)] {
+            let mut names = vec![String::new(); usize::from(source) + 1];
+            names[usize::from(source)] = format!("minecraft:{name}");
+            let tables = Tables {
+                formats: super::super::tables::Formats { upper, lower },
+                particle_names: names,
+                particles: IdMap::by_name([(name, u32::from(source))], [(name, u32::from(target))], |_| None),
+                ..Tables::default()
+            };
+            let error = clientbound(&mut test_session(tables), "minecraft:level_particles", &particle_packet(upper == 777, source, options)).unwrap_err();
+            assert!(format!("{error:#}").contains("particle payload"), "{name} {upper}->{lower}: {error:#}");
+        }
+    }
+}
+
 #[test]
 fn level_event_consumes_global_and_remaps_block_state() {
     let mut s = session();
