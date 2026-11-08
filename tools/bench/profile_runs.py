@@ -33,6 +33,7 @@ class Context:
     prepare_memory: str
     slice_name: str | None
     mem_total_mib: int
+    smoke: bool = False
     prepared: set[str] = field(default_factory=set)
     remote: "RemoteTarget | None" = None
 
@@ -98,6 +99,8 @@ def profile_command(ctx: Context, profile: str, out: Path, *, server_cpus: str, 
                "--server-cpus", server_cpus, "--bot-cpus", bot_cpus, "--max-rss-mb", str(max_rss_mb),
                "--warmup-seconds", str(ctx.warmup_seconds), "--measure-seconds", str(ctx.measure_seconds),
                "--readiness-seconds", str(ctx.readiness_seconds)]
+    if ctx.smoke:
+        command.append("--smoke")
     if wrapper:
         command += ["--server-wrapper", wrapper]
     if prepare_only:
