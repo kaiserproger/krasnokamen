@@ -314,6 +314,16 @@ SCENARIOS: dict[str, Scenario] = {
         proves="when green: the client reaches in_play with a refused chunk under or within about 12 blocks of the camera, as a vanilla client does with a hole in the world",
         limits="red today (solaris-client play_world_presentation_ready needs the biome-neighbour chunks); a repro, not a regression gate",
     ),
+    "native-command-feedback": _entry(
+        id="native-command-feedback",
+        summary="Player command feedback obeys the gamerule",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-command-feedback", requires=("xvfb",),
+        sources=("tools/harness/backends/scene_shot.py", "tools/harness/command_feedback_scene.json"),
+        fixture="private native client, operator commands and ordered chat fences",
+        proves="disabled success messages are absent, failure and chat remain visible, enabled success is visible",
+        limits="native player command path; console behavior is covered separately by a Rust regression",
+    ),
     "native-v2-chest-drag-disconnect": _entry(
         id="native-v2-chest-drag-disconnect",
         summary="Physical chest drag then disconnect with an item on the cursor",

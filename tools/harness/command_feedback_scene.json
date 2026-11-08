@@ -1,0 +1,76 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "time set 1000"
+    },
+    {
+      "cmd": "effect give @s minecraft:night_vision 60 0 true"
+    },
+    {
+      "cmd": "effect clear @s minecraft:invisibility"
+    },
+    {
+      "cmd": "say FeedbackDisabledFence"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "assert_chat": {
+        "name": "feedback-disabled",
+        "contains": [
+          "FeedbackDisabledFence",
+          "No entities were affected"
+        ],
+        "excludes": [
+          "1000 tick",
+          "Updated effects",
+          "send_command_feedback is now set to false"
+        ]
+      }
+    },
+    {
+      "shot": "feedback-disabled"
+    },
+    {
+      "cmd": "gamerule send_command_feedback true"
+    },
+    {
+      "cmd": "time set 2000"
+    },
+    {
+      "cmd": "say FeedbackEnabledFence"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "assert_chat": {
+        "name": "feedback-enabled",
+        "contains": [
+          "FeedbackEnabledFence",
+          "2000 tick"
+        ],
+        "excludes": [
+          "1000 tick",
+          "Updated effects"
+        ]
+      }
+    },
+    {
+      "shot": "feedback-enabled"
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from . import java_launcher as launcher
 from .matrix_api import MissingCapability
@@ -45,6 +46,7 @@ class VanillaLauncherTest(unittest.TestCase):
         command = self.command()
         self.assertIn("net.minecraft.client.main.Main", command)
         self.assertIn(f"-javaagent:{self.agent}", command)
+        self.assertNotIn("-Dsolaris.client.vanillaEvents=true", command)
         self.assertIn("-Xmx512M", command)
         self.assertFalse(any("KnotClient" in arg or "neoforge" in arg or "gradlew" in arg for arg in command))
         self.assertIn("26.1.2-30", command)
@@ -54,6 +56,19 @@ class VanillaLauncherTest(unittest.TestCase):
         self.info.write_text(json.dumps(self.metadata))
         with self.assertRaisesRegex(MissingCapability, "26.1.2"):
             self.command()
+
+    def test_explicit_263_accepts_only_matching_metadata(self):
+        self.metadata["id"] = "26.3"
+        self.info.write_text(json.dumps(self.metadata))
+        (self.assets / "indexes/26.3-30.json").write_bytes(b'{"objects":{}}')
+        with mock.patch.dict("os.environ", {"SOLARIS_JAVA_VERSION": "26.3"}):
+            command = self.command()
+            self.assertIn("-Dsolaris.client.vanillaEvents=true", command)
+            self.assertEqual(command[command.index("--version") + 1], "26.3")
+            self.metadata["id"] = "26.1.2"
+            self.info.write_text(json.dumps(self.metadata))
+            with self.assertRaisesRegex(MissingCapability, "26.3"):
+                self.command()
 
     def test_modified_client_bytes_fail_closed(self):
         self.client.write_bytes(b"tampered")

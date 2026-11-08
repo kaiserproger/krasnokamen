@@ -33,10 +33,16 @@ def side_horn_left_edges(image: Path) -> list[int]:
         if frame.size != (1280, 720):
             raise ValueError("goat oracle requires the matched 1280x720 frame")
         edges = []
+        # A one-pixel vertical raster shift can put the horn's top below y=360.
+        # Keep all four samples and move the bracket together in that case.
+        def row(y: int) -> list[int]:
+            return [x for x in range(690, 740) if max(frame.getpixel((x, y))) < 180]
+
+        shift = 0 if len(row(360)) >= 4 else 1
         for y in (360, 365, 370, 375):
-            dark = [x for x in range(690, 740) if max(frame.getpixel((x, y))) < 180]
+            dark = row(y + shift)
             if len(dark) < 4:
-                raise ValueError(f"side goat horn silhouette missing at y={y}")
+                raise ValueError(f"side goat horn silhouette missing at y={y + shift}")
             edges.append(dark[0])
         return edges
 
