@@ -62,6 +62,44 @@ fn unchanged_revision_has_no_entity_work_after_delivery() {
 }
 
 #[test]
+fn late_player_profile_respawns_previously_tracked_stationary_player() {
+    use mc_core::boundary::PlayerChange;
+    use mc_protocol::packets::play::{PlayerInfoUpdate, RemoveEntities};
+
+    let mut player = entity(10, [9.0, 64.0, 8.0]);
+    player.type_id = type_id_of("minecraft:player");
+    let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
+    viewer.loaded_chunks.insert((0, 0), 0);
+    let out = output(vec![], vec![player.clone()], ChangeSet::default());
+    assert!(
+        plan_entities_for(&out, &mut viewer, 32)
+            .iter()
+            .any(|p| p.id == AddEntity::ID)
+    );
+    // Seed the incremental interest index while the entity is already tracked.
+    plan_entities_for(&out, &mut viewer, 32);
+    let roster = PlayerChange::Roster {
+        players: Arc::from([mc_core::dimensions::RosterPlayer {
+            connection: ConnectionId(10),
+            entity: player.id,
+            uuid: player.uuid,
+            name: "Existing".into(),
+            game_mode: 0,
+        }]),
+        removed: Arc::from([]),
+    };
+    let packets = crate::plan::plan_player_changes(&[roster], &mut viewer);
+    assert!(packets.iter().any(|p| p.id == RemoveEntities::ID));
+    assert!(packets.iter().any(|p| p.id == PlayerInfoUpdate::ID));
+    assert!(
+        plan_entities_for(&out, &mut viewer, 32)
+            .iter()
+            .any(|p| p.id == AddEntity::ID),
+        "player must be spawned again after its profile arrives"
+    );
+}
+
+#[test]
 fn movement_waiting_for_its_phase_survives_an_unchanged_snapshot() {
     let mut mob = entity(10, [9.0, 64.0, 8.0]);
     mob.type_id = type_id_of("minecraft:cow");

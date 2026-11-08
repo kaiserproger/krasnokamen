@@ -273,7 +273,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                             entity_ids: vec![player.entity.0],
                         },
                     );
-                    viewer.entity_interest.removed(player.entity);
+                    viewer.entity_interest.respawn(player.entity);
                 }
             }
             if !removed.is_empty() {
