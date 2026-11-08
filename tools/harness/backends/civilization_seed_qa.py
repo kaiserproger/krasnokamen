@@ -178,8 +178,31 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
             raise RuntimeError("baby no longer visible for milestone capture")
         target = (current["x"], current["y"] + 0.5, current["z"])
     else:
+        destination = [math.floor(value) for value in target]
+        if building:
+            low, high = building["min"], building["max"]
+            faces = ((low[0] - 1, low[0] - 1, low[2], high[2]),
+                     (high[0] + 1, high[0] + 1, low[2], high[2]),
+                     (low[0], high[0], low[2] - 1, low[2] - 1),
+                     (low[0], high[0], high[2] + 1, high[2] + 1))
+            blocks = []
+            for min_x, max_x, min_z, max_z in faces:
+                bounds = {"min_x": min_x, "max_x": max_x,
+                          "min_y": low[1] - 2, "max_y": high[1] + 2,
+                          "min_z": min_z, "max_z": max_z, "max_blocks": 4096}
+                offset = 0
+                while True:
+                    scan = probe.call("minecraft_scan_blocks", {**bounds, "offset": offset})
+                    blocks.extend(scan.get("blocks", []))
+                    if not scan.get("truncated"):
+                        break
+                    following = scan.get("next_offset")
+                    if not isinstance(following, int) or following <= offset:
+                        raise RuntimeError("observer perimeter scan pagination did not advance")
+                    offset = following
+            destination = building_observer_stand(blocks, building, target[1], initial)
         probe.call("minecraft_navigate_to_block", {
-            "x": math.floor(target[0]), "y": math.floor(target[1]), "z": math.floor(target[2]),
+            "x": destination[0], "y": destination[1], "z": destination[2],
             "timeout_seconds": 120.0,
         })
     player = probe.observe()["player"]
@@ -359,6 +382,32 @@ def standable_height(blocks: list[dict[str, Any]], player_y: float) -> int | Non
                and cells[y + 1].get("collision_empty", False)
                and (cells[y].get("fluid") or {}).get("empty", False)]
     return min(heights, key=lambda h: abs(h - player_y)) if heights else None
+
+
+def building_observer_stand(blocks: list[dict[str, Any]], building: dict[str, Any],
+                            target_y: float, player: dict[str, Any]) -> tuple[int, int, int]:
+    """Choose one received exterior standpoint, not a route through a sealed room."""
+    low, high = building["min"], building["max"]
+    columns: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    for block in blocks:
+        columns.setdefault((block["x"], block["z"]), []).append(block)
+    best = None
+    for (x, z), column in columns.items():
+        on_face = ((x in (low[0] - 1, high[0] + 1) and low[2] <= z <= high[2])
+                   or (z in (low[2] - 1, high[2] + 1) and low[0] <= x <= high[0]))
+        if not on_face:
+            continue
+        height = standable_height(column, target_y)
+        if height is None or not low[1] <= height + 1.62 <= high[1] + 1:
+            continue
+        distance = ((x + 0.5 - player["x"]) ** 2 + (height - player["y"]) ** 2
+                    + (z + 0.5 - player["z"]) ** 2)
+        rank = (distance, x, height, z)
+        if best is None or rank < best:
+            best = rank
+    if best is None:
+        raise RuntimeError("building capture has no received supported standing cell")
+    return best[1:]
 
 
 def walk_to_village(probe: ProbeSteps, detail: dict[str, Any]) -> dict[str, Any]:

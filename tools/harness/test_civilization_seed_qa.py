@@ -142,6 +142,50 @@ class CivilizationEvidenceTests(unittest.TestCase):
         self.assertEqual(probe.call.call_args_list[2].args,
                          ("minecraft_look", {"yaw_deg": 0, "pitch_deg": 0}))
 
+    def test_building_capture_uses_supported_exterior_not_sealed_volume_midpoint(self):
+        building = {"id": 4294967302, "kind": "builder",
+                    "min": [148, 75, -262], "max": [152, 78, -256]}
+        # Received column from the failed seed-24 Builder capture: y77 has
+        # air below it; y76 has the cobblestone floor and two clear cells.
+        column = [{"x": 150, "y": y, "z": -259, "block_id": block,
+                   "collision_empty": empty, "fluid": {"empty": True}}
+                  for y, block, empty in (
+                      (75, "minecraft:cobblestone", False),
+                      (76, "minecraft:air", True),
+                      (77, "minecraft:air", True),
+                      (78, "minecraft:birch_slab", False))]
+        # An exterior supported column is an observer-fixture input, not a
+        # claim that the recorded interior is reachable through its closed door.
+        exterior = [{**block, "z": -255} for block in column]
+        blocks = column + exterior
+        class NavigationRequested(Exception):
+            pass
+        probe = Mock()
+        probe.observe.return_value = {"player": {"x": 131.9, "y": 76.9375, "z": -215.5}}
+        def call(name, arguments):
+            if name == "minecraft_scan_blocks":
+                return {"blocks": blocks, "truncated": False}
+            if name == "minecraft_navigate_to_block":
+                raise NavigationRequested(arguments)
+            return {}
+        probe.call.side_effect = call
+        with self.assertRaises(NavigationRequested) as navigation:
+            qa.capture_target(probe, "artifact", "builder", (150.5, 77.0, -258.5), building=building)
+        self.assertEqual(navigation.exception.args[0],
+                         {"x": 150, "y": 76, "z": -255, "timeout_seconds": 120.0})
+
+    def test_building_capture_refuses_a_column_without_supported_standing_space(self):
+        probe = Mock()
+        probe.observe.return_value = {"player": {"x": 131.9, "y": 76.9375, "z": -215.5}}
+        probe.call.return_value = {"blocks": [
+            {"x": 150, "y": y, "z": -255, "collision_empty": True, "fluid": {"empty": True}}
+            for y in range(74, 81)], "truncated": False}
+        with self.assertRaisesRegex(RuntimeError, "supported standing"):
+            qa.capture_target(probe, "artifact", "builder", (150.5, 77.0, -258.5),
+                              building={"min": [148, 75, -262], "max": [152, 78, -256]})
+        self.assertNotIn("minecraft_navigate_to_block",
+                         [call.args[0] for call in probe.call.call_args_list])
+
     def test_occluded_stage_target_never_produces_screenshot(self):
         probe = Mock()
         probe.observe.return_value = {"player": {"x": 0, "y": 64, "z": 0},
