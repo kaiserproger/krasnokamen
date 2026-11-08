@@ -3866,3 +3866,14 @@ status = "open"
 source = "Contributing factors: maps/runtime.rs appends distinct retained frame markers without a writer-side limit; maps::checkpoint serializes them without validation; maps::recover rejects more than 256. The read boundary fails closed, but the live admission and save boundaries do not prevent that state. Source finding, not a destructive restart test. M00 batches genuine maps to avoid creating this invalid benchmark fixture; that does not fix the gameplay owner."
 regression = []
 failing_first = "not recorded"
+
+[[bug]]
+id = "NATIVE-BLACK-SKY-GEOMETRY"
+title = "Black stair-stepped geometry covers the hill and sky in a native frame"
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Owner screenshot, independently visible in .analysis/validation/20261108T123904-scene-shot-cgvyf3fv/screenshots/freeze-before.png, frame 148: seed 100, camera (128.5,71.62,0.5), yaw/pitch 0, Low preset, render distance 4. Draw owner and cause remain unproved; clouds and terrain are hypotheses, not established causes. No rendering feature has been disabled."
+regression = []
+failing_first = "reported"
