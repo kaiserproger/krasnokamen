@@ -479,29 +479,46 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             (artifact / f"{value['name']}.json").write_text(json.dumps(state, indent=2) + "\n")
         elif kind == "walk_capture":
             args = {"radius": 32, "limit": 128}
+            attempts = []
+            before = after = frame = None
+            image = frame_path = first = None
             for _ in range(value["max_ticks"]):
                 before = probe.call("minecraft_list_entities", args)
-                candidate = matching_walk(before, value)
-                # The observation samples the end of the tick; rendering
-                # interpolates from the previous tick's smaller walk position.
-                if candidate and candidate["walk_position"] >= value["phase"]:
-                    break
+                entities = [entity for entity in before.get("entities", [])
+                            if entity.get("entity_type") == value["entity_type"]]
+                candidate = entities[0] if len(entities) == 1 else None
+                position = candidate.get("walk_position") if candidate else None
+                speed = candidate.get("walk_speed") if candidate else None
+                # The observation is a tick endpoint, but the image is
+                # interpolated. Capture overlapping ticks until the actual
+                # rendered frame, not the observation, meets the phase.
+                if (type(position) in (int, float) and type(speed) in (int, float)
+                        and math.isfinite(position) and math.isfinite(speed)
+                        and speed >= value["min_speed"]
+                        and position >= value["phase"] - value["tolerance"]
+                        and position - speed <= value["phase"] + value["tolerance"]):
+                    first = candidate
+                    image = capture(probe, artifact, value["name"])
+                    after = probe.call("minecraft_list_entities", args)
+                    frame_path = Path(image + ".gait.json") if client == "java" else Path(image).with_suffix(".json")
+                    frame_data = json.loads(frame_path.read_text())
+                    frame_entities = frame_data if client == "java" else frame_data["gait_frame"]
+                    frame = {"entities": frame_entities}
+                    attempts.append({"before": before, "after": after, "frame": frame})
+                    same_entity = [entity for entity in after.get("entities", [])
+                                   if first.get("entity_uuid")
+                                   and entity.get("entity_uuid") == first["entity_uuid"]]
+                    if matching_walk(frame, value) is not None and len(same_entity) == 1:
+                        break
                 probe.call("minecraft_wait_ticks", {"ticks": 1})
             else:
+                (artifact / f"{value['name']}-walk.json").write_text(
+                    json.dumps({"attempts": attempts, "spec": value}, indent=2) + "\n")
                 raise RuntimeError(f"walk phase not reached: {value['name']}")
-            image = capture(probe, artifact, value["name"])
-            after = probe.call("minecraft_list_entities", args)
-            frame_path = Path(image + ".gait.json") if client == "java" else Path(image).with_suffix(".json")
-            frame_data = json.loads(frame_path.read_text())
-            frame_entities = frame_data if client == "java" else frame_data["gait_frame"]
-            frame = {"entities": frame_entities}
-            first = matching_walk(before, value)
-            same_entity = [entity for entity in after.get("entities", [])
-                           if first is not None and first.get("entity_uuid")
-                           and entity.get("entity_uuid") == first["entity_uuid"]]
             (artifact / f"{value['name']}-walk.json").write_text(
                 json.dumps({"before": before, "after": after, "frame": frame,
-                            "frame_path": str(frame_path), "spec": value}, indent=2) + "\n")
+                            "frame_path": str(frame_path), "spec": value,
+                            "attempts": attempts}, indent=2) + "\n")
             probe.check(f"{value['name']}_same_entity", first is not None and len(same_entity) == 1)
             probe.check(f"{value['name']}_render_phase", matching_walk(frame, value) is not None)
             shots.append(image)

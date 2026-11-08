@@ -186,8 +186,40 @@ class SceneShotTests(unittest.TestCase):
                     evidence = json.loads((root / "walk-walk.json").read_text())
                     self.assertEqual(evidence["after"]["entities"][0]["walk_position"], 3.0)
                     write_frame(2.5)
-                    with self.assertRaisesRegex(AssertionError, "walk_render_phase"):
+                    with self.assertRaisesRegex(RuntimeError, "walk phase not reached"):
                         scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client)
+
+    def test_walk_capture_retries_interpolated_frame_without_widening_phase(self):
+        spec = {"name": "walk", "entity_type": "minecraft:spider", "phase": 1.5,
+                "tolerance": 0.45, "min_speed": 0.1, "max_ticks": 3}
+        entity = {"entity_type": "minecraft:spider", "entity_uuid": "mob",
+                  "walk_position": 1.467, "walk_speed": 0.6}
+
+        class Probe:
+            def __init__(self):
+                self.tick = 0
+            def call(self, name, args):
+                if name == "minecraft_wait_ticks":
+                    self.tick += 1
+                    return {}
+                return {"entities": [{**entity, "walk_position": (1.467, 2.05)[min(self.tick, 1)]}]}
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            image = str(root / "walk.png")
+            positions = iter((0.9, 1.6))
+            def capture(*args):
+                frame = {**entity, "walk_position": next(positions)}
+                Path(image).with_suffix(".json").write_text(json.dumps({"gait_frame": [frame]}))
+                return image
+            with patch.object(scene_shot, "capture_native", side_effect=capture):
+                self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], "native"), [image])
+            evidence = json.loads((root / "walk-walk.json").read_text())
+            self.assertEqual([a["frame"]["entities"][0]["walk_position"] for a in evidence["attempts"]], [0.9, 1.6])
+            self.assertEqual(evidence["spec"]["tolerance"], 0.45)
 
     def test_steps_dispatch_and_retain_evidence(self):
         class Probe:

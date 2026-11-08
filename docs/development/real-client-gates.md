@@ -283,11 +283,13 @@ The receipt's `lifecycle-progress.json`, `scene-progress.json`,
 their respective operations, so forced termination retains the last phase and
 its timeout. Proxy start, EOF and teardown are each bounded to eight seconds.
 
-`walk_capture` samples one uniquely matching entity and waits for its reported raw
-walk position and minimum speed. It retains the before/after observations and
-the screenshot's render-frame gait inputs; the frame, not a later state sample,
-must match the requested tolerance, and the observed entity identity must persist.
-Position is not wrapped: renderers can apply a factor before calculating phase.
+`walk_capture` samples one uniquely matching entity and its minimum speed. An
+endpoint sample may straddle the requested range because rendering interpolates
+from the previous tick, so the harness captures overlapping ticks until the
+actual render frame matches without widening the tolerance. It records every
+capture attempt, the matching before/after observations, and the screenshot's
+render-frame gait inputs; the entity identity must persist. Position is not
+wrapped: renderers can apply a factor before calculating phase.
 `tools/harness/gait_phase_scene.json` fixes the scene and slows both clients'
 server clock to 2 TPS so extraction can be sampled without widening the phase
 tolerance. For the Java lane copy the fixture and set `java_plain` and
