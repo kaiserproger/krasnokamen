@@ -12,6 +12,24 @@ from tools.harness.backends import scene_shot
 
 
 class SceneShotTests(unittest.TestCase):
+    def test_java_chat_hidden_is_opt_in(self):
+        self.assertIn("chatVisibility:0\n", scene_shot.java_options(8, 70))
+        self.assertIn("chatVisibility:2\n", scene_shot.java_options(8, 70, hide_chat=True))
+
+    def test_java_bootstrap_retries_only_early_client_thread_timeout(self):
+        from types import SimpleNamespace
+        process = SimpleNamespace(poll=lambda: None)
+        timeout = RuntimeError('minecraft_observe failed: {"code": "tool-execution-failed", "message": "TimeoutException"}')
+        with patch.object(scene_shot.runtime, "wait_client_ready_for_connect",
+                          side_effect=[timeout, {"current_screen": "TitleScreen"}]) as ready:
+            self.assertEqual(scene_shot.wait_java_bootstrap(object(), process, 30)["current_screen"], "TitleScreen")
+            self.assertEqual(ready.call_count, 2)
+        with patch.object(scene_shot.runtime, "wait_client_ready_for_connect",
+                          side_effect=RuntimeError("unrelated protocol failure")) as ready:
+            with self.assertRaisesRegex(RuntimeError, "unrelated protocol failure"):
+                scene_shot.wait_java_bootstrap(object(), process, 30)
+            self.assertEqual(ready.call_count, 1)
+
     def test_server_identity_is_recorded_at_launch(self):
         import hashlib
         with tempfile.TemporaryDirectory() as directory:
