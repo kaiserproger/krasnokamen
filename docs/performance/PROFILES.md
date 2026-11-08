@@ -65,6 +65,7 @@ refills or reduced AI cadence.
 | Profile | Protocol clients | Named fixture entities | Server view / simulation distance | Activity |
 |---|---:|---|---:|---|
 | `idle` | 0 | No summoned cohort | 8 / 8 | Generated spawn area, no clients or player input; empty-server pause disabled so simulation continues |
+| `explore-3` | 3 | No summoned cohort | 8 / 8 | Same terrain, spacing and per-player movement as `explore-20`; the 1–5-player weak-server shape, not a substitute for the 20-player result |
 | `explore-20` | 20 | No summoned cohort | 8 / 8 | One client per terrain anchor, 256-block grid spacing; creative, straight-line walking with sprint/jump legs; no block edits or recurring commands |
 | `native-100` | 100 | 100,000 mixed mobs; no fixture villagers | 6 / 6 | Creative observers distributed across roofed pens; movement at 20 offered slots/s, dig/place at 2/s and chat at 1/s per client |
 | `villager-heavy` | 100 | Same 100,000 mixed mobs **plus** 20,000 villagers | 6 / 6 | Same activity, distributed across mob and villager pens; real beds and composters |
@@ -103,6 +104,8 @@ indefinitely through terrain. Login includes operator-assisted safe landing.
 
 - A fresh server process opens the prepared world. Fixture generation and all
   client login/setup are **outside** the measured interval.
+  After dashboard readiness the collector waits for the first pushed exact-tick
+  sample before starting warmup; an empty or invalid stream still fails closed.
 - After all requested clients are ready: **30 seconds of active warmup**, then
   **120 seconds measured**, using the same offered workload in both intervals.
   Idle uses the same wall durations without bots. Changing either duration

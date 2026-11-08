@@ -27,7 +27,8 @@ class ProfilesTests(unittest.TestCase):
         recipe = profiles.fixture(0, 0)
         self.assertTrue(recipe["regions"])
         self.assertFalse(any(c.startswith("summon ") for r in recipe["regions"] for c in r["commands"]))
-        for name, movement, edits in (("idle", 0, 0), ("explore-20", 20, 0), ("native-100", 20, 2)):
+        for name, movement, edits in (("idle", 0, 0), ("explore-3", 20, 0),
+                                      ("explore-20", 20, 0), ("native-100", 20, 2)):
             args = argparse.Namespace(profile=name, mobs=profiles.PROFILES[name][1], warmup_seconds=30, measure_seconds=120)
             plan = profiles.schedule(args)["windows"]
             self.assertEqual([w["duration_ms"] for w in plan], [30000, 120000])
@@ -62,6 +63,28 @@ class ProfilesTests(unittest.TestCase):
                         {"samples": [{"tick": 11, "wall_start_unix_ns": 100, "wall_us": -1}]}):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 profiles.validate_metrics(dict(metric, **changes), initial, 10)
+
+
+class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
+    async def test_waits_for_first_pushed_tick_instead_of_sampling_an_empty_ring(self):
+        class Session:
+            async def http(self, url, timeout):
+                self.url, self.timeout = url, timeout
+                return {"schema_version": 1, "latest_tick": 75 if "wait=true" in url else None}
+
+        session = Session()
+        initial = await profiles.initial_metrics(session, "http://localhost")
+        self.assertEqual(initial["latest_tick"], 75)
+        self.assertEqual(session.url, "http://localhost/load-metrics?wait=true&min_samples=1")
+        self.assertEqual(session.timeout, 12)
+
+    async def test_missing_or_invalid_telemetry_still_fails_closed(self):
+        class Session:
+            async def http(self, _url, _timeout):
+                return {"schema_version": 2, "latest_tick": None}
+
+        with self.assertRaisesRegex(ValueError, "exact source tick telemetry unavailable"):
+            await profiles.initial_metrics(Session(), "http://localhost")
 
 
 if __name__ == "__main__":

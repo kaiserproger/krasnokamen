@@ -14,6 +14,7 @@ for the current runtime. Each procedure has one owner page:
 
 Contents:
 [Startup and content](#startup-and-content) ·
+[Small hardware](#small-hardware) ·
 [Configuration, network and security](#configuration-network-and-security) ·
 [Administration](#administration) ·
 [World operations and backup](#world-operations-and-backup) ·
@@ -114,6 +115,69 @@ but remains cinnabar for 26.2. Dynamic registries and `item_model` with a
 server resource pack may provide client-accepted data; blocks, entities and
 mechanics cannot be added by datapacks. Unknown/malformed payloads fail closed.
 This is protocol compatibility, not identical rendering or mechanics.
+
+## Small hardware
+
+Treat CPU and RAM budgets as measured workload envelopes, not minimum-hardware
+guarantees. [The weak-hardware benchmark](performance/BENCHMARKS.md#weak-hw-the-6-vps-shape)
+keeps dedicated-server budgets separate from the combined singleplayer budget:
+server CPU affinity and its memory cap do not include the graphical client.
+`explore-3` means three exploring players, not the twenty-player workload under
+a different name.
+
+### Singleplayer with software Vulkan
+
+On 2026-11-07, fresh seed 42, installed 26.3 content, 1280×720 Low preset,
+Vulkan lavapipe, and client plus server sharing four logical CPUs (`0-3`) and
+an 8 GiB cgroup cap:
+
+| Quiet release run | Play → usable world | Play → observed look input | Combined peak |
+|---|---:|---:|---:|
+| RC5 defaults, near 8 / far 1024 | 17.87 s | 18.17 s | 2.87 GiB |
+| Automatic software-adapter defaults, near 4 / far 256 | 11.38 s | 11.52 s | 2.37 GiB |
+
+Receipts under `.analysis/validation/`:
+`20261107T125724-native-sp-weak-hardware-1ev8zgzc/result.json` and
+`20261107T125848-native-sp-weak-hardware-jd4y97cu/result.json`.
+Each has `singleplayer/scenario.json` with the actual-window readiness,
+ordinary-input observation, process RSS and cgroup peak. Both runs closed the
+loading overlay before control was measured. These are startup measurements;
+the captured 124 ms candidate frame interval is not a sustained-FPS result.
+They exclude first-time content installation and do not establish a physical
+laptop's minimum RAM or integrated-GPU performance.
+
+Software adapters use the existing background CPU far-terrain generator,
+instead of placing software compute on the frame queue. An unconfigured
+software adapter uses near distance 4 and far distance 256. Explicit valid
+saved settings win; changing another option does not persist the automatically
+selected distances as user choices. Hardware-adapter defaults are unchanged.
+
+The choices were also measured one at a time in the same diagnostic `-p`
+lane (four logical CPUs `8-11`, shared 8 GiB, lavapipe, same fresh world and
+display settings). Each step retains the preceding step:
+
+| Step | Play → usable world | Play → observed look input |
+|---|---:|---:|
+| RC5, software GPU far generation, near 8 / far 1024 | 27.80 s | 29.10 s |
+| Route software far generation to the CPU | 18.81 s | 19.30 s |
+| Then far 1024 → 256 | 17.18 s | 17.42 s |
+| Then near 8 → 4 | 14.77 s | 14.99 s |
+
+Diagnostic receipts under `.analysis/validation/`, each ending in
+`/singleplayer/scenario.json`:
+`20261107T121704-native-sp-weak-hardware-zzxm8lss`,
+`20261107T122303-native-sp-weak-hardware-ahrtobcc`,
+`20261107T122448-native-sp-weak-hardware-lm6cmhn2`, and
+`20261107T122606-native-sp-weak-hardware-cn16cmcw`.
+These single profiled samples select useful defaults; they are not quiet-lane
+publication numbers or a statistical guarantee. The separate quiet pair above
+measures the combined automatic policy with no saved-settings override.
+
+Singleplayer startup listens for the local server's actual progress,
+Listening, failure and process-exit events. Slow startup is not failure merely
+because 180 seconds elapsed. The loading screen publishes each changed
+startup status; Cancel remains available. World-entry readiness still requires
+the normal terrain/light and GPU-completion fences, not an elapsed-time bypass.
 
 ## Configuration, network and security
 

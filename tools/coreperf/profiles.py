@@ -21,7 +21,7 @@ from typing import Any
 from tools.coreperf import compare
 from tools.harness.backends import catalog_load as load
 
-PROFILES = {"idle": (0, 0, 0, 8), "explore-20": (20, 0, 0, 8),
+PROFILES = {"idle": (0, 0, 0, 8), "explore-3": (3, 0, 0, 8), "explore-20": (20, 0, 0, 8),
             "native-100": (100, 100000, 0, 6), "villager-heavy": (100, 100000, 20000, 6)}
 
 
@@ -135,6 +135,13 @@ def validate_metrics(metric: dict[str, Any], initial: dict[str, Any], cursor: in
     return cursor
 
 
+async def initial_metrics(session: Any, url: str) -> dict[str, Any]:
+    initial = await session.http(url + "/load-metrics?wait=true&min_samples=1", 12)
+    if initial.get("schema_version") != 1 or initial.get("latest_tick") is None:
+        raise ValueError("exact source tick telemetry unavailable")
+    return initial
+
+
 async def measure(args: argparse.Namespace, directory: Path, world: Path,
                   recipe: dict[str, Any], prepared: dict[str, Any]) -> dict[str, Any]:
     directory.mkdir()
@@ -173,9 +180,7 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
             result["bot_command"] = command
             await session.spawn("bots", command, events=True)
             result["ready"] = await session.ready(args.clients, args.readiness_seconds)
-        initial = await session.http(url + "/load-metrics", 2)
-        if initial.get("schema_version") != 1 or initial.get("latest_tick") is None:
-            raise ValueError("exact source tick telemetry unavailable")
+        initial = await initial_metrics(session, url)
         cursor = initial["latest_tick"]
         epoch = time.time_ns()
         if args.clients:
@@ -228,7 +233,7 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
             raise ValueError("bot schedule failed or incomplete")
         if bots.get("movements_sent", 0) == 0:
             raise ValueError("requested active profile sent no movement")
-        if args.profile == "explore-20" and bots.get("chunk_boundaries_crossed", 0) == 0:
+        if args.profile in ("explore-3", "explore-20") and bots.get("chunk_boundaries_crossed", 0) == 0:
             raise ValueError("exploration did not cross a chunk boundary")
     snapshot = await compare.snapshot(args, directory, world, config)
     result["entity_counts_after"] = {kind: group["active"] for kind, group in snapshot["entities"].items()}

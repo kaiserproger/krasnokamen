@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build or reuse one immutable pinned release binary: pin-release <worktree|repo-root> [--client].
+"""Build or reuse one immutable release pin, identified by source, binary kind and Rust target.
 
 Owner-host tool (see tools/dev/README.md). The pin is identified by the tree's
 HEAD and a hash of its uncommitted changes; the same tree is built once and every
 later call prints the pinned binary. stdout carries only the final
-SOLARIS_SERVER_BINARY=<path> (or SOLARIS_CLIENT_BINARY=<path>) line.
+SOLARIS_SERVER_BINARY=<path> (or SOLARIS_CLIENT_BINARY / SOLARIS_BOTS_BINARY).
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import argparse
 import fcntl
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -26,6 +27,7 @@ import wtlib as w  # noqa: E402
 KINDS = {
     "server": {"repo": "core", "package": "mc-edge", "bin": "solaris-v2", "env": "SOLARIS_SERVER_BINARY"},
     "client": {"repo": "client", "package": "solaris-client", "bin": "solaris-client", "env": "SOLARIS_CLIENT_BINARY"},
+    "bots": {"repo": "core", "package": "mc-test-harness", "bin": "player-scale-bots", "env": "SOLARIS_BOTS_BINARY"},
 }
 # mem-run's pool lock files: slot-<l> is held through /tmp/solaris-mem-slots/<l>.
 SLOT_LOCKS = Path("/tmp/solaris-mem-slots")
@@ -36,7 +38,7 @@ def say(message: str) -> None:
 
 
 def check_tree(top: Path, kind: str) -> None:
-    if kind == "server" and not (top / "crates/mc-edge/Cargo.toml").is_file():
+    if kind in ("server", "bots") and not (top / "crates/mc-edge/Cargo.toml").is_file():
         raise w.ToolError(f"{top} is not a core Solaris tree (no crates/mc-edge); use --client for the client")
     if kind == "client":
         manifest = top / "Cargo.toml"
@@ -56,7 +58,7 @@ def provenance(top: Path) -> dict:
     }
 
 
-def existing_pin(pin_dir: Path, kind: str) -> Path | None:
+def existing_pin(pin_dir: Path, kind: str, rust_target: str) -> Path | None:
     """The binary of a valid existing pin, or None; a damaged pin is an error (pins are never overwritten)."""
     manifest = pin_dir / "manifest.json"
     if not manifest.is_file():
@@ -65,23 +67,25 @@ def existing_pin(pin_dir: Path, kind: str) -> Path | None:
     binary = Path(info.get("binary", ""))
     if info.get("repo") != KINDS[kind]["repo"]:
         raise w.ToolError(f"{pin_dir} pins repo {info.get('repo')!r}, not {KINDS[kind]['repo']!r}")
+    if info.get("kind") != kind or info.get("target") != rust_target:
+        raise w.ToolError(f"{pin_dir} does not pin {kind} for {rust_target}; refusing a different binary")
     if not binary.is_file() or w.sha256_file(binary) != info.get("binary_sha256"):
         raise w.ToolError(f"pin {pin_dir} is damaged (binary missing or sha256 differs); pins are immutable, "
                           "so it is not rebuilt: the owner must remove it deliberately")
     return binary
 
 
-def build(top: Path, kind: str, target: Path | None = None) -> tuple[list[str], Path]:
-    """One runner build; a plain cargo argv keeps it preemptible. Without `target`
-    the runner picks a pooled slot (a caller's CARGO_TARGET_DIR is dropped)."""
+def build(top: Path, kind: str, rust_target: str, target: Path | None = None) -> tuple[list[str], Path]:
+    """One runner build; target is the optional pooled slot, rust_target is explicit."""
     spec = KINDS[kind]
     cmd = [str(w.MEM_RUN), "-m", "6G", "env", "RUSTC_WRAPPER="]
     if target is not None:
         cmd.append(f"CARGO_TARGET_DIR={target}")
-    cmd += ["cargo", "build", "--release", "--locked", "-p", spec["package"], "--bin", spec["bin"],
-            "--message-format=json-render-diagnostics"]
+    cmd += ["cargo", "build", "--release", "--locked", "--target", rust_target,
+            "-p", spec["package"], "--bin", spec["bin"], "--message-format=json-render-diagnostics"]
     env = dict(os.environ)
     env.pop("CARGO_TARGET_DIR", None)
+    env.pop("CARGO_BUILD_TARGET", None)
     say(f"building: {shlex.join(cmd)} (cwd {top})")
     artifact = None
     with subprocess.Popen(cmd, cwd=top, env=env, stdout=subprocess.PIPE, text=True) as proc:
@@ -102,21 +106,51 @@ def build(top: Path, kind: str, target: Path | None = None) -> tuple[list[str], 
     return cmd, artifact
 
 
+def target_triple(value: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9_.]+(?:-[A-Za-z0-9_]+)+", value):
+        raise argparse.ArgumentTypeError("target must be a Rust target triple, not a path")
+    return value
+
+
+def host_target(top: Path) -> str:
+    version = subprocess.check_output(["rustc", "-vV"], cwd=top, text=True)
+    for line in version.splitlines():
+        if line.startswith("host: "):
+            return target_triple(line.removeprefix("host: ").strip())
+    raise w.ToolError("rustc did not report its host target")
+
+
+def artifact_slot(artifact: Path) -> Path:
+    try:
+        relative = artifact.resolve().relative_to(w.TARGETS.resolve())
+    except ValueError:
+        raise w.ToolError(f"{artifact} is not in a pooled target slot; nothing pinned") from None
+    if not relative.parts or not relative.parts[0].startswith("slot-"):
+        raise w.ToolError(f"{artifact} is not in a pooled target slot; nothing pinned")
+    return w.TARGETS / relative.parts[0]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build once, pin immutably, print the binary path env line.")
     parser.add_argument("tree", help="a worktree or repository root")
-    parser.add_argument("--client", action="store_true", help="pin the native client (default: the core server)")
+    kinds = parser.add_mutually_exclusive_group()
+    kinds.add_argument("--client", action="store_true", help="pin the native client (default: the core server)")
+    kinds.add_argument("--bots", action="store_true", help="pin release player-scale-bots")
+    parser.add_argument("--target", type=target_triple, help="Rust target triple (default: rustc host, not CARGO_BUILD_TARGET)")
     args = parser.parse_args()
     w.check_host()
 
-    kind = "client" if args.client else "server"
+    kind = "client" if args.client else "bots" if args.bots else "server"
     spec = KINDS[kind]
     if not Path(args.tree).is_dir():
         raise w.ToolError(f"{args.tree} is not a directory")
     top = Path(str(w.git(args.tree, "rev-parse", "--show-toplevel")))
     check_tree(top, kind)
+    rust_target = args.target or host_target(top)
+    binary_name = spec["bin"] + (".exe" if "windows" in rust_target.split("-") else "")
     before = provenance(top)
-    pin_dir = w.PINS / before["id"]
+    pin_id = f"{before['id']}-{kind}-{rust_target}"
+    pin_dir = w.PINS / pin_id
 
     def done(binary: Path, built: bool) -> None:
         w.in_use_add(pin_dir, top.name, "pin")  # owner: the tree that asked for the pin
@@ -124,23 +158,21 @@ def main() -> None:
         print(f"{spec['env']}={binary}")
 
     w.PINS.mkdir(parents=True, exist_ok=True)
-    with open(w.PINS / f".lock-{before['id']}", "w") as lock:
+    with open(w.PINS / f".lock-{pin_id}", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)  # a concurrent build of the same tree is waited for, not repeated
-        binary = existing_pin(pin_dir, kind)
+        binary = existing_pin(pin_dir, kind, rust_target)
         if binary:
             return done(binary, False)
         if pin_dir.exists():
             raise w.ToolError(f"{pin_dir} exists without a manifest; refusing to touch it")
 
-        cmd, artifact = build(top, kind)
+        cmd, artifact = build(top, kind, rust_target)
         # The runner releases the slot when the build exits, and another tree may
         # then replace the artifact. Take the slot's pool lock ourselves, make sure
         # the slot holds this tree's build (rebuild under the lock: usually a no-op),
         # and copy while still holding it.
-        slot = artifact.parents[1]
-        if not slot.name.startswith("slot-") or not w.is_under(slot, w.TARGETS):
-            raise w.ToolError(f"{artifact} is not in a pooled target slot; nothing pinned")
-        stage = w.PINS / f".tmp-{before['id']}-{os.getpid()}"
+        slot = artifact_slot(artifact)
+        stage = w.PINS / f".tmp-{pin_id}-{os.getpid()}"
         with open(SLOT_LOCKS / slot.name.removeprefix("slot-"), "w") as slot_lock:
             fcntl.flock(slot_lock, fcntl.LOCK_EX)  # no new owner can take the slot now
             marker = slot / ".solaris-tree"
@@ -152,13 +184,13 @@ def main() -> None:
                     fcntl.flock(use_lock, fcntl.LOCK_EX)
                     subprocess.run("git ls-files -z | xargs -0 -r touch -c --", shell=True, cwd=top, check=True)
                     marker.write_text(f"{top}\n")
-            cmd, artifact = build(top, kind, target=slot)
+            cmd, artifact = build(top, kind, rust_target, target=slot)
             after = provenance(top)
             if after["tree"] != before["tree"]:
                 raise w.ToolError("the tree changed during the build; the binary does not match any single provenance, nothing pinned")
             try:
                 stage.mkdir()
-                staged = stage / spec["bin"]
+                staged = stage / binary_name
                 shutil.copyfile(artifact, staged)
             except BaseException:
                 shutil.rmtree(stage, ignore_errors=True)
@@ -166,9 +198,10 @@ def main() -> None:
         try:
             staged.chmod(0o555)
             binary_sha = w.sha256_file(staged)
-            final_binary = pin_dir / spec["bin"]
+            final_binary = pin_dir / binary_name
             manifest = {
                 "repo": spec["repo"], "head": before["head"], "diff_sha256": before["diff_sha256"],
+                "kind": kind, "target": rust_target,
                 "dirty": before["dirty"], "untracked_files": before["untracked_files"], "source": str(top),
                 "binary": str(final_binary), "binary_sha256": binary_sha,
                 "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "command": shlex.join(cmd),
