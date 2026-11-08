@@ -112,11 +112,15 @@ The design's recommendation is no-go until Step 3 narrows the coupling.
 
 A crate split pays off only after `mc-core`'s cycle is cut at real ownership
 boundaries. A split that adds a hook layer around shared state does not
-qualify. The order, each step measured with the Step 1 method before the next:
+qualify. Measurement is deferred to one batched quiet window (owner host,
+2026-11-08: `-x` windows stall while campaigns and real-client gates run). That
+window measures, with the Step 1 method, three separate comparisons: base
+`168023ec`, feature unification `521714a8`, and the leaf-extraction commit.
+Until then, none of these steps claims a build-time gain. The order:
 
 1. **Feature unification.** `workspace-features` is the one workspace dependency
-   feature owner, described below. Measure actual artifact reuse before claiming
-   the historical 3–4 minute lower-crate rebuild has been saved.
+   feature owner, described below. Its effect is unmeasured: the historical
+   3–4 minute lower-crate rebuild is not yet shown to be saved.
 2. **Leaf crates first.** `world_conversion` has no production inbound references
    from other `mc-core` modules (4.8k production plus 6.7k test lines).
    `mc-edge::operator_cli` calls it, and several core tests also use it.
