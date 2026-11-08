@@ -933,8 +933,13 @@ pub(super) fn run_native_work(
         }
         NativeWork::Backup { job, through } => {
             let started = std::time::Instant::now();
-            let result =
-                crate::hot_backup::copy_world(world_dir, &job.out, prev_manifest.tick, through);
+            let result = crate::hot_backup::copy_world(
+                world_dir,
+                &job.out,
+                &mut job.store.snapshot_reader(),
+                prev_manifest.tick,
+                through,
+            );
             match &result {
                 Ok(backup) => tracing::info!(
                     checkpoint_tick = backup.checkpoint_tick,

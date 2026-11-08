@@ -43,6 +43,10 @@ fn io(error: std::io::Error) -> CoreError {
 fn copy_hashed(source: &Path, destination: &Path) -> Result<String, CoreError> {
     let mut input = File::open(source)
         .map_err(|error| CoreError::Storage(format!("{}: {error}", source.display())))?;
+    copy_reader_hashed(&mut input, destination)
+}
+
+fn copy_reader_hashed(input: &mut impl Read, destination: &Path) -> Result<String, CoreError> {
     let mut output = File::options()
         .write(true)
         .create_new(true)
@@ -74,6 +78,7 @@ fn copy_hashed(source: &Path, destination: &Path) -> Result<String, CoreError> {
 pub(crate) fn copy_world(
     world_dir: &Path,
     out: &Path,
+    database: &mut impl Read,
     checkpoint_tick: u64,
     through: u64,
 ) -> Result<HotBackup, CoreError> {
@@ -83,7 +88,7 @@ pub(crate) fn copy_world(
     std::fs::create_dir(out.join("journal")).map_err(io)?;
     files.insert(
         NATIVE_DATABASE.to_owned(),
-        copy_hashed(&world_dir.join(NATIVE_DATABASE), &out.join(NATIVE_DATABASE))?,
+        copy_reader_hashed(database, &out.join(NATIVE_DATABASE))?,
     );
 
     let mut batches = Vec::new();
@@ -121,9 +126,7 @@ pub(crate) fn copy_world(
         )));
     }
     for directory in [out.join("native"), out.join("journal"), out.to_path_buf()] {
-        File::open(directory)
-            .and_then(|d| d.sync_all())
-            .map_err(io)?;
+        crate::journal::fsync_dir(&directory).map_err(io)?;
     }
     Ok(HotBackup {
         checkpoint_tick,
