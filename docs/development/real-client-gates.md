@@ -264,6 +264,10 @@ defaults to 4, and `client_settings` accepts `graphics_preset`, `render_distance
 and `fov` (default 70: the owner's saved fov is never inherited). PNG paths are
 recorded in `result.json`; settings and world are isolated per run.
 
+`use_phases` (native only) takes `name` and `ticks` (1–100), holds use across
+start and hold captures, releases it even on failure, and requires the client's
+`using` state to transition idle → active → active → idle.
+
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains
   its same-client-thread `game_time` and entity positions. Missing timestamps fail.
 - `mob_motion` reads three named `timed_entities` receipts and records horizontal

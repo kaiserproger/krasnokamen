@@ -217,6 +217,9 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
             yield "minecraft_wait_ticks", {"ticks": min(value, 100)}
         elif kind == "pause":
             yield "minecraft_open_pause_menu", {}
+        elif kind == "use_phases":
+            yield "minecraft_press_inputs", {"keys": ["use"], "ticks": 1, "hold": True}
+            yield "minecraft_wait_ticks", {"ticks": value["ticks"]}
         elif kind == "cmd":
             yield "minecraft_send_chat", {"message": value, "command": True}
         elif kind == "tp":
@@ -258,6 +261,12 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
             valid = isinstance(value, dict) and set(value) == {"keys", "ticks"}
         elif kind in ("look", "hotbar", "use_item_on", "click_screen_button"):
             valid = isinstance(value, dict)
+        elif kind == "use_phases":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"name", "ticks"}
+                     and isinstance(value["name"], str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and type(value["ticks"]) is int and 1 <= value["ticks"] <= 100)
         elif kind == "mob_motion":
             valid = (isinstance(value, dict) and set(value) == {"samples", "name"}
                      and isinstance(value["name"], str) and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
@@ -313,6 +322,30 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 shots.append(capture(probe, artifact, value))
             else:
                 (artifact / f"{value}.json").write_text(json.dumps(probe.observe(), indent=2) + "\n")
+        elif kind == "use_phases":
+            name = value["name"]
+            before = probe.observe()
+            probe.check(f"{name}_initially_idle", before.get("using") is None)
+            args = {"keys": ["use"], "ticks": 1, "hold": True}
+            probe.call("minecraft_press_inputs", args)
+            try:
+                probe.call("minecraft_wait_ticks", {"ticks": 1})
+                started = probe.observe()
+                probe.check(f"{name}_started", started.get("using") is not None)
+                (artifact / f"{name}-start.json").write_text(json.dumps(started, indent=2) + "\n")
+                shots.append(capture(probe, artifact, f"{name}-start"))
+                probe.call("minecraft_wait_ticks", {"ticks": value["ticks"]})
+                held = probe.observe()
+                probe.check(f"{name}_held", held.get("using") is not None)
+                (artifact / f"{name}-hold.json").write_text(json.dumps(held, indent=2) + "\n")
+                shots.append(capture(probe, artifact, f"{name}-hold"))
+            finally:
+                probe.call("minecraft_press_inputs", {**args, "hold": False})
+            probe.call("minecraft_wait_ticks", {"ticks": 1})
+            released = probe.observe()
+            probe.check(f"{name}_released", released.get("using") is None)
+            (artifact / f"{name}-release.json").write_text(json.dumps(released, indent=2) + "\n")
+            shots.append(capture(probe, artifact, f"{name}-release"))
         elif kind == "goat_horns_upright":
             from . import goat_horn_oracle
 

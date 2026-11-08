@@ -120,6 +120,31 @@ class SceneShotTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 scene_shot.validate_steps([{"pause": value}], client)
 
+    def test_use_phases_checks_state_and_releases_on_failure(self):
+        class Probe:
+            def __init__(self, states):
+                self.states = iter(states)
+                self.calls = []
+            def observe(self):
+                return {"using": next(self.states)}
+            def call(self, name, args):
+                self.calls.append((name, args))
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+        step = {"use_phases": {"name": "shield", "ticks": 10}}
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(scene_shot, "capture_native", side_effect=lambda p, a, n: n):
+            root = Path(tmp)
+            probe = Probe([None, {"hand": 0}, {"hand": 0}, None])
+            self.assertEqual(scene_shot.execute(probe, root, [step]),
+                             ["shield-start", "shield-hold", "shield-release"])
+            failed = Probe([None, None])
+            with self.assertRaisesRegex(AssertionError, "shield_started"):
+                scene_shot.execute(failed, root, [step])
+            self.assertEqual(failed.calls[-1],
+                             ("minecraft_press_inputs", {"keys": ["use"], "ticks": 1, "hold": False}))
+
     def test_look_is_validated_and_dispatched_to_real_client(self):
         step = {"look": {"yaw_deg": 45, "pitch_deg": -60}}
         self.assertEqual(list(scene_shot.scene_mcp_calls([step])),
