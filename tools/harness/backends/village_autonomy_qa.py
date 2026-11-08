@@ -1501,7 +1501,8 @@ def _gametime(probe: ProbeSteps) -> int:
     return 0
 
 
-def _probe_ecology(probe: ProbeSteps, detail: dict[str, Any], building_lines: list[str]) -> dict[str, Any]:
+def _probe_ecology(probe: ProbeSteps, detail: dict[str, Any], building_lines: list[str], *,
+                   entities: dict[str, Any] | None = None) -> dict[str, Any]:
     """Client-visible ecology: farm crop maturity, sheep count, mine-zone presence."""
     import re as _re
     ecology: dict[str, Any] = {"farms": [], "sheep": None, "mine_zone": None, "lumber_zone": None}
@@ -1533,7 +1534,8 @@ def _probe_ecology(probe: ProbeSteps, detail: dict[str, Any], building_lines: li
                                      "farmland": len(farmland), "crop_blocks": len(crops),
                                      "mature": len(mature), "sample": crops[:6]})
     try:
-        entities = probe.call("minecraft_list_entities", {"radius": 128})
+        if entities is None:
+            entities = probe.call("minecraft_list_entities", {"radius": 128})
         rows = entities.get("entities", [])
         ecology["sheep"] = sum(1 for r in rows if isinstance(r, dict) and r.get("entity_type") == "minecraft:sheep")
         ecology["villagers"] = sum(1 for r in rows if isinstance(r, dict) and r.get("entity_type") == "minecraft:villager")

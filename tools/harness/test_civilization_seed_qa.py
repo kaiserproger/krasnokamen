@@ -9,6 +9,45 @@ from .backends import civilization_seed_qa as qa
 
 
 class CivilizationEvidenceTests(unittest.TestCase):
+    def test_entity_census_retains_all_pages_including_a_distant_newborn(self):
+        entities = [{"entity_id": index, "entity_uuid": str(index),
+                     "entity_type": "minecraft:villager", "received_baby": index == 599}
+                    for index in range(600)]
+        probe = Mock()
+        def page(name, arguments):
+            self.assertEqual(name, "minecraft_list_entities")
+            self.assertEqual((arguments["radius"], arguments["limit"]), (128, 16))
+            start = int(arguments["cursor"]) + 1 if arguments["cursor"] else 0
+            rows = entities[start:start + 16]
+            more = start + len(rows) < len(entities)
+            return {"entities": rows, "visible_count": len(entities),
+                    "truncated": more, "next_cursor": str(rows[-1]["entity_id"]) if more else None}
+        probe.call.side_effect = page
+        census = qa.entity_census(probe)
+        self.assertEqual(census["entities"], entities)
+        self.assertFalse(census["truncated"])
+        self.assertEqual(qa.newborn(census, {str(index) for index in range(599)}, True)["entity_id"], 599)
+
+    def test_entity_census_never_accepts_an_incomplete_or_repeated_page(self):
+        for pages in (
+            [{"entities": [], "visible_count": 1, "truncated": False, "next_cursor": None}],
+            [{"entities": [], "visible_count": 1, "truncated": True, "next_cursor": None}],
+            [{"entities": [{"entity_id": 1}], "visible_count": 2, "truncated": True, "next_cursor": "1"},
+             {"entities": [{"entity_id": 1}], "visible_count": 2, "truncated": False, "next_cursor": None}],
+        ):
+            with self.subTest(pages=pages):
+                probe = Mock()
+                probe.call.side_effect = pages
+                with self.assertRaises(RuntimeError):
+                    qa.entity_census(probe)
+
+    def test_ecology_reuses_the_complete_census(self):
+        probe = Mock()
+        census = {"entities": [{"entity_type": "minecraft:sheep"}, {"entity_type": "minecraft:villager"}]}
+        ecology = qa.village._probe_ecology(probe, {}, [], entities=census)
+        self.assertEqual((ecology["sheep"], ecology["villagers"]), (1, 1))
+        probe.call.assert_not_called()
+
     def test_verdict_requires_all_evidence_and_stall_wins(self):
         stages = {name: True for name in ("new_house", "births", "second_building", "iron_smelted")}
         self.assertTrue(qa.acceptance_verdict(stages, stalled=False)["all"])
@@ -112,15 +151,19 @@ class CivilizationEvidenceTests(unittest.TestCase):
 
     def test_baby_capture_checks_identity_after_approach(self):
         probe = Mock()
-        baby = {"entity_id": 17, "entity_uuid": "new", "received_baby": True,
-                "x": 0, "y": 65.12, "z": 4}
-        probe.call.side_effect = lambda name, args=None: {"entities": [baby]} if name == "minecraft_list_entities" else {}
+        baby = {"entity_id": 17, "entity_uuid": "new", "entity_type": "minecraft:villager",
+                "received_baby": True, "x": 0, "y": 65.12, "z": 4}
+        probe.call.side_effect = lambda name, args=None: {
+            "entities": [baby], "visible_count": 1, "truncated": False, "next_cursor": None
+        } if name == "minecraft_list_entities" else {}
         probe.observe.return_value = {"player": {"x": 0, "y": 64, "z": 0},
                                       "target": {"type": "entity", "entity_uuid": "new"}}
         with patch.object(qa.native_client, "capture", return_value={"retained_path": "baby.png"}):
             result = qa.capture_target(probe, "artifact", "baby", (0, 65.62, 4), entity=baby)
         self.assertEqual(result["observed_target"]["entity_uuid"], "new")
         probe.call.assert_any_call("minecraft_approach_entity", {"entity_id": 17, "timeout_seconds": 120.0})
+        probe.call.assert_any_call("minecraft_list_entities", {
+            "radius": 128, "limit": 16, "cursor": "", "entity_type": "minecraft:villager"})
         probe.observe.return_value["target"]["entity_uuid"] = "other"
         with patch.object(qa.native_client, "capture") as capture:
             with self.assertRaisesRegex(RuntimeError, "occluded or out of reach"):
@@ -261,6 +304,7 @@ class CivilizationEvidenceTests(unittest.TestCase):
                 census += 1
                 if census == 2:
                     raise RuntimeError("observation begins")
+                return {"entities": [], "visible_count": 0, "truncated": False, "next_cursor": None}
             return {}
 
         probe.call.side_effect = call

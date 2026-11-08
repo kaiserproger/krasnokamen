@@ -132,6 +132,32 @@ def completed_project(building: dict[str, Any], baseline_buildings: set[int],
                  and village._blueprint_placements(building, blueprints[p["blueprint"]], p["origin"])), None)
 
 
+def entity_census(probe: ProbeSteps, entity_type: str | None = None) -> dict[str, Any]:
+    """Read every page, without shrinking the 128-block received-entity census."""
+    arguments: dict[str, Any] = {"radius": 128, "limit": 16, "cursor": ""}
+    if entity_type is not None:
+        arguments["entity_type"] = entity_type
+    rows: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    while True:
+        page = probe.call("minecraft_list_entities", dict(arguments))
+        for entity in page["entities"]:
+            identity = entity["entity_id"]
+            if identity in seen or (entity_type is not None and entity["entity_type"] != entity_type):
+                raise RuntimeError("entity census returned a duplicate identity or wrong type")
+            seen.add(identity)
+            rows.append(entity)
+        cursor = page.get("next_cursor")
+        if cursor is None:
+            if page["truncated"] or len(rows) != page["visible_count"]:
+                raise RuntimeError("entity census is incomplete or changed during pagination")
+            return {**page, "entities": rows, "census_pages_complete": True}
+        if (not page["truncated"] or not page["entities"] or
+                (arguments["cursor"] and int(cursor) <= int(arguments["cursor"]))):
+            raise RuntimeError("entity census cursor did not advance")
+        arguments["cursor"] = cursor
+
+
 def capture_target(probe: ProbeSteps, artifact: Path, label: str,
                    target: tuple[float, float, float], *,
                    entity: dict[str, Any] | None = None,
@@ -140,7 +166,7 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
     initial = probe.observe()["player"]
     if entity:
         probe.call("minecraft_approach_entity", {"entity_id": entity["entity_id"], "timeout_seconds": 120.0})
-        seen = probe.call("minecraft_list_entities", {"radius": 128, "limit": 512})
+        seen = entity_census(probe, "minecraft:villager")
         current = next((e for e in seen.get("entities", [])
                         if e.get("entity_uuid") == entity["entity_uuid"]), None)
         if current is None or current.get("received_baby") is not True:
@@ -377,8 +403,8 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
              server_log: Path, read_container: Callable[[tuple[int, int, int]], dict[str, int]]) -> None:
     spawn = probe.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
     detail["player_spawn"] = {key: spawn["player"].get(key) for key in ("x", "y", "z")}
-    detail["spawn_entities"] = probe.call("minecraft_list_entities", {"radius": 128, "limit": 512})
-    detail["census_coverage"] = "At most 512 client-visible entities within 128 blocks; membership counts come from settlement info."
+    detail["spawn_entities"] = entity_census(probe)
+    detail["census_coverage"] = "Every received client-visible entity within 128 blocks, paged in groups of 16 without an aggregate limit; membership counts also come from settlement info."
     arrived = walk_to_village(probe, detail)
     detail["player_after_walk"] = {key: arrived["player"].get(key) for key in ("x", "y", "z")}
     detail["spawn_to_target_horizontal_blocks"] = math.dist(
@@ -427,7 +453,7 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
     probe.report["fixture_commands"].append("console: " + command)
     item_merge._console(server, command)
     detail["observer_mode"] = "creative after claim and founding transfer; player survival is not tested"
-    entities = probe.call("minecraft_list_entities", {"radius": 128, "limit": 512})
+    entities = entity_census(probe)
     detail["initial_entities"] = entities
     detail["initial_sheep_count"] = sum(
         1 for entity in entities.get("entities", [])
@@ -463,8 +489,8 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
         project = status.get("project")
         if project and project["blueprint"] in blueprints and project not in projects:
             projects.append(project)
-        entities = probe.call("minecraft_list_entities", {"radius": 128, "limit": 512})
-        ecology = village._probe_ecology(probe, detail, status["buildings_now"])
+        entities = entity_census(probe)
+        ecology = village._probe_ecology(probe, detail, status["buildings_now"], entities=entities)
         blocks = building_blocks(probe, status["buildings_now"])
         workstations = workstation_blocks(probe, chest)
         workstation_shots = []

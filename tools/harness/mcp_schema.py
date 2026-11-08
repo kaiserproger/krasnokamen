@@ -35,6 +35,9 @@ def native_schema(binary: Path, windowed: bool) -> dict[str, dict] | None:
     Older pinned clients stay valid gate subjects (negative controls, released-client
     checks); they refuse the subcommand with `unknown_command: mcp-schema` and the
     client itself still validates every call at run time. Any other failure fails closed.
+
+    Optional native census arguments (entity_type and cursor) come from this exact
+    binary, not the Loader's catalog. Never merge the two clients' capabilities.
     """
     try:
         result = subprocess.run([str(binary), 'mcp-schema'], capture_output=True, text=True,
