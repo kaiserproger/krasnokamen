@@ -146,43 +146,19 @@ Neither Mojang bytes nor prepared worlds are shipped in Git.
 
 ### Build once and retain provenance
 
-Use an ordinary, **non-PGO-instrumented release** build. Do not silently point a
-release receipt at another binary: the runner checks both binary SHA-256 hashes.
-The commit identifies the server source, while the receipt also retains the
-actual build command/toolchain. If your source is dirty, retain its patch and
-identify it in the receipt instead of presenting HEAD as the whole source.
+Use immutable `pin-release` artifacts for both the server and protocol bots,
+from the same source tree. The runner checks each pin's manifest and binary hash,
+and rejects a hand-written release-build receipt or pins from different trees.
+Build outside measurement:
 
 ```sh
 ROOT="$(pwd -P)"
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
-cargo build --release --bin solaris-v2 --bin player-scale-bots -j 2
-python3 - <<'PY'
-import hashlib, json, os, pathlib, subprocess
-root = pathlib.Path.cwd()
-target = pathlib.Path(os.environ['CARGO_TARGET_DIR']).resolve()
-def sha(path):
-    with path.open('rb') as f:
-        return hashlib.file_digest(f, 'sha256').hexdigest()
-receipt = {
-    'profile': 'release',
-    'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
-    'command': ['cargo', 'build', '--release', '--bin', 'solaris-v2', '--bin', 'player-scale-bots', '-j', '2'],
-    'rustc': subprocess.check_output(['rustc', '-Vv'], text=True),
-    'build_environment': {k: v for k, v in os.environ.items()
-        if k in ('RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_TARGET_DIR') or k.startswith('CARGO_PROFILE_RELEASE')},
-    'cargo_config': (root / '.cargo/config.toml').read_text(),
-    'server_sha256': sha(target / 'release/solaris-v2'),
-    'bots_sha256': sha(target / 'release/player-scale-bots'),
-}
-(root / '.analysis').mkdir(exist_ok=True)
-(root / '.analysis/profile-build.json').write_text(json.dumps(receipt, indent=2) + '\n')
-PY
+eval "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release "$ROOT")"
+eval "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release "$ROOT" --bots)"
 ```
 
-On the shared agent host, wrap builds in `tools/dev/mem-run.sh -m 4G` (the
-runner is Main's copy, see [heavy commands](../development/heavy-commands-and-memory.md))
-and use the assigned target directory (raise the cap only after an observed OOM).
-Do not compile during somebody else's measurement window.
+`pin-release` builds through the owner-host memory runner and retains source and
+binary provenance. Do not compile during somebody else's measurement window.
 
 ### One command per profile
 
@@ -191,9 +167,9 @@ each invocation owns preparation/cache reuse, startup, warmup, measurement,
 shutdown, native snapshot checks and its receipt directory.
 
 ```sh
-COMMON=(--server-bin "$CARGO_TARGET_DIR/release/solaris-v2"
-        --bots-bin "$CARGO_TARGET_DIR/release/player-scale-bots"
-        --build-receipt "$ROOT/.analysis/profile-build.json")
+COMMON=(--server-bin "$SOLARIS_SERVER_BINARY"
+        --bots-bin "$SOLARIS_BOTS_BINARY"
+        --build-receipt "$(dirname "$SOLARIS_SERVER_BINARY")/manifest.json")
 python3 -m tools.coreperf.profiles idle "${COMMON[@]}"
 python3 -m tools.coreperf.profiles explore-20 "${COMMON[@]}"
 python3 -m tools.coreperf.profiles native-100 "${COMMON[@]}"

@@ -24,6 +24,53 @@ from tools.harness.backends import catalog_load as load
 PROFILES = {"idle": (0, 0, 0, 8), "explore-3": (3, 0, 0, 8), "explore-20": (20, 0, 0, 8),
             "native-100": (100, 100000, 0, 6), "villager-heavy": (100, 100000, 20000, 6)}
 
+PIN_ROOT = Path("/run/media/kaiserroman/games/solaris-work/pins")
+
+
+def pinned_binary(binary: Path, kind: str) -> dict[str, Any]:
+    """Accept only the immutable pin-release artifact and its matching manifest."""
+    binary = binary.resolve()
+    if binary.parent.parent != PIN_ROOT.resolve():
+        raise ValueError(f"{kind} binary is not in the pin-release store")
+    manifest = json.loads((binary.parent / "manifest.json").read_text())
+    if (manifest.get("repo") != "core" or manifest.get("kind") != kind
+            or manifest.get("binary") != str(binary) or not manifest.get("head")
+            or not manifest.get("diff_sha256")
+            or not manifest.get("command") or not manifest.get("target")
+            or manifest.get("binary_sha256") != load.scale.binary_sha256(binary)):
+        raise ValueError(f"{kind} pin-release manifest does not match binary")
+    return manifest
+
+
+def validate_cohort(before: dict[str, Any], after: dict[str, Any],
+                    expected: dict[str, int]) -> None:
+    for cohort in (before, after):
+        identities = cohort.get("identities")
+        if not isinstance(identities, dict) or cohort.get("counts") != expected:
+            raise ValueError("missing saved identities or wrong fixture population")
+        counts = dict.fromkeys(expected, 0)
+        for row in identities.values():
+            kind = row.get("kind")
+            if kind not in counts:
+                raise ValueError("unexpected saved fixture identity")
+            counts[kind] += 1
+        if counts != expected:
+            raise ValueError("missing saved identities or wrong fixture population")
+    if before["identities"].keys() != after["identities"].keys():
+        raise ValueError("persistent fixture cohort changed identity")
+    if any(before["identities"][key]["kind"] != after["identities"][key]["kind"]
+           for key in before["identities"]):
+        raise ValueError("persistent fixture identity changed kind")
+
+
+def validate_prepared(recipe: dict[str, Any], prepared: dict[str, Any]) -> None:
+    if prepared.get("recipe_sha256") != load.digest(recipe):
+        raise ValueError("prepared fixture recipe differs from requested recipe")
+    cohort = prepared.get("cohort")
+    if not isinstance(cohort, dict):
+        raise ValueError("prepared fixture lacks saved identities")
+    validate_cohort(cohort, cohort, recipe["expected"])
+
 
 def fixture(mobs: int, villagers: int) -> dict[str, Any]:
     """PGOBolt's shared public-command pens; no private world seeding."""
@@ -125,6 +172,8 @@ def validate_metrics(metric: dict[str, Any], initial: dict[str, Any], cursor: in
             metric.get("instance_started_unix_ns") != initial.get("instance_started_unix_ns") or
             metric.get("source_skipped_ticks_total") != initial.get("source_skipped_ticks_total")):
         raise ValueError("exact tick stream overwritten, reset or lost source samples")
+    if not isinstance(metric.get("samples"), list):
+        raise ValueError("exact source tick samples missing")
     for row in metric["samples"]:
         if row["tick"] != cursor + 1:
             raise ValueError("noncontiguous exact tick stream")
@@ -238,9 +287,7 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
     snapshot = await compare.snapshot(args, directory, world, config)
     result["entity_counts_after"] = {kind: group["active"] for kind, group in snapshot["entities"].items()}
     after = compare.cohort(snapshot, recipe["expected"])
-    before = prepared["cohort"]
-    if before["identities"].keys() != after["identities"].keys():
-        raise ValueError("persistent fixture cohort changed identity")
+    validate_cohort(prepared["cohort"], after, recipe["expected"])
     result["cohort_counts"] = after["counts"]
     result["status"] = "smoke" if args.smoke else "measured"
     result["publication_evidence"] = not args.smoke
@@ -259,19 +306,21 @@ async def run(args: argparse.Namespace) -> int:
     asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, task.cancel)
     try:
         result["host"] = host_receipt(args.out)
-        build = json.loads(args.build_receipt.read_text())
-        hashes = {"server_sha256": load.scale.binary_sha256(args.server_bin),
-                  "bots_sha256": load.scale.binary_sha256(args.bots_bin)}
-        if build.get("profile") != "release" or any(build.get(k) != v for k, v in hashes.items()):
-            raise ValueError("release build receipt does not match supplied binaries")
-        if not build.get("commit") or not build.get("command"):
-            raise ValueError("build receipt lacks commit or exact build command")
-        result["build"] = build
+        server_pin = pinned_binary(args.server_bin, "server")
+        bots_pin = pinned_binary(args.bots_bin, "bots")
+        if args.build_receipt.resolve() != args.server_bin.resolve().parent / "manifest.json":
+            raise ValueError("build receipt must be the server pin-release manifest")
+        if (server_pin["head"], server_pin["diff_sha256"]) != (bots_pin["head"], bots_pin["diff_sha256"]):
+            raise ValueError("server and bots pins identify different source trees")
+        hashes = {"server_sha256": server_pin["binary_sha256"],
+                  "bots_sha256": bots_pin["binary_sha256"]}
+        result["build"] = {"server": server_pin, "bots": bots_pin}
         result["registry"] = load.tree_hash(args.vanilla_data_dir)
         recipe = fixture(args.mobs, args.villagers)
         load.scale.dump(args.out / "fixture.json", recipe)
         key = compare.fixture_cache_key(args, recipe, result["registry"]["sha256"])
         world, prepared = await compare.prepare(args, args.out / "prepare", recipe, key, hashes)
+        validate_prepared(recipe, prepared)
         result["fixture_cache"] = prepared["fixture_cache"]
         result["entity_counts_before"] = {kind: group["active"] for kind, group in prepared["snapshot"]["entities"].items()}
         if args.prepare_only:

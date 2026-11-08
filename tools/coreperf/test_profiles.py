@@ -1,6 +1,10 @@
 """Unit contracts for public profile receipts; no server launch."""
 import argparse
 import unittest
+import json
+from pathlib import Path
+import tempfile
+from unittest.mock import patch
 
 from tools.coreperf import profiles
 
@@ -63,6 +67,52 @@ class ProfilesTests(unittest.TestCase):
                         {"samples": [{"tick": 11, "wall_start_unix_ns": 100, "wall_us": -1}]}):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 profiles.validate_metrics(dict(metric, **changes), initial, 10)
+
+    def test_prepared_recipe_and_population_and_saved_identities_are_required(self):
+        recipe = {"expected": {"minecraft:cow": 1}, "variant": "example"}
+        cohort = {"counts": {"minecraft:cow": 1},
+                  "identities": {"uuid": {"kind": "minecraft:cow"}}}
+        prepared = {"recipe_sha256": profiles.load.digest(recipe), "cohort": cohort}
+        profiles.validate_prepared(recipe, prepared)
+        for bad in (
+            dict(prepared, recipe_sha256="wrong"),
+            dict(prepared, cohort={"counts": cohort["counts"], "identities": {}}),
+            dict(prepared, cohort={"counts": {"minecraft:cow": 2}, "identities": cohort["identities"]}),
+            dict(prepared, cohort={"counts": cohort["counts"]}),
+        ):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                profiles.validate_prepared(recipe, bad)
+        with self.assertRaises(ValueError):
+            profiles.validate_cohort(cohort, {"counts": cohort["counts"],
+                                     "identities": {"other": {"kind": "minecraft:cow"}}},
+                                     recipe["expected"])
+
+    def test_pin_manifest_must_belong_to_supplied_binary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pin = root / "pin"
+            pin.mkdir()
+            binary = pin / "solaris-v2"
+            binary.write_bytes(b"server")
+            manifest = {"repo": "core", "kind": "server", "binary": str(binary),
+                        "head": "abc", "diff_sha256": "def", "command": "cargo build",
+                        "target": "test-target", "binary_sha256": profiles.load.scale.binary_sha256(binary)}
+            (pin / "manifest.json").write_text(json.dumps(manifest))
+            with patch.object(profiles, "PIN_ROOT", root):
+                self.assertEqual(profiles.pinned_binary(binary, "server"), manifest)
+                with self.assertRaises(ValueError):
+                    profiles.pinned_binary(binary, "bots")
+                binary.write_bytes(b"other")
+                with self.assertRaises(ValueError):
+                    profiles.pinned_binary(binary, "server")
+            with self.assertRaises(ValueError):
+                profiles.pinned_binary(binary, "server")
+
+    def test_missing_source_samples_fail(self):
+        initial = {"schema_version": 1, "instance_started_unix_ns": 1,
+                   "source_skipped_ticks_total": 0}
+        with self.assertRaisesRegex(ValueError, "samples missing"):
+            profiles.validate_metrics(initial, initial, 0)
 
 
 class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
