@@ -2166,7 +2166,7 @@ regression = []
 
 [[bug]]
 id = "ISSUE-1-03"
-title = "F3 indices unexpectedly rises"
+title = "F3 drawn-index count rises sharply with camera direction; verify it stays bounded rather than accumulating"
 area = "client"
 repro = "manual"
 severity = "major"
@@ -2853,7 +2853,7 @@ regression = []
 
 [[bug]]
 id = "MODEL-OPUS-9"
-title = "Aquatic identity is lost."
+title = "Axolotl gills, fish fins and silhouettes, and pufferfish/tropical fish variants differ from vanilla"
 area = "client"
 repro = "source"
 severity = "major"
@@ -2863,7 +2863,7 @@ regression = []
 
 [[bug]]
 id = "MODEL-OPUS-10"
-title = "Several mobs lose their signature parts."
+title = "Hoglin ears and tusks, baby bee limbs, guardian spikes and strider bristles or proportions are missing or malformed"
 area = "client"
 repro = "source"
 severity = "major"
@@ -2873,7 +2873,7 @@ regression = []
 
 [[bug]]
 id = "MODEL-OPUS-11"
-title = "These mobs have the wrong shape or size."
+title = "Allay, rabbit, fox, panda, vex and horse family rigs have incorrect silhouettes or sizes"
 area = "client"
 repro = "source"
 severity = "major"
@@ -2903,7 +2903,7 @@ regression = []
 
 [[bug]]
 id = "MODEL-OPUS-14"
-title = "Ceiling hanging sign (Sonnet lead, independently confirmed)."
+title = "Hanging signs have incorrect bar, chains, board UV and wall brackets"
 area = "client"
 repro = "source"
 severity = "major"
@@ -3023,7 +3023,7 @@ regression = []
 
 [[bug]]
 id = "MODEL-OPUS-N10"
-title = "Small items:"
+title = "Glow squid tentacle texture yaw, cow and mooshroom front-leg alignment, and bed right-leg mirroring differ from vanilla"
 area = "client"
 repro = "source"
 severity = "major"
