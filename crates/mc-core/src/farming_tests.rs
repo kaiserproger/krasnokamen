@@ -1863,6 +1863,75 @@ fn turtle_eggs_crack_at_night_into_baby_turtles() {
 }
 
 #[test]
+fn sniffer_scheduled_edges_match_continuous_ticks() {
+    let (mut ordinary, _) = setup();
+    let (mut warped, _) = setup();
+    let pos = BlockPos {
+        x: 3,
+        y: Y + 1,
+        z: -2,
+    };
+    for state in [&mut ordinary, &mut warped] {
+        let egg = block(state, "sniffer_egg", &[("hatch", "0")]);
+        put(state, pos.x, pos.y, pos.z, egg);
+        crate::eggs::changed(state, pos);
+    }
+
+    for stage in 0..3 {
+        let image = ordinary.block_ticks.image();
+        let due = image
+            .chunks
+            .iter()
+            .flat_map(|chunk| &chunk.ticks)
+            .find(|tick| tick.pos == [pos.x, pos.y, pos.z])
+            .unwrap()
+            .trigger_tick;
+        // Compare a small continuous window around each real scheduled edge.
+        // No other behaviour in this isolated fixture is asserted across the
+        // omitted interval.
+        ordinary.tick = due - 4;
+        warped.tick = due - 4;
+        while ordinary.tick < due {
+            run(&mut ordinary, 1);
+        }
+        assert_eq!(crate::tick_tests::warp_to_block_tick(&mut warped, pos), due);
+        run(&mut ordinary, 1);
+        run(&mut warped, 1);
+
+        let ordinary_block = at(&ordinary, pos.x, pos.y, pos.z);
+        assert_eq!(ordinary_block, at(&warped, pos.x, pos.y, pos.z));
+        if stage < 2 {
+            assert_eq!(
+                ordinary_block,
+                block(
+                    &ordinary,
+                    "sniffer_egg",
+                    &[("hatch", if stage == 0 { "1" } else { "2" })]
+                )
+            );
+        } else {
+            assert_eq!(ordinary_block, ordinary.registry.states.air);
+        }
+        assert_eq!(ordinary.block_ticks.image(), warped.block_ticks.image());
+        let babies = |state: &TickState| {
+            state
+                .entities
+                .slots()
+                .filter(|slot| {
+                    let row = state.entities.row(*slot);
+                    row.entity_life.child_ticks > 0
+                        && matches!(state.entities.body(*slot).kind, crate::entities::EntityKind::Mob { type_id }
+                            if state.registry.blueprint(type_id).is_some_and(|blueprint| blueprint.name == "minecraft:sniffer"))
+                })
+                .map(|slot| (state.entities.row(slot).entity_life.child_ticks, state.entities.pos(slot)))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(babies(&ordinary).len(), usize::from(stage == 2));
+        assert_eq!(babies(&ordinary), babies(&warped));
+    }
+}
+
+#[test]
 fn sniffer_eggs_hatch_into_baby_sniffers() {
     // Vanilla SnifferEggBlock: scheduled thirds of 24000 ticks (12000 on
     // moss); each third cracks hatch+1, the third hatches a snifferlet.

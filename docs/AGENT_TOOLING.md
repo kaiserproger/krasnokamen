@@ -271,8 +271,11 @@ For a long, isolated scheduled-block simulation, use
 `crate::tick_tests::warp_to_block_tick` to jump to the target block's real
 queued deadline, then run the native tick and assert the outcome. This does
 not advance other simulation systems: do not use it if movement, random ticks,
-other deadlines, or elapsed per-tick effects matter. `/tick sprint`, including
-the civilization-seed QA sprint, removes waits but still executes every tick.
+other deadlines, or elapsed per-tick effects matter. For each warped behaviour,
+retain an ordinary-tick test or compare a small continuous-tick case with the
+warped case, including a negative control that skips a consequential tick.
+`/tick sprint`, including the civilization-seed QA sprint, removes waits but
+still executes every tick.
 
 Concurrency: `RUST_TEST_THREADS` (first priority), else `NEXTEST_TEST_THREADS`
 (default `num-cpus`), selects the gate default; nextest's `--test-threads=N`
