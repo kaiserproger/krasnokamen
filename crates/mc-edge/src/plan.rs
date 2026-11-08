@@ -700,7 +700,7 @@ fn plan_viewer_inner(
             &mut out,
             conn,
             &ClientboundSetTime::overworld(
-                i64::try_from(snapshot.tick).unwrap_or(i64::MAX),
+                i64::try_from(snapshot.game_time).unwrap_or(i64::MAX),
                 snapshot.day_time,
                 snapshot.day_time_rate,
             ),

@@ -3822,3 +3822,47 @@ status = "open"
 source = "Native gait scene retained summon and effect success messages after send_command_feedback false"
 regression = ["cargo:mc-core:command_execution::tests::gamerule_suppresses_player_scene_success_but_not_failure_or_console", "cargo:mc-core:dimensions::tests::dimensional_teleport_success_obeys_player_feedback_rule", "harness:scene-shot:native-command-feedback"]
 failing_first = "reported"
+
+[[bug]]
+id = "TICK-FROZEN-GAME-AGE-WIRE"
+title = "SET_TIME advances client game age during tick freeze by sending the WAL frame counter"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Native freeze/teleport/local-input scene: the old server advances received game age while daylight holds. The candidate projects TickControl simulated age; actual native repeats and source controls exist, but graphical ledger promotion remains pending."
+regression = ["cargo:mc-core:tick_control::tests::game_time_stands_still_while_frozen_and_counts_stepped_ticks", "cargo:mc-edge:server::admin_tests::clock_queue_tests::queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer", "cargo:mc-edge:play::tests::join_burst_carries_load_start_before_center"]
+failing_first = "reported"
+
+[[bug]]
+id = "TICK-FROZEN-GAME-AGE-RESTART"
+title = "Restart loses accumulated held ticks and jumps simulated game age to the recovered WAL frame"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "core/recovery.rs restores the native frame into a new TickState, while TickControl starts with held_ticks=0. The runtime-only held offset is not in checkpoint metadata. Separate from the SET_TIME projection fix; no storage migration was made."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "TIME-QUERY-FROZEN-PHASE"
+title = "time query gametime is one tick behind the published simulated age during a held frame"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "tick.rs begin_tick increments held_ticks before input commands, but state.tick increments afterwards; command_execution.rs queries game_ticks(state.tick) in between. A held query sees N-(H+1), whereas the post-tick snapshot sees (N+1)-(H+1)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "MAP-FRAME-MARKER-RECOVERY-LIMIT"
+title = "A saved map with more than 256 retained frame markers prevents world recovery"
+area = "gameplay"
+repro = "source"
+severity = "blocker"
+status = "open"
+source = "Contributing factors: maps/runtime.rs appends distinct retained frame markers without a writer-side limit; maps::checkpoint serializes them without validation; maps::recover rejects more than 256. The read boundary fails closed, but the live admission and save boundaries do not prevent that state. Source finding, not a destructive restart test. M00 batches genuine maps to avoid creating this invalid benchmark fixture; that does not fix the gameplay owner."
+regression = []
+failing_first = "not recorded"

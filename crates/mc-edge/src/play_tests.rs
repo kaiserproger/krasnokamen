@@ -29,9 +29,12 @@ async fn loopback_pair() -> (crate::connection::Connection, crate::connection::C
 
 fn empty_output() -> TickOutput {
     TickOutput {
-        tick: 1,
+        tick: 40,
         snapshot: Arc::new(WorldSnapshot {
+            tick: 40,
+            game_time: 1,
             day_time: 100,
+            day_time_rate: 1.0,
             ..Default::default()
         }),
         changes: Arc::new(ChangeSet::default()),
@@ -98,6 +101,18 @@ async fn join_burst_carries_load_start_before_center() {
     let frames = read_burst_ids(&mut client).await;
     server_task.await.unwrap();
     let ids: Vec<i32> = frames.iter().map(|(id, _)| *id).collect();
+    let clocks: Vec<_> = frames
+        .iter()
+        .filter(|(id, _)| *id == mc_protocol::packets::play::ClientboundSetTime::ID)
+        .map(|(_, body)| {
+            mc_protocol::packets::play::ClientboundSetTime::decode(&mut &body[..]).unwrap()
+        })
+        .collect();
+    assert_eq!(
+        clocks,
+        vec![mc_protocol::packets::play::ClientboundSetTime::overworld(1, 100, 1.0); 2],
+        "both initial and closing time sync must preserve simulated age after held ticks"
+    );
     let (_, body) = frames
         .iter()
         .find(|(id, _)| *id == mc_protocol::packets::play::ClientboundCommands::ID)

@@ -296,6 +296,8 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and isinstance(value["name"], str)
                      and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
                      and type(value["eof"]) is bool)
+        elif kind == "wait_chat":
+            valid = client == "native" and isinstance(value, str) and bool(value)
         elif kind == "wait_screen":
             valid = isinstance(value, str) and bool(value)
         elif kind == "key":
@@ -397,6 +399,11 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 shots.append(capture(probe, artifact, value))
             else:
                 (artifact / f"{value}.json").write_text(json.dumps(probe.observe(), indent=2) + "\n")
+        elif kind == "wait_chat":
+            probe.wait(
+                lambda state: any(value in line for line in state["recent_chat"]),
+                f"chat_received_{value}", wait_for_play=True,
+            )
         elif kind == "assert_chat":
             state = probe.observe()
             lines = state.get("recent_chat")

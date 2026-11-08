@@ -526,6 +526,8 @@ pub struct WorldSnapshot {
     pub dimension: crate::dimensions::Dimension,
     /// Root output owns the other dimension projections from this same tick.
     pub dimensions: std::collections::BTreeMap<crate::dimensions::Dimension, TickOutput>,
+    /// Simulated world age; frozen ticks do not advance it.
+    pub game_time: u64,
     /// Day time in ticks (0..24000 cycle plus day count).
     pub day_time: i64,
     /// Client clock speed; zero when `advance_time` is disabled.

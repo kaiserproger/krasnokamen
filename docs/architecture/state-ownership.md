@@ -19,6 +19,16 @@ and [mutations.md](mutations.md) for routes.
 | Immutable content tables and definitions | validated startup data / native registry | gameplay, worldgen, wire encoders, component declarations | external licensed content cache; world identity rejects unsupported state |
 | Validation run and owned processes | canonical `tools/harness` | agents/CI inspect receipts | one `.analysis/validation/<stamp>-<profile>-<id>/result.json` plus command logs |
 
+## Tick and wire clocks
+
+`WorldSnapshot::tick` identifies native frames and WAL order, including held
+frames. `WorldSnapshot::game_time` projects the existing
+`TickControl::game_ticks` counter: frozen frames hold it, a simulated step
+advances it once. Edge `SET_TIME` uses that simulated age, not the WAL frame.
+`day_time` and its client rate remain independent daylight-clock projections.
+The held offset is currently runtime-only: recovery restores the WAL frame but
+not that offset (`TICK-FROZEN-GAME-AGE-RESTART` in the bug ledger).
+
 ## Rules
 
 1. Only native gameplay writes authoritative world/player/entity state. The edge

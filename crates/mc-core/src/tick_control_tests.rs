@@ -348,17 +348,35 @@ fn parser_follows_vanilla_grammar_and_bounds() {
 
 #[test]
 fn game_time_stands_still_while_frozen_and_counts_stepped_ticks() {
-    let mut control = TickControl::default();
-    control.begin_tick();
-    assert_eq!(control.game_ticks(1), 1);
-    control.set_frozen(true);
+    let mut state = fixture();
+    let (output, _, _) = run_tick(&mut state, &[]);
+    assert_eq!(output.snapshot.game_time, 1);
+    state.tick_control.set_frozen(true);
     for tick in 2..=4 {
-        control.begin_tick();
-        assert_eq!(control.game_ticks(tick), 1, "frozen ticks add no game time");
+        let (output, _, _) = run_tick(&mut state, &[]);
+        assert_eq!(output.tick, tick, "the journal still advances while frozen");
+        assert_eq!(
+            output.snapshot.game_time, 1,
+            "frozen ticks add no world age"
+        );
     }
-    control.step(1);
-    control.begin_tick();
-    assert_eq!(control.game_ticks(5), 2, "the stepped tick counts");
-    control.begin_tick();
-    assert_eq!(control.game_ticks(6), 2);
+    assert!(state.tick_control.step(1));
+    let (output, _, _) = run_tick(&mut state, &[]);
+    assert_eq!(output.snapshot.game_time, 2, "one step adds one game tick");
+    let (output, _, _) = run_tick(&mut state, &[]);
+    assert_eq!(output.snapshot.game_time, 2, "the step budget is spent");
+    state.day_time = 48_000;
+    state
+        .gamerules
+        .insert("advance_time".into(), "false".into());
+    state.tick_control.set_frozen(false);
+    let (output, _, _) = run_tick(&mut state, &[]);
+    assert_eq!(
+        output.snapshot.game_time, 3,
+        "world age ignores daylight rules"
+    );
+    assert_eq!(
+        output.snapshot.day_time, 48_000,
+        "the daylight clock stays paused"
+    );
 }

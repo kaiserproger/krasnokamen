@@ -194,7 +194,7 @@ pub async fn send_join_burst(burst: JoinBurst<'_>) -> anyhow::Result<()> {
     })
     .await?;
     conn.send_packet(&ClientboundSetTime::overworld(
-        i64::try_from(out.snapshot.tick).unwrap_or(i64::MAX),
+        i64::try_from(out.snapshot.game_time).unwrap_or(i64::MAX),
         out.snapshot.day_time,
         out.snapshot.day_time_rate,
     ))
@@ -279,7 +279,7 @@ pub async fn send_join_burst(burst: JoinBurst<'_>) -> anyhow::Result<()> {
     // Closing time sync: the client renders the world clock from the last
     // one it saw.
     conn.send_packet(&ClientboundSetTime::overworld(
-        i64::try_from(out.snapshot.tick).unwrap_or(i64::MAX),
+        i64::try_from(out.snapshot.game_time).unwrap_or(i64::MAX),
         out.snapshot.day_time,
         out.snapshot.day_time_rate,
     ))

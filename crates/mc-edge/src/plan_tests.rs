@@ -1896,6 +1896,7 @@ fn clock_output(tick: u64, day_time: i64, day_time_rate: f32) -> TickOutput {
         tick,
         snapshot: Arc::new(WorldSnapshot {
             tick,
+            game_time: tick - 4,
             day_time,
             day_time_rate,
             ..Default::default()
@@ -1933,7 +1934,7 @@ fn idle_viewer_gets_world_clock_every_20_ticks() {
         let mut v = viewer_at(1, [8.0, 64.0, 8.0]);
         assert_eq!(
             clocks(plan_viewer(&at(5), &mut v, 0, c)),
-            vec![ClientboundSetTime::overworld(5, 6005, 1.0)]
+            vec![ClientboundSetTime::overworld(1, 6005, 1.0)]
         );
         for tick in 6..25 {
             assert!(
@@ -1944,7 +1945,7 @@ fn idle_viewer_gets_world_clock_every_20_ticks() {
         // Tick 25 never planned (coalesced); tick 27 is past the interval.
         assert_eq!(
             clocks(plan_viewer(&at(27), &mut v, 0, c)),
-            vec![ClientboundSetTime::overworld(27, 6027, 1.0)]
+            vec![ClientboundSetTime::overworld(23, 6027, 1.0)]
         );
     });
 }
@@ -1962,7 +1963,7 @@ fn frozen_clock_is_projected_with_zero_client_rate() {
         assert!(time.reliable);
         assert_eq!(
             ClientboundSetTime::decode(&mut &body_of(time)[..]).unwrap(),
-            ClientboundSetTime::overworld(30, 6000, 0.0)
+            ClientboundSetTime::overworld(26, 6000, 0.0)
         );
     });
 }
@@ -1975,7 +1976,7 @@ fn time_set_jump_bypasses_interval() {
         for (tick, day_time) in [(11, 6000), (12, 1000), (13, 24_000)] {
             assert_reliable_clock(
                 &plan_viewer(&clock_output(tick, day_time, 1.0), &mut viewer, 0, cache),
-                ClientboundSetTime::overworld(tick as i64, day_time, 1.0),
+                ClientboundSetTime::overworld((tick - 4) as i64, day_time, 1.0),
             );
         }
     });
@@ -2012,7 +2013,7 @@ fn dirty_clock_survives_zero_chunk_credit() {
         viewer.world_credit = 0;
         let output = clock_output(11, 6000, 1.0);
         let packets = plan_viewer(&output, &mut viewer, 0, cache);
-        assert_reliable_clock(&packets, ClientboundSetTime::overworld(11, 6000, 1.0));
+        assert_reliable_clock(&packets, ClientboundSetTime::overworld(7, 6000, 1.0));
         assert!(packets.iter().all(|p| p.reliable));
         assert!(
             viewer.loaded_chunks.contains_key(&(63, 63)),
@@ -2036,7 +2037,7 @@ fn gamerule_flip_sends_rate() {
         for (tick, rate) in [(11, 0.0), (12, 1.0)] {
             assert_reliable_clock(
                 &plan_viewer(&clock_output(tick, 6001, rate), &mut viewer, 0, cache),
-                ClientboundSetTime::overworld(tick as i64, 6001, rate),
+                ClientboundSetTime::overworld((tick - 4) as i64, 6001, rate),
             );
         }
         assert!(
@@ -2067,7 +2068,7 @@ fn same_dimension_respawn_resends_clock_without_chunk_credit() {
             &mut viewer,
         );
         let packets = plan_viewer(&output, &mut viewer, 0, cache);
-        assert_reliable_clock(&packets, ClientboundSetTime::overworld(10, 6000, 1.0));
+        assert_reliable_clock(&packets, ClientboundSetTime::overworld(6, 6000, 1.0));
         assert!(viewer.forget_all, "forget pass still awaits world credit");
     });
 }

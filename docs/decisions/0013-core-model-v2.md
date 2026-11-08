@@ -43,6 +43,11 @@ entity intent: each path still has to preserve its complete custody boundary.
 Within a block-update chain, preserve vanilla order. Independent-zone parallel
 execution is a model constraint, not a claim that a general scheduler exists.
 
+Client game age follows simulated ticks, not journal frame identifiers.
+[State ownership](../architecture/state-ownership.md#tick-and-wire-clocks) defines the
+freeze/step projection and its current restart limitation; daylight time remains
+independent.
+
 ## Threads and backpressure
 
 Long-lived core workers perform parallel gameplay work; edge socket and fanout

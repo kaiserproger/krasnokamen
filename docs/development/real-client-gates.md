@@ -298,6 +298,12 @@ is required; use an ordered chat fence after the commands under test before
 checking absence. `tools/harness/command_feedback_scene.json` exercises player
 success suppression, failure visibility and the enabled feedback control.
 
+`wait_chat` (native only) takes a nonempty substring and waits on client state
+notifications until `recent_chat` contains it. Use a received acknowledgement
+before observing a server-driven transition; waiting client ticks does not
+acknowledge a command. This checks current chat history, not freshness: use a
+unique ordered fence when the same reply could already be present.
+
 
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains
   its same-client-thread `game_time` and entity positions. Missing timestamps fail.

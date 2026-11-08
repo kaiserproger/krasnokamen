@@ -8,6 +8,7 @@ fn clock_output(tick: u64, day_time: i64) -> TickOutput {
         tick,
         snapshot: Arc::new(WorldSnapshot {
             tick,
+            game_time: tick - 4,
             day_time,
             day_time_rate: 1.0,
             ..Default::default()
@@ -148,8 +149,8 @@ async fn queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer() {
     assert_eq!(
         clocks,
         vec![
-            ClientboundSetTime::overworld(30, 1030, 1.0),
-            ClientboundSetTime::overworld(31, 6000, 1.0),
+            ClientboundSetTime::overworld(26, 1030, 1.0),
+            ClientboundSetTime::overworld(27, 6000, 1.0),
         ],
         "the client's final clock must be the command jump, never the older heartbeat"
     );
