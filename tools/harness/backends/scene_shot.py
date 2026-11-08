@@ -49,7 +49,7 @@ class LatencyProxy:
         self.ready = threading.Event()
         self.error = None
         self.port = None
-        self.downstreams = set()
+        self.downstreams = []
         self.eof_writers = set()
         self.thread = threading.Thread(target=self._run, daemon=True)
 
@@ -67,7 +67,7 @@ class LatencyProxy:
             await writer.drain()
 
     async def _connection(self, reader, writer):
-        self.downstreams.add(writer)
+        self.downstreams.append(writer)
         upstream = None
         try:
             upstream_reader, upstream = await asyncio.open_connection("127.0.0.1", self.target_port)
@@ -80,7 +80,7 @@ class LatencyProxy:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
         finally:
-            self.downstreams.discard(writer)
+            self.downstreams.remove(writer)
             self.eof_writers.discard(writer)
             writer.close()
             if upstream is not None:
@@ -115,9 +115,9 @@ class LatencyProxy:
 
     def send_eof(self):
         async def close_write():
-            if len(self.downstreams) != 1:
-                raise RuntimeError("EOF requires exactly one connected client")
-            writer = next(iter(self.downstreams))
+            if not self.downstreams:
+                raise RuntimeError("EOF requires a connected client")
+            writer = self.downstreams[-1]
             self.eof_writers.add(writer)
             writer.write_eof()
             await writer.drain()
