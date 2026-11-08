@@ -387,6 +387,7 @@ class ProtocolEntities:
         self._entities: dict[int, dict[str, Any]] = {}
         self._lifecycle: list[dict[str, Any]] = []
         self._lifecycle_overflow = False
+        self._lifecycle_error: str | None = None
         self._xp: dict[str, Any] | None = None
         self._local = {'id': local_entity_id} if local_entity_id is not None else None
         self.unavailable: str | None = None
@@ -433,9 +434,13 @@ class ProtocolEntities:
                 return False
         except _DecodeError as error:
             self.unavailable = str(error) or "decode_failed"
+            if packet_id in (ADD_ENTITY, REMOVE_ENTITIES):
+                self._lifecycle_error = self.unavailable
             return False
         except Exception as error:  # observer must never die on wire input
             self.unavailable = "internal_%s" % type(error).__name__
+            if packet_id in (ADD_ENTITY, REMOVE_ENTITIES):
+                self._lifecycle_error = self.unavailable
             return False
         return True
 
@@ -467,6 +472,7 @@ class ProtocolEntities:
             "entities": entities,
             "lifecycle": copy.deepcopy(self._lifecycle),
             "lifecycle_overflow": self._lifecycle_overflow,
+            "lifecycle_error": self._lifecycle_error,
             "partial": any(entry.get("partial") for entry in self._entities.values()),
             "unavailable": self.unavailable,
             "xp": copy.deepcopy(self._xp),

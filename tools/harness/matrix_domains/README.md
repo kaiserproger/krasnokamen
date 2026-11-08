@@ -260,8 +260,9 @@ actual LoginPlay entity ID, never an invented local spawn; effect keys are
 numeric-ID strings resolved with the mob-effect registry above.
 `entity_lifecycle` separately records received spawns and removals in order,
 including the UUID associated with a known removed ID. It is per connection;
-an unknown removal has a null UUID. On overflow (4096 events) the journal is
-omitted and `observation_errors.entity_lifecycle` reports `journal_overflow`.
+an unknown removal has a null UUID. On overflow (4096 events), or an undecodable
+spawn or removal, the journal is omitted and
+`observation_errors.entity_lifecycle` reports the reason, even after respawn.
 An empty final census alone cannot distinguish no spawn from later removal.
 
 Malformed/unsupported entity packets leave sticky

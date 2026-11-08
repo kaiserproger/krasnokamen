@@ -64,6 +64,12 @@ class ProtocolEntitiesTests(unittest.TestCase):
                          [('spawn',str(identity)),('remove',str(identity))])
         self.assertFalse(snapshot['lifecycle_overflow'])
 
+    def test_lifecycle_decode_error_stays_unavailable_after_respawn(self):
+        tracker=ProtocolEntities()
+        self.assertFalse(tracker.consume(0x01,b'\x2a'))
+        self.assertTrue(tracker.consume(0x52,b''))
+        self.assertIsNotNone(tracker.snapshot()['lifecycle_error'])
+
     def test_263_linear_and_stepped_movement(self):
         tracker = ProtocolEntities(protocol=777)
         self.consume_add(tracker, x=1.0, y=2.0, z=3.0)
