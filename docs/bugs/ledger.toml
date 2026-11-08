@@ -3928,3 +3928,36 @@ status = "open"
 source = "The seed-24 fresh scenario built and received the new house and bed but its milestone capture navigated directly through a closed door, aborting the run. The wt/CivSim5 correction uses ordinary entrance approach/use, awaits both open halves, preserves the exact bed raycast and rendered capture, and returns to the observer. Three canonical saved-world closed/open flows passed, with the unprepared closed route and missing/stale entrance controls refusing capture; 72 affected contracts and doclinks passed. Source and commands are retained in receipts/CivSimStallFix/house-harness-capture.json. Full original fresh acceptance remains 0/3; integration and formal ledger promotion remain pending."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "CIV-FIXTURE-INACTIVE-MINE"
+title = "Civilization fixture leaves the village mine outside active simulation"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 original-identity continuation: simulation distance 4 leaves Mine (60,66,-154) inactive, so 118 native staffing attempts make no route call. Changing only the isolated fixture to the core-default distance 6 activates the mine; original resident 12939df5 receives a fully active 269-node native route and the real assignment. View distance remains 4. No allocator policy change is justified; the original fresh civilization gate remains 0/3."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "VILLAGER-HOUSE-EXIT-FOLIAGE"
+title = "Foliage obstructs a village doorway and prevents residents reaching free beds"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 native checkpoint 125406: oak leaves at (124,73,-276) obstruct the approach to the open house door at (123,72,-276). On an unchanged original-identity clone, five actual resident49 bed searches fail; removing only that leaf makes four searches reach bed (120,71,-292) with 44-node routes, and resident63 obtains a 74-node route. Actual received blocks verify leaf-to-air, original identities and protected source world remain unchanged. Foliage placement origin and the production correction remain under investigation; this is not movement, birth or fresh civilization acceptance."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "VILLAGER-STAIR-PENETRATION-STALL"
+title = "An adult villager remains embedded in a stair after seating"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 original adult49 at (122.5,72.5,-279.5) has a received adult bounding box overlapping the upper half of the oak stair at (122,72,-280). The canonical collision descriptor fingerprint is verified. Removing only the stair releases two blocks of local movement. The seating owner validates a standing position above the stair, then places the physical body at the unchecked stair center y+0.5; the edge already renders a separate visual seat anchor. This is a source-proven penetration ingress, not proof of this resident's historical ingress. Leaf removal permits free-bed reachability probes but does not prove a movement route was requested or committed. Preserve that distinction while verifying seating, dismount and navigation."
+regression = []
+failing_first = "reported"
