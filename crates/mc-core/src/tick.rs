@@ -34,7 +34,7 @@ use crate::world::ChunkWorld;
 mod auth;
 pub(crate) use auth::unlock_session;
 mod container_access;
-mod damage;
+pub(crate) mod damage;
 mod death_message;
 mod elytra;
 mod entity_lifecycle;

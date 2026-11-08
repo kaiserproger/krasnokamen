@@ -92,6 +92,46 @@ fn sky_creeper_flies_and_rain_hurts_it_but_not_a_creeper() {
 }
 
 #[test]
+fn strider_takes_water_and_exposed_rain_damage_but_not_dry_or_sheltered() {
+    for (rain, water, roof, expected) in [
+        (false, false, false, 20.0),
+        (true, false, true, 20.0),
+        (true, false, false, 19.0),
+        (false, true, false, 19.0),
+    ] {
+        let (mut state, _, centre) = setup(12.0);
+        let pos = [centre[0], centre[1] + 6.0, centre[2]];
+        let kind = vanilla(&state, "minecraft:strider");
+        let strider = state.spawn_mob(kind, pos, 20.0);
+        if rain {
+            state.weather.0 = crate::commands::Weather::Rain;
+        }
+        if water {
+            state.world.set_block(
+                pos[0] as i32,
+                pos[1] as i32,
+                pos[2] as i32,
+                state.registry.states.water,
+            );
+        }
+        if roof {
+            state.world.set_block(
+                pos[0] as i32,
+                pos[1] as i32 + 3,
+                pos[2] as i32,
+                state.registry.states.stone,
+            );
+        }
+        run_tick(&mut state, &[]);
+        assert_eq!(
+            health(&state, strider),
+            expected,
+            "rain={rain}, water={water}, roof={roof}"
+        );
+    }
+}
+
+#[test]
 fn sky_creeper_swells_with_its_own_fuse_and_non_griefing_blast() {
     let (mut state, player, centre) = setup(1.0);
     let key = register(&mut state, &sky_creeper());

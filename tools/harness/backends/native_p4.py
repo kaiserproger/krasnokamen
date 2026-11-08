@@ -1,11 +1,45 @@
 """P4 received-state probes; captures require independent visual review."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+import struct
 from typing import Any
 
 from .native_p1 import _aim, _capture, _inventory, _rows
 from .native_v2 import _block, _click, _echo, _open, _point, _set, _use
 from .probe_steps import ProbeSteps, container_slot, item_count
+
+class DamageWireReceipt:
+    """Decode received damage packets without changing the forwarded stream."""
+
+    def __init__(self, report_path: Path) -> None:
+        packets = json.loads(report_path.read_text())["play"]["clientbound"]
+        registry_path = Path(__file__).resolve().parents[3] / "crates/mc-data/data/required_registry_index.json"
+        damage_types = json.loads(registry_path.read_text())["damage_type"]
+        self.packet_id = packets["minecraft:damage_event"]["protocol_id"]
+        self.types = dict(enumerate(damage_types))
+        self.events: list[dict[str, Any]] = []
+
+    def server_packet(self, _wire: Any, phase: str, packet_id: int, payload: bytes) -> None:
+        if phase != "play" or packet_id != self.packet_id:
+            return
+        from .light_wire import Reader
+
+        reader = Reader(payload)
+        entity, kind, cause, direct = (reader.varint() for _ in range(4))
+        has_position = reader.take(1)[0]
+        if has_position not in (0, 1):
+            raise ValueError("invalid damage source position flag")
+        position = list(struct.unpack(">ddd", reader.take(24))) if has_position else None
+        if reader.offset != len(payload) or kind not in self.types:
+            raise ValueError("invalid or unknown damage event")
+        self.events.append({"entity_id": entity, "type": self.types[kind],
+                            "cause_entity_id": cause - 1, "direct_entity_id": direct - 1,
+                            "source_position": position})
+
+    def snapshot(self, _wire: Any) -> list[dict[str, Any]]:
+        return list(self.events)
 
 RESTART_SCENARIOS = frozenset({"native-v2-p4-nameplates", "native-v2-p4-advancements",
                                "native-v2-p4-statistics"})
@@ -208,7 +242,16 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     baseline = steps.observe()["player"]["health"]
     steps.report["baseline_health"] = baseline
     _capture(steps, "p4-damage-before")
-    steps.fixture(f"summon zombie {x + .5} {y} {z + 2.5}")
+    steps.fixture(f"summon zombie {x + .5} {y} {z + 2.5} {{UUID:[I;0,0,0,123458]}}")
+    zombie: dict[str, Any] = {}
+    def zombie_received(_: dict[str, Any]) -> bool:
+        row = next((row for row in _rows(steps, 16)
+                    if row.get("entity_uuid") == "00000000-0000-0000-0000-00000001e242"), None)
+        if row is None:
+            return False
+        zombie.update(row)
+        return True
+    steps.wait(zombie_received, "damage_zombie_authored_uuid_received")
     hit = steps.call("minecraft_wait_for_health_below", {"health": baseline, "timeout_seconds": steps.remaining()})
     steps.report["hit"] = hit
     hurt = steps.wait(lambda current: current["player"].get("hurt_tick") is not None
@@ -217,6 +260,15 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.report["hurt_observation"] = {key: hurt["player"].get(key) for key in
                                        ("hurt_tick", "hurt_tilt_deg", "hurt_direction", "health")}
     steps.report["hurt_observation"]["client_tick"] = hurt["client_tick"]
+    player_id = hurt["player"]["entity_id"]
+    damage_wire = steps.client.p4_damage_wire()
+    mob_hits = [event for event in damage_wire
+                if event["entity_id"] == player_id and event["type"] == "minecraft:mob_attack"]
+    steps.check("zombie_hit_has_mob_attack_wire_identity", bool(mob_hits))
+    steps.check("zombie_hit_has_source_identity",
+                any(event["cause_entity_id"] == zombie["entity_id"] and
+                    event["direct_entity_id"] == zombie["entity_id"] for event in mob_hits))
+    steps.report["damage_wire_mob_hits"] = mob_hits
     _capture(steps, "p4-damage-hit")
     # One bounded adjacent check: live owner still accepts input and receives state.
     steps.call("minecraft_press_inputs", {"keys": ["back"], "ticks": 4})
@@ -224,6 +276,274 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.check("post_hit_still_in_play", state["in_play"] is True and state["player"]["health"] > 0)
     _capture(steps, "p4-damage-after")
     steps.report["visual_review_required"] = ["hit frame hurt direction/tilt versus before", "no client errors or runtime disconnect"]
+
+    # Real client receives and consumes a non-totem death-protection component.
+    steps.fixture("kill @e[type=minecraft:zombie,distance=..32]")
+    steps.fixture("gamemode creative @s")
+    steps.fixture("effect give @s minecraft:instant_health 1 5 true")
+    steps.fixture("clear @s")
+    steps.fixture(
+        "give @s minecraft:stick[death_protection={death_effects:["
+        "{type:'minecraft:clear_all_effects'},"
+        "{type:'minecraft:apply_effects',effects:[{id:'minecraft:speed',duration:2000}]}]}]"
+    )
+    _inventory(steps, "minecraft:stick", 1)
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    steps.call("minecraft_wait_ticks", {"ticks": 25})
+    generic_start = len(steps.client.p4_damage_wire())
+    steps.fixture("gamemode survival @s")
+    steps.fixture("damage @s 100 minecraft:generic")
+    saved = steps.wait(lambda state: state["player"]["health"] == 1,
+                       "custom_death_protection_prevents_death")
+    steps.check("generic_command_damage_identity_received", any(
+        event["entity_id"] == player_id and event["type"] == "minecraft:generic"
+        for event in steps.client.p4_damage_wire()[generic_start:]))
+    _inventory(steps, "minecraft:stick", 0)
+    steps.fixture("data get entity @s active_effects")
+    snapshot = steps.wait(
+        lambda state: any("has the following entity data:" in line and "minecraft:speed" in line
+                          for line in state.get("recent_chat", [])),
+        "custom_death_protection_effects_received",
+    )
+    effects = next(line for line in snapshot["recent_chat"]
+                   if "has the following entity data:" in line and "minecraft:speed" in line)
+    steps.check("no_generic_totem_effects",
+                all(name not in effects for name in (
+                    "minecraft:regeneration", "minecraft:absorption", "minecraft:fire_resistance")))
+    steps.report["custom_death_protection"] = {"health": saved["player"]["health"], "effects": effects}
+
+    # Provoke a real warden with ordinary lever vibrations, then observe its
+    # sonic attack on the native connection (not a /damage identity alias).
+    steps.fixture("gamemode creative @s")
+    steps.fixture("gamerule natural_regeneration false")
+    steps.fixture("effect clear @s")
+    steps.fixture("effect give @s minecraft:instant_health 1 5 true")
+    steps.fixture(f"tp @s {x + .5} {y} {z + .5}")
+    steps.wait(lambda state: state["player"]["health"] >= 18 and
+               abs(state["player"]["z"] - z - .5) < .3, "warden_fixture_player_ready")
+    lever = _point(origin, dz=-2)
+    _set(steps, lever, "minecraft:lever[face=floor,facing=north]")
+    steps.fixture(f"summon minecraft:warden {x + .5} {y} {z - 7.5} {{UUID:[I;0,0,0,123457]}}")
+    warden: dict[str, Any] = {}
+    def warden_received(_: dict[str, Any]) -> bool:
+        row = next((row for row in _rows(steps, 16)
+                    if row.get("entity_uuid") == "00000000-0000-0000-0000-00000001e241"), None)
+        if row is None:
+            return False
+        warden.update(row)
+        return True
+    steps.wait(warden_received, "warden_authored_uuid_received")
+    steps.fixture("gamemode survival @s")
+    _echo(steps, "warden_fixture_ready")
+    for _ in range(3):
+        _use(steps, lever)
+        steps.call("minecraft_wait_ticks", {"ticks": 50})
+    steps.fixture(f"fill {x - 5} {y} {z - 4} {x + 5} {y + 4} {z - 4} minecraft:stone")
+    steps.fixture("damage @s 13 minecraft:generic")
+    steps.wait(lambda state: 0 < state["player"]["health"] < 10, "warden_lethal_health_prepared")
+
+    def sonic_received(_: dict[str, Any]) -> bool:
+        return any(event["entity_id"] == player_id and event["type"] == "minecraft:sonic_boom"
+                   and event["cause_entity_id"] == warden["entity_id"]
+                   for event in steps.client.p4_damage_wire())
+    steps.wait(sonic_received, "warden_sonic_damage_identity_received", timeout_seconds=60)
+    steps.report["damage_wire_warden_sonic"] = [
+        event for event in steps.client.p4_damage_wire()
+        if event["entity_id"] == player_id and event["type"] == "minecraft:sonic_boom"
+    ]
+    death = steps.wait(lambda state: state["player"]["health"] == 0 and state["screen"]["open"],
+                       "warden_sonic_death_screen_received")
+    steps.report["warden_sonic_death_screen"] = death["screen"]
+    steps.call("minecraft_respawn", {"timeout_seconds": steps.remaining()})
+    steps.wait(lambda state: state["player"]["health"] > 0 and not state["screen"]["open"],
+               "warden_sonic_respawn_received", wait_for_play=True)
+    steps.fixture("gamemode creative @s")
+    steps.fixture("kill @e[type=minecraft:warden]")
+    steps.call("minecraft_wait_ticks", {"ticks": 70})
+    _damage_environment(steps, origin, steps.observe()["player"]["entity_id"])
+
+
+def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_id: int) -> None:
+    """Physical sources only; packet names alone are not evidence of mechanics."""
+    x, y, z = origin
+    fixtures = (
+        ("in_wall", f"setblock {x} {y + 1} {z} minecraft:stone"),
+        ("hot_floor", f"setblock {x} {y - 1} {z} minecraft:magma_block"),
+        ("campfire", f"setblock {x} {y} {z} minecraft:campfire[lit=true]"),
+        ("cactus", f"setblock {x + 1} {y} {z} minecraft:cactus"),
+        ("sweet_berry_bush", f"setblock {x} {y} {z} minecraft:sweet_berry_bush[age=3]"),
+        ("fall", f"tp @s {x + .5} {y + 10} {z + .5}"),
+        ("stalagmite", f"tp @s {x + .5} {y + 10} {z + .5}"),
+        ("falling_anvil", f"setblock {x} {y + 5} {z} minecraft:anvil"),
+        ("falling_stalactite", f"setblock {x} {y + 5} {z} minecraft:pointed_dripstone[vertical_direction=down,thickness=tip]"),
+        ("arrow", f"summon minecraft:arrow {x + .5} {y + 1} {z + 4.5} {{Motion:[0d,0d,-1d]}}"),
+        ("trident", f"summon minecraft:trident {x + .5} {y + 1} {z + 4.5} {{Motion:[0d,0d,-1d]}}"),
+        ("thrown", f"summon minecraft:wind_charge {x + .5} {y + 1} {z + 4.5} {{Motion:[0d,0d,-1d]}}"),
+        ("fireball", f"summon minecraft:small_fireball {x + .5} {y + 1} {z + 4.5} {{Motion:[0d,0d,-1d]}}"),
+        ("explosion", f"summon minecraft:tnt {x + 5.5} {y} {z + .5}"),
+        ("lightning_bolt", f"summon minecraft:lightning_bolt {x + .5} {y} {z + .5}"),
+        ("wither", "effect give @s minecraft:wither 30 0"),
+        ("poison", "effect give @s minecraft:poison 30 0"),
+        ("magic", "effect give @s minecraft:instant_damage 1 0"),
+        ("outside_border", "worldborder damage buffer 0"),
+        ("starve", "effect give @s minecraft:hunger 120 255"),
+        ("drown", f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:water"),
+        ("lava", f"setblock {x} {y} {z} minecraft:lava"),
+        ("in_fire", f"setblock {x} {y} {z} minecraft:fire"),
+    )
+    results = []
+    for kind, fixture in fixtures:
+        steps.fixture("gamemode creative @s")
+        steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:water")
+        steps.call("minecraft_wait_ticks", {"ticks": 10})
+        steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:air")
+        if kind in ("fall", "stalagmite", "falling_anvil", "falling_stalactite"):
+            steps.fixture(f"fill {x} {y + 4} {z} {x} {y + 11} {z} minecraft:air")
+        if kind == "falling_stalactite":
+            steps.fixture(f"setblock {x} {y + 6} {z} minecraft:stone")
+        if kind == "cactus":
+            steps.fixture(f"setblock {x + 1} {y - 1} {z} minecraft:sand")
+        steps.fixture(f"setblock {x} {y - 1} {z} minecraft:obsidian")
+        steps.fixture(f"tp @s {x + .5} {y} {z + .5}")
+        if kind == "outside_border":
+            steps.fixture(f"worldborder center {x + 10} {z + .5}")
+            steps.fixture("worldborder set 4")
+        steps.fixture("effect clear @s")
+        steps.fixture("effect give @s minecraft:instant_health 1 5 true")
+        steps.wait(lambda state: state["player"]["health"] >= 18 and
+                   abs(state["player"]["z"] - z - .5) < .3, f"{kind}_fixture_ready")
+        steps.call("minecraft_wait_ticks", {"ticks": 25})
+        baseline = steps.observe()["player"]["health"]
+        start = len(steps.client.p4_damage_wire())
+        steps.fixture("gamemode survival @s")
+        if kind == "stalagmite":
+            steps.fixture(f"setblock {x} {y} {z} minecraft:pointed_dripstone[vertical_direction=up,thickness=tip]")
+        steps.fixture(fixture)
+        if kind == "falling_stalactite":
+            steps.fixture(f"setblock {x} {y + 6} {z} minecraft:air")
+        if kind in ("cactus", "sweet_berry_bush"):
+            steps.call("minecraft_look", {"yaw_deg": -90, "pitch_deg": 0})
+            steps.call("minecraft_press_inputs", {"keys": ["forward"], "ticks": 10})
+        identity = "magic" if kind == "poison" else kind
+        def hit_received(state: dict[str, Any]) -> bool:
+            return (state["player"]["health"] < baseline and any(
+                event["entity_id"] == player_id and event["type"] == f"minecraft:{identity}"
+                for event in steps.client.p4_damage_wire()[start:]))
+        hit_state = steps.wait(hit_received, f"{kind}_physical_identity_received",
+                               timeout_seconds=60 if kind == "starve" else 30)
+        results.append({"type": kind, "health": hit_state["player"]["health"],
+                        "events": steps.client.p4_damage_wire()[start:]})
+        if kind == "outside_border":
+            steps.fixture("worldborder set 59999968")
+            steps.fixture("worldborder center 0 0")
+        if kind == "starve":
+            steps.fixture("effect clear @s")
+            steps.fixture("effect give @s minecraft:saturation 1 20 true")
+        if kind == "in_fire":
+            before_burn = len(steps.client.p4_damage_wire())
+            steps.fixture(f"setblock {x} {y} {z} minecraft:air")
+            burned = steps.wait(lambda state: state["player"]["health"] < hit_state["player"]["health"]
+                                and any(event["entity_id"] == player_id and
+                                        event["type"] == "minecraft:on_fire"
+                                        for event in steps.client.p4_damage_wire()[before_burn:]),
+                                "on_fire_physical_identity_received", timeout_seconds=30)
+            results.append({"type": "on_fire", "health": burned["player"]["health"],
+                            "events": steps.client.p4_damage_wire()[before_burn:]})
+    steps.fixture("gamemode creative @s")
+    steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:water")
+    steps.call("minecraft_wait_ticks", {"ticks": 10})
+    steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:air")
+    steps.fixture(f"tp @s {x + .5} {y} {z + .5}")
+    steps.fixture("effect give @s minecraft:instant_health 1 5 true")
+    steps.fixture("clear @s")
+    steps.fixture("give @s minecraft:splash_potion[potion_contents={potion:'minecraft:harming'}]")
+    _inventory(steps, "minecraft:splash_potion", 1)
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    steps.wait(lambda state: state["player"]["health"] >= 18, "indirect_magic_fixture_healed")
+    steps.call("minecraft_wait_ticks", {"ticks": 25})
+    baseline = steps.observe()["player"]["health"]
+    start = len(steps.client.p4_damage_wire())
+    steps.fixture("gamemode survival @s")
+    steps.call("minecraft_look", {"yaw_deg": 0, "pitch_deg": 90})
+    steps.call("minecraft_press_inputs", {"keys": ["use"], "ticks": 1})
+    splash = steps.wait(lambda state: state["player"]["health"] < baseline and any(
+        event["entity_id"] == player_id and event["type"] == "minecraft:indirect_magic"
+        for event in steps.client.p4_damage_wire()[start:]), "splash_potion_indirect_magic_received",
+        timeout_seconds=30)
+    results.append({"type": "indirect_magic", "health": splash["player"]["health"],
+                    "events": steps.client.p4_damage_wire()[start:]})
+    steps.fixture("gamemode creative @s")
+    steps.fixture("effect give @s minecraft:instant_health 1 5 true")
+    steps.fixture(
+        f'summon minecraft:zombie {x + .5} {y} {z + 2.5} '
+        '{UUID:[I;0,0,0,123456],NoAI:1b,equipment:{chest:{id:"minecraft:diamond_chestplate",count:1,'
+        'components:{"minecraft:enchantments":{"minecraft:thorns":10}}}}}'
+    )
+    target: dict[str, Any] = {}
+    def thorns_target_received(_: dict[str, Any]) -> bool:
+        row = next((row for row in _rows(steps, 8)
+                    if row.get("entity_uuid") == "00000000-0000-0000-0000-00000001e240"), None)
+        if row is None:
+            return False
+        target.update(row)
+        return True
+    steps.wait(thorns_target_received, "thorns_authored_uuid_received")
+    steps.wait(lambda state: state["player"]["health"] >= 18, "thorns_fixture_healed")
+    steps.call("minecraft_wait_ticks", {"ticks": 25})
+    baseline = steps.observe()["player"]["health"]
+    start = len(steps.client.p4_damage_wire())
+    steps.fixture("gamemode survival @s")
+    steps.call("minecraft_attack_entity_once", {
+        **{key: target[key] for key in ("entity_id", "entity_uuid", "entity_type")},
+        "timeout_seconds": steps.remaining(),
+    })
+    thorn_state = steps.wait(lambda state: state["player"]["health"] < baseline and any(
+        event["entity_id"] == player_id and event["type"] == "minecraft:thorns"
+        for event in steps.client.p4_damage_wire()[start:]), "thorns_physical_identity_received",
+        timeout_seconds=30)
+    steps.check("player_attack_physical_identity_received", any(
+        event["entity_id"] == target["entity_id"] and event["type"] == "minecraft:player_attack"
+        and event["cause_entity_id"] == player_id
+        for event in steps.client.p4_damage_wire()[start:]))
+    results.append({"type": "thorns", "health": thorn_state["player"]["health"],
+                    "events": steps.client.p4_damage_wire()[start:]})
+    steps.fixture("kill @e[type=minecraft:zombie,distance=..16]")
+    steps.fixture("gamemode creative @s")
+    steps.fixture("effect clear @s")
+    steps.fixture("effect give @s minecraft:instant_health 1 5 true")
+    steps.wait(lambda state: state["player"]["health"] >= 18, "void_fixture_healed")
+    steps.call("minecraft_wait_ticks", {"ticks": 25})
+    start = len(steps.client.p4_damage_wire())
+    steps.fixture("gamemode survival @s")
+    steps.fixture(f"tp @s {x + .5} -200 {z + .5}")
+    void_state = steps.wait(lambda state: state["player"]["health"] < 18 and any(
+        event["entity_id"] == player_id and event["type"] == "minecraft:out_of_world"
+        for event in steps.client.p4_damage_wire()[start:]), "void_physical_identity_received",
+        timeout_seconds=30)
+    results.append({"type": "out_of_world", "health": void_state["player"]["health"],
+                    "events": steps.client.p4_damage_wire()[start:]})
+    steps.wait(lambda state: state["player"]["health"] == 0 and state["screen"]["open"],
+               "void_death_screen_received")
+    steps.call("minecraft_respawn", {"timeout_seconds": steps.remaining()})
+    steps.wait(lambda state: state["player"]["health"] > 0 and not state["screen"]["open"],
+               "void_respawn_received", wait_for_play=True)
+    player_id = steps.observe()["player"]["entity_id"]
+    start = len(steps.client.p4_damage_wire())
+    steps.fixture("kill @s")
+    killed = steps.wait(lambda state: state["player"]["health"] == 0 and state["screen"]["open"]
+                        and any(event["entity_id"] == player_id and event["type"] == "minecraft:generic_kill"
+                                for event in steps.client.p4_damage_wire()[start:]),
+                        "kill_physical_identity_received")
+    results.append({"type": "generic_kill", "screen": killed["screen"],
+                    "events": steps.client.p4_damage_wire()[start:]})
+    steps.call("minecraft_respawn", {"timeout_seconds": steps.remaining()})
+    steps.wait(lambda state: state["player"]["health"] > 0 and not state["screen"]["open"],
+               "kill_respawn_received", wait_for_play=True)
+    steps.report["damage_wire_unexercised"] = [
+        "freeze, cramming and fly_into_wall: no physical DamageKind producer found",
+        "dragon_breath: dragon cloud deals indirect_magic; registry name alone is not physical evidence",
+    ]
+    steps.report["damage_wire_environment"] = results
 
 
 def _hopper(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:

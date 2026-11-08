@@ -3,10 +3,11 @@
 //! `registries.json`. Ids are matched by name; names that only exist on the
 //! canonical side go through the polyfill rules below.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 
 /// New blocks (and their block items) shown to a 26.1.2 client as the nearest
@@ -432,7 +433,7 @@ pub struct Tables {
     /// Canonical entity type id of `falling_block` (its spawn data is a state).
     pub falling_block: i32,
     /// Canonical sound names, for sounds a legacy client lacks (sent inline).
-    pub sound_names: Vec<String>,
+    pub sound_names: Cow<'static, [String]>,
     /// Canonical particle names (their payload shape is chosen by name).
     pub particle_names: Vec<String>,
     /// Item component payload shapes on both sides.
@@ -467,6 +468,7 @@ impl Tables {
         legacy: &Reports,
         canonical_data: &mc_data::VanillaData,
         legacy_data: &mc_data::VanillaData,
+        source_protocol: i32,
     ) -> Result<Self> {
         let formats = Formats::default();
         let none = |_: &str| None;
@@ -501,7 +503,32 @@ impl Tables {
         let falling_block = entity_ids
             .get("minecraft:falling_block")
             .map_or(-1, |id| id.protocol_id);
-        let sound_names = names_by_id(canonical.registry("minecraft:sound_event")?);
+        let report_sounds = canonical.registry("minecraft:sound_event")?;
+        let sound_names: Cow<'static, [String]> = if source_protocol == 777 {
+            let names = mc_data::builtin_sounds_26_3::names();
+            ensure!(
+                report_sounds.len() == names.len()
+                    && names.iter().enumerate().all(|(id, name)| {
+                        report_sounds
+                            .get(name)
+                            .is_some_and(|entry| entry.protocol_id == id as i32)
+                    }),
+                "777 sound report does not match the 26.3 built-in sound index"
+            );
+            Cow::Borrowed(names)
+        } else {
+            let names = names_by_id(report_sounds);
+            ensure!(
+                names.iter().enumerate().all(|(id, name)| {
+                    !name.is_empty()
+                        && report_sounds
+                            .get(name)
+                            .is_some_and(|entry| entry.protocol_id == id as i32)
+                }),
+                "source sound report has non-dense or duplicate protocol ids"
+            );
+            Cow::Owned(names)
+        };
         let particle_names = names_by_id(canonical.registry("minecraft:particle_type")?);
         let component_shapes = super::items::Components::new(
             &names_by_id(canonical.registry("minecraft:data_component_type")?),
@@ -558,7 +585,14 @@ impl Tables {
                 .registry("minecraft:block_entity_type")?
                 .get("minecraft:decorated_pot")
                 .map(|entry| entry.protocol_id),
-            sounds: registry("minecraft:sound_event", &none)?,
+            sounds: IdMap::by_name(
+                sound_names
+                    .iter()
+                    .enumerate()
+                    .map(|(id, name)| (name.as_str(), id as u32)),
+                entries(legacy.registry("minecraft:sound_event")?),
+                none,
+            ),
             particles: registry("minecraft:particle_type", &none)?,
             components: registry("minecraft:data_component_type", &none)?,
             attributes: registry("minecraft:attribute", &none)?,
@@ -580,6 +614,7 @@ impl Tables {
                     "recipe_book_category",
                     "potion",
                     "mob_effect",
+                    "consume_effect_type",
                 ] {
                     if canonical.registries.contains_key(&namespaced(name))
                         && legacy.registries.contains_key(&namespaced(name))

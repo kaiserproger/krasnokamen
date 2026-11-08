@@ -126,14 +126,74 @@ pub(super) fn extra(
             }
         }
         Payload::DeathProtection => {
-            // Native admission currently permits only an empty ConsumeEffect
-            // list. Never treat an unknown nonempty list as an empty one.
-            let n = r.read_varint()?;
-            ensure!(
-                n == 0,
-                "nonempty death protection is unsupported by Solaris"
-            );
-            w.write_varint(n);
+            let n = list_len(r, w)?;
+            if n == 0 {
+                return Ok(());
+            }
+            let kinds = t
+                .registry_ids
+                .get("consume_effect_type")
+                .context("missing consume effect registry")?;
+            for _ in 0..n {
+                let source = r.read_varint()?;
+                let target = map(kinds, to, source).context("unmapped consume effect type")?;
+                let canonical = if to == To::Legacy { source } else { target };
+                *lossy |= to == To::Legacy && kinds.back(target) != Some(source);
+                w.write_varint(target);
+                match canonical {
+                    0 => {
+                        let count = list_len(r, w)?;
+                        for _ in 0..count {
+                            registry(t, to, "mob_effect", r, w, false, lossy)?;
+                            copy_effect_details(r, w, 0)?;
+                        }
+                        w.write_f32(r.read_f32()?);
+                    }
+                    1 => {
+                        let count = r.read_varint()?;
+                        ensure!(
+                            (0..=MAX_LIST + 1).contains(&count),
+                            "effect holder set size"
+                        );
+                        w.write_varint(count);
+                        if count == 0 {
+                            string(r, w)?;
+                        } else {
+                            for _ in 1..count {
+                                registry(t, to, "mob_effect", r, w, false, lossy)?;
+                            }
+                        }
+                    }
+                    2 => {}
+                    3 => w.write_f32(r.read_f32()?),
+                    4 => {
+                        let holder = r.read_varint()?;
+                        ensure!(holder >= 0, "invalid sound holder");
+                        if holder == 0 {
+                            w.write_varint(0);
+                            string(r, w)?;
+                            optional(r, w, |r, w| {
+                                w.write_f32(r.read_f32()?);
+                                Ok(())
+                            })?;
+                        } else if let Some(mapped) = map(&t.sounds, to, holder - 1) {
+                            *lossy |= to == To::Legacy && t.sounds.back(mapped) != Some(holder - 1);
+                            w.write_varint(mapped + 1);
+                        } else if to == To::Legacy {
+                            let name = t
+                                .sound_names
+                                .get((holder - 1) as usize)
+                                .context("unknown sound holder")?;
+                            w.write_varint(0);
+                            w.write_string(name, 32767)?;
+                            w.write_bool(false);
+                        } else {
+                            bail!("unmapped sound holder {holder}");
+                        }
+                    }
+                    _ => bail!("unsupported consume effect type {canonical}"),
+                }
+            }
         }
         Payload::StewEffects => {
             let n = list_len(r, w)?;

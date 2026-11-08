@@ -2594,6 +2594,7 @@ fn command_sound_and_particle_changes_encode_packets() {
     let changes = [
         PlayerChange::CommandSound {
             sound: mc_data::Identifier::parse("minecraft:block.bell.use").unwrap(),
+            fixed_range: None,
             source: 4,
             position: [8, 480, 16],
             volume: 1.0,
@@ -3271,6 +3272,46 @@ fn custom_name_visible_uses_entity_boolean_index_three_on_spawn_and_change() {
                 .iter()
                 .any(|value| matches!(value, WireEntityDataValue::Boolean { index: 3, .. }))
         );
+    }
+}
+
+#[test]
+fn no_gravity_metadata_reaches_viewer_on_spawn_and_change() {
+    let type_id = mc_data::entity_types::entity_type_contract_26_1_2_by_name("minecraft:cow")
+        .unwrap()
+        .protocol_id;
+    for value in [true, false] {
+        let appearance = EntityAppearance {
+            extra: vec![(5, mc_core::boundary::EntityDataValue::Boolean(value))],
+            ..Default::default()
+        };
+        for previous in [
+            None,
+            Some(EntityAppearance {
+                extra: vec![(5, mc_core::boundary::EntityDataValue::Boolean(!value))],
+                ..Default::default()
+            }),
+        ] {
+            let mut packets = Vec::new();
+            push_appearance_for(
+                &mut packets,
+                ConnectionId(1),
+                EntityId(2),
+                &appearance,
+                type_id,
+                previous.as_ref(),
+            );
+            let data = packets
+                .iter()
+                .find(|packet| packet.id == ClientboundSetEntityData::ID)
+                .unwrap();
+            let decoded = ClientboundSetEntityData::decode(&mut body_of(data)).unwrap();
+            assert!(
+                decoded
+                    .values
+                    .contains(&WireEntityDataValue::Boolean { index: 5, value })
+            );
+        }
     }
 }
 

@@ -472,6 +472,7 @@ async fn join_version(protocol: i32) {
         &tables::Reports::load(&peer_root).unwrap(),
         &server.data,
         &profile.data,
+        777,
     )
     .unwrap();
     profile.tables.formats = tables::Formats {

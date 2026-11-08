@@ -37,6 +37,7 @@ fn item_motion_air_preserves_launch_velocity_and_integrates_gravity() {
     let next = crate::item_motion::step(
         body(Vec3::new(6.0, 2.0, -4.0)),
         &Material(BlockMaterial::Air),
+        false,
     );
     assert!((next.position.x - 0.8).abs() < 1e-8);
     assert!((next.position.y - 4.06).abs() < 1e-8);
@@ -46,14 +47,27 @@ fn item_motion_air_preserves_launch_velocity_and_integrates_gravity() {
 }
 
 #[test]
+fn item_no_gravity_preserves_vertical_launch_and_fluid_buoyancy() {
+    let air = Material(BlockMaterial::Air);
+    let still = crate::item_motion::step(body(Vec3::ZERO), &air, true);
+    assert_eq!(still.position.y, 4.0);
+    let launched = crate::item_motion::step(body(Vec3::new(0.0, 2.0, 0.0)), &air, true);
+    assert!((launched.position.y - 4.1).abs() < 1e-8);
+    assert!((launched.velocity.y - 1.96).abs() < 1e-8);
+    let water = Material(BlockMaterial::Water);
+    let floating = crate::item_motion::step(body(Vec3::ZERO), &water, true);
+    assert!(floating.position.y > 4.0 && floating.velocity.y > 0.0);
+}
+
+#[test]
 fn item_motion_water_retains_pull_momentum_and_only_lifts_slow_items() {
     let water = Material(BlockMaterial::Water);
-    let launched = crate::item_motion::step(body(Vec3::new(8.0, 4.0, -2.0)), &water);
+    let launched = crate::item_motion::step(body(Vec3::new(8.0, 4.0, -2.0)), &water, false);
     assert!((launched.position.x - 0.896).abs() < 1e-8);
     assert!((launched.position.y - 4.2).abs() < 1e-8);
     assert!((launched.velocity.x - 8.0 * 0.99 * 0.98).abs() < 1e-8);
     assert!((launched.velocity.y - 3.92).abs() < 1e-8);
-    let floating = crate::item_motion::step(body(Vec3::ZERO), &water);
+    let floating = crate::item_motion::step(body(Vec3::ZERO), &water, false);
     assert!(floating.position.y > 4.0 && floating.velocity.y > 0.0);
 }
 

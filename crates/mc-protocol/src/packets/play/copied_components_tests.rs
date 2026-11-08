@@ -94,7 +94,7 @@ fn copied_death_protection_empty_actions_use_vanilla_list_count() {
 }
 
 #[test]
-fn copied_death_protection_rejects_nonempty_custom_actions() {
+fn copied_death_protection_clear_action_roundtrips() {
     let value = fields(vec![(
         "death_effects",
         make_list(vec![fields(vec![(
@@ -102,20 +102,8 @@ fn copied_death_protection_rejects_nonempty_custom_actions() {
             text("minecraft:clear_all_effects"),
         )])]),
     )]);
-    let error = stack("minecraft:death_protection", value)
-        .encode(&mut Vec::new())
-        .unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("nonempty custom death_protection")
-    );
-    let error = decode(&mut [1_u8].as_slice(), 36, 0).unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("nonempty custom death_protection")
-    );
+    fixture("minecraft:death_protection", value, vec![1, 2]);
+    assert!(decode(&mut [1_u8].as_slice(), 36, 0).is_err());
 }
 
 #[test]

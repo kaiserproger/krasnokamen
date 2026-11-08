@@ -39,6 +39,9 @@ const WATER_RAW_ID: i32 = 2;
 const FLOWING_LAVA_RAW_ID: i32 = 3;
 const LAVA_RAW_ID: i32 = 4;
 
+/// Built-in effect registry shared by tag admission and gameplay lookups.
+pub const MOB_EFFECT_REGISTRY: &str = "minecraft:mob_effect";
+
 /// `(tags/<fs subpath>, "minecraft:<registry id>")` pairs the loader
 /// knows about. We deliberately limit the set to registries the
 /// vanilla client either knows natively (built-in `block`, `item`,
@@ -68,6 +71,7 @@ const TAG_ROOTS: &[(&str, &str)] = &[
     ("game_event", "minecraft:game_event"),
     ("instrument", "minecraft:instrument"),
     ("item", "minecraft:item"),
+    ("mob_effect", MOB_EFFECT_REGISTRY),
     ("painting_variant", "minecraft:painting_variant"),
     ("point_of_interest_type", "minecraft:point_of_interest_type"),
     ("potion", "minecraft:potion"),

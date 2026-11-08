@@ -89,6 +89,10 @@ pub(crate) fn prepare(
     mc_nbt::write_network(&mut normalized, &Tag::Compound(fields.clone()))
         .map_err(|error| error.to_string())?;
     match kind {
+        BlockEntityKind::SculkSensor
+        | BlockEntityKind::CalibratedSculkSensor
+        | BlockEntityKind::SculkCatalyst => crate::sculk::validate_record(&normalized)?,
+        BlockEntityKind::SculkShrieker => crate::shrieker::validate_record(&normalized)?,
         BlockEntityKind::Beehive => {
             crate::bees::Hive::decode(&normalized).map_err(|error| error.to_string())?;
         }

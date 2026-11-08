@@ -156,6 +156,49 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             lines = say('tellraw @s {"text":"RAW-OK-7f3","color":"green"}', "RAW-OK-7f3", "tellraw_arrives")
             probe.report["tellraw_line"] = lines[:1]
 
+            # Distinct identities prove the client sees a no-gravity entity stay
+            # airborne while the otherwise equivalent control actually falls.
+            p = probe.observe()["player"]
+            x, y, z = int(p["x"]), int(p["y"]) + 8, int(p["z"]) + 4
+            probe.fixture(f"fill {x - 2} {y - 8} {z - 2} {x + 4} {y + 2} {z + 2} minecraft:air")
+            probe.fixture(f"fill {x - 2} {y - 9} {z - 2} {x + 4} {y - 9} {z + 2} minecraft:stone")
+            probe.fixture(f"summon minecraft:cow {x}.5 {y} {z}.5 {{UUID:[I;0,0,0,121],NoAI:1b,NoGravity:1b,Invulnerable:1b}}")
+            probe.fixture(f"summon minecraft:cow {x + 2}.5 {y} {z}.5 {{UUID:[I;0,0,0,122],NoAI:1b,NoGravity:0b}}")
+            identities = ["00000000-0000-0000-0000-000000000079", "00000000-0000-0000-0000-00000000007a"]
+
+            def cows() -> dict[str, dict[str, Any]]:
+                result = probe.call("minecraft_list_entities", {"radius": 48})
+                rows = result.get("entities", result.get("visible_entities", []))
+                return {row["entity_uuid"]: row for row in rows
+                        if isinstance(row, dict) and row.get("entity_uuid") in identities}
+
+            probe.wait(lambda _: len(cows()) == 2, "no_gravity_cows_visible")
+            before = cows()
+            client_ticks(50, "no_gravity_motion_observed")
+            after = cows()
+            probe.check("no_gravity_cow_remains_airborne",
+                        abs(after[identities[0]]["y"] - y) < 0.01)
+            probe.check("gravity_control_cow_falls",
+                        after[identities[1]]["y"] < y - 1)
+            for identity in identities:
+                row = after[identity]
+                probe.check(f"cow_health_received_{identity}", row.get("health") is not None)
+                probe.fixture(
+                    f"damage @e[type=minecraft:cow,x={row['x']},y={row['y']},z={row['z']},"
+                    "distance=..1,limit=1] 3 minecraft:generic"
+                )
+            def control_damaged(_: dict[str, Any]) -> bool:
+                rows = cows()
+                return len(rows) == 2 and rows[identities[1]].get("health") is not None and (
+                    rows[identities[1]]["health"] < after[identities[1]]["health"]
+                )
+            probe.wait(control_damaged, "gravity_control_damage_received")
+            damaged = cows()
+            probe.check("invulnerable_cow_health_unchanged",
+                        damaged[identities[0]]["health"] == after[identities[0]]["health"])
+            probe.report["invulnerable_entities"] = damaged
+            probe.report["no_gravity_entities"] = {"before": before, "after": after}
+
             # --- /title -----------------------------------------------------------------
             probe.call("minecraft_send_chat", {"message": "title @s times 2 200 2", "command": True})
             probe.call("minecraft_send_chat", {"message": 'title @s subtitle {"text":"SUB-LINE-3a9"}', "command": True})

@@ -90,7 +90,7 @@ fn effect_bool(fields: &[(String, Tag)], name: &str, default: bool) -> Result<bo
     }
 }
 
-fn potion_effect_from_nbt(
+pub(super) fn potion_effect_from_nbt(
     tag: &Tag,
     inherited_id: Option<&Identifier>,
     depth: usize,
@@ -123,7 +123,7 @@ fn potion_effect_from_nbt(
     })
 }
 
-fn potion_effect_to_nbt(
+pub(super) fn potion_effect_to_nbt(
     effect: &PotionEffect,
     inherited_id: Option<&Identifier>,
     depth: usize,

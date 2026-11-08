@@ -411,6 +411,8 @@ def sculk_sensor_signal(ctx):
         command(ctx, f'setblock 24 100 16 {kind}' + ('[facing=north]' if calibrated else ''))
         command(ctx, 'fill 25 99 16 39 99 16 copper_bulb')
         command(ctx, 'fill 25 100 16 39 100 16 redstone_wire')
+        # A bulb beside the dust is not the downward latch: it is a control.
+        command(ctx, 'setblock 27 100 17 copper_bulb')
         command(ctx, 'setblock 23 100 16 comparator[facing=west]')
         command(ctx, 'fill 8 99 16 22 99 16 copper_bulb')
         command(ctx, 'fill 8 100 16 22 100 16 redstone_wire')
@@ -421,23 +423,63 @@ def sculk_sensor_signal(ctx):
         command(ctx, f'setblock 24 100 {16-distance} note_block')
         ticks(ctx, 45)
         command(ctx, f'setblock 23 100 {16-distance} redstone_block')
-        # Bulbs retain the pulse after the sensor becomes inactive. Console
-        # round trips must not decide whether a ten-tick pulse was observed.
-        ticks(ctx, distance + 40)
         accepts = not calibrated or selected == 10
         strength = max(1, 15 - (15 * distance // (16 if calibrated else 8))) if accepts else 0
         label = f'calibrated={calibrated}:distance={distance}:selected={selected}'
+        # Native matrix evidence must observe the sensor transition itself,
+        # not infer it from a latched downstream bulb after the pulse.
+        call = getattr(ctx.clients[0], 'call', None)
+        if accepts and callable(call):
+            received = []
+            for phase in ('active', 'cooldown', 'inactive'):
+                properties = {'sculk_sensor_phase': phase}
+                if phase == 'active':
+                    properties['power'] = str(strength)
+                reply = call('minecraft_wait_for_block_state', {
+                    'x': 24, 'y': 100, 'z': 16,
+                    'block_id': 'minecraft:' + kind,
+                    'properties': properties,
+                    'timeout_seconds': 30.0,
+                })
+                received.append(reply['block']['properties']['sculk_sensor_phase'])
+            expected_phases = ['active', 'cooldown', 'inactive']
+            check(ctx, label + ':received-phases', received == expected_phases,
+                  received, expected_phases, source='Sculk_Sensor')
+        # Bulbs retain the pulse after the sensor becomes inactive. Console
+        # round trips must not decide whether a ten-tick pulse was observed.
+        ticks(ctx, distance + 40)
         block(ctx, (24, 100, 16-distance), 'note_block[powered=true]',
               source='Note_Block#Redstone_component', name=label + ':stimulus')
+        block(ctx, (27, 100, 17), 'copper_bulb[lit=false]',
+              source='Sculk_Sensor#Redstone_emission', name=label + ':perpendicular-control')
+        def received_bulb(position, lit, name):
+            if not callable(call):
+                return
+            reply = call('minecraft_wait_for_block_state', {
+                **dict(zip(('x', 'y', 'z'), position)),
+                'block_id': 'minecraft:copper_bulb',
+                'properties': {'lit': str(lit).lower()},
+                'timeout_seconds': 30.0,
+            })
+            observed = reply['block']
+            expected = {'block_id': 'minecraft:copper_bulb', 'lit': str(lit).lower()}
+            actual = {'block_id': observed['block_id'], 'lit': observed['properties']['lit']}
+            check(ctx, name + ':received', actual == expected, actual, expected,
+                  source='Sculk_Sensor#Redstone_emission')
+        received_bulb((27, 100, 17), False, label + ':perpendicular-control')
         for index in range(1, 16):
             block(ctx, (24+index, 99, 16),
                   f'copper_bulb[lit={str(index <= strength).lower()}]',
                   source='Sculk_Sensor#Redstone_emission',
                   name=f'{label}:strength-latch:{index}')
+            received_bulb((24 + index, 99, 16), index <= strength,
+                          f'{label}:strength-latch:{index}')
             block(ctx, (23-index, 99, 16),
                   f'copper_bulb[lit={str(accepts and index <= 10).lower()}]',
                   source='Sculk_Sensor#Vibration_frequencies',
                   name=f'{label}:frequency-latch:{index}')
+            received_bulb((23 - index, 99, 16), accepts and index <= 10,
+                          f'{label}:frequency-latch:{index}')
         block(ctx, (24, 100, 16), f'{kind}[sculk_sensor_phase=inactive]',
               source='Calibrated_Sculk_Sensor#Filtering' if calibrated else 'Sculk_Sensor')
 

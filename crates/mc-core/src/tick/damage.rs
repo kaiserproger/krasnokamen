@@ -7,9 +7,22 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 #[path = "totem.rs"]
 mod totem;
+type AdmittedDamage = (DamagePiece, (f32, f32));
+
+/// Admission facts emitted from the source tick, before any profiler-specific attribution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DamageObservation {
+    AcceptedVictim,
+    AcceptedReactive,
+}
+
+type DamageObserver<'a> = &'a mut dyn FnMut(&TickState, EntitySlot, DamageObservation);
 
 impl TickState {
-    pub(super) fn commit_damage(&mut self) -> (Vec<EntityId>, Vec<EntityEvent>, Vec<EntityId>) {
+    pub(crate) fn commit_damage(
+        &mut self,
+        mut observer: Option<DamageObserver<'_>>,
+    ) -> (Vec<EntityId>, Vec<EntityEvent>, Vec<EntityId>) {
         let mut deaths = Vec::new();
         let mut events = Vec::new();
         let mut spawned = Vec::new();
@@ -18,13 +31,9 @@ impl TickState {
         // feather falling, none for void).
         // Keep each admitted source's original amount before land_hit mutates
         // it. Advancement dealt/taken evidence must not merge other hits.
-        type AdmittedDamage = (DamagePiece, (f32, f32));
+        // Kept until the final observer pass, including already-applied player hits.
         let mut damage_by_slot: HashMap<EntitySlot, Vec<AdmittedDamage>> = HashMap::default();
         for (slot, piece) in std::mem::take(&mut self.merge_damage) {
-            if crate::plugin_player::shields_damage(self, slot, piece.source) {
-                crate::command_damage::report(self, None, &piece, piece.amount, false);
-                continue;
-            }
             damage_by_slot
                 .entry(slot)
                 .or_default()
@@ -34,6 +43,9 @@ impl TickState {
         damaged.sort_by_key(|(slot, _)| *slot);
         // Resolve ordinary hits first: sweep damage and visuals exist only
         // when their primary hit lands, regardless of dense target-slot order.
+        // A player can rescue itself and change effects on any admitted hit.
+        // Apply each player hit before admitting the next one, while
+        // retaining admitted pieces for the single final victim observation.
         let mut successful_sweeps = HashSet::default();
         let mut projectile_followups = Vec::new();
         for (slot, pieces) in &mut damaged {
@@ -44,12 +56,18 @@ impl TickState {
                 pieces.clear();
                 continue;
             }
-            pieces.retain_mut(|(piece, (raw, _))| {
+            let is_player = matches!(self.entities.body(*slot).kind, EntityKind::Player { .. });
+            pieces.retain_mut(|admitted| {
+                let (piece, (raw, _)) = &mut *admitted;
                 if matches!(
                     piece.source,
                     Some(crate::intent::DamageSource::Sweep { .. })
                 ) {
                     return true;
+                }
+                if crate::plugin_player::shields_damage(self, *slot, piece.source) {
+                    crate::command_damage::report(self, None, piece, *raw, false);
+                    return false;
                 }
                 let accepted = self.commit_damage_piece(*slot, piece, &mut events, &mut spawned);
                 let target = self.entities.body(*slot).id;
@@ -90,23 +108,61 @@ impl TickState {
                         yaw,
                     });
                 }
+                if is_player && piece.amount > 0.0 {
+                    self.apply_player_damage(
+                        *slot,
+                        admitted,
+                        &mut deaths,
+                        &mut events,
+                        &mut spawned,
+                    );
+                }
                 true
             });
             for mut followup in projectile_followups.drain(..) {
                 let raw = followup.amount;
                 if self.commit_damage_piece(*slot, &mut followup, &mut events, &mut spawned) {
-                    pieces.push((followup, (raw, 0.0)));
+                    let mut admitted = (followup, (raw, 0.0));
+                    if is_player && admitted.0.amount > 0.0 {
+                        self.apply_player_damage(
+                            *slot,
+                            &mut admitted,
+                            &mut deaths,
+                            &mut events,
+                            &mut spawned,
+                        );
+                    }
+                    pieces.push(admitted);
                 }
             }
         }
         for (slot, pieces) in &mut damaged {
-            pieces.retain_mut(|(piece, _)| {
+            if (slot.0 as usize) >= self.entities.len() {
+                continue;
+            }
+            let is_player = matches!(self.entities.body(*slot).kind, EntityKind::Player { .. });
+            pieces.retain_mut(|admitted| {
+                let piece = &mut admitted.0;
                 if let Some(crate::intent::DamageSource::Sweep {
                     attacker, primary, ..
                 }) = piece.source
                 {
-                    successful_sweeps.contains(&(attacker, primary))
-                        && self.commit_damage_piece(*slot, piece, &mut events, &mut spawned)
+                    if crate::plugin_player::shields_damage(self, *slot, piece.source) {
+                        crate::command_damage::report(self, None, piece, admitted.1.0, false);
+                        return false;
+                    }
+                    let accepted = successful_sweeps.contains(&(attacker, primary))
+                        && self.commit_damage_piece(*slot, piece, &mut events, &mut spawned);
+                    if accepted && is_player && piece.amount > 0.0 {
+                        self.apply_player_damage(
+                            *slot,
+                            admitted,
+                            &mut deaths,
+                            &mut events,
+                            &mut spawned,
+                        );
+                    }
+                    accepted
                 } else {
                     true
                 }
@@ -126,10 +182,25 @@ impl TickState {
             if !accepted {
                 continue;
             }
+            if let Some(observe) = observer.as_deref_mut() {
+                observe(self, slot, DamageObservation::AcceptedReactive);
+            }
+            let mut admitted = (piece, (raw, 0.0));
+            if matches!(self.entities.body(slot).kind, EntityKind::Player { .. })
+                && admitted.0.amount > 0.0
+            {
+                self.apply_player_damage(
+                    slot,
+                    &mut admitted,
+                    &mut deaths,
+                    &mut events,
+                    &mut spawned,
+                );
+            }
             if let Some((_, pieces)) = damaged.iter_mut().find(|(target, _)| *target == slot) {
-                pieces.push((piece, (raw, 0.0)));
+                pieces.push(admitted);
             } else {
-                damaged.push((slot, vec![(piece, (raw, 0.0))]));
+                damaged.push((slot, vec![admitted]));
             }
         }
         for (slot, mut pieces) in damaged {
@@ -140,356 +211,13 @@ impl TickState {
             if total <= 0.0 {
                 continue;
             }
+            if let Some(observe) = observer.as_deref_mut() {
+                observe(self, slot, DamageObservation::AcceptedVictim);
+            }
             let id = self.entities.body(slot).id;
             let is_player = matches!(self.entities.body(slot).kind, EntityKind::Player { .. });
             if is_player {
-                let statistics_killer = pieces
-                    .iter()
-                    .rev()
-                    .find_map(|(piece, _)| crate::statistics::kill_credit(self, piece.source));
-                let rules = self.registry.item_rules();
-                let mut died = false;
-                let mut health_changed = false;
-                let mut armor_changed = false;
-                let mut absorption_changed = false;
-                let victim_uuid = self.entities.row(slot).uuid;
-                let mut combat_hits = Vec::new();
-                let mut totems = Vec::new();
-                for (piece, amounts) in &mut pieces {
-                    let DamagePiece {
-                        amount,
-                        kind,
-                        source,
-                        physical,
-                        custom_armor,
-                    } = *piece;
-                    let mut credit = None;
-                    if let Some(player) = self.players.get_mut(&id) {
-                        let before = player.vitals.health;
-                        let absorption_before = player.active_effects.absorption;
-                        let reduced = if custom_armor {
-                            amount
-                        } else if let Some((armor, toughness)) = player
-                            .effective_attribute("armor")
-                            .zip(player.effective_attribute("armor_toughness"))
-                        {
-                            crate::survival::reduce_damage_with_player_attributes(
-                                &rules,
-                                &player.inventory.slots[36..40],
-                                amount,
-                                kind,
-                                crate::mace::breach(source),
-                                mc_data::armor::ArmorStats {
-                                    armor: armor.min(30.0) as f32,
-                                    toughness: toughness.min(20.0) as f32,
-                                },
-                            )
-                        } else {
-                            crate::survival::reduce_damage_with_breach(
-                                &rules,
-                                &player.inventory.slots[36..40],
-                                amount,
-                                kind,
-                                crate::mace::breach(source),
-                            )
-                        };
-                        let after_armor = reduced;
-                        let absorption = player.active_effects.absorption;
-                        let reduced = player.active_effects.reduce_damage(kind, reduced);
-                        let absorbed = (absorption - player.active_effects.absorption).max(0.0);
-                        let resisted = if !matches!(
-                            kind,
-                            crate::survival::DamageKind::Void
-                                | crate::survival::DamageKind::GenericKill
-                                | crate::survival::DamageKind::Starvation
-                        ) && player
-                            .active_effects
-                            .has(crate::effects::EffectId::Resistance)
-                        {
-                            (after_armor - reduced - absorbed).max(0.0)
-                        } else {
-                            0.0
-                        };
-                        let reduced = if kind == crate::survival::DamageKind::Poison {
-                            reduced.min((player.vitals.health - 1.0).max(0.0))
-                        } else {
-                            reduced
-                        };
-                        let wear_amount = if custom_armor {
-                            physical.map_or(amount, |impact| impact.damage_hp)
-                        } else {
-                            amount
-                        };
-                        let wear = crate::survival::armor_wear(wear_amount, kind);
-                        if wear > 0
-                            && !player.creative()
-                            && !player.spectator()
-                            && !player.vitals.is_dead()
-                        {
-                            for (stack, armor_slot) in player.inventory.slots[36..40]
-                                .iter_mut()
-                                .zip(["feet", "legs", "chest", "head"])
-                            {
-                                if stack.is_empty() {
-                                    continue;
-                                }
-                                let Some(max_damage) = rules
-                                    .facts
-                                    .facts_for_stack(stack, rules.items)
-                                    .filter(|facts| {
-                                        !custom_armor
-                                            || facts
-                                                .physical_profile
-                                                .as_ref()
-                                                .is_none_or(|profile| profile.armor.is_none())
-                                    })
-                                    .filter(|facts| {
-                                        facts
-                                            .armor
-                                            .as_ref()
-                                            .is_some_and(|armor| armor.slot == armor_slot)
-                                    })
-                                    .and_then(|facts| facts.max_damage)
-                                else {
-                                    continue;
-                                };
-                                let wear = crate::enchantments::durability_damage(
-                                    stack,
-                                    wear,
-                                    true,
-                                    &mut player.enchantment_seed,
-                                );
-                                if wear == 0 {
-                                    continue;
-                                }
-                                let damage = stack.damage.unwrap_or(0).saturating_add(wear);
-                                if u32::try_from(damage).is_ok_and(|damage| damage >= max_damage) {
-                                    player
-                                        .statistics
-                                        .increment(StatType::Broken, stack.item_id, 1);
-                                    *stack = mc_data::ItemStack::EMPTY;
-                                } else {
-                                    stack.damage = Some(damage);
-                                }
-                                armor_changed = true;
-                            }
-                        }
-                        let before_hit = player.vitals.health;
-                        let lethal = player.vitals.hurt(kind, reduced);
-                        let health_after_hit = player.vitals.health;
-                        player.statistics.increment_custom(
-                            CustomStat::DamageTaken,
-                            (reduced * 10.0).round() as i32,
-                        );
-                        player.statistics.increment_custom(
-                            CustomStat::DamageAbsorbed,
-                            (absorbed * 10.0).round() as i32,
-                        );
-                        player.statistics.increment_custom(
-                            CustomStat::DamageResisted,
-                            (resisted * 10.0).round() as i32,
-                        );
-                        amounts.1 = (before_hit - player.vitals.health).max(0.0);
-                        credit =
-                            Some(((before - player.vitals.health).max(0.0), absorbed, resisted));
-                        if lethal {
-                            if let Some(rescue) = totem::rescue(player, &self.registry, kind) {
-                                totems.push(rescue);
-                            } else {
-                                died = true;
-                            }
-                        }
-                        health_changed |= lethal || player.vitals.health != before;
-                        absorption_changed |= player.active_effects.absorption != absorption_before;
-                        let damage = (before_hit.max(0.0) - health_after_hit.max(0.0)).max(0.0);
-                        if damage > 0.0
-                            && let Some(attacker) = crate::plugin::damage_attacker(source)
-                        {
-                            combat_hits.push((
-                                attacker,
-                                damage,
-                                before_hit > 0.0 && player.vitals.is_dead(),
-                            ));
-                        }
-                    }
-                    if let Some((dealt, absorbed, resisted)) = credit {
-                        crate::statistics::damage_dealt(
-                            &mut self.players,
-                            source,
-                            dealt,
-                            absorbed,
-                            resisted,
-                        );
-                    }
-                }
-                for (used, changes) in totems {
-                    if let Some(connection) = self.connections.entity_connection(id) {
-                        for change in changes {
-                            self.push_player(connection, change);
-                        }
-                    }
-                    let evidence = crate::advancements::item_snapshot(self, &used);
-                    crate::advancements::trigger(
-                        self,
-                        id,
-                        "minecraft:used_totem",
-                        serde_json::json!({"item": evidence}),
-                    );
-                    crate::vibration::emit(
-                        self,
-                        self.entities.pos(slot),
-                        crate::vibration::GameEvent::ItemInteractFinish,
-                        Some(id),
-                    );
-                    // LivingEntity.checkTotemDeathProtection, pinned 26.1.2.
-                    events.push(EntityEvent::Status {
-                        entity: id,
-                        event: 35,
-                    });
-                    crate::effects::sync_appearance(self, id);
-                }
-                for (attacker, damage, killed) in combat_hits {
-                    crate::plugin_npcs::record_combat(self, attacker, victim_uuid, damage, killed);
-                }
-                let health = self
-                    .players
-                    .get(&id)
-                    .map(|player| player.vitals.health)
-                    .unwrap_or(0.0);
-                self.entities.row_mut(slot).health = health;
-                let last = pieces.len() - 1;
-                let last_damage_kind = pieces.last().map(|(piece, _)| piece.kind);
-                let last_damage_source = pieces.last().and_then(|(piece, _)| piece.source);
-                for (index, (piece, amounts)) in pieces.into_iter().enumerate() {
-                    crate::advancements::damage(
-                        self,
-                        id,
-                        piece.source,
-                        piece.kind,
-                        amounts,
-                        died && index == last,
-                        false,
-                    );
-                }
-                if absorption_changed && let Some(player) = self.players.get(&id) {
-                    let connection = player.connection;
-                    let amount = player.active_effects.absorption;
-                    self.push_player(connection, PlayerChange::Absorption { amount });
-                    crate::effects::sync_appearance(self, id);
-                }
-                if health_changed {
-                    let appearance =
-                        std::sync::Arc::make_mut(&mut self.entities.row_mut(slot).appearance);
-                    appearance.health = health;
-                    self.appearance_changed.push(id);
-                }
-                if died && self.entities.body(slot).alive {
-                    self.entities.body_mut(slot).alive = false;
-                    crate::statistics::kill(self, statistics_killer, id);
-                    deaths.push(id);
-                    crate::plugin_inventories::invalidate_player(self, id);
-                    crate::plugin::player_died(self, id);
-                    events.push(EntityEvent::Death { entity: id });
-                    crate::effects_trigger::death(self, id, &mut spawned);
-                    crate::scoreboard::automatic(self, &[id], &[]);
-                    let keep_inventory = crate::command_rules::boolean(
-                        self,
-                        crate::command_rules::BoolRule::KEEP_INVENTORY,
-                    );
-                    // A deployed `death_graves` package takes custody of the drops
-                    // this death would have scattered. `keepInventory` wins, as in
-                    // vanilla: a retained inventory never reaches a grave. A death
-                    // with no live connection keeps the vanilla drop too, because
-                    // nobody could be told where the grave is.
-                    let grave_owner =
-                        if keep_inventory || self.connections.entity_connection(id).is_none() {
-                            None
-                        } else {
-                            self.plugin_runtime
-                                .as_ref()
-                                .and_then(|runtime| runtime.death_graves.clone())
-                        };
-                    let keep_experience = grave_owner.is_some();
-                    let death_xp = if keep_inventory || keep_experience {
-                        0
-                    } else {
-                        self.players
-                            .get(&id)
-                            .map_or(0, |player| player.vitals.experience.death_drop())
-                    };
-                    let rules = self.registry.item_rules();
-                    let effects = self
-                        .players
-                        .get_mut(&id)
-                        .map(|player| player.die(&rules, keep_inventory, keep_experience))
-                        .unwrap_or_default();
-                    let pos = self.entities.pos(slot);
-                    crate::experience_orbs::award(self, pos, death_xp, &mut spawned);
-                    let mut dropped = effects.dropped;
-                    let grave = grave_owner.and_then(|owner| {
-                        crate::plugin_graves::bury(self, &owner, pos, &mut dropped)
-                    });
-                    if let Some(connection) = self.connections.entity_connection(id) {
-                        for change in effects.changes {
-                            self.push_player(connection, change);
-                        }
-                        for stack in dropped {
-                            let drop = spawn_item_entity(self, pos, stack);
-                            spawned.push(drop);
-                        }
-                        // Death-screen order (commit drain = same tick as
-                        // the drops): Health(0) then Died. Appearance was
-                        // updated with the committed health above.
-                        if let Some(player) = self.players.get(&id) {
-                            self.push_player(connection, player.health_change());
-                        }
-                        let show = crate::command_rules::boolean(
-                            self,
-                            crate::command_rules::BoolRule::SHOW_DEATH_MESSAGES,
-                        );
-                        let message = if show {
-                            super::death_message::component(
-                                self,
-                                id,
-                                last_damage_kind.unwrap_or(crate::survival::DamageKind::Generic),
-                                last_damage_source,
-                            )
-                        } else {
-                            mc_nbt::Tag::String(String::new())
-                        };
-                        self.push_player(
-                            connection,
-                            PlayerChange::Died {
-                                message: message.clone(),
-                            },
-                        );
-                        if show {
-                            super::death_message::broadcast(self, id, message);
-                        }
-                    } else {
-                        // Offline/dead-connection victim: drops still spawn
-                        // (journaled below); nobody to sync to.
-                        for stack in dropped {
-                            let drop = spawn_item_entity(self, pos, stack);
-                            spawned.push(drop);
-                        }
-                    }
-                    if let Some(grave) = grave {
-                        crate::plugin::player_grave_created(self, id, &grave);
-                    }
-                } else if health_changed
-                    && let Some(connection) = self.connections.entity_connection(id)
-                    && let Some(player) = self.players.get(&id)
-                {
-                    self.push_player(connection, player.health_change());
-                }
-                if armor_changed
-                    && !died
-                    && let Some(connection) = self.connections.entity_connection(id)
-                    && let Some(player) = self.players.get(&id)
-                {
-                    self.push_player(connection, player.inventory_contents());
-                }
+                continue;
             } else {
                 let statistics_killer = pieces
                     .iter()
@@ -771,6 +499,320 @@ impl TickState {
         (deaths, events, spawned)
     }
 
+    fn apply_player_damage(
+        &mut self,
+        slot: EntitySlot,
+        admitted: &mut AdmittedDamage,
+        deaths: &mut Vec<EntityId>,
+        events: &mut Vec<EntityEvent>,
+        spawned: &mut Vec<EntityId>,
+    ) {
+        let id = self.entities.body(slot).id;
+        let (piece, amounts) = admitted;
+        let statistics_killer = crate::statistics::kill_credit(self, piece.source);
+        let registry = std::sync::Arc::clone(&self.registry);
+        let rules = registry.item_rules();
+        let mut died = false;
+        let mut health_changed = false;
+        let mut armor_changed = false;
+        let mut absorption_changed = false;
+        let victim_uuid = self.entities.row(slot).uuid;
+        let mut combat_hit = None;
+        let DamagePiece {
+            amount,
+            kind,
+            source,
+            physical,
+            custom_armor,
+        } = *piece;
+        let mut credit = None;
+        let mut rescue = None;
+        if let Some(player) = self.players.get_mut(&id) {
+            let before = player.vitals.health;
+            let absorption_before = player.active_effects.absorption;
+            let reduced = if custom_armor {
+                amount
+            } else if let Some((armor, toughness)) = player
+                .effective_attribute("armor")
+                .zip(player.effective_attribute("armor_toughness"))
+            {
+                crate::survival::reduce_damage_with_player_attributes(
+                    &rules,
+                    &player.inventory.slots[36..40],
+                    amount,
+                    kind,
+                    crate::mace::breach(source),
+                    mc_data::armor::ArmorStats {
+                        armor: armor.min(30.0) as f32,
+                        toughness: toughness.min(20.0) as f32,
+                    },
+                )
+            } else {
+                crate::survival::reduce_damage_with_breach(
+                    &rules,
+                    &player.inventory.slots[36..40],
+                    amount,
+                    kind,
+                    crate::mace::breach(source),
+                )
+            };
+            let after_armor = reduced;
+            let absorption = player.active_effects.absorption;
+            let reduced = player.active_effects.reduce_damage(kind, reduced);
+            let absorbed = (absorption - player.active_effects.absorption).max(0.0);
+            let resisted = if !matches!(
+                kind,
+                crate::survival::DamageKind::Void
+                    | crate::survival::DamageKind::GenericKill
+                    | crate::survival::DamageKind::Starvation
+            ) && player
+                .active_effects
+                .has(crate::effects::EffectId::Resistance)
+            {
+                (after_armor - reduced - absorbed).max(0.0)
+            } else {
+                0.0
+            };
+            let reduced = if kind == crate::survival::DamageKind::Poison {
+                reduced.min((player.vitals.health - 1.0).max(0.0))
+            } else {
+                reduced
+            };
+            let wear_amount = if custom_armor {
+                physical.map_or(amount, |impact| impact.damage_hp)
+            } else {
+                amount
+            };
+            let wear = crate::survival::armor_wear(wear_amount, kind);
+            if wear > 0 && !player.creative() && !player.spectator() && !player.vitals.is_dead() {
+                for (stack, armor_slot) in player.inventory.slots[36..40]
+                    .iter_mut()
+                    .zip(["feet", "legs", "chest", "head"])
+                {
+                    if stack.is_empty() {
+                        continue;
+                    }
+                    let Some(max_damage) = rules
+                        .facts
+                        .facts_for_stack(stack, rules.items)
+                        .filter(|facts| {
+                            !custom_armor
+                                || facts
+                                    .physical_profile
+                                    .as_ref()
+                                    .is_none_or(|profile| profile.armor.is_none())
+                        })
+                        .filter(|facts| {
+                            facts
+                                .armor
+                                .as_ref()
+                                .is_some_and(|armor| armor.slot == armor_slot)
+                        })
+                        .and_then(|facts| facts.max_damage)
+                    else {
+                        continue;
+                    };
+                    let wear = crate::enchantments::durability_damage(
+                        stack,
+                        wear,
+                        true,
+                        &mut player.enchantment_seed,
+                    );
+                    if wear == 0 {
+                        continue;
+                    }
+                    let damage = stack.damage.unwrap_or(0).saturating_add(wear);
+                    if u32::try_from(damage).is_ok_and(|damage| damage >= max_damage) {
+                        player
+                            .statistics
+                            .increment(StatType::Broken, stack.item_id, 1);
+                        *stack = mc_data::ItemStack::EMPTY;
+                    } else {
+                        stack.damage = Some(damage);
+                    }
+                    armor_changed = true;
+                }
+            }
+            let before_hit = player.vitals.health;
+            let lethal = player.vitals.hurt(kind, reduced);
+            let health_after_hit = player.vitals.health;
+            player
+                .statistics
+                .increment_custom(CustomStat::DamageTaken, (reduced * 10.0).round() as i32);
+            player
+                .statistics
+                .increment_custom(CustomStat::DamageAbsorbed, (absorbed * 10.0).round() as i32);
+            player
+                .statistics
+                .increment_custom(CustomStat::DamageResisted, (resisted * 10.0).round() as i32);
+            amounts.1 = (before_hit - player.vitals.health).max(0.0);
+            credit = Some(((before - player.vitals.health).max(0.0), absorbed, resisted));
+            if lethal {
+                rescue = totem::rescue(player, &self.registry, kind);
+                if rescue.is_none() {
+                    died = true;
+                }
+            }
+            health_changed |= lethal || player.vitals.health != before;
+            absorption_changed |= player.active_effects.absorption != absorption_before;
+            let damage = (before_hit.max(0.0) - health_after_hit.max(0.0)).max(0.0);
+            if damage > 0.0
+                && let Some(attacker) = crate::plugin::damage_attacker(source)
+            {
+                combat_hit = Some((
+                    attacker,
+                    damage,
+                    before_hit > 0.0 && rescue.is_none() && player.vitals.is_dead(),
+                ));
+            }
+        }
+        if let Some(mut rescue) = rescue {
+            let evidence = crate::advancements::item_snapshot(self, &rescue.used);
+            crate::advancements::trigger(
+                self,
+                id,
+                "minecraft:used_totem",
+                serde_json::json!({"item": evidence}),
+            );
+            crate::vibration::emit(
+                self,
+                self.entities.pos(slot),
+                crate::vibration::GameEvent::ItemInteractFinish,
+                Some(id),
+            );
+            totem::apply(self, id, &mut rescue);
+            events.push(EntityEvent::Status {
+                entity: id,
+                event: 35,
+            });
+            crate::effects::sync_appearance(self, id);
+        }
+        if let Some((dealt, absorbed, resisted)) = credit {
+            crate::statistics::damage_dealt(&mut self.players, source, dealt, absorbed, resisted);
+        }
+        if let Some((attacker, damage, killed)) = combat_hit {
+            crate::plugin_npcs::record_combat(self, attacker, victim_uuid, damage, killed);
+        }
+        let health = self
+            .players
+            .get(&id)
+            .map(|player| player.vitals.health)
+            .unwrap_or(0.0);
+        self.entities.row_mut(slot).health = health;
+        let last_damage_source = piece.source;
+        crate::advancements::damage(self, id, piece.source, piece.kind, *amounts, died, false);
+        if absorption_changed && let Some(player) = self.players.get(&id) {
+            let connection = player.connection;
+            let amount = player.active_effects.absorption;
+            self.push_player(connection, PlayerChange::Absorption { amount });
+            crate::effects::sync_appearance(self, id);
+        }
+        if health_changed {
+            let appearance = std::sync::Arc::make_mut(&mut self.entities.row_mut(slot).appearance);
+            appearance.health = health;
+            self.appearance_changed.push(id);
+        }
+        if died && self.entities.body(slot).alive {
+            self.entities.body_mut(slot).alive = false;
+            crate::statistics::kill(self, statistics_killer, id);
+            deaths.push(id);
+            crate::plugin_inventories::invalidate_player(self, id);
+            crate::plugin::player_died(self, id);
+            events.push(EntityEvent::Death { entity: id });
+            crate::effects_trigger::death(self, id, spawned);
+            crate::scoreboard::automatic(self, &[id], &[]);
+            let keep_inventory =
+                crate::command_rules::boolean(self, crate::command_rules::BoolRule::KEEP_INVENTORY);
+            // A deployed `death_graves` package takes custody of the drops
+            // this death would have scattered. `keepInventory` wins, as in
+            // vanilla: a retained inventory never reaches a grave. A death
+            // with no live connection keeps the vanilla drop too, because
+            // nobody could be told where the grave is.
+            let grave_owner = if keep_inventory || self.connections.entity_connection(id).is_none()
+            {
+                None
+            } else {
+                self.plugin_runtime
+                    .as_ref()
+                    .and_then(|runtime| runtime.death_graves.clone())
+            };
+            let keep_experience = grave_owner.is_some();
+            let death_xp = if keep_inventory || keep_experience {
+                0
+            } else {
+                self.players
+                    .get(&id)
+                    .map_or(0, |player| player.vitals.experience.death_drop())
+            };
+            let rules = self.registry.item_rules();
+            let effects = self
+                .players
+                .get_mut(&id)
+                .map(|player| player.die(&rules, keep_inventory, keep_experience))
+                .unwrap_or_default();
+            let pos = self.entities.pos(slot);
+            crate::experience_orbs::award(self, pos, death_xp, spawned);
+            let mut dropped = effects.dropped;
+            let grave = grave_owner
+                .and_then(|owner| crate::plugin_graves::bury(self, &owner, pos, &mut dropped));
+            if let Some(connection) = self.connections.entity_connection(id) {
+                for change in effects.changes {
+                    self.push_player(connection, change);
+                }
+                for stack in dropped {
+                    let drop = spawn_item_entity(self, pos, stack);
+                    spawned.push(drop);
+                }
+                // Death-screen order (commit drain = same tick as
+                // the drops): Health(0) then Died. Appearance was
+                // updated with the committed health above.
+                if let Some(player) = self.players.get(&id) {
+                    self.push_player(connection, player.health_change());
+                }
+                let show = crate::command_rules::boolean(
+                    self,
+                    crate::command_rules::BoolRule::SHOW_DEATH_MESSAGES,
+                );
+                let message = if show {
+                    super::death_message::component(self, id, piece.kind, last_damage_source)
+                } else {
+                    mc_nbt::Tag::String(String::new())
+                };
+                self.push_player(
+                    connection,
+                    PlayerChange::Died {
+                        message: message.clone(),
+                    },
+                );
+                if show {
+                    super::death_message::broadcast(self, id, message);
+                }
+            } else {
+                // Offline/dead-connection victim: drops still spawn
+                // (journaled below); nobody to sync to.
+                for stack in dropped {
+                    let drop = spawn_item_entity(self, pos, stack);
+                    spawned.push(drop);
+                }
+            }
+            if let Some(grave) = grave {
+                crate::plugin::player_grave_created(self, id, &grave);
+            }
+        } else if health_changed
+            && let Some(connection) = self.connections.entity_connection(id)
+            && let Some(player) = self.players.get(&id)
+        {
+            self.push_player(connection, player.health_change());
+        }
+        if armor_changed
+            && !died
+            && let Some(connection) = self.connections.entity_connection(id)
+            && let Some(player) = self.players.get(&id)
+        {
+            self.push_player(connection, player.inventory_contents());
+        }
+    }
+
     /// Shared hit admission, shield response, hurt window and motion pipeline.
     fn commit_damage_piece(
         &mut self,
@@ -780,6 +822,13 @@ impl TickState {
         spawned: &mut Vec<EntityId>,
     ) -> bool {
         let victim = self.entities.body(slot).id;
+        if self
+            .players
+            .get(&victim)
+            .is_some_and(|player| player.vitals.is_dead())
+        {
+            return false;
+        }
         if !piece.kind.bypasses_invulnerability()
             && self
                 .players

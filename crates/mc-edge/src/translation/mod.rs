@@ -106,7 +106,8 @@ impl Profile {
         #[cfg(test)]
         let tables = {
             let reports = adjacent::tables::Reports::load(root)?;
-            let mut tables = adjacent::tables::Tables::new(&reports, &reports, &data, &data)?;
+            let mut tables =
+                adjacent::tables::Tables::new(&reports, &reports, &data, &data, version.protocol)?;
             tables.formats = adjacent::tables::Formats {
                 upper: version.protocol,
                 lower: version.protocol,

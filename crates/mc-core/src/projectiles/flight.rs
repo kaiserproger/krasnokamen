@@ -670,7 +670,8 @@ fn step(
                         ..Default::default()
                     },
                 });
-            } else if record.kind.arrow() && crate::item_frame::eject_on_projectile(state, body.id)
+            } else if record.kind.arrow()
+                && crate::item_frame::eject_on_projectile(state, body.id, owner)
             {
                 // Vanilla occupied frame: first non-explosive hit ejects the
                 // displayed item and leaves the frame attached. The arrow is
@@ -798,7 +799,9 @@ fn step(
         .set_pos(slot, std::array::from_fn(|axis| pos[axis] + velocity[axis]));
     if let Some(profile) = authored {
         let mut next = velocity;
-        next[1] -= profile.gravity;
+        if !state.entities.row(slot).controls.no_gravity {
+            next[1] -= profile.gravity;
+        }
         super::set_flight(state, slot, next);
         return false;
     }
@@ -839,7 +842,9 @@ fn step(
         };
         (velocity[axis] + acceleration) * drag
     });
-    next[1] -= gravity;
+    if !state.entities.row(slot).controls.no_gravity {
+        next[1] -= gravity;
+    }
     if record.kind == ProjectileKind::Firework && !record.shot_at_angle {
         next[0] *= 1.15;
         next[2] *= 1.15;

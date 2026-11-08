@@ -254,6 +254,8 @@ class WorldAdapterTests(unittest.TestCase):
     def test_sculk_latches_distance_frequency_and_rejection_after_pulse(self):
         from . import redstone
         ctx = self.context()
+        ctx.clients[0].call = Mock(side_effect=lambda _tool, args: {
+            'block': {'block_id': args['block_id'], 'properties': dict(args['properties'])}})
         with patch.object(redstone, 'ticks') as wait, patch.object(redstone, 'block') as block:
             redstone.sculk_sensor_signal(ctx)
         cases = [(False, 2, 0, 12), (False, 6, 0, 4),
@@ -268,6 +270,13 @@ class WorldAdapterTests(unittest.TestCase):
                 self.assertEqual(((23-index, 99, 16),
                                   f'copper_bulb[lit={str(strength > 0 and index <= 10).lower()}]'),
                                  calls[f'{label}:frequency-latch:{index}'])
+            self.assertEqual(((27, 100, 17), 'copper_bulb[lit=false]'),
+                             calls[f'{label}:perpendicular-control'])
+        calls_received = [entry.args[1] for entry in ctx.clients[0].call.call_args_list]
+        self.assertEqual(155, sum(args['block_id'] == 'minecraft:copper_bulb' for args in calls_received))
+        phases = [args['properties']['sculk_sensor_phase'] for args in calls_received
+                  if 'sculk_sensor_phase' in args['properties']]
+        self.assertEqual(['active', 'cooldown', 'inactive'] * 4, phases)
         self.assertEqual([45, 42, 45, 46, 45, 42, 45, 42, 45, 52],
                          [call.args[1] for call in wait.call_args_list])
 

@@ -458,7 +458,71 @@ def _automation_storage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None
     _block(steps, sensor, "minecraft:sculk_sensor", {"sculk_sensor_phase": "cooldown", "power": "0"})
     _block(steps, sensor, "minecraft:sculk_sensor", {"sculk_sensor_phase": "inactive", "power": "0"})
     steps.check("sensor_active_cooldown_inactive_received", True)
-    steps.report["limits"] = ["one crafter pulse/no held-power duplicate; one unpowered shelf slot swap; one sensor use-vibration cycle; no powered shelf chains, calibrated filtering, shrieker/warden or visual model parity"]
+    _sculk_latch(steps, origin)
+    steps.report["limits"] = ["one crafter pulse/no held-power duplicate; one unpowered shelf slot swap; sensor phase, output and downward-latch cases; no powered shelf chains, shrieker/warden or visual model parity"]
+
+
+def _sculk_latch(steps: ProbeSteps, origin: tuple[int, int, int], fixture=None) -> None:
+    # Same downward-facing bulb geometry as the corrected matrix fixture;
+    # every value below comes from received client block state.
+    fixture = fixture or steps.fixture
+    x, y, z = origin
+    z += 8
+    results = []
+    for calibrated, distance, selected in (
+        (False, 2, 0), (False, 6, 0),
+        (True, 2, 10), (True, 2, 8), (True, 12, 10),
+    ):
+        kind = "minecraft:calibrated_sculk_sensor" if calibrated else "minecraft:sculk_sensor"
+        fixture(f"fill {x - 18} {y} {z - 14} {x + 17} {y + 2} {z + 3} minecraft:air")
+        fixture(f"setblock {x} {y} {z} {kind}" + ("[facing=north]" if calibrated else ""))
+        fixture(f"fill {x + 1} {y - 1} {z} {x + 15} {y - 1} {z} minecraft:copper_bulb")
+        fixture(f"fill {x + 1} {y} {z} {x + 15} {y} {z} minecraft:redstone_wire")
+        # Perpendicular bulb is the historical incorrect latch geometry.
+        fixture(f"setblock {x + 3} {y} {z + 1} minecraft:copper_bulb")
+        fixture(f"setblock {x - 1} {y} {z} minecraft:comparator[facing=west]")
+        fixture(f"fill {x - 16} {y - 1} {z} {x - 2} {y - 1} {z} minecraft:copper_bulb")
+        fixture(f"fill {x - 16} {y} {z} {x - 2} {y} {z} minecraft:redstone_wire")
+        if calibrated:
+            fixture(f"setblock {x} {y} {z + 3} minecraft:cake[bites={(14 - selected) // 2}]")
+            fixture(f"setblock {x} {y} {z + 2} minecraft:comparator[facing=north]")
+            fixture(f"setblock {x} {y} {z + 1} minecraft:redstone_wire")
+        fixture(f"setblock {x} {y} {z - distance} minecraft:note_block")
+        _echo(steps, "sculk_latch_fixture_ordered")
+        steps.call("minecraft_wait_ticks", {"ticks": 45})
+        sensor = {"x": x, "y": y, "z": z}
+        _block(steps, sensor, kind, {"sculk_sensor_phase": "inactive"})
+        fixture(f"setblock {x - 1} {y} {z - distance} minecraft:redstone_block")
+        accepts = not calibrated or selected == 10
+        strength = max(1, 15 - (15 * distance // (16 if calibrated else 8))) if accepts else 0
+        if accepts:
+            active = _block(steps, sensor, kind, {"sculk_sensor_phase": "active", "power": str(strength)})
+            cooldown = _block(steps, sensor, kind, {"sculk_sensor_phase": "cooldown", "power": "0"})
+            _block(steps, sensor, kind, {"sculk_sensor_phase": "inactive", "power": "0"})
+        else:
+            steps.call("minecraft_wait_ticks", {"ticks": distance + 45})
+            active = cooldown = None
+            _block(steps, sensor, kind, {"sculk_sensor_phase": "inactive", "power": "0"})
+        note = steps.call("minecraft_read_block", {"x": x, "y": y, "z": z - distance})
+        steps.check("sculk_note_powered", note["properties"]["powered"] == "true")
+        horizontal = steps.call("minecraft_read_block", {"x": x + 3, "y": y, "z": z + 1})
+        steps.check(f"sculk_perpendicular_control_{calibrated}_{distance}_{selected}",
+                    horizontal["properties"]["lit"] == "false")
+        strength_lights = []
+        frequency_lights = []
+        for index in range(1, 16):
+            for lights, bx, expected in (
+                (strength_lights, x + index, index <= strength),
+                (frequency_lights, x - 1 - index, accepts and index <= 10),
+            ):
+                block = steps.call("minecraft_read_block", {"x": bx, "y": y - 1, "z": z})
+                lit = block["properties"]["lit"] == "true"
+                lights.append(lit)
+                steps.check(f"sculk_latch_{calibrated}_{distance}_{selected}_{bx}", lit == expected)
+        results.append({"calibrated": calibrated, "distance": distance, "selected": selected,
+                        "active": active, "cooldown": cooldown, "horizontal": horizontal,
+                        "strength_lights": strength_lights, "frequency_lights": frequency_lights})
+    steps.report["sculk_downward_latches"] = results
 
 
 def _storage_adversarial(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:

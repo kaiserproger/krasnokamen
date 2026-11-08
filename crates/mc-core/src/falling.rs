@@ -232,7 +232,12 @@ pub(crate) fn run(
         let mut falling = state.entities.row(slot).falling.expect("falling payload");
         let old = state.entities.pos(slot);
         let vel = state.entities.vel(slot);
-        let desired = mc_physics::Vec3::new(vel[0] / 20.0, vel[1] / 20.0 - 0.04, vel[2] / 20.0);
+        let gravity = if state.entities.row(slot).controls.no_gravity {
+            0.0
+        } else {
+            0.04
+        };
+        let desired = mc_physics::Vec3::new(vel[0] / 20.0, vel[1] / 20.0 - gravity, vel[2] / 20.0);
         let next_y = old[1] + desired.y;
         let x = old[0].floor() as i32;
         let z = old[2].floor() as i32;

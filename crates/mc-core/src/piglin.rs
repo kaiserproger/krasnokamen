@@ -280,6 +280,10 @@ fn zombify(state: &mut TickState) {
         row.entity_life.time_in_overworld = 0;
         row.special_mob = None;
         Arc::make_mut(&mut row.appearance).extra.clear();
+        crate::entity_controls::sync_no_gravity(
+            Arc::make_mut(&mut row.appearance),
+            row.controls.no_gravity,
+        );
         row.active_effects.add(crate::effects::ActiveEffect::new(
             crate::effects::EffectId::Nausea,
             200,
@@ -306,6 +310,7 @@ fn zombify(state: &mut TickState) {
                 connection,
                 crate::boundary::PlayerChange::CommandSound {
                     sound: sound.clone(),
+                    fixed_range: None,
                     source: 5,
                     position: pos.map(|v| (v * 8.0).floor() as i32),
                     volume: 1.0,

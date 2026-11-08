@@ -304,6 +304,48 @@ fn arrow_ejects_display_without_destroying_frame() {
 }
 
 #[test]
+fn invulnerable_frame_keeps_display_on_melee_and_arrow_but_creative_bypasses() {
+    let (mut state, actor) = fixture();
+    let frame = place(&mut state, actor, "minecraft:item_frame");
+    let slot = state.entities.slot_of(frame).unwrap();
+    let stack = item(&state, "minecraft:diamond", 1).with_custom_name("custody");
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] = stack.clone();
+    click(&mut state, frame);
+    state.entities.row_mut(slot).controls.invulnerable = true;
+    let attack = PlayerInput::Attack {
+        connection: ConnectionId(1),
+        target: frame,
+    };
+    let (output, _, _) = run_tick(&mut state, std::slice::from_ref(&attack));
+    assert!(state.entities.slot_of(frame).is_some());
+    assert_eq!(displayed(&state, slot), Some(&stack));
+    assert!(output.changes.entities_spawned.is_empty());
+    let owner = state
+        .entities
+        .row(state.entities.slot_of(actor).unwrap())
+        .uuid;
+    let arrow = crate::projectiles::ProjectileState::new(
+        crate::projectiles::ProjectileKind::Arrow,
+        Some(owner),
+        item(&state, "minecraft:arrow", 1),
+    );
+    crate::projectiles::launch(&mut state, arrow, [6.6, 65.8, 8.5], [2.0, 0.0, 0.0]).unwrap();
+    let (output, _, _) = run_tick(&mut state, &[]);
+    assert!(state.entities.slot_of(frame).is_some());
+    assert_eq!(displayed(&state, slot), Some(&stack));
+    assert!(!output.changes.entities_spawned.iter().any(|id| {
+        state
+            .entities
+            .slot_of(*id)
+            .and_then(|slot| state.entities.row(slot).item.as_ref())
+            .is_some_and(|drop| drop.full_stack() == stack)
+    }));
+    state.players.get_mut(&actor).unwrap().game_mode = crate::commands::GameMode::Creative;
+    run_tick(&mut state, &[attack]);
+    assert!(state.entities.slot_of(frame).is_none() || displayed(&state, slot).is_none());
+}
+
+#[test]
 fn partial_block_supports_hold_normal_and_glow_frames() {
     for support in [
         "minecraft:chest",

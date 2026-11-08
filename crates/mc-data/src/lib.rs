@@ -49,6 +49,7 @@ pub mod block_placement_26_1_2;
 pub mod block_semantics_26_1_2;
 pub mod block_tools;
 pub mod blocks;
+pub mod builtin_sounds_26_3;
 pub mod collision_shapes;
 pub mod conduit_nbt;
 pub mod damage_types;

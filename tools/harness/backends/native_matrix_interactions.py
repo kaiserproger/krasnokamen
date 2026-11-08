@@ -3,9 +3,10 @@ from __future__ import annotations
 import math
 from typing import Any
 from .probe_steps import item_count
-from .native_v2 import _block, _point, _use
+from .native_v2 import _block, _point, _sculk_latch, _use
 
-SUBJECTS = {'block_interact.jukebox', 'block_interact.shelf', 'block_interact.composter'}
+SUBJECTS = {'block_interact.jukebox', 'block_interact.shelf', 'block_interact.composter',
+            'redstone.sculk_sensor_signal'}
 
 
 def run(lane: Any, scenario: dict[str, Any]) -> None:
@@ -17,6 +18,12 @@ def run(lane: Any, scenario: dict[str, Any]) -> None:
     point = _point(origin)
     x, y, z = point.values()
     name = lane.names[0]
+    if scenario['subject'] == 'redstone.sculk_sensor_signal':
+        context = scenario['context']
+        if context['network_condition'] != 'normal' or context['server_lifecycle'] != 'steady':
+            raise NotImplementedError('sculk_latch_boundary: only steady normal-network cell is covered')
+        _sculk_latch(steps, origin, fixture=lane.console)
+        return
     lane.console(f'clear {name}')
     subject = scenario['subject']
     if subject == 'block_interact.jukebox':

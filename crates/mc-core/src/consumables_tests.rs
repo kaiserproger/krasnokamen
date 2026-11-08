@@ -139,6 +139,21 @@ fn chorus_destinations_are_supported_clear_and_loaded() {
 }
 
 #[test]
+fn death_effect_teleport_obeys_authored_diameter() {
+    let (state, _, pos) = flat_player_fixture();
+    for diameter in [2.0, 4.0] {
+        let destinations: Vec<_> = (0..64)
+            .filter_map(|seed| crate::consumables::random_destination(&state, pos, seed, diameter))
+            .collect();
+        assert!(!destinations.is_empty());
+        for target in destinations {
+            assert!((target[0] - pos[0]).abs() <= diameter / 2.0);
+            assert!((target[2] - pos[2]).abs() <= diameter / 2.0);
+        }
+    }
+}
+
+#[test]
 fn chorus_teleport_updates_native_position_and_resets_fall() {
     let (mut state, entity, pos) = flat_player_fixture();
     let slot = state.entities.slot_of(entity).unwrap();

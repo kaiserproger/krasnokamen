@@ -47,16 +47,42 @@ pub(crate) fn chorus_destination(
     position: [f64; 3],
     seed: u64,
 ) -> Option<[f64; 3]> {
+    destination(state, position, seed, 16.0, true)
+}
+
+pub(crate) fn random_destination(
+    state: &TickState,
+    position: [f64; 3],
+    seed: u64,
+    diameter: f64,
+) -> Option<[f64; 3]> {
+    destination(state, position, seed, diameter, false)
+}
+
+fn destination(
+    state: &TickState,
+    position: [f64; 3],
+    seed: u64,
+    diameter: f64,
+    chorus: bool,
+) -> Option<[f64; 3]> {
     let shapes = mc_data::collision_shapes::vanilla_collision_shapes();
     for attempt in 0..16_u64 {
         let a = splitmix(seed ^ attempt.wrapping_mul(0x9e3779b97f4a7c15));
         let b = splitmix(a);
         let c = splitmix(b);
         let unit = |value: u64| (value >> 11) as f64 / ((1_u64 << 53) as f64);
-        let x = position[0] + (unit(a) - 0.5) * 16.0;
-        let z = position[2] + (unit(b) - 0.5) * 16.0;
-        let mut y = (position[1].floor() as i32 + (c % 16) as i32 - 8)
-            .min(state.dimension.geometry().max_y() - 2);
+        let x = position[0] + (unit(a) - 0.5) * diameter;
+        let z = position[2] + (unit(b) - 0.5) * diameter;
+        let y = if chorus {
+            position[1].floor() as i32 + (c % 16) as i32 - 8
+        } else {
+            (position[1] + (unit(c) - 0.5) * diameter).floor() as i32
+        };
+        let mut y = y.clamp(
+            state.dimension.geometry().min_y(),
+            state.dimension.geometry().max_y() - 2,
+        );
         let mut supported = false;
         while y > state.dimension.geometry().min_y() {
             let Some(id) = state

@@ -306,7 +306,13 @@ fn boat(state: &mut TickState, slot: EntitySlot) {
     vel[1] = if water {
         ((f64::from(p[1].floor() as i32) + 0.8 - p[1]) * 0.1).clamp(-0.05, 0.05)
     } else {
-        (vel[1] - 0.04) * 0.98
+        (vel[1]
+            - if state.entities.row(slot).controls.no_gravity {
+                0.0
+            } else {
+                0.04
+            })
+            * 0.98
     };
     let speed = mth::length2(vel[0], vel[2]);
     if speed > 0.4 {
@@ -322,7 +328,9 @@ fn cart(state: &mut TickState, slot: EntitySlot) {
     let old = state.entities.vel(slot).map(|v| v / 20.0);
     let Some(mut rail) = current_rail(state, p) else {
         let mut vel = old;
-        vel[1] -= 0.04;
+        if !state.entities.row(slot).controls.no_gravity {
+            vel[1] -= 0.04;
+        }
         if state.entities.ground(slot) {
             vel[0] *= 0.5;
             vel[2] *= 0.5;

@@ -342,6 +342,15 @@ fn endpoint(root: &Path, version: Version) {
     ] {
         registries.insert(format!("minecraft:{name}"), json!({"entries":{"minecraft:stone":{"protocol_id":0},"minecraft:brick":{"protocol_id":1}}}));
     }
+    if version.protocol == 777 {
+        let entries: serde_json::Map<String, serde_json::Value> =
+            mc_data::builtin_sounds_26_3::names()
+                .iter()
+                .enumerate()
+                .map(|(id, name)| (name.clone(), json!({"protocol_id":id})))
+                .collect();
+        registries.insert("minecraft:sound_event".into(), json!({"entries":entries}));
+    }
     write_json(root, "reports/registries.json", registries.into());
     for (registry, directory) in mc_data::KNOWN_REGISTRIES {
         write_json(

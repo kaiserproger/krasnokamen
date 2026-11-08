@@ -182,6 +182,7 @@ pub(crate) fn strike_entity(state: &mut TickState, id: crate::boundary::EntityId
     };
     let appearance = std::sync::Arc::make_mut(&mut row.appearance);
     appearance.extra.clear();
+    crate::entity_controls::sync_no_gravity(appearance, row.controls.no_gravity);
     appearance.baby = pig && (appearance.baby || child_ticks > 0);
     if let Some(saddle) = appearance.saddle.take() {
         state.merge_life_drops.push((position, saddle));

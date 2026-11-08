@@ -678,7 +678,7 @@ impl TickState {
         Vec<EntityId>,
     ) {
         super::refresh_player_attributes(self, false);
-        let (deaths, mut events, mut spawned) = self.commit_damage();
+        let (deaths, mut events, mut spawned) = self.commit_damage(None);
         crate::entity_life::commit_drops(self, &mut spawned);
         // Pickups: move item counts into the collector's inventory. Only a
         // fully-consumed ground stack is queued for removal; a partial or

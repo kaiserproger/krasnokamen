@@ -110,6 +110,7 @@ fn run(state: &mut TickState, context: Context, input: &str) -> Result<i32, Stri
             connection,
             crate::boundary::PlayerChange::CommandSound {
                 sound: sound.clone(),
+                fixed_range: None,
                 source,
                 position: location.map(|v| (v * 8.0).floor() as i32),
                 volume: effective_volume,

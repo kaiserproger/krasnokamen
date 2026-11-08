@@ -13,6 +13,9 @@ use thiserror::Error;
 
 use crate::Identifier;
 
+/// Canonical identity used to resolve the pointed-dripstone state family.
+pub const POINTED_DRIPSTONE: &str = "minecraft:pointed_dripstone";
+
 const REQUIRED_BLOCKS: &str = include_str!("../data/required_blocks.json");
 
 /// One block entry from `blocks.json`.

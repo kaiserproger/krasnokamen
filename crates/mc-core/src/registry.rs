@@ -242,6 +242,8 @@ pub struct ResolvedStates {
     pub grass_block: u32,
     pub obsidian: u32,
     pub cobblestone: u32,
+    /// Upward pointed tips, dry then waterlogged, resolved before ticking.
+    pub stalagmite_tips: [u32; 2],
     /// `water` / `lava` by `level` (0 source, 1-7 flowing, 8-15 falling).
     pub water_levels: [u32; 16],
     pub lava_levels: [u32; 16],
@@ -753,6 +755,35 @@ impl ResolvedStates {
             }
             Ok(out)
         };
+        let dripstone = Identifier::parse(mc_data::blocks::POINTED_DRIPSTONE)
+            .expect("vanilla block identifier parses");
+        let block = blocks
+            .block(&dripstone)
+            .ok_or_else(|| CoreError::Registry(format!("missing {dripstone:?}")))?;
+        let mut stalagmite_tips = [0; 2];
+        for (tip, waterlogged) in stalagmite_tips.iter_mut().zip(["false", "true"]) {
+            *tip = block
+                .states
+                .iter()
+                .find_map(|id| {
+                    let state = blocks.by_id(*id)?;
+                    [
+                        ("vertical_direction", "up"),
+                        ("thickness", "tip"),
+                        ("waterlogged", waterlogged),
+                    ]
+                    .iter()
+                    .all(|(key, value)| {
+                        state.properties.iter().any(|(k, v)| k == key && v == value)
+                    })
+                    .then_some(id.0)
+                })
+                .ok_or_else(|| {
+                    CoreError::Registry(format!(
+                        "missing {dripstone:?} upward tip waterlogged={waterlogged}"
+                    ))
+                })?;
+        }
         Ok(Self {
             air: default_of("minecraft:air")?,
             stone: default_of("minecraft:stone")?,
@@ -764,6 +795,7 @@ impl ResolvedStates {
             grass_block: default_of("minecraft:grass_block")?,
             obsidian: default_of("minecraft:obsidian")?,
             cobblestone: default_of("minecraft:cobblestone")?,
+            stalagmite_tips,
             water_levels: levels("minecraft:water")?,
             lava_levels: levels("minecraft:lava")?,
         })
