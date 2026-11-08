@@ -1650,7 +1650,11 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHUTDOWN-ERROR-LOG"
-regression = []
+regression = [
+  "cargo:mc-core:core::stop_tests::native_writer_explicit_shutdown_logs_info_without_waiting_for_channel_close",
+  "cargo:mc-core:core::stop_tests::native_writer_channel_close_logs_stop_cause",
+  "cargo:mc-core:core::stop_tests::journal_io_failure_still_logs_error_and_never_acknowledges",
+]
 
 [[bug]]
 id = "DEATH-PROTECTION-ACTIONS"
@@ -3528,7 +3532,12 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "WinFixReview (history://WinFixReview) on RC5 hotfix a76e1e80: mc-edge backup.rs ExclusiveLease, mc-core hot_backup.rs:123-127, world_conversion.rs:673-679, import.rs session.lock skip"
-regression = []
+regression = [
+  "cargo:mc-world:native::backup_tests::snapshot_reads_lease_holding_handle_without_releasing_database_custody",
+  "cargo:mc-core:hot_backup_tests::copy_reads_the_owned_database_snapshot_not_a_second_path_handle",
+  "cargo:mc-core:hot_backup_tests::backup_of_a_running_core_restores_the_state_at_its_tick",
+]
+fix_commit = "fa736b7d99541cd612300073aeb776c333fee1ec"
 
 [[bug]]
 id = "SP-RELAUNCH-LEASE-RACE"
@@ -3670,7 +3679,7 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "CoreBlockers: native-v2-corrupt-block-entities fixtures had to stay two chunks from the player; with the fixture in the player's own chunk the client stays at 'session startup: play' while the server keeps ticking (scenario native-v2-corrupt-chunk-near-camera, restart_client_entered_play fails); a refused chunk two chunks away does not block it (play_world_presentation_ready, spawn_meshes_presented)."
-regression = []
+regression = ["cargo:mc-core:chunk_loader::tests::refused_chunk_never_blocks_other_chunks_and_stays_refused"]
 repro_check = "harness:entities:native-v2-corrupt-chunk-near-camera"
 
 [[bug]]

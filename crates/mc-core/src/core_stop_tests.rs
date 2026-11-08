@@ -73,6 +73,45 @@ fn native_writer_explicit_shutdown_logs_info_without_waiting_for_channel_close()
 }
 
 #[test]
+fn journal_io_failure_still_logs_error_and_never_acknowledges() {
+    let root = tempfile::tempdir().unwrap();
+    let writer = JournalWriter::open(root.path(), 1).unwrap();
+    let journal = root.path().join("journal");
+    std::fs::remove_dir(&journal).unwrap();
+    std::fs::write(&journal, b"injected non-directory").unwrap();
+    let (sender, receiver) = journal_work_channel();
+    let (ack, acknowledged) = std::sync::mpsc::channel();
+    sender
+        .send(JournalWork::Append {
+            tick_lo: 1,
+            tick_hi: 1,
+            entries: Vec::new(),
+            plugin_ack: Some(ack),
+            reserved: 0,
+        })
+        .unwrap();
+    drop(sender);
+    let log = capture(|| {
+        journal_loop(
+            root.path(),
+            receiver,
+            writer,
+            &std::sync::atomic::AtomicBool::new(false),
+            &JournalBudget::new(crate::journal_budget::JOURNAL_QUEUE_BYTES),
+            CheckpointManifest::default(),
+            crate::plugin::PluginState::default(),
+        )
+    });
+    assert!(
+        log.contains("ERROR") && log.contains("journal append failed"),
+        "{log}"
+    );
+    assert!(log.contains("world halting (fail closed)"), "{log}");
+    assert!(acknowledged.recv().is_err());
+    assert_eq!(std::fs::read(journal).unwrap(), b"injected non-directory");
+}
+
+#[test]
 fn graceful_shutdown_state_distinguishes_expected_broadcast_close() {
     let root = tempfile::tempdir().unwrap();
     let config = CoreConfig::new(root.path().to_owned(), 42);
