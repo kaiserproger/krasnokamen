@@ -139,8 +139,13 @@ def entity_census(probe: ProbeSteps, entity_type: str | None = None) -> dict[str
         arguments["entity_type"] = entity_type
     rows: list[dict[str, Any]] = []
     seen: set[int] = set()
+    total: int | None = None
     while True:
         page = probe.call("minecraft_list_entities", dict(arguments))
+        if total is None:
+            total = page["visible_count"]
+        elif page["visible_count"] != total:
+            raise RuntimeError("entity census membership changed during pagination")
         for entity in page["entities"]:
             identity = entity["entity_id"]
             if identity in seen or (entity_type is not None and entity["entity_type"] != entity_type):

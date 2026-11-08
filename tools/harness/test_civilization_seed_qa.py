@@ -34,6 +34,8 @@ class CivilizationEvidenceTests(unittest.TestCase):
             [{"entities": [], "visible_count": 1, "truncated": True, "next_cursor": None}],
             [{"entities": [{"entity_id": 1}], "visible_count": 2, "truncated": True, "next_cursor": "1"},
              {"entities": [{"entity_id": 1}], "visible_count": 2, "truncated": False, "next_cursor": None}],
+            [{"entities": [{"entity_id": 1}], "visible_count": 3, "truncated": True, "next_cursor": "1"},
+             {"entities": [{"entity_id": 2}], "visible_count": 2, "truncated": False, "next_cursor": None}],
         ):
             with self.subTest(pages=pages):
                 probe = Mock()

@@ -27,7 +27,7 @@ class SchemaTests(unittest.TestCase):
             'radius': {'type': 'number', 'minimum': 1, 'maximum': 128},
             'limit': {'type': 'integer', 'minimum': 1, 'maximum': 512},
             'entity_type': {'type': 'string', 'minLength': 1, 'maxLength': 128},
-            'cursor': {'type': 'string', 'minLength': 0, 'maxLength': 11},
+            'cursor': {'type': 'string', 'minLength': 0, 'maxLength': 20},
         }
         schema = {'type': 'object', 'properties': properties, 'additionalProperties': False}
         tool = {'name': 'minecraft_list_entities', 'inputSchema': schema}
