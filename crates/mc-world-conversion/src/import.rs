@@ -1795,10 +1795,9 @@ pub(super) fn convert(
                 .directory(Path::new(""))
                 .join("data/minecraft")
                 .join(name);
-            let key = canonical
-                .to_str()
+            let key = mc_data::resource_path::slash_relative(Path::new(""), &canonical)
                 .ok_or_else(|| fail("non-UTF8 saved-data path"))?;
-            if let Some(tag) = metadata.get(key) {
+            if let Some(tag) = metadata.get(&key) {
                 if fight {
                     if dimension != Dimension::End {
                         return Err(fail(format!("{key}: dragon fight outside End")));

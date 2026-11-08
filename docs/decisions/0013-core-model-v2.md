@@ -107,6 +107,14 @@ complete framing, first-start,
 lease and backup contract is in
 [persistence](../architecture/persistence.md).
 
+Backups retain database custody throughout the copy. The native redb backend
+and hot-backup reader share the exact lease-holding file handle (not a reopened
+path or duplicated Windows handle). Positioned reads have independent cursors;
+the native writer serializes the copy between committed jobs. Offline
+backup/restore likewise read through their database lease handle. No unlock/copy/
+relock interval is permitted. Windows directory durability uses the existing
+platform directory-sync helper, not an ordinary `File::open` on a directory.
+
 ## Plugin admission
 
 Independently deployed `solaris:plugin@0.8.0` components execute outside the

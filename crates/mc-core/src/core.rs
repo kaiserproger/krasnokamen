@@ -223,6 +223,7 @@ enum JournalWork {
 /// One hot backup request; the answer arrives once the native writer has copied.
 struct BackupJob {
     out: PathBuf,
+    store: Arc<mc_world::native::NativeStore>,
     reply: std::sync::mpsc::Sender<Result<crate::hot_backup::HotBackup, CoreError>>,
 }
 /// Bounded journal work queue: 128 queued batches (6.4 s of ticks) behind the
@@ -321,6 +322,7 @@ struct CoreInner {
     moderation_selector_tx: Sender<moderation_selector::Request>,
     checkpoint_tx: std::sync::mpsc::Sender<std::sync::mpsc::Sender<bool>>,
     backup_tx: std::sync::mpsc::Sender<BackupJob>,
+    backup_store: std::sync::Weak<mc_world::native::NativeStore>,
     input_dropped: AtomicU64,
     /// Weak: only the tick thread owns the `Sender`, so its exit (halt or
     /// shutdown) closes every subscriber instead of leaving them waiting.
@@ -866,6 +868,7 @@ impl Core {
                 moderation_selector_tx,
                 checkpoint_tx,
                 backup_tx,
+                backup_store: Arc::downgrade(&store),
                 input_dropped: AtomicU64::new(0),
                 tick_tx: tick_tx.downgrade(),
                 timing_tx: timing_tx.downgrade(),
@@ -1207,6 +1210,11 @@ impl Core {
         let (reply, result) = std::sync::mpsc::channel();
         let job = BackupJob {
             out: out.to_path_buf(),
+            store: self
+                .inner
+                .backup_store
+                .upgrade()
+                .ok_or_else(|| CoreError::Storage("hot backup: native store stopped".into()))?,
             reply,
         };
         if self.inner.backup_tx.send(job).is_err() {
