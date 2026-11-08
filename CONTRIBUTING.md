@@ -13,9 +13,10 @@ Outside contributors fork the repository, work on a branch and open a pull
 request. The repository owner reviews and merges; nothing lands on `main`
 without that review, and pushing, tagging and publishing releases are owner
 actions. Make each commit a revertible Conventional Commit and leave hooks and
-signing alone. Coding agents running on the owner's host follow AGENTS.md
-instead: they do not commit, push or merge without the owner's explicit
-authorization, and they follow the host's memory-runner and target-directory rules.
+signing alone. Coding agents running on the owner's host follow
+[AGENTS.md](AGENTS.md) instead, including Main's standing commit/push
+authorization, worker-branch limits and the host's memory-runner and
+target-directory rules. Tags and releases still need explicit owner authorization.
 
 ## Prerequisites
 

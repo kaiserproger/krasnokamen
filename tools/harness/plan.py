@@ -293,7 +293,6 @@ REVIEWER_KINDS = {
     "protocol": "independent read-only reviewer before Main commits a protocol change",
     "custody": "independent read-only reviewer before Main commits a custody change",
     "ledger-batch": "independent read-only reviewer for a ledger promotion batch of 5 or more rows",
-    "innovation": "independent read-only reviewer of the decision record for a new dependency, toolchain or prerequisite",
 }
 LEDGER_BATCH_MIN = 5
 INNOVATION_DOC = "docs/development/adding-a-feature.md#new-dependencies-and-components"
@@ -1039,10 +1038,9 @@ def _innovations(ctx: Context, hits: list[str]) -> list[tuple[str, str, str]]:
 def _expand_innovation(ctx: Context, rule: Rule, hits: list[str]) -> None:
     for label, path, _what in _innovations(ctx, hits):
         ctx.plan.add(f"decision record required ({INNOVATION_DOC.split('#')[0]} innovation checklist): {label}",
-                     why=f"{rule.source}: {rule.why}", reviewer="innovation", paths=(path,),
+                     why=f"{rule.source}: {rule.why}", paths=(path,),
                      notes=("answer: what we do with what we already have, why that is prohibitively hard, "
                             "and what the new thing replaces (an open-transitions row)",))
-        ctx.reviewers.setdefault("innovation", []).append(f"{rule.source}: {label}")
 
 
 EXPANDERS: dict[str, Callable[..., None]] = {

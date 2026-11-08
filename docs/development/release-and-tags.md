@@ -1,8 +1,9 @@
 # Releases and tags
 
-Authorization rules are in [AGENTS.md](../../AGENTS.md) (no commit, push, tag
-or publication without explicit owner authorization). The two release reviewers
-and the advisor's role are in
+Authorization rules are in [AGENTS.md](../../AGENTS.md): Main has standing
+authorization for small commits and pushes to `main`; workers stay on their own
+worktree branches and do not push. Tags, releases and other publication need
+explicit owner authorization. The two release reviewers and the advisor's role are in
 [review committee and breaker](review-committee-and-breaker.md#release-reviewers-owner-2026-11-07).
 The breaker passes before the tag and before the announcement are in the
 [break-it QA protocol](../QA_AGENT_PROTOCOL.md) "Release-candidate breaker

@@ -1,8 +1,9 @@
 # Owner contract (verbatim)
 
 The owner's own words, kept as written. [AGENTS.md](../../AGENTS.md) "Working
-rules" restates them as a short numbered list with the conflicts resolved; when
-the two seem to disagree, ask the owner.
+rules" restates them as a short numbered list with the conflicts resolved.
+Apply its precedence order and later explicit owner decisions; ask only about
+a material choice they do not resolve.
 
 > ONCE AN HOUR OR BEFORE COMMIT LOOKUP AT OWNER OPEN ISSUES IN REPOSITORY
 

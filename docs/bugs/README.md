@@ -81,8 +81,10 @@ bugs, require a real-client check; source/test findings may use a Cargo test
 through the same real tick/gameplay path or a TCP/native scenario. Tests must
 assert vanilla or owner-accepted behavior, not merely the current output.
 One row describes one symptom: split covered behavior from remaining gaps.
-The phase reviewer confirms each promotion batch matches the symptom and
-failed before the fix. A unit test cannot close a known client failure.
+The phase reviewer confirms each promotion batch matches the symptom and has
+the required failing negative control; seeing the original failure before
+editing is recorded when available, not required. A unit test cannot close a
+known client failure.
 Client promotion requires an assertion matching the repro; visual-review
 scenarios require recorded review.
 

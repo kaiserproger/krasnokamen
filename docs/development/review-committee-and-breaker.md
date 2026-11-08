@@ -124,8 +124,10 @@ to the review scope; the rubric below specialises it for independent review:
 
 ## Breaker
 
-Use one before pushing a player-visible change to `main` and before tagging or
-announcing a release. Its prompt is the QA protocol plus these rules:
+Use one before accepting a player-visible change and before tagging or announcing
+a release, as required by the [QA protocol](../QA_AGENT_PROTOCOL.md#roles).
+Unaccepted work may be pushed to `main`; a push is not acceptance. Its prompt
+is the QA protocol plus these rules:
 
 - Its only goal is a reproducible failure of the target (commit, branch, tag or
   published assets); passing the author's happy path again is not its job, and

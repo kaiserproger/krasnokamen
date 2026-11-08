@@ -228,7 +228,7 @@ diff, and `../solaris-client/...` names a sibling repository) and prints one
 deduplicated list. Each entry has the exact gate, `why` (the rule's doc path
 and section), `runs` (1, or 3 for a variable profile), whether a negative control
 is required, and whether an independent reviewer is required and of which kind
-(persistence, protocol, custody, ledger batch of five or more rows, innovation).
+(persistence, protocol, custody, ledger batch of five or more rows).
 Rules of several paths are unioned; the strictest run count wins.
 
 The rules are the `RULES` table in `tools/harness/plan.py`, one row per rule with its
@@ -247,8 +247,9 @@ that falls in two or more risk domains (persistence, protocol, custody, gate),
 is printed as `manual classification required: <files>`; so is any change whose
 domain its path does not show, which you must classify yourself. A new direct
 dependency, a toolchain change or a new required prerequisite prints `decision
-record required` and a reviewer (see
-[adding a feature](development/adding-a-feature.md), "New dependencies and components").
+record required` (see [adding a feature](development/adding-a-feature.md),
+"New dependencies and components"); it does not introduce an additional
+independent-review checkpoint.
 Run it from inside the tree to be judged; `plan` is read-only.
 
 ## Test gate (nextest)

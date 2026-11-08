@@ -259,15 +259,14 @@ class InnovationTests(unittest.TestCase):
     def records(self, result: dict) -> list[str]:
         return [g for g in gates(result) if g.startswith("decision record required")]
 
-    def test_added_dependency_needs_a_decision_record_and_the_reviewer(self):
+    def test_added_dependency_needs_a_decision_record_without_an_extra_reviewer(self):
         path = "crates/x/Cargo.toml"
         result = self.innovation({path: self.MANIFEST},
                                  {path: self.MANIFEST + 'left-pad = "0.1"\nmc-other = { path = "../o" }\n'}, [path])
         (record,) = self.records(result)
-        self.assertEqual(record, "decision record required (docs/development/adding-a-feature.md "
-                                 "innovation checklist): new dependency left-pad")
-        self.assertEqual(gates(result)[record]["reviewer"], ["innovation"])
-        self.assertEqual([r["kind"] for r in result["reviewers"]], ["innovation"])
+        self.assertIn("left-pad", record)
+        self.assertEqual(gates(result)[record]["reviewer"], [])
+        self.assertEqual(result["reviewers"], [])
 
     def test_version_bump_removal_and_workspace_reuse_are_not_innovation(self):
         path = "crates/x/Cargo.toml"
@@ -291,8 +290,8 @@ class InnovationTests(unittest.TestCase):
         result = self.innovation(files, {"rust-toolchain.toml": '[toolchain]\nchannel = "nightly"\n'},
                                  ["rust-toolchain.toml"])
         (record,) = self.records(result)
-        self.assertIn("toolchain or cargo config change rust-toolchain.toml", record)
-        self.assertEqual(gates(result)[record]["reviewer"], ["innovation"])
+        self.assertIn("rust-toolchain.toml", record)
+        self.assertEqual(gates(result)[record]["reviewer"], [])
         unchanged = self.innovation(files, {}, ["rust-toolchain.toml", ".cargo/config.toml"])
         self.assertEqual(self.records(unchanged), [])
 

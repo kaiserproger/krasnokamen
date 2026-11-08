@@ -133,7 +133,8 @@ Before accepting a returned slice (procedure:
    and [state ownership](../architecture/state-ownership.md).
 3. `validation` names the tree and observes the promised result at its consumer:
    dispatch, chat echo or a mock interaction is not proof that world geometry,
-   inventory or pixels changed. Reuse green checks only for an identical tree.
+   inventory or pixels changed. Reuse green checks only for an identical
+   relevant tree, environment and scope.
    An optimisation claim also needs a comparable full workload, the relevant
    latency/memory budget and preserved behaviour under the
    [profiling rules](performance-windows-and-profiling.md), not just a

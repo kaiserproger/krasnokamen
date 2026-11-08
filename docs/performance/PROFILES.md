@@ -201,8 +201,9 @@ python3 -m tools.coreperf.profiles villager-heavy "${COMMON[@]}"
 ```
 
 Fixture preparation uses the harness's memory guard, so execute these commands
-inside a bounded cgroup. On the shared host, request Main's **GO**, then prefix
-**each** command with `tools/dev/mem-run.sh -x -p -m 6G`.
+inside a bounded cgroup. On the shared host, prefix **each** command with
+`<work>/solaris/tools/dev/mem-run.sh -x -p -m 6G`; the lanes serialize
+themselves, so no Main GO is needed.
 On another Linux host use the same runner or an equivalent bounded cgroup,
 record the cap and run without competing builds/tests. The published affinity
 is server logical CPUs `0-7`, bots `8-11`; override `--server-cpus` and

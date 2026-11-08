@@ -208,12 +208,13 @@ proofs need a physical XTest click (pattern: `_scroll` in
   client's `.analysis/harness-runs/`; the 0600 bearer token and private nonce are
   not receipted.
 - The `survival` server uses an isolated seed-81 world with no plugins by default,
-  no operators and hostile spawning disabled. By default the harness builds the
-  current debug server; `SOLARIS_SERVER_BINARY` selects a known matching prebuilt
-  server read-only (path and SHA-256 are receipted). `--plugins-dir PATH` (an
-  existing directory used directly as `[plugins].directory`) is accepted by the
-  profiles that allow it and supplies no plugin-specific scenarios or unlock
-  proofs.
+  no operators and hostile spawning disabled. The generic harness fallback builds
+  the current debug server; it does not satisfy real-client gate requirements.
+  For these gates pass the pinned `--release --locked` server through
+  `SOLARIS_SERVER_BINARY` as required by AGENTS.md (path and SHA-256 are receipted).
+  `--plugins-dir PATH` (an existing directory used directly as `[plugins].directory`)
+  is accepted by the profiles that allow it and supplies no plugin-specific
+  scenarios or unlock proofs.
 - `--windowed` owns Xvfb and launches `play --windowed`. After success,
   `screenshots/native-final.png` and its JSON receipt retain an actual-window scene
   target with frame id, scene/state/resource revisions and GPU completion; missing
