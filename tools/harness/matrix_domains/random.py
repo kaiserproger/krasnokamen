@@ -135,7 +135,11 @@ def _published(ctx, through):
     directory = ctx.server.world_dir / 'journal'
     def ready():
         for path in directory.glob('batch-*-*.bin'):
-            raw = path.read_bytes()
+            try:
+                raw = path.read_bytes()
+            except FileNotFoundError:
+                # A checkpoint can retire a batch between enumeration and read.
+                continue
             if len(raw) < 32:
                 raise AssertionError('truncated published WAL header')
             magic, version, low, high, size, crc = struct.unpack_from('<IIQQII', raw)
@@ -145,6 +149,22 @@ def _published(ctx, through):
                 return True, {'path': str(path), 'low': low, 'high': high}
         return False, None
     return runtime.wait_for_path_condition(directory / '.fence', 30, ready)
+
+
+def _fixture_item_stock(entities):
+    resources = Counter()
+    for entity in entities:
+        if entity.get('type') != 'minecraft:item' and 'item' not in entity:
+            continue
+        position = entity.get('position')
+        if not isinstance(position, (list, tuple)) or len(position) != 3:
+            raise MissingCapability('random:received_item_position')
+        x, y, z = position
+        if 24 <= x <= 44 and 79 <= y <= 90 and 24 <= z <= 44:
+            if 'item' not in entity:
+                raise MissingCapability('random:received_item_stack')
+            resources.update(stock([entity['item']]))
+    return resources
 
 
 def observe(ctx):
@@ -193,9 +213,7 @@ def observe(ctx):
     if 'entities' not in entities:
         raise MissingCapability('random:received_item_entities:' +
                                 str(entities.get('observation_errors', {}).get('entities', 'unknown')))
-    for entity in entities['entities']:
-        if 'item' in entity:
-            resources.update(stock([entity['item']]))
+    resources.update(_fixture_item_stock(entities['entities']))
     errors = re.findall(r'^.*(?:\bERROR\b|panicked at|panic:).*$',
                         ctx.server.log_path.read_text(errors='replace'), re.M)
     refusals = [str(client.observer.error) for client in clients if client.observer.error]
@@ -372,6 +390,7 @@ def _action(ctx, step):
                              description='received prior block removal')
             actor.teleport_to(position[0] + .5, 80, position[2] + .5)
             actor.wait_ticks(2)
+            actor.teleport_to(position[0] + .5, 80, position[2] - 1.5)
             old = 'minecraft:air'
         if verb == 'place':
             _supply(ctx, actor, 'minecraft:dirt', 1)

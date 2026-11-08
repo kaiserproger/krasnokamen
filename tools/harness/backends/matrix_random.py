@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import sys
 
@@ -36,6 +37,9 @@ def replay(ctx, row, directory):
     ctx.cwds.append(str(runtime.REPO_ROOT))
     ctx.logs.append(str(log))
     ctx.exits.append(None)
+    work = Path('/run/media/kaiserroman/games/solaris-work')
+    if runtime.REPO_ROOT.is_relative_to(work) and shutil.disk_usage(work).free < 100 * 1024**3:
+        raise RuntimeError('scenario reduction refused: games disk has less than 100 GiB free')
     with log.open('w') as output:
         result = subprocess.run(argv, cwd=runtime.REPO_ROOT, env=env, stdout=output,
                                 stderr=subprocess.STDOUT, timeout=ctx.timeout_seconds or 600)

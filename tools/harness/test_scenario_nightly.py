@@ -39,6 +39,7 @@ class ScenarioNightlyTests(unittest.TestCase):
                 return SimpleNamespace(returncode=seed)
 
             with patch('tools.harness.ledger.tree_fingerprint', return_value=fingerprint), \
+                    patch.object(nightly.shutil, 'disk_usage', return_value=SimpleNamespace(free=nightly.MIN_FREE_BYTES)), \
                     patch.object(nightly.subprocess, 'run', side_effect=run):
                 self.assertEqual(nightly.run_campaign(args), 1)
             result = json.loads(next(args.receipts.glob('campaign-*/result.json')).read_text())
@@ -52,6 +53,26 @@ class ScenarioNightlyTests(unittest.TestCase):
             self.assertEqual(result['failures'][0]['status'], 'failed')
             self.assertFalse((Path(result['passed_seeds'][0]['original_receipt'])).exists())
             self.assertTrue(Path(result['failures'][0]['receipt']).exists())
+    def test_campaign_refuses_seed_below_disk_floor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary = root / 'solaris-v2'
+            binary.write_bytes(b'server')
+            (root / 'manifest.json').write_text(json.dumps({'head': 'server-head'}))
+            receipts = root / 'campaigns'
+            receipts.mkdir()
+            args = SimpleNamespace(receipts=receipts, server_bin=binary, repo=root,
+                                   vanilla_data=root, seeds=1, start_seed=0, steps=1, bots=2,
+                                   max_bytes=1000000, budget_seconds=60, port=27380)
+            with patch.object(nightly.shutil, 'disk_usage', return_value=SimpleNamespace(free=nightly.MIN_FREE_BYTES - 1)), \
+                    patch.object(nightly.subprocess, 'run') as launch:
+                self.assertEqual(nightly.run_campaign(args), 1)
+            launch.assert_not_called()
+            result = json.loads(next(receipts.glob('campaign-*/result.json')).read_text())
+            self.assertEqual(result['stop_reason'], 'disk_floor')
+            self.assertEqual(result['disk_free_bytes'], nightly.MIN_FREE_BYTES - 1)
+            self.assertEqual(result['seeds_run'], 0)
+
 
     def test_pass_summary_preserves_seed_command_and_tree_before_cleanup(self):
         with tempfile.TemporaryDirectory() as tmp:

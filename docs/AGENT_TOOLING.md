@@ -112,8 +112,9 @@ slot. The isolated server's opt-in input log records each consumed input and
 tick; a missing or gapped log fails closed. Network scheduling is not
 deterministic merely because the action seed is fixed.
 Before actions, the isolated fixture removes pre-existing dropped items and
-waits until the observer sees no ground stock, so natural terrain drops are not
-mistaken for scenario-created resources.
+waits until the observer sees no ground stock. Conservation counts every item
+type within the fixture's ground volume (x/z 24–44, y 79–90), excluding
+unrelated natural terrain drops elsewhere in loaded chunks.
 
 Inventory comparisons use each owning client's received inventory, not an
 independent observer of other players' private inventories. Do not infer replay
@@ -145,6 +146,9 @@ When the disk budget requires pruning older campaigns, their compact
 The configured disk budget is checked between seeds, not enforced as a hard
 filesystem quota during a running seed; a single seed or reduction may exceed
 it before the campaign stops.
+On the owner host, each seed and reduction trial checks that the games disk has
+at least 100 GiB free before starting a world run; a campaign stops with
+`disk_floor` rather than starting another seed below that threshold.
 
 
 ## Profiles and scenarios

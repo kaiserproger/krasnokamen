@@ -17,6 +17,7 @@ import time
 
 WORK = Path('/run/media/kaiserroman/games/solaris-work')
 MEM_RUN = WORK / 'solaris/tools/dev/mem-run.sh'
+MIN_FREE_BYTES = 100 * 1024**3
 
 
 def size(directory):
@@ -118,6 +119,10 @@ def run_campaign(args):
         if remaining <= 0:
             summary['stop_reason'] = 'time_budget'
             break
+        free_bytes = shutil.disk_usage(WORK).free
+        if free_bytes < MIN_FREE_BYTES:
+            summary.update(stop_reason='disk_floor', disk_free_bytes=free_bytes)
+            break
         directory = root / f'seed-{seed}'
         directory.mkdir()
         env = dict(os.environ, SOLARIS_VALIDATION_ROOT=str(directory / 'receipts'))
@@ -152,7 +157,10 @@ def run_campaign(args):
             if identity is not None and identity not in summary['reductions']:
                 script = next((directory / 'receipts').glob('*/random-script.json'), None)
                 remaining = deadline - time.monotonic()
-                if script is not None and remaining > 0:
+                free_bytes = shutil.disk_usage(WORK).free
+                if script is not None and remaining > 0 and free_bytes < MIN_FREE_BYTES:
+                    summary.update(stop_reason='disk_floor', disk_free_bytes=free_bytes)
+                elif script is not None and remaining > 0:
                     reduction = directory / 'reduction'
                     reduction.mkdir()
                     reduce_env = dict(os.environ, SOLARIS_VALIDATION_ROOT=str(reduction / 'receipts'))
@@ -167,6 +175,8 @@ def run_campaign(args):
                     summary['reductions'][identity] = str(reduced[0]) if reduced else None
             (directory / 'campaign-result.json').write_text(json.dumps(record, indent=2) + '\n')
         (root / 'result.json').write_text(json.dumps(summary, indent=2) + '\n')
+        if summary['stop_reason'] == 'disk_floor':
+            break
         if prune(args.receipts, root, args.max_bytes) > args.max_bytes:
             summary['stop_reason'] = 'disk_budget'
             break
