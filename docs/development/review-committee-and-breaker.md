@@ -82,8 +82,9 @@ ledger promotion batch of five or more rows; a persistence, protocol or custody
 change before Main commits it); docs-only and test-only slices get none. It
 neither edits nor delegates, and fixing its findings does not trigger another
 reviewer. The negative-code checks it must include are in
-[AGENT_TOOLING.md](../AGENT_TOOLING.md) "Negative-code gate". Rubric used for
-Solaris reviews:
+[AGENT_TOOLING.md](../AGENT_TOOLING.md) "Negative-code gate". Apply
+[Main's integration checklist](agent-fleet.md#mains-integration-checklist)
+to the review scope; the rubric below specialises it for independent review:
 
 - Review exactly one candidate: the task, its acceptance items read literally,
   the path-limited diff and compact validation evidence. No parent history, no

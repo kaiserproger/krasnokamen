@@ -122,11 +122,22 @@ Before accepting a returned slice (procedure:
 [worktrees and integration](worktrees-and-integration.md)):
 
 1. The diff stays inside the brief's write set, and `changed_files` matches
-   `git diff --stat` of that tree.
-2. `validation` names the tree each check ran on; a green check is reused only
-   for an identical tree.
-3. Every `gaps` entry is queued as work with its blocker; none is closed by
-   rewording.
+   `git diff --stat` of that tree. Name the concrete failure or change cost
+   and why this is the smallest sufficient correction; a pattern name or
+   "legacy" alone is not a reason to change code.
+2. Identify the owner of the rule and the invariant that must survive the
+   operation, including dependent debits, credits and rejection. Similar
+   statements need not express the same rule; shared authority must not be
+   duplicated. Module boundaries follow responsibility and independent reasons
+   to change, not file count. See [mechanisms](adding-a-feature.md#mechanisms-not-code)
+   and [state ownership](../architecture/state-ownership.md).
+3. `validation` names the tree and observes the promised result at its consumer:
+   dispatch, chat echo or a mock interaction is not proof that world geometry,
+   inventory or pixels changed. Reuse green checks only for an identical tree.
+   An optimisation claim also needs a comparable full workload, the relevant
+   latency/memory budget and preserved behaviour under the
+   [profiling rules](performance-windows-and-profiling.md), not just a
+   microbenchmark or average TPS.
 4. **Second way.** Does this change add a second mechanism for something that
    already exists (pinning, server launch, observers, ledger/proof paths,
    config, test helpers)? If so, either migrate the old one in the same change
@@ -140,6 +151,10 @@ Before accepting a returned slice (procedure:
    it alone; a transition opened or finished updates STATUS in the same change
    ([rule](adding-a-feature.md#open-transitions)).
 6. The doc that owns each changed behaviour is updated; code beats docs.
+   Every `gaps` entry is queued with its blocker, never closed by rewording.
+   Put task-specific decisions, evidence and next actions in the existing
+   handoff cursor so context loss cannot turn a review finding into a forgotten
+   report; link the owning rule rather than copying it into another policy.
 
 ## Doc coherence check
 
