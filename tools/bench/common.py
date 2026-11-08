@@ -216,8 +216,6 @@ def source_record(server_bin: Path, bots_bin: Path | None, commit_override: str 
     return record
 
 
-
-
 # --- output -----------------------------------------------------------------
 
 def fmt(value: Any, digits: int = 1) -> str:
