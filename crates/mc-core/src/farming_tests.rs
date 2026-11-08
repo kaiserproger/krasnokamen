@@ -1863,7 +1863,7 @@ fn turtle_eggs_crack_at_night_into_baby_turtles() {
 }
 
 #[test]
-fn sniffer_scheduled_edges_match_continuous_ticks() {
+fn sniffer_scheduled_edge_windows_match_continuous_ticks() {
     let (mut ordinary, _) = setup();
     let (mut warped, _) = setup();
     let pos = BlockPos {
@@ -1886,9 +1886,8 @@ fn sniffer_scheduled_edges_match_continuous_ticks() {
             .find(|tick| tick.pos == [pos.x, pos.y, pos.z])
             .unwrap()
             .trigger_tick;
-        // Compare a small continuous window around each real scheduled edge.
-        // No other behaviour in this isolated fixture is asserted across the
-        // omitted interval.
+        // Only the four ticks immediately before each edge are continuous;
+        // this does not compare the intervening 8,000-tick intervals.
         ordinary.tick = due - 4;
         warped.tick = due - 4;
         while ordinary.tick < due {
