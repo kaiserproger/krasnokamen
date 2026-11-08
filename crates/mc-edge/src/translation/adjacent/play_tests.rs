@@ -22,7 +22,8 @@ fn session() -> Session {
 #[test]
 fn particle_registry_delta_maps_each_exact_wire_layout() {
     // IDs from the local 26.3, 26.2 and 26.1.2 registries.json reports.
-    let cases: &[(i32, i32, &str, u32, &str, u32, u32, &[u8])] = &[
+    type RegistryDeltaCase<'a> = (i32, i32, &'a str, u32, &'a str, u32, u32, &'a [u8]);
+    let cases: &[RegistryDeltaCase<'_>] = &[
         (
             777,
             776,
@@ -190,7 +191,8 @@ fn particle_packet(modern: bool, kind: u8, options: &[u8]) -> Vec<u8> {
 
 #[test]
 fn level_particles_complete_packets_preserve_supported_options_on_both_steps() {
-    let cases: &[(&str, u8, u8, u8, &[u8], &[u8])] = &[
+    type ParticleOptionsCase<'a> = (&'a str, u8, u8, u8, &'a [u8], &'a [u8]);
+    let cases: &[ParticleOptionsCase<'_>] = &[
         ("block", 1, 1, 1, &[9], &[4]),
         ("item", 57, 54, 47, &[10, 2, 0, 0], &[3, 2, 0, 0]),
         (
