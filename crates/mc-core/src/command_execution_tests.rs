@@ -2612,6 +2612,61 @@ fn settlement_create_refuses_without_authenticated_actor_and_creates_nothing() {
 }
 
 #[test]
+fn settlement_founding_and_claiming_autobind_native_residents() {
+    for action in ["create town", "claim"] {
+        let (mut state, alice, _) = fixture();
+        let at = state
+            .entities
+            .pos(state.entities.slot_of(alice).unwrap())
+            .map(|value| value.floor() as i32);
+        if action == "claim" {
+            state
+                .settlements
+                .adopt_village(
+                    &mut state.settlement_sequence,
+                    "minecraft:overworld:autobind-village",
+                    at,
+                )
+                .unwrap();
+        }
+        let villager_type = state
+            .registry
+            .entity_types
+            .id_of(&mc_data::Identifier::parse("minecraft:villager").unwrap())
+            .unwrap();
+        let inside = state.spawn_mob(villager_type, at.map(f64::from), 20.0);
+        let outside = state.spawn_mob(
+            villager_type,
+            [f64::from(at[0]) + 49.0, f64::from(at[1]), f64::from(at[2])],
+            20.0,
+        );
+        let originals = [inside, outside].map(|entity| {
+            let slot = state.entities.slot_of(entity).unwrap();
+            state.entities.row_mut(slot).villager =
+                Some(Box::new(crate::villager::VillagerState::default()));
+            (entity, state.entities.row(slot).uuid)
+        });
+        let bodies = state.entities.len();
+
+        command(&mut state, alice, &format!("settlement {action}"));
+
+        let id = state.settlements.records().next().unwrap().id;
+        for ((entity, uuid), membership) in originals.into_iter().zip([Some(id), None]) {
+            let slot = state.entities.slot_of(entity).unwrap();
+            let row = state.entities.row(slot);
+            assert_eq!(row.uuid, uuid, "{action} must retain the original villager");
+            assert_eq!(
+                row.villager.as_ref().unwrap().settlement,
+                membership,
+                "{action} must bind only the villager inside its territory"
+            );
+        }
+        assert_eq!(state.entities.len(), bodies);
+        assert_eq!(crate::settlements::member_count(&state, id), 1);
+    }
+}
+
+#[test]
 fn settlement_commands_keep_native_identity_and_enforce_owner_or_operator() {
     let (mut state, alice, bob) = fixture();
     assert!(parse("settlement create town", false).is_ok());

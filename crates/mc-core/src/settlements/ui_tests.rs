@@ -951,6 +951,8 @@ fn autonomous_dialog_claim_requires_live_presence_and_refreshes_management() {
             at,
         )
         .unwrap();
+    let resident = villager(&mut state, at.map(f64::from));
+    let resident_uuid = state.entities.row(resident).uuid;
     let changes = command(&mut state, "settlement");
     assert!(last_dialog(&changes).has("claim"));
     let original = state.settlements.get(id).unwrap().name.clone();
@@ -973,6 +975,17 @@ fn autonomous_dialog_claim_requires_live_presence_and_refreshes_management() {
     state.entities.set_pos(slot, [1000.0, 201.0, 1000.0]);
     click(&mut state, id, "claim", &[]);
     assert_eq!(state.settlements.get(id).unwrap().owner, None);
+    assert_eq!(
+        state
+            .entities
+            .row(resident)
+            .villager
+            .as_ref()
+            .unwrap()
+            .settlement,
+        None,
+        "a rejected remote claim must not acquire residents"
+    );
     state.entities.set_pos(slot, at.map(f64::from));
     let changes = click(&mut state, id, "claim", &[]);
     assert_eq!(
@@ -980,6 +993,17 @@ fn autonomous_dialog_claim_requires_live_presence_and_refreshes_management() {
         Some(PLAYER)
     );
     assert!(!last_dialog(&changes).has("claim"));
+    assert_eq!(
+        state
+            .entities
+            .row(resident)
+            .villager
+            .as_ref()
+            .unwrap()
+            .settlement,
+        Some(id)
+    );
+    assert_eq!(state.entities.row(resident).uuid, resident_uuid);
 }
 
 fn blueprint_build(state: &mut TickState, id: SettlementId, blueprint: &str) -> BuildingId {

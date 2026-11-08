@@ -337,6 +337,88 @@ fn radius_grows_with_population_persists_and_never_shrinks() {
 }
 
 #[test]
+fn autobinding_keeps_entry_radius_and_original_eligible_entities() {
+    let mut state = state();
+    let town = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "growing".into(),
+            "owner".into(),
+            [0, 64, 0],
+            8,
+        )
+        .unwrap();
+    let other = settlement(&mut state, "other");
+    let people = [
+        resident(&mut state, [0.0, 64.0, 0.0]),
+        resident(&mut state, [1.0, 64.0, 1.0]),
+        resident(&mut state, [8.0, 64.0, 0.0]),
+        resident(&mut state, [2.0, 64.0, 0.0]),
+        resident(&mut state, [2.0, 64.0, 0.0]),
+        resident(&mut state, [2.0, 64.0, 0.0]),
+        resident(&mut state, [2.0, 64.0, 0.0]),
+        resident(&mut state, [8.25, 64.0, 0.0]),
+        resident(&mut state, [0.0, 72.25, 0.0]),
+    ];
+    bind(&mut state, other, people[3]).unwrap();
+    let dead = state.entities.slot_of(people[4]).unwrap();
+    state.entities.body_mut(dead).alive = false;
+    let trader = state.entities.slot_of(people[5]).unwrap();
+    state
+        .entities
+        .row_mut(trader)
+        .villager
+        .as_mut()
+        .unwrap()
+        .wandering = true;
+    let converting = state.entities.slot_of(people[6]).unwrap();
+    state
+        .entities
+        .row_mut(converting)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = Some(20);
+    let originals = people.map(|entity| {
+        let slot = state.entities.slot_of_any(entity).unwrap();
+        (entity, state.entities.row(slot).uuid)
+    });
+
+    bind_residents(&mut state, town);
+
+    assert_eq!(state.settlements.get(town).unwrap().radius, 12);
+    assert_eq!(member_count(&state, town), 3);
+    assert_eq!(member_count(&state, other), 1);
+    assert_eq!(state.entities.len(), people.len());
+    let expected = [
+        Some(town),
+        Some(town),
+        Some(town),
+        Some(other),
+        None,
+        None,
+        None,
+        None,
+        None,
+    ];
+    for ((entity, uuid), membership) in originals.into_iter().zip(expected) {
+        let slot = state.entities.slot_of_any(entity).unwrap();
+        assert_eq!(state.entities.row(slot).uuid, uuid);
+        assert_eq!(
+            state
+                .entities
+                .row(slot)
+                .villager
+                .as_ref()
+                .unwrap()
+                .settlement,
+            membership
+        );
+    }
+}
+
+#[test]
 fn soldier_must_be_dismissed_before_unbind_and_settlement_removal_clears_orders() {
     let mut state = state();
     let town = settlement(&mut state, "town");

@@ -45,6 +45,7 @@ pub(super) fn settlement(
                 *radius,
             ) {
                 Ok(id) => {
+                    crate::settlements::bind_residents(state, id);
                     crate::settlements::refresh_owner_names(state);
                     let record = state.settlements.get(id).expect("created record");
                     let revision = record.revision;

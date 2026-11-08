@@ -11,7 +11,7 @@ Settlements are native to the core (`mc-core`), not a plugin, and tick with the 
 3. To found your own, run `/settlement create <name> [radius]` (radius 1 to 256, default 48).
 4. Put real materials in settlement storage. A founded settlement starts with no stock: certify a storage building first. Generated villages start with a saved bootstrap chest. See [construction](settlements/construction.md#planning-and-streets).
 5. Certify buildings you built (`/settlement building certify ...`), or order blueprint buildings with `/settlement build <blueprint>` or the **Projects** screen. See [construction](settlements/construction.md).
-6. Bind villagers with `/settlement bind <name>` next to one, then assign crafts from the **Residents & jobs** screen. See [jobs](settlements/jobs.md#allocating-jobs).
+6. Founding or claiming automatically binds eligible unbound villagers already inside the settlement's radius. For later unbound arrivals, use `/settlement bind <name>` next to one. Assign crafts from the **Residents & jobs** screen. See [jobs](settlements/jobs.md#allocating-jobs).
 
 `/settlement layout` prints the street plan of the settlement you stand in.
 

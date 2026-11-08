@@ -83,6 +83,40 @@ pub(crate) fn bind(
     Ok(())
 }
 
+/// Acquire existing residents inside the territory at operation entry.
+pub(crate) fn bind_residents(state: &mut TickState, id: SettlementId) {
+    let record = state
+        .settlements
+        .get(id)
+        .expect("created or claimed settlement");
+    let anchor = record.anchor;
+    let radius_squared = f64::from(record.radius).powi(2);
+    // Binding can grow the radius, but it neither adds nor removes entity slots.
+    for index in 0..state.entities.len() {
+        let slot = crate::entities::EntitySlot(index as u32);
+        if state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .is_none_or(|villager| villager.settlement.is_some())
+        {
+            continue;
+        }
+        let distance: f64 = state
+            .entities
+            .pos(slot)
+            .iter()
+            .zip(anchor)
+            .map(|(coordinate, anchor)| (coordinate - f64::from(anchor)).powi(2))
+            .sum();
+        if distance <= radius_squared {
+            let entity = state.entities.body(slot).id;
+            let _ = bind(state, id, entity);
+        }
+    }
+}
+
 pub(crate) fn unbind(state: &mut TickState, entity: EntityId) -> Result<(), &'static str> {
     let slot = state.entities.slot_of(entity).ok_or("villager not found")?;
     let villager = state
