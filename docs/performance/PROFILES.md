@@ -104,6 +104,8 @@ indefinitely through terrain. Login includes operator-assisted safe landing.
 
 - A fresh server process opens the prepared world. Fixture generation and all
   client login/setup are **outside** the measured interval.
+  After dashboard readiness the collector waits for the first pushed exact-tick
+  sample before starting warmup; an empty or invalid stream still fails closed.
 - After all requested clients are ready: **30 seconds of active warmup**, then
   **120 seconds measured**, using the same offered workload in both intervals.
   Idle uses the same wall durations without bots. Changing either duration

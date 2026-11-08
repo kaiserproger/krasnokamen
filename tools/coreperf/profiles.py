@@ -135,6 +135,13 @@ def validate_metrics(metric: dict[str, Any], initial: dict[str, Any], cursor: in
     return cursor
 
 
+async def initial_metrics(session: Any, url: str) -> dict[str, Any]:
+    initial = await session.http(url + "/load-metrics?wait=true&min_samples=1", 12)
+    if initial.get("schema_version") != 1 or initial.get("latest_tick") is None:
+        raise ValueError("exact source tick telemetry unavailable")
+    return initial
+
+
 async def measure(args: argparse.Namespace, directory: Path, world: Path,
                   recipe: dict[str, Any], prepared: dict[str, Any]) -> dict[str, Any]:
     directory.mkdir()
@@ -173,9 +180,7 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
             result["bot_command"] = command
             await session.spawn("bots", command, events=True)
             result["ready"] = await session.ready(args.clients, args.readiness_seconds)
-        initial = await session.http(url + "/load-metrics", 2)
-        if initial.get("schema_version") != 1 or initial.get("latest_tick") is None:
-            raise ValueError("exact source tick telemetry unavailable")
+        initial = await initial_metrics(session, url)
         cursor = initial["latest_tick"]
         epoch = time.time_ns()
         if args.clients:
