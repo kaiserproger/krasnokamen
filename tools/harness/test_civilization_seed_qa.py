@@ -185,7 +185,9 @@ class CivilizationEvidenceTests(unittest.TestCase):
         with patch("tools.harness.backends.probe_steps.time.monotonic", return_value=100.0):
             probe = qa.ProbeSteps(Mock(), None, 7200.0, "sprint")
         probe.wait = Mock(return_value=player)
-        probe.call = Mock(return_value={})
+        probe.call = Mock(return_value={
+            "entities": [], "visible_count": 0, "truncated": False, "next_cursor": None,
+        })
 
         def planner(probe, detail, chest, read_container, capture):
             capture()
