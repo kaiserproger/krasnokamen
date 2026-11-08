@@ -1,4 +1,4 @@
-"""Chisel addon gate: plugin block-tool conversions on the native client.
+"""Chisel gate: native block-tool conversions and plain Java optional-bundle admission.
 
 Scenario (seed-81 flat platform, all privileged setup via real chat commands):
 /give `minecraft:stick[minecraft:item_model='chisel:chisel']` is the exact
@@ -18,13 +18,14 @@ import hashlib
 import json
 import os
 import shutil
+import tomllib
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from .. import runtime
 from ..profiles import ProfileContext
-from . import native_client
+from . import native_client, scene_shot
 from .gameplay import peak_rss_kib, prepare_operator_fixture, require_tools
 from .probe_steps import ProbeSteps, item_count
 
@@ -156,8 +157,10 @@ def block_matches(block: dict[str, Any], want_id: str, want_props: dict[str, str
 
 
 def validate_args(ctx: ProfileContext) -> float:
-    if ctx.client != "native":
-        raise ValueError("chisel requires --client native")
+    if ctx.client not in ("native", "java"):
+        raise ValueError("chisel requires --client native|java")
+    if ctx.client == "java" and not ctx.windowed:
+        raise ValueError("chisel Java admission requires --windowed")
     if ctx.extra_args or ctx.platform is not None:
         raise ValueError("chisel accepts only --client, --windowed and --timeout-seconds")
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else TIMEOUT
@@ -186,6 +189,11 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         seed=81,
     ))
     package = _copy_package(_package_source(), artifact / "plugins" / "chisel")
+    manifest = tomllib.loads((artifact / "plugins" / "chisel" / "plugin.toml").read_text())
+    bundles = manifest.get("client", {}).get("bundles", [])
+    if not bundles or any(bundle.get("required") is not False for bundle in bundles):
+        raise RuntimeError("chisel gate requires the deployed optional (required=false) bundles")
+    package["bundles"] = bundles
     prepare_operator_fixture(ctx, [USERNAME])
     evidence = ctx.client_evidence
     with binary.open("rb") as server_executable:
@@ -193,7 +201,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     evidence.update(server_address=address, server_binary_path=str(binary),
                     server_binary_sha256=server_hash, world_dir=str(artifact / "world"),
                     seed=81, chisel_package=package)
-    server = client_process = xvfb = mcp = None
+    server = client_process = client_log = xvfb = mcp = None
     server_log = None
     server_log_path = artifact / "server.log"
     try:
@@ -209,6 +217,22 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         if ctx.windowed:
             xvfb, display, _ = runtime.start_xvfb(artifact)
             ctx.logs.append(str(artifact / "xvfb.log"))
+        if ctx.client == "java":
+            # The plain profile has the observation agent but no Solaris Loader.
+            client_process, client_log, mcp = scene_shot.start_java(
+                ctx, artifact, address, USERNAME, timeout, display, 8, 70, plain=True)
+            with ProbeSteps(mcp, artifact / "chisel", timeout, "java-chisel-admission") as probe:
+                require_tools(mcp.list_tools(), {
+                    "minecraft_observe", "minecraft_wait_for_play",
+                    "minecraft_send_chat", "minecraft_wait_for_state_change", "minecraft_screenshot",
+                }, "java-chisel-admission")
+                probe.observe(wait_for_play=True)
+                marker = "chisel_optional_bundle_admitted"
+                probe.call("minecraft_send_chat", {"message": marker})
+                probe.wait(lambda state: marker in json.dumps(state.get("recent_chat", [])),
+                           "optional_bundle_vanilla_chat")
+                evidence["capture"] = scene_shot.capture_java(probe, artifact, "chisel-java-admitted")
+            return {"scenario": probe.report, "verdicts": {"vanilla_optional_admission": True}}
         # The local opt-in a player would configure: chisel's permissions plus the
         # server's built-in native settlements view bundle, which the native client also receives.
         os.environ["SOLARIS_CLIENT_LOADER_PERMISSIONS"] = (
@@ -241,6 +265,8 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         runtime.stop_process(xvfb)
         if server_log is not None:
             server_log.close()
+        if client_log is not None:
+            client_log.close()
 
 
 def _scenario(probe: ProbeSteps, ctx: ProfileContext, artifact: Path) -> None:
