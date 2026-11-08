@@ -29,8 +29,9 @@ pass". This page is the release procedure for the four repositories:
    passes a `vanilla_data_dir` (`CoreRegistry::load(None)` is test-only).
    **macOS:** there is no local Mac. Push the candidate commit to
    `rc-check/<tag>` and delete the branch afterwards;
-   `.github/workflows/rc-check-macos.yml` runs the `mc-core` and `mc-world` lib
-   tests (nextest `ci` profile, which excludes a fixed list of tests that were
+   `.github/workflows/rc-check-macos.yml` runs the `mc-core`, `mc-world`,
+   `mc-world-conversion` and `mc-world-tools` lib tests (nextest `ci` profile,
+   which excludes a fixed list of tests that were
    slow in one old run) on `macos-15` with the 26.3 content cache. Pass = a
    green run whose log prints the candidate SHA; save the log under
    `.analysis/releases/<tag>/`, then `git push origin --delete rc-check/<tag>`.

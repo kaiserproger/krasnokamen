@@ -17,7 +17,7 @@ env:
 
 jobs:
   macos:
-    name: mc-core and mc-world lib tests (macOS)
+    name: mc-core, mc-world and offline world crates lib tests (macOS)
     runs-on: macos-15
     timeout-minutes: 150
     steps:
@@ -39,5 +39,5 @@ jobs:
           mkdir -p data
           cp -a "$RUNNER_TEMP/xdg/solaris/content/26.3" data/vanilla
       # The CI short-run profile excludes the fixed slow-test name list in .config/nextest.toml.
-      - name: mc-core and mc-world lib tests
-        run: cargo nextest run --locked --profile ci -p mc-core -p mc-world --lib
+      - name: mc-core, mc-world, mc-world-conversion and mc-world-tools lib tests
+        run: cargo nextest run --locked --profile ci -p mc-core -p mc-world -p mc-world-conversion -p mc-world-tools --lib
