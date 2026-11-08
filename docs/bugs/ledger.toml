@@ -3884,3 +3884,14 @@ status = "open"
 source = "tools/harness/plan.py _expand_innovation added a required innovation reviewer although AGENTS.md names the review checkpoints and adding-a-feature.md requires only a decision record for an innovation token. Corrected by preserving the decision record without the extra reviewer; two focused assertions failed before the fix, all 42 planner tests and actual dependency/persistence CLI smokes passed after it. Formal ledger promotion remains pending."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "NATIVE-NAV-GROUNDED-EDGE-ORIGIN"
+title = "Native navigation refuses a grounded edge pose whose support lies in a neighboring column"
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization return to (131,76,-216) refused without movement from (143.865930,75,-203.841109). Received terrain shows air below the center and grass support in the overlapping neighboring footprint. Original planner considers only its center column. Reproduced on original client 75755212b117; the four-cardinal regression failed before the fix. Corrected native pin 75755212b117-345e4b64 passed 20 navigation tests and three original saved-world windowed returns with actual grounded arrival. Fresh civilization acceptance remains 0/3; independent acceptance and formal ledger promotion remain pending."
+regression = []
+failing_first = "reported"
