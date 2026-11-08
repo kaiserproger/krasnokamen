@@ -138,6 +138,25 @@ class PinReleaseTests(unittest.TestCase):
             self.assertEqual(final.read_bytes(), artifact.read_bytes())
         self.assertEqual(len(set(paths)), 4)
 
+    def test_foreign_config_target_is_not_labeled_native(self):
+        artifact = self.slot / WINDOWS / "release/solaris-client.exe"
+        artifact.parent.mkdir(parents=True)
+        artifact.touch()
+        message = {"reason": "compiler-artifact", "target": {"name": "solaris-client", "kind": ["bin"]},
+                   "executable": str(artifact)}
+
+        class Process:
+            stdout = [json.dumps(message) + "\n"]
+            returncode = 0
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+
+        with patch.object(pin.w, "TARGETS", self.targets), \
+             patch.object(pin, "host_target", return_value=LINUX), \
+             patch.object(pin.subprocess, "Popen", return_value=Process()):
+            with self.assertRaisesRegex(pin.w.ToolError, "not a native"):
+                pin.build(self.root, "client", None, target=self.slot)
+
 
 if __name__ == "__main__":
     unittest.main()

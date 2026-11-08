@@ -75,14 +75,16 @@ def existing_pin(pin_dir: Path, kind: str, rust_target: str) -> Path | None:
     return binary
 
 
-def build(top: Path, kind: str, rust_target: str, target: Path | None = None) -> tuple[list[str], Path]:
-    """One runner build; target is the optional pooled slot, rust_target is explicit."""
+def build(top: Path, kind: str, rust_target: str | None, target: Path | None = None) -> tuple[list[str], Path]:
+    """One runner build; None uses Cargo's native artifact layout, explicit targets keep their own layout."""
     spec = KINDS[kind]
     cmd = [str(w.MEM_RUN), "-m", "6G", "env", "RUSTC_WRAPPER="]
     if target is not None:
         cmd.append(f"CARGO_TARGET_DIR={target}")
-    cmd += ["cargo", "build", "--release", "--locked", "--target", rust_target,
-            "-p", spec["package"], "--bin", spec["bin"], "--message-format=json-render-diagnostics"]
+    cmd += ["cargo", "build", "--release", "--locked"]
+    if rust_target is not None:
+        cmd += ["--target", rust_target]
+    cmd += ["-p", spec["package"], "--bin", spec["bin"], "--message-format=json-render-diagnostics"]
     env = dict(os.environ)
     env.pop("CARGO_TARGET_DIR", None)
     env.pop("CARGO_BUILD_TARGET", None)
@@ -103,6 +105,15 @@ def build(top: Path, kind: str, rust_target: str, target: Path | None = None) ->
         raise w.ToolError(f"build failed (exit {proc.returncode}); nothing pinned")
     if artifact is None or not artifact.is_file():
         raise w.ToolError(f"cargo reported no {spec['bin']} executable; nothing pinned")
+    if rust_target is None:
+        host = host_target(top)
+        name = spec["bin"] + (".exe" if "windows" in host.split("-") else "")
+        relative = artifact.resolve().relative_to(artifact_slot(artifact).resolve())
+        if relative.parts not in (("release", name), (host, "release", name)):
+            raise w.ToolError(
+                f"Cargo produced {artifact}, not a native {host} artifact; "
+                "use --target for a configured cross target; nothing pinned"
+            )
     return cmd, artifact
 
 
@@ -166,7 +177,7 @@ def main() -> None:
         if pin_dir.exists():
             raise w.ToolError(f"{pin_dir} exists without a manifest; refusing to touch it")
 
-        cmd, artifact = build(top, kind, rust_target)
+        cmd, artifact = build(top, kind, args.target)
         # The runner releases the slot when the build exits, and another tree may
         # then replace the artifact. Take the slot's pool lock ourselves, make sure
         # the slot holds this tree's build (rebuild under the lock: usually a no-op),
@@ -184,7 +195,7 @@ def main() -> None:
                     fcntl.flock(use_lock, fcntl.LOCK_EX)
                     subprocess.run("git ls-files -z | xargs -0 -r touch -c --", shell=True, cwd=top, check=True)
                     marker.write_text(f"{top}\n")
-            cmd, artifact = build(top, kind, rust_target, target=slot)
+            cmd, artifact = build(top, kind, args.target, target=slot)
             after = provenance(top)
             if after["tree"] != before["tree"]:
                 raise w.ToolError("the tree changed during the build; the binary does not match any single provenance, nothing pinned")
