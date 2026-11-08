@@ -510,6 +510,16 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                                    and entity.get("entity_uuid") == first["entity_uuid"]]
                     if matching_walk(frame, value) is not None and len(same_entity) == 1:
                         break
+                    rendered = [entity for entity in frame_entities
+                                if entity.get("entity_type") == value["entity_type"]]
+                    rendered_position = rendered[0].get("walk_position") if len(rendered) == 1 else None
+                    if (len(same_entity) == 1 and type(rendered_position) in (int, float)
+                            and math.isfinite(rendered_position)
+                            and rendered_position < value["phase"] - value["tolerance"]):
+                        # The interpolated frame can still advance within this
+                        # tick. Waiting for a whole tick here can skip the
+                        # requested phase entirely under load.
+                        continue
                 probe.call("minecraft_wait_ticks", {"ticks": 1})
             else:
                 (artifact / f"{value['name']}-walk.json").write_text(

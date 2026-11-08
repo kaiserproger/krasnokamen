@@ -200,8 +200,7 @@ class SceneShotTests(unittest.TestCase):
                 self.tick = 0
             def call(self, name, args):
                 if name == "minecraft_wait_ticks":
-                    self.tick += 1
-                    return {}
+                    raise AssertionError("waiting can skip the interpolated phase")
                 return {"entities": [{**entity, "walk_position": (1.467, 2.05)[min(self.tick, 1)]}]}
             def check(self, name, value):
                 if not value:
@@ -213,10 +212,12 @@ class SceneShotTests(unittest.TestCase):
             positions = iter((0.9, 1.6))
             def capture(*args):
                 frame = {**entity, "walk_position": next(positions)}
+                probe.tick += 1
                 Path(image).with_suffix(".json").write_text(json.dumps({"gait_frame": [frame]}))
                 return image
+            probe = Probe()
             with patch.object(scene_shot, "capture_native", side_effect=capture):
-                self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], "native"), [image])
+                self.assertEqual(scene_shot.execute(probe, root, [{"walk_capture": spec}], "native"), [image])
             evidence = json.loads((root / "walk-walk.json").read_text())
             self.assertEqual([a["frame"]["entities"][0]["walk_position"] for a in evidence["attempts"]], [0.9, 1.6])
             self.assertEqual(evidence["spec"]["tolerance"], 0.45)

@@ -286,8 +286,10 @@ its timeout. Proxy start, EOF and teardown are each bounded to eight seconds.
 `walk_capture` samples one uniquely matching entity and its minimum speed. An
 endpoint sample may straddle the requested range because rendering interpolates
 from the previous tick, so the harness captures overlapping ticks until the
-actual render frame matches without widening the tolerance. It records every
-capture attempt, the matching before/after observations, and the screenshot's
+actual render frame matches without widening the tolerance. An early frame is
+sampled again immediately rather than waiting a whole tick and potentially
+skipping the requested phase. It records every capture attempt, the matching
+before/after observations, and the screenshot's
 render-frame gait inputs; the entity identity must persist. Position is not
 wrapped: renderers can apply a factor before calculating phase.
 `tools/harness/gait_phase_scene.json` fixes the scene and slows both clients'
