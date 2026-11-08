@@ -1,10 +1,257 @@
 use super::*;
-use crate::dimensions::Dimension;
-use crate::journal::CheckpointManifest;
-use crate::native_checkpoint as bridge;
+use mc_core::dimensions::Dimension;
+use mc_core::journal::CheckpointManifest;
+use mc_core::native_checkpoint as bridge;
 use mc_nbt::Tag;
 use mc_world::native::{NativeCheckpoint, NativeStore};
 use std::collections::BTreeMap;
+
+/// Driven by tools/harness/vanilla_world_roundtrip.py: real Java creation, offline
+/// native import/mutation/export, Java save, then fresh native import/re-export.
+#[test]
+#[ignore = "requires the real vanilla 26.1.2 headless round-trip driver"]
+fn vanilla_headless_world_roundtrip() {
+    use mc_core::boundary::{ConnectionId, PlayerChange, PlayerInput, TickOutput};
+    use std::sync::Arc;
+
+    let root = std::path::PathBuf::from(
+        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_WORLD").expect("round-trip world path"),
+    );
+    let phase = std::env::var("SOLARIS_VANILLA_ROUNDTRIP_PHASE").expect("round-trip phase");
+    assert!(matches!(phase.as_str(), "create" | "verify"));
+    let verified = phase == "verify";
+    let anvil = std::path::PathBuf::from(
+        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_ANVIL").expect("Anvil conversion path"),
+    );
+    let receipt = std::path::PathBuf::from(
+        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_RECEIPT").expect("conversion receipt path"),
+    );
+    let export = std::path::PathBuf::from(
+        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_EXPORT").expect("Anvil export destination"),
+    );
+    let export_receipt = std::path::PathBuf::from(
+        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_EXPORT_RECEIPT").expect("export receipt path"),
+    );
+    let mut config = crate::test_support::config(root.clone(), 42);
+    config.view_distance = 1;
+    config.simulation_distance = 0;
+    config.checkpoint_every_ticks = u64::MAX;
+    config.journal_fsync_every_batches = 1;
+    assert!(
+        !root.exists(),
+        "each phase requires a fresh native destination"
+    );
+    crate::import_anvil(&config, &anvil, &root, &receipt).expect("offline Java Anvil import");
+    let uuid = uuid::Uuid::parse_str("4d75256b-f3ff-3c0a-84fe-74c1a31dbd90").unwrap();
+    let registry = Arc::new(crate::test_support::registry().unwrap());
+    let core = mc_core::Core::open(config.clone()).expect("open native round-trip world");
+    let mut receiver = core.subscribe();
+    let advance = |ticks: usize, receiver: &mut tokio::sync::broadcast::Receiver<TickOutput>| {
+        let mut last = None;
+        for _ in 0..ticks {
+            last = Some(
+                receiver
+                    .blocking_recv()
+                    .expect("live round-trip tick thread"),
+            );
+            for (_, changes) in core.try_drain_outbox() {
+                for change in changes {
+                    if matches!(
+                        change,
+                        PlayerChange::Chat { .. } | PlayerChange::StyledChat { .. }
+                    ) {
+                        println!("{change:?}");
+                    }
+                }
+            }
+        }
+        last.unwrap()
+    };
+    if phase == "create" {
+        core.submit(PlayerInput::Join {
+            connection: ConnectionId(261),
+            uuid,
+            name: "LayoutPlayer".into(),
+            permission_level: 0,
+        });
+        advance(20, &mut receiver);
+        let run = |command: &str, receiver: &mut tokio::sync::broadcast::Receiver<TickOutput>| {
+            core.submit(PlayerInput::Command {
+                connection: ConnectionId(261),
+                command: command.into(),
+                permission_level: 2,
+            });
+            advance(5, receiver);
+        };
+        for command in [
+            "gamemode creative LayoutPlayer",
+            "gamerule advance_time false",
+            "gamerule advance_weather false",
+            "gamerule spawn_mobs false",
+            "time set 18000",
+            "setworldspawn 8 80 8",
+            "scoreboard objectives add layout_gate dummy",
+            "scoreboard players set LayoutPlayer layout_gate 37",
+            "give LayoutPlayer minecraft:diamond 3",
+        ] {
+            run(command, &mut receiver);
+        }
+        for dimension in Dimension::ALL {
+            run(
+                &format!("execute in {} run tp LayoutPlayer 8 82 8", dimension.name()),
+                &mut receiver,
+            );
+            advance(20, &mut receiver);
+            run("setblock 4 80 4 minecraft:diamond_block", &mut receiver);
+            run("setblock 8 79 8 minecraft:stone", &mut receiver);
+        }
+        run(
+            "execute in overworld run tp LayoutPlayer 8 80 8",
+            &mut receiver,
+        );
+        advance(20, &mut receiver);
+        run("spawnpoint LayoutPlayer 8 80 8", &mut receiver);
+        run(
+            "summon minecraft:cow 8 80 8 {CustomName:\"LayoutMarker\",NoAI:1b,Invulnerable:1b}",
+            &mut receiver,
+        );
+        core.submit(PlayerInput::Leave {
+            connection: ConnectionId(261),
+        });
+        advance(5, &mut receiver);
+        assert!(core.checkpoint(), "v2 create checkpoint");
+    } else {
+        assert_eq!(phase, "verify");
+        let output = advance(5, &mut receiver);
+        assert_eq!(output.snapshot.day_time, 19000, "vanilla-changed day clock");
+        assert!(
+            output.snapshot.entities.iter().any(|entity| {
+                entity
+                    .appearance
+                    .custom_name
+                    .as_deref()
+                    .is_some_and(|name| name.contains("LayoutMarkerVanilla"))
+                    && (entity.position[0] - 8.0).abs() < 0.01
+                    && (entity.position[2] - 9.0).abs() < 0.01
+            }),
+            "vanilla-saved named entity must be visible in v2"
+        );
+    }
+    core.shutdown();
+    drop(core);
+    let marker = registry
+        .blocks
+        .block(
+            &mc_data::Identifier::parse(if verified {
+                "minecraft:emerald_block"
+            } else {
+                "minecraft:diamond_block"
+            })
+            .unwrap(),
+        )
+        .unwrap()
+        .default;
+    let store = crate::test_support::fixture_store(&config).unwrap();
+    let recovered = mc_core::native_checkpoint::recover_with_reader(
+        &config,
+        Arc::clone(&registry),
+        store.checkpoint_reader().unwrap(),
+    )
+    .unwrap();
+    let mut imported_boundary_light = false;
+    for dimension in Dimension::ALL {
+        let mut world = mc_core::world::ChunkWorld::new_native(
+            config.seed,
+            Arc::clone(&store),
+            mc_core::native_checkpoint::dimension_id(dimension),
+            mc_core::native_checkpoint::generator(&config, &registry, dimension).unwrap(),
+            &registry,
+            mc_world::BlockStateId(registry.states.air),
+            [8, 80, 8],
+            dimension.geometry(),
+        );
+        let want = [(mc_world::ChunkPos { x: 0, z: 0 }, 0)]
+            .into_iter()
+            .collect();
+        world.ensure_blocking(&want);
+        assert_eq!(
+            world.block_at(4, 80, 4),
+            Some(marker.0),
+            "{dimension:?} marker"
+        );
+        if verified {
+            let chunk = world.chunk(mc_world::ChunkPos { x: 0, z: 0 }).unwrap();
+            assert_eq!(chunk.geometry(), dimension.geometry());
+            // Java adds boundary light to adjacent generated chunks, not
+            // necessarily the marker chunk that v2 originally checkpointed.
+            let want = (0..=2)
+                .flat_map(|x| (0..=2).map(move |z| (mc_world::ChunkPos { x, z }, 0)))
+                .collect();
+            world.ensure_blocking(&want);
+            for x in 0..=2 {
+                for z in 0..=2 {
+                    let pos = mc_world::ChunkPos { x, z };
+                    let chunk = world.chunk(pos).unwrap_or_else(|| {
+                        panic!(
+                            "{dimension:?} chunk {pos:?} failed admission: {:?}",
+                            world.load_errors().collect::<Vec<_>>()
+                        )
+                    });
+                    assert_eq!(chunk.geometry(), dimension.geometry());
+                    imported_boundary_light |= chunk
+                        .boundary_section_lights
+                        .iter()
+                        .any(|light| light.block.is_some() || light.sky.is_some());
+                }
+            }
+        }
+    }
+    assert!(
+        !verified || imported_boundary_light,
+        "must exercise real Java boundary-light import"
+    );
+    let manifest = &recovered.manifest;
+    assert_eq!(
+        manifest.world_spawn,
+        Some(if verified { [9, 81, 9] } else { [8, 80, 8] })
+    );
+    assert_eq!(
+        manifest.climate.as_ref().unwrap().day_time,
+        if verified { 19000 } else { 18000 }
+    );
+    assert_eq!(manifest.gamerules["advance_time"], "false");
+    let board = recovered.dimensions[&Dimension::Overworld]
+        .scoreboard
+        .as_ref()
+        .unwrap();
+    assert!(board.objectives.contains_key("layout_gate"));
+    assert_eq!(
+        board.scores["LayoutPlayer"]["layout_gate"].value,
+        if verified { 41 } else { 37 }
+    );
+    let player = &recovered.dimensions[&Dimension::Overworld].players[&uuid.to_string()];
+    assert_eq!(player.respawn, Some([8, 80, 8]));
+    assert_eq!(player.respawn_dimension, Dimension::Overworld);
+    let diamond = registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+        .unwrap();
+    assert_eq!(
+        player
+            .inventory
+            .iter()
+            .filter(|stack| stack.item_id == diamond)
+            .map(|stack| stack.count)
+            .sum::<i32>(),
+        3,
+        "offline player item custody survives Java save and v2 reopen"
+    );
+    drop(recovered);
+    drop(store);
+    crate::export_anvil(&config, &root, &export, &export_receipt)
+        .expect("offline native Anvil export");
+    println!("SOLARIS_VANILLA_ROUNDTRIP_{}_OK", phase.to_uppercase());
+}
 
 fn save(root: &Path, path: &str, tag: &Tag) {
     let path = root.join(path);
@@ -15,13 +262,13 @@ fn save(root: &Path, path: &str, tag: &Tag) {
     write_nbt(&path, tag).unwrap();
 }
 
-fn falcons_border(dimension: Dimension) -> crate::command_border::Border {
+fn falcons_border(dimension: Dimension) -> mc_core::command_border::Border {
     let [center_x, center_z] = if dimension == Dimension::Nether {
         [31.0625, -23.0625]
     } else {
         [248.5, -184.5]
     };
-    crate::command_border::Border {
+    mc_core::command_border::Border {
         center_x,
         center_z,
         size: 128_000.0,
@@ -32,14 +279,14 @@ fn falcons_border(dimension: Dimension) -> crate::command_border::Border {
 }
 
 fn modern_fixture(root: &Path, config: &CoreConfig) {
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let mut manifest = CheckpointManifest {
         tick: 79,
         domain_versions: bridge::domain_versions(),
         world_spawn: Some([12, 75, -45]),
         world_spawn_rotation: [90.0, 15.0],
-        difficulty: crate::survival::Difficulty::Hard,
-        climate: Some(crate::weather::ClimateImage {
+        difficulty: mc_core::survival::Difficulty::Hard,
+        climate: Some(mc_core::weather::ClimateImage {
             day_time: 18000,
             weather_kind: 2,
             remaining_ticks: 1234,
@@ -71,18 +318,18 @@ fn modern_fixture(root: &Path, config: &CoreConfig) {
             }),
         );
     }
-    let mut metadata = crate::level_metadata::MetadataTags::new();
-    crate::level_metadata::checkpoint_tags(&mut metadata, config.seed, &manifest).unwrap();
+    let mut metadata = mc_core::level_metadata::MetadataTags::new();
+    mc_core::level_metadata::checkpoint_tags(&mut metadata, config.seed, &manifest).unwrap();
     if let Tag::Compound(root) = metadata.get_mut("level.dat").unwrap() {
         root.push(("OpaqueRoot".into(), Tag::Long(37)));
     }
     for (path, tag) in metadata {
         save(root, &path, &tag);
     }
-    let mut scoreboard = crate::scoreboard::Scoreboard::default();
+    let mut scoreboard = mc_core::scoreboard::Scoreboard::default();
     scoreboard.objectives.insert(
         "gate".into(),
-        crate::scoreboard::Objective {
+        mc_core::scoreboard::Objective {
             criteria: "dummy".into(),
             display_name: "gate".into(),
         },
@@ -91,7 +338,7 @@ fn modern_fixture(root: &Path, config: &CoreConfig) {
         "FixturePlayer".into(),
         BTreeMap::from([(
             "gate".into(),
-            crate::scoreboard::Score {
+            mc_core::scoreboard::Score {
                 value: 37,
                 locked: true,
             },
@@ -187,7 +434,7 @@ fn modern_fixture(root: &Path, config: &CoreConfig) {
                 "dimensions/minecraft/{}/data/minecraft/raids.dat",
                 dimension.name().trim_start_matches("minecraft:")
             ),
-            &crate::raids::to_nbt(&crate::raids::Raids::default()),
+            &mc_core::raids::to_nbt(&mc_core::raids::Raids::default()),
         );
         save(
             root,
@@ -220,7 +467,7 @@ fn modern_fixture(root: &Path, config: &CoreConfig) {
     save(
         root,
         "dimensions/minecraft/the_end/data/minecraft/ender_dragon_fight.dat",
-        &crate::end_fight::to_nbt(&crate::end_fight::Fight::default()),
+        &mc_core::end_fight::to_nbt(&mc_core::end_fight::Fight::default()),
     );
     let mut player = mc_data::player_nbt::player_to_fields(
         &registry.items,
@@ -253,11 +500,10 @@ fn has_field(tag: &Tag, key: &str) -> bool {
     matches!(tag, Tag::Compound(fields) if fields.iter().any(|(name, _)| name == key))
 }
 
-#[test]
-fn imported_mount_cargo_menu_roundtrip_uses_native_contents() {
-    use crate::boundary::{ChangeSet, ClickMode, ConnectionId, Hand, PlayerInput};
-    use crate::mounts::tests as mount_tests;
-    use crate::tick::run_tick;
+#[tokio::test]
+async fn imported_mount_cargo_menu_roundtrip_uses_native_contents() {
+    use crate::test_support::Running;
+    use mc_core::boundary::{ClickMode, ConnectionId, EntityId, Hand, PlayerChange, PlayerInput};
     use mc_data::{Identifier, ItemStack};
     use mc_nbt::{ListTag, tag_type};
 
@@ -269,9 +515,9 @@ fn imported_mount_cargo_menu_roundtrip_uses_native_contents() {
     for path in [&source, &native, &output, &again] {
         std::fs::create_dir(path).unwrap();
     }
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     modern_fixture(&source, &config);
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let diamond = registry
         .items
         .id_of(&Identifier::parse("minecraft:diamond").unwrap())
@@ -307,95 +553,154 @@ fn imported_mount_cargo_menu_roundtrip_uses_native_contents() {
     let mut chunks = mc_world::anvil::read_entity_regions(&entity_dir, &registry.items).unwrap();
     chunks.get_mut(&(-1, 1)).unwrap().entities.push(mount);
     mc_world::anvil::write_entity_regions(&entity_dir, &registry.items, &chunks, 79).unwrap();
-    import::convert(&config, &source, &native).unwrap();
-    let mut recovered = bridge::recover_offline(&config).unwrap();
-    let replay = &recovered.dimensions[&Dimension::Overworld];
-    let (&id, record) = replay
-        .entities
-        .iter()
-        .find(|(_, entity)| entity.uuid == uuid.to_string())
-        .unwrap();
-    let (mut state, actor, pos) = mount_tests::fixture();
-    let mut record = record.clone();
-    record.pos = pos;
-    crate::core::restore_entity(&mut state, id, &record).unwrap();
-    let target = crate::boundary::EntityId(id);
-    let slot = state.entities.slot_of(target).unwrap();
-    state.entities.row_mut(slot).entity_life.tamed = true;
-    run_tick(
-        &mut state,
-        &[PlayerInput::InteractEntitySecondary {
-            connection: ConnectionId(1),
-            target,
-            hand: Hand::Main,
-            location: [0.0; 3],
-        }],
+    let mut floor = mc_world::Chunk::empty(
+        mc_world::ChunkPos { x: -1, z: 1 },
+        mc_world::BlockStateId(registry.states.air),
+        Identifier::parse("minecraft:plains").unwrap(),
     );
-    let window = state.players[&actor].open.as_ref().unwrap().window;
-    let version = state.players[&actor].open.as_ref().unwrap().state_id;
-    crate::mounts::menus::click(
-        &mut state,
-        actor,
-        window,
-        version,
-        2,
-        0,
-        ClickMode::QuickMove,
-        &mut ChangeSet::default(),
-    );
-    assert!(state.entities.row(slot).entity_life.mount.cargo[0].is_empty());
-    state.players.get_mut(&actor).unwrap().inventory.slots[0] = ItemStack::new(emerald, 5);
-    let version = state.players[&actor].open.as_ref().unwrap().state_id;
-    crate::mounts::menus::click(
-        &mut state,
-        actor,
-        window,
-        version,
-        44,
-        0,
-        ClickMode::QuickMove,
-        &mut ChangeSet::default(),
-    );
-    let expected = state.entities.row(slot).entity_life.mount.cargo.clone();
-    assert_eq!(expected[0], ItemStack::new(emerald, 5));
-    let (_, captured, _) = crate::core::checkpoint_data_for(&state, 80);
-    let entities =
-        bridge::encode_entities(Dimension::Overworld, &captured, &registry.items, 80).unwrap();
-    for replay in recovered.dimensions.values_mut() {
-        replay.tick = 80;
+    floor.status = "minecraft:full".into();
+    for x in 0..16 {
+        for z in 0..16 {
+            floor
+                .set_block(x, 63, z, mc_world::BlockStateId(registry.states.stone))
+                .unwrap();
+        }
     }
-    let mut checkpoint = bridge::encode_checkpoint(&recovered).unwrap();
-    checkpoint
-        .entities
-        .retain(|entity| entity.identity != *uuid.as_bytes());
-    checkpoint.entities.extend(
-        entities
-            .into_iter()
-            .filter(|entity| entity.identity == *uuid.as_bytes()),
-    );
-    drop(recovered);
-    let store = NativeStore::open(
-        &native.join("native/state.redb"),
-        bridge::native_identity(&config),
+    let payload = mc_world::anvil::chunk_to_payload_with_items_at_tick(
+        &floor,
+        &registry.blocks,
+        Some(&registry.items),
+        0,
+        79,
     )
     .unwrap();
-    store
-        .commit_checkpoint(
-            NativeCheckpoint {
-                tick: 80,
-                previous_tick: 79,
-                chunks: &[],
-                entities: &checkpoint.entities,
-                players: &checkpoint.players,
-                globals: &checkpoint.globals,
-            },
-            &registry.blocks,
-            &registry.items,
-        )
-        .unwrap();
-    drop(store);
+    mc_world::anvil::write_region(
+        Dimension::Overworld
+            .directory(&source)
+            .join("region/r.-1.0.mca"),
+        &[payload],
+    )
+    .unwrap();
+    let player_uuid = uuid::Uuid::from_u128(0x123457);
+    let mut player = mc_data::player_nbt::player_to_fields(
+        &registry.items,
+        &mc_data::player_nbt::VanillaPlayer {
+            pos: [-8.5, 64.0, 24.5],
+            inventory: vec![(0, ItemStack::new(emerald, 5))],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    player.push((
+        "DataVersion".into(),
+        Tag::Int(mc_world::anvil::TARGET_DATA_VERSION),
+    ));
+    player.push((
+        "Dimension".into(),
+        Tag::String("minecraft:overworld".into()),
+    ));
+    save(
+        &source,
+        &format!("players/data/{player_uuid}.dat"),
+        &Tag::Compound(player),
+    );
+    import::convert(&config, &source, &native).unwrap();
+    let recovered = bridge::recover_offline(&config).unwrap();
+    let target = EntityId(
+        *recovered.dimensions[&Dimension::Overworld]
+            .entities
+            .iter()
+            .find(|(_, entity)| entity.uuid == uuid.to_string())
+            .unwrap()
+            .0,
+    );
+    drop(recovered);
+    let mut live = Running::open(config.clone());
+    assert!(live.core.submit(PlayerInput::Join {
+        connection: ConnectionId(1),
+        uuid: player_uuid,
+        name: "rider".into(),
+        permission_level: 0,
+    }));
+    live.until(|_, batches| {
+        batches
+            .iter()
+            .filter(|(connection, _)| *connection == ConnectionId(1))
+            .flat_map(|(_, changes)| changes)
+            .any(|change| matches!(change, PlayerChange::Joined { .. }))
+            .then_some(())
+    })
+    .await;
+    assert!(live.core.submit(PlayerInput::InteractEntitySecondary {
+        connection: ConnectionId(1),
+        target,
+        hand: Hand::Main,
+        location: [0.0; 3],
+    }));
+
+    async fn contents(
+        live: &mut Running,
+        cargo: Option<ItemStack>,
+    ) -> (u8, i32, Vec<Option<ItemStack>>) {
+        live.until(|_, batches| {
+            batches
+                .iter()
+                .rev()
+                .filter(|(connection, _)| *connection == ConnectionId(1))
+                .flat_map(|(_, changes)| changes.iter().rev())
+                .find_map(|change| match change {
+                    PlayerChange::MenuContents {
+                        window,
+                        state_id,
+                        slots,
+                        ..
+                    } if *window != 0 && slots.get(2) == Some(&cargo) => {
+                        Some((*window, *state_id, slots.clone()))
+                    }
+                    _ => None,
+                })
+        })
+        .await
+    }
+
+    let (window, state_id, _) = contents(&mut live, Some(ItemStack::new(diamond, 7))).await;
+    assert!(live.core.submit(PlayerInput::ContainerClick {
+        connection: ConnectionId(1),
+        window,
+        state_id,
+        slot: 2,
+        button: 0,
+        mode: ClickMode::QuickMove,
+    }));
+    let (window, state_id, slots) = contents(&mut live, None).await;
+    assert_eq!(
+        slots[17..]
+            .iter()
+            .flatten()
+            .filter(|stack| stack.item_id == diamond)
+            .map(|stack| stack.count)
+            .sum::<i32>(),
+        7
+    );
+    assert_eq!(slots[44], Some(ItemStack::new(emerald, 5)));
+    assert!(live.core.submit(PlayerInput::ContainerClick {
+        connection: ConnectionId(1),
+        window,
+        state_id,
+        slot: 44,
+        button: 0,
+        mode: ClickMode::QuickMove,
+    }));
+    let (_, _, slots) = contents(&mut live, Some(ItemStack::new(emerald, 5))).await;
+    let expected: Vec<_> = slots[2..17]
+        .iter()
+        .map(|stack| stack.clone().unwrap_or(ItemStack::EMPTY))
+        .collect();
+    assert_eq!(expected[0], ItemStack::new(emerald, 5));
+    assert!(live.core.checkpoint());
+    drop(live);
     export::convert(&config, &native, &output).unwrap();
-    let again_config = CoreConfig::new(again.clone(), 42);
+    let again_config = crate::test_support::config(again.clone(), 42);
     import::convert(&again_config, &output, &again).unwrap();
     let recovered = bridge::recover_offline(&again_config).unwrap();
     let record = recovered.dimensions[&Dimension::Overworld]
@@ -415,7 +720,7 @@ fn modern_all_domains_three_dimension_borders_roundtrip_and_unknown_entity_check
     std::fs::create_dir(&source).unwrap();
     std::fs::create_dir(&native).unwrap();
     std::fs::create_dir(&output).unwrap();
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     modern_fixture(&source, &config);
     let original: Vec<_> = files(&source)
         .unwrap()
@@ -532,7 +837,7 @@ fn modern_all_domains_three_dimension_borders_roundtrip_and_unknown_entity_check
         bridge::native_identity(&config),
     )
     .unwrap();
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     store
         .commit_checkpoint(
             NativeCheckpoint {
@@ -587,7 +892,7 @@ fn modern_all_domains_three_dimension_borders_roundtrip_and_unknown_entity_check
     }
     let second = temp.path().join("native-again");
     std::fs::create_dir(&second).unwrap();
-    let second_config = CoreConfig::new(second.clone(), 42);
+    let second_config = crate::test_support::config(second.clone(), 42);
     let again = import::convert(&second_config, &output, &second).unwrap();
     assert_eq!(
         (
@@ -610,12 +915,12 @@ fn nonzero_import_ids_are_deterministic_and_runtime_admits_empty_wal() {
     let temp = tempfile::tempdir().unwrap();
     let source = temp.path().join("anvil");
     std::fs::create_dir(&source).unwrap();
-    let first_config = CoreConfig::new(temp.path().join("first"), 42);
+    let first_config = crate::test_support::config(temp.path().join("first"), 42);
     modern_fixture(&source, &first_config);
     let mut identities = Vec::new();
     for root in [first_config.world_dir.clone(), temp.path().join("second")] {
         std::fs::create_dir(&root).unwrap();
-        let config = CoreConfig::new(root.clone(), 42);
+        let config = crate::test_support::config(root.clone(), 42);
         let stats = import::convert(&config, &source, &root).unwrap();
         assert_eq!(stats.tick, 79);
         assert!(!root.join("journal").exists());
@@ -633,7 +938,7 @@ fn nonzero_import_ids_are_deterministic_and_runtime_admits_empty_wal() {
                 .collect::<Vec<_>>(),
         );
         drop(store);
-        let core = crate::Core::open(config).unwrap();
+        let core = mc_core::Core::open(config).unwrap();
         core.shutdown();
     }
     assert_eq!(identities[0], identities[1]);
@@ -646,7 +951,7 @@ fn failed_import_partial_stage_and_unpublished_wal_are_never_runtime_worlds() {
     let stage = temp.path().join("interrupted-stage");
     std::fs::create_dir(&source).unwrap();
     std::fs::create_dir(&stage).unwrap();
-    let config = CoreConfig::new(stage.clone(), 42);
+    let config = crate::test_support::config(stage.clone(), 42);
     modern_fixture(&source, &config);
     // Terrain is staged before players. A malformed player must abort the bulk
     // import without a checkpoint that runtime could admit as a published world.
@@ -666,14 +971,14 @@ fn failed_import_partial_stage_and_unpublished_wal_are_never_runtime_worlds() {
         .to_string();
     assert!(error.contains("expected four-int player UUID"), "{error}");
     assert!(stage.join("native/state.redb").is_file());
-    assert!(crate::Core::open(config.clone()).is_err());
+    assert!(mc_core::Core::open(config.clone()).is_err());
     std::fs::create_dir_all(stage.join("journal")).unwrap();
     std::fs::write(
         stage.join("journal/batch-00000000000000000080-00000000000000000080.bin"),
         b"unpublished",
     )
     .unwrap();
-    assert!(crate::Core::open(config).is_err());
+    assert!(mc_core::Core::open(config).is_err());
 
     let destination = temp.path().join("published");
     let receipt = temp.path().join("receipt.json");
@@ -699,7 +1004,7 @@ fn unsupported_java_ticket_semantics_fail_import_before_publication() {
     let stage = temp.path().join("stage");
     std::fs::create_dir(&source).unwrap();
     std::fs::create_dir(&stage).unwrap();
-    let config = CoreConfig::new(stage.clone(), 42);
+    let config = crate::test_support::config(stage.clone(), 42);
     modern_fixture(&source, &config);
     let path = "dimensions/minecraft/overworld/data/minecraft/chunk_tickets.dat";
     let mut tag = read_nbt(&source.join(path)).unwrap();
@@ -738,7 +1043,7 @@ fn opaque_extras_aggregate_budget_refuses_before_creating_native_database() {
     let stage = temp.path().join("stage");
     std::fs::create_dir(&source).unwrap();
     std::fs::create_dir(&stage).unwrap();
-    let config = CoreConfig::new(stage.clone(), 42);
+    let config = crate::test_support::config(stage.clone(), 42);
     modern_fixture(&source, &config);
     // Sparse opaque backup: admission must refuse from file metadata without
     // reading or allocating the oversized body and without importing terrain.
@@ -760,7 +1065,7 @@ fn unmodeled_saved_data_is_retained_verbatim_and_unreadable_nbt_fails_closed() {
     let source = dir.path().join("source");
     let native = dir.path().join("native");
     let exported = dir.path().join("exported");
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     modern_fixture(&source, &config);
     let domains = [
         "custom_boss_events",
@@ -824,9 +1129,9 @@ fn overdue_tick_deadlines_and_reversed_priorities_survive_native_conversion() {
     let source = dir.path().join("source");
     let native = dir.path().join("native");
     let exported = dir.path().join("exported");
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     modern_fixture(&source, &config);
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let mut chunk = mc_world::Chunk::empty_with_geometry(
         mc_world::ChunkPos { x: -1, z: 1 },
         mc_world::BlockStateId(registry.states.air),
@@ -938,9 +1243,9 @@ fn flowing_fluid_ids_survive_conversion_and_export_uses_authoritative_queue() {
     let source = dir.path().join("source");
     let native = dir.path().join("native");
     let exported = dir.path().join("exported");
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     modern_fixture(&source, &config);
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let mut chunk = mc_world::Chunk::empty_with_geometry(
         mc_world::ChunkPos { x: -1, z: 1 },
         mc_world::BlockStateId(registry.states.air),
@@ -1029,7 +1334,8 @@ fn flowing_fluid_ids_survive_conversion_and_export_uses_authoritative_queue() {
     );
     let before = hashes(&source).unwrap();
     import_anvil(&config, &source, &native, &dir.path().join("import.json")).unwrap();
-    let mut manifest = crate::native_checkpoint::tests::read_manifest(&config).unwrap();
+    let store = crate::test_support::fixture_store(&config).unwrap();
+    let mut manifest = crate::test_support::read_manifest(&store).unwrap();
     assert_eq!(
         manifest
             .fluid_ticks
@@ -1039,6 +1345,7 @@ fn flowing_fluid_ids_survive_conversion_and_export_uses_authoritative_queue() {
             .collect::<Vec<_>>(),
         source_ids.iter().map(String::as_str).collect::<Vec<_>>(),
     );
+    drop(store);
     export_anvil(&config, &native, &exported, &dir.path().join("export.json")).unwrap();
     assert_eq!(
         read_ids(
@@ -1054,7 +1361,9 @@ fn flowing_fluid_ids_survive_conversion_and_export_uses_authoritative_queue() {
     // authoritative queue changes. Export must not recover IDs from that copy.
     manifest.fluid_ticks.due[0].fluid = mc_data::Identifier::parse("minecraft:water").unwrap();
     manifest.fluid_ticks.due[1].fluid = mc_data::Identifier::parse("minecraft:lava").unwrap();
-    crate::native_checkpoint::tests::write_manifest(&config, &manifest).unwrap();
+    let store = crate::test_support::fixture_store(&config).unwrap();
+    crate::test_support::write_manifest(&config, &store, &manifest).unwrap();
+    drop(store);
     let changed = dir.path().join("changed");
     export_anvil(
         &config,
@@ -1084,7 +1393,7 @@ fn statistics_json_semantic_roundtrip_owns_legacy_and_offline_uuid_files() {
     for path in [&source, &native, &output] {
         std::fs::create_dir(path).unwrap();
     }
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     modern_fixture(&source, &config);
     let player_uuid = uuid::Uuid::from_u128(3);
     let offline_uuid = uuid::Uuid::from_u128(900);
@@ -1154,14 +1463,17 @@ fn statistics_json_semantic_roundtrip_owns_legacy_and_offline_uuid_files() {
             .all(|(name, _)| !name.starts_with("stats/") && !name.starts_with("players/stats/"))
     );
     drop(recovered);
-    let restarted = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
+    let restarted = crate::test_support::Running::open(config.clone());
+    assert!(restarted.core.checkpoint());
+    drop(restarted);
+    let recovered = bridge::recover_offline(&config).unwrap();
     assert_eq!(
-        restarted.offline_players[&offline_uuid]
+        recovered.dimensions[&Dimension::Overworld].players[&offline_uuid.to_string()]
             .statistics
             .get_custom(CustomStat::PlayTime),
         987
     );
-    drop(restarted);
+    drop(recovered);
     export::convert(&config, &native, &output).unwrap();
     for (uuid, expected) in [(player_uuid, input), (offline_uuid, offline_input)] {
         let actual: serde_json::Value = serde_json::from_slice(
@@ -1182,7 +1494,7 @@ fn duplicate_legacy_and_canonical_statistics_refuse_import_without_custody_loss(
     let native = directory.path().join("native");
     std::fs::create_dir(&source).unwrap();
     std::fs::create_dir(&native).unwrap();
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     modern_fixture(&source, &config);
     std::fs::create_dir(source.join("stats")).unwrap();
     std::fs::write(
@@ -1203,14 +1515,14 @@ fn duplicate_legacy_and_canonical_statistics_refuse_import_without_custody_loss(
 
 #[test]
 fn advancements_survive_native_checkpoint_wal_and_lossless_anvil_interchange() {
-    use crate::journal::{JournalEntry, JournalWriter};
+    use mc_core::journal::{JournalEntry, JournalWriter};
     let temp = tempfile::tempdir().unwrap();
     let source = temp.path().join("anvil");
     let native = temp.path().join("native");
     let output = temp.path().join("export");
     let sealed_output = temp.path().join("checkpoint-export");
     let imported_again = temp.path().join("imported-again");
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     modern_fixture(&source, &config);
     let uuid = "00000000-0000-0000-0000-000000000003";
     let progress_path = format!("players/advancements/{uuid}.json");
@@ -1371,7 +1683,7 @@ fn advancements_survive_native_checkpoint_wal_and_lossless_anvil_interchange() {
         bridge::native_identity(&config),
     )
     .unwrap();
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     store
         .commit_checkpoint(
             NativeCheckpoint {
@@ -1452,7 +1764,7 @@ fn duplicate_legacy_and_modern_advancement_destinations_are_rejected() {
     let temp = tempfile::tempdir().unwrap();
     let source = temp.path().join("anvil");
     let native = temp.path().join("native");
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     modern_fixture(&source, &config);
     for directory in ["advancements", "players/advancements"] {
         std::fs::create_dir_all(source.join(directory)).unwrap();
@@ -1476,9 +1788,9 @@ fn container_metadata_survives_native_import_export_without_restoring_inventory(
     let native = temp.path().join("native");
     let exported = temp.path().join("export");
     std::fs::create_dir(&source).unwrap();
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     modern_fixture(&source, &config);
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let mut chunk = Chunk::empty(
         ChunkPos { x: 0, z: 0 },
         BlockStateId(registry.states.air),

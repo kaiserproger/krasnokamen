@@ -9,13 +9,13 @@
 //! the persisted `settlement/<id>` rows, never inferred from beds or POIs.
 //! Villager membership is the persisted `solaris:VillagerRuntime` column.
 use super::{fail, hashes, write_receipt};
-use crate::dimensions::Dimension;
-use crate::journal::{CheckpointManifest, Replay};
-use crate::native_checkpoint::{
+use mc_core::dimensions::Dimension;
+use mc_core::journal::{CheckpointManifest, Replay};
+use mc_core::native_checkpoint::{
     dimension_id, generation_records, hydrate_visited_entity, native_identity, validate_manifest,
 };
-use crate::settlements::persistence::{Row, checkpoint_sequence, parse_row_key};
-use crate::{CoreConfig, CoreError};
+use mc_core::settlements::persistence::{Row, checkpoint_sequence, parse_row_key};
+use mc_core::{CoreConfig, CoreError};
 use mc_nbt::Tag;
 use mc_world::native::NativeReadOnlyStore;
 use serde::{Deserialize, Serialize};
@@ -129,9 +129,9 @@ fn census(
     config.world_dir = source.clone();
     let path = source.join("native/state.redb");
     if !path.is_file() {
-        return Err(crate::native_checkpoint::import_required(&config));
+        return Err(mc_core::native_checkpoint::import_required(&config));
     }
-    let registry = crate::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())?;
+    let registry = mc_core::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())?;
     let storage = |error: mc_world::native::NativeError| CoreError::Storage(error.to_string());
     let store =
         NativeReadOnlyStore::open_with_cache(&path, native_identity(&config), 16 * 1024 * 1024)
@@ -172,7 +172,7 @@ fn census(
         if row.value.id != id {
             return Err(invalid(format!("row {key} identity mismatch")));
         }
-        crate::settlements::validate_record(&row.value)
+        mc_core::settlements::validate_record(&row.value)
             .map_err(|error| invalid(format!("row {key}: {error}")))?;
         dimensions
             .get_mut(&row.dimension)
@@ -297,7 +297,7 @@ fn census(
         .map_err(storage)?;
 
     let mut tail = 0u64;
-    crate::journal::visit_complete_batches_after(&source.join("journal"), manifest.tick, |_| {
+    mc_core::journal::visit_complete_batches_after(&source.join("journal"), manifest.tick, |_| {
         tail += 1;
         Ok(())
     })?;

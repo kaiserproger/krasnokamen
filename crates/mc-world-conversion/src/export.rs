@@ -8,10 +8,10 @@ use mc_world::anvil::{ChunkPayload, TARGET_DATA_VERSION};
 use mc_world::{BlockPos, BlockStateId, Chunk, ChunkPos, ScheduledBlockTick, ScheduledFluidTick};
 
 use super::{ConversionStats, fail, write_nbt};
-use crate::config::{CoreConfig, CoreError};
-use crate::dimensions::Dimension;
-use crate::journal::{CheckpointManifest, ReplayBlockEntity};
-use crate::native_checkpoint::{decode_tag, encode_checkpoint, generator, recover_offline};
+use mc_core::config::{CoreConfig, CoreError};
+use mc_core::dimensions::Dimension;
+use mc_core::journal::{CheckpointManifest, ReplayBlockEntity};
+use mc_core::native_checkpoint::{decode_tag, encode_checkpoint, generator, recover_offline};
 
 type Cell = (i32, i32, i32);
 type Column = (i32, i32);
@@ -39,7 +39,7 @@ pub(super) fn convert(
             return Err(fail("conversion_extras: expected compound"));
         };
         for (path, bytes) in retained {
-            crate::level_metadata::validate_relative_path(&path)?;
+            mc_core::level_metadata::validate_relative_path(&path)?;
             if !super::safe_extra_path(Path::new(&path)) {
                 return Err(fail(format!(
                     "conversion_extras {path}: unsafe auxiliary path"
@@ -78,7 +78,7 @@ pub(super) fn convert(
         .map_err(fail)?;
 
     for dimension in [Dimension::Overworld, Dimension::Nether, Dimension::End] {
-        let dimension_id = crate::native_checkpoint::dimension_id(dimension);
+        let dimension_id = mc_core::native_checkpoint::dimension_id(dimension);
         let replay = &world.dimensions[&dimension];
         let generator = generator(&config, &world.registry, dimension)?;
         let mut columns = stored.remove(&dimension_id).unwrap_or_default();
@@ -107,7 +107,7 @@ pub(super) fn convert(
             .map(|image| ((image.chunk[0], image.chunk[1]), image))
             .collect();
         columns.extend(block_ticks.keys().copied());
-        let mut fluid_ticks = BTreeMap::<Column, Vec<&crate::fluids::FluidTickImage>>::new();
+        let mut fluid_ticks = BTreeMap::<Column, Vec<&mc_core::fluids::FluidTickImage>>::new();
         for image in &replay.fluid_ticks.due {
             fluid_ticks
                 .entry(column((image.pos[0], image.pos[1], image.pos[2])))
@@ -271,16 +271,16 @@ pub(super) fn convert(
         return Err(fail("native export: unsupported stored dimension"));
     }
 
-    let mut metadata = crate::level_metadata::from_tag(&decode_tag(
+    let mut metadata = mc_core::level_metadata::from_tag(&decode_tag(
         &checkpoint.globals["level_metadata"],
         "level_metadata",
     )?)?;
-    crate::level_metadata::checkpoint_tags(&mut metadata, config.seed, &manifest)?;
+    mc_core::level_metadata::checkpoint_tags(&mut metadata, config.seed, &manifest)?;
     let scoreboard_path = "data/minecraft/scoreboard.dat";
     let scoreboard = decode_tag(&checkpoint.globals["scoreboard"], "scoreboard")?;
     if extras.contains_key(scoreboard_path) {
-        let owned = crate::scoreboard::Scoreboard::from_nbt(&scoreboard).map_err(fail)?;
-        if owned != crate::scoreboard::Scoreboard::default() {
+        let owned = mc_core::scoreboard::Scoreboard::from_nbt(&scoreboard).map_err(fail)?;
+        if owned != mc_core::scoreboard::Scoreboard::default() {
             return Err(fail(format!(
                 "{scoreboard_path}: active native scoreboard conflicts with deferred saved data"
             )));
@@ -292,10 +292,10 @@ pub(super) fn convert(
         refresh_saved(
             &mut metadata,
             format!("data/minecraft/maps/{id}.dat"),
-            crate::maps::nbt::to_tag(map).map_err(fail)?,
+            mc_core::maps::nbt::to_tag(map).map_err(fail)?,
         )?;
     }
-    let next_map = crate::maps::sequence(&checkpoint.globals)?.max(
+    let next_map = mc_core::maps::sequence(&checkpoint.globals)?.max(
         world.dimensions[&Dimension::Overworld]
             .saved_maps
             .last_key_value()
@@ -304,7 +304,7 @@ pub(super) fn convert(
     refresh_saved(
         &mut metadata,
         "data/minecraft/maps/last_id.dat".into(),
-        crate::maps::nbt::sequence_to_tag(next_map).map_err(fail)?,
+        mc_core::maps::nbt::sequence_to_tag(next_map).map_err(fail)?,
     )?;
     for dimension in [Dimension::Overworld, Dimension::Nether, Dimension::End] {
         let replay = &world.dimensions[&dimension];
@@ -315,7 +315,7 @@ pub(super) fn convert(
         let border_path = saved_path("world_border.dat");
         let ticket_path = saved_path("chunk_tickets.dat");
         if extras.contains_key(&border_path)
-            && replay.border != crate::command_border::Border::default()
+            && replay.border != mc_core::command_border::Border::default()
         {
             return Err(fail(format!(
                 "{border_path}: active native border conflicts with deferred saved data"
@@ -325,7 +325,7 @@ pub(super) fn convert(
             && replay
                 .tickets
                 .keys()
-                .any(|owner| crate::forceload::is_forced_owner(owner))
+                .any(|owner| mc_core::forceload::is_forced_owner(owner))
         {
             return Err(fail(format!(
                 "{ticket_path}: active native forced tickets conflict with deferred saved data"
@@ -333,13 +333,13 @@ pub(super) fn convert(
         }
         if let Some(raids) = &replay.raids {
             if extras.contains_key(&raid_path) {
-                if raids != &crate::raids::Raids::default() {
+                if raids != &mc_core::raids::Raids::default() {
                     return Err(fail(format!(
                         "{raid_path}: active native raids conflict with deferred saved data"
                     )));
                 }
             } else {
-                refresh_saved(&mut metadata, raid_path, crate::raids::to_nbt(raids))?;
+                refresh_saved(&mut metadata, raid_path, mc_core::raids::to_nbt(raids))?;
             }
         }
         if let Some(fight) = &replay.end_fight {
@@ -348,7 +348,7 @@ pub(super) fn convert(
                     "{fight_path}: active native dragon fight conflicts with deferred saved data"
                 )));
             }
-            refresh_saved(&mut metadata, fight_path, crate::end_fight::to_nbt(fight))?;
+            refresh_saved(&mut metadata, fight_path, mc_core::end_fight::to_nbt(fight))?;
         }
     }
     // checkpoint_tags generates defaults even for domains deliberately deferred
@@ -382,9 +382,9 @@ pub(super) fn convert(
     for player in &checkpoint.players {
         let uuid = uuid::Uuid::from_bytes(player.uuid);
         let mut tag = decode_tag(&player.record, "player")?;
-        let record = crate::journal::player_from_tag(&tag, &world.registry.items)?;
+        let record = mc_core::journal::player_from_tag(&tag, &world.registry.items)?;
         let statistics =
-            crate::native_checkpoint::statistics_to_json(&record.statistics, &world.registry)?;
+            mc_core::native_checkpoint::statistics_to_json(&record.statistics, &world.registry)?;
         let statistics_path = format!("players/stats/{uuid}.json");
         if extras.contains_key(&statistics_path)
             || extras.contains_key(&format!("stats/{uuid}.json"))
@@ -469,7 +469,7 @@ pub(super) fn convert(
     // Players can be the only source of new components; publish the level
     // version only after every emitted record has selected its real format.
     for (path, mut tag) in metadata {
-        crate::level_metadata::validate_relative_path(&path)?;
+        mc_core::level_metadata::validate_relative_path(&path)?;
         if path == "level.dat"
             && stats.data_version == mc_world::anvil::upgrade::NATIVE_26_3_DATA_VERSION
         {
@@ -569,7 +569,7 @@ fn apply_block(
     chunk: &mut Chunk,
     (x, y, z): Cell,
     state: u32,
-    registry: &crate::registry::CoreRegistry,
+    registry: &mc_core::registry::CoreRegistry,
 ) -> Result<(), CoreError> {
     let lx = x.rem_euclid(16) as u8;
     let lz = z.rem_euclid(16) as u8;
@@ -585,7 +585,7 @@ fn apply_block(
         .by_id(previous)
         .ok_or_else(|| fail(format!("block ({x},{y},{z}): unknown stored state")))?;
     let same_family =
-        old.block.id == new.block.id || crate::copper::same_family(&old.block.id, &new.block.id);
+        old.block.id == new.block.id || mc_core::copper::same_family(&old.block.id, &new.block.id);
     if previous.0 != state {
         if !same_family {
             remove_block_entity(chunk, BlockPos { x, y, z });
@@ -627,7 +627,7 @@ fn apply_typed(
     chunk: &Chunk,
     (x, y, z): Cell,
     image: &ReplayBlockEntity,
-    registry: &crate::registry::CoreRegistry,
+    registry: &mc_core::registry::CoreRegistry,
 ) -> Result<(), CoreError> {
     use mc_data::block_entity_kinds::BlockEntityKind;
     let state = chunk
@@ -793,7 +793,7 @@ fn export_entities(
 }
 
 fn refresh_saved(
-    tags: &mut crate::level_metadata::MetadataTags,
+    tags: &mut mc_core::level_metadata::MetadataTags,
     path: String,
     mut fresh: Tag,
 ) -> Result<(), CoreError> {

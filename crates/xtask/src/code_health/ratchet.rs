@@ -26,11 +26,12 @@ pub(super) struct Ceilings {
 }
 
 pub(super) const CEILINGS: Ceilings = Ceilings {
-    // All set 2026-11-07 to the values measured on ffd52010 (Main HEAD) when
-    // the ratchets were introduced.
+    // Original ceilings measured on ffd52010, 2026-11-07.
     cycle_modules: 189,
-    vanilla_id_literals: 2_637,
-    path_equality: 115,
+    // Offline conversion/tools moved above core, 2026-11-08:
+    // canonical code-health measured 2617 literals and 114 path comparisons.
+    vanilla_id_literals: 2_617,
+    path_equality: 114,
     panics: 5,
     merge_block_write_pushes: 17,
 };

@@ -78,7 +78,7 @@ pub(crate) fn transform(blocks: &BlockRegistry, id: u32, age: u8, waxed: bool) -
         .map(|id| id.0)
 }
 
-pub(crate) fn same_family(a: &Identifier, b: &Identifier) -> bool {
+pub fn same_family(a: &Identifier, b: &Identifier) -> bool {
     family(a.path())
         .zip(family(b.path()))
         .is_some_and(|(a, b)| a.0 == b.0)

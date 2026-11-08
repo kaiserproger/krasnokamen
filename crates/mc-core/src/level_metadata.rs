@@ -10,7 +10,7 @@ use crate::weather::ClimateImage;
 type Fields = Vec<(String, Tag)>;
 
 /// Relative Anvil saved-data path to its complete, unknown-field-preserving NBT root.
-pub(crate) type MetadataTags = BTreeMap<String, Tag>;
+pub type MetadataTags = BTreeMap<String, Tag>;
 
 const BORDER_PATHS: [(crate::dimensions::Dimension, &str); 3] = [
     (
@@ -60,7 +60,7 @@ fn put(fields: &mut Fields, key: &str, value: Tag) {
 }
 
 /// Validate converter-owned relative paths without consulting the filesystem.
-pub(crate) fn validate_relative_path(path: &str) -> Result<(), CoreError> {
+pub fn validate_relative_path(path: &str) -> Result<(), CoreError> {
     if path.contains(['\\', '\0', ':'])
         || path
             .split('/')
@@ -71,7 +71,7 @@ pub(crate) fn validate_relative_path(path: &str) -> Result<(), CoreError> {
     Ok(())
 }
 
-pub(crate) fn to_tag(tags: &MetadataTags) -> Tag {
+pub fn to_tag(tags: &MetadataTags) -> Tag {
     Tag::Compound(
         tags.iter()
             .map(|(path, tag)| (path.clone(), tag.clone()))
@@ -79,7 +79,7 @@ pub(crate) fn to_tag(tags: &MetadataTags) -> Tag {
     )
 }
 
-pub(crate) fn from_tag(tag: &Tag) -> Result<MetadataTags, CoreError> {
+pub fn from_tag(tag: &Tag) -> Result<MetadataTags, CoreError> {
     let Tag::Compound(fields) = tag else {
         return Err(failure("level_metadata", "expected compound templates"));
     };
@@ -159,7 +159,7 @@ fn saved_data_mut<'a>(tags: &'a mut MetadataTags, path: &str) -> Result<&'a mut 
 }
 
 /// Import modern saved-data fields without reading or changing their templates.
-pub(crate) fn import_tags(
+pub fn import_tags(
     tags: &MetadataTags,
     manifest: &mut CheckpointManifest,
 ) -> Result<(), CoreError> {
@@ -371,7 +371,7 @@ pub(crate) fn import_tags(
 /// Refresh typed mutable fields in retained templates; no filesystem or clock IO.
 ///
 /// Unowned fields, including LevelName and LastPlayed, stay exactly as imported.
-pub(crate) fn checkpoint_tags(
+pub fn checkpoint_tags(
     tags: &mut MetadataTags,
     seed: i64,
     manifest: &CheckpointManifest,

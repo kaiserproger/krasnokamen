@@ -41,7 +41,7 @@ impl std::fmt::Display for ChunkLoadError {
 impl std::error::Error for ChunkLoadError {}
 
 /// Immutable inputs a worker needs: native coverage wins over worldgen.
-pub(crate) struct ChunkSource {
+pub struct ChunkSource {
     pub(crate) native: Option<Arc<NativeStore>>,
     pub(crate) dimension: u32,
     pub(crate) generator: Arc<dyn ChunkGenerator>,
@@ -54,6 +54,28 @@ pub(crate) struct ChunkSource {
 }
 
 impl ChunkSource {
+    /// Immutable native-store inputs shared by live and offline chunk workers.
+    pub fn new_native(
+        seed: i64,
+        store: Arc<NativeStore>,
+        dimension: u32,
+        generator: Arc<dyn ChunkGenerator>,
+        registry: &crate::registry::CoreRegistry,
+        geometry: mc_world::ChunkGeometry,
+    ) -> Self {
+        Self {
+            native: Some(store),
+            dimension,
+            generator,
+            registry: Arc::clone(&registry.blocks),
+            items: Arc::clone(&registry.items),
+            chest_loot: Arc::clone(&registry.chest_loot),
+            light: Arc::clone(&registry.light),
+            population: (dimension == 0).then(|| Population::new(seed, registry)),
+            geometry,
+        }
+    }
+
     /// Generate only when the native store reports no coverage. Failed reads
     /// remain failed, including imported all-air and malformed stored chunks.
     pub(crate) fn load_or_generate(&self, pos: ChunkPos) -> Result<Produced, ChunkLoadError> {
@@ -132,8 +154,8 @@ const JOBS_PER_WORKER: usize = 1;
 pub(crate) const READY_LOADS_MAX: usize = 32;
 
 /// One produced chunk and whether it was generated (not read from disk).
-pub(crate) type Produced = (Chunk, bool);
-pub(crate) type Ready = (ChunkPos, u64, Result<Produced, ChunkLoadError>);
+pub type Produced = (Chunk, bool);
+pub type Ready = (ChunkPos, u64, Result<Produced, ChunkLoadError>);
 
 /// One finished load: position, the request's ticket, and the load result
 /// (or the worker's panic, resumed on the tick thread).
@@ -143,9 +165,9 @@ pub(crate) type Loaded = (
     std::thread::Result<Result<Produced, ChunkLoadError>>,
 );
 
-/// Fixed pool of chunk workers; the tick thread is the only producer of
-/// jobs and the only consumer of results.
-pub(crate) struct ChunkLoader {
+/// Fixed pool of chunk workers with one producer of jobs and one consumer of
+/// results, used by both the live world and offline pregeneration.
+pub struct ChunkLoader {
     /// Per-worker bounded job queues: the bound, not bookkeeping, keeps at
     /// most [`JOBS_PER_WORKER`] requests queued at a worker.
     jobs: Vec<mpsc::SyncSender<(ChunkPos, u64)>>,
@@ -156,7 +178,7 @@ pub(crate) struct ChunkLoader {
 }
 
 impl ChunkLoader {
-    pub(crate) fn spawn(source: Arc<ChunkSource>, workers: usize) -> Self {
+    pub fn spawn(source: Arc<ChunkSource>, workers: usize) -> Self {
         let (done_tx, done) = tokio::sync::mpsc::unbounded_channel();
         let mut jobs = Vec::new();
         let mut handles = Vec::new();
@@ -191,7 +213,7 @@ impl ChunkLoader {
 
     /// Hand one request to the first worker with queue room, starting after
     /// the last one used. Never blocks; `false` when every queue is full.
-    pub(crate) fn try_submit(&mut self, pos: ChunkPos, ticket: u64, ready: usize) -> bool {
+    pub fn try_submit(&mut self, pos: ChunkPos, ticket: u64, ready: usize) -> bool {
         if self.pending + ready >= READY_LOADS_MAX {
             return false;
         }
@@ -217,12 +239,12 @@ impl ChunkLoader {
         out
     }
 
-    pub(crate) fn pending(&self) -> usize {
+    pub fn pending(&self) -> usize {
         self.pending
     }
 
-    /// Block until the next finished load (tests; never on the tick).
-    pub(crate) fn recv(&mut self) -> Ready {
+    /// Block until the next finished load (offline tools/tests; never on the tick).
+    pub fn recv(&mut self) -> Ready {
         self.pending -= 1;
         unwrap_loaded(
             self.done

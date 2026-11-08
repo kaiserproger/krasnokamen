@@ -38,13 +38,13 @@ pub(crate) fn row_key(id: SettlementId) -> String {
 /// per global id, keyed canonically; never an aggregate registry blob.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Row<T = SettlementRecord> {
+pub struct Row<T = SettlementRecord> {
     pub dimension: crate::dimensions::Dimension,
     pub value: T,
 }
 
 /// Parse a canonical `settlement/<u64>` key: nonzero, no leading zeros.
-pub(crate) fn parse_row_key(key: &str) -> Option<SettlementId> {
+pub fn parse_row_key(key: &str) -> Option<SettlementId> {
     let suffix = key.strip_prefix("settlement/")?;
     if suffix.is_empty() || suffix.len() > 20 {
         return None;
@@ -199,7 +199,7 @@ pub(crate) fn hydrate_dimension(
 
 /// Decode the durable allocator sequence row. Tombstones and live images' settlement tombstones
 /// ride the WAL tail (Replay settlements / settlement_removed).
-pub(crate) fn checkpoint_sequence(
+pub fn checkpoint_sequence(
     checkpoint: &BTreeMap<String, NativeDomainRecord>,
     tick: u64,
 ) -> Result<u64, CoreError> {

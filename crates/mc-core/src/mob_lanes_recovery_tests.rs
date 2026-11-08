@@ -48,7 +48,7 @@ fn checkpoint(
 }
 
 #[test]
-fn wandering_trader_native_checkpoint_wal_restart_and_anvil_roundtrip() {
+fn wandering_trader_native_checkpoint_wal_restart_and_despawn() {
     let root = tempfile::tempdir().unwrap();
     let (mut state, _, resident) = crate::raids::tests::fixture(Some(root.path()));
     state.remove_entity(state.entities.slot_of(resident).unwrap());
@@ -107,7 +107,7 @@ fn wandering_trader_native_checkpoint_wal_restart_and_anvil_roundtrip() {
     drop(writer);
     let clock = restarted.trader_spawner;
     drop(restarted);
-    let recovered = recover_dimension_state(&config, Dimension::Overworld).unwrap();
+    let mut recovered = recover_dimension_state(&config, Dimension::Overworld).unwrap();
     assert_eq!(recovered.trader_spawner, clock);
     assert_eq!(
         recovered
@@ -117,34 +117,8 @@ fn wandering_trader_native_checkpoint_wal_restart_and_anvil_roundtrip() {
             .as_ref(),
         Some(&expected)
     );
-    drop(recovered);
     drop(state);
 
-    let parent = tempfile::tempdir().unwrap();
-    let export = parent.path().join("java");
-    crate::world_conversion::export_anvil(
-        &config,
-        root.path(),
-        &export,
-        &parent.path().join("export.json"),
-    )
-    .unwrap();
-    let imported = parent.path().join("native");
-    crate::world_conversion::import_anvil(
-        &config,
-        &export,
-        &imported,
-        &parent.path().join("import.json"),
-    )
-    .unwrap();
-    let imported_config = CoreConfig::new(imported, 42);
-    let mut recovered = recover_dimension_state(&imported_config, Dimension::Overworld).unwrap();
-    assert_eq!(recovered.trader_spawner, clock);
-    let trader = recovered.entities.slot_of_uuid(owner).unwrap();
-    assert_eq!(
-        recovered.entities.row(trader).villager.as_ref(),
-        Some(&expected)
-    );
     let deadline = expected.despawn_at.unwrap();
     recovered
         .gamerules

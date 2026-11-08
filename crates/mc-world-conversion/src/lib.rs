@@ -21,13 +21,19 @@ mod import;
 #[cfg(test)]
 mod old_world_import_tests;
 #[cfg(test)]
+mod projectile_import_tests;
+#[cfg(test)]
+mod recovery_roundtrip_tests;
+#[cfg(test)]
 mod roundtrip_tests;
+#[cfg(test)]
+mod test_support;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod v263_tests;
 
-use crate::{CoreConfig, CoreError};
+use mc_core::{CoreConfig, CoreError};
 use mc_nbt::Tag;
 use mc_world::anvil::upgrade::{RecordKind, UpgradeReport};
 use serde::{Deserialize, Serialize};
@@ -37,7 +43,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub(super) struct ConversionStats {
+struct ConversionStats {
     pub data_version: i32,
     pub tick: u64,
     pub durable_tick: u64,
@@ -62,7 +68,7 @@ pub(super) struct ConversionStats {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct DuplicateUuidDrop {
+struct DuplicateUuidDrop {
     pub source: PathBuf,
     pub chunk: [i32; 2],
     pub entity_index: usize,
@@ -326,7 +332,7 @@ fn convert(
                     dropped.entity_index, dropped.uuid, artifact.display(),
                 ));
             }
-            crate::journal::fsync_dir(&archive).map_err(fail)?;
+            mc_core::journal::fsync_dir(&archive).map_err(fail)?;
             fs::remove_dir_all(stage.join("duplicate-uuid-dropped")).map_err(fail)?;
         }
         receipt.output_hashes = hashes(&stage)?;
@@ -398,7 +404,7 @@ fn convert(
         }
         publish_no_replace(&stage, &destination).map_err(fail)?;
         staging = None;
-        crate::journal::fsync_dir(&parent).map_err(fail)?;
+        mc_core::journal::fsync_dir(&parent).map_err(fail)?;
         receipt.status = "PASS".into();
         Ok(())
     })();
@@ -425,7 +431,7 @@ fn convert(
     Ok(receipt)
 }
 
-pub(super) fn fail(error: impl std::fmt::Display) -> CoreError {
+fn fail(error: impl std::fmt::Display) -> CoreError {
     CoreError::Storage(format!("world conversion: {error}"))
 }
 
@@ -488,11 +494,11 @@ impl JavaLease {
     }
 }
 
-pub(super) fn safe_extra_path(path: &Path) -> bool {
+fn safe_extra_path(path: &Path) -> bool {
     let Some(path) = path.to_str() else {
         return false;
     };
-    crate::level_metadata::validate_relative_path(path).is_ok()
+    mc_core::level_metadata::validate_relative_path(path).is_ok()
         && (path == "icon.png"
             || path == "level.dat_old"
             || path == "resourcepacks/resources.zip"
@@ -505,11 +511,11 @@ pub(super) fn safe_extra_path(path: &Path) -> bool {
 }
 
 /// Vanilla4772 storage moves; never rewrite or infer saved-data contents.
-pub(super) fn auxiliary_destination(path: &Path) -> Result<PathBuf, CoreError> {
+fn auxiliary_destination(path: &Path) -> Result<PathBuf, CoreError> {
     let name = path
         .to_str()
         .ok_or_else(|| fail("non-UTF8 auxiliary path"))?;
-    crate::level_metadata::validate_relative_path(name)?;
+    mc_core::level_metadata::validate_relative_path(name)?;
     if name == "resources.zip" {
         return Ok("resourcepacks/resources.zip".into());
     }
@@ -624,7 +630,7 @@ pub(super) fn auxiliary_destination(path: &Path) -> Result<PathBuf, CoreError> {
             })
         {
             let destination = format!("data/{namespace}/command_storage.dat");
-            crate::level_metadata::validate_relative_path(&destination)?;
+            mc_core::level_metadata::validate_relative_path(&destination)?;
             return Ok(destination.into());
         }
     }
@@ -662,7 +668,7 @@ fn validate_poi_filename(filename: &str) -> Result<(), CoreError> {
     Ok(())
 }
 
-pub(super) fn files(root: &Path) -> Result<Vec<PathBuf>, CoreError> {
+fn files(root: &Path) -> Result<Vec<PathBuf>, CoreError> {
     fn walk(root: &Path, relative: &Path, out: &mut Vec<PathBuf>) -> Result<(), CoreError> {
         let mut entries = fs::read_dir(root.join(relative))
             .map_err(fail)?
@@ -678,7 +684,7 @@ pub(super) fn files(root: &Path) -> Result<Vec<PathBuf>, CoreError> {
             if kind.is_dir() {
                 walk(root, &path, out)?;
             } else if kind.is_file() {
-                crate::level_metadata::validate_relative_path(
+                mc_core::level_metadata::validate_relative_path(
                     path.to_str().ok_or_else(|| fail("non-UTF8 source path"))?,
                 )?;
                 out.push(path);
@@ -723,7 +729,7 @@ fn hashes(root: &Path) -> Result<BTreeMap<String, String>, CoreError> {
     }
     Ok(out)
 }
-pub(super) fn read_nbt(path: &Path) -> Result<Tag, CoreError> {
+fn read_nbt(path: &Path) -> Result<Tag, CoreError> {
     // Vanilla `SavedDataStorage.readTagFromDisk` sniffs the gzip magic
     // (`isGzip` on the first two bytes) and falls back to raw named NBT.
     // Field proof: `data/minecraft/maps/last_id.dat` in genuine 26.1.2
@@ -750,7 +756,7 @@ pub(super) fn read_nbt(path: &Path) -> Result<Tag, CoreError> {
     }
     Ok(tag)
 }
-pub(super) fn write_nbt(path: &Path, tag: &Tag) -> Result<(), CoreError> {
+fn write_nbt(path: &Path, tag: &Tag) -> Result<(), CoreError> {
     fs::create_dir_all(
         path.parent()
             .ok_or_else(|| fail("NBT path has no parent"))?,
@@ -769,7 +775,7 @@ pub(super) fn write_nbt(path: &Path, tag: &Tag) -> Result<(), CoreError> {
 }
 /// Read the declared version without treating opaque record fields as a schema.
 /// No floor or ceiling: per-kind range gates live with the callers.
-pub(super) fn declared_version(tag: &Tag, path: &Path) -> Result<i32, CoreError> {
+fn declared_version(tag: &Tag, path: &Path) -> Result<i32, CoreError> {
     let Tag::Compound(root) = tag else {
         return Err(fail(format!("{}: expected compound", path.display())));
     };
@@ -823,7 +829,7 @@ pub(super) fn declared_version(tag: &Tag, path: &Path) -> Result<i32, CoreError>
 
 /// World-record source version: declared version gated to the region/level
 /// floor (>= 2586) through the target.
-pub(super) fn source_version(tag: &Tag, path: &Path) -> Result<i32, CoreError> {
+fn source_version(tag: &Tag, path: &Path) -> Result<i32, CoreError> {
     let version = declared_version(tag, path)?;
     if version != mc_world::anvil::upgrade::NATIVE_26_3_DATA_VERSION
         && !(mc_world::anvil::upgrade::MIN_DATA_VERSION..=mc_world::anvil::TARGET_DATA_VERSION)
@@ -843,7 +849,7 @@ pub(super) fn source_version(tag: &Tag, path: &Path) -> Result<i32, CoreError> {
 /// proved in legacy-player-map-oracle.md); explicit stamps pass through
 /// (the per-kind floor, players accept -1, lives in mc-world's upgrade
 /// module). Stamps above target always fail closed.
-pub(super) fn player_source_version(tag: &Tag, path: &Path) -> Result<i32, CoreError> {
+fn player_source_version(tag: &Tag, path: &Path) -> Result<i32, CoreError> {
     let version = match declared_version(tag, path) {
         Ok(version) => version,
         Err(error) if error.to_string().ends_with("missing DataVersion") => {
@@ -868,7 +874,7 @@ pub(super) fn player_source_version(tag: &Tag, path: &Path) -> Result<i32, CoreE
 /// data has no 2586 floor. This only identifies the source envelope; callers
 /// still either execute their specific upgrade or retain it explicitly deferred.
 /// Official 26.1.2 bytecode: aux-dataversion-javap.txt:234-245.
-pub(super) fn saved_data_source_version(tag: &Tag, path: &Path) -> Result<i32, CoreError> {
+fn saved_data_source_version(tag: &Tag, path: &Path) -> Result<i32, CoreError> {
     let version = match declared_version(tag, path) {
         Ok(version) => version,
         Err(error) if error.to_string().ends_with("missing DataVersion") => 1343,
@@ -897,7 +903,7 @@ pub(super) fn saved_data_source_version(tag: &Tag, path: &Path) -> Result<i32, C
 /// their stored version instead of demanding an exact 4790 stamp; stay
 /// fail-closed for newer-than-target stamps and for payloads a newer fixer
 /// actually rewrites.
-pub(super) fn check_version(tag: &Tag, path: &Path) -> Result<(), CoreError> {
+fn check_version(tag: &Tag, path: &Path) -> Result<(), CoreError> {
     let version = source_version(tag, path)?;
     let name = path
         .file_name()
@@ -945,7 +951,7 @@ fn sync_tree(root: &Path) -> Result<(), CoreError> {
                 directories(&entry.path())?;
             }
         }
-        crate::journal::fsync_dir(path).map_err(fail)
+        mc_core::journal::fsync_dir(path).map_err(fail)
     }
     directories(root)
 }
@@ -965,5 +971,5 @@ fn write_receipt<T: Serialize>(path: &Path, receipt: &T) -> Result<(), CoreError
     file.write_all(b"\n").map_err(fail)?;
     file.sync_all().map_err(fail)?;
     fs::rename(&temp, path).map_err(fail)?;
-    crate::journal::fsync_dir(parent).map_err(fail)
+    mc_core::journal::fsync_dir(parent).map_err(fail)
 }

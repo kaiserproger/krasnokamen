@@ -10,7 +10,7 @@ fn destination_exists_refuses_and_writes_failure_receipt() {
     fs::write(destination.join("owner-data"), b"unchanged").unwrap();
     let receipt = dir.path().join("receipt.json");
     let result = import_anvil(
-        &CoreConfig::new(source.clone(), 0),
+        &crate::test_support::config(source.clone(), 0),
         &source,
         &destination,
         &receipt,
@@ -236,7 +236,7 @@ fn raids_2586_pascalcase_upgrades_to_codec_fields() {
     ]);
     // Full entry still fails the typed reader (missing required raid
     // fields), proving the helper renames without fabricating data.
-    assert!(crate::raids::from_nbt(&tag).is_err());
+    assert!(mc_core::raids::from_nbt(&tag).is_err());
     // Empty raid list decodes once renamed.
     let mut empty = vec![
         (
@@ -255,7 +255,7 @@ fn raids_2586_pascalcase_upgrades_to_codec_fields() {
         ("data".into(), Tag::Compound(empty)),
         ("DataVersion".into(), Tag::Int(2586)),
     ]);
-    let raids = crate::raids::from_nbt(&tag).expect("upgraded raids must decode");
+    let raids = mc_core::raids::from_nbt(&tag).expect("upgraded raids must decode");
     assert_eq!(raids.next_id, 1);
     assert!(raids.raids.is_empty());
     // Already-current payloads are untouched.
@@ -392,12 +392,12 @@ fn destination_created_during_conversion_is_never_overwritten() {
 fn complete_but_unpublished_native_staging_never_admits_runtime() {
     let dir = tempfile::tempdir().unwrap();
     let staging = dir.path().join(".solaris-conversion-interrupted");
-    let config = CoreConfig::new(staging.clone(), 42);
-    drop(crate::native_checkpoint::tests::fixture_store(&config).unwrap());
+    let config = crate::test_support::config(staging.clone(), 42);
+    drop(crate::test_support::fixture_store(&config).unwrap());
     let before = hashes(&staging).unwrap();
     let database = staging.join("native/state.redb");
     let modified = fs::metadata(&database).unwrap().modified().unwrap();
-    let error = match crate::Core::open(config) {
+    let error = match mc_core::Core::open(config) {
         Ok(core) => {
             core.shutdown();
             panic!("unpublished converter staging admitted");
@@ -414,7 +414,7 @@ fn complete_but_unpublished_native_staging_never_admits_runtime() {
     {
         let alias = dir.path().join("ordinary-world-name");
         std::os::unix::fs::symlink(&staging, &alias).unwrap();
-        let error = match crate::Core::open(CoreConfig::new(alias, 42)) {
+        let error = match mc_core::Core::open(crate::test_support::config(alias, 42)) {
             Ok(core) => {
                 core.shutdown();
                 panic!("staging alias admitted");

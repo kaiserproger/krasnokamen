@@ -2,8 +2,8 @@
 //! stored item entity all come from the checkpoint image, never from live state.
 use super::probe::{ProbeBlock, ProbeEntity, ProbeItem};
 use super::*;
-use crate::journal::{JournalWriter, ReplayPlayer, player_to_tag};
-use crate::native_checkpoint::tests::{fixture_store, read_manifest, write_manifest};
+use crate::test_support::{fixture_store, read_manifest, write_manifest};
+use mc_core::journal::{JournalWriter, ReplayPlayer, player_to_tag};
 use mc_nbt::Tag;
 use mc_world::native::{NativeCheckpoint, NativeEntitySnapshot, NativePlayerSnapshot};
 use mc_world::{BlockPos, BlockStateId, ChestBlockEntity, Chunk, ChunkPos, FurnaceSlot};
@@ -15,7 +15,7 @@ fn identifier(value: &str) -> mc_data::Identifier {
     mc_data::Identifier::parse(value).expect("identifier")
 }
 
-fn dirt(registry: &crate::registry::CoreRegistry, count: i32) -> mc_data::ItemStack {
+fn dirt(registry: &mc_core::registry::CoreRegistry, count: i32) -> mc_data::ItemStack {
     mc_data::ItemStack {
         count,
         item_id: registry
@@ -38,10 +38,10 @@ struct Fixture {
 fn world(inventory: Vec<mc_data::ItemStack>, dropped: Option<mc_data::ItemStack>) -> Fixture {
     let dir = tempfile::tempdir().unwrap();
     let world = dir.path().join("world");
-    let config = CoreConfig::new(world.clone(), SEED);
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let config = crate::test_support::config(world.clone(), SEED);
+    let registry = crate::test_support::registry().unwrap();
     let store = fixture_store(&config).unwrap();
-    write_manifest(&config, &read_manifest(&config).unwrap()).unwrap();
+    write_manifest(&config, &store, &read_manifest(&store).unwrap()).unwrap();
     let barrel = registry
         .blocks
         .by_name_and_props(
@@ -86,7 +86,7 @@ fn world(inventory: Vec<mc_data::ItemStack>, dropped: Option<mc_data::ItemStack>
     let mut player = ReplayPlayer {
         opaque_player_fields: Vec::new(),
         statistics: Default::default(),
-        advancement_progress: crate::journal::empty_advancement_progress(),
+        advancement_progress: std::sync::Arc::new(serde_json::json!({})),
         unlocked_recipes: Default::default(),
         dimension: Default::default(),
         pos: [0.5, 80.0, 0.5],
@@ -125,7 +125,7 @@ fn world(inventory: Vec<mc_data::ItemStack>, dropped: Option<mc_data::ItemStack>
     }
     let players = vec![NativePlayerSnapshot {
         uuid: *uuid::Uuid::from_u128(0x50).as_bytes(),
-        record: crate::native_checkpoint::tag_record(
+        record: mc_core::native_checkpoint::tag_record(
             tick,
             &player_to_tag(&player, &registry.items).unwrap(),
         )
@@ -185,7 +185,7 @@ fn read(path: &Path) -> ProbeReceipt {
 
 #[test]
 fn probe_reports_grave_slots_player_inventory_and_stored_drops() {
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let fixture = world(vec![dirt(&registry, 2)], Some(dirt(&registry, 3)));
     let before = hashes(&fixture.world).unwrap();
     let out = tempfile::tempdir().unwrap();
@@ -284,7 +284,7 @@ fn probe_refuses_missing_native_world_without_touching_source() {
     let out = tempfile::tempdir().unwrap();
     let path = out.path().join("p.json");
     let error = probe_native(
-        &CoreConfig::new(source.clone(), SEED),
+        &crate::test_support::config(source.clone(), SEED),
         &source,
         &[GRAVE],
         &path,

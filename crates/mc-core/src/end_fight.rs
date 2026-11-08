@@ -14,9 +14,8 @@ use crate::tick::TickState;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub(crate) use persistence::{
-    entity_fields, from_nbt, hydrate_native_entity, native_appearance, to_nbt,
-};
+pub(crate) use persistence::{entity_fields, hydrate_native_entity, native_appearance};
+pub use persistence::{from_nbt, to_nbt};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(i32)]

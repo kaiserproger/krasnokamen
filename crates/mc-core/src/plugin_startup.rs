@@ -33,7 +33,7 @@ use crate::registry::CoreRegistry;
 /// declarations (ADR 0018, see `carrier_blocks`); physical item mechanics use the native execution validator.
 /// Items must have an owner-authorized client bundle; the network additionally
 /// validates exact item/carrier/name artifact identities before admitting clients.
-pub(crate) fn apply(
+pub fn apply(
     registry: &mut CoreRegistry,
     contribution: &DeploymentContribution,
     ore_profile: Option<PluginWorldgenOreProfile>,
@@ -193,7 +193,7 @@ pub(crate) fn apply(
 /// Discovery order, artifact paths and package versions are not world policy.
 /// UI-only client artifacts likewise do not change native generation/gameplay;
 /// their exact catalog is validated separately by the Loader before binding.
-pub(crate) fn world_identity(registry: &CoreRegistry) -> Result<Vec<u8>, CoreError> {
+pub fn world_identity(registry: &CoreRegistry) -> Result<Vec<u8>, CoreError> {
     #[derive(serde::Serialize)]
     struct ItemIdentity<'a> {
         id: &'a Identifier,

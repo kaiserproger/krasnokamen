@@ -1,7 +1,7 @@
 use super::*;
-use crate::dimensions::Dimension;
-use crate::journal::CheckpointManifest;
-use crate::native_checkpoint as bridge;
+use mc_core::dimensions::Dimension;
+use mc_core::journal::CheckpointManifest;
+use mc_core::native_checkpoint as bridge;
 use mc_data::entity_nbt::{VanillaEntity, entity_from_fields};
 use mc_data::player_nbt::{VanillaPlayer, player_from_fields};
 use mc_nbt::{ListTag, tag_type};
@@ -609,7 +609,7 @@ fn embedded_owner_player_wins_over_external_copy_with_receipt() {
     )
     .unwrap();
     let original = hashes(&source).unwrap();
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     let receipt =
         import_anvil(&config, &source, &native, &temp.path().join("receipt.json")).unwrap();
     assert_eq!(receipt.counts["players"], 1);
@@ -676,7 +676,7 @@ fn versionless_player_runs_full_legacy_chain_with_numeric_items() {
     .unwrap();
     let original = hashes(&source).unwrap();
     let receipt = import_anvil(
-        &CoreConfig::new(native.clone(), 42),
+        &crate::test_support::config(native.clone(), 42),
         &source,
         &native,
         &temp.path().join("receipt.json"),
@@ -692,7 +692,7 @@ fn versionless_player_runs_full_legacy_chain_with_numeric_items() {
     assert_eq!(upgrade.to, 4790);
     let store = NativeStore::open(
         &native.join("native/state.redb"),
-        bridge::native_identity(&CoreConfig::new(native.clone(), 42)),
+        bridge::native_identity(&crate::test_support::config(native.clone(), 42)),
     )
     .unwrap();
     let checkpoint = store.read_checkpoint().unwrap();
@@ -729,7 +729,7 @@ fn real_versionless_player_without_egg_tag_imports_and_exports_mooshroom_egg() {
     fs::create_dir_all(source.join("players/data")).unwrap();
     fs::write(source.join(&relative), &real_bytes).unwrap();
     let original = hashes(&source).unwrap();
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     let receipt =
         import_anvil(&config, &source, &native, &temp.path().join("import.json")).unwrap();
     assert_eq!(receipt.status, "PASS");
@@ -739,7 +739,7 @@ fn real_versionless_player_without_egg_tag_imports_and_exports_mooshroom_egg() {
         .find(|entry| entry.record == relative.to_str().unwrap())
         .unwrap();
     assert_eq!((upgraded.from, upgraded.to), (-1, 4790));
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let egg_id = registry
         .items
         .id_of(&mc_data::Identifier::parse("minecraft:mooshroom_spawn_egg").unwrap())
@@ -840,7 +840,7 @@ fn original_saved_data_unversioned_envelopes_roundtrip_without_source_mutation()
         retained.push((relative.clone(), fs::read(source.join(relative)).unwrap()));
     }
     let original = hashes(&source).unwrap();
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     let receipt =
         import_anvil(&config, &source, &native, &temp.path().join("import.json")).unwrap();
     assert_eq!(receipt.status, "PASS");
@@ -919,7 +919,7 @@ fn original_saved_data_unversioned_envelopes_roundtrip_without_source_mutation()
         write_nbt(&source.join(format!("data/{name}.dat")), &tag).unwrap();
         let before = hashes(&source).unwrap();
         let error = import_anvil(
-            &CoreConfig::new(native.clone(), 42),
+            &crate::test_support::config(native.clone(), 42),
             &source,
             &native,
             &temp.path().join("refused.json"),
@@ -952,12 +952,12 @@ fn original_saved_data_real_records_upgrade_and_decode_read_only() {
 }
 
 fn real_input_records_upgrade_and_decode_read_only(root: &Path) {
-    use crate::dimensions::Dimension;
+    use mc_core::dimensions::Dimension;
     use mc_world::anvil::upgrade;
     assert!(root.is_dir(), "requires {}", root.display());
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let mut failures = Vec::new();
-    let mut metadata = crate::level_metadata::MetadataTags::new();
+    let mut metadata = mc_core::level_metadata::MetadataTags::new();
     let mut counts = BTreeMap::<&str, usize>::new();
     let mut losses = Vec::new();
     let mut manifest = CheckpointManifest::default();
@@ -1000,7 +1000,7 @@ fn real_input_records_upgrade_and_decode_read_only(root: &Path) {
                 upgrade::upgrade_player(&mut tag, from).map_err(fail)?;
                 if source_location.is_some() {
                     if manifest.world_spawn.is_none() {
-                        crate::level_metadata::import_tags(&metadata, &mut manifest)?;
+                        mc_core::level_metadata::import_tags(&metadata, &mut manifest)?;
                     }
                     let retained = |tag: &Tag| {
                         fields(tag)
@@ -1025,7 +1025,7 @@ fn real_input_records_upgrade_and_decode_read_only(root: &Path) {
                         assert!(absent(&tag, "respawn"));
                     }
                 }
-                let player = crate::journal::player_from_tag(&tag, &registry.items)?;
+                let player = mc_core::journal::player_from_tag(&tag, &registry.items)?;
                 if player.pos.iter().any(|value| !value.is_finite())
                     || !player.yaw.is_finite()
                     || !player.pitch.is_finite()
@@ -1047,7 +1047,7 @@ fn real_input_records_upgrade_and_decode_read_only(root: &Path) {
                         *counts.entry("deferred_saved_data").or_default() += 1;
                         return Ok(());
                     }
-                    crate::scoreboard::Scoreboard::from_nbt(&tag).map_err(fail)?;
+                    mc_core::scoreboard::Scoreboard::from_nbt(&tag).map_err(fail)?;
                 } else if matches!(
                     destination.file_name().and_then(|name| name.to_str()),
                     Some("raids.dat" | "ender_dragon_fight.dat")
@@ -1069,12 +1069,12 @@ fn real_input_records_upgrade_and_decode_read_only(root: &Path) {
                             .find(|(key, _)| key == "DataVersion")
                             .unwrap();
                         *stamp = Tag::Int(mc_world::anvil::TARGET_DATA_VERSION);
-                        crate::raids::from_nbt(&tag).map_err(fail)?;
+                        mc_core::raids::from_nbt(&tag).map_err(fail)?;
                     } else if from == mc_world::anvil::TARGET_DATA_VERSION {
                         if raids {
-                            crate::raids::from_nbt(&tag).map_err(fail)?;
+                            mc_core::raids::from_nbt(&tag).map_err(fail)?;
                         } else {
-                            crate::end_fight::from_nbt(&tag).map_err(fail)?;
+                            mc_core::end_fight::from_nbt(&tag).map_err(fail)?;
                         }
                     } else {
                         // Exactly like the importer: retain old typed-owner
@@ -1107,7 +1107,7 @@ fn real_input_records_upgrade_and_decode_read_only(root: &Path) {
         }
         assert_eq!(fs::read(&path).unwrap(), before, "{}", path.display());
     }
-    if let Err(error) = crate::level_metadata::import_tags(&metadata, &mut manifest) {
+    if let Err(error) = mc_core::level_metadata::import_tags(&metadata, &mut manifest) {
         failures.push(format!("metadata typed decode: {error}"));
     }
     eprintln!(
@@ -1147,7 +1147,7 @@ fn saved_maps_upgrade_activates_native_rows_and_exports_without_source_mutation(
     write_nbt(&source.join("data/map_7.dat"), &legacy_map).unwrap();
     let original_bytes = fs::read(source.join("data/map_7.dat")).unwrap();
     let original = hashes(&source).unwrap();
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     let receipt =
         import_anvil(&config, &source, &native, &temp.path().join("receipt.json")).unwrap();
     assert_eq!(receipt.status, "PASS");
@@ -1167,10 +1167,10 @@ fn saved_maps_upgrade_activates_native_rows_and_exports_without_source_mutation(
     assert!(
         matches!(&extras,Tag::Compound(fields) if fields.iter().all(|(key,_)| key != "data/minecraft/maps/7.dat"))
     );
-    let maps = crate::maps::recover(&checkpoint.globals).unwrap();
+    let maps = mc_core::maps::recover(&checkpoint.globals).unwrap();
     assert_eq!(maps[&7].dimension, Dimension::Overworld);
     assert_eq!(maps[&7].colors.len(), 16384);
-    assert_eq!(crate::maps::sequence(&checkpoint.globals).unwrap(), 8);
+    assert_eq!(mc_core::maps::sequence(&checkpoint.globals).unwrap(), 8);
     drop(checkpoint);
     drop(store);
     let output = temp.path().join("exported");
@@ -1210,7 +1210,7 @@ fn stamped_legacy_embedded_player_uses_own_chain() {
     write_nbt(&source.join("level.dat"), &level).unwrap();
     write_legacy_region(&source, "region", &legacy_chunk());
     let receipt = import_anvil(
-        &CoreConfig::new(native.clone(), 42),
+        &crate::test_support::config(native.clone(), 42),
         &source,
         &native,
         &temp.path().join("receipt.json"),
@@ -1237,7 +1237,7 @@ fn embedded_owner_does_not_allow_duplicate_external_player_locations() {
     )
     .unwrap();
     let error = import_anvil(
-        &CoreConfig::new(native.clone(), 42),
+        &crate::test_support::config(native.clone(), 42),
         &source,
         &native,
         &temp.path().join("receipt.json"),
@@ -1269,7 +1269,7 @@ fn embedded_owner_does_not_mask_external_player_identity_mismatch() {
     )
     .unwrap();
     let error = import_anvil(
-        &CoreConfig::new(native.clone(), 42),
+        &crate::test_support::config(native.clone(), 42),
         &source,
         &native,
         &temp.path().join("receipt.json"),
@@ -1310,7 +1310,7 @@ fn java118_old_layout_import_anvil_upgrades_all_records_and_native_readback() {
         })
         .collect();
     let original_hashes = hashes(&source).unwrap();
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     let receipt = import_anvil(&config, &source, &native, &receipt_path).unwrap();
     assert_eq!(receipt.status, "PASS");
     assert_eq!(receipt.operation, "import-anvil");
@@ -1463,7 +1463,7 @@ fn java118_old_layout_import_anvil_upgrades_all_records_and_native_readback() {
     saved_paths.sort_unstable();
     assert_eq!(saved_paths, expected_saved_paths);
 
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let store = NativeStore::open(
         &native.join("native/state.redb"),
         bridge::native_identity(&config),
@@ -1475,7 +1475,7 @@ fn java118_old_layout_import_anvil_upgrades_all_records_and_native_readback() {
         serde_json::from_slice(&checkpoint.globals["checkpoint"].payload).unwrap();
     // Raids custody: the 2860 PascalCase payload (NextAvailableID 4,
     // Tick 19, empty Raids) upgraded to codec fields per dimension.
-    use crate::dimensions::Dimension;
+    use mc_core::dimensions::Dimension;
     for dimension in [Dimension::Overworld, Dimension::Nether, Dimension::End] {
         let dimension_manifest = if dimension == Dimension::Overworld {
             &manifest
@@ -1498,7 +1498,7 @@ fn java118_old_layout_import_anvil_upgrades_all_records_and_native_readback() {
         );
     }
     assert_eq!(manifest.domain_versions, bridge::domain_versions());
-    assert_eq!(manifest.difficulty, crate::survival::Difficulty::Hard);
+    assert_eq!(manifest.difficulty, mc_core::survival::Difficulty::Hard);
     assert_eq!(manifest.world_spawn, Some([12, 75, -45]));
     assert_eq!(manifest.world_spawn_rotation, [90.0, 0.0]);
     let climate = manifest.climate.unwrap();
@@ -1516,7 +1516,7 @@ fn java118_old_layout_import_anvil_upgrades_all_records_and_native_readback() {
     assert_eq!(manifest.border.size, 59_999_968.0);
     let metadata_tag =
         bridge::decode_tag(&checkpoint.globals["level_metadata"], "level_metadata").unwrap();
-    let metadata = crate::level_metadata::from_tag(&metadata_tag).unwrap();
+    let metadata = mc_core::level_metadata::from_tag(&metadata_tag).unwrap();
     for path in expected_saved_paths {
         assert_eq!(
             field(&metadata[path], "DataVersion"),
@@ -1703,8 +1703,8 @@ fn java118_old_layout_import_anvil_upgrades_all_records_and_native_readback() {
     let source_map = read_nbt(&source.join(map_source_path)).unwrap();
     let exported_map = read_nbt(&output.join(map_canonical_path)).unwrap();
     assert_eq!(field(&exported_map, "DataVersion"), &Tag::Int(4790));
-    let source_map = crate::maps::nbt::from_tag(&source_map).unwrap();
-    let exported_map = crate::maps::nbt::from_tag(&exported_map).unwrap();
+    let source_map = mc_core::maps::nbt::from_tag(&source_map).unwrap();
+    let exported_map = mc_core::maps::nbt::from_tag(&exported_map).unwrap();
     assert_eq!(exported_map.colors, source_map.colors);
     assert_eq!(exported_map.center, source_map.center);
     assert_eq!(exported_map.scale, source_map.scale);
@@ -1796,7 +1796,7 @@ fn modern_layout_poi_with_mixed_old_versions_is_preserved_byte_exact() {
     }
     let original = fs::read(source.join(poi_path)).unwrap();
     let original_hashes = hashes(&source).unwrap();
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     let receipt = import_anvil(
         &config,
         &source,
@@ -1872,7 +1872,7 @@ fn legacy_auxiliary_canonical_collisions_fail_without_mutating_source() {
         write_nbt(&source.join(canonical), &tag).unwrap();
         let original_hashes = hashes(&source).unwrap();
         let result = import_anvil(
-            &CoreConfig::new(native.clone(), 42),
+            &crate::test_support::config(native.clone(), 42),
             &source,
             &native,
             &temp.path().join("import-receipt.json"),
@@ -1884,7 +1884,7 @@ fn legacy_auxiliary_canonical_collisions_fail_without_mutating_source() {
 
 #[test]
 fn non_full_empty_import_regenerates_but_non_air_import_keeps_terrain() {
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     for (has_blocks, has_payload, fluid) in [
         (false, false, "minecraft:empty"),
         (true, false, "minecraft:empty"),
@@ -1967,7 +1967,7 @@ fn non_full_empty_import_regenerates_but_non_air_import_keeps_terrain() {
         }
         write_legacy_region(&source, "region", &tag);
         let original = hashes(&source).unwrap();
-        let config = CoreConfig::new(native.clone(), 42);
+        let config = crate::test_support::config(native.clone(), 42);
         let result = import_anvil(
             &config,
             &source,
@@ -2021,24 +2021,35 @@ fn non_full_empty_import_regenerates_but_non_air_import_keeps_terrain() {
             )
             .unwrap(),
         );
-        let loader_source = crate::chunk_loader::ChunkSource {
-            native: Some(store),
-            dimension: 0,
-            generator: bridge::generator(
-                &config,
-                &registry,
-                crate::dimensions::Dimension::Overworld,
-            )
-            .unwrap(),
-            registry: std::sync::Arc::clone(&registry.blocks),
-            items: std::sync::Arc::clone(&registry.items),
-            chest_loot: std::sync::Arc::clone(&registry.chest_loot),
-            light: std::sync::Arc::clone(&registry.light),
-            population: Some(crate::chunk_loader::Population::new(config.seed, &registry)),
-            geometry: mc_world::OVERWORLD_GEOMETRY,
-        };
-        let (loaded, generated) = loader_source.load_or_generate(chunk.pos).unwrap();
-        assert_eq!(generated, !retained);
+        let mut persisted = false;
+        store
+            .visit_chunk_positions(|dimension, position| {
+                persisted |= dimension == 0 && position == chunk.pos;
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            persisted, retained,
+            "only retained terrain may bypass generation"
+        );
+        let generator = bridge::generator(
+            &config,
+            &registry,
+            mc_core::dimensions::Dimension::Overworld,
+        )
+        .unwrap();
+        let mut world = mc_core::world::ChunkWorld::new_native(
+            config.seed,
+            store,
+            0,
+            generator,
+            &registry,
+            mc_world::BlockStateId(registry.states.air),
+            [0, 80, 0],
+            mc_world::OVERWORLD_GEOMETRY,
+        );
+        world.ensure_blocking(&[(chunk.pos, 0)].into_iter().collect());
+        let loaded = world.chunk(chunk.pos).unwrap();
         if retained {
             let expected = if has_blocks {
                 registry.states.stone
@@ -2072,7 +2083,7 @@ fn non_full_empty_import_regenerates_but_non_air_import_keeps_terrain() {
 
 #[test]
 fn foreign_scheduled_ticks_follow_vanilla_chunk_ownership() {
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     for (retained, unknown) in [
         (true, None),
         (false, None),
@@ -2197,7 +2208,7 @@ fn foreign_scheduled_ticks_follow_vanilla_chunk_ownership() {
             .collect();
         mc_world::anvil::write_region(source.join("region/r.0.0.mca"), &payloads).unwrap();
         let original = hashes(&source).unwrap();
-        let config = CoreConfig::new(native.clone(), 42);
+        let config = crate::test_support::config(native.clone(), 42);
         let result = import_anvil(&config, &source, &native, &temp.path().join("receipt.json"));
         if let Some(kind) = unknown {
             assert!(
@@ -2292,7 +2303,7 @@ fn foreign_scheduled_ticks_staged_import_crash_before_final_commit_is_unpublishe
     if let Some(root) = std::env::var_os(CHILD_ROOT) {
         let root = PathBuf::from(root);
         let destination = root.join("native");
-        let config = CoreConfig::new(destination.clone(), 42);
+        let config = crate::test_support::config(destination.clone(), 42);
         let _ = super::convert(
             "import-anvil",
             &config,
@@ -2300,7 +2311,7 @@ fn foreign_scheduled_ticks_staged_import_crash_before_final_commit_is_unpublishe
             &destination,
             &root.join("crash-receipt.json"),
             |config, _, stage| {
-                let registry = crate::registry::CoreRegistry::load(None).unwrap();
+                let registry = crate::test_support::registry().unwrap();
                 fs::create_dir_all(stage.join("native")).unwrap();
                 let store = NativeStore::create(
                     &stage.join("native/state.redb"),
@@ -2358,7 +2369,7 @@ fn foreign_scheduled_ticks_staged_import_crash_before_final_commit_is_unpublishe
         })
         .expect("abrupt exit must leave only unpublished staging");
     let staged_bytes = hashes(&stage).unwrap();
-    match crate::Core::open(CoreConfig::new(stage.clone(), 42)) {
+    match mc_core::Core::open(crate::test_support::config(stage.clone(), 42)) {
         Ok(core) => {
             core.shutdown();
             panic!("crashed unpublished staging admitted");
@@ -2368,7 +2379,7 @@ fn foreign_scheduled_ticks_staged_import_crash_before_final_commit_is_unpublishe
     assert_eq!(hashes(&stage).unwrap(), staged_bytes);
     assert_eq!(hashes(&source).unwrap(), original);
     let native = temp.path().join("normal");
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     let receipt = import_anvil(
         &config,
         &source,
@@ -2377,7 +2388,7 @@ fn foreign_scheduled_ticks_staged_import_crash_before_final_commit_is_unpublishe
     )
     .unwrap();
     assert_eq!(receipt.status, "PASS");
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let store = NativeStore::open(
         &native.join("native/state.redb"),
         bridge::native_identity(&config),
@@ -2439,7 +2450,7 @@ fn saved_maps_unversioned_index_preserves_allocation_fence_without_source_mutati
         fs::create_dir_all(counter.parent().unwrap()).unwrap();
         fs::write(&counter, &bytes).unwrap();
         let original = hashes(&source).unwrap();
-        let config = CoreConfig::new(native.clone(), 42);
+        let config = crate::test_support::config(native.clone(), 42);
         let imported = import_anvil(
             &config,
             &source,
@@ -2457,7 +2468,10 @@ fn saved_maps_unversioned_index_preserves_allocation_fence_without_source_mutati
         .unwrap();
         assert_eq!(exported.status, "PASS");
         let counter = read_nbt(&output.join("data/minecraft/maps/last_id.dat")).unwrap();
-        assert_eq!(crate::maps::nbt::sequence_from_tag(&counter).unwrap(), 449);
+        assert_eq!(
+            mc_core::maps::nbt::sequence_from_tag(&counter).unwrap(),
+            449
+        );
         assert_eq!(hashes(&source).unwrap(), original);
     }
 }
@@ -2483,7 +2497,7 @@ fn legacy_saved_data_versions_outside_supported_range_fail_closed() {
     .unwrap();
     let original_hashes = hashes(&source).unwrap();
     let result = import_anvil(
-        &CoreConfig::new(native.clone(), 42),
+        &crate::test_support::config(native.clone(), 42),
         &source,
         &native,
         &temp.path().join("import-receipt.json"),
@@ -2519,7 +2533,7 @@ fn legacy_auxiliary_collisions_with_level_split_or_other_poi_fail_closed() {
         }
         let original_hashes = hashes(&source).unwrap();
         let result = import_anvil(
-            &CoreConfig::new(native.clone(), 42),
+            &crate::test_support::config(native.clone(), 42),
             &source,
             &native,
             &temp.path().join("import-receipt.json"),
@@ -2548,12 +2562,12 @@ fn inline_region_entities_decode_into_entity_snapshots_without_entities_dir() {
     }
     write_legacy_region(&source, "region", &chunk);
     assert!(!source.join("entities").exists());
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     let receipt =
         import_anvil(&config, &source, &native, &temp.path().join("receipt.json")).unwrap();
     assert_eq!(receipt.status, "PASS");
     assert_eq!(receipt.counts["entities"], 1);
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let store = NativeStore::open(
         &native.join("native/state.redb"),
         bridge::native_identity(&config),
@@ -2631,7 +2645,7 @@ fn region_and_entities_dir_conflict_fails_closed() {
         write_legacy_region(&source, "entities", &other);
         let original = hashes(&source).unwrap();
         let result = import_anvil(
-            &CoreConfig::new(native.clone(), 42),
+            &crate::test_support::config(native.clone(), 42),
             &source,
             &native,
             &temp.path().join("receipt.json"),
@@ -2665,7 +2679,7 @@ fn region_and_entities_dir_identical_bodies_are_admitted_once() {
     write_legacy_region(&source, "region", &chunk);
     write_legacy_region(&source, "entities", &entities);
     let original = hashes(&source).unwrap();
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     let receipt =
         import_anvil(&config, &source, &native, &temp.path().join("receipt.json")).unwrap();
     assert_eq!(receipt.status, "PASS");
@@ -2857,14 +2871,14 @@ fn duplicate_entity_uuids_keep_first_and_archive_original_bodies() {
         Tag::String(marker) => marker.clone(),
         other => panic!("mod:entity is not a string: {other:?}"),
     };
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let canonical_temp = fs::canonicalize(temp.path()).unwrap();
 
     let mut runs = Vec::new();
     for run in ["a", "b"] {
         let native = temp.path().join(format!("native-{run}"));
         let receipt_name = format!("receipt-{run}.json");
-        let config = CoreConfig::new(native.clone(), 42);
+        let config = crate::test_support::config(native.clone(), 42);
         let receipt =
             import_anvil(&config, &source, &native, &temp.path().join(&receipt_name)).unwrap();
         assert_eq!(receipt.status, "PASS", "run {run}");
@@ -3020,7 +3034,7 @@ fn versionless_player_with_opaque_modern_data_field_still_runs_legacy_chain() {
     )
     .unwrap();
     let receipt = import_anvil(
-        &CoreConfig::new(native.clone(), 42),
+        &crate::test_support::config(native.clone(), 42),
         &source,
         &native,
         &temp.path().join("receipt.json"),
@@ -3034,7 +3048,7 @@ fn versionless_player_with_opaque_modern_data_field_still_runs_legacy_chain() {
         .unwrap();
     assert_eq!(upgrade.from, -1);
     assert_eq!(upgrade.to, 4790);
-    let config = CoreConfig::new(native.clone(), 42);
+    let config = crate::test_support::config(native.clone(), 42);
     let store = NativeStore::open(
         &native.join("native/state.redb"),
         bridge::native_identity(&config),

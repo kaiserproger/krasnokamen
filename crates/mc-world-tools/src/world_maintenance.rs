@@ -9,9 +9,9 @@ use std::path::PathBuf;
 
 use mc_world::native::{NativePruneReport, NativePruneRequest, NativeStore};
 
-use crate::config::{CoreConfig, CoreError};
-use crate::core::Core;
-use crate::dimensions::Dimension;
+use mc_core::config::{CoreConfig, CoreError};
+use mc_core::core::Core;
+use mc_core::dimensions::Dimension;
 
 fn storage(error: impl std::fmt::Display) -> CoreError {
     CoreError::Storage(error.to_string())
@@ -63,7 +63,7 @@ fn stopped_world(config: &CoreConfig) -> Result<StoppedWorld, CoreError> {
     })?;
     let path = config.world_dir.join("native/state.redb");
     if !path.is_file() {
-        return Err(crate::native_checkpoint::import_required(config));
+        return Err(mc_core::native_checkpoint::import_required(config));
     }
     Ok(StoppedWorld {
         path,
@@ -74,9 +74,9 @@ fn stopped_world(config: &CoreConfig) -> Result<StoppedWorld, CoreError> {
 fn open_store(config: &CoreConfig, world: &StoppedWorld) -> Result<NativeStore, CoreError> {
     NativeStore::open(
         &world.path,
-        crate::native_checkpoint::native_identity(config),
+        mc_core::native_checkpoint::native_identity(config),
     )
-    .map_err(|error| crate::native_checkpoint::open_refusal(config, &config.world_dir, error))
+    .map_err(|error| mc_core::native_checkpoint::open_refusal(config, &config.world_dir, error))
 }
 
 fn file_bytes(path: &std::path::Path) -> Result<u64, CoreError> {
@@ -108,7 +108,7 @@ pub fn prune_world(config: &CoreConfig, request: &PruneRequest) -> Result<PruneR
     }
     let probe = config.world_dir.join("native/state.redb");
     if !probe.is_file() {
-        return Err(crate::native_checkpoint::import_required(config));
+        return Err(mc_core::native_checkpoint::import_required(config));
     }
     let core = Core::open(config.clone())?;
     let spawn = core.world_spawn();
@@ -120,7 +120,7 @@ pub fn prune_world(config: &CoreConfig, request: &PruneRequest) -> Result<PruneR
     let store = open_store(config, &world)?;
     let chunks = store
         .prune_pristine(&NativePruneRequest {
-            dimension: crate::native_checkpoint::dimension_id(Dimension::Overworld),
+            dimension: mc_core::native_checkpoint::dimension_id(Dimension::Overworld),
             keep_min,
             keep_max,
             max_inhabited_ticks: request.max_inhabited_ticks,

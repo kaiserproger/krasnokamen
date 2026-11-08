@@ -4,7 +4,7 @@
 use super::*;
 
 /// Encode a complete player image without touching filesystem state.
-pub(crate) fn player_to_tag(
+pub fn player_to_tag(
     record: &ReplayPlayer,
     items: &mc_data::items::ItemRegistry,
 ) -> Result<mc_nbt::Tag, CoreError> {
@@ -301,7 +301,7 @@ pub(super) fn solaris_custody_fields(
 }
 
 /// Decode a player image without touching filesystem state.
-pub(crate) fn player_from_tag(
+pub fn player_from_tag(
     root: &mc_nbt::Tag,
     items: &mc_data::items::ItemRegistry,
 ) -> Result<ReplayPlayer, CoreError> {

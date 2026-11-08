@@ -325,7 +325,7 @@ pub fn decoration_id(name: &str) -> Option<i32> {
         .map(|i| i as i32)
 }
 
-pub(crate) fn checkpoint(
+pub fn checkpoint(
     records: &BTreeMap<i32, Arc<SavedMap>>,
     tick: u64,
     globals: &mut BTreeMap<String, mc_world::native::NativeDomainRecord>,
@@ -353,7 +353,7 @@ pub(crate) fn checkpoint(
     );
     Ok(())
 }
-pub(crate) fn recover(
+pub fn recover(
     globals: &BTreeMap<String, mc_world::native::NativeDomainRecord>,
 ) -> Result<BTreeMap<i32, Arc<SavedMap>>, CoreError> {
     let mut maps = BTreeMap::new();
@@ -375,7 +375,7 @@ pub(crate) fn recover(
     Ok(maps)
 }
 
-pub(crate) fn sequence(
+pub fn sequence(
     globals: &BTreeMap<String, mc_world::native::NativeDomainRecord>,
 ) -> Result<i64, CoreError> {
     let Some(record) = globals.get("map_sequence") else {

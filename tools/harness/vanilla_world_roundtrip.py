@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-TEST = "dimensions::tests::vanilla_headless_world_roundtrip"
+TEST = "roundtrip_tests::vanilla_headless_world_roundtrip"
 
 
 def read_nbt(path: Path):
@@ -134,7 +134,7 @@ def main():
                        f"SOLARIS_VANILLA_ROUNDTRIP_RECEIPT={output / (phase + '-conversion.json')}",
                        f"SOLARIS_VANILLA_ROUNDTRIP_EXPORT={world if phase == 'create' else output / 'reexport'}",
                        f"SOLARIS_VANILLA_ROUNDTRIP_EXPORT_RECEIPT={output / (phase + '-export.json')}",
-                       "cargo", "test", "-p", "mc-core", TEST, "--", "--ignored", "--exact", "--nocapture"]
+                       "cargo", "test", "-p", "mc-world-conversion", TEST, "--", "--ignored", "--exact", "--nocapture"]
             receipt.setdefault("conversion_receipts", {})[phase] = {
                 "import": str(output / (phase + "-conversion.json")),
                 "export": str(output / (phase + "-export.json")),

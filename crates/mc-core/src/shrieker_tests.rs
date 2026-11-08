@@ -390,7 +390,7 @@ fn lazy_warning_matches_eager_ticks_including_zero_level_and_imported_large_coun
 }
 
 #[test]
-fn lazy_warning_decay_survives_native_checkpoint_wal_restart_and_anvil_export() {
+fn lazy_warning_decay_survives_native_checkpoint_and_wal_restart() {
     use crate::dimensions::Dimension;
     let directory = tempfile::tempdir().unwrap();
     let native = directory.path().join("world");
@@ -460,29 +460,6 @@ fn lazy_warning_decay_survives_native_checkpoint_wal_restart_and_anvil_export() 
             .warden_warning
             .ticks_since_last_warning(),
         0
-    );
-    let exported = directory.path().join("export");
-    crate::world_conversion::export_anvil(
-        &config,
-        &native,
-        &exported,
-        &directory.path().join("export.json"),
-    )
-    .unwrap();
-    let tag = crate::world_conversion::read_nbt(&exported.join(format!("players/data/{uuid}.dat")))
-        .unwrap();
-    let Tag::Compound(fields) = tag else {
-        panic!("exported player compound")
-    };
-    assert!(!fields.iter().any(|(key, _)| key == "SolarisWardenWarning"));
-    let warning = Warning::read(&fields).unwrap();
-    assert_eq!(
-        (
-            warning.ticks_since_last_warning(),
-            warning.warning_level(),
-            warning.cooldown_ticks()
-        ),
-        (0, 2, 0)
     );
 }
 

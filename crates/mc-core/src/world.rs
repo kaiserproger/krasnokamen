@@ -440,18 +440,9 @@ impl ChunkWorld {
     ) -> Self {
         Self::from_source(
             seed,
-            Arc::new(ChunkSource {
-                native: Some(store),
-                dimension,
-                generator,
-                registry: Arc::clone(&registry.blocks),
-                items: Arc::clone(&registry.items),
-                chest_loot: Arc::clone(&registry.chest_loot),
-                light: Arc::clone(&registry.light),
-                population: (dimension == 0)
-                    .then(|| crate::chunk_loader::Population::new(seed, registry)),
-                geometry,
-            }),
+            Arc::new(ChunkSource::new_native(
+                seed, store, dimension, generator, registry, geometry,
+            )),
             air,
             world_spawn,
             Arc::clone(&registry.light),

@@ -248,7 +248,7 @@ fn sparse_warden_index_retains_native_identity_before_vibration() {
         mc_data::entity_nbt::entity_to_fields(&state.registry.items, entity).unwrap(),
     );
     let mut replay = Replay::default();
-    crate::dimensions::recovery::hydrate_entity(&state.registry, &mut replay, &payload, state.tick)
+    crate::native_checkpoint::hydrate_entity(&state.registry, &mut replay, &payload, state.tick)
         .unwrap();
     state.remove_entity(slot);
     assert!(state.entities.warden_ids().is_empty());

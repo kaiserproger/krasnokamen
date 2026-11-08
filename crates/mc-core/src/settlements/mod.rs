@@ -27,7 +27,7 @@ mod production;
 pub(crate) use crate::plugin_inventories::native as inventory;
 pub mod districts;
 pub mod households;
-pub(crate) mod persistence;
+pub mod persistence;
 pub mod startup;
 pub(crate) mod ui;
 pub(crate) mod ui_text;

@@ -20,10 +20,10 @@ use std::time::{Duration, Instant};
 use mc_world::native::NativeStore;
 use mc_world::{Chunk, ChunkGenerator, ChunkPos};
 
-use crate::chunk_loader::{ChunkLoader, ChunkSource};
-use crate::config::{CoreConfig, CoreError};
-use crate::core::{Core, overworld_terrain};
-use crate::dimensions::Dimension;
+use mc_core::chunk_loader::{ChunkLoader, ChunkSource};
+use mc_core::config::{CoreConfig, CoreError};
+use mc_core::core::{Core, overworld_terrain};
+use mc_core::dimensions::Dimension;
 
 /// Chunks per durable native transaction; the runtime's generated save batch.
 const SAVE_BATCH: usize = 64;
@@ -128,15 +128,15 @@ pub fn pregenerate(
     let store = Arc::new(
         NativeStore::open(
             &config.world_dir.join("native/state.redb"),
-            crate::native_checkpoint::native_identity(config),
+            mc_core::native_checkpoint::native_identity(config),
         )
         .map_err(|error| {
-            crate::native_checkpoint::open_refusal(config, &config.world_dir, error)
+            mc_core::native_checkpoint::open_refusal(config, &config.world_dir, error)
         })?,
     );
 
     // Coverage first: a rerun (or a resumed run) regenerates nothing.
-    let dimension = crate::native_checkpoint::dimension_id(Dimension::Overworld);
+    let dimension = mc_core::native_checkpoint::dimension_id(Dimension::Overworld);
     let mut covered = HashSet::new();
     store
         .visit_chunk_positions(|found_dimension, pos| {
@@ -193,20 +193,16 @@ pub fn pregenerate(
     }
 
     let generator: Arc<dyn ChunkGenerator> = Arc::new(overworld_terrain(config, &registry)?);
-    let source = Arc::new(ChunkSource {
-        native: Some(Arc::clone(&store)),
+    let source = Arc::new(ChunkSource::new_native(
+        config.seed,
+        Arc::clone(&store),
         dimension,
         generator,
-        registry: Arc::clone(&registry.blocks),
-        items: Arc::clone(&registry.items),
-        chest_loot: Arc::clone(&registry.chest_loot),
-        light: Arc::clone(&registry.light),
-        population: (dimension == 0)
-            .then(|| crate::chunk_loader::Population::new(config.seed, &registry)),
-        geometry: Dimension::Overworld.geometry(),
-    });
+        &registry,
+        Dimension::Overworld.geometry(),
+    ));
     // Same pool sizing as the live world: half the cores, at least one.
-    let workers = (crate::tick::worker_threads() / 2).max(1);
+    let workers = (mc_core::tick::worker_threads() / 2).max(1);
     let mut loader = ChunkLoader::spawn(source, workers);
     let mut next = 0_usize;
     let mut next_ticket = 0_u64;

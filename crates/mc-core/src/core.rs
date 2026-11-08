@@ -359,7 +359,7 @@ struct CoreInner {
 ///
 /// Serving and the offline `world pregenerate` command build the same terrain
 /// here, so pregenerated chunks match what a join would otherwise generate.
-pub(crate) fn overworld_terrain(
+pub fn overworld_terrain(
     config: &CoreConfig,
     registry: &CoreRegistry,
 ) -> Result<mc_worldgen::TerrainGenerator, CoreError> {

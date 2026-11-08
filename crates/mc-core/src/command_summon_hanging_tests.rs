@@ -23,7 +23,7 @@ fn reload(state: &mut TickState, id: EntityId) {
         mc_data::entity_nbt::entity_to_fields(&state.registry.items, &entity).unwrap(),
     );
     let mut replay = Replay::default();
-    crate::dimensions::recovery::hydrate_entity(&state.registry, &mut replay, &payload, state.tick)
+    crate::native_checkpoint::hydrate_entity(&state.registry, &mut replay, &payload, state.tick)
         .expect("native store accepts the summoned entity");
     let record = &replay.entities[&id.0];
     crate::dimensions::recovery::validate_entity(state, id.0, record)

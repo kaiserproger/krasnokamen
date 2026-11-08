@@ -682,7 +682,7 @@ fn native_writer_panic_fails_checkpoint_and_halts_journal() {
 }
 
 #[test]
-fn imported_bee_hive_release_checkpoints_after_kill_and_unload() {
+fn bee_hive_release_checkpoints_after_kill_and_unload() {
     fn save(
         config: &CoreConfig,
         state: &mut TickState,
@@ -740,23 +740,7 @@ fn imported_bee_hive_release_checkpoints_after_kill_and_unload() {
     drop(source_writer);
     drop(source);
 
-    let anvil = directory.path().join("anvil");
-    crate::world_conversion::export_anvil(
-        &source_config,
-        &source_config.world_dir,
-        &anvil,
-        &directory.path().join("export.json"),
-    )
-    .unwrap();
-    let config = CoreConfig::new(directory.path().join("imported"), 42);
-    let imported = crate::world_conversion::import_anvil(
-        &config,
-        &anvil,
-        &config.world_dir,
-        &directory.path().join("import.json"),
-    )
-    .unwrap();
-    assert_eq!(imported.counts["entities"], 2);
+    let config = source_config;
     let mut state = recovered_world(&config);
     state.tick = 2;
     state

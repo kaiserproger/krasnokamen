@@ -190,6 +190,133 @@ pub(crate) fn write_manifest(
 }
 
 #[test]
+fn inhabited_time_crash_recovery_checkpoint_tail_share_wal_tick() {
+    use crate::journal::JournalWriter;
+    use mc_world::ChunkPos;
+
+    fn append_tick(
+        world: &mut crate::world::ChunkWorld,
+        writer: &mut JournalWriter,
+        pos: ChunkPos,
+        tick: u64,
+        active: bool,
+    ) -> usize {
+        if active {
+            world.tick_inhabited_time(pos, tick);
+        }
+        world.finish_inhabited_tick(tick);
+        let mut entries = Vec::new();
+        world.journal_inhabited_time(&mut entries);
+        let count = entries.len();
+        writer.append(tick, tick, &entries).unwrap();
+        count
+    }
+
+    let temporary = tempfile::tempdir().unwrap();
+    let source = temporary.path().join("native-world");
+    let config = CoreConfig::new(source.clone(), 42);
+    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let store = fixture_store(&config).unwrap();
+    let pos = ChunkPos { x: 0, z: 0 };
+    let mut state = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
+    state
+        .world
+        .ensure_blocking(&[(pos, 0)].into_iter().collect());
+    let mut writer = JournalWriter::open(&source, 1).unwrap();
+    for tick in 1..=12 {
+        assert_eq!(
+            append_tick(&mut state.world, &mut writer, pos, tick, true),
+            usize::from(tick == 1),
+            "stable active sets write no per-chunk-per-tick records"
+        );
+    }
+    writer.flush().unwrap();
+    assert_eq!(state.world.inhabited_time(pos), 12);
+    let crash = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
+    assert_eq!(crash.tick, 12);
+    assert_eq!(
+        crash.world.inhabited_time(pos),
+        12,
+        "no checkpoint before crash"
+    );
+    drop(crash);
+
+    // Capture an open interval at tick 12 in the real atomic native transaction.
+    {
+        let regions = state.world.capture_dirty(&Default::default());
+        let mut image = store.read_checkpoint().unwrap();
+        let mut manifest = read_manifest(&config).unwrap();
+        manifest.tick = 12;
+        manifest.inhabited_time = state.world.inhabited_checkpoint(12);
+        for child in manifest.dimensions.values_mut() {
+            child.tick = 12;
+        }
+        image.globals.insert(
+            "checkpoint".into(),
+            crate::native_checkpoint::record(12, serde_json::to_vec(&manifest).unwrap()),
+        );
+        crate::native_checkpoint::refresh_metadata(&mut image.globals, &manifest).unwrap();
+        for record in image.globals.values_mut() {
+            record.captured_tick = 12;
+        }
+        store
+            .commit_checkpoint_stream(
+                mc_world::native::NativeCheckpoint {
+                    tick: 12,
+                    previous_tick: image.tick,
+                    chunks: &[],
+                    entities: &[],
+                    players: &[],
+                    globals: &image.globals,
+                },
+                |write| {
+                    regions
+                        .visit_native(|snapshot| {
+                            write(snapshot).map_err(|error| {
+                                crate::config::CoreError::Storage(error.to_string())
+                            })
+                        })
+                        .map_err(|error| mc_world::native::NativeError::Source(error.to_string()))
+                },
+                std::iter::empty::<
+                    Result<mc_world::native::NativeEntitySnapshot, mc_world::native::NativeError>,
+                >(),
+                &registry.blocks,
+                &registry.items,
+            )
+            .unwrap();
+        state.world.mark_flushed(&regions.written());
+    }
+    let checkpoint = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
+    assert_eq!(checkpoint.world.inhabited_time(pos), 12);
+    drop(checkpoint);
+    for tick in 13..=24 {
+        let active = tick <= 18 || tick >= 23;
+        assert_eq!(
+            append_tick(&mut state.world, &mut writer, pos, tick, active),
+            usize::from(tick == 19 || tick == 23),
+        );
+    }
+    writer.flush().unwrap();
+    assert_eq!(
+        state.world.inhabited_time(pos),
+        20,
+        "inactive ticks never accrue"
+    );
+    let crash = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
+    assert_eq!(crash.tick, 24);
+    assert_eq!(
+        crash.world.inhabited_time(pos),
+        20,
+        "checkpoint plus WAL tail"
+    );
+    drop(crash);
+    drop(writer);
+    drop(state);
+    drop(store);
+}
+
+#[test]
 fn missing_native_database_with_history_points_to_offline_import() {
     let directory = tempfile::tempdir().unwrap();
     std::fs::create_dir(directory.path().join("journal")).unwrap();
@@ -485,7 +612,7 @@ fn roundtrip_native_entity(
         mc_data::entity_nbt::entity_to_fields(&state.registry.items, &entity).unwrap(),
     );
     let mut replay = Replay::default();
-    crate::dimensions::recovery::hydrate_entity(&state.registry, &mut replay, &payload, state.tick)
+    crate::native_checkpoint::hydrate_entity(&state.registry, &mut replay, &payload, state.tick)
         .unwrap();
     state.remove_entity(state.entities.slot_of(id).unwrap());
     crate::core::restore_entity(state, id.0, &replay.entities[&id.0]).unwrap();
@@ -626,7 +753,7 @@ fn native_replay_rejects_malformed_opaque_entity_fields_before_checkpoint() {
         mc_data::entity_nbt::entity_to_fields(&state.registry.items, &entity).unwrap(),
     );
     let mut replay = Replay::default();
-    crate::dimensions::recovery::hydrate_entity(&state.registry, &mut replay, &payload, state.tick)
+    crate::native_checkpoint::hydrate_entity(&state.registry, &mut replay, &payload, state.tick)
         .unwrap();
     let record = replay.entities.get_mut(&id.0).unwrap();
     for payload in [vec![8, 0, 0, 0, 0], vec![10, 0, 0, 0, 0]] {
@@ -844,7 +971,7 @@ fn custom_name_visible_survives_native_store_restart_without_opaque_shadow() {
         );
         assert!(fields.contains(&("CustomNameVisible".into(), Tag::Byte(i8::from(visible)))));
         let mut recovered = Replay::default();
-        crate::dimensions::recovery::hydrate_entity(&state.registry, &mut recovered, payload, tick)
+        crate::native_checkpoint::hydrate_entity(&state.registry, &mut recovered, payload, tick)
             .unwrap();
         let restored = &recovered.entities[&id.0];
         assert_eq!(restored.appearance.custom_name_visible, visible);

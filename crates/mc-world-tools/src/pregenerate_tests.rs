@@ -8,6 +8,8 @@ fn world_dir(slug: &str) -> std::path::PathBuf {
 
 fn config(dir: &std::path::Path, seed: i64) -> CoreConfig {
     let mut config = CoreConfig::new(dir.to_path_buf(), seed);
+    config.vanilla_data_dir =
+        Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"));
     config.checkpoint_every_ticks = u64::MAX;
     config
 }
@@ -21,13 +23,13 @@ fn fresh_world(seed: i64) -> (std::path::PathBuf, CoreConfig) {
 fn stored_positions(config: &CoreConfig) -> HashSet<ChunkPos> {
     let store = NativeStore::open(
         &config.world_dir.join("native/state.redb"),
-        crate::native_checkpoint::native_identity(config),
+        mc_core::native_checkpoint::native_identity(config),
     )
     .expect("store opens after pregeneration");
     let mut positions = HashSet::new();
     store
         .visit_chunk_positions(|dimension, pos| {
-            if dimension == crate::native_checkpoint::dimension_id(Dimension::Overworld) {
+            if dimension == mc_core::native_checkpoint::dimension_id(Dimension::Overworld) {
                 positions.insert(pos);
             }
             Ok(())

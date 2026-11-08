@@ -1316,7 +1316,7 @@ fn checkpoint_control_state(state: &mut TickState, config: &crate::CoreConfig) {
 }
 
 #[test]
-fn village_control_claim_and_profession_survive_native_checkpoint_wal_and_anvil() {
+fn village_control_claim_and_profession_survive_native_checkpoint_and_wal() {
     let directory = tempfile::tempdir().unwrap();
     let config = crate::CoreConfig::new(directory.path().join("world"), 42);
     let mut state =
@@ -1454,65 +1454,6 @@ fn village_control_claim_and_profession_survive_native_checkpoint_wal_and_anvil(
         "recovery must preserve exclusive POI ownership",
     );
     drop(restored);
-    let registry = Arc::clone(&state.registry);
-    let export_tick = state.tick;
-    drop(state);
-    let anvil = directory.path().join("anvil");
-    crate::world_conversion::export_anvil(
-        &config,
-        &config.world_dir,
-        &anvil,
-        &directory.path().join("export-receipt.json"),
-    )
-    .unwrap();
-    let regions = mc_world::anvil::entity_regions::read_entity_regions(
-        &crate::dimensions::Dimension::Overworld
-            .directory(&anvil)
-            .join("entities"),
-        &registry.items,
-    )
-    .unwrap();
-    let entities: Vec<_> = regions.values().flat_map(|chunk| &chunk.entities).collect();
-    assert_eq!(entities.len(), 1);
-    assert_eq!(entities[0].uuid, uuid);
-    let exported = super::super::persistence::villager_from_fields(
-        &registry.items,
-        &entities[0].extra_fields,
-        export_tick,
-    )
-    .unwrap();
-    assert_eq!(exported.data.profession, Profession::Farmer);
-    assert_eq!(exported.job_site, Some(workstation));
-    assert_eq!(exported.job_site_dimension, "minecraft:overworld");
-    let fields = &entities[0].extra_fields;
-    let mc_nbt::Tag::Compound(data) = &fields
-        .iter()
-        .find(|(key, _)| key == "VillagerData")
-        .unwrap()
-        .1
-    else {
-        panic!("VillagerData must be a native compound");
-    };
-    assert!(data.contains(&(
-        "profession".into(),
-        mc_nbt::Tag::String("minecraft:farmer".into())
-    )));
-    let mc_nbt::Tag::Compound(brain) = &fields.iter().find(|(key, _)| key == "Brain").unwrap().1
-    else {
-        panic!("Brain must be a native compound");
-    };
-    let mc_nbt::Tag::Compound(memories) =
-        &brain.iter().find(|(key, _)| key == "memories").unwrap().1
-    else {
-        panic!("Brain memories must be a native compound");
-    };
-    assert_eq!(
-        memories
-            .iter()
-            .filter(|(key, _)| key == "minecraft:job_site")
-            .count(),
-        1
-    );
 }
 
 fn brain_benchmark_state(count: i32, prefix_mobs: i32) -> TickState {

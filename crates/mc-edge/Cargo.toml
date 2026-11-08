@@ -30,6 +30,8 @@ mc-data = { path = "../mc-data" }
 mc-nbt = { path = "../mc-nbt" }
 mc-protocol = { path = "../mc-protocol" }
 mc-world = { path = "../mc-world" }
+mc-world-conversion = { path = "../mc-world-conversion" }
+mc-world-tools = { path = "../mc-world-tools" }
 mc-worldgen = { path = "../mc-worldgen" }
 anyhow = { workspace = true }
 bytes = { workspace = true }

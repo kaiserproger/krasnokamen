@@ -1,5 +1,5 @@
 use super::*;
-use crate::core::Core;
+use mc_core::core::Core;
 use mc_world::native::NativeReadOnlyStore;
 use redb::ReadableTable;
 use std::path::PathBuf;
@@ -8,6 +8,8 @@ const CACHE: usize = 16 * 1024 * 1024;
 
 fn config(dir: &std::path::Path, seed: i64) -> CoreConfig {
     let mut config = CoreConfig::new(dir.to_path_buf(), seed);
+    config.vanilla_data_dir =
+        Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"));
     config.checkpoint_every_ticks = u64::MAX;
     config
 }
@@ -126,7 +128,7 @@ fn older_revision_world_is_refused_then_upgraded_and_opens() {
         .unwrap()
         .read_checkpoint()
         .unwrap();
-    let expected = crate::native_checkpoint::generation_records(&config).unwrap();
+    let expected = mc_core::native_checkpoint::generation_records(&config).unwrap();
     for key in ["generation", "dimensions"] {
         assert_eq!(image.globals[key].payload, expected[key].payload);
     }

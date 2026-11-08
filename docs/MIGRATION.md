@@ -260,9 +260,9 @@ lossless migration because an unknown field is kept in an opaque record.
 | Bukkit/Paper plugin data | Not interpreted. External SQL stores, plugin folders, claims, economy, permissions and custom items need a separately validated migration; keep the originals for rollback. |
 | Solaris-native plugin, settlement and block-log state on export | Vanilla cannot run or interpret it, and Anvil is not a backup format for these domains. Keep a native backup. |
 
-Implementation boundaries: [world conversion](../crates/mc-core/src/world_conversion.rs),
-[import](../crates/mc-core/src/world_conversion/import.rs),
-[export](../crates/mc-core/src/world_conversion/export.rs) and
+Implementation boundaries: [world conversion](../crates/mc-world-conversion/src/lib.rs),
+[import](../crates/mc-world-conversion/src/import.rs),
+[export](../crates/mc-world-conversion/src/export.rs) and
 [admin lists](../crates/mc-edge/src/admin.rs).
 
 ## 6. Replace plugins deliberately

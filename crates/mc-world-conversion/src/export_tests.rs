@@ -1,10 +1,9 @@
 use super::{ConversionReceipt, export_anvil, files, hashes, read_nbt};
-use crate::block_ticks::{BlockTickChunkImage, BlockTickImage};
-use crate::config::CoreConfig;
-use crate::dimensions::Dimension;
-use crate::journal::{JournalEntry, JournalWriter};
-use crate::native_checkpoint::tests::{fixture_store, read_manifest, write_manifest};
-use crate::registry::CoreRegistry;
+use crate::test_support::{fixture_store, read_manifest, write_manifest};
+use mc_core::block_ticks::{BlockTickChunkImage, BlockTickImage};
+use mc_core::dimensions::Dimension;
+use mc_core::journal::{JournalEntry, JournalWriter};
+use mc_core::registry::CoreRegistry;
 use mc_data::Identifier;
 use mc_nbt::Tag;
 use mc_world::{BlockStateId, Chunk, ChunkPos};
@@ -51,8 +50,8 @@ fn inhabited_time_child_dimension_replay_uses_empty_global_batch_clock() {
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("native-world");
     let destination = temporary.path().join("anvil-world");
-    let config = CoreConfig::new(source.clone(), 42);
-    let registry = std::sync::Arc::new(CoreRegistry::load(None).unwrap());
+    let config = crate::test_support::config(source.clone(), 42);
+    let registry = std::sync::Arc::new(crate::test_support::registry().unwrap());
     let store = fixture_store(&config).unwrap();
     let mut writer = JournalWriter::open(&source, 1).unwrap();
     writer
@@ -62,7 +61,7 @@ fn inhabited_time_child_dimension_replay_uses_empty_global_batch_clock() {
             &[JournalEntry::Dimension {
                 dimension: Dimension::Nether,
                 entries: vec![JournalEntry::InhabitedTime {
-                    image: crate::journal::InhabitedTimeImage {
+                    image: mc_core::journal::InhabitedTimeImage {
                         chunk: [0, 0],
                         value: 1,
                         tick: 1,
@@ -74,7 +73,7 @@ fn inhabited_time_child_dimension_replay_uses_empty_global_batch_clock() {
         .unwrap();
     writer.append(2, 9, &[]).unwrap();
     writer.flush().unwrap();
-    let recovered = crate::native_checkpoint::recover_with_reader(
+    let recovered = mc_core::native_checkpoint::recover_with_reader(
         &config,
         std::sync::Arc::clone(&registry),
         store.checkpoint_reader().unwrap(),
@@ -82,7 +81,14 @@ fn inhabited_time_child_dimension_replay_uses_empty_global_batch_clock() {
     .unwrap();
     let nether = &recovered.dimensions[&Dimension::Nether];
     assert_eq!(nether.tick, 9);
-    assert_eq!(nether.inhabited_time[&[0, 0]].value_at(nether.tick), 9);
+    let mut chunk = Chunk::empty_with_geometry(
+        ChunkPos { x: 0, z: 0 },
+        BlockStateId(registry.states.air),
+        Identifier::parse("minecraft:plains").unwrap(),
+        Dimension::Nether.geometry(),
+    );
+    nether.inhabited_time[&[0, 0]].apply(&mut chunk, nether.tick);
+    assert_eq!(chunk.inhabited_time(), 9);
     assert!(
         recovered.dimensions[&Dimension::Overworld]
             .inhabited_time
@@ -111,137 +117,116 @@ fn inhabited_time_child_dimension_replay_uses_empty_global_batch_clock() {
 }
 
 #[test]
-fn inhabited_time_crash_recovery_checkpoint_tail_and_anvil_export_share_wal_tick() {
-    fn append_tick(
-        world: &mut crate::world::ChunkWorld,
-        writer: &mut JournalWriter,
-        pos: ChunkPos,
-        tick: u64,
-        active: bool,
-    ) -> usize {
-        if active {
-            world.tick_inhabited_time(pos, tick);
-        }
-        world.finish_inhabited_tick(tick);
-        let mut entries = Vec::new();
-        world.journal_inhabited_time(&mut entries);
-        let count = entries.len();
-        writer.append(tick, tick, &entries).unwrap();
-        count
-    }
+fn inhabited_time_checkpoint_tail_and_anvil_export_share_wal_tick() {
+    use mc_core::journal::InhabitedTimeImage;
+    use mc_core::native_checkpoint::{encode_checkpoint, recover_with_reader};
+    use mc_world::native::NativeCheckpoint;
+    use std::sync::Arc;
 
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("native-world");
     let destination = temporary.path().join("anvil-world");
-    let config = CoreConfig::new(source.clone(), 42);
-    let registry = CoreRegistry::load(None).unwrap();
+    let config = crate::test_support::config(source.clone(), 42);
+    let registry = Arc::new(crate::test_support::registry().unwrap());
     let store = fixture_store(&config).unwrap();
     let pos = ChunkPos { x: 0, z: 0 };
-    let mut state = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
-    state
-        .world
-        .ensure_blocking(&[(pos, 0)].into_iter().collect());
+    let chunk = Chunk::empty(
+        pos,
+        BlockStateId(registry.states.air),
+        Identifier::parse("minecraft:plains").unwrap(),
+    );
+    store
+        .fill_generated(0, &[chunk], &registry.blocks, &registry.items)
+        .unwrap();
     let mut writer = JournalWriter::open(&source, 1).unwrap();
-    for tick in 1..=12 {
-        assert_eq!(
-            append_tick(&mut state.world, &mut writer, pos, tick, true),
-            usize::from(tick == 1),
-            "stable active sets write no per-chunk-per-tick records"
-        );
+    writer
+        .append(
+            1,
+            1,
+            &[JournalEntry::InhabitedTime {
+                image: InhabitedTimeImage {
+                    chunk: [0, 0],
+                    value: 1,
+                    tick: 1,
+                    active: true,
+                },
+            }],
+        )
+        .unwrap();
+    for tick in 2..=12 {
+        writer.append(tick, tick, &[]).unwrap();
     }
     writer.flush().unwrap();
-    assert_eq!(state.world.inhabited_time(pos), 12);
-    let crash = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
-    assert_eq!(crash.tick, 12);
+    let recovered = recover_with_reader(
+        &config,
+        Arc::clone(&registry),
+        store.checkpoint_reader().unwrap(),
+    )
+    .unwrap();
+    assert_eq!(recovered.dimensions[&Dimension::Overworld].tick, 12);
+    let image = encode_checkpoint(&recovered).unwrap();
+    let manifest: mc_core::journal::CheckpointManifest =
+        serde_json::from_slice(&image.globals["checkpoint"].payload).unwrap();
     assert_eq!(
-        crash.world.inhabited_time(pos),
-        12,
-        "no checkpoint before crash"
+        manifest.inhabited_time,
+        vec![InhabitedTimeImage {
+            chunk: [0, 0],
+            value: 12,
+            tick: 12,
+            active: true,
+        }]
     );
-    drop(crash);
-
-    // Capture an open interval at tick 12 in the real atomic native transaction.
-    {
-        let regions = state.world.capture_dirty(&Default::default());
-        let mut image = store.read_checkpoint().unwrap();
-        let mut manifest = read_manifest(&config).unwrap();
-        manifest.tick = 12;
-        manifest.inhabited_time = state.world.inhabited_checkpoint(12);
-        for child in manifest.dimensions.values_mut() {
-            child.tick = 12;
-        }
-        image.globals.insert(
-            "checkpoint".into(),
-            crate::native_checkpoint::record(12, serde_json::to_vec(&manifest).unwrap()),
-        );
-        crate::native_checkpoint::refresh_metadata(&mut image.globals, &manifest).unwrap();
-        for record in image.globals.values_mut() {
-            record.captured_tick = 12;
-        }
-        store
-            .commit_checkpoint_stream(
-                mc_world::native::NativeCheckpoint {
-                    tick: 12,
-                    previous_tick: image.tick,
-                    chunks: &[],
-                    entities: &[],
-                    players: &[],
-                    globals: &image.globals,
-                },
-                |write| {
-                    regions
-                        .visit_native(|snapshot| {
-                            write(snapshot).map_err(|error| {
-                                crate::config::CoreError::Storage(error.to_string())
-                            })
-                        })
-                        .map_err(|error| mc_world::native::NativeError::Source(error.to_string()))
-                },
-                std::iter::empty::<
-                    Result<mc_world::native::NativeEntitySnapshot, mc_world::native::NativeError>,
-                >(),
-                &registry.blocks,
-                &registry.items,
-            )
-            .unwrap();
-        state.world.mark_flushed(&regions.written());
-    }
-    let checkpoint = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
-    assert_eq!(checkpoint.world.inhabited_time(pos), 12);
-    drop(checkpoint);
+    drop(recovered);
+    store
+        .commit_checkpoint(
+            NativeCheckpoint {
+                tick: 12,
+                previous_tick: 0,
+                chunks: &[],
+                entities: &image.entities,
+                players: &image.players,
+                globals: &image.globals,
+            },
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
     for tick in 13..=24 {
-        let active = tick <= 18 || tick >= 23;
-        assert_eq!(
-            append_tick(&mut state.world, &mut writer, pos, tick, active),
-            usize::from(tick == 19 || tick == 23),
-        );
+        let image = match tick {
+            19 => Some(InhabitedTimeImage {
+                chunk: [0, 0],
+                value: 18,
+                tick,
+                active: false,
+            }),
+            23 => Some(InhabitedTimeImage {
+                chunk: [0, 0],
+                value: 19,
+                tick,
+                active: true,
+            }),
+            _ => None,
+        };
+        let entries: Vec<_> = image
+            .into_iter()
+            .map(|image| JournalEntry::InhabitedTime { image })
+            .collect();
+        writer.append(tick, tick, &entries).unwrap();
     }
     writer.flush().unwrap();
-    assert_eq!(
-        state.world.inhabited_time(pos),
-        20,
-        "inactive ticks never accrue"
-    );
-    let crash = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
-    assert_eq!(crash.tick, 24);
-    assert_eq!(
-        crash.world.inhabited_time(pos),
-        20,
-        "checkpoint plus WAL tail"
-    );
-    drop(crash);
     drop(writer);
-    drop(state);
     drop(store);
-    export_anvil(
+    let receipt = export_anvil(
         &config,
         &source,
         &destination,
         &temporary.path().join("export.json"),
     )
     .unwrap();
+    assert_eq!(receipt.checkpoint_tick, Some(12));
+    assert_eq!(receipt.replay_tick, Some(24));
     let exported = read_exported_chunk(&destination, Dimension::Overworld, pos, &registry);
-    assert_eq!(exported.inhabited_time(), 20);
+    assert_eq!(exported.inhabited_time(), 20, "inactive ticks never accrue");
 }
 
 #[test]
@@ -250,8 +235,8 @@ fn export_replays_wal_without_mutating_native_or_journal_and_enumerates_all_dime
     let source = temporary.path().join("native-world");
     let destination = temporary.path().join("anvil-world");
     let receipt_path = temporary.path().join("export.json");
-    let config = CoreConfig::new(source.clone(), 42);
-    let registry = CoreRegistry::load(None).unwrap();
+    let config = crate::test_support::config(source.clone(), 42);
+    let registry = crate::test_support::registry().unwrap();
     let store = fixture_store(&config).unwrap();
     let stored_pos = ChunkPos { x: 2, z: 2 };
     for dimension in Dimension::ALL {
@@ -263,7 +248,7 @@ fn export_replays_wal_without_mutating_native_or_journal_and_enumerates_all_dime
         );
         store
             .fill_generated(
-                crate::native_checkpoint::dimension_id(dimension),
+                mc_core::native_checkpoint::dimension_id(dimension),
                 &[chunk],
                 &registry.blocks,
                 &registry.items,
@@ -344,8 +329,8 @@ fn assert_checkpoint_delay_overflow_refuses_publication(fluid: bool) {
     let source = temporary.path().join("native-world");
     let destination = temporary.path().join("anvil-world");
     let receipt_path = temporary.path().join("export.json");
-    let config = CoreConfig::new(source.clone(), 42);
-    let registry = CoreRegistry::load(None).unwrap();
+    let config = crate::test_support::config(source.clone(), 42);
+    let registry = crate::test_support::registry().unwrap();
     let store = fixture_store(&config).unwrap();
     let pos = ChunkPos { x: 0, z: 0 };
     let chunk = Chunk::empty(
@@ -356,12 +341,12 @@ fn assert_checkpoint_delay_overflow_refuses_publication(fluid: bool) {
     store
         .fill_generated(0, &[chunk], &registry.blocks, &registry.items)
         .unwrap();
-    let mut manifest = read_manifest(&config).unwrap();
+    let mut manifest = read_manifest(&store).unwrap();
     manifest.tick = 1;
     let deadline = manifest.tick + i32::MAX as u64 + 1;
     if fluid {
-        manifest.fluid_ticks = crate::fluids::FluidTicksImage {
-            due: vec![crate::fluids::FluidTickImage {
+        manifest.fluid_ticks = mc_core::fluids::FluidTicksImage {
+            due: vec![mc_core::fluids::FluidTickImage {
                 pos: [1, 80, 1],
                 fluid: Identifier::parse("minecraft:water").unwrap(),
                 deadline,
@@ -384,7 +369,7 @@ fn assert_checkpoint_delay_overflow_refuses_publication(fluid: bool) {
             }],
         }];
     }
-    write_manifest(&config, &manifest).unwrap();
+    write_manifest(&config, &store, &manifest).unwrap();
     drop(store);
     let before = hashes(&source).unwrap();
     let error = export_anvil(&config, &source, &destination, &receipt_path).unwrap_err();
@@ -423,15 +408,15 @@ fn export_rejects_checkpoint_fluid_tick_delay_overflow_without_clamping() {
     assert_checkpoint_delay_overflow_refuses_publication(true);
 }
 
-#[test]
-fn export_import_does_not_respawn_claimed_dead_generated_villager() {
+#[tokio::test]
+async fn export_import_does_not_respawn_claimed_dead_generated_villager() {
     use std::sync::Arc;
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("native-source");
     let anvil = temporary.path().join("anvil");
     let restored = temporary.path().join("native-restored");
-    let config = CoreConfig::new(source.clone(), 42);
-    let registry = Arc::new(CoreRegistry::load(None).unwrap());
+    let config = crate::test_support::config(source.clone(), 42);
+    let registry = Arc::new(crate::test_support::registry().unwrap());
     let store = fixture_store(&config).unwrap();
     let pos = ChunkPos { x: 0, z: 0 };
     let dead_claim = "village:0:0:resident:dead";
@@ -453,6 +438,13 @@ fn export_import_does_not_respawn_claimed_dead_generated_villager() {
         BlockStateId(registry.states.air),
         Identifier::parse("minecraft:plains").unwrap(),
     );
+    for x in 0..16 {
+        for z in 0..16 {
+            chunk
+                .set_block(x, 79, z, BlockStateId(registry.states.stone))
+                .unwrap();
+        }
+    }
     chunk.set_generated_entities(&[
         marker(dead_claim, [1.5, 80.0, 1.5]),
         marker(pending_claim, [2.5, 80.0, 2.5]),
@@ -526,8 +518,8 @@ fn export_import_does_not_respawn_claimed_dead_generated_villager() {
         &temporary.path().join("import.json"),
     )
     .unwrap();
-    let restored_config = CoreConfig::new(restored, config.seed);
-    let recovered = crate::native_checkpoint::recover_offline(&restored_config).unwrap();
+    let restored_config = crate::test_support::config(restored, config.seed);
+    let recovered = mc_core::native_checkpoint::recover_offline(&restored_config).unwrap();
     assert!(
         recovered.dimensions[&Dimension::Overworld]
             .entities
@@ -539,49 +531,73 @@ fn export_import_does_not_respawn_claimed_dead_generated_villager() {
             .contains(dead_claim)
     );
     drop(recovered);
-    let restored_store = fixture_store(&restored_config).unwrap();
-    let generator =
-        crate::native_checkpoint::generator(&restored_config, &registry, Dimension::Overworld)
-            .unwrap();
-    let mut world = crate::world::ChunkWorld::new_native(
-        restored_config.seed,
-        restored_store,
-        0,
-        generator,
-        &registry,
-        BlockStateId(registry.states.air),
-        [0, 80, 0],
-        Dimension::Overworld.geometry(),
-    );
-    world.ensure_blocking(
-        &[(crate::boundary::ChunkPos { x: 0, z: 0 }, 0)]
-            .into_iter()
-            .collect(),
-    );
-    let mut state = crate::tick::TickState::new(registry, world, 0, 1);
-    let mut changes = crate::boundary::ChangeSet::default();
-    crate::villager::generated::load(&mut state, &[], &mut changes);
-    assert_eq!(
-        changes.entities_spawned.len(),
-        1,
-        "only the unclaimed control marker may spawn"
-    );
-    assert_eq!(state.entities.len(), 1);
-    assert!(state.generated_entity_claims.contains(pending_claim));
+    async fn loaded_villager(
+        runtime: &mut crate::test_support::Running,
+        type_id: u32,
+    ) -> uuid::Uuid {
+        runtime
+            .until(|output, _| {
+                if !output
+                    .snapshot
+                    .chunks
+                    .iter()
+                    .any(|chunk| chunk.pos == (ChunkPos { x: 0, z: 0 }))
+                {
+                    return None;
+                }
+                let mut villagers = output
+                    .snapshot
+                    .entities
+                    .iter()
+                    .filter(|entity| entity.type_id == type_id);
+                let villager = villagers.next()?;
+                assert!(
+                    villagers.next().is_none(),
+                    "only the unclaimed control marker may spawn"
+                );
+                Some(villager.uuid)
+            })
+            .await
+    }
+    let villager_type = registry
+        .entity_types
+        .id_of(&Identifier::parse("minecraft:villager").unwrap())
+        .unwrap();
+    let mut runtime = crate::test_support::Running::open(restored_config.clone());
+    let (command, _) = mc_core::command_console::ConsoleCommand::new("forceload add 0 0".into());
     assert!(
-        !state.generated_entity_claims.contains(dead_claim),
+        runtime
+            .core
+            .submit(mc_core::boundary::PlayerInput::ConsoleCommand(command))
+    );
+    let uuid = loaded_villager(&mut runtime, villager_type).await;
+    assert!(runtime.core.checkpoint());
+    drop(runtime);
+    let recovered = mc_core::native_checkpoint::recover_offline(&restored_config).unwrap();
+    let replay = &recovered.dimensions[&Dimension::Overworld];
+    assert_eq!(replay.entities.len(), 1);
+    assert!(replay.generated_entity_claims.contains(pending_claim));
+    assert!(
+        !replay.generated_entity_claims.contains(dead_claim),
         "dead placement must not respawn"
     );
-    changes.entities_spawned.clear();
-    crate::villager::generated::load(
-        &mut state,
-        &[crate::boundary::ChunkPos { x: 0, z: 0 }],
-        &mut changes,
-    );
-    assert!(
-        changes.entities_spawned.is_empty(),
+    drop(recovered);
+
+    // Reload the same resident chunk after a real checkpoint: its remaining
+    // marker must not duplicate the surviving entity.
+    let mut runtime = crate::test_support::Running::open(restored_config.clone());
+    assert_eq!(loaded_villager(&mut runtime, villager_type).await, uuid);
+    assert!(runtime.core.checkpoint());
+    drop(runtime);
+    let recovered = mc_core::native_checkpoint::recover_offline(&restored_config).unwrap();
+    let replay = &recovered.dimensions[&Dimension::Overworld];
+    assert_eq!(
+        replay.entities.len(),
+        1,
         "pending marker is still once-only"
     );
+    assert!(replay.generated_entity_claims.contains(pending_claim));
+    assert!(!replay.generated_entity_claims.contains(dead_claim));
 }
 
 #[test]
@@ -589,8 +605,8 @@ fn export_hopper_deadlines_become_bounded_portable_remaining_cooldowns() {
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("native-world");
     let destination = temporary.path().join("anvil-world");
-    let config = CoreConfig::new(source.clone(), 42);
-    let registry = CoreRegistry::load(None).unwrap();
+    let config = crate::test_support::config(source.clone(), 42);
+    let registry = crate::test_support::registry().unwrap();
     drop(fixture_store(&config).unwrap());
     let hopper = registry
         .blocks

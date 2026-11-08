@@ -9,13 +9,160 @@ use mc_world::native::{
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-pub(crate) fn native_identity(config: &CoreConfig) -> [u8; 32] {
+/// Hydrate one native entity compound without filesystem access.
+pub fn hydrate_entity(
+    registry: &crate::registry::CoreRegistry,
+    base: &mut crate::journal::Replay,
+    payload: &mc_nbt::Tag,
+    manifest_tick: u64,
+) -> Result<(), CoreError> {
+    let mc_nbt::Tag::Compound(fields) = payload else {
+        return Err(CoreError::Storage(
+            "native entity: expected compound".into(),
+        ));
+    };
+    mc_world::anvil::validate_shared_fields(fields)
+        .map_err(|error| CoreError::Storage(format!("native entity: {error}")))?;
+    let empty = mc_data::entity_nbt::VanillaEntity {
+        id: String::new(),
+        uuid: uuid::Uuid::nil(),
+        pos: [0.0; 3],
+        motion: [0.0; 3],
+        yaw: 0.0,
+        pitch: 0.0,
+        on_ground: false,
+        health: 20.0,
+        age: 0,
+        breed_cooldown: 0,
+        pickup_delay: 0,
+        item: None,
+        experience_orb: None,
+        sheep_wool: None,
+        active_effects: Vec::new(),
+        absorption_amount: 0.0,
+        wire_id: 0,
+        extra_fields: Vec::new(),
+    };
+    let record = mc_data::entity_nbt::entity_from_fields(&registry.items, empty, fields).map_err(
+        |error| {
+            use mc_data::item_nbt::ItemNbtError;
+            let field = match &error {
+                ItemNbtError::InvalidId(_) | ItemNbtError::UnknownItem(_) => "Item.id",
+                ItemNbtError::InvalidEnchantment(_) => "Item.components.minecraft:enchantments",
+                ItemNbtError::InvalidComponent(_) => "Item.components",
+            };
+            CoreError::Storage(format!("native entity {field}: {error}"))
+        },
+    )?;
+    let invalid =
+        |reason: String| CoreError::Storage(format!("native entity {}: {reason}", record.uuid));
+    let type_id = registry
+        .entity_type_id(&record.id)
+        .ok_or_else(|| invalid("unknown type".into()))?;
+    let wire_id = record.wire_id;
+    if wire_id <= 0 || base.entities.contains_key(&wire_id) {
+        return Err(invalid(format!("invalid or duplicate WireId {wire_id}")));
+    }
+    use crate::core::{appearance_from_vanilla_entity, velocity_from_vanilla_motion};
+    if record
+        .pos
+        .iter()
+        .chain(record.motion.iter())
+        .any(|value| !value.is_finite())
+        || !record.yaw.is_finite()
+        || !record.pitch.is_finite()
+        || !record.health.is_finite()
+    {
+        return Err(invalid(
+            "non-finite position, motion, rotation or health".into(),
+        ));
+    }
+    let projectile = if crate::projectiles::ProjectileKind::from_name(&record.id).is_some() {
+        Some(Box::new(
+            crate::projectiles::persistence::from_entity(&record, &registry.items)
+                .map_err(invalid)?,
+        ))
+    } else {
+        None
+    };
+    let ageable = registry.blueprint(type_id).is_some_and(|blueprint| {
+        blueprint
+            .goals
+            .iter()
+            .any(|goal| goal.kind == crate::blueprint::GoalKind::Breed)
+    });
+    let mut appearance = appearance_from_vanilla_entity(&record);
+    crate::end_fight::native_appearance(&record, &mut appearance).map_err(invalid)?;
+    crate::item_frame::native_appearance(&record, &mut appearance)?;
+    crate::painting::native_appearance(&record, &mut appearance, registry)?;
+    if let Some(fight) = &mut base.end_fight {
+        crate::end_fight::hydrate_native_entity(fight, &record).map_err(invalid)?;
+    }
+    appearance.equipment =
+        crate::entity_loot::equipment_from_fields(&registry.items, &record.extra_fields)?.into();
+    let native_state = crate::journal::EntityStateImage::from_record(registry, &record)
+        .map_err(|err| invalid(err.to_string()))?;
+    appearance.baby |= native_state.entity_life.child_ticks != 0;
+    appearance.shared_flags |= u8::from(native_state.burn_ticks != 0);
+    base.entities.insert(
+        wire_id,
+        crate::journal::ReplayEntity {
+            uuid: record.uuid.to_string(),
+            type_id,
+            pos: record.pos,
+            vel: velocity_from_vanilla_motion(record.motion),
+            yaw: record.yaw,
+            pitch: record.pitch,
+            ground: record.on_ground,
+            health: record.health,
+            alive: true,
+            age: native_state.age,
+            breed_cooldown: record
+                .breed_cooldown
+                .max(if ageable { record.age.max(0) } else { 0 })
+                as u32,
+            pickup_delay: record.pickup_delay as u32,
+            item: record.item.clone(),
+            appearance,
+            active_effects: crate::journal::active_effects_from_nbt(
+                &record.active_effects,
+                record.absorption_amount,
+            ),
+            villager: if matches!(
+                record.id.as_str(),
+                "minecraft:villager" | "minecraft:zombie_villager" | "minecraft:wandering_trader"
+            ) {
+                let mut state = crate::villager::persistence::villager_from_fields(
+                    &registry.items,
+                    &record.extra_fields,
+                    manifest_tick,
+                )
+                .map_err(|err| CoreError::Storage(format!("villager {}: {err}", record.uuid)))?;
+                state.wandering = record.id == "minecraft:wandering_trader";
+                if record.id.as_str() == "minecraft:zombie_villager"
+                    && state.conversion_time.is_none()
+                {
+                    state.conversion_time = Some(-1);
+                }
+                Some(Box::new(state))
+            } else {
+                None
+            },
+            state: native_state,
+            projectile,
+            tick: manifest_tick,
+        },
+    );
+    Ok(())
+}
+
+pub fn native_identity(config: &CoreConfig) -> [u8; 32] {
     native_identity_at(config, mc_worldgen::WORLDGEN_REVISION)
 }
 
 /// Identity of `config` under an explicit generator revision (the offline
 /// worldgen upgrade needs the stored one).
-pub(crate) fn native_identity_at(config: &CoreConfig, revision: u32) -> [u8; 32] {
+pub fn native_identity_at(config: &CoreConfig, revision: u32) -> [u8; 32] {
     // Fixed 16-byte format tag, followed by seed and generator revision (BE).
     let mut identity = [0; 32];
     const TAG: [u8; 16] = *b"SolarisV2Native\0";
@@ -25,7 +172,7 @@ pub(crate) fn native_identity_at(config: &CoreConfig, revision: u32) -> [u8; 32]
     identity
 }
 
-pub(crate) fn dimension_id(dimension: Dimension) -> u32 {
+pub fn dimension_id(dimension: Dimension) -> u32 {
     match dimension {
         Dimension::Overworld => 0,
         Dimension::Nether => 1,
@@ -33,7 +180,7 @@ pub(crate) fn dimension_id(dimension: Dimension) -> u32 {
     }
 }
 
-pub(crate) fn domain_versions() -> BTreeMap<String, u32> {
+pub fn domain_versions() -> BTreeMap<String, u32> {
     [
         "climate",
         "gamerules",
@@ -51,7 +198,7 @@ pub(crate) fn domain_versions() -> BTreeMap<String, u32> {
     .collect()
 }
 
-pub(crate) fn record(tick: u64, payload: Vec<u8>) -> NativeDomainRecord {
+pub fn record(tick: u64, payload: Vec<u8>) -> NativeDomainRecord {
     NativeDomainRecord {
         version: 1,
         captured_tick: tick,
@@ -59,13 +206,13 @@ pub(crate) fn record(tick: u64, payload: Vec<u8>) -> NativeDomainRecord {
     }
 }
 
-pub(crate) fn tag_record(tick: u64, tag: &Tag) -> Result<NativeDomainRecord, CoreError> {
+pub fn tag_record(tick: u64, tag: &Tag) -> Result<NativeDomainRecord, CoreError> {
     let mut bytes = Vec::new();
     mc_nbt::write_named(&mut bytes, "", tag).map_err(|e| CoreError::Storage(e.to_string()))?;
     Ok(record(tick, bytes))
 }
 
-pub(crate) fn decode_tag(record: &NativeDomainRecord, key: &str) -> Result<Tag, CoreError> {
+pub fn decode_tag(record: &NativeDomainRecord, key: &str) -> Result<Tag, CoreError> {
     let mut input = record.payload.as_slice();
     let (_, tag) = mc_nbt::read_named(&mut input)
         .map_err(|e| CoreError::Storage(format!("native {key}: {e}")))?;
@@ -78,7 +225,7 @@ pub(crate) fn decode_tag(record: &NativeDomainRecord, key: &str) -> Result<Tag, 
 }
 
 /// Resolve vanilla statistic names through the same registries gameplay uses.
-pub(crate) fn statistics_from_json(
+pub fn statistics_from_json(
     value: serde_json::Value,
     registry: &crate::registry::CoreRegistry,
 ) -> Result<mc_data::statistics::PlayerStatistics, CoreError> {
@@ -98,7 +245,7 @@ pub(crate) fn statistics_from_json(
     .map_err(CoreError::Storage)
 }
 
-pub(crate) fn statistics_to_json(
+pub fn statistics_to_json(
     statistics: &mc_data::statistics::PlayerStatistics,
     registry: &crate::registry::CoreRegistry,
 ) -> Result<serde_json::Value, CoreError> {
@@ -135,13 +282,13 @@ pub(crate) fn statistics_to_json(
         .map_err(CoreError::Storage)
 }
 
-pub(crate) fn generation_records(
+pub fn generation_records(
     config: &CoreConfig,
 ) -> Result<BTreeMap<String, NativeDomainRecord>, CoreError> {
     generation_records_at(config, mc_worldgen::WORLDGEN_REVISION)
 }
 
-pub(crate) fn generation_records_at(
+pub fn generation_records_at(
     config: &CoreConfig,
     revision: u32,
 ) -> Result<BTreeMap<String, NativeDomainRecord>, CoreError> {
@@ -174,7 +321,7 @@ pub(crate) fn generation_records_at(
     ]))
 }
 
-pub(crate) fn validate_manifest(manifest: &CheckpointManifest) -> Result<(), CoreError> {
+pub fn validate_manifest(manifest: &CheckpointManifest) -> Result<(), CoreError> {
     let mut expected_versions = domain_versions();
     if !manifest.domain_versions.contains_key("plugins")
         && !manifest.domain_versions.contains_key("plugin_startup")
@@ -260,17 +407,17 @@ pub(crate) fn validate_manifest(manifest: &CheckpointManifest) -> Result<(), Cor
 }
 
 /// Pure recovered images plus one pinned native reader; no owners or writes.
-pub(crate) struct RecoveredWorld {
-    pub(crate) registry: Arc<crate::registry::CoreRegistry>,
-    pub(crate) config: CoreConfig,
+pub struct RecoveredWorld {
+    pub registry: Arc<crate::registry::CoreRegistry>,
+    pub config: CoreConfig,
     /// Pinned metadata/player images only; entities hydrate directly into `dimensions`.
-    pub(crate) checkpoint: NativeCheckpointImage,
-    pub(crate) manifest: CheckpointManifest,
-    pub(crate) dimensions: BTreeMap<Dimension, Replay>,
-    pub(crate) reader: NativeCheckpointReader,
+    pub checkpoint: NativeCheckpointImage,
+    pub manifest: CheckpointManifest,
+    pub dimensions: BTreeMap<Dimension, Replay>,
+    pub reader: NativeCheckpointReader,
 }
 
-pub(crate) fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError> {
+pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError> {
     let mut registry = crate::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())?;
     // Offline recovery resolves the same pinned native types as live startup.
     // No tick events are started and no guest command is applied.
@@ -304,7 +451,7 @@ pub(crate) fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, Cor
     recover_with_reader(config, registry, reader)
 }
 
-pub(crate) fn import_required(config: &CoreConfig) -> CoreError {
+pub fn import_required(config: &CoreConfig) -> CoreError {
     CoreError::Storage(format!(
         "{} has persisted history but no native checkpoint; use solaris-v2 world import-anvil --source ANVIL --destination NATIVE --receipt JSON",
         config.world_dir.display()
@@ -313,7 +460,7 @@ pub(crate) fn import_required(config: &CoreConfig) -> CoreError {
 
 /// Revision stored in `identity` when it is `config`'s identity at some other
 /// generator revision, i.e. nothing but the worldgen revision differs.
-pub(crate) fn revision_only_difference(config: &CoreConfig, identity: [u8; 32]) -> Option<u32> {
+pub fn revision_only_difference(config: &CoreConfig, identity: [u8; 32]) -> Option<u32> {
     let revision = u32::try_from(u64::from_be_bytes(identity[24..].try_into().ok()?)).ok()?;
     (native_identity_at(config, revision) == identity).then_some(revision)
 }
@@ -321,7 +468,7 @@ pub(crate) fn revision_only_difference(config: &CoreConfig, identity: [u8; 32]) 
 /// Refusal for a store that failed identity admission. A world that differs only
 /// in an older worldgen revision gets the explicit operator path; everything else
 /// keeps the plain storage refusal.
-pub(crate) fn open_refusal(
+pub fn open_refusal(
     config: &CoreConfig,
     path: &std::path::Path,
     error: mc_world::native::NativeError,
@@ -351,7 +498,7 @@ pub(crate) fn open_refusal(
 /// Whether the stored checkpoint of the world at `path`, recorded at worldgen
 /// `revision`, is otherwise readable by this build. The offline worldgen upgrade and its
 /// startup hint only make sense for such worlds; a revision rewrite cannot fix the rest.
-pub(crate) fn stored_state_readable(
+pub fn stored_state_readable(
     config: &CoreConfig,
     path: &std::path::Path,
     revision: u32,
@@ -368,7 +515,7 @@ pub(crate) fn stored_state_readable(
 
 /// Operator guidance for a world whose stored globals this build does not read: written
 /// by an older Solaris storage format, so the supported route is an Anvil round trip.
-pub(crate) fn older_format_refusal(config: &CoreConfig) -> CoreError {
+pub fn older_format_refusal(config: &CoreConfig) -> CoreError {
     let world = config.world_dir.display();
     CoreError::Storage(format!(
         "world {world} was written by an older Solaris storage format that this build cannot \
@@ -391,7 +538,7 @@ pub(crate) fn read_refusal(config: &CoreConfig, error: mc_world::native::NativeE
 /// Validate and hydrate one stored native entity exactly as recovery does,
 /// with the identifying context (dimension, store path, chunk, wire-id, UUID,
 /// type) on every refusal. Shared by recovery and the read-only census.
-pub(crate) fn hydrate_visited_entity(
+pub fn hydrate_visited_entity(
     registry: &crate::registry::CoreRegistry,
     config: &CoreConfig,
     replay: &mut Replay,
@@ -417,7 +564,7 @@ pub(crate) fn hydrate_visited_entity(
                 )));
             }
         }
-        crate::dimensions::recovery::hydrate_entity(registry, replay, payload, manifest_tick)
+        crate::native_checkpoint::hydrate_entity(registry, replay, payload, manifest_tick)
     })()
     .map_err(|error| {
         let fields = match payload {
@@ -460,7 +607,7 @@ pub(crate) fn hydrate_visited_entity(
     })
 }
 
-pub(crate) fn recover_with_reader(
+pub fn recover_with_reader(
     config: &CoreConfig,
     registry: Arc<crate::registry::CoreRegistry>,
     reader: NativeCheckpointReader,
@@ -713,7 +860,7 @@ pub(crate) fn encode_players<'a>(
         .collect()
 }
 
-pub(crate) fn encode_entities(
+pub fn encode_entities(
     dimension: Dimension,
     chunks: &BTreeMap<(i32, i32), mc_world::anvil::EntityChunk>,
     items: &mc_data::items::ItemRegistry,
@@ -764,7 +911,7 @@ pub(crate) fn entity_tombstone(
 }
 
 /// Build the immutable configured generator without reading or publishing world metadata.
-pub(crate) fn generator(
+pub fn generator(
     config: &CoreConfig,
     registry: &crate::registry::CoreRegistry,
     dimension: Dimension,
@@ -786,9 +933,7 @@ pub(crate) fn generator(
 }
 
 /// Encode the recovered WAL-tail image for offline conversion, without writes or ticks.
-pub(crate) fn encode_checkpoint(
-    world: &RecoveredWorld,
-) -> Result<NativeCheckpointImage, CoreError> {
+pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage, CoreError> {
     let mut manifest = world.manifest.clone();
     let tick = world.dimensions[&Dimension::Overworld].tick;
     let mut entities = Vec::new();
@@ -968,7 +1113,7 @@ pub(crate) fn encode_checkpoint(
     })
 }
 
-pub(crate) fn refresh_metadata(
+pub fn refresh_metadata(
     globals: &mut BTreeMap<String, NativeDomainRecord>,
     manifest: &CheckpointManifest,
 ) -> Result<(), CoreError> {

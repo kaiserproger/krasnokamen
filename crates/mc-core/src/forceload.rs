@@ -77,7 +77,7 @@ pub(crate) fn owner(chunk: ChunkPos) -> String {
     format!("{OWNER_PREFIX}{}:{}", chunk.x, chunk.z)
 }
 
-pub(crate) fn is_forced_owner(owner: &str) -> bool {
+pub fn is_forced_owner(owner: &str) -> bool {
     owner.starts_with(OWNER_PREFIX)
 }
 

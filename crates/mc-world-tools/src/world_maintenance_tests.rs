@@ -9,6 +9,8 @@ fn world_dir(slug: &str) -> std::path::PathBuf {
 
 fn config(dir: &std::path::Path, seed: i64) -> CoreConfig {
     let mut config = CoreConfig::new(dir.to_path_buf(), seed);
+    config.vanilla_data_dir =
+        Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"));
     config.checkpoint_every_ticks = u64::MAX;
     config
 }
@@ -35,7 +37,10 @@ fn rectangle_covers_the_radius_in_chunks_including_negative_blocks() {
 fn prune_forgets_far_pregenerated_chunks_and_they_regenerate_on_demand() {
     let dir = world_dir("mc-core-prune");
     let config = config(&dir, 42);
-    let request = PregenerateRequest::new(64);
+    let request = PregenerateRequest {
+        radius: 64,
+        center: Some([0, 0]),
+    };
     let first = pregenerate(&config, &request, &mut no_progress).expect("pregenerate");
     assert_eq!(first.chunks, 81);
 

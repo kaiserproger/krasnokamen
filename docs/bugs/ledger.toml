@@ -1205,7 +1205,7 @@ repro = "manual"
 severity = "blocker"
 status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CUSTODY-MOUNT-EXPORT"
-regression = ["cargo:mc-core:world_conversion::roundtrip_tests::imported_mount_cargo_menu_roundtrip_uses_native_contents", "harness:entities:native-v2-custody-mount-export"]
+regression = ["cargo:mc-world-conversion:roundtrip_tests::imported_mount_cargo_menu_roundtrip_uses_native_contents", "harness:entities:native-v2-custody-mount-export"]
 failing_first = "reported"
 
 [[bug]]

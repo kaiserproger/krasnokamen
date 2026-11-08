@@ -10,6 +10,13 @@ retired. [ADR 0013](decisions/0013-core-model-v2.md) governs the core model.
 - `crates/mc-edge`: CLI, configuration, connections, authentication, packet
   decode and per-viewer presentation; it does not own gameplay state.
 - `crates/mc-core`: native tick, gameplay, intents/merge, journal and checkpoint.
+- `crates/mc-world-conversion`: offline Anvil import/export, native census and
+  probes; `crates/mc-world-tools`: stopped-world pregeneration, prune/compact
+  and generation-contract upgrades. Both are above `mc-core`; the edge routes
+  operator commands to them. Neither is a core dependency, even for tests.
+  Native codecs and recovery stay with the core's `native_checkpoint` owner.
+  Live and offline generation share `chunk_loader`'s immutable source and worker
+  pool, not a callback into a shared tick state.
 - `crates/mc-protocol`, `mc-data`, `mc-world`, `mc-physics` and `mc-worldgen`:
   protocol, content and shared world/physics implementation.
 - `mc-plugin-host` and `mc-script`: isolated component execution and bounded

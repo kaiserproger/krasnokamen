@@ -7,13 +7,13 @@
 //! started or ticked; the only write is the receipt, which must lie outside the
 //! source.
 use super::{fail, hashes, write_receipt};
-use crate::dimensions::Dimension;
-use crate::journal::{CheckpointManifest, Replay, player_from_tag, visit_complete_batches_after};
-use crate::native_checkpoint::{
+use mc_core::dimensions::Dimension;
+use mc_core::journal::{CheckpointManifest, Replay, player_from_tag, visit_complete_batches_after};
+use mc_core::native_checkpoint::{
     decode_tag, dimension_id, generation_records, generator, hydrate_visited_entity,
     native_identity, validate_manifest,
 };
-use crate::{CoreConfig, CoreError};
+use mc_core::{CoreConfig, CoreError};
 use mc_world::native::{NativeEntitySnapshot, NativeReadOnlyStore};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -142,9 +142,9 @@ fn probe(
     config.world_dir = source.clone();
     let path = source.join("native/state.redb");
     if !path.is_file() {
-        return Err(crate::native_checkpoint::import_required(&config));
+        return Err(mc_core::native_checkpoint::import_required(&config));
     }
-    let registry = crate::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())?;
+    let registry = mc_core::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())?;
     let storage = |error: mc_world::native::NativeError| CoreError::Storage(error.to_string());
     let store =
         NativeReadOnlyStore::open_with_cache(&path, native_identity(&config), 16 * 1024 * 1024)
@@ -356,7 +356,7 @@ fn probe(
 }
 
 fn push_item(
-    registry: &crate::registry::CoreRegistry,
+    registry: &mc_core::registry::CoreRegistry,
     items: &mut Vec<ProbeItem>,
     place: &str,
     slot: u32,

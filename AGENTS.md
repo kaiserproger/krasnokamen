@@ -90,8 +90,11 @@ Everything else: the [documentation index](docs/README.md).
 
 Layout: `crates/mc-core/` authoritative gameplay, native tick, snapshots,
 intents and merge, WAL and checkpoints; `crates/mc-edge/` CLI, config, sockets,
-auth, console, dashboard and connection presentation; other `crates/` protocol,
-data, world, worldgen, physics, plugins, Loader and tooling.
+auth, console, dashboard and connection presentation. Offline Anvil interchange,
+census and probes belong to `crates/mc-world-conversion/`; pregeneration,
+prune/compact and revision upgrades belong to `crates/mc-world-tools/`. Both
+depend on the core, never the reverse. Other `crates/` own protocol, data, world,
+worldgen, physics, plugins, Loader and tooling.
 `crates/workspace-features/` unifies third-party features for the server build and
 core tests without expanding standalone lower crates; it has no runtime API and
 must never depend on a Solaris crate.

@@ -6,10 +6,10 @@
 //! the (older) revision. Stored chunks, entities and gameplay state are not touched: only
 //! chunks generated after the upgrade use the new generator.
 
-use crate::native_checkpoint::{
+use mc_core::native_checkpoint::{
     generation_records_at, native_identity_at, revision_only_difference,
 };
-use crate::{CoreConfig, CoreError};
+use mc_core::{CoreConfig, CoreError};
 use mc_world::native::{NativeGenerationContract, NativeStore};
 
 /// What [`upgrade_worldgen_revision`] found and did.
@@ -51,7 +51,7 @@ pub fn upgrade_worldgen_revision(config: &CoreConfig) -> Result<WorldgenUpgrade,
     })?;
     let path = config.world_dir.join("native/state.redb");
     if !path.is_file() {
-        return Err(crate::native_checkpoint::import_required(config));
+        return Err(mc_core::native_checkpoint::import_required(config));
     }
     let current = mc_worldgen::WORLDGEN_REVISION;
     let stored_identity = NativeStore::read_identity_for_update(&path).map_err(storage)?;
@@ -70,11 +70,12 @@ pub fn upgrade_worldgen_revision(config: &CoreConfig) -> Result<WorldgenUpgrade,
     }
     // A revision rewrite cannot fix other stored state this build cannot read (a world
     // from an older storage format): refuse before writing anything.
-    if let Err(unreadable) = crate::native_checkpoint::stored_state_readable(config, &path, stored)
+    if let Err(unreadable) =
+        mc_core::native_checkpoint::stored_state_readable(config, &path, stored)
     {
         return Err(match unreadable {
             mc_world::native::NativeError::GlobalDomains => {
-                crate::native_checkpoint::older_format_refusal(config)
+                mc_core::native_checkpoint::older_format_refusal(config)
             }
             other => CoreError::Storage(format!(
                 "world state is not readable by this build ({other}); refusing to upgrade"

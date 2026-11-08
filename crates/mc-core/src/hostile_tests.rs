@@ -313,7 +313,7 @@ fn natural_skeleton_arrow_hit_and_tombstone_survive_checkpoint_wal_replay() {
                 let payload = mc_nbt::Tag::Compound(
                     mc_data::entity_nbt::entity_to_fields(&state.registry.items, entity).unwrap(),
                 );
-                crate::dimensions::recovery::hydrate_entity(
+                crate::native_checkpoint::hydrate_entity(
                     &state.registry,
                     &mut base,
                     &payload,

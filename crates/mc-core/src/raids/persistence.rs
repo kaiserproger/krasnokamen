@@ -265,10 +265,10 @@ impl Raids {
         Ok(out)
     }
 }
-pub(crate) fn to_nbt(raids: &Raids) -> Tag {
+pub fn to_nbt(raids: &Raids) -> Tag {
     raids.to_nbt()
 }
 
-pub(crate) fn from_nbt(root: &Tag) -> Result<Raids, String> {
+pub fn from_nbt(root: &Tag) -> Result<Raids, String> {
     Raids::from_nbt(root)
 }

@@ -12,10 +12,10 @@ use super::{
     ConversionStats, RecordUpgradeReceipt, check_version, fail, files, player_source_version,
     read_nbt, saved_data_source_version, source_version,
 };
-use crate::config::{CoreConfig, CoreError};
-use crate::dimensions::Dimension;
-use crate::journal::{CheckpointManifest, Replay};
-use crate::native_checkpoint as bridge;
+use mc_core::config::{CoreConfig, CoreError};
+use mc_core::dimensions::Dimension;
+use mc_core::journal::{CheckpointManifest, Replay};
+use mc_core::native_checkpoint as bridge;
 
 /// Read one named child of a compound Tag: missing → None, duplicate →
 /// fail-closed. Takes `&Tag` (unlike `bees::field`, which takes field
@@ -414,7 +414,7 @@ fn image(manifest: &mut CheckpointManifest, dimension: Dimension) -> &mut Checkp
 fn ticks(
     chunk: &mut Chunk,
     manifest: &mut CheckpointManifest,
-    registry: &crate::registry::CoreRegistry,
+    registry: &mc_core::registry::CoreRegistry,
 ) -> Result<(), CoreError> {
     let key = [chunk.pos.x, chunk.pos.z];
     let mut block = Vec::with_capacity(chunk.scheduled_block_ticks.len());
@@ -429,7 +429,7 @@ fn ticks(
         manifest.block_ticks.next_sequence = sequence
             .checked_add(1)
             .ok_or_else(|| fail("block tick sequence overflow"))?;
-        block.push(crate::block_ticks::BlockTickImage {
+        block.push(mc_core::block_ticks::BlockTickImage {
             pos: [tick.pos.x, tick.pos.y, tick.pos.z],
             block: tick.block.clone(),
             trigger_tick: tick.trigger_tick,
@@ -447,7 +447,7 @@ fn ticks(
     manifest
         .block_ticks
         .chunks
-        .push(crate::block_ticks::BlockTickChunkImage {
+        .push(mc_core::block_ticks::BlockTickChunkImage {
             chunk: key,
             ticks: block,
         });
@@ -463,7 +463,7 @@ fn ticks(
         manifest
             .fluid_ticks
             .due
-            .push(crate::fluids::FluidTickImage {
+            .push(mc_core::fluids::FluidTickImage {
                 pos: [tick.pos.x, tick.pos.y, tick.pos.z],
                 fluid: tick.fluid.clone(),
                 deadline: tick.trigger_tick,
@@ -733,7 +733,7 @@ fn admit_player(
             "{path}: player UUID disagrees with source identity"
         )));
     }
-    let player = crate::journal::player_from_tag(&tag, items)
+    let player = mc_core::journal::player_from_tag(&tag, items)
         .map_err(|error| fail(format!("{path}: {error}")))?;
     if player.pos.iter().any(|value| !value.is_finite())
         || !player.yaw.is_finite()
@@ -780,11 +780,11 @@ pub(super) fn convert(
 ) -> Result<ConversionStats, CoreError> {
     let paths = files(source)?;
     let mut consumed = BTreeSet::new();
-    let mut registry = crate::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())?;
+    let mut registry = mc_core::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())?;
     // S1 native settlement startup is world policy: `Core::open` always
     // materializes it before admission, so converted worlds must persist the
     // same applied identity or reopen refuses the checkpoint.
-    crate::plugin_startup::apply(
+    mc_core::plugin_startup::apply(
         &mut registry,
         &mc_plugin_host::DeploymentContribution::default(),
         None,
@@ -841,7 +841,7 @@ pub(super) fn convert(
             )));
         }
     }
-    let mut metadata = crate::level_metadata::MetadataTags::new();
+    let mut metadata = mc_core::level_metadata::MetadataTags::new();
     let level_path = source.join("level.dat");
     let mut level = read_nbt(&level_path)?;
     let level_version = source_version(&level, &level_path)?;
@@ -933,7 +933,7 @@ pub(super) fn convert(
         None,
     );
     for saved in report.saved_data {
-        crate::level_metadata::validate_relative_path(&saved.path)?;
+        mc_core::level_metadata::validate_relative_path(&saved.path)?;
         if auxiliary_sources.contains_key(Path::new(&saved.path))
             || metadata.contains_key(&saved.path)
         {
@@ -1118,7 +1118,7 @@ pub(super) fn convert(
             }),
         );
     }
-    crate::level_metadata::import_tags(&metadata, &mut manifest)?;
+    mc_core::level_metadata::import_tags(&metadata, &mut manifest)?;
     let tick = manifest.tick;
     for child in manifest.dimensions.values_mut() {
         child.tick = tick;
@@ -1227,7 +1227,7 @@ pub(super) fn convert(
             }
             let mut tag = read_nbt(&path)?;
             if name == "data/minecraft/maps/last_id.dat" {
-                map_sequence = crate::maps::nbt::sequence_from_tag(&tag).map_err(fail)?;
+                map_sequence = mc_core::maps::nbt::sequence_from_tag(&tag).map_err(fail)?;
                 consumed.insert(relative.clone());
                 continue;
             }
@@ -1257,7 +1257,7 @@ pub(super) fn convert(
                 if id < 0 {
                     return Err(fail("negative saved map id"));
                 }
-                let map = crate::maps::nbt::from_tag(&tag).map_err(fail)?;
+                let map = mc_core::maps::nbt::from_tag(&tag).map_err(fail)?;
                 saved_maps.insert(id, Arc::new(map));
                 consumed.insert(relative.clone());
                 continue;
@@ -1289,7 +1289,7 @@ pub(super) fn convert(
         "map_sequence".into(),
         bridge::record(tick, serde_json::to_vec(&map_sequence).map_err(fail)?),
     );
-    crate::maps::checkpoint(&saved_maps, tick, &mut globals)?;
+    mc_core::maps::checkpoint(&saved_maps, tick, &mut globals)?;
     std::fs::create_dir(stage.join("native")).map_err(fail)?;
     let store = NativeStore::create(
         &stage.join("native/state.redb"),
@@ -1804,12 +1804,12 @@ pub(super) fn convert(
                         return Err(fail(format!("{key}: dragon fight outside End")));
                     }
                     image(&mut manifest, dimension).end_fight = Some(
-                        crate::end_fight::from_nbt(tag)
+                        mc_core::end_fight::from_nbt(tag)
                             .map_err(|error| fail(format!("{key}: {error}")))?,
                     );
                 } else {
                     image(&mut manifest, dimension).raids = Some(
-                        crate::raids::from_nbt(tag)
+                        mc_core::raids::from_nbt(tag)
                             .map_err(|error| fail(format!("{key}: {error}")))?,
                     );
                 }
@@ -1853,7 +1853,7 @@ pub(super) fn convert(
         for (&(x, z), chunk) in chunks.iter_mut() {
             for (index, entity) in chunk.entities.iter_mut().enumerate() {
                 if let Some(raids) = image(&mut manifest, dimension).raids.as_mut() {
-                    crate::raids::hydrate_native_entity(raids, entity).map_err(|error| {
+                    mc_core::raids::hydrate_native_entity(raids, entity).map_err(|error| {
                         let path = source
                             .join(&roots[&dimension])
                             .join("entities")
@@ -1883,14 +1883,12 @@ pub(super) fn convert(
             }
         }
         let encoded = bridge::encode_entities(dimension, chunks, &registry.items, tick)?;
-        let mut replay = Replay {
-            end_fight: image(&mut manifest, dimension).end_fight.clone(),
-            raids: image(&mut manifest, dimension).raids.clone(),
-            wandering_trader: image(&mut manifest, dimension).wandering_trader,
-            ..Default::default()
-        };
+        let mut replay = Replay::default();
+        replay.end_fight = image(&mut manifest, dimension).end_fight.clone();
+        replay.raids = image(&mut manifest, dimension).raids.clone();
+        replay.wandering_trader = image(&mut manifest, dimension).wandering_trader;
         for entity in &encoded {
-            crate::dimensions::recovery::hydrate_entity(
+            mc_core::native_checkpoint::hydrate_entity(
                 &registry,
                 &mut replay,
                 entity.payload.as_ref().expect("live entity"),
@@ -2099,13 +2097,13 @@ pub(super) fn convert(
             player.record = bridge::tag_record(tick, &tag)?;
         } else {
             let mut player =
-                crate::journal::player_from_tag(&Tag::Compound(Vec::new()), &registry.items)?;
+                mc_core::journal::player_from_tag(&Tag::Compound(Vec::new()), &registry.items)?;
             player.statistics = statistics;
             player.pos = manifest.world_spawn.unwrap_or([0, 80, 0]).map(f64::from);
             player.yaw = manifest.world_spawn_rotation[0];
             player.pitch = manifest.world_spawn_rotation[1];
             player.tick = tick;
-            let tag = crate::journal::player_to_tag(&player, &registry.items)?;
+            let tag = mc_core::journal::player_to_tag(&player, &registry.items)?;
             admit_player(
                 tag,
                 uuid,
@@ -2154,17 +2152,17 @@ pub(super) fn convert(
     }
     stats.players = players.len() as u64;
     let scoreboard = if let Some(tag) = metadata.get("data/minecraft/scoreboard.dat") {
-        crate::scoreboard::Scoreboard::from_nbt(tag).map_err(fail)?;
+        mc_core::scoreboard::Scoreboard::from_nbt(tag).map_err(fail)?;
         tag.clone()
     } else {
-        crate::scoreboard::Scoreboard::default().to_nbt()
+        mc_core::scoreboard::Scoreboard::default().to_nbt()
     };
     let mut extras: Vec<(String, Tag)> = Vec::new();
     for relative in paths.iter().filter(|path| !consumed.contains(*path)) {
         let name = relative
             .to_str()
             .ok_or_else(|| fail("non-UTF8 extra path"))?;
-        crate::level_metadata::validate_relative_path(name)?;
+        mc_core::level_metadata::validate_relative_path(name)?;
         if name == "session.lock" {
             continue;
         }
@@ -2210,11 +2208,11 @@ pub(super) fn convert(
     globals.insert("scoreboard".into(), bridge::tag_record(tick, &scoreboard)?);
     globals.insert(
         "bossbars".into(),
-        bridge::tag_record(tick, &crate::bossbar::BossBars::default().to_nbt())?,
+        bridge::tag_record(tick, &mc_core::bossbar::BossBars::default().to_nbt())?,
     );
     globals.insert(
         "level_metadata".into(),
-        bridge::tag_record(tick, &crate::level_metadata::to_tag(&metadata))?,
+        bridge::tag_record(tick, &mc_core::level_metadata::to_tag(&metadata))?,
     );
     let extras_record = bridge::tag_record(tick, &Tag::Compound(extras))?;
     if extras_record.payload.len() as u64 > EXTRAS_BUDGET {
@@ -2227,14 +2225,14 @@ pub(super) fn convert(
         "plugins".into(),
         bridge::record(
             tick,
-            serde_json::to_vec(&crate::plugin::PluginState::default()).map_err(fail)?,
+            serde_json::to_vec(&mc_core::plugin::PluginState::default()).map_err(fail)?,
         ),
     );
     globals.insert(
         "plugin_startup".into(),
         bridge::record(
             tick,
-            crate::plugin_startup::world_identity(&registry).map_err(fail)?,
+            mc_core::plugin_startup::world_identity(&registry).map_err(fail)?,
         ),
     );
     // This Immediate checkpoint is the durability fence for every staged

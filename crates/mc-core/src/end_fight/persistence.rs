@@ -39,7 +39,7 @@ fn flag(fields: &[(String, Tag)], key: &str, default: bool) -> Result<bool, Stri
         _ => Err(format!("DragonFight.{key}: expected boolean byte")),
     }
 }
-pub(crate) fn to_nbt(fight: &Fight) -> Tag {
+pub fn to_nbt(fight: &Fight) -> Tag {
     let mut fields = vec![
         (
             "needs_state_scanning".into(),
@@ -113,7 +113,7 @@ pub(crate) fn to_nbt(fight: &Fight) -> Tag {
         ("data".into(), Tag::Compound(fields)),
     ])
 }
-pub(crate) fn from_nbt(root: &Tag) -> Result<Fight, String> {
+pub fn from_nbt(root: &Tag) -> Result<Fight, String> {
     let Tag::Compound(root) = root else {
         return Err("DragonFight: expected root compound".into());
     };

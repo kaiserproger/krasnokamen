@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use crate::boundary::{BlockPos, ChunkPos, EntityId};
 use crate::config::CoreError;
 mod player_nbt;
-pub(crate) use player_nbt::*;
+pub use player_nbt::*;
 mod replay;
 pub use replay::*;
 
@@ -579,7 +579,7 @@ pub fn read_complete_batches_after(
 
 /// Decode and consume one published batch at a time. Recovery memory is bounded
 /// by one batch and the latest recovered images, never the complete WAL history.
-pub(crate) fn visit_complete_batches_after(
+pub fn visit_complete_batches_after(
     journal_dir: &Path,
     manifest_tick: u64,
     mut visit: impl FnMut((u64, u64, Vec<JournalEntry>)) -> Result<(), CoreError>,
@@ -804,7 +804,7 @@ impl InhabitedTimeImage {
             .saturating_add(i64::try_from(elapsed).unwrap_or(i64::MAX))
     }
 
-    pub(crate) fn apply(self, chunk: &mut mc_world::Chunk, tick: u64) {
+    pub fn apply(self, chunk: &mut mc_world::Chunk, tick: u64) {
         let value = self.value_at(tick);
         chunk.extras.retain(|(key, _)| key != "InhabitedTime");
         chunk

@@ -1,11 +1,10 @@
 use super::*;
-use crate::dimensions::Dimension;
-use crate::registry::CoreRegistry;
+use mc_core::dimensions::Dimension;
 use mc_data::Identifier;
 
 #[test]
 fn malformed_falling_import_reports_location_and_leaves_region_bytes_unchanged() {
-    let registry = CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let uuid = uuid::Uuid::from_u128(0xfa11);
     let type_id = registry
         .entity_types
@@ -26,23 +25,23 @@ fn malformed_falling_import_reports_location_and_leaves_region_bytes_unchanged()
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source");
         fs::create_dir(&source).unwrap();
-        let mut manifest = crate::journal::CheckpointManifest {
-            domain_versions: crate::native_checkpoint::domain_versions(),
+        let mut manifest = mc_core::journal::CheckpointManifest {
+            domain_versions: mc_core::native_checkpoint::domain_versions(),
             world_spawn: Some([0, 80, 0]),
             ..Default::default()
         };
         for dimension in [Dimension::Nether, Dimension::End] {
             manifest.dimensions.insert(
                 dimension,
-                Box::new(crate::journal::CheckpointManifest {
-                    domain_versions: crate::native_checkpoint::domain_versions(),
+                Box::new(mc_core::journal::CheckpointManifest {
+                    domain_versions: mc_core::native_checkpoint::domain_versions(),
                     world_spawn: Some([0, 80, 0]),
                     ..Default::default()
                 }),
             );
         }
-        let mut metadata = crate::level_metadata::MetadataTags::new();
-        crate::level_metadata::checkpoint_tags(&mut metadata, 42, &manifest).unwrap();
+        let mut metadata = mc_core::level_metadata::MetadataTags::new();
+        mc_core::level_metadata::checkpoint_tags(&mut metadata, 42, &manifest).unwrap();
         for (path, tag) in metadata {
             write_nbt(&source.join(path), &tag).unwrap();
         }
@@ -86,7 +85,7 @@ fn malformed_falling_import_reports_location_and_leaves_region_bytes_unchanged()
         let destination = dir.path().join("native");
         let receipt_path = dir.path().join("receipt.json");
         let error = import_anvil(
-            &CoreConfig::new(source.clone(), 42),
+            &crate::test_support::config(source.clone(), 42),
             &source,
             &destination,
             &receipt_path,

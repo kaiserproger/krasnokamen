@@ -248,7 +248,7 @@ pub struct ResolvedStates {
 }
 
 impl CoreRegistry {
-    pub(crate) fn load(vanilla_data_dir: Option<&std::path::Path>) -> Result<Self, CoreError> {
+    pub fn load(vanilla_data_dir: Option<&std::path::Path>) -> Result<Self, CoreError> {
         #[cfg(test)]
         if vanilla_data_dir.is_none() {
             static EMBEDDED: std::sync::LazyLock<Result<CoreRegistry, CoreError>> =

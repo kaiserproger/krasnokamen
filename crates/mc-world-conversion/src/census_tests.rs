@@ -1,8 +1,8 @@
 use super::*;
-use crate::dimensions::Dimension;
-use crate::journal::JournalWriter;
-use crate::native_checkpoint::record;
-use crate::native_checkpoint::tests::{fixture_store, read_manifest, write_manifest};
+use crate::test_support::{fixture_store, read_manifest, write_manifest};
+use mc_core::dimensions::Dimension;
+use mc_core::journal::JournalWriter;
+use mc_core::native_checkpoint::record;
 use mc_nbt::{ListTag, Tag, tag_type};
 use mc_world::native::{NativeCheckpoint, NativeEntitySnapshot};
 use mc_world::{BlockStateId, Chunk, ChunkPos};
@@ -10,7 +10,7 @@ use mc_world::{BlockStateId, Chunk, ChunkPos};
 const SEED: i64 = 42;
 
 fn fields(
-    registry: &crate::registry::CoreRegistry,
+    registry: &mc_core::registry::CoreRegistry,
     id: &str,
     n: u128,
     wire: i32,
@@ -70,10 +70,10 @@ type EntityFixture = (u32, i32, i32, u128, Vec<(String, Tag)>);
 fn world(entities: Vec<EntityFixture>, settlement: bool) -> Fixture {
     let dir = tempfile::tempdir().unwrap();
     let world = dir.path().join("world");
-    let config = CoreConfig::new(world.clone(), SEED);
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let config = crate::test_support::config(world.clone(), SEED);
+    let registry = crate::test_support::registry().unwrap();
     let store = fixture_store(&config).unwrap();
-    write_manifest(&config, &read_manifest(&config).unwrap()).unwrap();
+    write_manifest(&config, &store, &read_manifest(&store).unwrap()).unwrap();
     let chunk = Chunk::empty(
         ChunkPos { x: 0, z: 0 },
         BlockStateId(registry.states.air),
@@ -128,7 +128,7 @@ fn world(entities: Vec<EntityFixture>, settlement: bool) -> Fixture {
 }
 
 fn populated() -> Fixture {
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let cow_rider = Tag::List(ListTag {
         element_type: tag_type::COMPOUND,
         elements: vec![Tag::Compound(member(
@@ -241,7 +241,7 @@ fn census_counts_entities_passengers_villagers_chunks_and_persisted_settlements(
 
 #[test]
 fn census_reports_zero_settlements_when_no_core_rows_exist() {
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let fixture = world(
         vec![(
             0,
@@ -268,9 +268,13 @@ fn census_refuses_missing_native_world_without_touching_source() {
     fs::create_dir(&source).unwrap();
     let out = tempfile::tempdir().unwrap();
     let path = out.path().join("c.json");
-    let error = census_native(&CoreConfig::new(source.clone(), SEED), &source, &path)
-        .unwrap_err()
-        .to_string();
+    let error = census_native(
+        &crate::test_support::config(source.clone(), SEED),
+        &source,
+        &path,
+    )
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("world import-anvil"), "{error}");
     let receipt = read(&path);
     assert_eq!(receipt.status, "FAIL");
@@ -305,7 +309,7 @@ fn census_refuses_journal_tail_instead_of_reporting_stale_counts() {
 
 #[test]
 fn census_refuses_entity_payload_uuid_that_differs_from_its_record_key() {
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_support::registry().unwrap();
     let fixture = world(
         vec![(
             0,

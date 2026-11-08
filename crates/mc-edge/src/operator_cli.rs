@@ -284,7 +284,7 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
             let config = crate::server::core_config(cfg);
             match command {
                 WorldCommand::ImportAnvil(paths) => {
-                    mc_core::world_conversion::import_anvil(
+                    mc_world_conversion::import_anvil(
                         &config,
                         &paths.source,
                         &paths.destination,
@@ -292,7 +292,7 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                     )?;
                 }
                 WorldCommand::ExportAnvil(paths) => {
-                    mc_core::world_conversion::export_anvil(
+                    mc_world_conversion::export_anvil(
                         &config,
                         &paths.source,
                         &paths.destination,
@@ -300,14 +300,10 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                     )?;
                 }
                 WorldCommand::Census(paths) => {
-                    mc_core::world_conversion::census_native(
-                        &config,
-                        &paths.source,
-                        &paths.receipt,
-                    )?;
+                    mc_world_conversion::census_native(&config, &paths.source, &paths.receipt)?;
                 }
                 WorldCommand::Probe(paths) => {
-                    mc_core::world_conversion::probe_native(
+                    mc_world_conversion::probe_native(
                         &config,
                         &paths.source,
                         &paths.blocks,
@@ -315,7 +311,8 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                     )?;
                 }
                 WorldCommand::UpgradeWorldgen => {
-                    let report = mc_core::worldgen_upgrade::upgrade_worldgen_revision(&config)?;
+                    let report =
+                        mc_world_tools::worldgen_upgrade::upgrade_worldgen_revision(&config)?;
                     if report.rewritten {
                         println!(
                             "worldgen revision upgraded: {} -> {} (existing chunks unchanged)",
@@ -329,7 +326,7 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                     }
                 }
                 WorldCommand::Pregenerate { radius, center } => {
-                    let request = mc_core::pregenerate::PregenerateRequest {
+                    let request = mc_world_tools::pregenerate::PregenerateRequest {
                         radius: *radius,
                         center: *center,
                     };
@@ -337,22 +334,26 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                     // results, so it runs on the blocking pool, never on an
                     // async worker.
                     let report = tokio::task::spawn_blocking(move || {
-                        mc_core::pregenerate::pregenerate(&config, &request, &mut |progress| {
-                            let done = progress.already_stored + progress.generated;
-                            let percent = if progress.chunks == 0 {
-                                100.0
-                            } else {
-                                done as f64 * 100.0 / progress.chunks as f64
-                            };
-                            println!(
-                                "pregenerate: {done}/{} chunks ({percent:.1}%), {} generated, \
+                        mc_world_tools::pregenerate::pregenerate(
+                            &config,
+                            &request,
+                            &mut |progress| {
+                                let done = progress.already_stored + progress.generated;
+                                let percent = if progress.chunks == 0 {
+                                    100.0
+                                } else {
+                                    done as f64 * 100.0 / progress.chunks as f64
+                                };
+                                println!(
+                                    "pregenerate: {done}/{} chunks ({percent:.1}%), {} generated, \
                                  {} already stored, {:.1}s",
-                                progress.chunks,
-                                progress.generated,
-                                progress.already_stored,
-                                progress.elapsed_ms as f64 / 1000.0,
-                            );
-                        })
+                                    progress.chunks,
+                                    progress.generated,
+                                    progress.already_stored,
+                                    progress.elapsed_ms as f64 / 1000.0,
+                                );
+                            },
+                        )
                     })
                     .await
                     .map_err(|error| anyhow::anyhow!("pregenerate task failed: {error}"))??;
@@ -377,9 +378,9 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                     max_inhabited_ticks,
                     dry_run,
                 } => {
-                    let report = mc_core::world_maintenance::prune_world(
+                    let report = mc_world_tools::world_maintenance::prune_world(
                         &config,
-                        &mc_core::world_maintenance::PruneRequest {
+                        &mc_world_tools::world_maintenance::PruneRequest {
                             keep_radius: *keep_radius,
                             center: *center,
                             max_inhabited_ticks: *max_inhabited_ticks,
@@ -410,7 +411,7 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                     );
                 }
                 WorldCommand::Compact => {
-                    let report = mc_core::world_maintenance::compact_world(&config)?;
+                    let report = mc_world_tools::world_maintenance::compact_world(&config)?;
                     println!(
                         "compact complete: {} rows repacked; file {} -> {} bytes",
                         report.rewritten_rows, report.bytes_before, report.bytes_after,

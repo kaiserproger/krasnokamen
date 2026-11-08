@@ -7,7 +7,7 @@ pub(crate) mod tests;
 use crate::boundary::ChangeSet;
 use crate::effects::{ActiveEffect, EffectId};
 use crate::tick::TickState;
-pub(crate) use persistence::{from_nbt, to_nbt};
+pub use persistence::{from_nbt, to_nbt};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
@@ -548,7 +548,7 @@ pub(crate) fn deserialize<'de, D: serde::Deserializer<'de>>(decoder: D) -> Resul
     Ok(image)
 }
 
-pub(crate) fn hydrate_native_entity(
+pub fn hydrate_native_entity(
     raids: &mut Raids,
     entity: &mc_data::entity_nbt::VanillaEntity,
 ) -> Result<(), String> {

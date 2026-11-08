@@ -1793,6 +1793,8 @@ dependencies = [
  "mc-script",
  "mc-vanilla",
  "mc-world",
+ "mc-world-conversion",
+ "mc-world-tools",
  "mc-worldgen",
  "md-5",
  "num-bigint",
@@ -1960,6 +1962,36 @@ dependencies = [
  "uuid",
  "wide",
  "zstd",
+]
+
+[[package]]
+name = "mc-world-conversion"
+version = "1.0.0-rc.5"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "mc-core",
+ "mc-data",
+ "mc-nbt",
+ "mc-plugin-host",
+ "mc-world",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "mc-world-tools"
+version = "1.0.0-rc.5"
+dependencies = [
+ "mc-core",
+ "mc-world",
+ "mc-worldgen",
+ "redb",
+ "uuid",
 ]
 
 [[package]]

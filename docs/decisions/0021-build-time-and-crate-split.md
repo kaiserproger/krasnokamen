@@ -6,7 +6,8 @@
 against it at today's coupling. Step 3 root-only feature unification passes
 workspace build, formatting and code-health; consumer test scope is below.
 Comparative timings await Main's batched quiet window.
-Leaf extraction and cycle cuts have not landed. The cycle ratchet
+Leaf extraction is implemented and under acceptance; cycle cuts have not landed.
+The cycle ratchet
 (owner-approved 2026-11-07, implemented) makes code-health fail when the module
 cycle grows.
 **Related:** [0011](0011-core-crate-topology-and-threading.md) (rejected
@@ -207,6 +208,60 @@ lower-edit measurement. Receipts: `baseline-server-cold-02` and
 `baseline-core-test-cold` under `receipts/CrateSplit`. Main deferred further
 timings while campaign gates run: ordinary `-m` validation is not performance
 evidence; neither cancelled `-x` nor cancelled `-p` attempts supply a comparison.
+
+### Offline ownership boundaries
+
+`mc-world-conversion` owns Anvil import/export, census and probes.
+`mc-world-tools` owns pregeneration, native prune/compact and worldgen revision
+upgrades. The edge's operator CLI depends on both; neither production nor test
+dependencies point back from the core to these operator crates.
+
+Core-native checkpoint codecs, recovery, metadata and plugin-startup records
+remain with their existing owners. These are actual public persistence APIs,
+not injected hooks or wrappers around `TickState`; the extraction changes no
+encoded records. The native entity hydration implementation now belongs to
+`native_checkpoint` and is shared by live dimension recovery and import.
+
+`ChunkSource::new_native` owns the immutable store, generator, registry and
+population inputs used by both live worlds and offline pregeneration. The
+existing worker pool owns its queues and worker lifetimes. Offline tools use
+the same terrain factory, admission bounds and load/generate path as serving;
+no second generator or reduced-fidelity import path is introduced.
+
+Private core scenario assertions remain in core tests. Cross-owner round trips
+live with the converter and exercise public `Core` inputs/outputs or the native
+store/journal format. In particular, mount cargo still crosses a real joined
+player's menu, checkpoint, export and reimport; the Java oracle and malformed
+projectile import checks move with the converter. The core retains its direct
+WAL recovery, despawn, POI exclusivity, warning-clock and bee custody assertions.
+Both offline crates supply the actual vanilla cache in tests rather than
+relying on the core's `cfg(test)` defaults or publishing private fixture APIs.
+
+Harness source paths and test discovery follow the new owners. The path-only
+matrix migration is kept separate from implementation commits.
+
+Canonical structural measurements on the extracted tree: 193 top-level core
+modules and 191830 production lines; the largest SCC remains 189 modules.
+These four offline modules were already outside the SCC: this extraction is
+not a cycle reduction. The core's vanilla-literal and path-comparison ceilings
+drop to the measured 2617 and 114; the other ceilings remain unchanged.
+The local crate graph has 18 crates and 55 edges including development edges,
+with no cycle. Receipts: `offline-root-only-code-health-01` and
+`crate-edges-root-only-extracted.json` under `receipts/CrateSplit`.
+
+Ordinary extraction acceptance passed on merged base `d5f3a8c9`: the complete
+workspace build, 153 selected tests across both offline crates and affected core
+recovery scenarios, formatting, and the tightened code-health ratchets.
+The test runner skipped 3781 tests outside this selection or marked ignored;
+this is not a full-workspace correctness claim. Receipts under
+`receipts/CrateSplit`: `offline-root-only-workspace-build-02`,
+`offline-root-only-affected-tests-01`, `offline-root-only-fmt-01`, and
+`offline-root-only-code-health-02`.
+
+The `config -> block_log` ownership cut and final whole-workspace correctness
+gate remain unperformed at this checkpoint. The cycle ceiling is still 189.
+Build-time comparisons remain deferred to the authorized batched quiet window;
+ordinary acceptance durations establish no performance gain.
 
 
 ## Cycle ratchet (implemented 2026-11-07)
