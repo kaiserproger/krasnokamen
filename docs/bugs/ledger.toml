@@ -3895,3 +3895,14 @@ status = "open"
 source = "Seed-24 civilization return to (131,76,-216) refused without movement from (143.865930,75,-203.841109). Received terrain shows air below the center and grass support in the overlapping neighboring footprint. Original planner considers only its center column. Reproduced on original client 75755212b117; the four-cardinal regression failed before the fix. Corrected native pin 75755212b117-345e4b64 passed 20 navigation tests and three original saved-world windowed returns with actual grounded arrival. Fresh civilization acceptance remains 0/3; independent acceptance and formal ledger promotion remain pending."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "COREPERF-PINS-OWNER-HOST-ONLY"
+title = "Coreperf profiles reject valid release pins on other Linux hosts"
+area = "harness"
+repro = "source"
+severity = "major"
+status = "open"
+source = "tools/coreperf/profiles.py pinned_binary unconditionally required the owner's absolute pin store. The relocated-pin regression failed before correction. Owner-host store and exact manifest path checks remain strict; other hosts verify the original manifest, binary name and SHA-256. Both host-boundary tests and a real release idle CLI lifecycle passed with the owner-host marker absent in a controlled local simulation, not on a second machine. Formal ledger promotion remains pending."
+regression = []
+failing_first = "reported"

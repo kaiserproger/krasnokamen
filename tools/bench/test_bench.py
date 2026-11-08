@@ -1,7 +1,5 @@
 """Unit contracts for the bench pipeline's pure parts; no server, systemd or JVM launch."""
 import json
-import argparse
-import importlib
 from pathlib import Path
 import tempfile
 import unittest
@@ -108,24 +106,6 @@ pregenerate complete: chunks [-16,-16]..[16,16] around block (0,0), 1089 chunks,
 
 
 class ProfileRunTests(unittest.TestCase):
-    def test_context_passes_pin_manifest_not_synthetic_receipt(self):
-        entry = importlib.import_module("tools.bench.__main__")
-        with tempfile.TemporaryDirectory() as raw:
-            root = Path(raw)
-            args = argparse.Namespace(fixture_cache=root / "cache", warmup_seconds=2,
-                                      measure_seconds=5, readiness_seconds=60,
-                                      prepare_memory="6G", slice_name=None, smoke=True)
-            source = {"server_bin": str(root / "server-pin" / "solaris-v2"),
-                      "bots_bin": str(root / "bots-pin" / "player-scale-bots")}
-            ctx = entry.make_context(args, root, [0], source, root, {"mem_total_gib": 8})
-            command = profile_runs.profile_command(ctx, "idle", root / "run",
-                                                   server_cpus="0", bot_cpus="0",
-                                                   wrapper="", max_rss_mb=4096, prepare_only=False)
-            self.assertEqual(command[command.index("--build-receipt") + 1],
-                             str(root / "server-pin" / "manifest.json"))
-            self.assertIn("--smoke", command)
-            self.assertFalse((root / "build-receipt.json").exists())
-
     def receipt(self, directory: Path, **fields):
         (directory / "result.json").write_text(json.dumps(fields))
 

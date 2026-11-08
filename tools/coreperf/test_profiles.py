@@ -93,26 +93,61 @@ class ProfilesTests(unittest.TestCase):
                                      "identities": {"other": {"kind": "minecraft:cow"}}},
                                      recipe["expected"])
 
-    def test_pin_manifest_must_belong_to_supplied_binary(self):
+    def test_remote_host_accepts_relocated_pin_and_checks_manifest_and_hash(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            pin = root / "pin"
-            pin.mkdir()
+            store = root / "absent-owner-host" / "pins"
+            pin = root / "remote-artifacts" / "pin"
+            pin.mkdir(parents=True)
             binary = pin / "solaris-v2"
             binary.write_bytes(b"server")
-            manifest = {"repo": "core", "kind": "server", "binary": str(binary),
-                        "head": "abc", "diff_sha256": "def", "command": "cargo build",
+            manifest = {"repo": "core", "kind": "server",
+                        "binary": str(store / "original-pin" / binary.name),
+                        "head": "abc", "diff_sha256": "def", "command": "cargo build --release",
                         "target": "test-target", "binary_sha256": profiles.load.scale.binary_sha256(binary)}
-            (pin / "manifest.json").write_text(json.dumps(manifest))
-            with patch.object(profiles, "PIN_ROOT", root):
+            receipt = pin / "manifest.json"
+            receipt.write_text(json.dumps(manifest))
+            with patch.object(profiles, "PIN_ROOT", store):
                 self.assertEqual(profiles.pinned_binary(binary, "server"), manifest)
                 with self.assertRaises(ValueError):
                     profiles.pinned_binary(binary, "bots")
+                for path in (str(store / "original-pin" / "other-binary"), None):
+                    with self.subTest(path=path):
+                        receipt.write_text(json.dumps(dict(manifest, binary=path)))
+                        with self.assertRaises(ValueError):
+                            profiles.pinned_binary(binary, "server")
+                receipt.write_text(json.dumps(manifest))
                 binary.write_bytes(b"other")
                 with self.assertRaises(ValueError):
                     profiles.pinned_binary(binary, "server")
-            with self.assertRaises(ValueError):
-                profiles.pinned_binary(binary, "server")
+
+    def test_owner_host_requires_pin_store_and_exact_manifest_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = root / "owner-host" / "pins"
+            runner = store.parent / "solaris" / "tools" / "dev" / "mem-run.sh"
+            runner.parent.mkdir(parents=True)
+            runner.touch()
+            pin = store / "pin"
+            pin.mkdir(parents=True)
+            binary = pin / "solaris-v2"
+            binary.write_bytes(b"server")
+            manifest = {"repo": "core", "kind": "server", "binary": str(binary),
+                        "head": "abc", "diff_sha256": "def", "command": "cargo build --release",
+                        "target": "test-target", "binary_sha256": profiles.load.scale.binary_sha256(binary)}
+            receipt = pin / "manifest.json"
+            receipt.write_text(json.dumps(manifest))
+            with patch.object(profiles, "PIN_ROOT", store):
+                self.assertEqual(profiles.pinned_binary(binary, "server"), manifest)
+                receipt.write_text(json.dumps(dict(manifest, binary=str(store / "other-pin" / binary.name))))
+                with self.assertRaises(ValueError):
+                    profiles.pinned_binary(binary, "server")
+                outside = root / "outside-pin" / binary.name
+                outside.parent.mkdir()
+                outside.write_bytes(b"server")
+                outside.with_name("manifest.json").write_text(json.dumps(dict(manifest, binary=str(outside))))
+                with self.assertRaisesRegex(ValueError, "not in the pin-release store"):
+                    profiles.pinned_binary(outside, "server")
 
     def test_missing_source_samples_fail(self):
         initial = {"schema_version": 1, "instance_started_unix_ns": 1,

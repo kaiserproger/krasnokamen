@@ -223,9 +223,9 @@ Neither Mojang bytes nor prepared worlds are shipped in Git.
 ### Build once and retain provenance
 
 Use immutable `pin-release` artifacts for both the server and protocol bots,
-from the same source tree. The runner checks each pin's manifest and binary hash,
-and rejects a hand-written release-build receipt or pins from different trees.
-Build outside measurement:
+from the same source tree. The runner checks their manifests, binary names and
+hashes, and rejects pins from different trees. On the owner host it also requires
+the canonical pin store and exact manifest paths. Build outside measurement:
 
 ```sh
 ROOT="$(pwd -P)"
@@ -235,6 +235,12 @@ eval "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release 
 
 `pin-release` builds through the owner-host memory runner and retains source and
 binary provenance. Do not compile during somebody else's measurement window.
+
+The pinning commands above are owner-host tools. On another Linux host, copy
+each pin directory with its original `manifest.json` unchanged and pass the
+relocated binary paths below. The manifest retains the producer's absolute
+path; outside the owner host, the matching filename and SHA-256 bind it to
+the copied binary without requiring the producer's filesystem layout.
 
 ### One command per profile
 

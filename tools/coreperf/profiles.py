@@ -36,13 +36,18 @@ PIN_ROOT = Path("/run/media/kaiserroman/games/solaris-work/pins")
 
 
 def pinned_binary(binary: Path, kind: str) -> dict[str, Any]:
-    """Accept only the immutable pin-release artifact and its matching manifest."""
+    """Verify pin provenance, retaining the immutable-store rule on the owner host."""
     binary = binary.resolve()
-    if binary.parent.parent != PIN_ROOT.resolve():
+    owner_host = (PIN_ROOT.parent / "solaris/tools/dev/mem-run.sh").is_file()
+    if owner_host and binary.parent.parent != PIN_ROOT.resolve():
         raise ValueError(f"{kind} binary is not in the pin-release store")
     manifest = json.loads((binary.parent / "manifest.json").read_text())
+    recorded_binary = manifest.get("binary")
+    path_matches = isinstance(recorded_binary, str) and (
+        recorded_binary == str(binary) if owner_host
+        else Path(recorded_binary).name == binary.name)
     if (manifest.get("repo") != "core" or manifest.get("kind") != kind
-            or manifest.get("binary") != str(binary) or not manifest.get("head")
+            or not path_matches or not manifest.get("head")
             or not manifest.get("diff_sha256")
             or not manifest.get("command") or not manifest.get("target")
             or manifest.get("binary_sha256") != load.scale.binary_sha256(binary)):
