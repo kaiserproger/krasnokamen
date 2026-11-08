@@ -82,6 +82,15 @@ def validate_args(ctx: ProfileContext) -> float:
     return timeout
 
 
+def select_vanilla_data(source: str, vanilla_data: str | None) -> str:
+    if not vanilla_data:
+        return source
+    token = 'vanilla_data_dir = "data/vanilla"'
+    if source.count(token) != 1:
+        raise RuntimeError(f"expected one survival config token: {token}")
+    return source.replace(token, f"vanilla_data_dir = {json.dumps(vanilla_data)}", 1)
+
+
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
     artifact = ctx.artifact_dir
@@ -106,6 +115,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         if source.count(old) != 1:
             raise RuntimeError(f"expected one survival config token: {old}")
         source = source.replace(old, new, 1)
+    source = select_vanilla_data(source, os.environ.get("SOLARIS_SERVER_VANILLA_DATA_DIR"))
     config.write_text(source)
     prepare_operator_fixture(ctx, operators)
     evidence = ctx.client_evidence
