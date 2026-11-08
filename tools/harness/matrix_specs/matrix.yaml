@@ -15720,13 +15720,13 @@ dimensions:
         - walk_move
         - read_world_state
         sources:
-        - crates/mc-core/src/pregenerate.rs
+        - crates/mc-world-tools/src/pregenerate.rs
         - crates/mc-edge/src/chunks.rs
         - crates/mc-core/src/chunk_loader.rs
         - crates/mc-core/src/chunk_tickets.rs
         - crates/mc-core/src/light.rs
         unit_tests:
-        - crates/mc-core/src/pregenerate_tests.rs
+        - crates/mc-world-tools/src/pregenerate_tests.rs
         - crates/mc-edge/src/chunks_tests.rs
         - crates/mc-core/src/chunk_loader_tests.rs
         - crates/mc-core/src/chunk_tickets_tests.rs
@@ -15756,13 +15756,13 @@ dimensions:
         - read_world_state
         - server_clean_restart
         sources:
-        - crates/mc-core/src/world_conversion.rs
+        - crates/mc-world-conversion/src/lib.rs
         - crates/mc-edge/src/chunks.rs
         - crates/mc-core/src/chunk_loader.rs
         - crates/mc-core/src/chunk_tickets.rs
         - crates/mc-core/src/light.rs
         unit_tests:
-        - crates/mc-core/src/world_conversion/tests.rs
+        - crates/mc-world-conversion/src/tests.rs
         - crates/mc-edge/src/chunks_tests.rs
         - crates/mc-core/src/chunk_loader_tests.rs
         - crates/mc-core/src/chunk_tickets_tests.rs
@@ -15791,13 +15791,13 @@ dimensions:
         - walk_move
         - read_world_state
         sources:
-        - crates/mc-core/src/worldgen_upgrade.rs
+        - crates/mc-world-tools/src/worldgen_upgrade.rs
         - crates/mc-edge/src/chunks.rs
         - crates/mc-core/src/chunk_loader.rs
         - crates/mc-core/src/chunk_tickets.rs
         - crates/mc-core/src/light.rs
         unit_tests:
-        - crates/mc-core/src/worldgen_upgrade_tests.rs
+        - crates/mc-world-tools/src/worldgen_upgrade_tests.rs
         - crates/mc-edge/src/chunks_tests.rs
         - crates/mc-core/src/chunk_loader_tests.rs
         - crates/mc-core/src/chunk_tickets_tests.rs
@@ -17165,7 +17165,7 @@ dimensions:
         - crates/mc-core/src/villager/building_housing_army_tests.rs
         - crates/mc-core/src/villager/building_tests.rs
         - crates/mc-core/src/villager/building_worksite_tests.rs
-        - crates/mc-core/src/world_conversion/census_tests.rs
+        - crates/mc-world-conversion/src/census_tests.rs
         - crates/mc-edge/src/plugin_command_tree_tests.rs
         - crates/mc-edge/src/plugin_wire_tests.rs
         - crates/mc-edge/src/settlement_command_tree_tests.rs
@@ -17971,7 +17971,7 @@ dimensions:
         - crates/mc-core/src/native_population_tests.rs
         - crates/mc-core/src/quirk_parity_tests.rs
         - crates/mc-core/src/spawn_clearance_tests.rs
-        - crates/mc-core/src/world_conversion/old_world_import_tests.rs
+        - crates/mc-world-conversion/src/old_world_import_tests.rs
         - crates/mc-core/src/world_tests.rs
         dims:
         - overworld
@@ -18227,7 +18227,7 @@ dimensions:
         - crates/mc-core/src/dimensions_tests.rs
         - crates/mc-core/src/native_checkpoint_tests.rs
         - crates/mc-core/src/tick_tests.rs
-        - crates/mc-core/src/world_conversion/old_world_import_tests.rs
+        - crates/mc-world-conversion/src/old_world_import_tests.rs
         - crates/mc-core/src/world_tests.rs
         dims:
         - overworld
@@ -18522,9 +18522,9 @@ dimensions:
         - crates/mc-core/src/end_fight/tests.rs
         - crates/mc-core/src/journal_tests.rs
         - crates/mc-core/src/raids_tests.rs
-        - crates/mc-core/src/world_conversion/old_world_import_tests.rs
-        - crates/mc-core/src/world_conversion/roundtrip_tests.rs
-        - crates/mc-core/src/world_conversion/tests.rs
+        - crates/mc-world-conversion/src/old_world_import_tests.rs
+        - crates/mc-world-conversion/src/roundtrip_tests.rs
+        - crates/mc-world-conversion/src/tests.rs
         - crates/mc-edge/src/command_tree_parity_tests.rs
         - crates/mc-edge/src/startup_data_tests.rs
         dims:
@@ -18578,7 +18578,7 @@ dimensions:
         - crates/mc-core/src/trial_spawner_tests.rs
         - crates/mc-core/src/vibration_tests.rs
         - crates/mc-core/src/villager/brain_tests.rs
-        - crates/mc-core/src/world_conversion/roundtrip_tests.rs
+        - crates/mc-world-conversion/src/roundtrip_tests.rs
         - crates/mc-core/src/world_tests.rs
         - crates/mc-edge/src/advancements_tests.rs
         - crates/mc-edge/src/auth_edge_fence_tests.rs
@@ -21695,8 +21695,8 @@ dimensions:
         - crates/mc-core/src/villager/brain_tests.rs
         - crates/mc-core/src/villager/route_continuation_tests.rs
         - crates/mc-core/src/weather_tests.rs
-        - crates/mc-core/src/world_conversion/old_world_import_tests.rs
-        - crates/mc-core/src/world_conversion/roundtrip_tests.rs
+        - crates/mc-world-conversion/src/old_world_import_tests.rs
+        - crates/mc-world-conversion/src/roundtrip_tests.rs
         dims:
         - overworld
         - the_nether
@@ -21730,7 +21730,7 @@ dimensions:
         - crates/mc-core/src/hostile_tests.rs
         - crates/mc-core/src/tick_tests.rs
         - crates/mc-core/src/weather_tests.rs
-        - crates/mc-core/src/world_conversion/old_world_import_tests.rs
+        - crates/mc-world-conversion/src/old_world_import_tests.rs
         dims:
         - overworld
         - the_nether
@@ -22796,8 +22796,8 @@ dimensions:
         - crates/mc-core/src/dimensions_rules.rs
         unit_tests:
         - crates/mc-core/src/raids_tests.rs
-        - crates/mc-core/src/world_conversion/old_world_import_tests.rs
-        - crates/mc-core/src/world_conversion/tests.rs
+        - crates/mc-world-conversion/src/old_world_import_tests.rs
+        - crates/mc-world-conversion/src/tests.rs
         - crates/mc-core/src/world_tests.rs
         dims:
         - overworld
@@ -22838,8 +22838,8 @@ dimensions:
         - crates/mc-core/src/plants_tests.rs
         - crates/mc-core/src/redstone/containers_tests.rs
         - crates/mc-core/src/tnt_tests.rs
-        - crates/mc-core/src/world_conversion/old_world_import_tests.rs
-        - crates/mc-core/src/world_conversion/roundtrip_tests.rs
+        - crates/mc-world-conversion/src/old_world_import_tests.rs
+        - crates/mc-world-conversion/src/roundtrip_tests.rs
         dims:
         - overworld
         - the_nether
@@ -24133,9 +24133,9 @@ dimensions:
         - crates/mc-core/src/villager/shepherd_tests.rs
         - crates/mc-core/src/villager/soldier_tests.rs
         - crates/mc-core/src/warden_tests.rs
-        - crates/mc-core/src/world_conversion/census_tests.rs
-        - crates/mc-core/src/world_conversion/falling_import_tests.rs
-        - crates/mc-core/src/world_conversion/roundtrip_tests.rs
+        - crates/mc-world-conversion/src/census_tests.rs
+        - crates/mc-world-conversion/src/falling_import_tests.rs
+        - crates/mc-world-conversion/src/roundtrip_tests.rs
         - crates/mc-edge/src/decode_spawn_egg_tests.rs
         - crates/mc-edge/src/fanout_tests.rs
         - crates/mc-edge/src/plan/entity_candidates_tests.rs
@@ -24237,7 +24237,7 @@ dimensions:
         - crates/mc-core/src/projectiles/payloads_tests.rs
         - crates/mc-core/src/villager/defense_tests.rs
         - crates/mc-core/src/villager/integration_tests.rs
-        - crates/mc-core/src/world_conversion/export_mob_tests.rs
+        - crates/mc-world-conversion/src/export_mob_tests.rs
         dims:
         - overworld
         - the_nether
@@ -26708,8 +26708,8 @@ dimensions:
         - crates/mc-core/src/tick/cohort_tests.rs
         - crates/mc-core/src/tick/merchant_tests.rs
         - crates/mc-core/src/tick_tests.rs
-        - crates/mc-core/src/world_conversion/census_tests.rs
-        - crates/mc-core/src/world_conversion/export_tests.rs
+        - crates/mc-world-conversion/src/census_tests.rs
+        - crates/mc-world-conversion/src/export_tests.rs
         - crates/mc-edge/src/decode_container_click_tests.rs
         - crates/mc-edge/src/decode_spawn_egg_tests.rs
         - crates/mc-edge/src/plan_tests.rs
@@ -49797,7 +49797,7 @@ scenarios:
   existing_coverage:
     status: unit_only
     unit:
-    - crates/mc-core/src/pregenerate_tests.rs
+    - crates/mc-world-tools/src/pregenerate_tests.rs
     - crates/mc-edge/src/chunks_tests.rs
     - crates/mc-core/src/chunk_loader_tests.rs
     - crates/mc-core/src/chunk_tickets_tests.rs
@@ -57107,7 +57107,7 @@ scenarios:
     - constantinople
     - vanilla-world-roundtrip
     unit:
-    - crates/mc-core/src/world_conversion/tests.rs
+    - crates/mc-world-conversion/src/tests.rs
     - crates/mc-edge/src/chunks_tests.rs
     - crates/mc-core/src/chunk_loader_tests.rs
     - crates/mc-core/src/chunk_tickets_tests.rs
@@ -57139,7 +57139,7 @@ scenarios:
   existing_coverage:
     status: unit_only
     unit:
-    - crates/mc-core/src/worldgen_upgrade_tests.rs
+    - crates/mc-world-tools/src/worldgen_upgrade_tests.rs
     - crates/mc-edge/src/chunks_tests.rs
     - crates/mc-core/src/chunk_loader_tests.rs
     - crates/mc-core/src/chunk_tickets_tests.rs
@@ -61941,8 +61941,8 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/raids_tests.rs
-    - crates/mc-core/src/world_conversion/old_world_import_tests.rs
-    - crates/mc-core/src/world_conversion/tests.rs
+    - crates/mc-world-conversion/src/old_world_import_tests.rs
+    - crates/mc-world-conversion/src/tests.rs
     - crates/mc-core/src/world_tests.rs
 - id: bl:gamerules.random_tick_speed/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: gamerules.random_tick_speed/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2

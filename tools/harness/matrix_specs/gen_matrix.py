@@ -233,7 +233,7 @@ def expand_src(s):
 
 
 TEST_TEXT = {}
-for crate in ("mc-core", "mc-edge", "mc-script", "mc-plugin-host", "mc-loader"):
+for crate in ("mc-core", "mc-world-conversion", "mc-world-tools", "mc-edge", "mc-script", "mc-plugin-host", "mc-loader"):
     for p in (SOL / "crates" / crate / "src").rglob("*.rs"):
         if p.name.endswith("_tests.rs") or p.name == "tests.rs":
             TEST_TEXT[str(p.relative_to(SOL))] = p.read_text(errors="ignore")

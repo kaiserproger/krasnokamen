@@ -611,12 +611,12 @@ subjects:
     reference:
       scope: solaris_operator_extension
       source:
-        - crates/mc-core/src/pregenerate.rs
+        - crates/mc-world-tools/src/pregenerate.rs
     missing_capabilities:
       - server_pregenerate
     server_gap: []
     source_modules:
-      - crates/mc-core/src/pregenerate.rs
+      - crates/mc-world-tools/src/pregenerate.rs
       - crates/mc-edge/src/chunks.rs
       - crates/mc-core/src/chunk_loader.rs
       - crates/mc-core/src/chunk_tickets.rs
@@ -674,7 +674,7 @@ subjects:
       - server_world_import_export_and_vanilla_reference
     server_gap: []
     source_modules:
-      - crates/mc-core/src/world_conversion.rs
+      - crates/mc-world-conversion/src/lib.rs
       - crates/mc-edge/src/chunks.rs
       - crates/mc-core/src/chunk_loader.rs
       - crates/mc-core/src/chunk_tickets.rs
@@ -722,12 +722,12 @@ subjects:
     reference:
       scope: solaris_revision_upgrade_not_vanilla_seam_guarantee
       source:
-        - crates/mc-core/src/worldgen_upgrade.rs:1-7,35-40
+        - crates/mc-world-tools/src/worldgen_upgrade.rs:1-7,35-40
     missing_capabilities:
       - server_worldgen_upgrade
     server_gap: []
     source_modules:
-      - crates/mc-core/src/worldgen_upgrade.rs
+      - crates/mc-world-tools/src/worldgen_upgrade.rs
       - crates/mc-edge/src/chunks.rs
       - crates/mc-core/src/chunk_loader.rs
       - crates/mc-core/src/chunk_tickets.rs
