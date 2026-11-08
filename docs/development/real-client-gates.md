@@ -271,6 +271,11 @@ start and hold captures, releases it even on failure, and requires the client's
 `resize` (native only) takes `name` and `size` in pixels, resizes the owned Xvfb
 window, and captures a frame whose dimensions must match the requested size.
 
+`wait_disconnect` (native only) takes `name` and `eof`; it waits for the
+disconnected/error phase and records cleared use state, requiring the transport
+EOF reason when `eof` is true. `reconnect` targets the same private server.
+`server_eof` kills only that harness-owned server to exercise transport EOF.
+
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains
   its same-client-thread `game_time` and entity positions. Missing timestamps fail.
 - `mob_motion` reads three named `timed_entities` receipts and records horizontal

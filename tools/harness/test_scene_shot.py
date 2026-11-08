@@ -164,6 +164,31 @@ class SceneShotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             scene_shot.validate_steps([{"resize": {"name": "bad", "size": [0, 540]}}], "native")
 
+    def test_disconnect_wait_rejects_live_or_wrong_eof_state(self):
+        class Probe:
+            def __init__(self, state):
+                self.state = state
+            def call(self, name, args=None):
+                assert name == "minecraft_observe"
+                return self.state
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+        step = {"wait_disconnect": {"name": "eof", "eof": True}}
+        with tempfile.TemporaryDirectory() as tmp:
+            state = {"in_play": False, "using": None, "loading_readiness": {"phase": "error"},
+                     "disconnect_reason": "not EOF"}
+            with self.assertRaisesRegex(AssertionError, "eof_eof"):
+                scene_shot.execute(Probe(state), Path(tmp), [step])
+            state["in_play"] = True
+            with self.assertRaisesRegex(AssertionError, "eof_left_play"):
+                scene_shot.execute(Probe(state), Path(tmp), [step])
+            state["in_play"] = False
+            state["disconnect_reason"] = "server closed connection"
+            scene_shot.execute(Probe(state), Path(tmp), [step])
+            self.assertEqual(json.loads((Path(tmp) / "eof.json").read_text())["disconnect_reason"],
+                             "server closed connection")
+
     def test_look_is_validated_and_dispatched_to_real_client(self):
         step = {"look": {"yaw_deg": 45, "pitch_deg": -60}}
         self.assertEqual(list(scene_shot.scene_mcp_calls([step])),

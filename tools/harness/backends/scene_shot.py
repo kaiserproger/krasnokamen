@@ -222,6 +222,8 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
             yield "minecraft_wait_ticks", {"ticks": value["ticks"]}
         elif kind == "resize":
             yield "minecraft_wait_ticks", {"ticks": 5}
+        elif kind == "reconnect":
+            yield "minecraft_connect", {"server_addr": "127.0.0.1:1"}
         elif kind == "cmd":
             yield "minecraft_send_chat", {"message": value, "command": True}
         elif kind == "tp":
@@ -257,6 +259,14 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
             valid = value is True
         elif kind == "pause":
             valid = client == "native" and value is True
+        elif kind in ("reconnect", "server_eof"):
+            valid = client == "native" and value is True
+        elif kind == "wait_disconnect":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"name", "eof"}
+                     and isinstance(value["name"], str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and type(value["eof"]) is bool)
         elif kind == "wait_screen":
             valid = isinstance(value, str) and bool(value)
         elif kind == "key":
@@ -367,6 +377,33 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             path = capture(probe, artifact, value["name"])
             probe.check(f"{value['name']}_dimensions", png_size(path) == size)
             shots.append(path)
+        elif kind == "reconnect":
+            address = getattr(probe.client, "scene_address", None)
+            if not address:
+                raise RuntimeError("reconnect requires the harness-owned server address")
+            probe.call("minecraft_connect", {"server_addr": address})
+            wait_play(probe)
+        elif kind == "server_eof":
+            server = getattr(probe.client, "scene_server", None)
+            if server is None or server.poll() is not None:
+                raise RuntimeError("EOF requires the running harness-owned server")
+            server.kill()
+            server.wait(timeout=8)
+        elif kind == "wait_disconnect":
+            while True:
+                state = probe.call("minecraft_observe")
+                phase = state.get("loading_readiness", {}).get("phase")
+                if phase in ("disconnected", "error"):
+                    break
+                probe.call("minecraft_wait_for_state_change", {
+                    "observed_version": state["state_version"],
+                    "timeout_seconds": probe.remaining(),
+                })
+            probe.check(f"{value['name']}_left_play", state.get("in_play") is False)
+            probe.check(f"{value['name']}_cleared_use", state.get("using") is None)
+            if value["eof"]:
+                probe.check(f"{value['name']}_eof", state.get("disconnect_reason") == "server closed connection")
+            (artifact / f"{value['name']}.json").write_text(json.dumps(state, indent=2) + "\n")
         elif kind == "goat_horns_upright":
             from . import goat_horn_oracle
 
@@ -653,6 +690,8 @@ def run(
                 else:
                     os.environ[key] = old
         mcp.request_timeout_seconds = min(timeout + 10, 130.0)
+        mcp.scene_address = f"127.0.0.1:{client_port}"
+        mcp.scene_server = server
         with ProbeSteps(mcp, artifact / "scene-shot", timeout, "scene-shot") as probe:
             wait_play(probe)
             if ctx.client == "java":
