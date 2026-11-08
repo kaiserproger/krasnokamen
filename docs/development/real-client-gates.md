@@ -274,7 +274,12 @@ window, and captures a frame whose dimensions must match the requested size.
 `wait_disconnect` (native only) takes `name` and `eof`; it waits for the
 disconnected/error phase and records cleared use state, requiring the transport
 EOF reason when `eof` is true. `reconnect` targets the same private server.
-`server_eof` kills only that harness-owned server to exercise transport EOF.
+`server_eof` half-closes the harness-owned proxy's client-facing socket, producing
+a clean EOF without killing the server or approximating EOF with a TCP reset.
+
+`walk_capture` samples one uniquely matching entity, waits for its reported walk
+phase and minimum speed, and brackets the screenshot with observations. Both
+bracket endpoints must match the requested phase tolerance for the same entity.
 
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains
   its same-client-thread `game_time` and entity positions. Missing timestamps fail.

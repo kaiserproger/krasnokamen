@@ -67,6 +67,42 @@ class SceneShotTests(unittest.TestCase):
             proxy.close()
             thread.join()
 
+    def test_proxy_eof_is_a_clean_half_close(self):
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        def echo():
+            with listener:
+                connection, _ = listener.accept()
+                with connection:
+                    connection.sendall(connection.recv(32))
+                    connection.recv(32)
+        thread = threading.Thread(target=echo)
+        thread.start()
+        proxy = scene_shot.LatencyProxy(listener.getsockname()[1], 0)
+        try:
+            port = proxy.start()
+            with socket.create_connection(("127.0.0.1", port), timeout=5) as client:
+                client.sendall(b"ping")
+                self.assertEqual(client.recv(4), b"ping")
+                proxy.send_eof()
+                self.assertEqual(client.recv(1), b"")
+        finally:
+            proxy.close()
+            thread.join()
+
+    def test_walk_phase_rejects_idle_missing_and_wrong_phase(self):
+        spec = {"name": "walk", "entity_type": "minecraft:zombie", "phase": 0.0,
+                "tolerance": 0.25, "min_speed": 0.1, "max_ticks": 30}
+        step = {"walk_capture": spec}
+        scene_shot.validate_steps([step], "native")
+        scene_shot.validate_steps([step], "java")
+        entity = {"entity_type": "minecraft:zombie", "walk_position": 0.1, "walk_speed": 0.2}
+        self.assertIs(scene_shot.matching_walk({"entities": [entity]}, spec), entity)
+        for values in ({"walk_speed": 0.0}, {"walk_position": None}, {"walk_position": 1.0}):
+            self.assertIsNone(scene_shot.matching_walk({"entities": [{**entity, **values}]}, spec))
+        self.assertIsNone(scene_shot.matching_walk({"entities": [entity, entity]}, spec))
+
     def test_steps_dispatch_and_retain_evidence(self):
         class Probe:
             def __init__(self):

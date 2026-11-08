@@ -49,6 +49,8 @@ class LatencyProxy:
         self.ready = threading.Event()
         self.error = None
         self.port = None
+        self.downstreams = set()
+        self.eof_writers = set()
         self.thread = threading.Thread(target=self._run, daemon=True)
 
     async def _forward(self, reader, writer):
@@ -59,10 +61,13 @@ class LatencyProxy:
                 await ready
             finally:
                 timer.cancel()
+            if writer in self.eof_writers:
+                await asyncio.Future()
             writer.write(data)
             await writer.drain()
 
     async def _connection(self, reader, writer):
+        self.downstreams.add(writer)
         upstream = None
         try:
             upstream_reader, upstream = await asyncio.open_connection("127.0.0.1", self.target_port)
@@ -75,6 +80,8 @@ class LatencyProxy:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
         finally:
+            self.downstreams.discard(writer)
+            self.eof_writers.discard(writer)
             writer.close()
             if upstream is not None:
                 upstream.close()
@@ -105,6 +112,16 @@ class LatencyProxy:
         if self.error is not None:
             raise RuntimeError("starting latency proxy failed") from self.error
         return self.port
+
+    def send_eof(self):
+        async def close_write():
+            if len(self.downstreams) != 1:
+                raise RuntimeError("EOF requires exactly one connected client")
+            writer = next(iter(self.downstreams))
+            self.eof_writers.add(writer)
+            writer.write_eof()
+            await writer.drain()
+        asyncio.run_coroutine_threadsafe(close_write(), self.loop).result(timeout=8)
 
     def close(self):
         if self.loop.is_running():
@@ -224,6 +241,9 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
             yield "minecraft_wait_ticks", {"ticks": 5}
         elif kind == "reconnect":
             yield "minecraft_connect", {"server_addr": "127.0.0.1:1"}
+        elif kind == "walk_capture":
+            yield "minecraft_list_entities", {"radius": 32, "limit": 128}
+            yield "minecraft_wait_ticks", {"ticks": 1}
         elif kind == "cmd":
             yield "minecraft_send_chat", {"message": value, "command": True}
         elif kind == "tp":
@@ -288,6 +308,17 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and all(type(n) is int for n in value["size"])
                      and 320 <= value["size"][0] <= 1280
                      and 240 <= value["size"][1] <= 720)
+        elif kind == "walk_capture":
+            valid = (isinstance(value, dict)
+                     and set(value) == {"name", "entity_type", "phase", "tolerance", "min_speed", "max_ticks"}
+                     and isinstance(value["name"], str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and isinstance(value["entity_type"], str) and value["entity_type"].startswith("minecraft:")
+                     and all(type(value[key]) in (int, float) and math.isfinite(value[key])
+                             for key in ("phase", "tolerance", "min_speed"))
+                     and 0 <= value["phase"] < math.tau and 0 < value["tolerance"] < math.pi
+                     and 0 < value["min_speed"] <= 1
+                     and type(value["max_ticks"]) is int and 1 <= value["max_ticks"] <= 300)
         elif kind == "mob_motion":
             valid = (isinstance(value, dict) and set(value) == {"samples", "name"}
                      and isinstance(value["name"], str) and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
@@ -317,6 +348,21 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
             valid = False
         if not valid:
             raise ValueError(f"invalid scene step: {step!r}")
+
+
+def matching_walk(entities: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any] | None:
+    matches = [entity for entity in entities.get("entities", [])
+               if entity.get("entity_type") == spec["entity_type"]]
+    if len(matches) != 1:
+        return None
+    entity = matches[0]
+    position, speed = entity.get("walk_position"), entity.get("walk_speed")
+    if (type(position) not in (int, float) or type(speed) not in (int, float)
+            or not math.isfinite(position) or not math.isfinite(speed)
+            or speed < spec["min_speed"]):
+        return None
+    delta = (position - spec["phase"] + math.pi) % math.tau - math.pi
+    return entity if abs(delta) <= spec["tolerance"] else None
 
 
 def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], client: str = "native") -> list[str]:
@@ -384,11 +430,10 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             probe.call("minecraft_connect", {"server_addr": address})
             wait_play(probe)
         elif kind == "server_eof":
-            server = getattr(probe.client, "scene_server", None)
-            if server is None or server.poll() is not None:
-                raise RuntimeError("EOF requires the running harness-owned server")
-            server.kill()
-            server.wait(timeout=8)
+            proxy = getattr(probe.client, "scene_proxy", None)
+            if proxy is None:
+                raise RuntimeError("EOF requires a harness-owned proxy")
+            proxy.send_eof()
         elif kind == "wait_disconnect":
             while True:
                 state = probe.call("minecraft_observe")
@@ -404,6 +449,24 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             if value["eof"]:
                 probe.check(f"{value['name']}_eof", state.get("disconnect_reason") == "server closed connection")
             (artifact / f"{value['name']}.json").write_text(json.dumps(state, indent=2) + "\n")
+        elif kind == "walk_capture":
+            args = {"radius": 32, "limit": 128}
+            for _ in range(value["max_ticks"]):
+                before = probe.call("minecraft_list_entities", args)
+                if matching_walk(before, value):
+                    break
+                probe.call("minecraft_wait_ticks", {"ticks": 1})
+            else:
+                raise RuntimeError(f"walk phase not reached: {value['name']}")
+            image = capture(probe, artifact, value["name"])
+            after = probe.call("minecraft_list_entities", args)
+            first, last = matching_walk(before, value), matching_walk(after, value)
+            probe.check(f"{value['name']}_phase_bracket",
+                        first is not None and last is not None
+                        and first["entity_uuid"] == last["entity_uuid"])
+            (artifact / f"{value['name']}-walk.json").write_text(
+                json.dumps({"before": before, "after": after, "spec": value}, indent=2) + "\n")
+            shots.append(image)
         elif kind == "goat_horns_upright":
             from . import goat_horn_oracle
 
@@ -667,7 +730,7 @@ def run(
         server = runtime.start_server(server_command, cwd=runtime.REPO_ROOT, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         runtime.wait_port(port, timeout, server, log_path=artifact / "server.log")
         client_port = port
-        if client_latency_ms:
+        if client_latency_ms or any(step.get("server_eof") is True for step in scenario["steps"]):
             proxy = LatencyProxy(port, client_latency_ms)
             client_port = proxy.start()
         xvfb, display, _ = runtime.start_xvfb(artifact)
@@ -691,7 +754,7 @@ def run(
                     os.environ[key] = old
         mcp.request_timeout_seconds = min(timeout + 10, 130.0)
         mcp.scene_address = f"127.0.0.1:{client_port}"
-        mcp.scene_server = server
+        mcp.scene_proxy = proxy
         with ProbeSteps(mcp, artifact / "scene-shot", timeout, "scene-shot") as probe:
             wait_play(probe)
             if ctx.client == "java":
