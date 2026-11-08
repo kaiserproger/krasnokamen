@@ -18,6 +18,59 @@ from .quirk_parity.fuzz import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_A
 
 
 class RandomMatrixTests(unittest.TestCase):
+    def test_seed19_adapter_consumes_received_packet_transitions(self):
+        import socket
+        from . import wire
+        from .protocol_matrix_client import ProtocolMatrixClient
+        a,b=socket.socketpair()
+        observer=None
+        try:
+            with patch.object(wire,'join_offline_socket',return_value=(a,{})):
+                observer=wire.PlayObserver(('unused',0),'Probe',account_uuid=None,timeout=1)
+            client=object.__new__(ProtocolMatrixClient)
+            client.observer=observer; client.items={163:'minecraft:oak_log',63:'minecraft:oak_planks'}
+            client.teleport_to=lambda *args:None
+            client.open_inventory=lambda:None
+            send=lambda packet,body:wire.send_compressed_frame(b,packet,bytes.fromhex(body))
+            slots=[b'\x00']*46; slots[36]=bytes.fromhex('01a3010000')
+            wire.send_compressed_frame(b,0x12,bytes([0,1,46])+b''.join(slots)+b'\x00')
+            observer.wait(lambda p:0 in p.menus,description='initial player menu')
+            def click(slot,**kwargs):
+                if slot==36:
+                    send(0x14,'0002002400'); send(0x60,'01a3010000')
+                elif slot==1:
+                    send(0x14,'00040000043f0000')
+                elif slot==0:
+                    send(0x14,'0006000000')
+                else:
+                    raise AssertionError(slot)
+            client.click_slot=click
+            deliver=[True]
+            def wait(predicate,*,description,timeout_seconds=30):
+                if description=='received crafting input and cursor':
+                    self.assertFalse(predicate())
+                    if deliver[0]:
+                        send(0x14,'0005000101a3010000'); send(0x60,'00')
+                return observer.wait(lambda _:predicate(),description=description,timeout=0.1)
+            client.wait_until=wait
+            ctx=SimpleNamespace(clients=[client])
+            with patch('tools.harness.matrix_domains.random._supply'), \
+                 patch('tools.harness.matrix_domains.random._close'):
+                _action(ctx,{'actor':0,'verb':'craft','count':2,'target':0})
+            self.assertEqual(observer.menus[0]['state_id'],6)
+            self.assertIsNone(observer.menus[0]['slots'][0])
+            deliver[0]=False
+            wire.send_compressed_frame(b,0x12,bytes([0,1,46])+b''.join(slots)+b'\x00')
+            observer.wait(lambda p:p.menus[0]['state_id']==1,description='reset menu')
+            with patch('tools.harness.matrix_domains.random._supply'), \
+                 patch('tools.harness.matrix_domains.random._close'):
+                with self.assertRaisesRegex(TimeoutError,'received crafting input and cursor'):
+                    _action(ctx,{'actor':0,'verb':'craft','count':2,'target':0})
+        finally:
+            if observer is not None: observer.close()
+            else: a.close()
+            b.close()
+
     def test_differential_rejects_planted_inventory_divergence(self):
         state = {'inventories': [{}], 'container': {}, 'blocks': {}}
         self.assertTrue(player.compare_player_states(state, state)['passed'])

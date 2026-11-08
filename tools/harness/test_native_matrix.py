@@ -3,28 +3,50 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from tools.harness.backends import native_matrix
 
 
 class NativeMatrixTests(unittest.TestCase):
-    def test_pre_oracle_failure_is_blocked_and_not_counted_as_executed(self):
+    def test_run_classifies_startup_and_oracle_exceptions(self):
         import yaml
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)
-            rows=[{'id':'missing-facts','status':native_matrix.failure_status(False),
-                   'driver':'native_mcp','server_sha':'sha','note':'missing block_collision_shapes',
-                   'run_dir':str(root)},
-                  {'id':'oracle-failure','status':native_matrix.failure_status(True),
-                   'driver':'native_mcp','server_sha':'sha','note':'assertion failed',
-                   'run_dir':str(root)}]
-            ledger=root/'ledger.jsonl'
-            ledger.write_text(''.join(json.dumps(row)+'\n' for row in rows))
-            native_matrix._write_summary({'all_native_ids':[r['id'] for r in rows],
-                'ledger':str(ledger),'server_sha':'sha','run_root':str(root),
-                'wave1_id_set_sha256':'a','matrix_sha256':'b','repro_prefix':['matrix']})
-            result=yaml.safe_load((root/'summary.yaml').read_text())
-            self.assertEqual((result['executed'],result['blocked'],result['fail']),(1,1,1))
+            binary=root/'server'; binary.write_bytes(b'server')
+            row={'id':'case','subject':'containers.chest','origin':'full','context':{
+                'client_kind':'native_linux','network_condition':'normal',
+                'server_lifecycle':'steady','player_count':'1','game_mode':'survival',
+                'dimension':'overworld'}}
+            matrix=root/'matrix.json'; matrix.write_text(json.dumps({'scenarios':[row]}))
+            for startup,expected in ((True,'blocked'),(False,'fail')):
+                run_root=root/('startup' if startup else 'oracle')
+                ctx=SimpleNamespace(extra_args=['--matrix',str(matrix),'--ledger',str(root/'ledger'),
+                    '--run-root',str(run_root)],client='native',windowed=True,server_bin=binary,
+                    plugins_dir=root,timeout_seconds=5,artifact_dir=root/'artifact',
+                    client_evidence={},commands=[],cwds=[],exits=[],logs=[])
+                host=SimpleNamespace(enabled_plugins=[])
+                lane=SimpleNamespace(host=host,clients=[object()])
+                manager=MagicMock()
+                manager.__enter__.side_effect=RuntimeError('missing block_collision_shapes') if startup else None
+                manager.__enter__.return_value=lane
+                manager.__exit__.return_value=False
+                with patch.object(native_matrix.native_client,'resolve_binary',return_value=binary), \
+                     patch.object(native_matrix,'Lane',return_value=manager), \
+                     patch.object(native_matrix,'storage',side_effect=AssertionError('oracle failed')), \
+                     patch('tools.harness.matrix_execution.select_plugin_profile',return_value=([],None)), \
+                     patch('tools.harness.matrix_execution.copy_plugins',return_value=[]), \
+                     patch('tools.harness.matrix_execution.plugin_set_fingerprint',return_value='sha'):
+                    with self.assertRaisesRegex(RuntimeError,'native matrix incomplete'):
+                        native_matrix.run(ctx)
+                self.assertEqual(ctx.client_evidence['matrix']['rows'][0]['status'],expected)
+                receipt={'details':{'matrix':ctx.client_evidence['matrix']}}
+                native_matrix.record_receipt(receipt,run_root/'result.json')
+                summary=yaml.safe_load((run_root/'summary.yaml').read_text())
+                self.assertEqual(summary['executed'],0 if startup else 1)
+                self.assertEqual(summary['fail'],0 if startup else 1)
 
     def test_health_rejects_dead_server_errors_missing_metrics_and_disconnect(self):
         from types import SimpleNamespace
@@ -32,11 +54,17 @@ class NativeMatrixTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             log=Path(directory)/'server.log'
             log.write_text('INFO ready\n')
-            host=SimpleNamespace(running=True,log_path=log,
-                dashboard_full_stats=lambda:{'tick':{'samples':10,'p50_us':49000}})
-            client=SimpleNamespace(call_tool=lambda *args:{'in_play':True})
+            current=[0]
+            tick={'samples':10,'p50_us':49000,'source_tick':2}
+            def stats():
+                current[0]+=1
+                return {'simulation_tick':current[0], 'tick':tick}
+            host=SimpleNamespace(running=True,log_path=log,dashboard_full_stats=stats)
+            client=SimpleNamespace(call_tool=lambda name,*args:
+                {'status':'ok'} if name=='minecraft_wait_ticks' else {'in_play':True})
             lane=SimpleNamespace(host=host,clients=[client])
             def check():
+                current[0]=0
                 steps=ProbeSteps(client,Path(directory),10,'health')
                 native_matrix.check_health(lane,steps)
                 return steps.report['assertions']
@@ -50,11 +78,14 @@ class NativeMatrixTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'server_alive'):
                 check()
             host.running=True
-            for tick in ({}, {'samples':0,'p50_us':1}, {'samples':1,'p50_us':50000}):
-                host.dashboard_full_stats=lambda tick=tick:{'tick':tick}
+            for invalid in ({'source_tick':2}, {'samples':0,'p50_us':1,'source_tick':2},
+                            {'samples':1,'p50_us':50000,'source_tick':2}):
+                tick.clear(); tick.update(invalid)
+                current[0]=0
                 with self.assertRaisesRegex(RuntimeError,'server_mspt_below_50'):
                     check()
-            host.dashboard_full_stats=lambda:{'tick':{'samples':1,'p50_us':1}}
+            tick.update({'samples':1,'p50_us':1,'source_tick':2})
+            current[0]=0
             lane.clients=[]
             with self.assertRaisesRegex(RuntimeError,'clients_present'):
                 check()
@@ -62,6 +93,36 @@ class NativeMatrixTests(unittest.TestCase):
             client.call_tool=lambda *args:{}
             with self.assertRaisesRegex(RuntimeError,'client_0_in_play'):
                 check()
+
+    def test_health_rejects_frozen_server_despite_client_ticks(self):
+        from types import SimpleNamespace
+        from tools.harness.backends.probe_steps import ProbeSteps
+        with tempfile.TemporaryDirectory() as directory:
+            log=Path(directory)/'server.log'
+            log.write_text('INFO ready\n')
+            host=SimpleNamespace(running=True,log_path=log,dashboard_full_stats=lambda:{
+                'simulation_tick':1,'tick':{'source_tick':1,'samples':2,'p50_us':1}})
+            client=SimpleNamespace(call_tool=lambda name,*args:
+                {'status':'ok'} if name=='minecraft_wait_ticks' else {'in_play':True})
+            lane=SimpleNamespace(host=host,clients=[client])
+            steps=ProbeSteps(client,Path(directory),10,'health')
+            with patch.object(steps,'remaining',side_effect=[1,1,TimeoutError('frozen')]):
+                with self.assertRaisesRegex(TimeoutError,'frozen'):
+                    native_matrix.check_health(lane,steps)
+
+    def test_restart_has_one_deadline_despite_unrelated_events(self):
+        from types import SimpleNamespace
+        lane=object.__new__(native_matrix.Lane)
+        lane.host=SimpleNamespace(clean_restart=lambda:{})
+        lane._record_server=lambda:None
+        lane.steps=SimpleNamespace(report={})
+        lane.wal_checkpoint_baseline=None
+        lane.timeout=1
+        client=SimpleNamespace(call_tool=lambda *args:{'in_play':True,'state_version':1})
+        lane.clients=[client]; lane.names=['test']
+        with patch.object(native_matrix.time,'monotonic',side_effect=[0,0.3,0.6,1.0]):
+            with self.assertRaisesRegex(TimeoutError,'did not leave Play'):
+                lane.restart()
 
     def test_native_selection_preserves_windows_as_explicit_blockers(self):
         rows = [{"id": "linux", "context": {"client_kind": "native_linux"}},

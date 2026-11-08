@@ -5,6 +5,32 @@ Ranges/distribution checks are explicitly distinguished from exact conservation.
 from ._blocks import (POS, actor, adapter, block, block_is, boundary, call, check,
     command, count, data, drops, entities, equip, field, observed, require_modes,
     scalar, setblock, ticks, use)
+from ..matrix_api import MissingCapability
+
+
+def _tnt_fuses(history):
+    spawned = {}
+    durations = []
+    for event in history:
+        kind = event.get('event')
+        if kind == 'spawn' and event.get('type') == 'minecraft:tnt':
+            identity = (event.get('id'), event.get('uuid'))
+            if None in identity:
+                raise MissingCapability('snapshot:entity_lifecycle.identity')
+            spawned[identity] = event
+        elif kind == 'remove':
+            identity = (event.get('id'), event.get('uuid'))
+            if identity not in spawned:
+                continue
+            start = spawned.pop(identity)
+            before, after = start.get('tick'), event.get('tick')
+            if type(before) is not int or type(after) is not int:
+                raise MissingCapability('snapshot:entity_lifecycle.authoritative_tick')
+            if after < before:
+                raise RuntimeError('entity lifecycle tick moved backwards')
+            durations.append(after-before)
+    return durations
+
 
 
 def _summon_tnt(ctx,x=1,y=144,z=0,fuse=1):
@@ -14,15 +40,16 @@ def _summon_tnt(ctx,x=1,y=144,z=0,fuse=1):
 
 
 def tnt_prime_chain(ctx):
-    require_modes(ctx,'survival','creative'); setblock(ctx,'tnt'); setblock(ctx,'tnt',(2,144,0))
+    require_modes(ctx,'survival','creative')
+    lifecycle_start=len(observed(ctx,'entity_lifecycle'))
+    setblock(ctx,'tnt'); setblock(ctx,'tnt',(2,144,0))
     equip(ctx,'flint_and_steel'); use(ctx); block(ctx,POS,'air')
     first=entities(ctx,'tnt'); check(ctx,'initial_prime_one',len(first)==1)
-    events=observed(ctx,'entity_lifecycle')
     ticks(ctx,120); block(ctx,(2,144,0),'air'); check(ctx,'chain_entities_expired',not entities(ctx,'tnt'))
     history=observed(ctx,'entity_lifecycle')
-    tnt=[e for e in history if e['type']=='minecraft:tnt']
-    check(ctx,'initial_fuse_80',any(e['removed_tick']-e['spawn_tick']==80 for e in tnt),tnt)
-    check(ctx,'chain_short_fuse',any(10<=e['removed_tick']-e['spawn_tick']<=30 for e in tnt),tnt)
+    durations=_tnt_fuses(history[lifecycle_start:])
+    check(ctx,'initial_fuse_80',80 in durations,durations)
+    check(ctx,'chain_short_fuse',any(10<=duration<=30 for duration in durations),durations)
     check(ctx,'crater_created',not block_is(ctx,(1,143,0),'stone'))
 
 

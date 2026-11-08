@@ -49,24 +49,58 @@ def failure_status(oracle_started: bool) -> str:
     return 'fail' if oracle_started else 'blocked'
 
 
+def _wait_client_tick(client: Any, steps: ProbeSteps) -> None:
+    remaining = steps.remaining()
+    previous = getattr(client, 'request_timeout_seconds', None)
+    if previous is not None:
+        client.request_timeout_seconds = min(previous, remaining)
+    try:
+        result = client.call_tool('minecraft_wait_ticks', {'ticks': 1})
+        steps.check('client_tick_response', result.get('status') == 'ok')
+    finally:
+        if previous is not None:
+            client.request_timeout_seconds = previous
+
+
 def check_health(lane: Any, steps: ProbeSteps) -> None:
     """Require observed server and client health before crediting any scenario."""
     steps.check('server_alive', lane.host.running)
     log = lane.host.log_path.read_text(errors='replace')
     steps.check('server_no_error_or_panic', not any(
         'ERROR' in line or 'panic' in line.lower() for line in log.splitlines()))
-    metrics = lane.host.dashboard_full_stats()
-    tick = metrics.get('tick')
-    samples = tick.get('samples') if isinstance(tick, dict) else None
-    p50 = tick.get('p50_us') if isinstance(tick, dict) else None
-    steps.report['server_health'] = {'tick': tick}
-    steps.check('server_mspt_below_50',
-                type(samples) is int and samples > 0 and type(p50) in (int, float)
-                and math.isfinite(p50) and 0 <= p50 < 50000)
+    baseline = lane.host.dashboard_full_stats()
+    baseline_tick = baseline.get('simulation_tick')
+    steps.check('server_tick_baseline', type(baseline_tick) is int)
     steps.check('clients_present', bool(lane.clients))
     for index, client in enumerate(lane.clients):
         state = client.call_tool('minecraft_observe')
         steps.check(f'client_{index}_in_play', state.get('in_play') is True)
+        _wait_client_tick(client, steps)
+    while True:
+        metrics = lane.host.dashboard_full_stats()
+        current_tick = metrics.get('simulation_tick')
+        tick = metrics.get('tick')
+        source_tick = tick.get('source_tick') if isinstance(tick, dict) else None
+        steps.check('server_metrics_available', type(source_tick) is int)
+        if type(current_tick) is int and current_tick > baseline_tick and source_tick > baseline_tick:
+            break
+        steps.check('server_alive_during_health', lane.host.running)
+        _wait_client_tick(lane.clients[0], steps)
+    tick = metrics.get('tick')
+    samples = tick.get('samples') if isinstance(tick, dict) else None
+    p50 = tick.get('p50_us') if isinstance(tick, dict) else None
+    source_tick = tick.get('source_tick') if isinstance(tick, dict) else None
+    steps.check('server_metrics_fresh',
+                type(source_tick) is int and source_tick > baseline_tick)
+    steps.report['server_health'] = {'baseline_tick': baseline_tick,
+                                     'final_tick': current_tick, 'tick': tick}
+    steps.check('server_mspt_below_50',
+                type(samples) is int and samples > 0 and type(p50) in (int, float)
+                and math.isfinite(p50) and 0 <= p50 < 50000)
+    steps.check('server_alive_after_health', lane.host.running)
+    log = lane.host.log_path.read_text(errors='replace')
+    steps.check('server_no_error_or_panic_after_health', not any(
+        'ERROR' in line or 'panic' in line.lower() for line in log.splitlines()))
 
 
 
@@ -260,11 +294,18 @@ class Lane:
             if proof.get('checkpoint_sha256_before_restart')!=self.wal_checkpoint_baseline:
                 raise NotImplementedError('server_kill9_before_next_checkpoint: checkpoint changed during action; WAL-only recovery unproven')
             self.steps.check('ordinary_transfer_not_checkpointed_before_SIGKILL',True)
+        deadline=time.monotonic()+self.timeout
         for client,name in zip(self.clients,self.names):
             state=client.call_tool('minecraft_observe')
-            while state.get('in_play'):
-                client.call_tool('minecraft_wait_for_state_change',{'observed_version':state['state_version'],'timeout_seconds':self.timeout})
+            while state.get('in_play') is True:
+                remaining=deadline-time.monotonic()
+                if remaining < 0.1:
+                    raise TimeoutError('clients did not leave Play after restart')
+                client.call_tool('minecraft_wait_for_state_change',
+                                 {'observed_version':state['state_version'],'timeout_seconds':remaining})
                 state=client.call_tool('minecraft_observe')
+            if state.get('in_play') is not False:
+                raise RuntimeError('client restart observation omitted in_play')
             client.call_tool('minecraft_connect',{'server_addr':self.address})
             self.authenticate(client,name)
             self.settle(client,name)

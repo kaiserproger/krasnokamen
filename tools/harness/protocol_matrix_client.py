@@ -140,7 +140,17 @@ class ProtocolMatrixClient(ProtocolStationVerbs, ProtocolInputVerbs):
                     elif observed['lifecycle_overflow']:
                         result['observation_errors']['entity_lifecycle'] = 'journal_overflow'
                     else:
-                        result['entity_lifecycle'] = observed['lifecycle']
+                        lifecycle = observed['lifecycle']
+                        for event in lifecycle:
+                            type_id = event.get('type')
+                            if type_id is not None:
+                                event['type'] = self.entity_types.get(type_id)
+                                if event['type'] is None:
+                                    result['observation_errors']['entity_lifecycle'] = (
+                                        f'unknown_entity_registry_id:{type_id}')
+                                    break
+                        else:
+                            result['entity_lifecycle'] = lifecycle
                     entities = observed['entities']
                     for entity in entities:
                         type_id = entity['type']

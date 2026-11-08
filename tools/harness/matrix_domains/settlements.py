@@ -14,10 +14,7 @@ def query(ctx, command):
     reply=ctx.server.query(command)
     if 'Unknown or incomplete' in reply:
         raise MissingCapability('settlement_command')
-    # Console transport appends a different fence per query. It is not world
-    # state and must not participate in pre/post-boundary equality.
-    return '\n'.join(line for line in reply.splitlines()
-                     if not re.fullmatch(r'chat\.type\.announcement: Server, MatrixConsoleFence\d+',line))
+    return reply.strip()
 
 
 def command(ctx, text, expected, *, client=None):

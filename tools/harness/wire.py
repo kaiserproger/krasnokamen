@@ -453,8 +453,18 @@ class PlayObserver:
                         self.blocks.clear()
                         self.chunk_sections.clear()
                     elif packet_id == 0x3B:  # OpenScreen, inventory.rs
-                        self.current_window, offset = read_varint_bytes(body)
-                        self.menu_types[self.current_window], _ = read_varint_bytes(body, offset)
+                        window, offset = read_varint_bytes(body)
+                        menu_type, _ = read_varint_bytes(body, offset)
+                        self._forget_menu(window)
+                        self.current_window = window
+                        self.menu_types[window] = menu_type
+                    elif packet_id == 0x11:  # ContainerClose
+                        window, offset = read_varint_bytes(body)
+                        if offset != len(body):
+                            raise RuntimeError('trailing container close bytes')
+                        self._forget_menu(window)
+                        if self.current_window == window:
+                            self.current_window = 0
                     elif packet_id == 0x12:
                         window, _ = read_varint_bytes(body)
                         try:
@@ -564,6 +574,13 @@ class PlayObserver:
         self.send(0x12, click_body(window, state, slot, button, mode,
                                    force_cursor_sync=getattr(self, 'force_cursor_sync', False)))
         self.send(0x0D)
+
+    def _forget_menu(self, window: int) -> None:
+        if window == 0:
+            return
+        for cache in (self.menus, self.menu_errors, self.menu_types, self.menu_properties,
+                      self.merchant_offers, self.merchant_errors):
+            cache.pop(window, None)
 
     def _cache_player_suffix(self, window: int) -> None:
         """Received container suffix remains authoritative after menu closure."""

@@ -579,7 +579,8 @@ class ProtocolEntities:
         for entity_id in ids:
             previous = self._entities.pop(entity_id, None)
             self._lifecycle_event({"event": "remove", "id": entity_id,
-                                   "uuid": previous["uuid"] if previous else None})
+                                   "uuid": previous["uuid"] if previous else None,
+                                   "type": previous["type"] if previous else None})
 
     def _motion(self, raw: bytes) -> None:
         cur = _Cursor(raw)

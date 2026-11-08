@@ -15,6 +15,30 @@ DOMAINS = {'block_interact':29, 'block_break':24, 'block_place':24,
 
 
 class BlocksContractTests(unittest.TestCase):
+    def test_tnt_adapter_blocks_received_lifecycle_without_tick_evidence(self):
+        import threading
+        from .matrix_domains import explosions
+        from .protocol_entities import ProtocolEntities
+        from .protocol_matrix_client import ProtocolMatrixClient
+        from .test_protocol_entities import add_body,varint
+        tracker=ProtocolEntities()
+        client=object.__new__(ProtocolMatrixClient)
+        client.entity_types={25:'minecraft:tnt'}; client.items={}
+        client.observer=SimpleNamespace(condition=threading.RLock(),position=None,events=[],health=None,
+            food=None,revision=1,chunks=set(),chat_components=[],chat_errors=[],menu_errors={},
+            merchant_errors={},menus={},current_window=0,entities=tracker)
+        def fire(_ctx):
+            tracker.consume(0x01,add_body(entity_id=42,entity_type=25))
+            tracker.consume(0x4d,varint(1)+varint(42))
+        ctx=SimpleNamespace(clients=[client])
+        with patch.object(explosions,'require_modes'),patch.object(explosions,'setblock'), \
+             patch.object(explosions,'equip'),patch.object(explosions,'use',side_effect=fire), \
+             patch.object(explosions,'block'),patch.object(explosions,'ticks'), \
+             patch.object(explosions,'entities',return_value=[{'id':42}]), \
+             patch.object(explosions,'check'):
+            with self.assertRaisesRegex(MissingCapability,'authoritative_tick'):
+                explosions.tnt_prime_chain(ctx)
+
     def context(self, reply='', snapshot=None):
         server=SimpleNamespace(query=lambda text:reply, command=lambda text:reply)
         client=SimpleNamespace(name='MatrixA',snapshot=lambda:snapshot or {})

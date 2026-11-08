@@ -17,6 +17,7 @@ from .test_matrix_api import context
 
 class MatrixRuntimeTests(unittest.TestCase):
     def test_console_fence_is_private_and_requires_fresh_query_result(self):
+        from .matrix_domains import settlements
         with tempfile.TemporaryDirectory() as temp:
             log=Path(temp)/'server.log'
             log.write_text('')
@@ -26,16 +27,25 @@ class MatrixRuntimeTests(unittest.TestCase):
             stdin=Mock()
             server._process=SimpleNamespace(stdin=stdin,poll=lambda:None)
             def wait(path, timeout, predicate):
-                log.write_text('MatrixConsoleFence00000001\n')
+                marker=stdin.write.call_args.args[0].decode().split('scoreboard players list ')[1].strip()
+                fence=f'Scores for {marker}: {{}}'
+                before=log.read_text()
+                log.write_text(before + '[Player] ' + fence + '\n')
                 self.assertFalse(predicate()[0])
-                log.write_text('Scores for MatrixConsoleFence00000001: {}\n')
+                town='OtherTown' if stdin.write.call_count == 3 else 'MatrixTown'
+                log.write_text(before + f'Settlements: {town}.\n' + fence + '\n')
                 ok, fresh=predicate()
                 self.assertTrue(ok)
                 return fresh
+            ctx=SimpleNamespace(server=server)
             with patch('tools.harness.runtime.wait_for_path_condition',side_effect=wait):
-                server.command('time query daytime')
-            stdin.write.assert_called_once_with(
-                b'time query daytime\nscoreboard players list MatrixConsoleFence00000001\n')
+                first=settlements.query(ctx,'settlement list')
+                second=settlements.query(ctx,'settlement list')
+                changed=settlements.query(ctx,'settlement list')
+            self.assertEqual(first,second)
+            self.assertEqual(first,'Settlements: MatrixTown.')
+            self.assertNotEqual(first,changed)
+            self.assertNotEqual(stdin.write.call_args_list[0],stdin.write.call_args_list[1])
 
     def test_non_json_adapter_state_is_rejected_before_actions(self):
         ctx=context(); action=Mock()
