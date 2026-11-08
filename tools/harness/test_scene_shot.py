@@ -1,4 +1,5 @@
 import json
+import math
 import socket
 import tempfile
 import threading
@@ -132,7 +133,8 @@ class SceneShotTests(unittest.TestCase):
         scene_shot.validate_steps([step], "java")
         entity = {"entity_type": "minecraft:zombie", "walk_position": 0.1, "walk_speed": 0.2}
         self.assertIs(scene_shot.matching_walk({"entities": [entity]}, spec), entity)
-        for values in ({"walk_speed": 0.0}, {"walk_position": None}, {"walk_position": 1.0}):
+        for values in ({"walk_speed": 0.0}, {"walk_position": None}, {"walk_position": 1.0},
+                       {"walk_position": math.tau + 0.1}):
             self.assertIsNone(scene_shot.matching_walk({"entities": [{**entity, **values}]}, spec))
         self.assertIsNone(scene_shot.matching_walk({"entities": [entity, entity]}, spec))
 

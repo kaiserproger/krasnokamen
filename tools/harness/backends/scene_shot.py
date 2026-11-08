@@ -361,8 +361,7 @@ def matching_walk(entities: dict[str, Any], spec: dict[str, Any]) -> dict[str, A
             or not math.isfinite(position) or not math.isfinite(speed)
             or speed < spec["min_speed"]):
         return None
-    delta = (position - spec["phase"] + math.pi) % math.tau - math.pi
-    return entity if abs(delta) <= spec["tolerance"] else None
+    return entity if abs(position - spec["phase"]) <= spec["tolerance"] else None
 
 
 def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], client: str = "native") -> list[str]:

@@ -277,9 +277,10 @@ EOF reason when `eof` is true. `reconnect` targets the same private server.
 `server_eof` half-closes every client-facing socket in the harness-owned proxy,
 producing clean EOF without killing the server or approximating EOF with a reset.
 
-`walk_capture` samples one uniquely matching entity, waits for its reported walk
-phase and minimum speed, and brackets the screenshot with observations. Both
-bracket endpoints must match the requested phase tolerance for the same entity.
+`walk_capture` samples one uniquely matching entity, waits for its reported raw
+walk position and minimum speed, and brackets the screenshot with observations.
+Both endpoints must match the requested tolerance for the same entity. Position
+is not wrapped: different renderers can apply a factor before calculating phase.
 
 `goat_side_horn` checks a previously named screenshot from the fixed goat side
 pose against the measured Java horn edge; it is not a general image comparator.
