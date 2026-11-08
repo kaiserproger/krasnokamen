@@ -420,15 +420,16 @@ def run(ctx):
             for crate, tests in sorted(cargo.items()) for name in sorted(tests)
         )
         all_ids = set().union(*(ids for tests in cargo.values() for ids in tests.values()))
+        package_args = [arg for crate in sorted(cargo) for arg in ('-p', crate)]
         try:
-            profiles._run_command(['cargo', 'nextest', 'list', '--workspace', '-E', expression, '--message-format', 'json'], ctx, 'regressions-list.log')
+            profiles._run_command(['cargo', 'nextest', 'list', *package_args, '-E', expression, '--message-format', 'json'], ctx, 'regressions-list.log')
             listing = _nextest_listing((ctx.artifact_dir / 'regressions-list.log').read_text())
             found = {(suite['package-name'], name) for suite in listing['rust-suites'].values() for name, result in suite.get('testcases', {}).items() if result.get('filter-match', {}).get('status') == 'matches' and not result.get('ignored', False)}
             missing = {(crate, name) for crate, tests in cargo.items() for name in tests} - found
             for crate, name in sorted(missing):
                 failures.extend(f'{ident}: unknown or ignored test {crate}:{name}' for ident in sorted(cargo[crate][name]))
             if not missing:
-                profiles._run_command(['cargo', 'nextest', 'run', '--workspace', '-E', expression, '--ignore-default-filter', '--no-fail-fast', '--no-tests=fail'], ctx, 'regressions-run.log')
+                profiles._run_command(['cargo', 'nextest', 'run', *package_args, '-E', expression, '--ignore-default-filter', '--no-fail-fast', '--no-tests=fail'], ctx, 'regressions-run.log')
         except Exception as error:
             log = ctx.artifact_dir / 'regressions-run.log'
             failed = _failed_ids(log.read_text(), cargo) if log.exists() else set()

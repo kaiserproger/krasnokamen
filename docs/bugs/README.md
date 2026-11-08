@@ -201,6 +201,10 @@ distinct ref, and prints one line per row:
 - `unrunnable(reason)`: no registered check, unknown or ignored test, build error,
   or a ref that cannot run.
 
+Cargo discovery and execution select only the packages named by the requested
+refs (`-p <crate>`), not the whole workspace. Exact-name matching and refusal
+of missing or ignored tests still apply.
+
 `--out` writes the full per-ref result as JSON (also valid YAML). Hand a worker
 only rows that are not `green`: a row already green at base is fixed in
 practice and needs promotion (or a better check), not a fix. Probe never

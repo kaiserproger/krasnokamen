@@ -80,7 +80,8 @@ _RESULT_LINE = re.compile(r'^\s+([A-Z][A-Z ]*?)\s+\[\s*[\d.]+s\]\s+(?:\(\s*\d+/\
 def _run_cargo(ctx, tests, tree):
     """Run exact cargo tests {(crate, name)} in one nextest invocation -> {(crate, name): (state, detail)}."""
     expression = ' | '.join(f'(package({crate}) & test(={name}))' for crate, name in sorted(tests))
-    argv, env = regressions.tree_build_command(tree, ['cargo', 'nextest', 'list', '--workspace', '-E', expression, '--message-format', 'json'])
+    package_args = [arg for crate in sorted({crate for crate, _ in tests}) for arg in ('-p', crate)]
+    argv, env = regressions.tree_build_command(tree, ['cargo', 'nextest', 'list', *package_args, '-E', expression, '--message-format', 'json'])
     ok, text = _exec(ctx, argv, 'list', tree, env)
     try:
         listing = regressions._nextest_listing(text)
@@ -95,7 +96,7 @@ def _run_cargo(ctx, tests, tree):
     if not runnable:
         return results
     expression = ' | '.join(f'(package({crate}) & test(={name}))' for crate, name in sorted(runnable))
-    argv, env = regressions.tree_build_command(tree, ['cargo', 'nextest', 'run', '--workspace', '-E', expression, '--ignore-default-filter',
+    argv, env = regressions.tree_build_command(tree, ['cargo', 'nextest', 'run', *package_args, '-E', expression, '--ignore-default-filter',
                                                       '--no-fail-fast', '--no-tests=fail', '--status-level', 'pass'])
     ok, text = _exec(ctx, argv, 'run', tree, env)
     seen = {}
