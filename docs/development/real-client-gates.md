@@ -256,7 +256,7 @@ proofs need a physical XTest click (pattern: `_scroll` in
 scripted capture. Set `SOLARIS_SERVER_BINARY`, `SOLARIS_CLIENT_BINARY`, the native
 env block above and `SCENE_SHOT_SCENARIO` to a JSON file. The JSON has `steps`,
 each one of `cmd`, `tp` (five coordinates), `look`, `hotbar`, `wait_ticks`, `wait_play`,
-`wait_respawn` (waits for live health and a closed death screen), `wait_terrain`, `shot`, `observe`, `use_item_on`, `click_screen_button`,
+`wait_respawn` (waits for live health and a closed death screen), `pause` (native only), `wait_terrain`, `shot`, `observe`, `use_item_on`, `click_screen_button`,
 `scan_blocks`, `read_block`, `navigate_to_block`, `list_entities`, `timed_entities`,
 `mob_motion`, or `key` (`keys` and `ticks` MCP arguments; released when the step finishes). Optional
 `seed` defaults to 100, `world` copies an existing world, `server_view_distance`

@@ -215,6 +215,8 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
             yield "minecraft_list_entities", value["args"]
         elif kind == "wait_ticks":
             yield "minecraft_wait_ticks", {"ticks": min(value, 100)}
+        elif kind == "pause":
+            yield "minecraft_open_pause_menu", {}
         elif kind == "cmd":
             yield "minecraft_send_chat", {"message": value, "command": True}
         elif kind == "tp":
@@ -248,6 +250,8 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
             valid = type(value) is int and value > 0
         elif kind in ("wait_play", "wait_respawn"):
             valid = value is True
+        elif kind == "pause":
+            valid = client == "native" and value is True
         elif kind == "wait_screen":
             valid = isinstance(value, str) and bool(value)
         elif kind == "key":
@@ -338,6 +342,8 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 ticks = min(remaining, 100)
                 probe.call("minecraft_wait_ticks", {"ticks": ticks})
                 remaining -= ticks
+        elif kind == "pause":
+            probe.call("minecraft_open_pause_menu", {})
         elif kind == "wait_play":
             wait_play(probe)
         elif kind == "wait_respawn":

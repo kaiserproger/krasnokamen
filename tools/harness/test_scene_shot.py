@@ -105,6 +105,21 @@ class SceneShotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             scene_shot.validate_steps([{"wait_respawn": False}], "native")
 
+    def test_pause_dispatches_native_menu_and_rejects_other_inputs(self):
+        class Probe:
+            def __init__(self):
+                self.calls = []
+            def call(self, name, args):
+                self.calls.append((name, args))
+        probe = Probe()
+        scene_shot.execute(probe, Path("/tmp"), [{"pause": True}])
+        self.assertEqual(probe.calls, [("minecraft_open_pause_menu", {})])
+        self.assertEqual(list(scene_shot.scene_mcp_calls([{"pause": True}])),
+                         [("minecraft_open_pause_menu", {})])
+        for client, value in [("java", True), ("native", False)]:
+            with self.assertRaises(ValueError):
+                scene_shot.validate_steps([{"pause": value}], client)
+
     def test_look_is_validated_and_dispatched_to_real_client(self):
         step = {"look": {"yaw_deg": 45, "pitch_deg": -60}}
         self.assertEqual(list(scene_shot.scene_mcp_calls([step])),
