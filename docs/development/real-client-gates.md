@@ -278,15 +278,22 @@ disconnected/error phase and records cleared use state, requiring the transport
 EOF reason when `eof` is true. `reconnect` targets the same private server.
 `server_eof` half-closes every client-facing socket in the harness-owned proxy,
 producing clean EOF without killing the server or approximating EOF with a reset.
+The receipt's `lifecycle-progress.json`, `scene-progress.json`,
+`scene-shot/mcp-progress.json` and `teardown-progress.json` are written before
+their respective operations, so forced termination retains the last phase and
+its timeout. Proxy start, EOF and teardown are each bounded to eight seconds.
 
-`walk_capture` samples one uniquely matching entity and waits for its reported raw
-walk position and minimum speed. It retains the before/after observations and
-the screenshot's render-frame gait inputs; the frame, not a later state sample,
-must match the requested tolerance, and the observed entity identity must persist.
-Position is not wrapped: renderers can apply a factor before calculating phase.
+`walk_capture` samples one uniquely matching entity and its minimum speed. An
+endpoint sample may straddle the requested range because rendering interpolates
+from the previous tick, so the harness captures overlapping ticks until the
+actual render frame matches without widening the tolerance. It records every
+capture attempt, the matching before/after observations, and the screenshot's
+render-frame gait inputs; the entity identity must persist. Position is not
+wrapped: renderers can apply a factor before calculating phase.
 `tools/harness/gait_phase_scene.json` fixes the scene and slows both clients'
 server clock to 2 TPS so extraction can be sampled without widening the phase
-tolerance. For the Java lane copy the fixture and set `java_plain` to `true`.
+tolerance. For the Java lane copy the fixture and set `java_plain` and
+`java_hide_chat` to `true`; the latter hides chat in the captured image.
 
 `goat_side_horn` checks a previously named screenshot from the fixed goat side
 pose against the measured Java horn edge; its four-row bracket shifts down one

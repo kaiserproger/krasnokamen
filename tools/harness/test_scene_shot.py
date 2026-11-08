@@ -12,6 +12,24 @@ from tools.harness.backends import scene_shot
 
 
 class SceneShotTests(unittest.TestCase):
+    def test_java_chat_hidden_is_opt_in(self):
+        self.assertIn("chatVisibility:0\n", scene_shot.java_options(8, 70))
+        self.assertIn("chatVisibility:2\n", scene_shot.java_options(8, 70, hide_chat=True))
+
+    def test_java_bootstrap_retries_only_early_client_thread_timeout(self):
+        from types import SimpleNamespace
+        process = SimpleNamespace(poll=lambda: None)
+        timeout = RuntimeError('minecraft_observe failed: {"code": "tool-execution-failed", "message": "TimeoutException"}')
+        with patch.object(scene_shot.runtime, "wait_client_ready_for_connect",
+                          side_effect=[timeout, {"current_screen": "TitleScreen"}]) as ready:
+            self.assertEqual(scene_shot.wait_java_bootstrap(object(), process, 30)["current_screen"], "TitleScreen")
+            self.assertEqual(ready.call_count, 2)
+        with patch.object(scene_shot.runtime, "wait_client_ready_for_connect",
+                          side_effect=RuntimeError("unrelated protocol failure")) as ready:
+            with self.assertRaisesRegex(RuntimeError, "unrelated protocol failure"):
+                scene_shot.wait_java_bootstrap(object(), process, 30)
+            self.assertEqual(ready.call_count, 1)
+
     def test_server_identity_is_recorded_at_launch(self):
         import hashlib
         with tempfile.TemporaryDirectory() as directory:
@@ -168,8 +186,40 @@ class SceneShotTests(unittest.TestCase):
                     evidence = json.loads((root / "walk-walk.json").read_text())
                     self.assertEqual(evidence["after"]["entities"][0]["walk_position"], 3.0)
                     write_frame(2.5)
-                    with self.assertRaisesRegex(AssertionError, "walk_render_phase"):
+                    with self.assertRaisesRegex(RuntimeError, "walk phase not reached"):
                         scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client)
+
+    def test_walk_capture_retries_interpolated_frame_without_widening_phase(self):
+        spec = {"name": "walk", "entity_type": "minecraft:spider", "phase": 1.5,
+                "tolerance": 0.45, "min_speed": 0.1, "max_ticks": 3}
+        entity = {"entity_type": "minecraft:spider", "entity_uuid": "mob",
+                  "walk_position": 1.467, "walk_speed": 0.6}
+
+        class Probe:
+            def __init__(self):
+                self.tick = 0
+            def call(self, name, args):
+                if name == "minecraft_wait_ticks":
+                    self.tick += 1
+                    return {}
+                return {"entities": [{**entity, "walk_position": (1.467, 2.05)[min(self.tick, 1)]}]}
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            image = str(root / "walk.png")
+            positions = iter((0.9, 1.6))
+            def capture(*args):
+                frame = {**entity, "walk_position": next(positions)}
+                Path(image).with_suffix(".json").write_text(json.dumps({"gait_frame": [frame]}))
+                return image
+            with patch.object(scene_shot, "capture_native", side_effect=capture):
+                self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], "native"), [image])
+            evidence = json.loads((root / "walk-walk.json").read_text())
+            self.assertEqual([a["frame"]["entities"][0]["walk_position"] for a in evidence["attempts"]], [0.9, 1.6])
+            self.assertEqual(evidence["spec"]["tolerance"], 0.45)
 
     def test_steps_dispatch_and_retain_evidence(self):
         class Probe:
