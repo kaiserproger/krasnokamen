@@ -1,0 +1,57 @@
+[package]
+name = "workspace-features"
+description = "Shared third-party feature closure for Solaris development and test builds."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[lib]
+test = false
+doctest = false
+
+# ADR 0021: keep the normal dependency closure identical for per-crate builds
+# and tests. Test-only frameworks and optional GPU backends stay out of here.
+# Cargo resolver 2 deliberately keeps host/build features separate from target
+# features, so syn's proc-macro feature union belongs in build-dependencies.
+
+[build-dependencies]
+syn = { version = "2", default-features = false, features = ["clone-impls", "default", "derive", "extra-traits", "fold", "full", "parsing", "printing", "proc-macro", "visit", "visit-mut"] }
+
+[dependencies]
+clap = { version = "4", default-features = false, features = ["color", "default", "derive", "error-context", "help", "std", "suggestions", "usage"] }
+clap_builder = { version = "4", default-features = false, features = ["color", "error-context", "help", "std", "suggestions", "usage"] }
+crc32fast = { version = "1", default-features = false, features = ["default", "std"] }
+digest = { version = "0.10", default-features = false, features = ["alloc", "block-buffer", "const-oid", "core-api", "default", "mac", "oid", "std", "subtle"] }
+getrandom = { version = "0.2", default-features = false, features = ["std"] }
+hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "serde"] }
+indexmap = { version = "2", default-features = false, features = ["default", "serde", "std"] }
+lazy_static = { version = "1", default-features = false, features = ["spin", "spin_no_std"] }
+libc = { version = "0.2", default-features = false, features = ["default", "std"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
+memchr = { version = "2", default-features = false, features = ["alloc", "default", "std"] }
+num-traits = { version = "0.2", default-features = false, features = ["default", "i128", "libm", "std"] }
+once_cell = { version = "1", default-features = false, features = ["alloc", "default", "race", "std"] }
+rand_core = { version = "0.6", default-features = false, features = ["alloc", "getrandom", "std"] }
+regex-automata = { version = "0.4", default-features = false, features = ["alloc", "dfa-build", "dfa-search", "meta", "nfa-pikevm", "nfa-thompson", "std", "syntax"] }
+regex-syntax = { version = "0.8", default-features = false, features = ["default", "std", "unicode", "unicode-age", "unicode-bool", "unicode-case", "unicode-gencat", "unicode-perl", "unicode-script", "unicode-segment"] }
+semver = { version = "1", default-features = false, features = ["serde", "std"] }
+serde = { version = "1", default-features = false, features = ["alloc", "default", "derive", "rc", "serde_derive", "std"] }
+serde_core = { version = "1", default-features = false, features = ["alloc", "rc", "result", "std"] }
+serde_json = { version = "1", default-features = false, features = ["default", "float_roundtrip", "raw_value", "std"] }
+smallvec = { version = "1", default-features = false, features = ["const_generics", "const_new", "serde", "union"] }
+tokio = { version = "1", default-features = false, features = ["bytes", "default", "fs", "full", "io-std", "io-util", "libc", "macros", "mio", "net", "parking_lot", "process", "rt", "rt-multi-thread", "signal", "signal-hook-registry", "socket2", "sync", "test-util", "time", "tokio-macros"] }
+tracing-core = { version = "0.1", default-features = false, features = ["default", "once_cell", "std"] }
+typenum = { version = "1", default-features = false, features = ["const-generics"] }
+uuid = { version = "1", default-features = false, features = ["default", "rng", "serde", "std", "v4"] }
+zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd", "zerocopy-derive"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+linux-raw-sys = { version = "0.12", default-features = false, features = ["auxvec", "elf", "errno", "general", "ioctl", "no_std", "prctl"] }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", default-features = false, features = ["alloc", "default", "fs", "mm", "param", "process", "std", "time"] }

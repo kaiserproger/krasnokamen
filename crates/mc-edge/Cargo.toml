@@ -20,6 +20,7 @@ name = "solaris-v2"
 path = "src/bin/solaris-v2.rs"
 
 [dependencies]
+workspace-features.workspace = true
 mc-core = { path = "../mc-core" }
 mc-vanilla = { path = "../mc-vanilla" }
 mc-plugin-host = { path = "../mc-plugin-host" }

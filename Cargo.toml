@@ -11,6 +11,7 @@ authors = ["Solaris contributors"]
 repository = "https://github.com/kaiserproger/solaris"
 
 [workspace.dependencies]
+workspace-features = { path = "crates/workspace-features" }
 arc-swap = "1.7"
 parking_lot = "0.12"
 rustc-hash = "2"

@@ -14,6 +14,11 @@ retired. [ADR 0013](decisions/0013-core-model-v2.md) governs the core model.
   protocol, content and shared world/physics implementation.
 - `mc-plugin-host` and `mc-script`: isolated component execution and bounded
   admission; `mc-loader` owns the Loader wire contract.
+- `workspace-features`: compile-time third-party feature unification for the
+  server build and core tests ([ADR 0021](decisions/0021-build-time-and-crate-split.md)).
+  Only mc-edge's normal dependencies and mc-core's dev dependencies activate it;
+  standalone lower crates remain independent. It owns no runtime state and
+  depends on no Solaris crate.
 
 Inputs enter native authority; entity workers read immutable snapshots and
 emit intents, the owner merges them, and the edge projects the result. World,
