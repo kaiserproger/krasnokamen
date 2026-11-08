@@ -3,9 +3,12 @@
 **Date:** 2026-11-05  
 **Status:** Step 1 accepted by the owner and implemented (2026-11-05). Step 2
 (settlements crate pilot) designed and not started: the design recommends
-against it at today's coupling. Step 3 is the future plan below. The cycle
-ratchet (owner-approved 2026-11-07, implemented) makes code-health fail when
-the module cycle grows.  
+against it at today's coupling. Step 3 root-only feature unification passes
+workspace build, formatting and code-health; consumer test scope is below.
+Comparative timings await Main's batched quiet window.
+Leaf extraction and cycle cuts have not landed. The cycle ratchet
+(owner-approved 2026-11-07, implemented) makes code-health fail when the module
+cycle grows.
 **Related:** [0011](0011-core-crate-topology-and-threading.md) (rejected
 one-crate-per-domain without an enforceable boundary),
 [0013](0013-core-model-v2.md) (current crate ownership),
@@ -105,19 +108,20 @@ along with the reference tables behind its counts.
 
 The design's recommendation is no-go until Step 3 narrows the coupling.
 
-## Step 3 (future plan)
+## Step 3 (in progress): feature unification, leaf extraction, ownership cuts
 
 A crate split pays off only after `mc-core`'s cycle is cut at real ownership
 boundaries. A split that adds a hook layer around shared state does not
 qualify. The order, each step measured with the Step 1 method before the next:
 
-1. **Feature unification.** Make `cargo build` and `cargo test` resolve the same
-   dependency features: wait for stable `resolver.feature-unification`, or use
-   one workspace dependency-features crate. This saves the 3–4 minute rebuild of
-   lower crates after rebases. No `mc-core` change is needed.
-2. **Leaf crates first.** `world_conversion` has no production inbound
-   references (4.8k production plus 6.7k test lines) and can become a crate
-   above `mc-core` with no hook. Other zero-inbound modules can follow.
+1. **Feature unification.** `workspace-features` is the one workspace dependency
+   feature owner, described below. Measure actual artifact reuse before claiming
+   the historical 3–4 minute lower-crate rebuild has been saved.
+2. **Leaf crates first.** `world_conversion` has no production inbound references
+   from other `mc-core` modules (4.8k production plus 6.7k test lines).
+   `mc-edge::operator_cli` calls it, and several core tests also use it.
+   Move those callers/tests without a reverse core dev-dependency when extracting
+   a crate above `mc-core`. Other zero-inbound modules can follow.
 3. **Narrow state ownership inside `mc-core` first.** Settlement and villager
    AI state moves out of `TickState`, the villager column and `JournalEntry`
    behind one owned state type, with persistence unchanged byte for byte.
@@ -128,6 +132,78 @@ qualify. The order, each step measured with the Step 1 method before the next:
 4. **Stop rule:** stop when a domain's unit-test loop is under about 30 s and
    the server-binary loop under about 45 s. Further splitting is not a goal in
    itself.
+### Shared dependency feature owner
+
+`mc-edge` depends on `workspace-features` normally; `mc-core` uses it only as a
+dev dependency. Standalone lower crates keep their own small dependency graphs.
+The feature owner's library has no runtime API; its manifest activates the union
+of third-party features used by the server and core tests. It depends on no Solaris
+crate, so it cannot introduce a reverse domain dependency. Cargo's
+[`resolver.feature-unification`](https://doc.rust-lang.org/cargo/reference/unstable.html#feature-unification)
+still requires an unstable flag; setting the configuration alone is ignored.
+This implementation needs neither nightly nor `RUSTC_BOOTSTRAP`.
+
+Resolver 2 separates host/build dependencies from target dependencies. The
+proc-macro `syn` union is therefore a build dependency, activated by the crate's
+build target; ordinary dependency features stay on the target side. Unix rustix
+and Linux raw-sys features retain their platform predicates. Optional GPU
+backends and test-only frameworks are not pulled into production just to unify
+their own features.
+
+On `4d32f280`, separate `mc-edge` build and `mc-core` test resolution differed in
+11 shared package contexts: digest, getrandom, hashbrown, lazy_static, num-traits,
+rand_core, regex-syntax, semver, smallvec, typenum (target), and syn (host).
+The original all-workspace variant made `mc-edge` build, `mc-core` build,
+`mc-core` tests and workspace tests agree in their common dependency contexts on
+`x86_64-unknown-linux-gnu` with default features. However, it expanded standalone
+mc-nbt's dependency graph from 11 to 84 packages. The root-only variant avoids
+that leaf cost; its comparative rebuild measurements remain pending. The lockfile
+adds only the local feature-owner package, not a new third-party version.
+
+This is **dependency-resolution evidence, not build or performance acceptance**.
+Receipts outside Git: `receipts/CrateSplit/feature-comparison.json`,
+`*-context.txt`, `*-unified.txt`, and `feature-union-before.json`. The plan and
+manifest graph are in that directory too. Cargo tree commands use
+`--locked --offline --prefix depth --format '{p}|{f}'`, with `-e normal,build`
+for builds and `-e normal,build,dev` for tests. Compare package version and
+host/target context, not just package name or an aggregate feature union.
+On merged base `168023ec`, root-only server-build and core-test resolution has
+222 shared package contexts and zero feature differences
+(`receipts/CrateSplit/root-only-comparison.json`). The standalone mc-nbt tree
+contains nine distinct packages (`root-only-leaf.txt`), with no unifier edge.
+
+Ordinary acceptance on this feature tree: workspace build, formatting,
+code-health and documentation links passed. The core/edge unit run passed
+4601 of 4602 tests (81 skipped) before its 3600-second command deadline.
+`adopted_village_with_resident_shears_produces_stock_and_builds` remained running.
+Main identified it as a pre-existing slow test outside this feature diff and
+directed no rerun; it is not claimed passed. Receipts:
+`root-only-workspace-build-02`, `root-only-consumer-tests-01/acceptance.json`,
+`root-only-fmt-01`, `root-only-code-health-01` and `root-only-doclinks.json`.
+
+When changing dependencies, update the shared feature owner to the resolved
+union, preserving platform/host distinctions and excluding test-only packages.
+Check the same feature contexts, then build and run the affected tests. A
+feature-tree match does not prove that profile or compiler-option differences
+cannot still trigger a rebuild.
+
+| Scenario on the current Step 3 tree | Before | After |
+|---|---|---|
+| Cold server build | 271.233 s, clean `168023ec`, quiet lane | Awaiting batched quiet window |
+| Trivial `mc-core` edit → server | Awaiting batched quiet window | Awaiting batched quiet window |
+| Trivial `mc-edge` edit → server | Awaiting batched quiet window | Awaiting batched quiet window |
+| Lower-crate edit → first core test build after server | Awaiting batched quiet window | Awaiting batched quiet window |
+
+Use the Step 1 quiet-lane method for both columns, on frozen trees with
+incremental compilation, existing dev/test profiles, clang/mold and no sccache.
+The historical tables above are not substitutes for these measurements.
+The clean baseline's first core test compilation took 250.887 s and rebuilt
+eight lower libraries after the server build. This cold test is not the
+lower-edit measurement. Receipts: `baseline-server-cold-02` and
+`baseline-core-test-cold` under `receipts/CrateSplit`. Main deferred further
+timings while campaign gates run: ordinary `-m` validation is not performance
+evidence; neither cancelled `-x` nor cancelled `-p` attempts supply a comparison.
+
 
 ## Cycle ratchet (implemented 2026-11-07)
 

@@ -1752,6 +1752,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "wit-component 0.259.0",
+ "workspace-features",
 ]
 
 [[package]]
@@ -1811,6 +1812,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "workspace-features",
  "zip",
  "zstd",
 ]
@@ -4820,6 +4822,41 @@ dependencies = [
  "serde_json",
  "unicode-ident",
  "wasmparser 0.259.0",
+]
+
+[[package]]
+name = "workspace-features"
+version = "1.0.0-rc.5"
+dependencies = [
+ "clap",
+ "clap_builder",
+ "crc32fast",
+ "digest",
+ "getrandom 0.2.17",
+ "hashbrown 0.17.1",
+ "indexmap",
+ "lazy_static",
+ "libc",
+ "linux-raw-sys",
+ "log",
+ "memchr",
+ "num-traits",
+ "once_cell",
+ "rand_core 0.6.4",
+ "regex-automata",
+ "regex-syntax",
+ "rustix",
+ "semver",
+ "serde",
+ "serde_core",
+ "serde_json",
+ "smallvec",
+ "syn 2.0.117",
+ "tokio",
+ "tracing-core",
+ "typenum",
+ "uuid",
+ "zerocopy",
 ]
 
 [[package]]
