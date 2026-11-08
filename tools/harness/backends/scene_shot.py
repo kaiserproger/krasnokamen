@@ -471,7 +471,10 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             args = {"radius": 32, "limit": 128}
             for _ in range(value["max_ticks"]):
                 before = probe.call("minecraft_list_entities", args)
-                if matching_walk(before, value):
+                candidate = matching_walk(before, value)
+                # The observation samples the end of the tick; rendering
+                # interpolates from the previous tick's smaller walk position.
+                if candidate and candidate["walk_position"] >= value["phase"]:
                     break
                 probe.call("minecraft_wait_ticks", {"ticks": 1})
             else:

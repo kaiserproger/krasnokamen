@@ -46,7 +46,7 @@ class VanillaLauncherTest(unittest.TestCase):
         command = self.command()
         self.assertIn("net.minecraft.client.main.Main", command)
         self.assertIn(f"-javaagent:{self.agent}", command)
-        self.assertIn("-Dsolaris.client.vanillaEvents=true", command)
+        self.assertNotIn("-Dsolaris.client.vanillaEvents=true", command)
         self.assertIn("-Xmx512M", command)
         self.assertFalse(any("KnotClient" in arg or "neoforge" in arg or "gradlew" in arg for arg in command))
         self.assertIn("26.1.2-30", command)
@@ -63,6 +63,7 @@ class VanillaLauncherTest(unittest.TestCase):
         (self.assets / "indexes/26.3-30.json").write_bytes(b'{"objects":{}}')
         with mock.patch.dict("os.environ", {"SOLARIS_JAVA_VERSION": "26.3"}):
             command = self.command()
+            self.assertIn("-Dsolaris.client.vanillaEvents=true", command)
             self.assertEqual(command[command.index("--version") + 1], "26.3")
             self.metadata["id"] = "26.1.2"
             self.info.write_text(json.dumps(self.metadata))

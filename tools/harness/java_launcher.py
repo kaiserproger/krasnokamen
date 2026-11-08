@@ -119,7 +119,8 @@ def vanilla_command(*, game_dir: Path, username: str, agent_jar: Path,
         raise MissingCapability("java25:executable_not_on_PATH")
     offline_uuid = uuid.UUID(bytes=hashlib.md5(("OfflinePlayer:" + username).encode()).digest(), version=3)
     return [java, "-Xms128M", "-Xmx512M", "--sun-misc-unsafe-memory-access=allow",
-            "--enable-native-access=ALL-UNNAMED", "-Dsolaris.client.vanillaEvents=true",
+            "--enable-native-access=ALL-UNNAMED",
+            *(["-Dsolaris.client.vanillaEvents=true"] if version == "26.3" else []),
             f"-javaagent:{agent_jar.resolve()}",
             f"-Djava.library.path={natives}", f"-Djna.tmpdir={natives}",
             f"-Dorg.lwjgl.system.SharedLibraryExtractPath={natives}",
