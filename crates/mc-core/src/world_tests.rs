@@ -1479,8 +1479,8 @@ fn physics_reader_dense_herd_micro() {
         for index in 0..entities {
             let fresh = world.physics_reader();
             let reader = if shared { &reader } else { &fresh };
-            let x = (index % 14 + 1) as i32;
-            let z = (index / 14 % 14 + 1) as i32;
+            let x = index % 14 + 1;
+            let z = index / 14 % 14 + 1;
             for (dx, y, dz) in [(0, 63, 0), (0, 64, 0), (1, 64, 0), (0, 65, 1)] {
                 sum = sum.wrapping_add(u64::from(reader.block_at(x + dx, y, z + dz).unwrap()));
             }
