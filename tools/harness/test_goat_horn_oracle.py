@@ -41,6 +41,14 @@ class GoatHornOracleTests(unittest.TestCase):
             edges = goat_horn_oracle.side_horn_left_edges(path)
             self.assertTrue(goat_horn_oracle.side_horn_aligned(edges))
             self.assertFalse(goat_horn_oracle.side_horn_aligned([edge + 8 for edge in edges]))
+            # The observed raster shift begins the same horn one row lower.
+            for x in range(701, 723):
+                image.putpixel((x, 360), (190, 220, 255))
+                image.putpixel((x, 376), (50, 50, 50))
+            image.save(path)
+            shifted = goat_horn_oracle.side_horn_left_edges(path)
+            self.assertTrue(goat_horn_oracle.side_horn_aligned(shifted))
+            self.assertFalse(goat_horn_oracle.side_horn_aligned([edge + 8 for edge in shifted]))
 
     def test_ear_coverage_distinguishes_grey_ear_from_grass(self):
         with tempfile.TemporaryDirectory() as directory:

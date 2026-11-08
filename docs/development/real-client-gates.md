@@ -285,7 +285,9 @@ Both endpoints must match the requested tolerance for the same entity. Position
 is not wrapped: different renderers can apply a factor before calculating phase.
 
 `goat_side_horn` checks a previously named screenshot from the fixed goat side
-pose against the measured Java horn edge; it is not a general image comparator.
+pose against the measured Java horn edge; its four-row bracket shifts down one
+pixel when rasterization moves the horn top below the first row. It is not a
+general image comparator.
 
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains
   its same-client-thread `game_time` and entity positions. Missing timestamps fail.
