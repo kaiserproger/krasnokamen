@@ -37,6 +37,7 @@ path = "src/bin/quirk_probe.rs"
 
 
 [dependencies]
+mc-core = { path = "../mc-core" }
 mc-data = { path = "../mc-data" }
 mc-protocol = { path = "../mc-protocol" }
 mc-vanilla = { path = "../mc-vanilla" }

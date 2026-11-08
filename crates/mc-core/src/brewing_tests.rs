@@ -139,7 +139,7 @@ fn batch_uses_one_fuel_charge_and_one_ingredient_for_three_bottles_at_four_hundr
     let items = registry();
     let mut slots = slots();
     let mut brewing = BrewingState::default();
-    assert!(brewing.tick(&mut slots, &items.items).is_none());
+    assert!(brewing.tick(&mut slots, &items.items).0.is_none());
     assert_eq!(brewing.properties(), [400, 19]);
     assert_eq!(slots[4].count, 1);
     for _ in 0..399 {
@@ -240,7 +240,7 @@ fn dragon_breath_changes_container_preserves_potion_and_returns_exactly_one_bott
             ingredient: Some(slots[3].item_id),
             ..Default::default()
         };
-        let dropped = brewing.tick(&mut slots, &items.items);
+        let (dropped, _) = brewing.tick(&mut slots, &items.items);
         assert_eq!(slots[0].item_id, stack("lingering_potion", 1).item_id);
         assert_eq!(
             slots[0].extended().potion.as_ref().unwrap().as_str(),
@@ -707,15 +707,102 @@ fn brewing_checks_reserved_fuel_and_completion_before_commit() {
     crate::crafter::tests::hold_block(&mut state, POS, "nether_wart", 3);
     state.brewing.get_mut(&KEY).unwrap().brew_time = 1;
     let before = state.block_entities[&KEY].slots.clone();
-    run(&mut state, &mut Vec::new(), &mut drops);
+    let mut sample = crate::boundary::CorePerfTick::default();
+    let region: fn(i32, i32) -> Option<usize> = |_, _| Some(7);
+    run_inner(
+        &mut state,
+        &mut Vec::new(),
+        &mut drops,
+        Some((&mut sample, region)),
+    );
+    assert!(sample.brewing_progressing_by_region.is_empty());
     assert_eq!(state.block_entities[&KEY].slots, before);
     assert_eq!(state.brewing[&KEY].properties(), [1, 19]);
     assert!(drops.is_empty());
 
     crate::plugin_inventories::invalidate_block(&mut state, POS);
-    run(&mut state, &mut Vec::new(), &mut drops);
+    sample = Default::default();
+    run_inner(
+        &mut state,
+        &mut Vec::new(),
+        &mut drops,
+        Some((&mut sample, region)),
+    );
+    assert_eq!(sample.brewing_progressing_by_region[&7], 1);
     assert_eq!(state.block_entities[&KEY].slots[3].count, 2);
     assert_awkward(&state.block_entities[&KEY].slots);
+}
+
+#[test]
+fn coreperf_counts_discovery_and_real_active_timer_progress() {
+    let mut state = state(None);
+    install(&mut state, slots());
+    let mut sample = crate::boundary::CorePerfTick::default();
+    let region: fn(i32, i32) -> Option<usize> = |x, z| (x == 0 && z == 0).then_some(7);
+    run_inner(
+        &mut state,
+        &mut Vec::new(),
+        &mut Vec::new(),
+        Some((&mut sample, region)),
+    );
+    assert_eq!(sample.brewing_discovery_by_region[&7], 1);
+    assert_eq!(sample.brewing_active_by_region[&7], 1);
+    assert!(sample.brewing_progressing_by_region.is_empty());
+    assert_eq!(state.brewing[&KEY].brew_time, 400);
+    sample = Default::default();
+    run_inner(
+        &mut state,
+        &mut Vec::new(),
+        &mut Vec::new(),
+        Some((&mut sample, region)),
+    );
+    assert_eq!(sample.brewing_progressing_by_region[&7], 1);
+    assert_eq!(state.brewing[&KEY].brew_time, 399);
+    state.brewing.get_mut(&KEY).unwrap().brew_time = 1;
+    state.block_entities.get_mut(&KEY).unwrap().slots[3] = stack("gunpowder", 3);
+    sample = Default::default();
+    run_inner(
+        &mut state,
+        &mut Vec::new(),
+        &mut Vec::new(),
+        Some((&mut sample, region)),
+    );
+    assert_eq!(state.brewing[&KEY].brew_time, 0);
+    assert_eq!(state.block_entities[&KEY].slots[3], stack("gunpowder", 3));
+    assert_eq!(
+        state.block_entities[&KEY].slots[0],
+        potion("potion", "water")
+    );
+    assert!(
+        sample.brewing_progressing_by_region.is_empty(),
+        "cancellation is not progress"
+    );
+    state.block_entities.get_mut(&KEY).unwrap().slots[3] = stack("nether_wart", 3);
+    run(&mut state, &mut Vec::new(), &mut Vec::new());
+    state.brewing.get_mut(&KEY).unwrap().brew_time = 1;
+    sample = Default::default();
+    run_inner(
+        &mut state,
+        &mut Vec::new(),
+        &mut Vec::new(),
+        Some((&mut sample, region)),
+    );
+    assert_eq!(sample.brewing_progressing_by_region[&7], 1);
+    assert_awkward(&state.block_entities[&KEY].slots);
+    assert_eq!(state.block_entities[&KEY].slots[3].count, 2);
+    state
+        .world
+        .set_active_chunks(Default::default(), state.tick + 1);
+    sample = Default::default();
+    run_inner(
+        &mut state,
+        &mut Vec::new(),
+        &mut Vec::new(),
+        Some((&mut sample, region)),
+    );
+    assert_eq!(sample.brewing_discovery_by_region[&7], 1);
+    assert!(sample.brewing_active_by_region.is_empty());
+    assert!(sample.brewing_progressing_by_region.is_empty());
 }
 
 #[test]

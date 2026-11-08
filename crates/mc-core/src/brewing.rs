@@ -16,6 +16,11 @@ pub(crate) type BrewingStands = BTreeMap<(i32, i32, i32), BrewingState>;
 /// Opaque brewing-stand images of one chunk: (cell, timers, slots).
 pub(crate) type Decoded = Vec<((i32, i32, i32), BrewingState, Vec<ItemStack>)>;
 
+type CorePerfSample<'a> = (
+    &'a mut crate::boundary::CorePerfTick,
+    fn(i32, i32) -> Option<usize>,
+);
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct BrewingState {
     pub(crate) brew_time: i16,
@@ -32,7 +37,8 @@ impl BrewingState {
 
     /// The ingredient fence runs before the final decrement. Cancellation spends
     /// the already-debited batch fuel but never consumes ingredient or bottles.
-    fn tick(&mut self, slots: &mut [ItemStack], items: &ItemRegistry) -> Option<ItemStack> {
+    fn tick(&mut self, slots: &mut [ItemStack], items: &ItemRegistry) -> (Option<ItemStack>, bool) {
+        let mut progressed = false;
         if self.fuel <= 0 && is_named(items, &slots[4], "blaze_powder") {
             decrement_stack(&mut slots[4]);
             self.fuel = 20;
@@ -46,6 +52,7 @@ impl BrewingState {
                 self.ingredient = None;
             } else {
                 self.brew_time -= 1;
+                progressed = true;
                 if self.brew_time == 0 {
                     for i in 0..3 {
                         if let Some(result) =
@@ -67,7 +74,7 @@ impl BrewingState {
                             if slots[3].is_empty() {
                                 slots[3] = bottle;
                             } else {
-                                return Some(bottle);
+                                return (Some(bottle), progressed);
                             }
                         }
                     }
@@ -78,7 +85,7 @@ impl BrewingState {
             self.brew_time = 400;
             self.ingredient = Some(slots[3].item_id);
         }
-        None
+        (None, progressed)
     }
 
     fn encode(&self, pos: BlockPos, slots: &[ItemStack], items: &ItemRegistry) -> Vec<u8> {
@@ -320,9 +327,40 @@ pub(crate) fn run(
     writes: &mut Vec<(BlockPos, u32)>,
     drops: &mut Vec<EntityId>,
 ) {
+    run_inner(state, writes, drops, None);
+}
+
+pub(crate) fn run_counted(
+    state: &mut TickState,
+    writes: &mut Vec<(BlockPos, u32)>,
+    drops: &mut Vec<EntityId>,
+    sample: &mut crate::boundary::CorePerfTick,
+) {
+    run_inner(
+        state,
+        writes,
+        drops,
+        Some((sample, crate::tick::coreperf_block_region)),
+    );
+}
+
+fn run_inner(
+    state: &mut TickState,
+    writes: &mut Vec<(BlockPos, u32)>,
+    drops: &mut Vec<EntityId>,
+    mut sample: Option<CorePerfSample<'_>>,
+) {
     let registry = Arc::clone(&state.registry);
     let mut stands = std::mem::take(&mut state.brewing);
     for (key, _) in &state.block_entities {
+        if let Some((sample, region_for)) = sample.as_mut()
+            && let Some(region) = region_for(key.0, key.2)
+        {
+            *sample
+                .brewing_discovery_by_region
+                .entry(region)
+                .or_default() += 1;
+        }
         if state
             .world
             .block_at(key.0, key.1, key.2)
@@ -361,6 +399,11 @@ pub(crate) fn run(
                 record.slots.resize(5, ItemStack::EMPTY);
             }
         }
+        if let Some((sample, region_for)) = sample.as_mut()
+            && let Some(region) = region_for(pos.x, pos.z)
+        {
+            *sample.brewing_active_by_region.entry(region).or_default() += 1;
+        }
         let before = [
             stand.cancelled_time.take().unwrap_or(stand.brew_time),
             stand.fuel,
@@ -375,18 +418,18 @@ pub(crate) fn run(
                     &state.block_entities[key].slots[4],
                     "blaze_powder",
                 ));
-        let remainder = if changes_inventory
+        let (remainder, progressed) = if changes_inventory
             && crate::plugin_inventories::has_reservations_for_block(state, pos)
         {
             let mut candidate = state.block_entities[key].slots.clone();
             let mut next = stand.clone();
-            let remainder = next.tick(&mut candidate, &registry.items);
+            let (remainder, progressed) = next.tick(&mut candidate, &registry.items);
             if crate::plugin_inventories::below_block_floors(state, pos, &candidate) {
-                None
+                (None, false)
             } else {
                 *stand = next;
                 state.block_entities.get_mut(key).unwrap().slots = candidate;
-                remainder
+                (remainder, progressed)
             }
         } else {
             stand.tick(
@@ -402,6 +445,15 @@ pub(crate) fn run(
                 .get(key)
                 .is_none_or(|image| image.0 != record.slots);
         let after = stand.properties();
+        if let Some((sample, region_for)) = sample.as_mut()
+            && progressed
+            && let Some(region) = region_for(pos.x, pos.z)
+        {
+            *sample
+                .brewing_progressing_by_region
+                .entry(region)
+                .or_default() += 1;
+        }
         if slots_changed || before != after || ingredient_before != stand.ingredient {
             let bytes = stand.encode(pos, &record.slots, &registry.items);
             let has_opaque = state

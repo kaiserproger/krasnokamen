@@ -353,23 +353,34 @@ pub fn checkpoint(
     );
     Ok(())
 }
+/// Decode and validate one native map record at the recovery boundary.
+pub fn decode_record(
+    key: &str,
+    record: &mc_world::native::NativeDomainRecord,
+) -> Result<(i32, SavedMap), CoreError> {
+    let id: i32 = key
+        .strip_prefix("map/")
+        .ok_or_else(|| CoreError::Storage("invalid map key".into()))?
+        .parse()
+        .map_err(|_| CoreError::Storage("invalid map key".into()))?;
+    if id < 0 || record.version != 1 {
+        return Err(CoreError::Storage("invalid map record".into()));
+    }
+    let map: SavedMap =
+        serde_json::from_slice(&record.payload).map_err(|e| CoreError::Storage(e.to_string()))?;
+    map.validate().map_err(CoreError::Storage)?;
+    Ok((id, map))
+}
+
 pub fn recover(
     globals: &BTreeMap<String, mc_world::native::NativeDomainRecord>,
 ) -> Result<BTreeMap<i32, Arc<SavedMap>>, CoreError> {
     let mut maps = BTreeMap::new();
     for (key, record) in globals {
-        let Some(id) = key.strip_prefix("map/") else {
+        if !key.starts_with("map/") {
             continue;
-        };
-        let id: i32 = id
-            .parse()
-            .map_err(|_| CoreError::Storage("invalid map key".into()))?;
-        if id < 0 || record.version != 1 {
-            return Err(CoreError::Storage("invalid map record".into()));
         }
-        let map: SavedMap = serde_json::from_slice(&record.payload)
-            .map_err(|e| CoreError::Storage(e.to_string()))?;
-        map.validate().map_err(CoreError::Storage)?;
+        let (id, map) = decode_record(key, record)?;
         maps.insert(id, Arc::new(map));
     }
     Ok(maps)

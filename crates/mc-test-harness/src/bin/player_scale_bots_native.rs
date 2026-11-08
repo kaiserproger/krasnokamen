@@ -334,6 +334,31 @@ fn native_compound(bytes: &[u8]) -> Result<Value> {
     nbt_json(&tag)
 }
 
+fn snapshot_globals(
+    records: &BTreeMap<String, mc_world::native::NativeDomainRecord>,
+) -> Result<Map<String, Value>> {
+    // Use the same decoder and validation as server recovery, not JSON shape.
+    let mut globals = Map::new();
+    for (name, record) in records {
+        let payload = match name.as_str() {
+            name if name.starts_with("map/") => {
+                let (_, map) = mc_core::maps::decode_record(name, record)?;
+                serde_json::to_value(map).map_err(Into::into)
+            }
+            "scoreboard" | "level_metadata" | "conversion_extras" | "bossbars"
+            | "command_storage" => native_compound(&record.payload),
+            _ => serde_json::from_slice::<Value>(&record.payload).map_err(Into::into),
+        }
+        .with_context(|| format!("decode native global {name}"))?;
+        globals.insert(
+            name.clone(),
+            json!({"version":record.version,
+            "captured_tick":record.captured_tick, "payload":payload}),
+        );
+    }
+    Ok(globals)
+}
+
 pub(super) fn native_control_snapshot(world: &Path, spec: &Value) -> Result<Value> {
     let seed = spec["native_seed"]
         .as_i64()
@@ -350,21 +375,7 @@ pub(super) fn native_control_snapshot(world: &Path, spec: &Value) -> Result<Valu
     let store = NativeReadOnlyStore::open_with_cache(&path, identity, 16 * 1024 * 1024)?;
     let reader = store.checkpoint_reader()?;
     let image = reader.read_checkpoint()?;
-    let mut globals = Map::new();
-    for (name, record) in &image.globals {
-        let payload = match name.as_str() {
-            "scoreboard" | "level_metadata" | "conversion_extras" | "bossbars"
-            | "command_storage" => native_compound(&record.payload),
-            _ => serde_json::from_slice::<Value>(&record.payload).map_err(Into::into),
-        }
-        .with_context(|| format!("decode native global {name}"))?;
-        globals.insert(
-            name.clone(),
-            json!({"version":record.version,
-            "captured_tick":record.captured_tick,
-            "payload":payload}),
-        );
-    }
+    let globals = snapshot_globals(&image.globals)?;
     let mut entities = Vec::with_capacity(image.entities.len());
     let mut villagers = Vec::new();
     for entity in &image.entities {
@@ -448,6 +459,56 @@ pub(super) fn native_control_snapshot(world: &Path, spec: &Value) -> Result<Valu
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn snapshot_globals_uses_map_recovery_validation() {
+        use mc_world::native::NativeDomainRecord;
+        let map =
+            mc_core::maps::SavedMap::new([0, 0], 0, mc_core::dimensions::Dimension::Overworld)
+                .unwrap();
+        let record = |version, payload| NativeDomainRecord {
+            version,
+            captured_tick: 7,
+            payload,
+        };
+        let mut records = BTreeMap::new();
+        records.insert("map/3".into(), record(1, serde_json::to_vec(&map).unwrap()));
+        records.insert("map/4".into(), record(1, serde_json::to_vec(&map).unwrap()));
+        let globals = snapshot_globals(&records).unwrap();
+        assert_eq!(globals["map/3"]["captured_tick"], 7);
+        assert!(globals.contains_key("map/4"));
+        records.insert("map/3".into(), record(2, serde_json::to_vec(&map).unwrap()));
+        assert!(snapshot_globals(&records).is_err());
+        records.insert("map/3".into(), record(1, b"{}".to_vec()));
+        assert!(snapshot_globals(&records).is_err());
+        let mut invalid = map.clone();
+        invalid.colors.pop();
+        records.insert(
+            "map/3".into(),
+            record(1, serde_json::to_vec(&invalid).unwrap()),
+        );
+        assert!(snapshot_globals(&records).is_err());
+        invalid = map.clone();
+        invalid.colors[0] = 248;
+        records.insert(
+            "map/3".into(),
+            record(1, serde_json::to_vec(&invalid).unwrap()),
+        );
+        assert!(snapshot_globals(&records).is_err());
+        invalid = map;
+        invalid.frame_markers = (0..256).map(|x| (x, 65, 0)).collect();
+        records.insert(
+            "map/3".into(),
+            record(1, serde_json::to_vec(&invalid).unwrap()),
+        );
+        assert!(snapshot_globals(&records).is_ok());
+        invalid.frame_markers = (0..257).map(|x| (x, 65, 0)).collect();
+        records.insert(
+            "map/3".into(),
+            record(1, serde_json::to_vec(&invalid).unwrap()),
+        );
+        assert!(snapshot_globals(&records).is_err());
+    }
 
     #[test]
     fn native_json_does_not_collapse_duplicate_owner_fields() {

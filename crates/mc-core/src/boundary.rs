@@ -472,8 +472,50 @@ impl TickOutput {
     }
 }
 
+/// Opt-in coreperf counters produced alongside the tick they describe.
+/// Region indices follow the operator-supplied fixture manifest.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct CorePerfRegion {
+    pub region: usize,
+    pub active_chunks: u64,
+    pub motion_admitted: u64,
+    pub motion_full: u64,
+    pub motion_resting: u64,
+    /// Projectile flight candidates in the region, before the owner runs.
+    pub projectile_candidates: u64,
+}
+
+/// Fixture-region evidence, omitted entirely outside explicit coreperf runs.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct CorePerfTick {
+    pub tick: Tick,
+    /// All live resident entity rows, including players and non-fixture entities.
+    pub resident_entities: usize,
+    /// Active XP-orb bodies processed by their owner during this source tick.
+    pub xp_orbs_processed: u64,
+    /// Active XP-orb bodies processed by their owner, by fixture region.
+    pub xp_orbs_by_region: std::collections::HashMap<usize, u64>,
+    /// Distinct fixture victims with accepted positive damage, by fixture region.
+    pub damage_victims_by_region: std::collections::HashMap<usize, u64>,
+    /// Accepted reactive damage pieces against fixture entities, by region.
+    pub damage_reactive_by_region: std::collections::HashMap<usize, u64>,
+    /// Block entities visited by brewing discovery, by fixture region.
+    pub brewing_discovery_by_region: std::collections::HashMap<usize, u64>,
+    /// Valid, active brewing stands visited by their owner, by fixture region.
+    pub brewing_active_by_region: std::collections::HashMap<usize, u64>,
+    /// Active brewing stands whose actual timer advanced this tick, by region.
+    pub brewing_progressing_by_region: std::collections::HashMap<usize, u64>,
+    /// Fixture villagers present in the active brain loop, by region.
+    pub brain_candidates_by_region: std::collections::HashMap<usize, u64>,
+    /// Fixture villagers admitted for full brain decisions, by region.
+    pub brain_admitted_by_region: std::collections::HashMap<usize, u64>,
+    /// Declared isolated farm cells changed during this tick's villager brain.
+    pub productive_harvested_cells: Vec<[i32; 3]>,
+    pub regions: Vec<CorePerfRegion>,
+}
+
 /// Server-side phase times for one tick in microseconds (bench/monitoring).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct TickTimes {
     /// UNIX wall-clock nanoseconds sampled at the active owner iteration
     /// start, before checkpoint acknowledgements and input drains. Zero
@@ -515,6 +557,8 @@ pub struct TickTimes {
     pub owner_post_us: u64,
     /// `run_tick` + WAL build/enqueue + generated capture, before the broadcast.
     pub total_us: u64,
+    /// Optional opt-in workload counters paired with this exact source tick.
+    pub coreperf: Option<Arc<CorePerfTick>>,
 }
 
 /// Immutable world state after a tick. Shared read-only; never mutated after

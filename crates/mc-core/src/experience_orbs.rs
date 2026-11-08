@@ -189,6 +189,25 @@ fn mend(player: &mut crate::player::PlayerState, mut amount: i32, mut seed: u64)
 
 /// Runs after entity merge: physics, periodic local merges, expiry and collection.
 pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet, events: &mut Vec<EntityEvent>) {
+    run_inner(state, changes, events, None);
+}
+
+/// Count only bodies actually admitted to the ordinary active-orb owner.
+pub(crate) fn run_counted(
+    state: &mut TickState,
+    changes: &mut ChangeSet,
+    events: &mut Vec<EntityEvent>,
+    sample: &mut crate::boundary::CorePerfTick,
+) {
+    run_inner(state, changes, events, Some(sample));
+}
+
+fn run_inner(
+    state: &mut TickState,
+    changes: &mut ChangeSet,
+    events: &mut Vec<EntityEvent>,
+    mut sample: Option<&mut crate::boundary::CorePerfTick>,
+) {
     if state.entities.experience_orbs().next().is_none() {
         return;
     }
@@ -249,6 +268,14 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet, events: &mut V
             (pos[2].floor() as i32).div_euclid(16),
         ) {
             continue;
+        }
+        if let Some(sample) = sample.as_deref_mut() {
+            sample.xp_orbs_processed += 1;
+            if let Some(region) =
+                crate::tick::coreperf_block_region(pos[0].floor() as i32, pos[2].floor() as i32)
+            {
+                *sample.xp_orbs_by_region.entry(region).or_default() += 1;
+            }
         }
         let mut velocity = state.entities.vel(slot).map(|component| component / 20.0);
         if !state.entities.row(slot).controls.no_gravity {
@@ -430,6 +457,22 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet, events: &mut V
 #[cfg(test)]
 mod tests {
     use super::experience_value;
+
+    #[test]
+    fn coreperf_counts_only_active_orbs_admitted_to_the_real_owner() {
+        let (mut state, _, pos) = crate::hostile_tests::setup(8.0);
+        let mut spawned = Vec::new();
+        super::award(&mut state, pos, 3, &mut spawned);
+        assert_eq!(spawned.len(), 1);
+        let mut just_spawned = crate::boundary::ChangeSet::default();
+        just_spawned.entities_spawned.clone_from(&spawned);
+        let mut sample = crate::boundary::CorePerfTick::default();
+        super::run_counted(&mut state, &mut just_spawned, &mut Vec::new(), &mut sample);
+        assert_eq!(sample.xp_orbs_processed, 0);
+        let mut changes = crate::boundary::ChangeSet::default();
+        super::run_counted(&mut state, &mut changes, &mut Vec::new(), &mut sample);
+        assert_eq!(sample.xp_orbs_processed, 1);
+    }
 
     #[test]
     fn vanilla_experience_denominations_and_boundaries() {

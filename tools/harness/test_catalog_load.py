@@ -629,6 +629,31 @@ class CatalogEventTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(set(commands), {"setup"})
                 phase.stop.assert_awaited_once()
 
+    async def test_frame_setup_saves_after_observed_interactions(self):
+        region = {"name": "frames", "anchor": [32, 32], "commands": ["summon item_frame 0 65 0"],
+                  "frame_positions": [[0, 65, 0]]}
+        for observed in (1, 0):
+            with self.subTest(observed=observed), tempfile.TemporaryDirectory() as directory:
+                phase = SimpleNamespace(spawn=AsyncMock(), ready=AsyncMock(return_value={"clients": 1}),
+                                        stop=AsyncMock(), shutdown={}, process_samples=lambda: {},
+                                        fixture_map_frames={"count": observed})
+                root = Path(directory) / "region"
+                with patch.object(load, "Session", return_value=phase), \
+                     patch.object(load, "bot_command", return_value=["bots"]), \
+                     patch.object(load, "_await_fixture_checkpoint", new=AsyncMock(return_value={})):
+                    if observed:
+                        receipt = await load.public_region(SimpleNamespace(readiness_seconds=1, view_distance=8),
+                                                           root, 25565, region, save_command="save-all")
+                        self.assertEqual(receipt["map_frames_observed"]["count"], 1)
+                    else:
+                        with self.assertRaisesRegex(load.ClassifiedFailure, "metadata evidence incomplete"):
+                            await load.public_region(SimpleNamespace(readiness_seconds=1, view_distance=8),
+                                                     root, 25565, region, save_command="save-all")
+                commands = json.loads((root / "commands.json").read_text())
+                self.assertEqual(commands["setup"], region["commands"])
+                self.assertEqual(commands["save_after_frames"], "save-all")
+                self.assertEqual(commands["frame_positions"], region["frame_positions"])
+
     async def test_fixture_commits_without_one_feedback_per_setup_command(self):
         session = load.Session(None, Path("."))
         session.push_event({"event": "fixture_commands_sent", "commands_sent": 17})

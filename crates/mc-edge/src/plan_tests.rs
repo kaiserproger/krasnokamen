@@ -2170,6 +2170,10 @@ fn deferred_block_update_is_sent_from_the_snapshot() {
         let changed_out = output(vec![(pos, edited)], vec![], changes);
         let changed = plan_viewer(&changed_out, &mut v, 0, c);
         assert!(!changed.iter().any(|p| p.id == BlockUpdate::ID));
+        assert!(
+            !v.geometry_drained(0, &changed_out.snapshot.chunks),
+            "deferred block must hold the world fence"
+        );
         v.world_credit = 512;
         // Same snapshot (same revision), no change set.
         let quiet = TickOutput {
@@ -2190,7 +2194,42 @@ fn deferred_block_update_is_sent_from_the_snapshot() {
                 state_id: 1,
             }]
         );
+        assert!(
+            v.geometry_drained(0, &quiet.snapshot.chunks),
+            "fence may follow the queued update"
+        );
         assert!(updates(plan_viewer(&quiet, &mut v, 0, c)).is_empty());
+        v.geometry_unsent();
+        assert!(
+            !v.geometry_drained(0, &quiet.snapshot.chunks),
+            "failed world send requires repair before fencing"
+        );
+        let repairs = plan_viewer(&quiet, &mut v, 0, c);
+        assert!(
+            repairs
+                .iter()
+                .any(|packet| packet.id == mc_protocol::packets::play::LevelChunkWithLight::ID)
+        );
+        assert!(v.geometry_drained(0, &quiet.snapshot.chunks));
+        assert!(
+            !v.geometry_drained(0, &[]),
+            "missing current snapshot must not fence"
+        );
+        let mut missing_changes = ChangeSet::default();
+        missing_changes.blocks.push(BlockChange {
+            position: mc_world::chunk::BlockPos { x: 3, y: 64, z: 5 },
+            state: 1,
+        });
+        let missing = output(vec![], vec![], missing_changes);
+        plan_viewer(&missing, &mut v, 0, c);
+        assert_eq!(
+            v.pending_blocks.len(),
+            1,
+            "missing snapshot must retain block debt"
+        );
+        assert!(!v.geometry_drained(0, &missing.snapshot.chunks));
+        assert_eq!(updates(plan_viewer(&quiet, &mut v, 0, c)).len(), 1);
+        assert!(v.geometry_drained(0, &quiet.snapshot.chunks));
     });
 }
 

@@ -15,15 +15,14 @@ import shlex
 import shutil
 import signal
 import sys
-import tarfile
 from typing import Any
 
 from tools.bench import common, profile_runs, worldgen_runs
+from tools.coreperf import profiles
 from tools.bench.common import BenchError, fmt, table
 from tools.bench.remote import LocalHost, Remote
 
 SMOKE_NOTE = "SMOKE RUN: short windows prove the pipeline only. Not publishable numbers."
-DEFAULT_BUILD = ["cargo", "build", "--release", "--bin", "solaris-v2", "--bin", "player-scale-bots"]
 ALL_PROFILES = sorted(profile_runs.PROFILE_CLIENTS)
 
 
@@ -39,9 +38,9 @@ def csv_modes(text: str) -> list[str]:
 
 
 def add_common(parser: argparse.ArgumentParser, *, bots: bool) -> None:
-    parser.add_argument("--server-bin", type=Path, help="release solaris-v2 (default: $CARGO_TARGET_DIR/release, ./target/release)")
+    parser.add_argument("--server-bin", type=Path, help="pin-release solaris-v2 (default: $SOLARIS_SERVER_BINARY)")
     if bots:
-        parser.add_argument("--bots-bin", type=Path, help="release player-scale-bots (same default lookup)")
+        parser.add_argument("--bots-bin", type=Path, help="pin-release player-scale-bots (default: $SOLARIS_BOTS_BINARY)")
     parser.add_argument("--out", type=Path, help="new result directory (default .analysis/bench/<UTC>-<command>-<pid>)")
     parser.add_argument("--vanilla-data-dir", type=Path,
                         help="imported content cache (default $SOLARIS_VANILLA_DATA_DIR, ./data/vanilla, ~/.local/share/solaris/content/26.1.2)")
@@ -50,7 +49,7 @@ def add_common(parser: argparse.ArgumentParser, *, bots: bool) -> None:
     parser.add_argument("--slice", dest="slice_name", help="systemd slice for the limited scopes (shared hosts: solaris-heavy.slice)")
     parser.add_argument("--commit", help="source identity recorded instead of `git rev-parse HEAD`")
     parser.add_argument("--smoke", action="store_true",
-                        help="short pipeline check: 5s warmup + 25s window, tiny worldgen square, cheap defaults; never publishable")
+                        help="short pipeline check: 2s warmup + 5s window, tiny worldgen square, cheap defaults; never publishable")
     parser.add_argument("--warmup-seconds", type=int)
     parser.add_argument("--measure-seconds", type=int)
     parser.add_argument("--readiness-seconds", type=int, help="bot login / server stop deadline (default 1800; 300 under --smoke)")
@@ -86,7 +85,6 @@ def parser() -> argparse.ArgumentParser:
     vps.add_argument("--memory", default="none", help="MemoryMax of the server unit (default none: the VPS itself is the limit)")
     vps.add_argument("--profiles", help="default idle,explore-20")
     vps.add_argument("--worldgen-radius", type=int, help="default 256; 0 skips")
-    vps.add_argument("--server-tarball", type=Path, help="release solaris-<target>.tar.gz; its `solaris` is uploaded instead of --server-bin")
 
     scaling = sub.add_parser("scaling", help="one workload at 1,2,4,6,8,12 logical CPUs, plus an optional physical-core series")
     add_common(scaling, bots=True)
@@ -116,26 +114,14 @@ def parser() -> argparse.ArgumentParser:
 def find_binary(explicit: Path | None, name: str) -> Path:
     candidates = [explicit] if explicit else []
     if not explicit:
-        if target := os.environ.get("CARGO_TARGET_DIR"):
-            candidates.append(Path(target) / "release" / name)
-        candidates.append(common.ROOT / "target/release" / name)
+        pin_env = "SOLARIS_SERVER_BINARY" if name == "solaris-v2" else "SOLARIS_BOTS_BINARY"
+        if pinned := os.environ.get(pin_env):
+            candidates.append(Path(pinned))
     for candidate in candidates:
         if candidate.is_file():
             return candidate.resolve()
-    raise BenchError(f"{name} not found (tried {[str(c) for c in candidates]}); build it with "
-                     f"`{' '.join(DEFAULT_BUILD)}` and pass --{'server' if name == 'solaris-v2' else 'bots'}-bin")
-
-
-def extract_server(tarball: Path, directory: Path) -> Path:
-    with tarfile.open(tarball) as archive:
-        member = archive.getmember("solaris")
-        if not member.isfile():
-            raise BenchError("`solaris` in the tarball is not a regular file")
-        target = directory / "solaris-v2"
-        with archive.extractfile(member) as source, target.open("wb") as handle:
-            shutil.copyfileobj(source, handle)
-    target.chmod(0o755)
-    return target
+    raise BenchError(f"{name} not found (tried {[str(c) for c in candidates]}); "
+                     "pin the binary with tools/dev/pin-release and pass its path")
 
 
 def find_data_dir(explicit: Path | None) -> Path:
@@ -150,9 +136,11 @@ def find_data_dir(explicit: Path | None) -> Path:
 
 
 def resolve_durations(args: argparse.Namespace) -> None:
-    warmup, measure = (5, 25) if args.smoke else (30, 120)
-    args.warmup_seconds = args.warmup_seconds or warmup
-    args.measure_seconds = args.measure_seconds or measure
+    if args.smoke:
+        args.warmup_seconds, args.measure_seconds = 2, 5
+    else:
+        args.warmup_seconds = args.warmup_seconds or 30
+        args.measure_seconds = args.measure_seconds or 120
     # Bounds login/fixture waits and the final save; a smoke must fail fast instead of waiting the profile default.
     args.readiness_seconds = args.readiness_seconds or (300 if args.smoke else 1800)
     # A canonical window is the documented 30s + 120s or longer; anything shorter is never publishable.
@@ -163,7 +151,7 @@ def memory_option(text: str | None) -> str | None:
     return None if text in (None, "", "none") else text
 
 
-def setup(args: argparse.Namespace, *, bots: bool, server_bin: Path | None = None) -> tuple[Path, list[int], dict[str, Any], dict[str, Any], Path]:
+def setup(args: argparse.Namespace, *, bots: bool) -> tuple[Path, list[int], dict[str, Any], dict[str, Any], Path]:
     """Output dir, local CPU pool, local hardware, source record, content dir; preflight first."""
     problems = common.preflight(need_memory_scope=bool(memory_option(getattr(args, "memory", None))) or bots)
     if problems:
@@ -171,21 +159,35 @@ def setup(args: argparse.Namespace, *, bots: bool, server_bin: Path | None = Non
     pool = common.available_pool(args.cpu_pool)
     out = (args.out or common.ROOT / ".analysis/bench" / f"{common.utc_stamp()}-{args.command}-{os.getpid()}").resolve()
     out.mkdir(parents=True)
-    server = server_bin or find_binary(args.server_bin, "solaris-v2")
+    server = find_binary(args.server_bin, "solaris-v2")
     bots_bin = find_binary(args.bots_bin, "player-scale-bots") if bots else None
     source = common.source_record(server, bots_bin, args.commit)
+    if bots_bin:
+        try:
+            server_pin = profiles.pinned_binary(server, "server")
+            bots_pin = profiles.pinned_binary(bots_bin, "bots")
+            if (server_pin["head"], server_pin["diff_sha256"]) != (bots_pin["head"], bots_pin["diff_sha256"]):
+                raise ValueError("server and bots pins identify different source trees")
+            if args.commit and args.commit != server_pin["head"]:
+                raise ValueError("--commit differs from the server pin")
+        except (OSError, ValueError) as error:
+            raise BenchError(f"invalid release pin: {error}") from error
+        source.update(commit=server_pin["head"], dirty_tracked_files=server_pin["dirty"],
+                      server_pin=server_pin, bots_pin=bots_pin)
     return out, pool, common.hardware(pool), source, find_data_dir(args.vanilla_data_dir)
 
 
 def make_context(args: argparse.Namespace, out: Path, pool: list[int], source: dict[str, Any], data_dir: Path,
                  hw: dict[str, Any]) -> profile_runs.Context:
-    receipt = common.write_build_receipt(out / "build-receipt.json", source, DEFAULT_BUILD)
+    server = Path(source["server_bin"])
     return profile_runs.Context(
-        out=out, server_bin=Path(source["server_bin"]), bots_bin=Path(source["bots_bin"]), build_receipt=receipt,
+        out=out, server_bin=server, bots_bin=Path(source["bots_bin"]),
+        build_receipt=server.parent / "manifest.json",
         vanilla_data_dir=data_dir, fixture_cache=(args.fixture_cache or common.ROOT / ".analysis/profile-fixtures").resolve(),
         pool=pool, warmup_seconds=args.warmup_seconds, measure_seconds=args.measure_seconds,
         readiness_seconds=args.readiness_seconds,
-        prepare_memory=args.prepare_memory, slice_name=args.slice_name, mem_total_mib=int(hw["mem_total_gib"] * 1024))
+        prepare_memory=args.prepare_memory, slice_name=args.slice_name,
+        mem_total_mib=int(hw["mem_total_gib"] * 1024), smoke=args.smoke)
 
 
 def header(args: argparse.Namespace, hw: dict[str, Any], source: dict[str, Any], title: str, hw_title: str = "Host") -> list[str]:
@@ -282,13 +284,7 @@ def remote_preflight(remote: Remote, args: argparse.Namespace, server_bin: Path)
 def cmd_weak_hw(args: argparse.Namespace) -> int:
     resolve_durations(args)
     vps = args.command == "vps"
-    server_override = None
-    if vps and args.server_tarball:
-        args.out = args.out.resolve() if args.out else None
-        scratch = (args.out or common.ROOT / ".analysis/bench").resolve()
-        scratch.mkdir(parents=True, exist_ok=True)
-        server_override = extract_server(args.server_tarball, scratch)
-    out, pool, local_hw, source, data_dir = setup(args, bots=True, server_bin=server_override)
+    out, pool, local_hw, source, data_dir = setup(args, bots=True)
     memory = memory_option(args.memory)
     profiles = (args.profiles or ("idle,explore-20" if vps or args.smoke else "idle,explore-20,native-100")).split(",")
     unknown = [p for p in profiles if p not in profile_runs.PROFILE_CLIENTS]

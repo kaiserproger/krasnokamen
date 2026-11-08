@@ -489,6 +489,37 @@ impl ViewerState {
         self.loaded_chunks.remove(&pos);
         self.chunk_sync = None;
     }
+
+    /// Reconcile the complete held geometry after a planned world frame was not queued.
+    pub(crate) fn geometry_unsent(&mut self) {
+        self.chunk_repairs
+            .extend(self.loaded_chunks.keys().copied());
+        self.chunk_sync = None;
+    }
+
+    /// All geometry already planned for this viewer precedes a world-queue fence.
+    pub(crate) fn geometry_drained(&self, server_distance: i32, chunks: &[SnapshotChunk]) -> bool {
+        let radius = self
+            .view_distance
+            .unwrap_or(server_distance)
+            .min(server_distance);
+        let center = (
+            (self.position[0].floor() as i32).div_euclid(16),
+            (self.position[2].floor() as i32).div_euclid(16),
+        );
+        !self.skipped
+            && !self.forget_all
+            && self.center_sent == Some(center)
+            && self.pending_blocks.is_empty()
+            && self.chunk_repairs.is_empty()
+            && (center.0 - radius..=center.0 + radius).all(|x| {
+                (center.1 - radius..=center.1 + radius).all(|z| {
+                    self.loaded_chunks.get(&(x, z)).is_some_and(|held| {
+                        find_chunk(chunks, (x, z)).is_some_and(|chunk| chunk.revision == *held)
+                    })
+                })
+            })
+    }
 }
 
 /// Remove every held entity and forget every held chunk, within credit.
@@ -987,6 +1018,7 @@ fn plan_viewer_inner(
             continue;
         }
         let Some(resident) = find_chunk(&snapshot.chunks, chunk) else {
+            viewer.pending_blocks.extend(positions.iter().copied());
             continue;
         };
         update.section_pos = pack_section_pos(section.0, section.1, section.2);

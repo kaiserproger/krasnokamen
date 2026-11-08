@@ -677,8 +677,20 @@ impl TickState {
         Vec<EntityId>,
         Vec<EntityId>,
     ) {
+        self.commit_merge_effects_observed(None)
+    }
+
+    pub(super) fn commit_merge_effects_observed(
+        &mut self,
+        observer: Option<super::damage::DamageObserver<'_>>,
+    ) -> (
+        Vec<EntityId>,
+        Vec<EntityEvent>,
+        Vec<EntityId>,
+        Vec<EntityId>,
+    ) {
         super::refresh_player_attributes(self, false);
-        let (deaths, mut events, mut spawned) = self.commit_damage(None);
+        let (deaths, mut events, mut spawned) = self.commit_damage(observer);
         crate::entity_life::commit_drops(self, &mut spawned);
         // Pickups: move item counts into the collector's inventory. Only a
         // fully-consumed ground stack is queued for removal; a partial or

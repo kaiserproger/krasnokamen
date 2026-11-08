@@ -49,7 +49,7 @@ use mc_data::VanillaData;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock};
 use std::time::Instant;
 use tokio::net::{TcpListener, TcpStream};
@@ -643,10 +643,47 @@ impl EdgeServer {
         packet_id: i32,
         body: &[u8],
     ) -> anyhow::Result<bool> {
+        use mc_protocol::codec::ReadMc;
         use mc_protocol::packets::{
             Packet,
-            play::{ServerboundClientInformation, ServerboundCommandSuggestion},
+            play::{
+                ServerboundClientInformation, ServerboundCommandSuggestion,
+                ServerboundCustomPayload,
+            },
         };
+        if packet_id == ServerboundCustomPayload::ID {
+            let mut input = body;
+            let channel_length = usize::try_from(input.read_varint()?)
+                .map_err(|_| anyhow::anyhow!("invalid custom payload channel length"))?;
+            if channel_length == mc_protocol::SETUP_WORLD_FENCE_CHANNEL.len()
+                && input.starts_with(mc_protocol::SETUP_WORLD_FENCE_CHANNEL.as_bytes())
+            {
+                anyhow::ensure!(
+                    !self.hub.session_locked(id) && self.admin.session_level(id) > 0,
+                    "setup world fence requires an authenticated operator"
+                );
+                let nonce = u64::from_be_bytes(
+                    input[channel_length..]
+                        .try_into()
+                        .map_err(|_| anyhow::anyhow!("invalid setup world fence nonce"))?,
+                );
+                let tick = self.tick_stats.tick();
+                let mut registry = self.connections.inner.lock();
+                anyhow::ensure!(
+                    registry.handles.contains_key(&id),
+                    "setup world fence connection is closed"
+                );
+                anyhow::ensure!(
+                    !registry.setup_world_fences.contains_key(&id),
+                    "setup world fence already pending"
+                );
+                registry.setup_world_fences.insert(id, (tick, nonce));
+                self.connections
+                    .setup_fences_pending
+                    .store(true, Ordering::Release);
+                return Ok(true);
+            }
+        }
         if packet_id == ServerboundClientInformation::ID {
             let mut input = body;
             let request = ServerboundClientInformation::decode(&mut input)?;

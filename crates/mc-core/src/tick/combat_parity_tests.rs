@@ -88,6 +88,40 @@ fn damage_observer_counts_real_admitted_victims_and_thorns_reaction() {
     assert!(state.players[&actor].vitals.health < 20.0);
 }
 
+#[test]
+fn damage_observer_excludes_command_only_groups_without_changing_damage() {
+    use crate::tick::damage::DamageObservation;
+
+    let (mut state, _, pos) = flat_player_fixture();
+    let command_only = state.spawn_mob(state.registry.zombie_type_id, pos, 1000.0);
+    let mixed = state.spawn_mob(
+        state.registry.zombie_type_id,
+        [pos[0] + 1.0, pos[1], pos[2]],
+        1000.0,
+    );
+    let command = DamageSource::Command {
+        connection: ConnectionId(1),
+        damage_type: "minecraft:generic",
+        direct: None,
+        cause: None,
+        position: None,
+    };
+    hit(&mut state, command_only, DamageKind::Generic, Some(command));
+    hit(&mut state, mixed, DamageKind::Generic, None);
+    hit(&mut state, mixed, DamageKind::Generic, Some(command));
+    state.merge_damage.last_mut().unwrap().1.amount = 200.0;
+    let mut observed = Vec::new();
+    state.commit_damage(Some(&mut |_, slot, fact| observed.push((slot, fact))));
+    let command_slot = state.entities.slot_of(command_only).unwrap();
+    let mixed_slot = state.entities.slot_of(mixed).unwrap();
+    assert_eq!(
+        observed,
+        vec![(mixed_slot, DamageObservation::AcceptedVictim)]
+    );
+    assert_eq!(state.entities.row(command_slot).health, 900.0);
+    assert_eq!(state.entities.row(mixed_slot).health, 800.0);
+}
+
 fn shield(state: &mut TickState, player: EntityId) {
     let item = state
         .registry

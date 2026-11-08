@@ -2,6 +2,20 @@
 //! Moved verbatim from `server.rs`.
 
 use super::*;
+use mc_core::boundary::EntityId;
+
+const COREPERF_COLD_PAIR_LIMIT: usize = 1_000_000;
+
+fn bounded_tracked_union(
+    pairs: usize,
+    ids: impl Iterator<Item = EntityId>,
+    limit: usize,
+) -> Option<usize> {
+    if pairs > limit {
+        return None;
+    }
+    Some(ids.collect::<HashSet<_>>().len())
+}
 
 /// Single pump task: subscribes to the core, records tick stats, drains the
 /// reliable outbox FIRST, then publishes the world snapshot and routes both.
@@ -32,6 +46,7 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         // resync, and recompute forever without ever routing. The cache
         // makes re-plans O(1) per chunk; block changes evict their chunk.
         let mut chunk_cache = crate::plan::ChunkPacketCache::with_anti_xray(anti_xray);
+        let coreperf = std::env::var_os("SOLARIS_COREPERF_REGIONS").is_some();
         loop {
             let out = match rx.recv().await {
                 Ok(out) => out,
@@ -105,6 +120,36 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                         names,
                     }),
                 });
+            if coreperf {
+                let pairs = viewers
+                    .values()
+                    .map(|viewer| {
+                        viewer.tracked_entities.len().saturating_sub(usize::from(
+                            viewer.tracked_entities.contains_key(&viewer.entity_id),
+                        ))
+                    })
+                    .sum();
+                if server.dashboard.take_coreperf_visibility_request() {
+                    let ids = viewers.values().flat_map(|viewer| {
+                        viewer
+                            .tracked_entities
+                            .keys()
+                            .copied()
+                            .filter(move |id| *id != viewer.entity_id)
+                    });
+                    let unique = bounded_tracked_union(pairs, ids, COREPERF_COLD_PAIR_LIMIT);
+                    server.dashboard.record_coreperf_visibility_proof(
+                        crate::dashboard::CorePerfVisibilityProof {
+                            source_tick: out.tick,
+                            viewers: viewers.len(),
+                            tracked_entity_viewer_pairs: pairs,
+                            unique_tracked_entities: unique,
+                            pair_limit: COREPERF_COLD_PAIR_LIMIT,
+                        },
+                    );
+                }
+                server.dashboard.record_coreperf_visibility(out.tick, pairs);
+            }
             tracing::debug!(
                 tick = out.tick,
                 viewers = viewers.len(),
@@ -351,10 +396,67 @@ pub(super) async fn publish_and_route(
                 }
             }
             crate::fanout::Priority::BestEffort => {
-                // Planned within the queue's free slots: this fails only
-                // when the connection has closed.
-                let _ = handles.world_tx.try_send(packet.data);
+                // Another producer may consume the credit after planning.
+                if handles.world_tx.try_send(packet.data).is_err()
+                    && let Some(viewer) = viewers.get_mut(&packet.connection)
+                {
+                    // Another producer can exhaust the credit after planning.
+                    // The failed frame may have contained geometry.
+                    viewer.geometry_unsent();
+                }
             }
+        }
+    }
+    flush_setup_world_fences(server, viewers, connections, out, view_distance);
+}
+
+pub(super) fn flush_setup_world_fences(
+    server: &EdgeServer,
+    viewers: &HashMap<ConnectionId, crate::plan::ViewerState>,
+    connections: &HashMap<ConnectionId, ConnectionHandles>,
+    out: &TickOutput,
+    view_distance: i32,
+) {
+    if server
+        .connections
+        .setup_fences_pending
+        .load(Ordering::Acquire)
+    {
+        let mut registry = server.connections.inner.lock();
+        registry
+            .setup_world_fences
+            .retain(|id, (after_tick, nonce)| {
+                let Some(handles) = connections.get(id) else {
+                    return false;
+                };
+                let Some(viewer) = viewers.get(id) else {
+                    return false;
+                };
+                let Some(projection) = out.in_dimension(viewer.dimension) else {
+                    return true;
+                };
+                if out.tick <= *after_tick
+                    || !viewer.geometry_drained(view_distance, &projection.snapshot.chunks)
+                    || handles.world_tx.capacity() == 0
+                {
+                    return true;
+                }
+                // The world FIFO contains every previously planned chunk/update.
+                // A reliable response would be able to overtake that FIFO.
+                let channel = mc_data::Identifier::parse(mc_protocol::SETUP_WORLD_FENCE_CHANNEL)
+                    .expect("valid setup world fence channel");
+                let frame = crate::lod::frame(channel, nonce.to_be_bytes().to_vec())
+                    .expect("encode setup world fence");
+                match handles.world_tx.try_send(frame) {
+                    Ok(()) => false,
+                    Err(_) => !handles.world_tx.is_closed(),
+                }
+            });
+        if registry.setup_world_fences.is_empty() {
+            server
+                .connections
+                .setup_fences_pending
+                .store(false, Ordering::Release);
         }
     }
 }
@@ -431,5 +533,20 @@ pub(super) fn empty_output() -> TickOutput {
         }),
         changes: Arc::new(ChangeSet::default()),
         times: Default::default(),
+    }
+}
+
+#[cfg(test)]
+mod coreperf_visibility_tests {
+    use super::*;
+
+    #[test]
+    fn cold_union_deduplicates_overlapping_viewers_and_enforces_bound() {
+        let ids = [EntityId(1), EntityId(2), EntityId(2), EntityId(3)];
+        assert_eq!(
+            bounded_tracked_union(ids.len(), ids.into_iter(), 4),
+            Some(3)
+        );
+        assert_eq!(bounded_tracked_union(ids.len(), ids.into_iter(), 3), None);
     }
 }

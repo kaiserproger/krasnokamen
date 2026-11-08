@@ -66,6 +66,14 @@ edge queues the burst's frames as one item. World fanout
 may reconcile to a newer snapshot. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
+Input-ordered chat proves native input handling, not geometry delivery: reliable
+traffic can overtake the world queue. The operator-only `solaris:setup_world_fence`
+request keeps one transient nonce per connection. A later publication must have
+the viewer's current dimension and complete geometry window, with no block or
+chunk-repair debt, before the edge appends the nonce response to that same world
+FIFO. The setup client dispatches all preceding frames before using the marker.
+This changes neither gameplay authority nor durability; disconnect drops the fence.
+
 Operator changes reserve the whole authoritative input batch before changing
 edge-owned operator state. An async mutex serializes admission and changes;
 the initiator's live permission and lock status are rechecked after reservation.

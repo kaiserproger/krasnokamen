@@ -7,10 +7,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import copy
 import json
 import os
 from pathlib import Path
 import platform
+import secrets
+import shlex
 import signal
 import statistics
 import subprocess
@@ -23,6 +26,58 @@ from tools.harness.backends import catalog_load as load
 
 PROFILES = {"idle": (0, 0, 0, 8), "explore-3": (3, 0, 0, 8), "explore-20": (20, 0, 0, 8),
             "native-100": (100, 100000, 0, 6), "villager-heavy": (100, 100000, 20000, 6)}
+SCALE_PROFILES = {
+    f"scale-{label}-{mix}": (count, mix)
+    for label, count in (("100k", 100_000), ("500k", 500_000), ("1m", 1_000_000))
+    for mix in ("all-active", "mostly-resting", "sparse-active")
+}
+
+PIN_ROOT = Path("/run/media/kaiserroman/games/solaris-work/pins")
+
+
+def pinned_binary(binary: Path, kind: str) -> dict[str, Any]:
+    """Accept only the immutable pin-release artifact and its matching manifest."""
+    binary = binary.resolve()
+    if binary.parent.parent != PIN_ROOT.resolve():
+        raise ValueError(f"{kind} binary is not in the pin-release store")
+    manifest = json.loads((binary.parent / "manifest.json").read_text())
+    if (manifest.get("repo") != "core" or manifest.get("kind") != kind
+            or manifest.get("binary") != str(binary) or not manifest.get("head")
+            or not manifest.get("diff_sha256")
+            or not manifest.get("command") or not manifest.get("target")
+            or manifest.get("binary_sha256") != load.scale.binary_sha256(binary)):
+        raise ValueError(f"{kind} pin-release manifest does not match binary")
+    return manifest
+
+
+def validate_cohort(before: dict[str, Any], after: dict[str, Any],
+                    expected: dict[str, int]) -> None:
+    for cohort in (before, after):
+        identities = cohort.get("identities")
+        if not isinstance(identities, dict) or cohort.get("counts") != expected:
+            raise ValueError("missing saved identities or wrong fixture population")
+        counts = dict.fromkeys(expected, 0)
+        for row in identities.values():
+            kind = row.get("kind")
+            if kind not in counts:
+                raise ValueError("unexpected saved fixture identity")
+            counts[kind] += 1
+        if counts != expected:
+            raise ValueError("missing saved identities or wrong fixture population")
+    if before["identities"].keys() != after["identities"].keys():
+        raise ValueError("persistent fixture cohort changed identity")
+    if any(before["identities"][key]["kind"] != after["identities"][key]["kind"]
+           for key in before["identities"]):
+        raise ValueError("persistent fixture identity changed kind")
+
+
+def validate_prepared(recipe: dict[str, Any], prepared: dict[str, Any]) -> None:
+    if prepared.get("recipe_sha256") != load.digest(recipe):
+        raise ValueError("prepared fixture recipe differs from requested recipe")
+    cohort = prepared.get("cohort")
+    if not isinstance(cohort, dict):
+        raise ValueError("prepared fixture lacks saved identities")
+    validate_cohort(cohort, cohort, recipe["expected"])
 
 
 def fixture(mobs: int, villagers: int) -> dict[str, Any]:
@@ -77,14 +132,492 @@ def fixture(mobs: int, villagers: int) -> dict[str, Any]:
     return value
 
 
-def schedule(args: argparse.Namespace) -> dict[str, Any]:
+def scale_fixture(residents: int, mix: str, *, without_cows: bool = False) -> dict[str, Any]:
+    """Separate public-command pens, with cold regions kept resident by adjacent tickets."""
+    if residents < 0 or mix not in ("all-active", "mostly-resting", "sparse-active"):
+        raise ValueError("invalid scale population or activity mix")
+    kinds = compare.MOB_KINDS
+    eligible = tuple(kind for kind in kinds if not without_cows or kind != "cow")
+    counts = {kind: 0 for kind in kinds}
+    if mix == "mostly-resting":
+        counts["sheep" if without_cows else "cow"] = residents - residents // 10
+        counts["zombie"] = residents // 10
+    else:
+        for index, kind in enumerate(eligible):
+            counts[kind] = residents // len(eligible) + (index < residents % len(eligible))
+    active_total = residents // 10 if mix == "sparse-active" else residents
+    active_left = active_total
+    portions: dict[str, int] = {}
+    for kind, count in counts.items():
+        portions[kind] = min(count, active_left)
+        active_left -= portions[kind]
+    regions = []
+    coverage = []
+    for active in (True, False):
+        for kind, total in counts.items():
+            count = portions[kind] if active else total - portions[kind]
+            for offset in range(0, count, 1024):
+                n = min(1024, count - offset)
+                group = len(regions)
+                x, z = group % 32 * 256, group // 32 * 256
+                roof = 67 if kind == "spider" else 71
+                commands = [
+                    f"fill {x-1} 62 {z-1} {x+64} 62 {z+64} minecraft:dirt",
+                    f"fill {x-1} 63 {z-1} {x+64} 63 {z+64} minecraft:grass_block",
+                    f"fill {x} 64 {z} {x+63} 70 {z+63} minecraft:air",
+                    f"fill {x-1} 64 {z-1} {x+64} {roof-1} {z-1} minecraft:stone",
+                    f"fill {x-1} 64 {z+64} {x+64} {roof-1} {z+64} minecraft:stone",
+                    f"fill {x-1} 64 {z} {x-1} {roof-1} {z+63} minecraft:stone",
+                    f"fill {x+64} 64 {z} {x+64} {roof-1} {z+63} minecraft:stone",
+                    f"fill {x-1} {roof} {z-1} {x+64} {roof} {z+64} minecraft:stone",
+                ]
+                if active:
+                    # Keep the normal moving observer on its roof ticket; no
+                    # cadence or view-distance reduction is used for coverage.
+                    commands += [
+                        f"fill {x-1} {roof+1} {z-1} {x+64} {roof+2} {z-1} minecraft:stone",
+                        f"fill {x-1} {roof+1} {z+64} {x+64} {roof+2} {z+64} minecraft:stone",
+                        f"fill {x-1} {roof+1} {z} {x-1} {roof+2} {z+63} minecraft:stone",
+                        f"fill {x+64} {roof+1} {z} {x+64} {roof+2} {z+63} minecraft:stone",
+                    ]
+                if not regions:
+                    commands[:0] = [
+                        "gamerule doMobSpawning false", "gamerule doWeatherCycle false",
+                        "gamerule randomTickSpeed 3", "gamerule doDaylightCycle true",
+                        "weather clear", "time set 2000", "difficulty easy",
+                        f"setworldspawn {x+32} 64 {z+32}",
+                        *[f"kill @e[type=minecraft:{name}]" for name in (*kinds, "villager")],
+                    ]
+                if not active:
+                    # Ticket centres lie outside the pen; their level-33 halo
+                    # retains all four columns without ticking the pen itself.
+                    commands += [f"forceload add {x-16} {z+16}", f"forceload add {x+64} {z+16}"]
+                tag = f" {{CustomName:'{compare.COHORT_NAME}',PersistenceRequired:1b}}"
+                commands.extend(
+                    f"summon minecraft:{kind} {x+(i % 32)*2+1.0} 64 {z+(i//32)*2+1.0}{tag}"
+                    for i in range(n))
+                regions.append({"name": f"{'active' if active else 'cold'}-{kind}-{offset//1024}",
+                                "anchor": [x+32, z+32], "view_distance": 8, "commands": commands})
+                coverage.append({"chunks": [[x//16+dx, z//16+dz] for dx in range(4) for dz in range(4)],
+                                 "active": active, "resident": n, "kind": f"minecraft:{kind}"})
+    return {"schema_version": 1, "kind": "native-v2-public-commands", "seed": 42,
+            "variant": f"noncanonical-scale-{residents}-{mix}",
+            "expected": {f"minecraft:{kind}": count for kind, count in counts.items()},
+            "regions": regions, "coverage": coverage,
+            "population": {"resident_requested": residents, "active_requested": active_total,
+                           "cold_requested": residents-active_total},
+            "official_performance_evidence": False}
+
+
+def add_dispenser_bank(recipe: dict[str, Any], count: int, capacity: int, item: str) -> tuple[int, str, str]:
+    """Build an ordinary powered-dispenser bank in a separate active region."""
+    if count < 0 or count > capacity or capacity > 1024:
+        raise ValueError("ammunition count exceeds dispenser bank capacity")
+    group = len(recipe["regions"])
+    x, z = group % 32 * 256, group // 32 * 256
+    commands = [
+        f"fill {x-1} 62 {z-1} {x+80} 62 {z+64} minecraft:dirt",
+        f"fill {x-1} 63 {z-1} {x+80} 63 {z+64} minecraft:grass_block",
+        f"fill {x} 64 {z} {x+63} 70 {z+63} minecraft:air",
+        f"fill {x+65} 64 {z} {x+79} 70 {z+63} minecraft:air",
+        f"fill {x+64} 64 {z-1} {x+80} 66 {z-1} minecraft:stone",
+        f"fill {x+64} 64 {z+64} {x+80} 66 {z+64} minecraft:stone",
+        f"fill {x+64} 64 {z} {x+64} 66 {z+63} minecraft:stone",
+        f"fill {x+80} 64 {z} {x+80} 66 {z+63} minecraft:stone",
+    ]
+    for i in range(capacity):
+        px, pz = x + (i % 32) * 2, z + (i // 32) * 2
+        commands.append(f"setblock {px} 66 {pz} minecraft:dispenser[facing=up,triggered=false]")
+        if i < count:
+            commands.append(f"item replace block {px} 66 {pz} container.0 with minecraft:{item} 64")
+    recipe["regions"].append({"name": f"{item}-bank", "anchor": [x+72, z+32],
+                              "view_distance": 8, "commands": commands})
+    recipe["coverage"].append({"chunks": [[x//16+dx, z//16+dz] for dx in range(4) for dz in range(4)],
+                               "active": True, "resident": 0, "kind": None})
+    return (group, f"fill {x} 65 {z} {x+63} 65 {z+63} minecraft:redstone_block",
+            f"fill {x} 65 {z} {x+63} 65 {z+63} minecraft:air")
+
+
+def add_projectile_fixture(recipe: dict[str, Any], count: int, *, smoke: bool) -> None:
+    """Pulse an identical dispenser bank; only the loaded-ammunition count varies."""
+    capacity = max(count, 4) if smoke else 1000
+    group, on, off = add_dispenser_bank(recipe, count, capacity, "arrow")
+    recipe["stress"] = {"kind": "projectiles", "regions": [group], "requested_peak": count,
+                        "dispenser_capacity": capacity, "pulse_interval_ms": 3000,
+                        "commands": [on, off]}
+
+
+def add_xp_fixture(recipe: dict[str, Any], count: int, *, smoke: bool) -> None:
+    """Use real thrown bottles; identical bank geometry for all full-scale comparisons."""
+    capacity = max(count, 4) if smoke else 100000
+    if count < 0 or count > capacity:
+        raise ValueError("XP bottle count exceeds fixture capacity")
+    groups, on, off = [], [], []
+    remaining = count
+    for start in range(0, capacity, 1000):
+        size = min(1000, capacity - start)
+        loaded = min(size, remaining)
+        group, enable, disable = add_dispenser_bank(recipe, loaded, size, "experience_bottle")
+        groups.append(group)
+        on.append(enable)
+        off.append(disable)
+        remaining -= loaded
+    recipe["stress"] = {"kind": "xp-orbs", "regions": groups, "requested_peak": count,
+                        "dispenser_capacity": capacity, "pulse_interval_ms": max(1, 6000 // (2 * len(groups))),
+                        "commands": on + off}
+
+
+def add_brewing_fixture(recipe: dict[str, Any], containers: int, *, stands: int = 5) -> None:
+    """Place non-brewing containers and a fixed set of genuinely brewing stands."""
+    if containers < 1 or stands < 1:
+        raise ValueError("container and brewing-stand counts must be positive")
+    groups, refresh, discovery = [], [], {}
+    for start in range(0, containers, 1000):
+        group, _, _ = add_dispenser_bank(recipe, 0, 0, "arrow")
+        groups.append(group)
+        region = recipe["regions"][-1]
+        region["name"] = "brewing-containers"
+        x, z = group % 32 * 256, group // 32 * 256
+        discovery[str(group)] = min(1000, containers - start) + (stands if start == 0 else 0)
+        for i in range(min(1000, containers - start)):
+            px, pz = x + (i % 32) * 2, z + (i // 32) * 2
+            region["commands"].append(f"setblock {px} 64 {pz} minecraft:chest")
+        if start == 0:
+            for i in range(stands):
+                px, pz = x + (i % 32) * 2, z + (i // 32) * 2
+                region["commands"] += [
+                    f"setblock {px} 68 {pz} minecraft:brewing_stand",
+                    f"item replace block {px} 68 {pz} container.3 with minecraft:nether_wart 64",
+                    f"item replace block {px} 68 {pz} container.4 with minecraft:blaze_powder 64",
+                ]
+                refresh.append(
+                    f'item replace block {px} 68 {pz} container.0 with '
+                    'minecraft:potion[potion_contents={potion:"minecraft:water"}]')
+            region["commands"] += refresh
+    recipe["stress"] = {"kind": "brewing-containers", "regions": groups,
+                        "requested_containers": containers, "requested_stands": stands,
+                        "discovery_per_region": discovery,
+                        "pulse_interval_ms": max(1, 10000 // stands), "commands": refresh}
+
+
+def add_productive_fixture(recipe: dict[str, Any], workers: int, *, smoke: bool) -> None:
+    """One unbound farmer per walled crop cell; stock and harvest stay native."""
+    capacity = max(workers, 1) if smoke else 10000
+    if workers < 0 or workers > capacity:
+        raise ValueError("productive worker count exceeds fixture capacity")
+    groups, crops, refresh = [], [], []
+    for start in range(0, capacity, 36):
+        group, _, _ = add_dispenser_bank(recipe, 0, 0, "arrow")
+        groups.append(group)
+        region = recipe["regions"][-1]
+        region["name"] = "productive-farmers"
+        x, z = group % 32 * 256, group // 32 * 256
+        n = min(36, capacity - start)
+        residents = min(n, max(0, workers - start))
+        recipe["coverage"][-1]["resident"] = residents
+        recipe["coverage"][-1]["kind"] = "minecraft:villager" if residents else None
+        for i in range(n):
+            px, pz = x + (i % 6) * 10 + 1, z + (i // 6) * 10 + 1
+            region["commands"] += [
+                f"fill {px-1} 64 {pz-1} {px+3} 66 {pz-1} minecraft:stone",
+                f"fill {px-1} 64 {pz+3} {px+3} 66 {pz+3} minecraft:stone",
+                f"fill {px-1} 64 {pz} {px-1} 66 {pz+2} minecraft:stone",
+                f"fill {px+3} 64 {pz} {px+3} 66 {pz+2} minecraft:stone",
+                f"setblock {px+1} 64 {pz} minecraft:composter",
+                f"setblock {px+1} 63 {pz+2} minecraft:farmland[moisture=7]",
+                f"setblock {px+1} 64 {pz+2} minecraft:wheat[age=7]",
+            ]
+            crops.append([px+1, 64, pz+2])
+            if i < residents:
+                region["commands"].append(
+                    f"summon minecraft:villager {px+.5} 64 {pz+1.5} "
+                    f"{{CustomName:'{compare.COHORT_NAME}',PersistenceRequired:1b}}")
+        refresh.append(f"fill {x} 64 {z} {x+63} 64 {z+63} minecraft:wheat[age=7] replace minecraft:wheat")
+    recipe["regions"][-1]["commands"].append("time set 2000")
+    old_residents = recipe["population"]["resident_requested"]
+    recipe["expected"]["minecraft:villager"] = workers
+    recipe["population"]["resident_requested"] += workers
+    recipe["population"]["active_requested"] += workers
+    recipe["variant"] = recipe["variant"].replace(
+        f"noncanonical-scale-{old_residents}-",
+        f"noncanonical-scale-{recipe['population']['resident_requested']}-", 1)
+    recipe["stress"] = {"kind": "productive-npcs", "regions": groups,
+                        "requested_workers": workers, "worker_cells": crops[:workers],
+                        "pulse_interval_ms": max(1, 15000 // len(groups)), "commands": refresh}
+
+
+def add_damage_fixture(recipe: dict[str, Any], victims: int, *, smoke: bool) -> None:
+    """Generate real projectile damage against isolated, ordinary living targets."""
+    capacity = max(victims, 1) if smoke else 100000
+    if victims < 1 or victims > capacity or recipe["expected"]["minecraft:cow"]:
+        raise ValueError("damage fixture requires exclusive cow targets within capacity")
+    groups = []
+    for start in range(0, capacity, 256):
+        group, _, _ = add_dispenser_bank(recipe, 0, 0, "arrow")
+        groups.append(group)
+        region = recipe["regions"][-1]
+        region["name"] = "projectile-damage-targets"
+        x, z = group % 32 * 256, group // 32 * 256
+        n = min(256, capacity - start)
+        residents = min(n, max(0, victims - start))
+        recipe["coverage"][-1]["resident"] = residents
+        recipe["coverage"][-1]["kind"] = "minecraft:cow" if residents else None
+        if group == 0:
+            region["commands"][:0] = [
+                "gamerule doMobSpawning false", "gamerule doWeatherCycle false",
+                "gamerule randomTickSpeed 3", "gamerule doDaylightCycle true",
+                "weather clear", "time set 2000", "difficulty easy", f"setworldspawn {x+32} 64 {z+32}",
+                *[f"kill @e[type=minecraft:{kind}]" for kind in (*compare.MOB_KINDS, "villager")],
+            ]
+        for i in range(n):
+            px, pz = x + (i % 16) * 4 + 1, z + (i // 16) * 4 + 1
+            region["commands"] += [
+                f"fill {px-1} 64 {pz-1} {px+1} 66 {pz-1} minecraft:stone",
+                f"fill {px-1} 64 {pz+1} {px+1} 66 {pz+1} minecraft:stone",
+                f"fill {px-1} 64 {pz} {px-1} 66 {pz} minecraft:stone",
+                f"fill {px+1} 64 {pz} {px+1} 66 {pz} minecraft:stone",
+                f"setblock {px} 63 {pz} minecraft:dispenser[facing=up,triggered=false]",
+            ]
+            if i < residents:
+                region["commands"] += [
+                    f"item replace block {px} 63 {pz} container.0 with minecraft:arrow 64",
+                    f"summon minecraft:cow {px+.5} 64 {pz+.5} "
+                    f"{{CustomName:'{compare.COHORT_NAME}',PersistenceRequired:1b,Health:100f}}",
+                ]
+    recipe["regions"][0]["commands"][:0] = [
+        "gamerule minecraft:max_command_forks 200001",
+        "gamerule minecraft:max_command_sequence_length 400000",
+    ]
+    old_residents = recipe["population"]["resident_requested"]
+    recipe["expected"]["minecraft:cow"] = victims
+    recipe["population"]["resident_requested"] += victims
+    recipe["population"]["active_requested"] += victims
+    recipe["variant"] = recipe["variant"].replace(
+        f"noncanonical-scale-{old_residents}-",
+        f"noncanonical-scale-{recipe['population']['resident_requested']}-", 1)
+    selector = "@e[type=minecraft:cow,name=solaris-coreperf-fixture]"
+    recipe["stress"] = {"kind": "damage", "regions": groups, "requested_victims": victims,
+                        "target_initial_health": 100, "dispenser_capacity": capacity,
+                        "pulse_interval_ms": 3000,
+                        "commands": [f"execute as {selector} at @s run setblock ~1 ~-1 ~ minecraft:redstone_block",
+                                     f"execute as {selector} at @s run setblock ~1 ~-1 ~ minecraft:grass_block"]}
+
+
+def add_map_frame_fixture(recipe: dict[str, Any], frames: int, *, smoke: bool) -> None:
+    """Place real filled maps in frames through the normal protocol player."""
+    capacity = max(frames, 1) if smoke else 100000
+    if frames < 0 or frames > capacity:
+        raise ValueError("map-frame count exceeds fixture capacity")
+    groups = []
+    for start in range(0, capacity, 1000):
+        group, _, _ = add_dispenser_bank(recipe, 0, 0, "arrow")
+        groups.append(group)
+        region = recipe["regions"][-1]
+        region["name"] = "map-frames"
+        x, z = group % 32 * 256, group // 32 * 256
+        residents = min(1000, max(0, frames - start))
+        recipe["coverage"][-1]["resident"] = residents
+        recipe["coverage"][-1]["kind"] = "minecraft:item_frame" if residents else None
+        if group == 0:
+            region["commands"][:0] = [
+                "gamerule doMobSpawning false", "gamerule doWeatherCycle false",
+                "gamerule randomTickSpeed 3", "gamerule doDaylightCycle true",
+                "weather clear", "time set 2000", "difficulty easy", f"setworldspawn {x+32} 64 {z+32}",
+                *[f"kill @e[type=minecraft:{kind}]" for kind in (*compare.MOB_KINDS, "villager")],
+            ]
+        if residents:
+            positions = [[x + (i % 32) * 2, 65, z + (i // 32) * 2] for i in range(residents)]
+            region["commands"] += [
+                f"summon minecraft:item_frame {px+.5} {py} {pz+.5} "
+                f"{{CustomName:'{compare.COHORT_NAME}'}}" for px, py, pz in positions]
+            region["frame_positions"] = positions
+    old_residents = recipe["population"]["resident_requested"]
+    recipe["expected"]["minecraft:item_frame"] = frames
+    recipe["population"]["resident_requested"] += frames
+    recipe["population"]["active_requested"] += frames
+    recipe["variant"] = recipe["variant"].replace(
+        f"noncanonical-scale-{old_residents}-",
+        f"noncanonical-scale-{recipe['population']['resident_requested']}-", 1)
+    recipe["stress"] = {"kind": "map-frames", "regions": groups, "requested_frames": frames}
+
+
+def validate_map_frames(snapshot: dict[str, Any], expected: int) -> dict[str, int]:
+    """Check frame custody against records decoded by the native recovery owner."""
+    frames = snapshot.get("entities", {}).get("minecraft:item_frame", {}).get("samples", [])
+    rows = [row for row in frames if row.get("active")
+            and row.get("payload", {}).get("CustomName") == compare.COHORT_NAME]
+    globals_ = snapshot.get("globals", {})
+    if len(rows) != expected or not isinstance(globals_, dict):
+        raise ValueError("saved map-frame identities or map records differ from request")
+    identities: dict[str, int] = {}
+    counts: dict[int, int] = {}
+    for row in rows:
+        item = row["payload"].get("Item", {})
+        components = item.get("components", {}) if isinstance(item, dict) else {}
+        map_id = components.get("minecraft:map_id") if isinstance(components, dict) else None
+        record = globals_.get(f"map/{map_id}")
+        identity = row.get("uuid")
+        if (not isinstance(identity, str) or not identity or identity in identities
+                or not isinstance(item, dict) or item.get("id") != "minecraft:filled_map"
+                or item.get("count", item.get("Count")) != 1
+                or type(map_id) is not int or map_id < 0
+                or not isinstance(record, dict) or record.get("version") != 1
+                or not isinstance(record.get("payload"), dict) or not record["payload"]):
+            raise ValueError("saved frame is missing its identity, filled map or map record")
+        identities[identity] = map_id
+        counts[map_id] = counts.get(map_id, 0) + 1
+        if counts[map_id] > 256:
+            raise ValueError("saved map is assigned to more than 256 frames")
+    return identities
+
+
+def validate_scale_sample(recipe: dict[str, Any], sample: dict[str, Any],
+                          allowed_cells: set[tuple[int, int, int]] | None = None) -> dict[str, Any]:
+    """Fail closed on partial region coverage, stale source ticks or cohort mismatch."""
+    data = sample.get("coreperf")
+    if not isinstance(data, dict) or data.get("tick") != sample.get("tick"):
+        raise ValueError("missing or mismatched source-tick region telemetry")
+    resident_rows = data.get("resident_entities")
+    if not isinstance(resident_rows, int) or resident_rows < recipe["population"]["resident_requested"]:
+        raise ValueError("live resident rows are below the requested fixture population")
+    rows = data.get("regions")
+    if not isinstance(rows, list):
+        raise ValueError("missing region coverage")
+    by_region: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        index = row.get("region")
+        if not isinstance(index, int) or index < 0 or index >= len(recipe["coverage"]) or index in by_region:
+            raise ValueError("duplicate or invalid region coverage")
+        by_region[index] = row
+    totals = {"resident_rows": resident_rows, "active": 0, "admitted": 0, "full": 0,
+              "resting": 0, "active_chunks": 0}
+    stress = recipe.get("stress", {})
+    stress_regions = set(stress.get("regions", []))
+    if stress_regions:
+        totals["projectiles"] = 0
+    if stress.get("kind") == "xp-orbs":
+        xp = data.get("xp_orbs_processed")
+        regions = data.get("xp_orbs_by_region")
+        if (type(xp) is not int or xp < 0 or not isinstance(regions, dict)
+                or any(type(value) is not int or value < 0 for value in regions.values())):
+            raise ValueError("missing XP-orb owner telemetry")
+        totals["xp_orbs"] = sum(regions.get(str(i), 0) for i in stress_regions)
+        totals["xp_orbs_global"] = xp
+    if stress.get("kind") == "damage":
+        victims = data.get("damage_victims_by_region")
+        reactive = data.get("damage_reactive_by_region")
+        if not isinstance(victims, dict) or not isinstance(reactive, dict):
+            raise ValueError("missing accepted damage owner telemetry")
+        if any(type(value) is not int or value < 0 for value in (*victims.values(), *reactive.values())):
+            raise ValueError("invalid accepted damage counters")
+        totals["damage_victims"] = sum(victims.get(str(i), 0) for i in stress_regions)
+        totals["damage_reactive"] = sum(reactive.get(str(i), 0) for i in stress_regions)
+    if stress.get("kind") == "brewing-containers":
+        discovery = data.get("brewing_discovery_by_region")
+        active = data.get("brewing_active_by_region")
+        progressing = data.get("brewing_progressing_by_region")
+        if not all(isinstance(value, dict) for value in (discovery, active, progressing)):
+            raise ValueError("missing brewing owner telemetry")
+        for region, required in stress["discovery_per_region"].items():
+            if not isinstance(discovery.get(region), int) or discovery[region] < required:
+                raise ValueError(f"brewing discovery region {region} below requested containers")
+        totals["brewing_discovered"] = sum(discovery.get(str(i), 0) for i in stress_regions)
+        totals["brewing_active"] = sum(active.get(str(i), 0) for i in stress_regions)
+        totals["brewing_progressing"] = sum(progressing.get(str(i), 0) for i in stress_regions)
+        if totals["brewing_active"] < stress["requested_stands"]:
+            raise ValueError("brewing owner did not visit every requested active stand")
+    if stress.get("kind") == "productive-npcs":
+        brain_candidates = data.get("brain_candidates_by_region")
+        brain_admitted = data.get("brain_admitted_by_region")
+        if not isinstance(brain_candidates, dict) or not isinstance(brain_admitted, dict):
+            raise ValueError("missing villager brain candidate/admission telemetry")
+        totals["brain_candidates"] = 0
+        totals["brain_admitted"] = 0
+        cells = data.get("productive_harvested_cells")
+        if not isinstance(cells, list) or any(
+                not isinstance(cell, list) or len(cell) != 3 or any(type(v) is not int for v in cell)
+                for cell in cells):
+            raise ValueError("missing productive farmer work telemetry")
+        allowed = allowed_cells if allowed_cells is not None else {tuple(cell) for cell in stress["worker_cells"]}
+        if any(tuple(cell) not in allowed for cell in cells):
+            raise ValueError("productive farmer work outside declared worker cells")
+        totals["harvested_cells"] = cells
+    for index, expected in enumerate(recipe["coverage"]):
+        row = by_region.get(index)
+        actual = {}
+        for key in ("active_chunks", "motion_admitted", "motion_full", "motion_resting"):
+            value = 0 if row is None else row.get(key)
+            if type(value) is not int or value < 0:
+                raise ValueError("invalid or missing region counter")
+            actual[key] = value
+        row = row or {}
+        required = expected["resident"] if expected["active"] else 0
+        if expected.get("kind") == "minecraft:villager":
+            candidate = brain_candidates.get(str(index), 0)
+            admitted = brain_admitted.get(str(index), 0)
+            if (type(candidate) is not int or type(admitted) is not int
+                    or candidate != required or admitted < 0 or admitted > candidate):
+                raise ValueError(f"region {index} villager brain candidate/admission differs")
+            if actual["motion_admitted"] != 0:
+                raise ValueError("villager brain rows were incorrectly counted as motion admissions")
+            totals["brain_candidates"] += candidate
+            totals["brain_admitted"] += admitted
+        else:
+            candidate = admitted = actual["motion_admitted"]
+            if candidate != required:
+                raise ValueError(f"region {index} admitted {candidate}, expected {required}")
+        if actual["active_chunks"] != (len(expected["chunks"]) if expected["active"] else 0):
+            raise ValueError(f"region {index} active chunk coverage differs from recipe")
+        if actual["motion_full"] + actual["motion_resting"] != actual["motion_admitted"]:
+            raise ValueError(f"region {index} motion full/resting partition differs from admissions")
+        totals["active"] += candidate
+        totals["admitted"] += admitted
+        totals["full"] += actual["motion_full"]
+        totals["resting"] += actual["motion_resting"]
+        totals["active_chunks"] += actual["active_chunks"]
+        if index in stress_regions:
+            projectiles = row.get("projectile_candidates")
+            if not isinstance(projectiles, int) or projectiles < 0:
+                raise ValueError("missing projectile owner candidates")
+            totals["projectiles"] += projectiles
+    if totals["active"] != recipe["population"]["active_requested"]:
+        raise ValueError("observed active cohort differs from advertised population")
+    return totals
+
+
+def visibility_summary(samples: list[dict[str, Any]], rows: list[dict[str, Any]],
+                       start: int, end: int) -> dict[str, Any]:
+    ticks = {sample["tick"] for sample in samples if start <= sample["wall_start_unix_ns"] < end}
+    observations = []
+    for row in rows:
+        visibility = row["stats"].get("coreperf_visibility")
+        if not isinstance(visibility, dict) or visibility.get("source_tick") not in ticks:
+            continue
+        pairs = visibility.get("tracked_entity_viewer_pairs")
+        if not isinstance(pairs, int) or pairs < 0:
+            raise ValueError("invalid edge visibility observation")
+        observations.append((visibility["source_tick"], pairs))
+    if not observations:
+        raise ValueError("no edge visibility observation matches a measured source tick")
+    return {"tracked_entity_viewer_pairs_min": min(pairs for _, pairs in observations),
+            "tracked_entity_viewer_pairs_max": max(pairs for _, pairs in observations),
+            "source_ticks": [tick for tick, _ in observations],
+            "scope": "edge planned tracked entity-viewer pairs; includes nonfixture entities, not distinct or delivered entities"}
+
+
+def schedule(args: argparse.Namespace, recipe: dict[str, Any] | None = None) -> dict[str, Any]:
     active = args.profile != "idle"
-    return {"windows": [{"name": name, "duration_ms": round(seconds * 1000),
+    plan = {"windows": [{"name": name, "duration_ms": round(seconds * 1000),
                          "movement_hz": 20 if active else 0,
                          "edit_hz": 2 if args.mobs else 0,
                          "chat_hz": 1 if args.mobs else 0}
                         for name, seconds in (("warmup", args.warmup_seconds),
                                               ("measurement", args.measure_seconds))]}
+    if recipe and recipe.get("stress", {}).get("commands"):
+        for window in plan["windows"]:
+            window["command_interval_ms"] = recipe["stress"]["pulse_interval_ms"]
+            window["commands"] = recipe["stress"]["commands"]
+    return plan
 
 
 def host_receipt(out: Path) -> dict[str, Any]:
@@ -125,6 +658,8 @@ def validate_metrics(metric: dict[str, Any], initial: dict[str, Any], cursor: in
             metric.get("instance_started_unix_ns") != initial.get("instance_started_unix_ns") or
             metric.get("source_skipped_ticks_total") != initial.get("source_skipped_ticks_total")):
         raise ValueError("exact tick stream overwritten, reset or lost source samples")
+    if not isinstance(metric.get("samples"), list):
+        raise ValueError("exact source tick samples missing")
     for row in metric["samples"]:
         if row["tick"] != cursor + 1:
             raise ValueError("noncontiguous exact tick stream")
@@ -142,9 +677,52 @@ async def initial_metrics(session: Any, url: str) -> dict[str, Any]:
     return initial
 
 
+class ColdVisibilityUnavailable(ValueError):
+    """The bounded cold capture could not establish the requested proof."""
+
+    def __init__(self, proof: dict[str, Any]):
+        self.proof = proof
+        pairs, limit = proof["tracked_entity_viewer_pairs"], proof["pair_limit"]
+        super().__init__(f"cold visibility proof unavailable: requires {pairs} pair visits, limit {limit}; "
+                         f"up to {pairs} distinct-ID hash entries, allocation size implementation-dependent")
+
+
+async def cold_visibility_proof(session: Any, url: str, viewers: int, after_tick: int,
+                                timeout: float) -> dict[str, Any]:
+    """Request a bounded one-shot tracked-ID union before measured workload begins."""
+    proof = await session.http(url + "/coreperf-visibility-proof", timeout,
+                               bearer_token=session.args.metrics_bearer_token)
+    if not isinstance(proof, dict):
+        raise ValueError("cold visibility proof response is not an object")
+    tick, count = proof.get("source_tick"), proof.get("viewers")
+    pairs, unique, limit = (proof.get("tracked_entity_viewer_pairs"),
+                            proof.get("unique_tracked_entities"), proof.get("pair_limit"))
+    if type(tick) is not int or tick <= after_tick or count != viewers:
+        raise ValueError("cold visibility proof has wrong source tick or incomplete viewers")
+    if type(pairs) is not int or type(limit) is not int or pairs < 0 or limit < 0:
+        raise ValueError("cold visibility proof has invalid pair bound")
+    if pairs > limit:
+        raise ColdVisibilityUnavailable(proof)
+    if type(unique) is not int or not 0 <= unique <= pairs:
+        raise ValueError("cold visibility proof unique count invalid")
+    return proof
+
+
 async def measure(args: argparse.Namespace, directory: Path, world: Path,
                   recipe: dict[str, Any], prepared: dict[str, Any]) -> dict[str, Any]:
     directory.mkdir()
+    if "coverage" in recipe:
+        if getattr(args, "remote_host", None):
+            raise ValueError("scale telemetry currently requires a local server")
+        region_file = directory / "coreperf-regions.json"
+        load.scale.dump(region_file, {"marker": compare.COHORT_NAME,
+                                      "regions": [row["chunks"] for row in recipe["coverage"]],
+                                      "productive_crops": recipe.get("stress", {}).get("worker_cells", [])})
+        args = copy.copy(args)
+        args.metrics_bearer_token = secrets.token_urlsafe(32)
+        args.server_wrapper = " ".join(filter(None, [
+            args.server_wrapper,
+            "env", shlex.quote(f"SOLARIS_COREPERF_REGIONS={region_file}")]))
     config, url, game = load.config(args, directory, world, args.clients, operators=True)
     # Idle measures simulation, not the default pause-when-empty policy.
     config.write_text(config.read_text().replace("[server]\n", "[server]\npause_when_empty_seconds = -1\n", 1))
@@ -153,12 +731,14 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
         session = RemoteSession(args, directory, config, world)
     else:
         session = compare.CoreSession(args, directory, config)
-    plan = schedule(args)
+    plan = schedule(args, recipe)
     load.scale.dump(directory / "schedule.json", plan)
     result: dict[str, Any] = {"status": "failed", "schedule": plan, "config": str(config),
                               "timing_scope": "exact active-iteration wall_us, excluding pacing sleep"}
     samples: list[dict[str, Any]] = []
     process_rows: list[dict[str, Any]] = []
+    coverage_samples: list[dict[str, Any]] = []
+    allowed_cells = {tuple(cell) for cell in recipe.get("stress", {}).get("worker_cells", [])}
     try:
         await session.start_server()
         if hasattr(session, "wait_ready"):
@@ -170,7 +750,8 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                        *load.bot_command(args, directory, game, args.clients, {"group_size": 1}),
                        "--open-loop", "--schedule-file", str(directory / "schedule.json")]
             if args.mobs:
-                anchors = [region["anchor"] for region in recipe["regions"]]
+                anchors = [region["anchor"] for index, region in enumerate(recipe["regions"])
+                           if "coverage" not in recipe or recipe["coverage"][index]["active"]]
                 load.scale.dump(directory / "anchors.json", [anchors[n % len(anchors)] for n in range(args.clients)])
                 command += ["--anchors", str(directory / "anchors.json")]
             else:
@@ -182,6 +763,8 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
             result["ready"] = await session.ready(args.clients, args.readiness_seconds)
         initial = await initial_metrics(session, url)
         cursor = initial["latest_tick"]
+        proof = (await cold_visibility_proof(session, url, args.clients, cursor, args.readiness_seconds)
+                 if "coverage" in recipe else None)
         epoch = time.time_ns()
         if args.clients:
             stdin = session.processes["bots"].stdin
@@ -208,6 +791,8 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                     if tick["wall_start_unix_ns"] <= previous_wall_start:
                         raise ValueError("source wall clock regressed")
                     previous_wall_start = tick["wall_start_unix_ns"]
+                    if "coverage" in recipe and start <= tick["wall_start_unix_ns"] < end:
+                        coverage_samples.append(validate_scale_sample(recipe, tick, allowed_cells))
                 stats = await session.http(url + "/stats", 2)
                 row = {"captured_unix_ns": time.time_ns() + offset, "processes": session.process_samples(),
                        "stats": stats, "bots": session.latest_bot}
@@ -221,6 +806,71 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                 if metric["samples"] and metric["samples"][-1]["wall_start_unix_ns"] >= end:
                     break
         result["summary"] = summarize(samples, process_rows, start, end)
+        if "coverage" in recipe:
+            if not coverage_samples:
+                raise ValueError("measurement lacks source-tick region coverage")
+            if (recipe["variant"].endswith("-mostly-resting")
+                    and sum(row["resting"] for row in coverage_samples)
+                    <= sum(row["full"] for row in coverage_samples)):
+                raise ValueError("mostly-resting recipe did not observe a majority of resting motion rows")
+            visible = visibility_summary(samples, process_rows, start, end)
+            if proof is None or not any(sample["tick"] == proof["source_tick"]
+                                        and sample["wall_start_unix_ns"] < epoch + offset for sample in samples):
+                raise ValueError("cold visibility proof lacks its exact pre-warmup core source-tick sample")
+            result["population"] = {**recipe["population"],
+                                    "resident_all_entities_min": min(row["resident_rows"] for row in coverage_samples),
+                                    "resident_observed_saved": sum(prepared["cohort"]["counts"].values()),
+                                    "active_observed_min": min(row["active"] for row in coverage_samples),
+                                    "admitted_observed_min": min(row["admitted"] for row in coverage_samples),
+                                    "motion_full_min": min(row["full"] for row in coverage_samples),
+                                    "motion_resting_min": min(row["resting"] for row in coverage_samples),
+                                    "active_chunks_min": min(row["active_chunks"] for row in coverage_samples),
+                                    "visible_unique_entities": proof["unique_tracked_entities"],
+                                    "visible_unique_scope": "bounded pre-warmup edge tracked-ID union, not measured-window visibility or delivery",
+                                    "visible_unique_proof": proof,
+                                    "visibility": visible,
+                                    "source_tick_samples": len(coverage_samples)}
+            if recipe.get("stress", {}).get("kind") == "projectiles":
+                peak = max(row["projectiles"] for row in coverage_samples)
+                requested = recipe["stress"]["requested_peak"]
+                if (requested == 0 and peak != 0) or (requested > 0 and peak < requested):
+                    raise ValueError(f"projectile owner peak {peak} does not satisfy requested {requested}")
+                result["stress"] = {**recipe["stress"], "projectile_candidates_peak": peak,
+                                    "scope": "source-tick peak flight candidates, not sustained concurrency"}
+            elif recipe.get("stress", {}).get("kind") == "xp-orbs":
+                peak = max(row["xp_orbs"] for row in coverage_samples)
+                projectile_peak = max(row["projectiles"] for row in coverage_samples)
+                requested = recipe["stress"]["requested_peak"]
+                if (requested == 0 and peak != 0) or (requested > 0 and peak < requested):
+                    raise ValueError(f"XP-orb owner peak {peak} does not satisfy requested {requested}")
+                result["stress"] = {**recipe["stress"], "xp_orbs_processed_peak": peak,
+                                    "all_active_orbs_peak": max(row["xp_orbs_global"] for row in coverage_samples),
+                                    "projectile_candidates_peak": projectile_peak,
+                                    "scope": "source-tick active owner bodies, not sustained concurrency"}
+            elif recipe.get("stress", {}).get("kind") == "brewing-containers":
+                progressing = max(row["brewing_progressing"] for row in coverage_samples)
+                if progressing < recipe["stress"]["requested_stands"]:
+                    raise ValueError("brewing owner did not advance every requested stand in one tick")
+                result["stress"] = {**recipe["stress"],
+                                    "discovered_min": min(row["brewing_discovered"] for row in coverage_samples),
+                                    "active_stands_min": min(row["brewing_active"] for row in coverage_samples),
+                                    "progressing_stands_peak": progressing}
+            elif recipe.get("stress", {}).get("kind") == "productive-npcs":
+                cells = {tuple(cell) for row in coverage_samples for cell in row["harvested_cells"]}
+                requested = recipe["stress"]["requested_workers"]
+                if len(cells) != requested:
+                    raise ValueError(f"observed {len(cells)} productive worker cells, expected {requested}")
+                result["stress"] = {**recipe["stress"], "productive_worker_cells_observed": len(cells),
+                                    "brain_candidates_min": min(row["brain_candidates"] for row in coverage_samples),
+                                    "brain_admitted_min": min(row["brain_admitted"] for row in coverage_samples),
+                                    "scope": "distinct isolated farmer crop cells changed in villager brain"}
+            elif recipe.get("stress", {}).get("kind") == "damage":
+                peak = max(row["damage_victims"] for row in coverage_samples)
+                if peak < recipe["stress"]["requested_victims"]:
+                    raise ValueError(f"accepted distinct damage victims peak {peak} below requested")
+                result["stress"] = {**recipe["stress"], "accepted_distinct_victims_peak": peak,
+                                    "accepted_reactive_pieces_total": sum(row["damage_reactive"] for row in coverage_samples),
+                                    "scope": "accepted grouped victims in one source tick"}
     finally:
         await session.stop()
         result["shutdown"] = session.shutdown
@@ -235,15 +885,26 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
             raise ValueError("requested active profile sent no movement")
         if args.profile in ("explore-3", "explore-20") and bots.get("chunk_boundaries_crossed", 0) == 0:
             raise ValueError("exploration did not cross a chunk boundary")
+        if recipe.get("stress", {}).get("commands"):
+            windows = bots.get("open_loop", {}).get("windows", [])
+            if (not windows or any(row.get("command", {}).get("writes_completed") !=
+                                   row.get("command", {}).get("offered") for row in windows)):
+                raise ValueError("fixture trigger commands were dropped")
+            measurement = next((row for row in windows if row.get("name") == "measurement"), {})
+            if measurement.get("command", {}).get("writes_completed", 0) == 0:
+                raise ValueError("fixture measurement sent no trigger command")
     snapshot = await compare.snapshot(args, directory, world, config)
     result["entity_counts_after"] = {kind: group["active"] for kind, group in snapshot["entities"].items()}
     after = compare.cohort(snapshot, recipe["expected"])
-    before = prepared["cohort"]
-    if before["identities"].keys() != after["identities"].keys():
-        raise ValueError("persistent fixture cohort changed identity")
+    validate_cohort(prepared["cohort"], after, recipe["expected"])
+    if recipe.get("stress", {}).get("kind") == "map-frames":
+        maps_after = validate_map_frames(snapshot, recipe["stress"]["requested_frames"])
+        if maps_after != validate_map_frames(prepared["snapshot"], recipe["stress"]["requested_frames"]):
+            raise ValueError("saved frame map identities changed during measurement")
+        result["stress"] = {**recipe["stress"], "saved_filled_map_frames": len(maps_after)}
     result["cohort_counts"] = after["counts"]
     result["status"] = "smoke" if args.smoke else "measured"
-    result["publication_evidence"] = not args.smoke
+    result["publication_evidence"] = not args.smoke and "coverage" not in recipe
     load.scale.dump(directory / "result.json", result)
     return result
 
@@ -258,20 +919,48 @@ async def run(args: argparse.Namespace) -> int:
     assert task
     asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, task.cancel)
     try:
+        if args.productive_npcs is not None:
+            raise ValueError("productive-npcs unavailable until CivSim 3/3 and brain owner callsites are integrated")
         result["host"] = host_receipt(args.out)
-        build = json.loads(args.build_receipt.read_text())
-        hashes = {"server_sha256": load.scale.binary_sha256(args.server_bin),
-                  "bots_sha256": load.scale.binary_sha256(args.bots_bin)}
-        if build.get("profile") != "release" or any(build.get(k) != v for k, v in hashes.items()):
-            raise ValueError("release build receipt does not match supplied binaries")
-        if not build.get("commit") or not build.get("command"):
-            raise ValueError("build receipt lacks commit or exact build command")
-        result["build"] = build
+        server_pin = pinned_binary(args.server_bin, "server")
+        bots_pin = pinned_binary(args.bots_bin, "bots")
+        if args.build_receipt.resolve() != args.server_bin.resolve().parent / "manifest.json":
+            raise ValueError("build receipt must be the server pin-release manifest")
+        if (server_pin["head"], server_pin["diff_sha256"]) != (bots_pin["head"], bots_pin["diff_sha256"]):
+            raise ValueError("server and bots pins identify different source trees")
+        hashes = {"server_sha256": server_pin["binary_sha256"],
+                  "bots_sha256": bots_pin["binary_sha256"]}
+        result["build"] = {"server": server_pin, "bots": bots_pin}
         result["registry"] = load.tree_hash(args.vanilla_data_dir)
-        recipe = fixture(args.mobs, args.villagers)
+        base_residents = (args.mobs - (args.productive_npcs or 0)
+                          - (args.damage_victims or 0) - (args.map_frames or 0))
+        recipe = (scale_fixture(base_residents, SCALE_PROFILES[args.profile][1],
+                                without_cows=args.damage_victims is not None)
+                  if args.profile in SCALE_PROFILES else fixture(args.mobs, args.villagers))
+        if args.projectiles is not None:
+            add_projectile_fixture(recipe, args.projectiles, smoke=args.smoke)
+        if args.xp_orbs is not None:
+            add_xp_fixture(recipe, args.xp_orbs, smoke=args.smoke)
+        if args.containers is not None:
+            add_brewing_fixture(recipe, args.containers)
+        if args.productive_npcs is not None:
+            add_productive_fixture(recipe, args.productive_npcs, smoke=args.smoke)
+        if args.damage_victims is not None:
+            add_damage_fixture(recipe, args.damage_victims, smoke=args.smoke)
+        if args.map_frames is not None:
+            add_map_frame_fixture(recipe, args.map_frames, smoke=args.smoke)
+        if "coverage" in recipe:
+            args.clients = sum(row["active"] for row in recipe["coverage"])
+            result["conditions"]["clients"] = args.clients
+            result["noncanonical"] = True
+            result["recipe_sha256"] = load.digest(recipe)
+            result["population"] = recipe["population"]
         load.scale.dump(args.out / "fixture.json", recipe)
         key = compare.fixture_cache_key(args, recipe, result["registry"]["sha256"])
         world, prepared = await compare.prepare(args, args.out / "prepare", recipe, key, hashes)
+        validate_prepared(recipe, prepared)
+        if args.map_frames is not None:
+            result["saved_filled_map_frames_before"] = len(validate_map_frames(prepared["snapshot"], args.map_frames))
         result["fixture_cache"] = prepared["fixture_cache"]
         result["entity_counts_before"] = {kind: group["active"] for kind, group in prepared["snapshot"]["entities"].items()}
         if args.prepare_only:
@@ -279,7 +968,11 @@ async def run(args: argparse.Namespace) -> int:
         else:
             result["measurement"] = await measure(args, args.out / "run", world, recipe, prepared)
             result["status"] = "smoke" if args.smoke else "measured"
-            result["publication_evidence"] = not args.smoke
+            result["publication_evidence"] = not args.smoke and "coverage" not in recipe
+    except ColdVisibilityUnavailable as error:
+        result["status"] = "blocked"
+        result["error"] = f"{type(error).__name__}: {error}"
+        result["cold_visibility_proof"] = error.proof
     except (Exception, asyncio.CancelledError) as error:
         result["error"] = f"{type(error).__name__}: {error}"
     finally:
@@ -306,7 +999,7 @@ async def run(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("profile", choices=PROFILES)
+    parser.add_argument("profile", choices=(*PROFILES, *SCALE_PROFILES))
     parser.add_argument("--server-bin", type=Path, required=True)
     parser.add_argument("--bots-bin", type=Path, required=True)
     parser.add_argument("--build-receipt", type=Path, required=True)
@@ -336,8 +1029,62 @@ def main() -> int:
                         help="populate/reuse the fixture cache without measuring; never a performance receipt")
     parser.add_argument("--smoke", action="store_true",
                         help="2s warmup + 5s measurement at full population; lifecycle only, never publication evidence")
+    parser.add_argument("--smoke-residents", type=int,
+                        help="smaller noncanonical resident cohort for --smoke only")
+    stress = parser.add_mutually_exclusive_group()
+    stress.add_argument("--projectiles", type=int,
+                        help="noncanonical projectile peak: 0, 100 or 1000 (smoke may use smaller counts)")
+    stress.add_argument("--xp-orbs", type=int,
+                        help="noncanonical active XP-orb peak: 0, 10000 or 100000 (smoke may use smaller counts)")
+    stress.add_argument("--containers", type=int,
+                        help="brewing discovery load: 1000 or 100000 containers (smoke may use smaller counts)")
+    stress.add_argument("--productive-npcs", type=int,
+                        help="productive farmers: 0, 1000 or 10000 (smoke may use smaller counts)")
+    stress.add_argument("--damage-victims", type=int,
+                        help="distinct accepted projectile victims: 1, 1000, 10000 or 100000")
+    stress.add_argument("--map-frames", type=int,
+                        help="saved filled-map frames: 0, 10000 or 100000 (smoke may use smaller counts)")
     args = parser.parse_args()
-    args.clients, args.mobs, args.villagers, args.view_distance = PROFILES[args.profile]
+    if args.profile in SCALE_PROFILES:
+        if args.remote_host:
+            parser.error("scale telemetry requires a local server")
+        if args.smoke_residents is not None and not args.smoke:
+            parser.error("--smoke-residents requires --smoke")
+        args.clients, args.mobs, args.villagers, args.view_distance = (
+            0, args.smoke_residents if args.smoke_residents is not None else SCALE_PROFILES[args.profile][0], 0, 6)
+        if args.mobs < 10:
+            parser.error("scale population must be at least 10")
+        if args.projectiles is not None and (
+                args.projectiles < 0 or args.projectiles > 1000
+                or not args.smoke and args.projectiles not in (0, 100, 1000)):
+            parser.error("projectiles must be 0, 100 or 1000 except in smoke")
+        if args.xp_orbs is not None and (
+                args.xp_orbs < 0 or args.xp_orbs > 100000
+                or not args.smoke and args.xp_orbs not in (0, 10000, 100000)):
+            parser.error("XP-orbs must be 0, 10000 or 100000 except in smoke")
+        if args.containers is not None and (
+                args.containers < 1 or args.containers > 100000
+                or not args.smoke and args.containers not in (1000, 100000)):
+            parser.error("containers must be 1000 or 100000 except in smoke")
+        if args.productive_npcs is not None and (
+                args.productive_npcs < 0 or args.productive_npcs > min(10000, args.mobs - 10)
+                or not args.smoke and args.productive_npcs not in (0, 1000, 10000)):
+            parser.error("productive-npcs must be 0, 1000 or 10000 and leave at least 10 mobs")
+        if args.damage_victims is not None and (
+                args.damage_victims < 1 or args.damage_victims > min(100000, args.mobs)
+                or not args.smoke and args.damage_victims not in (1, 1000, 10000, 100000)):
+            parser.error("damage-victims must be 1, 1000, 10000 or 100000 and not exceed residents")
+        if args.map_frames is not None and (
+                args.map_frames < 0 or args.map_frames > min(100000, args.mobs)
+                or not args.smoke and args.map_frames not in (0, 10000, 100000)):
+            parser.error("map-frames must be 0, 10000 or 100000 and not exceed residents")
+    else:
+        if args.smoke_residents is not None:
+            parser.error("--smoke-residents requires a scale profile")
+        if any(value is not None for value in (args.projectiles, args.xp_orbs, args.containers,
+                                                args.productive_npcs, args.damage_victims, args.map_frames)):
+            parser.error("stress fixtures require a scale profile")
+        args.clients, args.mobs, args.villagers, args.view_distance = PROFILES[args.profile]
     args.seed, args.prepare_concurrency = 42, 3
     if min(args.warmup_seconds, args.measure_seconds, args.readiness_seconds, args.max_rss_mb) <= 0:
         parser.error("durations and RSS guard must be positive")

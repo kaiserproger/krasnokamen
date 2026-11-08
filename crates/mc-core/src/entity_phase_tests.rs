@@ -1209,6 +1209,70 @@ fn idle_wander_decision_proof_keeps_air_support_and_goal_changes_live() {
 }
 
 #[test]
+fn idle_cow_ignores_non_food_but_wakes_for_food_in_either_hand() {
+    let (mut state, slot) = resting_cow();
+    let _ = run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(995),
+            uuid: uuid::Uuid::from_u128(995),
+            name: "rest-food".to_owned(),
+            permission_level: 0,
+        }],
+    );
+    let player = *state.players.keys().next().unwrap();
+    let cow = state.entities.body(slot).id;
+    state.entities.set_vel(slot, [0.0; 3]);
+    state.entities.set_ground(slot, true);
+    state.tick = (1..120)
+        .find(|&tick| {
+            crate::entity_motion::wander(state.entities.body(slot).movement, cow.0, tick, 1.0)
+                == [0.0; 3]
+        })
+        .unwrap();
+    state.entity_phase_revision = state.world.revision_now();
+    state.entities.prepare_motion_hints(&state.registry);
+    let item = |name| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap()
+    };
+    let dirt = item("minecraft:dirt");
+    let wheat = item("minecraft:wheat");
+    for hand in [Hand::Main, Hand::Off] {
+        let index = held_slot_index(&state.players[&player], hand);
+        state.players.get_mut(&player).unwrap().inventory.slots[index] =
+            mc_data::ItemStack::new(dirt, 1);
+        let view = PrepView::of(&state);
+        assert!(!view.has_tempting_items);
+        assert!(early_entity_rest(
+            &view,
+            slot,
+            1,
+            state.entity_phase_revision,
+            true,
+            true
+        ));
+        state.players.get_mut(&player).unwrap().inventory.slots[index] =
+            mc_data::ItemStack::new(wheat, 1);
+        let view = PrepView::of(&state);
+        assert!(view.has_tempting_items);
+        assert!(!early_entity_rest(
+            &view,
+            slot,
+            1,
+            state.entity_phase_revision,
+            true,
+            true
+        ));
+        state.players.get_mut(&player).unwrap().inventory.slots[index] =
+            mc_data::ItemStack::new(dirt, 1);
+    }
+}
+
+#[test]
 fn targetless_chaser_decision_rest_keeps_all_target_classes_live() {
     for species in [
         "minecraft:skeleton",

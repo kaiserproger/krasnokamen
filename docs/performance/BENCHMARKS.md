@@ -44,14 +44,10 @@ session, or root) for the memory cap, and the imported 26.3 content cache
 For comparable runs use the `performance` CPU governor (`cpupower frequency-set -g performance`);
 the governor is recorded.
 
-Build once (the bench never builds), non-PGO release, exactly as in
-[PROFILES.md](PROFILES.md#build-once-and-retain-provenance):
-
-```sh
-CARGO_TARGET_DIR=<dir> cargo build --release --locked --bin solaris-v2 --bin player-scale-bots -j 2
-```
-
-On the owner host use immutable pins instead of retaining pooled build paths:
+Build and pin once (the bench never builds), as in
+[PROFILES.md](PROFILES.md#build-once-and-retain-provenance). Profile workloads
+require `pin-release` manifests for the server and bots from the same source tree;
+un-pinned release binaries and hand-written build receipts are rejected.
 
 ```sh
 export "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /absolute/core/tree)"
@@ -59,12 +55,12 @@ export "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-releas
 python3 -m tools.bench weak-hw --server-bin "$SOLARIS_SERVER_BINARY" --bots-bin "$SOLARIS_BOTS_BINARY"
 ```
 
-The pin manifest distinguishes binary kind and Rust target; `--target` also
-supports the Windows software-renderer repro without reusing a host executable.
-
-Defaults: `--server-bin`/`--bots-bin` = `$CARGO_TARGET_DIR/release/…` or `./target/release/…`.
+The pin manifest distinguishes binary kind and Rust target. Profile commands
+read `$SOLARIS_SERVER_BINARY` and `$SOLARIS_BOTS_BINARY` by default, or accept
+their paths via `--server-bin` and `--bots-bin`. The source commit and dirty
+state come from the manifests, not the current checkout.
 Results go to a new `.analysis/bench/<UTC>-<command>-<pid>/` (`--out` to choose; never overwritten):
-`result.json`, `result.md`, `build-receipt.json`, per-run receipts under `runs/` (the full
+`result.json`, `result.md`, and per-run receipts under `runs/` (the full
 `tools.coreperf.profiles` receipt: `samples.jsonl`, bot reports, server config, logs).
 
 On the shared agent host wrap any invocation in `tools/dev/mem-run.sh -x -m 6G`
@@ -172,9 +168,7 @@ open-loop schedule, exact `/load-metrics` ticks, cohort check after the run).
 ```sh
 python3 -m tools.bench vps --host root@203.0.113.7 \
     --remote-data-dir /opt/solaris/.local/share/solaris/content/26.3 \
-    --server-bin target/release/solaris-v2 --bots-bin target/release/player-scale-bots
-# 26.3 / release tarball server instead of --server-bin:
-#   --server-tarball solaris-x86_64-unknown-linux-gnu.tar.gz
+    --server-bin "$SOLARIS_SERVER_BINARY" --bots-bin "$SOLARIS_BOTS_BINARY"
 # options: --ssh-options="-p 2222 -i KEY" (use `=`: the value starts with a dash)  --cores 2  --memory none
 #          --profiles idle,explore-20
 #          --worldgen-radius 256  --game-port 25590 --dash-port 25591  --bot-cpus 4-7  --tunnel-game
@@ -281,7 +275,7 @@ evidence: run the ladder on the build you are asking about before citing capacit
 
 ## Smoke checks (pipeline proof, not numbers)
 
-`--smoke` shrinks windows to 5 s warmup + 25 s, uses the cheap defaults (`idle,explore-20`,
+`--smoke` shrinks windows to 2 s warmup + 5 s, uses the cheap defaults (`idle,explore-20`,
 `scaling` on `explore-20` at 1,2 CPUs, a 64-block worldgen square) and marks the result not
 publishable.
 

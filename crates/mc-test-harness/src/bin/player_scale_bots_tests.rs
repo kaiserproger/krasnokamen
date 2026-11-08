@@ -68,6 +68,7 @@ fn terrain_bot(x: f64, y: i16, z: f64, direction: u32) -> Bot {
                         walkable: true,
                     }; 256],
                     platform_cells: None,
+                    setup_cells: None,
                 },
             );
         }
@@ -584,6 +585,7 @@ fn farmer_astar_reaches_distant_goal_without_exhausting_open_area() -> Result<()
                         walkable: true,
                     }; 256],
                     platform_cells: None,
+                    setup_cells: None,
                 },
             );
         }
@@ -944,6 +946,7 @@ async fn public_save_feedback_accepts_success_and_refuses_failure() -> Result<()
         bot.commands = Arc::new(CommandSchedule {
             setup: vec!["save-all flush".into()],
             recurring: Vec::new(),
+            ..Default::default()
         });
         let (mut client, _peer, _buffer) = connection().await?;
         let component = |text: &str| {
@@ -1389,6 +1392,24 @@ fn landing_requires_received_walkable_supported_target() {
     assert_eq!(bot.landing_height(0, 0), None);
 }
 
+#[test]
+fn setup_terrain_updates_reveal_lower_received_floor_and_clearance() {
+    let mut bot = terrain_bot(19.5, 67, 45.5, 0);
+    let surface = bot.surfaces.get_mut(&(1, 2)).unwrap();
+    surface.setup_cells = Some(vec![0; HEIGHT * 256].into_boxed_slice());
+    let pos = |y| pack_block_pos(19, y, 45);
+    bot.update(pos(63), 1, "test", None);
+    bot.update(pos(66), 1, "test", None);
+    assert_eq!(bot.landing_height(19, 45), Some(67));
+    bot.update(pos(66), 0, "test", None);
+    assert_eq!(bot.landing_height(19, 45), Some(64));
+    bot.update(pos(63), 0, "test", None);
+    assert_eq!(bot.landing_height(19, 45), None);
+    bot.update(pos(63), 1, "test", None);
+    bot.update(pos(68), 1, "test", None);
+    assert_eq!(bot.landing_height(19, 45), Some(69));
+}
+
 #[tokio::test]
 async fn one_bot_uses_another_valid_direction_without_replaying_slots() -> Result<()> {
     let mut bot = terrain_bot(0.5, 64, 0.5, 0);
@@ -1531,6 +1552,7 @@ fn platform_proof_requires_all_five_real_grass_and_clearance_columns() -> Result
                 z,
                 columns,
                 platform_cells: Some([1, 0, 0]),
+                setup_cells: None,
             },
         );
     }
@@ -1578,6 +1600,10 @@ fn platform_cells_decode_from_sections_not_advertised_heightmaps() -> Result<()>
         && column.below == 1
         && column.walkable));
     assert_eq!(surface.platform_cells, Some([1, 0, 0]));
+    let setup_surface = read_surface_mechanics(&body, &bot.facts, None, true)?;
+    let cells = setup_surface.setup_cells.unwrap();
+    assert_eq!(cells[(63 - MIN_Y) as usize * 256], 1);
+    assert_eq!(cells[(64 - MIN_Y) as usize * 256], 0);
     Ok(())
 }
 

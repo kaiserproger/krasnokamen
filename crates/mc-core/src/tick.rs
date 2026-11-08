@@ -39,6 +39,7 @@ mod death_message;
 mod elytra;
 mod entity_lifecycle;
 mod entity_phase;
+pub(crate) use entity_phase::coreperf_block_region;
 mod hydration;
 mod residency;
 pub(crate) use hydration::{refuse_record, sync_chunk_block_entities};
@@ -1420,6 +1421,7 @@ fn run_dimension_tick_inner<'a>(
         crate::mob_lanes::snowballs(state);
     }
     let entity_intents = run_entity_phase(state, sim);
+    let mut coreperf = state.entity_phase_scratch.coreperf.take();
     let entity_time = entity_start.elapsed();
     let entity_tail_start = std::time::Instant::now();
     intents.extend(entity_intents);
@@ -1471,7 +1473,16 @@ fn run_dimension_tick_inner<'a>(
         crate::redstone::run(state, &mut block_writes, &mut popped_drops);
         crate::command_blocks::run(state, &mut changes);
         crate::jukebox::run(state, &mut block_writes, &mut popped_drops);
-        crate::brewing::run(state, &mut block_writes, &mut popped_drops);
+        if let Some(sample) = &mut coreperf {
+            crate::brewing::run_counted(
+                state,
+                &mut block_writes,
+                &mut popped_drops,
+                Arc::get_mut(sample).expect("coreperf sample is not shared before publication"),
+            );
+        } else {
+            crate::brewing::run(state, &mut block_writes, &mut popped_drops);
+        }
         crate::crafter::run(state);
     }
     crate::shelf::run(state);
@@ -1516,7 +1527,16 @@ fn run_dimension_tick_inner<'a>(
     let commit_write_start = state.merge_block_writes.len();
     #[cfg(test)]
     let effects_start = crate::horde_bench::merge_cost_tests::start();
-    let (deaths, mut events, spawned_drops, committed_removals) = state.commit_merge_effects();
+    let (deaths, mut events, spawned_drops, committed_removals) =
+        if let Some(sample) = &mut coreperf {
+            let sample =
+                Arc::get_mut(sample).expect("coreperf sample is not shared before publication");
+            state.commit_merge_effects_observed(Some(&mut |state, slot, observation| {
+                entity_phase::coreperf_damage_observation(sample, state, slot, observation);
+            }))
+        } else {
+            state.commit_merge_effects()
+        };
     #[cfg(test)]
     crate::horde_bench::merge_cost_tests::record(effects_start, |probe, ns| {
         probe.effects_ns += ns;
@@ -1546,7 +1566,16 @@ fn run_dimension_tick_inner<'a>(
         .entities_spawned
         .append(&mut state.projectiles.spawned);
     if sim {
-        crate::experience_orbs::run(state, &mut changes, &mut events);
+        if let Some(sample) = &mut coreperf {
+            crate::experience_orbs::run_counted(
+                state,
+                &mut changes,
+                &mut events,
+                Arc::get_mut(sample).expect("coreperf sample is not shared before publication"),
+            );
+        } else {
+            crate::experience_orbs::run(state, &mut changes, &mut events);
+        }
     }
     changes.explosions.append(&mut state.hostile.explosions);
     events.append(&mut state.hostile.events);
@@ -1566,7 +1595,13 @@ fn run_dimension_tick_inner<'a>(
     // sharing the global tick budget with its own telemetry phase.
     let allocator_us = if sim {
         let allocator_us = crate::settlements::tick(state, &mut changes);
+        let crop_start = coreperf.as_ref().map(|_| changes.blocks.len());
         crate::villager::brain::tick(state, &mut changes);
+        if let (Some(sample), Some(crop_start)) = (&mut coreperf, crop_start) {
+            let sample =
+                Arc::get_mut(sample).expect("coreperf sample is not shared before publication");
+            entity_phase::coreperf_productive_changes(&changes.blocks[crop_start..], sample);
+        }
         allocator_us
     } else {
         0
@@ -1793,6 +1828,7 @@ fn run_dimension_tick_inner<'a>(
         snapshot_us: snapshot_time.as_micros() as u64,
         views_us: views_time.as_micros() as u64,
         publish_us: publish_tail_time.as_micros() as u64,
+        coreperf,
         total_us: 0,
         ..Default::default()
     };

@@ -26,6 +26,7 @@
 
 use std::collections::VecDeque;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -138,6 +139,23 @@ pub struct PluginStats {
     pub command_results: u64,
 }
 
+/// Opt-in edge-plan observation. Pairs are not distinct entities or delivery acknowledgements.
+#[derive(Debug, Clone, Serialize)]
+pub struct CorePerfVisibility {
+    pub source_tick: u64,
+    pub tracked_entity_viewer_pairs: usize,
+}
+
+/// One bounded, opt-in pre-measurement union of server-side tracked identities.
+#[derive(Debug, Clone, Serialize)]
+pub struct CorePerfVisibilityProof {
+    pub source_tick: u64,
+    pub viewers: usize,
+    pub tracked_entity_viewer_pairs: usize,
+    pub unique_tracked_entities: Option<usize>,
+    pub pair_limit: usize,
+}
+
 /// The complete `/stats` payload.
 #[derive(Debug, Clone, Serialize)]
 pub struct StatsSnapshot {
@@ -165,6 +183,10 @@ pub struct StatsSnapshot {
     pub chunks: DashboardChunks,
     /// Entity population totals.
     pub entities: DashboardEntities,
+    /// Most recent opt-in fanout observation; tagged with its own source tick.
+    pub coreperf_visibility: Option<CorePerfVisibility>,
+    /// Most recent requested cold proof, not a client-delivery acknowledgement.
+    pub coreperf_visibility_proof: Option<CorePerfVisibilityProof>,
     /// Network counters.
     pub network: DashboardNetwork,
     /// Absent when no production component deployment is configured.
@@ -197,13 +219,14 @@ pub struct LoadPhaseTimes {
 }
 
 /// A completed active core iteration, distinct from edge fanout.
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct LoadTickSample {
     pub tick: u64,
     pub wall_start_unix_ns: u64,
     pub wall_us: u64,
     pub total_us: u64,
     pub phase_us: LoadPhaseTimes,
+    pub coreperf: Option<std::sync::Arc<mc_core::boundary::CorePerfTick>>,
 }
 
 /// Real send-channel gauges. `capacity()`, unlike a receiver length, includes
@@ -276,6 +299,9 @@ pub struct DashboardState {
     load_changed: Notify,
     queue_source: OnceLock<Arc<ConnectionRegistry>>,
     plugin_source: OnceLock<Arc<mc_core::Core>>,
+    /// Idle=0, queued=1, consumed=2; disabled=u8::MAX.
+    coreperf_visibility_requested: AtomicU8,
+    coreperf_visibility_changed: Notify,
     metrics_bearer_token: OnceLock<String>,
 }
 
@@ -293,6 +319,8 @@ struct StateInner {
     pump_skipped_ticks: u64,
     chunks: DashboardChunks,
     entities: DashboardEntities,
+    coreperf_visibility: Option<CorePerfVisibility>,
+    coreperf_visibility_proof: Option<CorePerfVisibilityProof>,
     network: DashboardNetwork,
     warnings: Vec<String>,
 }
@@ -311,6 +339,8 @@ impl DashboardState {
                 pump_skipped_ticks: 0,
                 chunks: DashboardChunks::default(),
                 entities: DashboardEntities::default(),
+                coreperf_visibility: None,
+                coreperf_visibility_proof: None,
                 network: DashboardNetwork::default(),
                 warnings: Vec::new(),
             }),
@@ -326,11 +356,19 @@ impl DashboardState {
             queue_source: OnceLock::new(),
             plugin_source: OnceLock::new(),
             metrics_bearer_token: OnceLock::new(),
+            coreperf_visibility_requested: AtomicU8::new(
+                if std::env::var_os("SOLARIS_COREPERF_REGIONS").is_some() {
+                    0
+                } else {
+                    u8::MAX
+                },
+            ),
+            coreperf_visibility_changed: Notify::new(),
         }
     }
 
-    /// Require this token for the Prometheus scrape endpoint. An absent token
-    /// intentionally preserves the dashboard's local, unauthenticated default.
+    /// Protect Prometheus scraping and opt-in coreperf capture with this token.
+    /// Without a token, only scraping retains the local unauthenticated default.
     pub fn set_metrics_bearer_token(&self, token: Option<String>) {
         if let Some(token) = token.filter(|token| !token.is_empty()) {
             let _ = self.metrics_bearer_token.set(token);
@@ -389,6 +427,7 @@ impl DashboardState {
             wall_start_unix_ns: times.wall_start_unix_ns,
             wall_us: times.wall_us,
             total_us: times.total_us,
+            coreperf: times.coreperf,
             phase_us: LoadPhaseTimes {
                 input_us: times.input_us,
                 chunks_us: times.chunks_us,
@@ -446,7 +485,7 @@ impl DashboardState {
                 .samples
                 .iter()
                 .filter(|sample| after_tick.is_none_or(|after| sample.tick > after))
-                .copied()
+                .cloned()
                 .collect(),
             queues: None,
         };
@@ -514,6 +553,37 @@ impl DashboardState {
         }
     }
 
+    pub(crate) fn record_coreperf_visibility(&self, tick: u64, pairs: usize) {
+        self.inner.lock().coreperf_visibility = Some(CorePerfVisibility {
+            source_tick: tick,
+            tracked_entity_viewer_pairs: pairs,
+        });
+    }
+
+    pub(crate) fn take_coreperf_visibility_request(&self) -> bool {
+        self.coreperf_visibility_requested
+            .compare_exchange(1, 2, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+
+    pub(crate) fn record_coreperf_visibility_proof(&self, proof: CorePerfVisibilityProof) {
+        self.inner.lock().coreperf_visibility_proof = Some(proof);
+        self.coreperf_visibility_changed.notify_waiters();
+    }
+
+    async fn wait_for_coreperf_visibility_proof(&self) -> CorePerfVisibilityProof {
+        let notified = self.coreperf_visibility_changed.notified();
+        tokio::pin!(notified);
+        loop {
+            notified.as_mut().enable();
+            if let Some(proof) = self.inner.lock().coreperf_visibility_proof.clone() {
+                return proof;
+            }
+            notified.as_mut().await;
+            notified.set(self.coreperf_visibility_changed.notified());
+        }
+    }
+
     /// Count core ticks the pump skipped after a `broadcast` lag.
     pub fn record_pump_skipped(&self, ticks: u64) {
         let mut inner = self.inner.lock();
@@ -545,6 +615,8 @@ impl DashboardState {
             publish,
             chunks: inner.chunks.clone(),
             entities: inner.entities.clone(),
+            coreperf_visibility: inner.coreperf_visibility.clone(),
+            coreperf_visibility_proof: inner.coreperf_visibility_proof.clone(),
             network: inner.network.clone(),
             plugin: self.plugin_snapshot(),
             autoscale: false,
@@ -677,6 +749,57 @@ where
         return;
     }
     match request.path.as_str() {
+        "/coreperf-visibility-proof"
+            if state.coreperf_visibility_requested.load(Ordering::Acquire) != u8::MAX =>
+        {
+            if state.metrics_bearer_token.get().is_none()
+                || !state.metrics_authorized(request.bearer_token.as_deref())
+            {
+                let _ =
+                    write_response(stream, "401 Unauthorized", "text/plain", b"unauthorized").await;
+                return;
+            }
+            if state
+                .coreperf_visibility_requested
+                .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
+                .is_err()
+            {
+                let _ = write_response(
+                    stream,
+                    "409 Conflict",
+                    "text/plain",
+                    b"capture already requested",
+                )
+                .await;
+                return;
+            }
+            let Ok(proof) = tokio::time::timeout(
+                LOAD_WAIT_TIMEOUT,
+                state.wait_for_coreperf_visibility_proof(),
+            )
+            .await
+            else {
+                let _ = write_response(
+                    stream,
+                    "504 Gateway Timeout",
+                    "text/plain",
+                    b"capture deadline expired",
+                )
+                .await;
+                return;
+            };
+            let Ok(body) = serde_json::to_vec(&proof) else {
+                let _ = write_response(
+                    stream,
+                    "500 Internal Server Error",
+                    "text/plain",
+                    b"encode error",
+                )
+                .await;
+                return;
+            };
+            let _ = write_response(stream, "200 OK", "application/json", &body).await;
+        }
         "/stats" => {
             let snapshot = state.snapshot();
             let Ok(body) = serde_json::to_vec(&snapshot) else {
@@ -922,9 +1045,10 @@ fn prometheus(state: &DashboardState) -> String {
     if let Some(bytes) = resident_memory_bytes() {
         prometheus_gauge(&mut out, "solaris_process_resident_memory_bytes", bytes);
     }
-    if let Some(sample) = state
-        .load_snapshot(None)
-        .and_then(|metrics| metrics.samples.last().copied())
+    let load_metrics = state.load_snapshot(None);
+    if let Some(sample) = load_metrics
+        .as_ref()
+        .and_then(|metrics| metrics.samples.last())
     {
         for (phase, value) in [
             ("input", sample.phase_us.input_us),
@@ -1043,6 +1167,72 @@ mod tests {
     }
 
     #[test]
+    fn visibility_observation_keeps_its_own_source_tick() {
+        let state = test_state();
+        state.record_pump_tick(PumpTick {
+            tick: 42,
+            ..Default::default()
+        });
+        state.record_coreperf_visibility(41, 11);
+        let snapshot = state.snapshot();
+        assert_eq!(snapshot.simulation_tick, 42);
+        let visible = snapshot.coreperf_visibility.unwrap();
+        assert_eq!(visible.source_tick, 41);
+        assert_eq!(visible.tracked_entity_viewer_pairs, 11);
+    }
+
+    #[test]
+    fn visibility_capture_is_one_shot_per_dashboard_lifetime() {
+        let state = test_state();
+        assert!(
+            state
+                .coreperf_visibility_requested
+                .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+        );
+        assert!(state.take_coreperf_visibility_request());
+        assert!(!state.take_coreperf_visibility_request());
+        assert!(
+            state
+                .coreperf_visibility_requested
+                .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn load_sample_retains_exact_coreperf_tick_and_region_counts() {
+        let state = test_state();
+        let coverage = mc_core::boundary::CorePerfTick {
+            tick: 41,
+            resident_entities: 12,
+            xp_orbs_processed: 0,
+            regions: vec![mc_core::boundary::CorePerfRegion {
+                region: 7,
+                active_chunks: 16,
+                motion_admitted: 12,
+                motion_full: 5,
+                motion_resting: 7,
+                projectile_candidates: 0,
+            }],
+            ..Default::default()
+        };
+        state.record_load_tick(
+            41,
+            TickTimes {
+                coreperf: Some(Arc::new(coverage)),
+                ..Default::default()
+            },
+        );
+        let snapshot = state.load_snapshot(None).unwrap();
+        let json = serde_json::to_value(&snapshot.samples[0]).unwrap();
+        assert_eq!(json["tick"], 41);
+        assert_eq!(json["coreperf"]["tick"], 41);
+        assert_eq!(json["coreperf"]["regions"][0]["region"], 7);
+        assert_eq!(json["coreperf"]["regions"][0]["motion_admitted"], 12);
+    }
+
+    #[test]
     fn load_samples_preserve_source_times_and_gaps_without_changing_stats() {
         let state = test_state();
         let times = TickTimes {
@@ -1065,14 +1255,15 @@ mod tests {
             generated_us: 24,
             owner_pre_us: 25,
             owner_post_us: 26,
+            coreperf: None,
         };
-        state.record_load_tick(41, times);
+        state.record_load_tick(41, times.clone());
         state.record_load_skipped(2);
         state.record_load_tick(
             44,
             TickTimes {
                 wall_start_unix_ns: times.wall_start_unix_ns + 987_654_321,
-                ..times
+                ..times.clone()
             },
         );
         let snapshot = state.load_snapshot(Some(40)).unwrap();
@@ -1123,7 +1314,7 @@ mod tests {
         let state = test_state();
         state.record_load_tick(1, TickTimes::default());
         let snapshot = state.load_snapshot(None).unwrap();
-        let value = serde_json::to_value(snapshot.samples[0]).unwrap();
+        let value = serde_json::to_value(&snapshot.samples[0]).unwrap();
         for phase in [
             "input_us",
             "chunks_us",
@@ -1459,5 +1650,98 @@ mod tests {
             let text = String::from_utf8(out).unwrap();
             assert!(text.starts_with(&format!("HTTP/1.1 {status}")), "{text}");
         }
+    }
+
+    #[tokio::test]
+    async fn coreperf_capture_authorizes_before_consumption_and_waits_for_publication() {
+        let state = test_state();
+        state
+            .coreperf_visibility_requested
+            .store(u8::MAX, Ordering::Release);
+        let (mut client, mut server) = duplex(8192);
+        client
+            .write_all(b"GET /coreperf-visibility-proof HTTP/1.1\r\nHost: x\r\n\r\n")
+            .await
+            .unwrap();
+        serve_connection(&mut server, &state).await;
+        drop(server);
+        let mut out = Vec::new();
+        client.read_to_end(&mut out).await.unwrap();
+        assert!(out.starts_with(b"HTTP/1.1 404 Not Found"));
+
+        state
+            .coreperf_visibility_requested
+            .store(0, Ordering::Release);
+        for (token, configured) in [(Some("secret"), false), (None, true), (Some("wrong"), true)] {
+            if configured {
+                state.set_metrics_bearer_token(Some("secret".into()));
+            }
+            let (mut client, mut server) = duplex(8192);
+            let auth = token
+                .map(|token| format!("Authorization: Bearer {token}\r\n"))
+                .unwrap_or_default();
+            client
+                .write_all(
+                    format!("GET /coreperf-visibility-proof HTTP/1.1\r\nHost: x\r\n{auth}\r\n")
+                        .as_bytes(),
+                )
+                .await
+                .unwrap();
+            serve_connection(&mut server, &state).await;
+            drop(server);
+            let mut out = Vec::new();
+            client.read_to_end(&mut out).await.unwrap();
+            assert!(out.starts_with(b"HTTP/1.1 401 Unauthorized"));
+            assert_eq!(
+                state.coreperf_visibility_requested.load(Ordering::Acquire),
+                0
+            );
+        }
+
+        let (mut client, mut server) = duplex(8192);
+        client.write_all(b"GET /coreperf-visibility-proof HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer secret\r\n\r\n").await.unwrap();
+        tokio::join!(
+            biased;
+            serve_connection(&mut server, &state),
+            async {
+                assert!(state.take_coreperf_visibility_request());
+                state.record_coreperf_visibility_proof(CorePerfVisibilityProof {
+                    source_tick: 77,
+                    viewers: 2,
+                    tracked_entity_viewer_pairs: 8,
+                    unique_tracked_entities: Some(5),
+                    pair_limit: 1_000_000,
+                });
+            }
+        );
+        drop(server);
+        let mut out = Vec::new();
+        client.read_to_end(&mut out).await.unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.starts_with("HTTP/1.1 200 OK"));
+        let proof: serde_json::Value =
+            serde_json::from_str(text.split_once("\r\n\r\n").unwrap().1).unwrap();
+        assert_eq!(proof["source_tick"], 77);
+        assert_eq!(proof["viewers"], 2);
+        assert_eq!(proof["unique_tracked_entities"], 5);
+        assert!(!state.take_coreperf_visibility_request());
+
+        let (mut client, mut server) = duplex(8192);
+        client.write_all(b"GET /coreperf-visibility-proof HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer secret\r\n\r\n").await.unwrap();
+        serve_connection(&mut server, &state).await;
+        drop(server);
+        let mut out = Vec::new();
+        client.read_to_end(&mut out).await.unwrap();
+        assert!(out.starts_with(b"HTTP/1.1 409 Conflict"));
+        assert_eq!(
+            state
+                .inner
+                .lock()
+                .coreperf_visibility_proof
+                .as_ref()
+                .unwrap()
+                .source_tick,
+            77
+        );
     }
 }

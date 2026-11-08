@@ -216,16 +216,6 @@ def source_record(server_bin: Path, bots_bin: Path | None, commit_override: str 
     return record
 
 
-def write_build_receipt(path: Path, source: dict[str, Any], build_command: list[str]) -> Path:
-    """The receipt `tools.coreperf.profiles` demands: release profile, hashes, commit, command."""
-    receipt = {"profile": "release", "commit": source["commit"], "command": build_command,
-               "rustc": run_text(["rustc", "-Vv"]), "server_sha256": source["server_sha256"],
-               "bots_sha256": source.get("bots_sha256"),
-               "note": "written by tools.bench from the supplied binaries; not a build log"}
-    path.write_text(json.dumps(receipt, indent=2) + "\n")
-    return path
-
-
 # --- output -----------------------------------------------------------------
 
 def fmt(value: Any, digits: int = 1) -> str:

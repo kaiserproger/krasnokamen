@@ -156,6 +156,176 @@ async fn queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer() {
     );
 }
 
+#[test]
+fn setup_world_fence_follows_queued_geometry_and_a_later_tick() {
+    use mc_protocol::packets::play::{BlockUpdate, ClientboundCustomPayload};
+    use mc_protocol::packets::{CustomPayload, Packet};
+    let (server, dir) = fixture();
+    let id = server.connections.joining_id();
+    let (reliable_tx, mut reliable_rx) = mpsc::channel(4);
+    let (world_tx, mut world_rx) = mpsc::channel(4);
+    server
+        .connections
+        .register(
+            id,
+            ConnectionHandles {
+                reliable_tx: reliable_tx.clone(),
+                world_tx: world_tx.clone(),
+            },
+        )
+        .unwrap();
+    let mut viewer = crate::plan::ViewerState::new(id, EntityId(1), [8.0, 64.0, 8.0]);
+    viewer.view_distance = Some(0);
+    viewer.center_sent = Some((0, 0));
+    viewer.loaded_chunks.insert((0, 0), 1);
+    let pos = mc_world::chunk::ChunkPos { x: 0, z: 0 };
+    let chunks = [mc_core::boundary::SnapshotChunk {
+        pos,
+        revision: 1,
+        chunk: Arc::new(mc_world::chunk::Chunk::empty(
+            pos,
+            mc_world::BlockStateId(0),
+            mc_data::Identifier::parse("minecraft:plains").unwrap(),
+        )),
+    }];
+    let mut viewers = HashMap::from([(id, viewer)]);
+    let (connections, _) = server.connections.routing_snapshot();
+    server
+        .connections
+        .inner
+        .lock()
+        .setup_world_fences
+        .insert(id, (10, 42));
+    server
+        .connections
+        .setup_fences_pending
+        .store(true, Ordering::Release);
+    reliable_tx
+        .try_send(bytes::Bytes::from_static(b"echo"))
+        .unwrap();
+    let mut body = Vec::new();
+    BlockUpdate {
+        position: 0,
+        state_id: 1,
+    }
+    .encode(&mut body)
+    .unwrap();
+    let update = mc_protocol::frame::encode_frame(
+        BlockUpdate::ID,
+        &body,
+        mc_protocol::frame::Compression::Threshold(256),
+    )
+    .unwrap();
+    world_tx.try_send(update.clone()).unwrap();
+    let mut output = clock_output(10, 0);
+    Arc::get_mut(&mut output.snapshot).unwrap().chunks = Arc::new(Vec::from(chunks));
+    flush_setup_world_fences(&server, &viewers, &connections, &output, 0);
+    assert_eq!(world_rx.len(), 1, "same tick cannot complete the fence");
+    output.tick = 11;
+    let snapshot = Arc::get_mut(&mut output.snapshot).unwrap();
+    snapshot.tick = 11;
+    let held_chunks = std::mem::take(&mut snapshot.chunks);
+    flush_setup_world_fences(&server, &viewers, &connections, &output, 0);
+    assert_eq!(
+        world_rx.len(),
+        1,
+        "missing snapshot cannot complete the fence"
+    );
+    Arc::get_mut(&mut output.snapshot).unwrap().chunks = Arc::clone(&held_chunks);
+    viewers.get_mut(&id).unwrap().dimension = mc_core::dimensions::Dimension::Nether;
+    flush_setup_world_fences(&server, &viewers, &connections, &output, 0);
+    assert_eq!(
+        world_rx.len(),
+        1,
+        "matching coordinates and revisions in the root dimension cannot complete a Nether fence"
+    );
+    let mut nether = clock_output(11, 0);
+    let snapshot = Arc::get_mut(&mut nether.snapshot).unwrap();
+    snapshot.dimension = mc_core::dimensions::Dimension::Nether;
+    snapshot.chunks = held_chunks;
+    Arc::get_mut(&mut output.snapshot)
+        .unwrap()
+        .dimensions
+        .insert(mc_core::dimensions::Dimension::Nether, nether);
+    flush_setup_world_fences(&server, &viewers, &connections, &output, 0);
+    assert_eq!(
+        reliable_rx.try_recv().unwrap(),
+        bytes::Bytes::from_static(b"echo")
+    );
+    assert_eq!(world_rx.try_recv().unwrap(), update);
+    let mut bytes = bytes::BytesMut::from(world_rx.try_recv().unwrap().as_ref());
+    let frame = mc_protocol::frame::try_decode_frame(
+        &mut bytes,
+        mc_protocol::frame::Compression::Threshold(256),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(frame.id, ClientboundCustomPayload::ID);
+    let packet = ClientboundCustomPayload::decode(&mut frame.body.as_ref()).unwrap();
+    assert!(
+        matches!(packet.payload, CustomPayload::Unknown { channel, payload }
+        if channel.as_str() == mc_protocol::SETUP_WORLD_FENCE_CHANNEL
+            && payload == 42_u64.to_be_bytes())
+    );
+    server.connections.remove(id);
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn setup_world_fence_requires_operator_and_rejects_duplicate() {
+    use mc_protocol::packets::play::ServerboundCustomPayload;
+    use mc_protocol::packets::{CustomPayload, Packet};
+    let (server, dir) = fixture();
+    let (ordinary, _) = register(&server, "ordinary", false);
+    let (operator, _) = register(&server, "operator", true);
+    let packet = ServerboundCustomPayload {
+        payload: CustomPayload::Unknown {
+            channel: mc_data::Identifier::parse(mc_protocol::SETUP_WORLD_FENCE_CHANNEL).unwrap(),
+            payload: 42_u64.to_be_bytes().to_vec(),
+        },
+    };
+    let mut body = Vec::new();
+    packet.encode(&mut body).unwrap();
+    assert!(
+        server
+            .handle_edge_frame(ordinary, ServerboundCustomPayload::ID, &body)
+            .await
+            .is_err()
+    );
+    assert!(
+        server
+            .connections
+            .inner
+            .lock()
+            .setup_world_fences
+            .is_empty()
+    );
+    assert!(
+        server
+            .handle_edge_frame(operator, ServerboundCustomPayload::ID, &body)
+            .await
+            .unwrap()
+    );
+    assert!(
+        server
+            .handle_edge_frame(operator, ServerboundCustomPayload::ID, &body)
+            .await
+            .is_err()
+    );
+    assert_eq!(server.connections.inner.lock().setup_world_fences.len(), 1);
+    server.connections.remove(ordinary);
+    server.connections.remove(operator);
+    assert!(
+        !server
+            .connections
+            .setup_fences_pending
+            .load(Ordering::Acquire)
+    );
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 #[tokio::test]
 async fn routing_snapshot_drops_overflow_victim_before_any_later_packets() {
     let (server, dir) = fixture();

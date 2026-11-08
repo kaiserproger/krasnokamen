@@ -9,14 +9,14 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 mod totem;
 type AdmittedDamage = (DamagePiece, (f32, f32));
 
-/// Admission facts emitted from the source tick, before any profiler-specific attribution.
+/// Accepted native damage work from the source tick, excluding command pieces.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DamageObservation {
     AcceptedVictim,
     AcceptedReactive,
 }
 
-type DamageObserver<'a> = &'a mut dyn FnMut(&TickState, EntitySlot, DamageObservation);
+pub(super) type DamageObserver<'a> = &'a mut dyn FnMut(&TickState, EntitySlot, DamageObservation);
 
 impl TickState {
     pub(crate) fn commit_damage(
@@ -182,7 +182,12 @@ impl TickState {
             if !accepted {
                 continue;
             }
-            if let Some(observe) = observer.as_deref_mut() {
+            if let Some(observe) = observer.as_deref_mut()
+                && !matches!(
+                    piece.source,
+                    Some(crate::intent::DamageSource::Command { .. })
+                )
+            {
                 observe(self, slot, DamageObservation::AcceptedReactive);
             }
             let mut admitted = (piece, (raw, 0.0));
@@ -211,7 +216,15 @@ impl TickState {
             if total <= 0.0 {
                 continue;
             }
-            if let Some(observe) = observer.as_deref_mut() {
+            if let Some(observe) = observer.as_deref_mut()
+                && pieces.iter().any(|(piece, _)| {
+                    piece.amount > 0.0
+                        && !matches!(
+                            piece.source,
+                            Some(crate::intent::DamageSource::Command { .. })
+                        )
+                })
+            {
                 observe(self, slot, DamageObservation::AcceptedVictim);
             }
             let id = self.entities.body(slot).id;
