@@ -63,6 +63,7 @@ def check_health(lane: Any, steps: ProbeSteps) -> None:
     steps.check('server_mspt_below_50',
                 type(samples) is int and samples > 0 and type(p50) in (int, float)
                 and math.isfinite(p50) and 0 <= p50 < 50000)
+    steps.check('clients_present', bool(lane.clients))
     for index, client in enumerate(lane.clients):
         state = client.call_tool('minecraft_observe')
         steps.check(f'client_{index}_in_play', state.get('in_play') is True)

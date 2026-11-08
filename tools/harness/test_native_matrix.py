@@ -55,6 +55,10 @@ class NativeMatrixTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError,'server_mspt_below_50'):
                     check()
             host.dashboard_full_stats=lambda:{'tick':{'samples':1,'p50_us':1}}
+            lane.clients=[]
+            with self.assertRaisesRegex(RuntimeError,'clients_present'):
+                check()
+            lane.clients=[client]
             client.call_tool=lambda *args:{}
             with self.assertRaisesRegex(RuntimeError,'client_0_in_play'):
                 check()
