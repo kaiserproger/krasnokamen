@@ -102,10 +102,12 @@ Answer with counts from one pass over `/proc` and the cgroup tree; never poll.
    `*.scope`: `cgroup.freeze` (1 = requested), `cgroup.events` (`frozen 1` =
    confirmed), `memory.current`, comms in `cgroup.procs`. Reasons:
    `journalctl --user -u solaris-heavy-watchdog -o cat -n 20`.
-3. **CPU cap.** Slice `cpu.max` must be `max`; check `nr_throttled` vs
-   `nr_periods` in `cpu.stat`. Runtime drop-ins live under
-   `/run/user/<uid>/systemd/user.control/solaris-heavy.slice.d/`; clear a cap
-   with `systemctl --user set-property --runtime solaris-heavy.slice CPUQuota=`.
+3. **CPU cap.** Slice `cpu.max` is `max` unless the owner pinned a quota in
+   `/tmp/solaris-mem-slots/cpu-quota` (one line such as `600%`; the runner
+   applies it on every call and clears any other slice quota). Check
+   `nr_throttled` vs `nr_periods` in `cpu.stat`. Runtime drop-ins live under
+   `/run/user/<uid>/systemd/user.control/solaris-heavy.slice.d/`; remove the
+   owner cap by deleting that file and running any `mem-run` command.
    Host `/proc/pressure/cpu` near 80% while `vmstat` shows >40% idle means a cap
    or pinning, not load.
 4. **Pinning.** `Cpus_allowed_list` of cargo/rustc; widen live with
@@ -166,10 +168,12 @@ Owner-approved response (2026-10-24), adjusted for the current runner: renice
 running rustc/cargo/java/qemu to 19, start new heavy commands with a lower
 `SOLARIS_MEM_RUN_CPU_QUOTA` (e.g. `400`), and tell agents to use
 `-m 6G nice -n 19 env RUSTC_WRAPPER= cargo ... -j 2`, `--test-threads 2`,
-focused `-p` crates only. A slice-level `CPUQuota` does not hold: the runner
-clears it on every call (a forgotten one held every heavy command to 2 CPUs
-from 2026-10-26 to 2026-10-28). Find rustc processes outside the slice
-(`/proc/<pid>/cgroup`) and trace their cwd to the agent.
+focused `-p` crates only. For a machine-wide cap, write the owner's quota to
+`/tmp/solaris-mem-slots/cpu-quota` (e.g. `600%`, replaced atomically); the runner
+clears any slice `CPUQuota` not set through that file (a forgotten one held every
+heavy command to 2 CPUs from 2026-10-26 to 2026-10-28).
+Find rustc processes outside the slice (`/proc/<pid>/cgroup`) and trace their
+cwd to the agent.
 
 ## Disk
 

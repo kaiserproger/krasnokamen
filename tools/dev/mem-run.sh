@@ -55,9 +55,15 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 mkdir -p "$dir/run"
 slice=solaris-heavy.slice
 slice_gib=25
-# CPUQuota= (none): the slice is bounded by memory; a stray CPUQuota on it once held
-# every heavy command to 2 CPUs for two days (2026-10-26..28).
-systemctl --user set-property --runtime "$slice" MemoryMax=${slice_gib}G MemoryHigh=infinity MemorySwapMax=2G AllowedCPUs=0-11 CPUQuota=
+# The slice is bounded by memory. Its CPUQuota is cleared on every call unless the
+# owner pins one in $dir/cpu-quota (e.g. "600%"): a stray CPUQuota once held every
+# heavy command to 2 CPUs for two days (2026-10-26..28), so only that file sets it.
+slice_quota=
+if [ -r "$dir/cpu-quota" ]; then
+  slice_quota=$(tr -d '[:space:]' < "$dir/cpu-quota")
+  [[ "$slice_quota" =~ ^[1-9][0-9]*%$ ]] || { echo "mem-run: $dir/cpu-quota must be like 600%, got '$slice_quota'" >&2; exit 64; }
+fi
+systemctl --user set-property --runtime "$slice" MemoryMax=${slice_gib}G MemoryHigh=infinity MemorySwapMax=2G AllowedCPUs=0-11 CPUQuota=$slice_quota
 # After a reboot the slice is inactive and has no cgroup: start it, and fail closed
 # if it still has none (an empty path would account the root cgroup's scopes).
 systemctl --user start "$slice"
