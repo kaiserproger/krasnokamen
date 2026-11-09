@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import os
 import runpy
+import select
+import signal
 import subprocess
 import sys
 import time
@@ -36,6 +38,7 @@ class ProfileContext:
     extra_args: list[str] = field(default_factory=list)
     release: bool = False
     timeout_seconds: float | None = None
+    stage_timeout_seconds: float | None = None
     platform: str | None = None
     # A named scenario's identity, set by `cmd_run` when the catalog entry
     # declares it. `None` keeps every profile's own default/override semantics.
@@ -54,6 +57,45 @@ class ProfileContext:
     windowed: bool = False
     # loader-live can exercise an immutable v2 candidate without building it.
     server_bin: Path | None = None
+
+
+def _kill_stage_tree(proc: subprocess.Popen[Any]) -> None:
+    """Freeze and kill descendants, including those in separate sessions."""
+    pending = [proc.pid]
+    descriptors: list[int] = []
+    try:
+        while pending:
+            pid = pending.pop()
+            try:
+                fd = os.pidfd_open(pid)
+            except ProcessLookupError:
+                continue
+            descriptors.append(fd)
+            try:
+                signal.pidfd_send_signal(fd, signal.SIGSTOP)
+            except ProcessLookupError:
+                continue
+            for children in Path(f"/proc/{pid}/task").glob("*/children"):
+                try:
+                    pending.extend(int(child) for child in children.read_text().split())
+                except FileNotFoundError:
+                    pass
+        for fd in reversed(descriptors):
+            try:
+                signal.pidfd_send_signal(fd, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.wait()
+        for fd in descriptors:
+            if not select.select([fd], [], [], 5)[0]:
+                raise RuntimeError("stage descendant did not exit after SIGKILL")
+    finally:
+        for fd in descriptors:
+            os.close(fd)
 
 
 def _run_command(
@@ -94,9 +136,9 @@ def _run_command(
                 flush=True,
             )
             try:
-                returncode = proc.wait()
+                returncode = proc.wait(timeout=ctx.stage_timeout_seconds)
             except BaseException:
-                stop_process(proc, interrupt=True)
+                _kill_stage_tree(proc)
                 raise
     finally:
         if proc is not None:

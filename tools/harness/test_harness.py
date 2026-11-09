@@ -179,7 +179,7 @@ class RunTestPolicyTests(unittest.TestCase):
                 with mock.patch.object(cli, "_default_cpu_quota", return_value="600%"):
                     with mock.patch.object(cli, "_available_bytes", return_value=16 * 1024**3):
                         with mock.patch.object(cli, "_scope_command", return_value=["scope"]) as scope:
-                            with mock.patch.object(cli.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
+                            with mock.patch.object(cli.os, "execvpe"):
                                 with contextlib.redirect_stdout(io.StringIO()):
                                     self.assertEqual(cli._exec_in_scope(profile), 0)
                 scope.assert_called_once_with("600%", expected)
@@ -197,7 +197,7 @@ class RunTestPolicyTests(unittest.TestCase):
                 with mock.patch.dict(os.environ, {cli.MEMORY_MAX_ENV: "8G"}):
                     with mock.patch.object(cli, "_available_bytes", return_value=16 * 1024**3):
                         with mock.patch.object(cli, "_scope_command", return_value=["scope"]) as scope:
-                            with mock.patch.object(cli.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
+                            with mock.patch.object(cli.os, "execvpe"):
                                 with contextlib.redirect_stdout(io.StringIO()):
                                     self.assertEqual(cli._exec_in_scope("correctness"), 0)
                         scope.assert_called_once_with("600%", "8G")
@@ -235,6 +235,17 @@ class RunTestPolicyTests(unittest.TestCase):
 
 
 class ReceiptContractTests(unittest.TestCase):
+    def test_test_stage_deadline_is_only_set_by_explicit_option(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            contexts = []
+            spec = {"scope": "harness", "prerequisites": profiles._NONE,
+                    "run": lambda ctx: contexts.append(ctx.stage_timeout_seconds) or {}}
+            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):
+                with mock.patch.dict(profiles.PROFILES, {"test": spec}):
+                    self.assertEqual(cli.cmd_run(["test"]), 0)
+                    self.assertEqual(cli.cmd_run(["test", "--timeout-seconds", "7"]), 0)
+            self.assertEqual(contexts, [None, 7.0])
+
     def test_unknown_profile_never_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):

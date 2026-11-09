@@ -19,7 +19,9 @@ import argparse
 import contextlib
 import datetime
 import json
+import math
 import os
+import signal
 import shutil
 import subprocess
 import sys
@@ -395,7 +397,7 @@ def cmd_run(argv: list[str]) -> int:
                         details["server_pin"] = pin
                     except (OSError, ValueError, TypeError) as exc:
                         details["server_pin_error"] = str(exc)
-        if status == "failed":
+        if status in {"failed", "timeout"}:
             code = (child_failure.returncode if child_failure is not None
                     else details.get("startup_child_exit"))
             failure_logs = list(logs)
@@ -437,7 +439,7 @@ def cmd_run(argv: list[str]) -> int:
         if profile == "native-matrix":
             from .backends.native_matrix import record_receipt
             record_receipt(receipt, artifact_dir / "result.json")
-        outcome = {"passed": "PASS", "failed": "FAIL",
+        outcome = {"passed": "PASS", "failed": "FAIL", "timeout": "TIMEOUT",
                    "prepared": "PREPARED", "interrupted": "INTERRUPTED"}[status]
         print(
             f"[harness] {outcome} profile={profile} "
@@ -474,6 +476,7 @@ def cmd_run(argv: list[str]) -> int:
         extra_args=extra,
         release=release,
         timeout_seconds=timeout_seconds,
+        stage_timeout_seconds=timeout_seconds,
         platform=platform,
         scenario_id=None if scenario is None else scenario.scenario_id,
         manifest=None if scenario is None else scenario.manifest,
@@ -483,7 +486,17 @@ def cmd_run(argv: list[str]) -> int:
         windowed=args.windowed,
         server_bin=args.server_bin,
     )
+    interrupted_signal = signal.SIGINT
+    def terminate(signum: int, frame: Any) -> None:
+        nonlocal interrupted_signal
+        interrupted_signal = signum
+        raise KeyboardInterrupt(signal.Signals(signum).name)
+
+    previous_handlers = {sig: signal.signal(sig, terminate)
+                         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
     try:
+        if timeout_seconds is not None and (not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
+            raise ValueError("--timeout-seconds must be finite and positive")
         if ctx.server_bin is not None and profile not in {"loader-live", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}:
             raise ValueError("--server-bin is supported only by loader-live or matrix profiles")
         if (ctx.plugins_dir is not None and client != "native"
@@ -503,8 +516,10 @@ def cmd_run(argv: list[str]) -> int:
             failure_phase = "unknown"
             details = spec["run"](ctx)
     except KeyboardInterrupt:
-        return finish("interrupted", spec["scope"], {}, "interrupted by user",
-                      artifact_dir, 130, ctx)
+        return finish("interrupted", spec["scope"], {}, f"received {signal.Signals(interrupted_signal).name}",
+                      artifact_dir, 128 + interrupted_signal, ctx)
+    except subprocess.TimeoutExpired as error:
+        return finish("timeout", spec["scope"], {}, str(error), artifact_dir, 1, ctx)
     except Exception as error:
         from .runtime import child_exit, observed_phase
         child_failure = child_exit(error)
@@ -512,6 +527,9 @@ def cmd_run(argv: list[str]) -> int:
         if observed != "unknown":
             failure_phase = observed
         return finish("failed", spec["scope"], {}, str(error), artifact_dir, 1, ctx)
+    finally:
+        for sig, handler in previous_handlers.items():
+            signal.signal(sig, handler)
     if scenario is not None and isinstance(details, dict):
         if scenario.tests:
             evidence_text = scenario_catalog.log_text(ctx)
@@ -726,15 +744,13 @@ def _exec_in_scope(profile: str | None) -> int | None:
     environment = dict(os.environ, **{CPU_SCOPE_ENV: "1"})
     print(
         f"[harness] scope CPUQuota={quota} MemoryHigh={os.environ.get(MEMORY_HIGH_ENV, DEFAULT_MEMORY_HIGH)} "
-        f"MemoryMax={memory_max}"
+        f"MemoryMax={memory_max}", flush=True
     )
-    completed = subprocess.run(
-        command,
-        cwd=REPO_ROOT,
-        env=environment,
-        check=False,
-    )
-    return completed.returncode
+    # Replace the wrapper so signals sent to the harness reach the scoped run,
+    # rather than killing a parent that is merely waiting for it.
+    os.chdir(REPO_ROOT)
+    os.execvpe(command[0], command, environment)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
