@@ -187,9 +187,169 @@ fn mend(player: &mut crate::player::PlayerState, mut amount: i32, mut seed: u64)
     (amount, changed)
 }
 
+/// Logical body visits, including rejected/deleted candidates and index construction.
+/// Compiles away outside tests; unlike admitted-orb telemetry this measures search work.
+#[derive(Default)]
+struct OrbWork {
+    #[cfg(test)]
+    orbs: std::cell::Cell<u64>,
+    #[cfg(test)]
+    players: std::cell::Cell<u64>,
+}
+
+impl OrbWork {
+    #[inline]
+    fn orb(&self) {
+        #[cfg(test)]
+        self.orbs.set(self.orbs.get() + 1);
+    }
+
+    #[inline]
+    fn player(&self) {
+        #[cfg(test)]
+        self.players.set(self.players.get() + 1);
+    }
+}
+
+type PlayerChunks = std::collections::HashMap<crate::boundary::ChunkPos, Vec<(EntityId, [f64; 3])>>;
+
+/// Query the existing entity chunk index once per visited chunk, not once per
+/// orb. Dense XP piles must not become a quadratic scan of non-player bodies.
+fn local_players(
+    state: &TickState,
+    pos: [f64; 3],
+    radius: f64,
+    cache: &mut PlayerChunks,
+    out: &mut Vec<(EntityId, [f64; 3])>,
+    work: &OrbWork,
+) {
+    out.clear();
+    let chunk = |v: f64| (v.floor() as i32).div_euclid(16);
+    for x in chunk(pos[0] - radius)..=chunk(pos[0] + radius) {
+        for z in chunk(pos[2] - radius)..=chunk(pos[2] + radius) {
+            let players = cache
+                .entry(crate::boundary::ChunkPos { x, z })
+                .or_insert_with(|| {
+                    let mut players = Vec::new();
+                    state.entities.for_each_slot_in_chunk(
+                        crate::boundary::ChunkPos { x, z },
+                        |slot| {
+                            let body = state.entities.body(slot);
+                            if matches!(body.kind, EntityKind::Player { .. }) {
+                                work.player();
+                                if body.alive
+                                    && state.players.get(&body.id).is_some_and(|p| !p.spectator())
+                                    && !state.entity_session_locked(body.id)
+                                {
+                                    players.push((body.id, state.entities.pos(slot)));
+                                }
+                            } else {
+                                work.orb();
+                            }
+                        },
+                    );
+                    players
+                });
+            for player in players.iter() {
+                work.player();
+                out.push(*player);
+            }
+        }
+    }
+    out.sort_unstable_by_key(|(id, _)| *id);
+}
+
+type MergeKey = (i32, i32, i32, i32, i32);
+
+#[derive(Default)]
+struct MergeCells {
+    cells: std::collections::HashMap<MergeKey, std::collections::BTreeSet<EntityId>>,
+    // The old 4-block admission cell and its ordering remain part of the oracle.
+    origins: std::collections::HashMap<EntityId, [i32; 3]>,
+}
+
+impl MergeCells {
+    fn key(id: EntityId, value: i32, pos: [f64; 3]) -> MergeKey {
+        let [x, y, z] = pos.map(|v| v.floor() as i32);
+        (value, id.0.rem_euclid(40), x, y, z)
+    }
+
+    fn insert(&mut self, id: EntityId, value: i32, pos: [f64; 3]) {
+        self.origins.insert(id, merge_cell(pos));
+        self.cells
+            .entry(Self::key(id, value, pos))
+            .or_default()
+            .insert(id);
+    }
+
+    fn remove(&mut self, id: EntityId, value: i32, pos: [f64; 3]) {
+        let key = Self::key(id, value, pos);
+        if let Some(ids) = self.cells.get_mut(&key) {
+            ids.remove(&id);
+            if ids.is_empty() {
+                self.cells.remove(&key);
+            }
+        }
+    }
+
+    fn moved(&mut self, id: EntityId, value: i32, before: [f64; 3], after: [f64; 3]) {
+        if Self::key(id, value, before) != Self::key(id, value, after) {
+            self.remove(id, value, before);
+            self.cells
+                .entry(Self::key(id, value, after))
+                .or_default()
+                .insert(id);
+        }
+    }
+
+    fn nearby(
+        &self,
+        state: &TickState,
+        id: EntityId,
+        value: i32,
+        pos: [f64; 3],
+        out: &mut Vec<EntityId>,
+        work: &OrbWork,
+    ) {
+        out.clear();
+        let coarse = merge_cell(pos);
+        let (v, group, x, y, z) = Self::key(id, value, pos);
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                for dz in -1..=1 {
+                    if let Some(ids) = self.cells.get(&(v, group, x + dx, y + dy, z + dz)) {
+                        for other in ids {
+                            work.orb();
+                            if *other == id
+                                || !self.origins[other]
+                                    .into_iter()
+                                    .zip(coarse)
+                                    .all(|(a, b)| (i64::from(a) - i64::from(b)).abs() <= 1)
+                            {
+                                continue;
+                            }
+                            let slot = state.entities.slot_of(*other).expect("live merge index");
+                            if state
+                                .entities
+                                .pos(slot)
+                                .into_iter()
+                                .zip(pos)
+                                .all(|(a, b)| (a - b).abs() <= 1.0)
+                            {
+                                out.push(*other);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out.sort_unstable_by_key(|id| (self.origins[id], *id));
+    }
+}
+
 /// Runs after entity merge: physics, periodic local merges, expiry and collection.
 pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet, events: &mut Vec<EntityEvent>) {
-    run_inner(state, changes, events, None);
+    run_inner(state, changes, events, None, &OrbWork::default());
 }
 
 /// Count only bodies actually admitted to the ordinary active-orb owner.
@@ -199,7 +359,7 @@ pub(crate) fn run_counted(
     events: &mut Vec<EntityEvent>,
     sample: &mut crate::boundary::CorePerfTick,
 ) {
-    run_inner(state, changes, events, Some(sample));
+    run_inner(state, changes, events, Some(sample), &OrbWork::default());
 }
 
 fn run_inner(
@@ -207,6 +367,7 @@ fn run_inner(
     changes: &mut ChangeSet,
     events: &mut Vec<EntityEvent>,
     mut sample: Option<&mut crate::boundary::CorePerfTick>,
+    work: &OrbWork,
 ) {
     if state.entities.experience_orbs().next().is_none() {
         return;
@@ -215,27 +376,21 @@ fn run_inner(
     let orbs: Vec<_> = state
         .entities
         .experience_orbs()
-        .filter(|id| !spawned.contains(id))
+        .filter(|id| {
+            work.orb();
+            !spawned.contains(id)
+        })
         .collect();
     if orbs.is_empty() {
         return;
     }
-    let mut players: Vec<_> = state
-        .players
-        .iter()
-        .filter_map(|(id, player)| {
-            if player.spectator() || state.entity_session_locked(*id) {
-                return None;
-            }
-            let slot = state.entities.slot_of(*id)?;
-            Some((*id, state.entities.pos(slot)))
-        })
-        .collect();
-    players.sort_unstable_by_key(|(id, _)| *id);
-    let mut merge_cells =
-        std::collections::HashMap::<(i32, i32, i32, i32, i32), Vec<EntityId>>::new();
+    let mut player_chunks = PlayerChunks::new();
+    let mut players = Vec::new();
+    let mut merge_cells = MergeCells::default();
+    let mut nearby = Vec::new();
     if state.tick.is_multiple_of(20) {
         for id in &orbs {
+            work.orb();
             let slot = state.entities.slot_of(*id).expect("orb index");
             let pos = state.entities.pos(slot);
             if !state.world.is_active(
@@ -251,14 +406,11 @@ fn run_inner(
                 .experience_orb
                 .expect("orb")
                 .0;
-            let [x, y, z] = merge_cell(pos);
-            merge_cells
-                .entry((value, id.0.rem_euclid(40), x, y, z))
-                .or_default()
-                .push(*id);
+            merge_cells.insert(*id, value, pos);
         }
     }
     for id in orbs {
+        work.orb();
         let Some(slot) = state.entities.slot_of(id) else {
             continue;
         };
@@ -281,9 +433,13 @@ fn run_inner(
         if !state.entities.row(slot).controls.no_gravity {
             velocity[1] -= 0.03;
         }
+        local_players(state, pos, 8.0, &mut player_chunks, &mut players, work);
         let nearest = players
             .iter()
-            .filter(|(_, at)| distance_sq(*at, pos) <= 64.0)
+            .filter(|(_, at)| {
+                work.player();
+                distance_sq(*at, pos) <= 64.0
+            })
             .min_by(|a, b| distance_sq(a.1, pos).total_cmp(&distance_sq(b.1, pos)));
         if let Some((_, target)) = nearest {
             let delta = [
@@ -337,51 +493,27 @@ fn run_inner(
                 .set_vel(slot, velocity.map(|component| component * friction * 20.0));
             state.entities.set_ground(slot, resolved.grounded);
         }
+        let value = state
+            .entities
+            .row(slot)
+            .appearance
+            .experience_orb
+            .expect("orb")
+            .0;
+        if state.tick.is_multiple_of(20) {
+            merge_cells.moved(id, value, pos, state.entities.pos(slot));
+        }
         if state.entities.row(slot).age >= 6000 {
+            merge_cells.remove(id, value, state.entities.pos(slot));
             changes.entities_removed.push(id);
             state.remove_entity(slot);
             continue;
         }
         if state.tick.is_multiple_of(20) {
             let pos = state.entities.pos(slot);
-            let value = state
-                .entities
-                .row(slot)
-                .appearance
-                .experience_orb
-                .expect("orb")
-                .0;
-            let [x, y, z] = merge_cell(pos);
-            let mut nearby = Vec::new();
-            for dx in -1..=1 {
-                for dy in -1..=1 {
-                    for dz in -1..=1 {
-                        let Some(candidates) =
-                            merge_cells.get(&(value, id.0.rem_euclid(40), x + dx, y + dy, z + dz))
-                        else {
-                            continue;
-                        };
-                        for other in candidates {
-                            if *other == id {
-                                continue;
-                            }
-                            let Some(other_slot) = state.entities.slot_of(*other) else {
-                                continue;
-                            };
-                            if state
-                                .entities
-                                .pos(other_slot)
-                                .into_iter()
-                                .zip(pos)
-                                .all(|(a, b)| (a - b).abs() <= 1.0)
-                            {
-                                nearby.push(*other);
-                            }
-                        }
-                    }
-                }
-            }
-            for other in nearby {
+            merge_cells.nearby(state, id, value, pos, &mut nearby, work);
+            for other in nearby.iter().copied() {
+                work.orb();
                 let other_slot = state.entities.slot_of(other).expect("merge target");
                 let count = state
                     .entities
@@ -391,6 +523,7 @@ fn run_inner(
                     .expect("orb")
                     .1;
                 let age = state.entities.row(other_slot).age;
+                merge_cells.remove(other, value, state.entities.pos(other_slot));
                 state.remove_entity(other_slot);
                 changes.entities_removed.push(other);
                 let slot = state.entities.slot_of(id).expect("merge owner");
@@ -406,7 +539,9 @@ fn run_inner(
         }
         let slot = state.entities.slot_of(id).expect("orb owner");
         let pos = state.entities.pos(slot);
+        local_players(state, pos, 0.8, &mut player_chunks, &mut players, work);
         let collector = players.iter().find(|(player, at)| {
+            work.player();
             (at[0] - pos[0]).abs() <= 0.8
                 && (at[2] - pos[2]).abs() <= 0.8
                 && pos[1] >= at[1] - 0.5
@@ -444,6 +579,7 @@ fn run_inner(
             count: 1,
         });
         if count == 1 {
+            merge_cells.remove(id, value, pos);
             changes.entities_removed.push(id);
             state.remove_entity(slot);
         } else {
@@ -453,6 +589,10 @@ fn run_inner(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "experience_orbs_top100_h08_tests.rs"]
+mod top100_h08_tests;
 
 #[cfg(test)]
 mod tests {
