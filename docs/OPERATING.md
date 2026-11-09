@@ -326,8 +326,10 @@ in vanilla, and chunks next to an unloaded chunk are not hidden on that side.
 
 `[lod]` answers tile requests from the **native Solaris client** only (vanilla
 clients never see it). A tile is 16×16 column samples spaced 2 to 64 blocks.
-Stored chunks answer with their top block as of the last stored image (later
-edits are not shown); never-generated columns answer with the generator's
+Stored chunks answer with their top surface block (one with collision or
+holding water or lava, as vanilla's `MOTION_BLOCKING`; flowers, grass and thin
+snow are skipped) as of the last stored image (later edits are not shown);
+never-generated columns answer with the generator's
 cave-free router surface, sampled on the server, so far terrain costs server CPU
 in proportion to the never-generated area players look at. Requests beyond
 `max_distance`, above `max_inflight_tiles` per connection or not fitting the

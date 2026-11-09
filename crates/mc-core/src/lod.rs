@@ -2,7 +2,8 @@
 //!
 //! A tile is 16x16 point samples spaced `1 << level` blocks, whose first
 //! sample is the column at block `(tile_x, tile_z) * (16 << level)`. A stored
-//! chunk answers with its top non-air block as of the last stored image
+//! chunk answers with its top surface block (collision or fluid, as vanilla's
+//! `MOTION_BLOCKING`; plants are not ground) as of the last stored image
 //! (player edits after it are not shown). A column that was never generated
 //! answers with the generator's cheap router surface, which is what generation
 //! will later produce there. Read-only and off the tick thread: the tile
@@ -12,6 +13,7 @@
 use std::sync::Arc;
 
 use mc_data::Identifier;
+use mc_physics::{BlockMaterial, BlockMaterialIds};
 use mc_world::{BlockStateId, Chunk, ChunkPos};
 
 use crate::CoreError;
@@ -28,7 +30,7 @@ pub enum LodOrigin {
     /// Not answered: a store read failed, or the client asked for stored
     /// columns only and this one was never generated.
     Missing,
-    /// The column's top non-air block in the stored chunk.
+    /// The column's top surface block in the stored chunk.
     Stored,
     /// Never generated: the generator's cave-free router surface.
     Router,
@@ -38,7 +40,7 @@ pub enum LodOrigin {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LodSample {
     pub origin: LodOrigin,
-    /// Y of the top block (stored) or top solid block (router).
+    /// Y of the top surface block (stored) or top solid block (router).
     pub height: i32,
     /// Stored top block; the router does not decide surface blocks.
     pub block: Option<BlockStateId>,
@@ -56,7 +58,9 @@ impl LodSample {
 
 pub(crate) struct LodSource {
     source: std::sync::Weak<ChunkSource>,
-    air: Vec<BlockStateId>,
+    /// By block state: a far surface blocks motion or holds a fluid (vanilla
+    /// `MOTION_BLOCKING`); air and dry passable plants are not ground.
+    surface: Vec<bool>,
     program: std::sync::OnceLock<Option<Arc<Vec<u8>>>>,
 }
 
@@ -72,16 +76,27 @@ impl std::fmt::Debug for LodSource {
 }
 
 impl LodSource {
-    pub(crate) fn new(source: Arc<ChunkSource>) -> Self {
-        let air = source
-            .registry
-            .states()
-            .filter(|state| matches!(state.block.id.path(), "air" | "cave_air" | "void_air"))
-            .map(|state| state.id)
-            .collect();
+    pub(crate) fn new(source: Arc<ChunkSource>, materials: &BlockMaterialIds) -> Self {
+        let mut surface = Vec::new();
+        for state in source.registry.states() {
+            let index = state.id.0 as usize;
+            if surface.len() <= index {
+                surface.resize(index + 1, false);
+            }
+            // Kelp, seagrass and bubble columns hold water without a
+            // `waterlogged` property; the material table calls them passable.
+            let wet = matches!(
+                state.block.id.path(),
+                "kelp" | "kelp_plant" | "seagrass" | "tall_seagrass" | "bubble_column"
+            ) || state
+                .properties
+                .iter()
+                .any(|(key, value)| key == "waterlogged" && value == "true");
+            surface[index] = wet || materials.classify(state.id.0) != BlockMaterial::Air;
+        }
         Self {
             source: Arc::downgrade(&source),
-            air,
+            surface,
             program: std::sync::OnceLock::new(),
         }
     }
@@ -189,7 +204,7 @@ impl LodSource {
         let top = (geometry.min_y()..geometry.max_y()).rev().find_map(|y| {
             chunk
                 .get_block(lx, y, lz)
-                .filter(|state| !self.air.contains(state))
+                .filter(|state| self.surface.get(state.0 as usize).copied().unwrap_or(true))
                 .map(|state| (y, state))
         });
         let Some((height, block)) = top else {
@@ -222,7 +237,8 @@ mod tests {
     use super::*;
     use mc_world::ChunkGenerator;
 
-    /// A stored chunk answers with its current top block, edits included; the
+    /// A stored chunk answers with its current top surface block, edits
+    /// included, never a plant standing on it; the
     /// never-generated rest of the tile with the router, or nothing when the
     /// client asked for stored columns only.
     #[test]
@@ -236,13 +252,22 @@ mod tests {
             Arc::clone(&registry.blocks),
         ));
         let mut chunk = generator.generate(ChunkPos { x: 0, z: 0 });
-        let stone = registry
-            .blocks
-            .block(&Identifier::parse("minecraft:stone").unwrap())
-            .unwrap()
-            .default;
-        // A player's pillar at column (2, 4): 240 is far above any terrain.
+        let block = |name: &str| {
+            registry
+                .blocks
+                .block(&Identifier::parse(name).unwrap())
+                .unwrap()
+                .default
+        };
+        let [stone, poppy, kelp] =
+            ["minecraft:stone", "minecraft:poppy", "minecraft:kelp"].map(block);
+        // A player's pillar at column (2, 4): 240 is far above any terrain. The
+        // poppy on it has no collision, so the far surface stays the stone.
         chunk.set_block(2, 240, 4, stone);
+        chunk.set_block(2, 241, 4, poppy);
+        // Kelp has no collision either, but it holds water: it is the surface.
+        chunk.set_block(6, 240, 4, stone);
+        chunk.set_block(6, 241, 4, kelp);
         store
             .fill_generated(0, &[chunk], &registry.blocks, &registry.items)
             .expect("stored chunk");
@@ -257,12 +282,14 @@ mod tests {
             population: Some(crate::chunk_loader::Population::new(42, &registry)),
             geometry: crate::dimensions::Dimension::Overworld.geometry(),
         });
-        let source = LodSource::new(Arc::clone(&chunks));
+        let source = LodSource::new(Arc::clone(&chunks), &registry.materials);
         // Level 1 tile (0, 0): 2-block spacing over chunks (0..2, 0..2).
         let tile = source.tile(0, 0, 1, false).expect("tile");
         let pillar = &tile[2 * TILE_EDGE + 1];
         assert_eq!(pillar.origin, LodOrigin::Stored);
         assert_eq!((pillar.height, pillar.block), (240, Some(stone)));
+        let wet = &tile[2 * TILE_EDGE + 3];
+        assert_eq!((wet.height, wet.block), (241, Some(kelp)));
         assert!(pillar.biome.is_some());
         for (index, sample) in tile.iter().enumerate() {
             let (x, z) = (index % TILE_EDGE * 2, index / TILE_EDGE * 2);

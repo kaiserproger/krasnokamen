@@ -682,7 +682,10 @@ impl Core {
         // through the normal atomic transaction; reopened worlds already have
         // it in their record.
         crate::terrain::stage_epoch(&mut tick_state.native_globals, &terrain_epoch)?;
-        let lod = crate::lod::LodSource::new(tick_state.world.chunk_source());
+        let lod = crate::lod::LodSource::new(
+            tick_state.world.chunk_source(),
+            &tick_state.registry.materials,
+        );
         let terrain_sources = |state: &crate::tick::TickState| {
             Arc::new(crate::terrain::TerrainSource::new(
                 state.world.chunk_source(),
