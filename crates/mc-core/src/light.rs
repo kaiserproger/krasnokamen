@@ -827,3 +827,7 @@ impl crate::tick::TickState {
 #[cfg(test)]
 #[path = "light_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "light_top100_h10_tests.rs"]
+mod top100_h10_tests;
