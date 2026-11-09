@@ -311,28 +311,7 @@ pub(crate) fn snowballs(state: &mut TickState) {
         let owner = row.uuid;
         let at = state.entities.pos(slot);
         let muzzle = [at[0], at[1] + 1.5, at[2]];
-        let target = state
-            .entities
-            .slots()
-            .filter(|&other| {
-                let body = state.entities.body(other);
-                let row = state.entities.row(other);
-                body.alive
-                    && row.health > 0.0
-                    && crate::natural_spawn::category_of(state, other) == MobCategory::Monster
-            })
-            .filter_map(|other| {
-                let pos = state.entities.pos(other);
-                let distance: f64 = (0..3).map(|axis| (at[axis] - pos[axis]).powi(2)).sum();
-                let aim = [
-                    pos[0],
-                    pos[1] + state.entities.body(other).height * 0.5,
-                    pos[2],
-                ];
-                (distance <= 100.0 && crate::hostile::sight_clear(state, muzzle, aim))
-                    .then_some((other, aim, distance))
-            })
-            .min_by(|a, b| a.2.total_cmp(&b.2).then_with(|| a.0.0.cmp(&b.0.0)));
+        let target = snowball_target(state, at, muzzle);
         let Some((_, aim, _)) = target else { continue };
         let Some(item) = state
             .registry
@@ -352,6 +331,63 @@ pub(crate) fn snowballs(state: &mut TickState) {
         );
         crate::projectiles::launch(state, projectile, muzzle, aimed.map(|v| v / length * 1.6));
     }
+}
+
+fn snowball_candidate(
+    state: &TickState,
+    at: [f64; 3],
+    muzzle: [f64; 3],
+    other: EntitySlot,
+) -> Option<(EntitySlot, [f64; 3], f64)> {
+    #[cfg(test)]
+    spatial_tests::VISITS.with(|visits| visits.set(visits.get() + 1));
+    let body = state.entities.body(other);
+    let row = state.entities.row(other);
+    if !(body.alive
+        && row.health > 0.0
+        && crate::natural_spawn::category_of(state, other) == MobCategory::Monster)
+    {
+        return None;
+    }
+    let pos = state.entities.pos(other);
+    let distance: f64 = (0..3).map(|axis| (at[axis] - pos[axis]).powi(2)).sum();
+    let aim = [pos[0], pos[1] + body.height * 0.5, pos[2]];
+    (distance <= 100.0 && crate::hostile::sight_clear(state, muzzle, aim))
+        .then_some((other, aim, distance))
+}
+
+fn snowball_target(
+    state: &TickState,
+    at: [f64; 3],
+    muzzle: [f64; 3],
+) -> Option<(EntitySlot, [f64; 3], f64)> {
+    let min_x = ((at[0] - 10.0).floor() as i32).div_euclid(16);
+    let max_x = ((at[0] + 10.0).floor() as i32).div_euclid(16);
+    let min_z = ((at[2] - 10.0).floor() as i32).div_euclid(16);
+    let max_z = ((at[2] + 10.0).floor() as i32).div_euclid(16);
+    let mut target = None;
+    for x in min_x..=max_x {
+        for z in min_z..=max_z {
+            state
+                .entities
+                .for_each_slot_in_chunk(crate::boundary::ChunkPos { x, z }, |other| {
+                    if let Some(candidate) = snowball_candidate(state, at, muzzle, other)
+                        && target
+                            .as_ref()
+                            .is_none_or(|previous: &(EntitySlot, [f64; 3], f64)| {
+                                candidate
+                                    .2
+                                    .total_cmp(&previous.2)
+                                    .then_with(|| candidate.0.cmp(&previous.0))
+                                    .is_lt()
+                            })
+                    {
+                        target = Some(candidate);
+                    }
+                });
+        }
+    }
+    target
 }
 
 pub(crate) fn snow_trails(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>) {
@@ -452,3 +488,7 @@ pub(crate) fn snow_trails(state: &mut TickState, writes: &mut Vec<(BlockPos, u32
         }
     }
 }
+
+#[cfg(test)]
+#[path = "mob_lanes_spatial_tests.rs"]
+mod spatial_tests;
