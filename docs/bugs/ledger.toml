@@ -3980,7 +3980,7 @@ area = "client"
 repro = "client"
 severity = "major"
 status = "open"
-source = "Independent native WriterLifetimeQA reproduced 2/2: cancel session A's active input, then admit session B and issue ordinary input; B receives controller_lease_revoked while A returns cancelled. The late owner-error path in automation tools revokes the current lease without checking the admitted action's identity. The SourceNext correction uses the existing identity-fenced revoke operation; the replacement-writer regression and 23 other lifecycle tests pass, but a corrected immutable binary and native recheck remain pending."
+source = "Independent native WriterLifetimeQA reproduced 2/2 on original client f1 and server befd: cancel session A's active input, then admit session B; B receives controller_lease_revoked while A returns cancelled. The late owner-error path revokes the current lease without checking its admitted identity. The SourceNext correction uses the existing identity-fenced revoke operation; 24 lifecycle tests and three native 4f/befd cases pass. These are not the assigned Core5e pair. Later exact 4f/Core5e attempts keep B's controller active but reveal the separate NATIVE-REPLACEMENT-INPUT-CLEARED symptom in one of three attempts. Both rows remain open; no general handoff acceptance or promotion."
 regression = []
 failing_first = "reported"
 
@@ -4003,5 +4003,27 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Independent graphical damage QA observed rejection of gamerule natural_regeneration, so later health assertions did not have the intended regeneration-off fixture. The owning native P4 fixture now sends natural_health_regeneration false and requires actual command feedback. The corrected full run observes that feedback, but the full graphical gate still fails physical fall readiness and has no acceptance or ledger promotion."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "NATIVE-REPLACEMENT-INPUT-CLEARED"
+title = "A replacement native controller keeps its lease but loses accepted held input after cancellation"
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "WriterLifetimeQA exact client 4f96c55b and Core5e: cancel A's held sneak, then B successfully holds forward; B's controller remains active but the next observation has no held inputs. One failure in three fresh attempts; a confirmation did not reproduce. Both observations are healthy and playable without a screen transition. Session::input(ReleaseAll) clears gameplay input synchronously but UiState::release_all leaves a pending release that the next UI synchronization can replay over B's input. The SourceNext correction consumes that already-applied release: 30 focused regressions pass, the same consumer regression fails with the original release owner in an isolated tree, and native candidate 99f28571/Core5e passes three fresh cancellation cases plus manual preemption. Main read all four receipts; evidence is retained in receipts/NativeControlLease/replacement-input-cleanup.json. Client integration, broader acceptance and formal promotion remain pending."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "NATIVE-CAMEL-RIDER-OFF-SADDLE"
+title = "The native camel rider appears over the neck instead of the visible saddle"
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "SeatAttachmentQA reproduced the visible defect in two fresh two-client scenes on native 4f96c55b and Core5e, with actual SetPassengers receipts and mounted, movement and dismount frames. The shared first-passenger attachment agrees with the local reference source. The authored adult camel back is 0.625 blocks below the standing seat anchor; camel and camel_husk have the same low geometry. A model-proportion correction is not yet implemented or verified. Evidence: receipts/SeatAttachmentQA/report.yaml and receipts/ClientSeatAttachment/camel-owner-diagnosis.json. No matched vanilla frame, general attachment acceptance or promotion."
 regression = []
 failing_first = "reported"
