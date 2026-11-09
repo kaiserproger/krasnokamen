@@ -96,6 +96,10 @@ fn invulnerable_is_applied() {
 fn summon_no_gravity_and_invulnerable_are_effective_and_persistent() {
     let (mut state, id) = summon("cow", "{NoGravity:1b,Invulnerable:1b,NoAI:1b}");
     let slot = state.entities.slot_of(id).unwrap();
+    assert!(state.entities.row(slot).controls.no_gravity);
+    assert!(state.entities.row(slot).opaque_entity_fields.is_empty());
+    let target = crate::commands::target_of("@e[type=minecraft:cow,nbt={NoGravity:1b}]").unwrap();
+    assert!(crate::command_execution::resolve_target(&state, id, &target).contains(&id));
     let metadata = |state: &TickState| {
         state
             .entities

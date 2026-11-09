@@ -433,7 +433,6 @@ fn opaque_entity_tags_survive_native_runtime_checkpoint_and_restart() {
     let slot = state.entities.slot_of(id).unwrap();
     let expected = vec![
         ("Silent".into(), Tag::Byte(1)),
-        ("NoGravity".into(), Tag::Byte(1)),
         (
             "Tags".into(),
             Tag::List(mc_nbt::ListTag {
@@ -451,6 +450,7 @@ fn opaque_entity_tags_survive_native_runtime_checkpoint_and_restart() {
     let row = state.entities.row_mut(slot);
     row.persistent = true;
     Arc::make_mut(&mut row.appearance).custom_name_visible = true;
+    row.controls.no_gravity = true;
     mc_nbt::write_named(
         &mut row.opaque_entity_fields,
         "",
@@ -459,6 +459,16 @@ fn opaque_entity_tags_survive_native_runtime_checkpoint_and_restart() {
     .unwrap();
     let uuid = row.uuid;
     let (_, captured, _) = crate::core::checkpoint_data_for(&state, 2);
+    let captured_entity = captured
+        .values()
+        .flat_map(|chunk| &chunk.entities)
+        .find(|entity| entity.uuid == uuid)
+        .unwrap();
+    assert!(
+        captured_entity
+            .extra_fields
+            .contains(&("NoGravity".into(), Tag::Byte(1)))
+    );
     let entities =
         encode_entities(Dimension::Overworld, &captured, &state.registry.items, 2).unwrap();
     let mut image = store.read_checkpoint().unwrap();
@@ -503,6 +513,21 @@ fn opaque_entity_tags_survive_native_runtime_checkpoint_and_restart() {
             .find(|entity| entity.uuid == uuid.to_string())
             .unwrap();
         assert!(entity.appearance.custom_name_visible);
+        assert!(entity.state.controls.no_gravity);
+        let (mut view, _, _) = crate::hostile_tests::setup(8.0);
+        let view_id = crate::boundary::EntityId(999_999);
+        crate::core::restore_entity(&mut view, view_id.0, entity).unwrap();
+        let Tag::Compound(fields) = crate::command_data::entity(&view, view_id).unwrap() else {
+            panic!("entity data must be a compound");
+        };
+        assert!(fields.contains(&("NoGravity".into(), Tag::Byte(1))));
+        assert!(fields.contains(&("Silent".into(), Tag::Byte(1))));
+        let target =
+            crate::commands::target_of("@e[type=minecraft:cow,nbt={Silent:1b,NoGravity:1b}]")
+                .unwrap();
+        assert!(
+            crate::command_execution::resolve_target(&view, view_id, &target).contains(&view_id)
+        );
         let (_, opaque) =
             mc_nbt::read_named(&mut entity.state.opaque_entity_fields.as_slice()).unwrap();
         assert_eq!(opaque, Tag::Compound(expected.clone()));

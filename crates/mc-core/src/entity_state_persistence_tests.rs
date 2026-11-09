@@ -495,11 +495,39 @@ fn native_no_gravity_restore_rehydrates_wire_metadata_and_motion() {
         ],
         ..Default::default()
     };
-    let record = replay_record(&state, &native);
-    restore_entity(&mut state, 42, &record).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let chunks = [(
+        (0, 0),
+        mc_world::anvil::EntityChunk {
+            x: 0,
+            z: 0,
+            entities: vec![native],
+        },
+    )]
+    .into_iter()
+    .collect();
+    mc_world::anvil::write_entity_regions(directory.path(), &state.registry.items, &chunks, 1)
+        .unwrap();
+    let loaded =
+        mc_world::anvil::read_entity_regions(directory.path(), &state.registry.items).unwrap();
+    let native = &loaded[&(0, 0)].entities[0];
+    let payload = mc_nbt::Tag::Compound(
+        mc_data::entity_nbt::entity_to_fields(&state.registry.items, native).unwrap(),
+    );
+    let mut replay = Replay::default();
+    crate::native_checkpoint::hydrate_entity(&state.registry, &mut replay, &payload, 1).unwrap();
+    let record = &replay.entities[&42];
+    assert!(record.state.controls.no_gravity);
+    assert!(record.state.opaque_entity_fields.is_empty());
+    restore_entity(&mut state, 42, record).unwrap();
     let slot = state.entities.slot_of(EntityId(42)).unwrap();
     let row = state.entities.row(slot);
     assert!(row.controls.no_gravity);
+    let target = crate::commands::target_of("@e[type=minecraft:cow,nbt={NoGravity:1b}]").unwrap();
+    assert!(
+        crate::command_execution::resolve_target(&state, EntityId(42), &target)
+            .contains(&EntityId(42))
+    );
     assert!(
         row.appearance
             .extra
