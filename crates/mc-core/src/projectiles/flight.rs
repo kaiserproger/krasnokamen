@@ -1,4 +1,7 @@
 //! Shared swept collision, ballistic motion, pickup and loyalty return.
+//! One post-move body snapshot owns exact hit geometry. Per-shot membership is
+//! frozen from EntityStore's chunk index before payload mutations; pickup and
+//! riptide query that same live index and preserve dense-slot priority.
 
 use std::sync::Arc;
 
@@ -12,8 +15,13 @@ use crate::intent::{DamageSource, Footprint, Intent, IntentKind};
 use crate::survival::DamageKind;
 use crate::tick::TickState;
 
+#[cfg(test)]
+#[path = "flight_top100_h02_tests.rs"]
+mod top100_h02_tests;
+
 #[derive(Debug)]
 pub(super) struct Hittable {
+    slot: Option<EntitySlot>,
     id: EntityId,
     uuid: Uuid,
     /// Armor stand: a possible plugin deployment. Hit tests resolve its slot by
@@ -24,9 +32,9 @@ pub(super) struct Hittable {
     item: bool,
 }
 
-fn hittables(state: &TickState, bodies: &mut Vec<Hittable>, current_is_hook: bool) {
+fn hittables(state: &TickState, bodies: &mut Vec<Hittable>) {
     bodies.clear();
-    let include_items = current_is_hook || crate::projectiles::active_hook_present(state);
+    let include_items = crate::projectiles::active_hook_present(state);
     bodies.extend(state.entities.slots().filter_map(|slot| {
         let body = state.entities.body(slot);
         let row = state.entities.row(slot);
@@ -48,6 +56,7 @@ fn hittables(state: &TickState, bodies: &mut Vec<Hittable>, current_is_hook: boo
         hittable.then(|| {
             let pos = state.entities.pos(slot);
             Hittable {
+                slot: Some(slot),
                 id: body.id,
                 uuid: row.uuid,
                 item: matches!(body.kind, EntityKind::Item { .. }),
@@ -69,6 +78,7 @@ fn hittables(state: &TickState, bodies: &mut Vec<Hittable>, current_is_hook: boo
             let part = EntityId(id.0 + offset);
             if let Some((min, max)) = crate::end_fight::part_bounds(state, part) {
                 bodies.push(Hittable {
+                    slot: None,
                     id: part,
                     uuid,
                     item: false,
@@ -79,6 +89,105 @@ fn hittables(state: &TickState, bodies: &mut Vec<Hittable>, current_is_hook: boo
             }
         }
     }
+}
+
+/// The entity store indexes feet, not bounds. Expand by its retained maximum
+/// body width before visiting chunks; callers retain their exact narrow phase.
+/// Slot order preserves the exhaustive pickup/riptide order, including swaps.
+pub(super) fn swept_slots(
+    state: &TickState,
+    start: [f64; 3],
+    end: [f64; 3],
+    margin: f64,
+    slots: &mut Vec<EntitySlot>,
+) {
+    slots.clear();
+    let extent = state.entities.max_half_width() + margin;
+    let chunk = |v: f64| mc_physics::mth::floor_i32(v).div_euclid(16);
+    let min_x = chunk(start[0].min(end[0]) - extent);
+    let max_x = chunk(start[0].max(end[0]) + extent);
+    let min_z = chunk(start[2].min(end[2]) - extent);
+    let max_z = chunk(start[2].max(end[2]) + extent);
+    let cells =
+        (i64::from(max_x) - i64::from(min_x) + 1) * (i64::from(max_z) - i64::from(min_z) + 1);
+    let indexed =
+        state.entities.brain_sensor_chunks().len() + state.entities.villager_chunks().len();
+    if cells > indexed as i64 {
+        // Long diagonal sweeps/teleports must not enumerate empty world space.
+        // These are the same authoritative chunks, not a second spatial index.
+        for &pos in state
+            .entities
+            .brain_sensor_chunks()
+            .keys()
+            .chain(state.entities.villager_chunks().keys())
+        {
+            if (min_x..=max_x).contains(&pos.x) && (min_z..=max_z).contains(&pos.z) {
+                state
+                    .entities
+                    .for_each_slot_in_chunk(pos, |slot| slots.push(slot));
+            }
+        }
+    } else {
+        for z in min_z..=max_z {
+            for x in min_x..=max_x {
+                state
+                    .entities
+                    .for_each_slot_in_chunk(crate::boundary::ChunkPos { x, z }, |slot| {
+                        slots.push(slot)
+                    });
+            }
+        }
+    }
+    slots.sort_unstable_by_key(|slot| slot.0);
+    slots.dedup();
+}
+
+/// Freeze broad-phase membership at the same post-move version as `hittables`.
+/// Later payloads can teleport bodies, remove rows or swap slots. Neither those
+/// changes nor a newly spawned drop may change another shot's frozen candidates.
+fn shot_candidates(
+    state: &TickState,
+    id: EntityId,
+    bodies: &[Hittable],
+    exceptional: &[usize],
+    slots: &mut Vec<EntitySlot>,
+    candidates: &mut Vec<usize>,
+) {
+    let Some(slot) = state.entities.slot_of(id) else {
+        return;
+    };
+    let Some(record) = state.entities.row(slot).projectile.as_deref() else {
+        return;
+    };
+    if record.stuck || record.kind == ProjectileKind::EyeOfEnder {
+        return;
+    }
+    let pos = state.entities.pos(slot);
+    let velocity = state.entities.vel(slot).map(|v| v / 20.0);
+    let radius = crate::physical_attacks::projectile_profile(state, slot)
+        .map_or(0.3, |profile| profile.collision_radius);
+    if pos.iter().any(|v| !v.is_finite()) || !radius.is_finite() || !(0.0..=128.0).contains(&radius)
+    {
+        return;
+    }
+    let (start, end) = if matches!(record.data, super::ProjectileData::Homing { .. }) {
+        // Homing may observe a target teleported by an earlier payload. Every
+        // segment accepted by first_solid is inside this conservative envelope.
+        (pos.map(|v| v - 128.0), pos.map(|v| v + 128.0))
+    } else {
+        if velocity.iter().any(|v| !v.is_finite() || v.abs() > 128.0) {
+            return;
+        }
+        (pos, std::array::from_fn(|axis| pos[axis] + velocity[axis]))
+    };
+    swept_slots(state, start, end, radius, slots);
+    candidates.extend(slots.iter().filter_map(|slot| {
+        bodies
+            .binary_search_by_key(&slot.0, |body| body.slot.map_or(u32::MAX, |slot| slot.0))
+            .ok()
+    }));
+    // Dragon parts and deployed planes need not fit the ordinary body bounds.
+    candidates.extend_from_slice(exceptional);
 }
 
 pub(super) fn segment_enters(
@@ -291,13 +400,76 @@ pub(super) fn run(
     ids: impl Iterator<Item = EntityId>,
 ) {
     state.projectiles.retired_crossbows.clear();
-    let mut ids = ids.peekable();
-    if ids.peek().is_none() {
+    let ids: Vec<_> = ids.collect();
+    if ids.is_empty() {
         return;
     }
     let mut bodies = std::mem::take(&mut state.projectiles.bodies);
-    let mut have_hittables = false;
-    for id in ids {
+    bodies.clear();
+    if ids.iter().any(|id| {
+        state.entities.slot_of(*id).is_some_and(|slot| {
+            state
+                .entities
+                .row(slot)
+                .projectile
+                .as_deref()
+                .is_some_and(|record| !record.stuck && record.kind != ProjectileKind::EyeOfEnder)
+        })
+    }) {
+        hittables(state, &mut bodies);
+    }
+    let exceptional: Vec<_> = bodies
+        .iter()
+        .enumerate()
+        .filter_map(|(index, body)| {
+            (body.slot.is_none() || body.deployed_candidate).then_some(index)
+        })
+        .collect();
+    let mut slots = Vec::new();
+    let mut candidates = Vec::new();
+    let mut ranges = Vec::with_capacity(ids.len());
+    for &id in &ids {
+        let start = candidates.len();
+        shot_candidates(
+            state,
+            id,
+            &bodies,
+            &exceptional,
+            &mut slots,
+            &mut candidates,
+        );
+        candidates[start..].sort_unstable();
+        // Each query has unique slots, but exceptional stands may also be local.
+        let mut end = start;
+        for read in start..candidates.len() {
+            if end == start || candidates[read] != candidates[end - 1] {
+                candidates[end] = candidates[read];
+                end += 1;
+            }
+        }
+        candidates.truncate(end);
+        ranges.push(start..end);
+    }
+    run_shots(
+        state,
+        intents,
+        ids.into_iter()
+            .zip(ranges)
+            .map(|(id, range)| (id, &candidates[range])),
+        &bodies,
+        &mut slots,
+    );
+    state.projectiles.bodies = bodies;
+}
+
+fn run_shots<'a>(
+    state: &mut TickState,
+    intents: &mut Vec<Intent>,
+    shots: impl Iterator<Item = (EntityId, &'a [usize])>,
+    bodies: &[Hittable],
+    slots: &mut Vec<EntitySlot>,
+) {
+    for (id, candidates) in shots {
         let Some(slot) = state.entities.slot_of(id) else {
             continue;
         };
@@ -342,15 +514,7 @@ pub(super) fn run(
         };
         let record = &mut *boxed;
         record.age = record.age.saturating_add(1);
-        if record.kind != ProjectileKind::EyeOfEnder && !have_hittables {
-            hittables(
-                state,
-                &mut bodies,
-                record.kind == ProjectileKind::FishingHook,
-            );
-            have_hittables = true;
-        }
-        let gone = step(state, intents, id, record, &bodies);
+        let gone = step(state, intents, id, record, bodies, candidates, slots);
         if gone {
             // Removing the row must not discard actual weapon custody before
             // the lethal-hit hooks run during same-tick damage admission.
@@ -367,7 +531,6 @@ pub(super) fn run(
             super::touch(state, id);
         }
     }
-    state.projectiles.bodies = bodies;
 }
 
 /// Attached rockets follow their player's UUID, never a restart-local entity id.
@@ -450,6 +613,8 @@ fn step(
     id: EntityId,
     record: &mut ProjectileState,
     bodies: &[Hittable],
+    candidates: &[usize],
+    slots: &mut Vec<EntitySlot>,
 ) -> bool {
     if record.kind == ProjectileKind::EyeOfEnder {
         return super::eye::step(state, id, record);
@@ -487,7 +652,7 @@ fn step(
         if record.age > ARROW_STUCK_TICKS {
             return true;
         }
-        return pickup(state, record, pos);
+        return pickup(state, record, pos, slots);
     }
     // Vanilla ThrowableProjectile has no lifetime: a pearl may hover for ever.
     if record.kind != ProjectileKind::EnderPearl
@@ -517,8 +682,9 @@ fn step(
     let owner = super::owner_id(state, record);
     if !(record.kind == ProjectileKind::Trident && (!record.hit.is_empty() || record.returning)) {
         loop {
-            let victim = bodies
+            let victim = candidates
                 .iter()
+                .map(|&index| &bodies[index])
                 .filter(|body| !body.item || record.kind == ProjectileKind::FishingHook)
                 .filter(|body| Some(body.uuid) != record.owner && !record.hit.contains(&body.uuid))
                 .filter(|body| {
@@ -854,12 +1020,17 @@ fn step(
     false
 }
 
-fn pickup(state: &mut TickState, record: &ProjectileState, pos: [f64; 3]) -> bool {
+fn pickup(
+    state: &mut TickState,
+    record: &ProjectileState,
+    pos: [f64; 3],
+    slots: &mut Vec<EntitySlot>,
+) -> bool {
     if !record.pickup || record.stack.is_empty() {
         return false;
     }
-    for index in 0..state.entities.len() as u32 {
-        let slot = EntitySlot(index);
+    swept_slots(state, pos, pos, 1.5, slots);
+    for &slot in slots.iter() {
         let body = state.entities.body(slot);
         let player = body.id;
         if !body.alive
