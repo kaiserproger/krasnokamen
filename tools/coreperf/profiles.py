@@ -137,20 +137,30 @@ def fixture(mobs: int, villagers: int) -> dict[str, Any]:
     return value
 
 
-def scale_fixture(residents: int, mix: str, *, without_cows: bool = False) -> dict[str, Any]:
+def scale_fixture(residents: int, mix: str, *, excluded_kinds: tuple[str, ...] = (),
+                  active_override: int | None = None) -> dict[str, Any]:
     """Separate public-command pens, with cold regions kept resident by adjacent tickets."""
     if residents < 0 or mix not in ("all-active", "mostly-resting", "sparse-active"):
         raise ValueError("invalid scale population or activity mix")
     kinds = compare.MOB_KINDS
-    eligible = tuple(kind for kind in kinds if not without_cows or kind != "cow")
+    eligible = tuple(kind for kind in kinds if kind not in excluded_kinds)
+    if len(eligible) < 2:
+        raise ValueError("scale fixture requires at least two species")
     counts = {kind: 0 for kind in kinds}
     if mix == "mostly-resting":
-        counts["sheep" if without_cows else "cow"] = residents - residents // 10
-        counts["zombie"] = residents // 10
+        primary = next((kind for kind in ("cow", "sheep", "pig") if kind in eligible), eligible[0])
+        secondary = ("zombie" if "zombie" in eligible and primary != "zombie" else
+                     next(kind for kind in eligible if kind != primary))
+        counts[primary] = residents - residents // 10
+        counts[secondary] = residents // 10
     else:
         for index, kind in enumerate(eligible):
             counts[kind] = residents // len(eligible) + (index < residents % len(eligible))
-    active_total = residents // 10 if mix == "sparse-active" else residents
+    active_total = (residents // 10 if mix == "sparse-active" else residents)
+    if active_override is not None:
+        active_total = active_override
+    if active_total < 0 or active_total > residents:
+        raise ValueError("active population exceeds residents")
     active_left = active_total
     portions: dict[str, int] = {}
     for kind, count in counts.items():
@@ -233,6 +243,8 @@ def add_dispenser_bank(recipe: dict[str, Any], count: int, capacity: int, item: 
     for i in range(capacity):
         px, pz = x + (i % 32) * 2, z + (i // 32) * 2
         commands.append(f"setblock {px} 66 {pz} minecraft:dispenser[facing=up,triggered=false]")
+        recipe.setdefault("expected_blocks", []).append({"position": [px, 66, pz], "block": "minecraft:dispenser",
+            "item": f"minecraft:{item}" if i < count else "minecraft:air", "count": 64 if i < count else 0})
         if i < count:
             commands.append(f"item replace block {px} 66 {pz} container.0 with minecraft:{item} 64")
     recipe["regions"].append({"name": f"{item}-bank", "anchor": [x+72, z+32],
@@ -247,29 +259,57 @@ def add_projectile_fixture(recipe: dict[str, Any], count: int, *, smoke: bool) -
     """Pulse an identical dispenser bank; only the loaded-ammunition count varies."""
     capacity = max(count, 4) if smoke else 1000
     group, on, off = add_dispenser_bank(recipe, count, capacity, "arrow")
-    recipe["stress"] = {"kind": "projectiles", "regions": [group], "requested_peak": count,
+    recipe["stress"] = {"kind": "projectiles", "regions": [group], "requested_count": count,
                         "dispenser_capacity": capacity, "pulse_interval_ms": 3000,
                         "commands": [on, off]}
 
 
-def add_xp_fixture(recipe: dict[str, Any], count: int, *, smoke: bool) -> None:
-    """Use real thrown bottles; identical bank geometry for all full-scale comparisons."""
-    capacity = max(count, 4) if smoke else 100000
-    if count < 0 or count > capacity:
-        raise ValueError("XP bottle count exceeds fixture capacity")
-    groups, on, off = [], [], []
-    remaining = count
-    for start in range(0, capacity, 1000):
-        size = min(1000, capacity - start)
-        loaded = min(size, remaining)
-        group, enable, disable = add_dispenser_bank(recipe, loaded, size, "experience_bottle")
-        groups.append(group)
-        on.append(enable)
-        off.append(disable)
-        remaining -= loaded
-    recipe["stress"] = {"kind": "xp-orbs", "regions": groups, "requested_peak": count,
-                        "dispenser_capacity": capacity, "pulse_interval_ms": max(1, 6000 // (2 * len(groups))),
+def add_xp_fixture(recipe: dict[str, Any], count: int, *, smoke: bool,
+                   players: int = 1, locality: str = "compact") -> None:
+    """One active bank region, with independently counted observer anchors."""
+    if (count < 0 or count > 100000 or players not in (0, 1, 100, 1000)
+            or (players == 0 and count != 0) or locality not in ("compact", "spread")):
+        raise ValueError("invalid XP workload")
+    capacity = (max(count, 4) if smoke else 100000) if count else 0
+    group, _, _ = add_dispenser_bank(recipe, 0, 0, "experience_bottle")
+    region = recipe["regions"][group]
+    region["name"] = "xp-observer-bank" if count else "xp-observer"
+    recipe["variant"] = f"noncanonical-xp-{recipe['population']['resident_requested']}-cold-background"
+    x, z = group % 32 * 256, group // 32 * 256
+    if players:
+        region["commands"].append(f"setworldspawn {x+32} 64 {z+32}")
+    else:
+        recipe["coverage"][group]["active"] = False
+        region["commands"] += [f"setworldspawn {x+128} 64 {z+128}",
+                               f"forceload add {x-16} {z+16}", f"forceload add {x+64} {z+16}"]
+    on, off = [], []
+    width = 63
+    for start in range(0, capacity, width * width):
+        size = min(width * width, capacity - start)
+        y = 66 + (start // (width * width)) * 3
+        rows, remainder = divmod(size, width)
+        if rows:
+            region["commands"].append(f"fill {x} {y} {z} {x+width-1} {y} {z+rows-1} minecraft:dispenser[facing=up,triggered=false]")
+        if remainder:
+            region["commands"].append(f"fill {x} {y} {z+rows} {x+remainder-1} {y} {z+rows} minecraft:dispenser[facing=up,triggered=false]")
+        recipe.setdefault("expected_blocks", []).extend(
+            {"position": [x+i%width, y, z+i//width], "block": "minecraft:dispenser",
+             "item": "minecraft:experience_bottle" if start+i < count else "minecraft:air",
+             "count": 64 if start+i < count else 0} for i in range(size))
+        for i in range(min(size, max(0, count-start))):
+            region["commands"].append(f"item replace block {x+i%width} {y} {z+i//width} container.0 with minecraft:experience_bottle 64")
+        on.append(f"fill {x} {y-1} {z} {x+width-1} {y-1} {z+width-1} minecraft:redstone_block")
+        off.append(f"fill {x} {y-1} {z} {x+width-1} {y-1} {z+width-1} minecraft:air")
+    anchors = ([[x+32, z+32]] * players if locality == "compact" else
+               [[x+8+(i%4)*16, z+8+((i//4)%4)*16] for i in range(players)])
+    recipe["stress"] = {"kind": "xp-orbs", "regions": [group] if count else [],
+                        "observer_region": group, "requested_count": count,
+                        "dispenser_capacity": capacity, "players": players,
+                        "locality": locality, "anchors": anchors,
+                        "pulse_interval_ms": max(1, 6000 // max(1, len(on)+len(off))),
                         "commands": on + off}
+
+
 
 
 def add_brewing_fixture(recipe: dict[str, Any], containers: int, *, stands: int = 5) -> None:
@@ -287,9 +327,11 @@ def add_brewing_fixture(recipe: dict[str, Any], containers: int, *, stands: int 
         for i in range(min(1000, containers - start)):
             px, pz = x + (i % 32) * 2, z + (i // 32) * 2
             region["commands"].append(f"setblock {px} 64 {pz} minecraft:chest")
+            recipe.setdefault("expected_blocks", []).append({"position": [px, 64, pz], "block": "minecraft:chest"})
         if start == 0:
             for i in range(stands):
                 px, pz = x + (i % 32) * 2, z + (i // 32) * 2
+                recipe.setdefault("expected_blocks", []).append({"position": [px, 68, pz], "block": "minecraft:brewing_stand"})
                 region["commands"] += [
                     f"setblock {px} 68 {pz} minecraft:brewing_stand",
                     f"item replace block {px} 68 {pz} container.3 with minecraft:nether_wart 64",
@@ -376,6 +418,8 @@ def add_damage_fixture(recipe: dict[str, Any], victims: int, *, smoke: bool) -> 
             ]
         for i in range(n):
             px, pz = x + (i % 16) * 4 + 1, z + (i // 16) * 4 + 1
+            recipe.setdefault("expected_blocks", []).append({"position": [px, 63, pz], "block": "minecraft:dispenser",
+                "item": "minecraft:arrow" if i < residents else "minecraft:air", "count": 64 if i < residents else 0})
             region["commands"] += [
                 f"fill {px-1} 64 {pz-1} {px+1} 66 {pz-1} minecraft:stone",
                 f"fill {px-1} 64 {pz+1} {px+1} 66 {pz+1} minecraft:stone",
@@ -400,12 +444,193 @@ def add_damage_fixture(recipe: dict[str, Any], victims: int, *, smoke: bool) -> 
     recipe["variant"] = recipe["variant"].replace(
         f"noncanonical-scale-{old_residents}-",
         f"noncanonical-scale-{recipe['population']['resident_requested']}-", 1)
-    selector = "@e[type=minecraft:cow,name=solaris-coreperf-fixture]"
+    selector = f"@e[type=minecraft:cow,nbt={{CustomName:'{compare.COHORT_NAME}'}}]"
     recipe["stress"] = {"kind": "damage", "regions": groups, "requested_victims": victims,
                         "target_initial_health": 100, "dispenser_capacity": capacity,
                         "pulse_interval_ms": 3000,
                         "commands": [f"execute as {selector} at @s run setblock ~1 ~-1 ~ minecraft:redstone_block",
                                      f"execute as {selector} at @s run setblock ~1 ~-1 ~ minecraft:grass_block"]}
+
+
+def add_reactive_fixture(recipe: dict[str, Any], pairs: int) -> None:
+    """Confined golem/zombie pairs trigger native, guaranteed thorns reactions."""
+    if pairs < 1 or recipe["expected"]["minecraft:zombie"]:
+        raise ValueError("reactive fixture requires exclusive zombie targets")
+    groups = []
+    for start in range(0, pairs, 64):
+        group, _, _ = add_dispenser_bank(recipe, 0, 0, "arrow")
+        groups.append(group)
+        region = recipe["regions"][group]
+        region["name"] = "reactive-pairs"
+        x, z = group % 32 * 256, group // 32 * 256
+        n = min(64, pairs-start)
+        recipe["coverage"][group].update(resident=2*n, kind="minecraft:zombie")
+        for i in range(n):
+            px, pz = x+(i%8)*8+2, z+(i//8)*8+2
+            region["commands"] += [
+                f"fill {px-2} 64 {pz-2} {px+2} 67 {pz-2} minecraft:stone",
+                f"fill {px-2} 64 {pz+2} {px+2} 67 {pz+2} minecraft:stone",
+                f"fill {px-2} 64 {pz-1} {px-2} 67 {pz+1} minecraft:stone",
+                f"fill {px+2} 64 {pz-1} {px+2} 67 {pz+1} minecraft:stone",
+                f"fill {px-2} 68 {pz-2} {px+2} 68 {pz+2} minecraft:stone",
+                f"summon minecraft:zombie {px-.5} 64 {pz+.5} "
+                f"{{CustomName:'{compare.COHORT_NAME}',PersistenceRequired:1b,Health:100000f,"
+                "equipment:{chest:{id:'minecraft:diamond_chestplate',components:{'minecraft:enchantments':{'minecraft:thorns':10}}}}}",
+                f"summon minecraft:iron_golem {px+1.0} 64 {pz+.5} "
+                f"{{CustomName:'{compare.COHORT_NAME}',PersistenceRequired:1b,Health:100000f}}",
+            ]
+    old = recipe["population"]["resident_requested"]
+    recipe["expected"]["minecraft:zombie"] = pairs
+    recipe["expected"]["minecraft:iron_golem"] = pairs
+    recipe["population"]["resident_requested"] += 2*pairs
+    recipe["population"]["active_requested"] += 2*pairs
+    recipe["variant"] = recipe["variant"].replace(f"noncanonical-scale-{old}-",
+        f"noncanonical-scale-{recipe['population']['resident_requested']}-", 1)
+    recipe["stress"] = {"kind": "reactive-damage", "regions": groups,
+                        "requested_pairs": pairs, "commands": []}
+
+
+def add_natural_fixture(recipe: dict[str, Any], count: int, kind: str) -> None:
+    """Confined exposed zombies or initially sheared sheep, summoned by operators."""
+    if count < 0 or kind not in ("daylight-zombies", "wool-sheep"):
+        raise ValueError("invalid natural cohort")
+    animal = "zombie" if kind == "daylight-zombies" else "sheep"
+    if recipe["expected"][f"minecraft:{animal}"]:
+        raise ValueError("natural cohort species must be exclusive")
+    groups = []
+    for start in range(0, count, 256):
+        group, _, _ = add_dispenser_bank(recipe, 0, 0, "arrow")
+        groups.append(group)
+        region = recipe["regions"][group]
+        region["name"] = kind
+        x, z = group % 32 * 256, group // 32 * 256
+        n = min(256, count-start)
+        recipe["coverage"][group].update(resident=n, kind=f"minecraft:{animal}")
+        for i in range(n):
+            px, pz = x + (i%16)*4 + 1, z + (i//16)*4 + 1
+            region["commands"] += [
+                f"fill {px-1} 64 {pz-1} {px+1} 66 {pz-1} minecraft:stone",
+                f"fill {px-1} 64 {pz+1} {px+1} 66 {pz+1} minecraft:stone",
+                f"fill {px-1} 64 {pz} {px-1} 66 {pz} minecraft:stone",
+                f"fill {px+1} 64 {pz} {px+1} 66 {pz} minecraft:stone",
+                f"fill {px} 65 {pz} {px} 319 {pz} minecraft:air",
+            ]
+            if kind == "wool-sheep":
+                region["commands"].append(f"setblock {px} 63 {pz} minecraft:stone")
+                extra = ",Sheared:1b"
+            else:
+                extra = ",Health:100000f,equipment:{}"
+            region["commands"].append(
+                f"summon minecraft:{animal} {px+.5} 64 {pz+.5} "
+                f"{{CustomName:'{compare.COHORT_NAME}',PersistenceRequired:1b{extra}}}")
+    recipe["regions"][-1]["commands"] += ["gamerule doDaylightCycle false", "time set 2000"]
+    old_residents = recipe["population"]["resident_requested"]
+    recipe["expected"][f"minecraft:{animal}"] = count
+    recipe["population"]["resident_requested"] += count
+    recipe["population"]["active_requested"] += count
+    recipe["variant"] = recipe["variant"].replace(f"noncanonical-scale-{old_residents}-",
+        f"noncanonical-scale-{recipe['population']['resident_requested']}-", 1)
+    commands = []
+    if count and kind == "wool-sheep":
+        recipe["regions"][0]["commands"][:0] = [
+            "gamerule minecraft:max_command_forks 200001",
+            "gamerule minecraft:max_command_sequence_length 400000"]
+        commands = [f"execute as @e[type=minecraft:sheep,nbt={{CustomName:'{compare.COHORT_NAME}'}}] at @s run setblock ~ ~-1 ~ minecraft:grass_block"]
+    recipe["stress"] = {"kind": kind, "regions": groups, "requested_count": count,
+                        "pulse_interval_ms": 3000, "commands": commands}
+
+
+def validate_spawn_rules(snapshot: dict[str, Any], expected: dict[str, bool]) -> dict[str, bool]:
+    checkpoint = snapshot.get("globals", {}).get("checkpoint", {})
+    rules = checkpoint.get("payload", {}).get("gamerules") if isinstance(checkpoint, dict) else None
+    if not isinstance(rules, dict):
+        raise ValueError("missing saved spawn-rule state")
+    observed = {}
+    for key, wanted in expected.items():
+        value = rules.get(key)
+        if value not in ("true", "false") or (value == "true") != wanted:
+            raise ValueError(f"saved spawn-rule {key} differs from request")
+        observed[key] = value == "true"
+    return observed
+
+
+def validate_reactive_equipment(snapshot: dict[str, Any], expected: int) -> int:
+    rows = snapshot.get("entities", {}).get("minecraft:zombie", {}).get("samples", [])
+    rows = [row for row in rows if row.get("active") and row.get("payload", {}).get("CustomName") == compare.COHORT_NAME]
+    if len(rows) != expected:
+        raise ValueError("saved reactive zombie count differs from request")
+    for row in rows:
+        chest = row["payload"].get("equipment", {}).get("chest", {})
+        levels = chest.get("components", {}).get("minecraft:enchantments", {})
+        if chest.get("id") != "minecraft:diamond_chestplate" or levels.get("minecraft:thorns") != 10:
+            raise ValueError("saved reactive target lacks requested thorns equipment")
+    return len(rows)
+
+
+def validate_reactive_samples(stress: dict[str, Any], samples: list[dict[str, Any]]) -> int:
+    if not samples or any(type(row.get("damage_reactive")) is not int
+                          or row["damage_reactive"] < 0 for row in samples):
+        raise ValueError("missing reactive source-tick samples")
+    total = sum(row["damage_reactive"] for row in samples)
+    if total < stress["requested_pairs"]:
+        raise ValueError("accepted reactive damage pieces below requested pairs")
+    return total
+
+
+def validate_natural_snapshot(stress: dict[str, Any], snapshot: dict[str, Any], *, before: bool) -> dict[str, int]:
+    animal = "zombie" if stress["kind"] == "daylight-zombies" else "sheep"
+    rows = snapshot.get("entities", {}).get(f"minecraft:{animal}", {}).get("samples", [])
+    rows = [row for row in rows if row.get("active") and row.get("payload", {}).get("CustomName") == compare.COHORT_NAME]
+    if len(rows) != stress["requested_count"]:
+        raise ValueError("saved natural cohort count differs from request")
+    key = "Fire" if animal == "zombie" else "Sheared"
+    positive = sum(type(row["payload"].get(key)) is int and row["payload"][key] > 0 for row in rows)
+    if (animal == "sheep" and before or animal == "zombie" and not before) and positive != len(rows):
+        raise ValueError(f"saved {animal} {key} state differs from requested cohort")
+    return {"saved_count": len(rows), "positive_state": positive}
+
+
+def add_churn_fixture(recipe: dict[str, Any], count: int, percent: int) -> None:
+    """Alternate native cows and pigs in confined cells via public commands."""
+    if (count < 0 or percent not in (0, 1, 10) or recipe["expected"]["minecraft:cow"]
+            or recipe["expected"]["minecraft:pig"]):
+        raise ValueError("invalid churn cohort")
+    groups = []
+    for start in range(0, count, 256):
+        group, _, _ = add_dispenser_bank(recipe, 0, 0, "arrow")
+        groups.append(group)
+        region = recipe["regions"][group]
+        region["name"] = "churn-cells"
+        x, z = group % 32 * 256, group // 32 * 256
+        n = min(256, count - start)
+        recipe["coverage"][group].update(resident=n, kind="minecraft:cow")
+        for i in range(n):
+            px, pz = x + (i % 16) * 4 + 1, z + (i // 16) * 4 + 1
+            region["commands"] += [
+                f"fill {px-1} 64 {pz-1} {px+1} 66 {pz-1} minecraft:stone",
+                f"fill {px-1} 64 {pz+1} {px+1} 66 {pz+1} minecraft:stone",
+                f"fill {px-1} 64 {pz} {px-1} 66 {pz} minecraft:stone",
+                f"fill {px+1} 64 {pz} {px+1} 66 {pz} minecraft:stone",
+                f"summon minecraft:cow {px+.5} 64 {pz+.5} {{CustomName:'{compare.COHORT_NAME}',PersistenceRequired:1b}}",
+            ]
+    recipe["regions"][0]["commands"][:0] = [
+        "gamerule minecraft:max_command_forks 200001",
+        "gamerule minecraft:max_command_sequence_length 400000"]
+    recipe["expected"]["minecraft:cow"] = count
+    old_residents = recipe["population"]["resident_requested"]
+    recipe["population"]["resident_requested"] += count
+    recipe["population"]["active_requested"] += count
+    recipe["variant"] = recipe["variant"].replace(f"noncanonical-scale-{old_residents}-",
+        f"noncanonical-scale-{recipe['population']['resident_requested']}-", 1)
+    marker = compare.COHORT_NAME
+    commands = [] if not count else [
+        f"execute as @e[type=minecraft:cow,nbt={{CustomName:'{marker}'}}] at @s run summon minecraft:pig ~ ~ ~ {{CustomName:'{marker}',PersistenceRequired:1b}}",
+        f"kill @e[type=minecraft:cow,nbt={{CustomName:'{marker}'}}]",
+        f"execute as @e[type=minecraft:pig,nbt={{CustomName:'{marker}'}}] at @s run summon minecraft:cow ~ ~ ~ {{CustomName:'{marker}',PersistenceRequired:1b}}",
+        f"kill @e[type=minecraft:pig,nbt={{CustomName:'{marker}'}}]",
+    ]
+    recipe["stress"] = {"kind": "churn", "regions": groups, "requested_count": count,
+                        "requested_percent": percent, "pulse_interval_ms": 500, "commands": commands}
 
 
 def add_map_frame_fixture(recipe: dict[str, Any], frames: int, *, smoke: bool) -> None:
@@ -476,14 +701,81 @@ def validate_map_frames(snapshot: dict[str, Any], expected: int) -> dict[str, in
     return identities
 
 
+def validate_churn_cohort(recipe: dict[str, Any], before: dict[str, Any], snapshot: dict[str, Any]) -> tuple[dict[str, Any], dict[str, int]]:
+    count = recipe["stress"]["requested_count"]
+    rows = compare.entities(snapshot)
+    churn = {key: row for key, row in rows.items() if row["custom_name"] == compare.COHORT_NAME
+             and row["kind"] in ("minecraft:cow", "minecraft:pig")}
+    if len(churn) != count:
+        raise ValueError("saved churn count differs from requested cohort")
+    counts = dict(recipe["expected"])
+    counts["minecraft:cow"] = sum(row["kind"] == "minecraft:cow" for row in churn.values())
+    counts["minecraft:pig"] = sum(row["kind"] == "minecraft:pig" for row in churn.values())
+    after = compare.cohort(snapshot, counts)
+    old_churn = {key for key, row in before["identities"].items()
+                 if row["kind"] in ("minecraft:cow", "minecraft:pig")}
+    if len(old_churn) != count or (count and old_churn.intersection(churn)):
+        raise ValueError("saved churn identities did not all turn over")
+    stable_expected = dict(counts, **{"minecraft:cow": 0, "minecraft:pig": 0})
+    def stable(cohort):
+        return {"counts": stable_expected, "identities": {key: row for key, row in cohort["identities"].items()
+                if row["kind"] not in ("minecraft:cow", "minecraft:pig")}}
+    validate_cohort(stable(before), stable(after), stable_expected)
+    return after, {"before": len(old_churn), "after": len(churn), "replaced_min": count}
+
+
+def fixture_block_spec(recipe: dict[str, Any]) -> dict[str, Any]:
+    rows = recipe.get("expected_blocks", [])
+    positions = [tuple(row["position"]) for row in rows]
+    if len(set(positions)) != len(positions):
+        raise ValueError("fixture block positions are duplicated")
+    containers = [row for row in rows if row["block"] == "minecraft:dispenser"]
+    return {"entities": [], "blocks": [
+        {"name": f"fixture-{i}", "position": row["position"]} for i, row in enumerate(rows)],
+        "containers": [{"name": f"fixture-container-{i}", "position": row["position"], "slots": 9}
+                       for i, row in enumerate(containers)]}
+
+
+def validate_fixture_blocks(recipe: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]:
+    expected = recipe.get("expected_blocks", [])
+    blocks = snapshot.get("blocks")
+    if not isinstance(blocks, dict) or len(blocks) != len(expected):
+        raise ValueError("saved fixture block count differs from recipe")
+    counts: dict[str, int] = {}
+    for i, row in enumerate(expected):
+        observed = blocks.get(f"fixture-{i}")
+        if (not isinstance(observed, dict) or observed.get("position") != row["position"]
+                or observed.get("final", {}).get("name") != row["block"]):
+            raise ValueError(f"saved fixture block {i} differs from recipe")
+        counts[row["block"]] = counts.get(row["block"], 0) + 1
+    expected_containers = [row for row in expected if row["block"] == "minecraft:dispenser"]
+    containers = snapshot.get("containers", {})
+    if not isinstance(containers, dict) or len(containers) != len(expected_containers):
+        raise ValueError("saved fixture container count differs from recipe")
+    loaded_sources: dict[str, int] = {}
+    for i, row in enumerate(expected_containers):
+        observed = containers.get(f"fixture-container-{i}")
+        slots = observed.get("final") if isinstance(observed, dict) else None
+        if (not isinstance(observed, dict) or observed.get("position") != row["position"]
+                or not isinstance(slots, list) or len(slots) != 9
+                or slots[0].get("name") != row["item"] or slots[0].get("count") != row["count"]
+                or any(slot.get("name") != "minecraft:air" or slot.get("count") != 0 for slot in slots[1:])):
+            raise ValueError(f"saved fixture ammunition {i} differs from recipe")
+        if slots[0]["count"]:
+            item = slots[0]["name"]
+            loaded_sources[item] = loaded_sources.get(item, 0) + 1
+    return {"blocks": counts, "loaded_sources": loaded_sources}
+
+
 def validate_scale_sample(recipe: dict[str, Any], sample: dict[str, Any],
                           allowed_cells: set[tuple[int, int, int]] | None = None) -> dict[str, Any]:
     """Fail closed on partial region coverage, stale source ticks or cohort mismatch."""
     data = sample.get("coreperf")
-    if not isinstance(data, dict) or data.get("tick") != sample.get("tick"):
+    if (type(sample.get("tick")) is not int or not isinstance(data, dict)
+            or data.get("tick") != sample["tick"]):
         raise ValueError("missing or mismatched source-tick region telemetry")
     resident_rows = data.get("resident_entities")
-    if not isinstance(resident_rows, int) or resident_rows < recipe["population"]["resident_requested"]:
+    if type(resident_rows) is not int or resident_rows < recipe["population"]["resident_requested"]:
         raise ValueError("live resident rows are below the requested fixture population")
     rows = data.get("regions")
     if not isinstance(rows, list):
@@ -494,11 +786,11 @@ def validate_scale_sample(recipe: dict[str, Any], sample: dict[str, Any],
         if not isinstance(index, int) or index < 0 or index >= len(recipe["coverage"]) or index in by_region:
             raise ValueError("duplicate or invalid region coverage")
         by_region[index] = row
-    totals = {"resident_rows": resident_rows, "active": 0, "admitted": 0, "full": 0,
+    totals = {"tick": sample["tick"], "resident_rows": resident_rows, "active": 0, "admitted": 0, "full": 0,
               "resting": 0, "active_chunks": 0}
     stress = recipe.get("stress", {})
     stress_regions = set(stress.get("regions", []))
-    if stress_regions:
+    if stress_regions or stress.get("kind") == "xp-orbs":
         totals["projectiles"] = 0
     if stress.get("kind") == "xp-orbs":
         xp = data.get("xp_orbs_processed")
@@ -506,9 +798,11 @@ def validate_scale_sample(recipe: dict[str, Any], sample: dict[str, Any],
         if (type(xp) is not int or xp < 0 or not isinstance(regions, dict)
                 or any(type(value) is not int or value < 0 for value in regions.values())):
             raise ValueError("missing XP-orb owner telemetry")
+        if not stress_regions and xp:
+            raise ValueError("zero XP control observed active orbs")
         totals["xp_orbs"] = sum(regions.get(str(i), 0) for i in stress_regions)
         totals["xp_orbs_global"] = xp
-    if stress.get("kind") == "damage":
+    if stress.get("kind") in ("damage", "reactive-damage"):
         victims = data.get("damage_victims_by_region")
         reactive = data.get("damage_reactive_by_region")
         if not isinstance(victims, dict) or not isinstance(reactive, dict):
@@ -523,8 +817,11 @@ def validate_scale_sample(recipe: dict[str, Any], sample: dict[str, Any],
         progressing = data.get("brewing_progressing_by_region")
         if not all(isinstance(value, dict) for value in (discovery, active, progressing)):
             raise ValueError("missing brewing owner telemetry")
+        if any(type(value) is not int or value < 0 for counters in (discovery, active, progressing)
+               for value in counters.values()):
+            raise ValueError("invalid brewing owner counters")
         for region, required in stress["discovery_per_region"].items():
-            if not isinstance(discovery.get(region), int) or discovery[region] < required:
+            if type(discovery.get(region)) is not int or discovery[region] < required:
                 raise ValueError(f"brewing discovery region {region} below requested containers")
         totals["brewing_discovered"] = sum(discovery.get(str(i), 0) for i in stress_regions)
         totals["brewing_active"] = sum(active.get(str(i), 0) for i in stress_regions)
@@ -569,7 +866,10 @@ def validate_scale_sample(recipe: dict[str, Any], sample: dict[str, Any],
             totals["brain_admitted"] += admitted
         else:
             candidate = admitted = actual["motion_admitted"]
-            if candidate != required:
+            if (stress.get("kind") == "churn" and index in stress_regions):
+                if not required <= candidate <= 2 * required:
+                    raise ValueError(f"region {index} churn cohort outside expected transition bounds")
+            elif candidate != required:
                 raise ValueError(f"region {index} admitted {candidate}, expected {required}")
         if actual["active_chunks"] != (len(expected["chunks"]) if expected["active"] else 0):
             raise ValueError(f"region {index} active chunk coverage differs from recipe")
@@ -582,12 +882,45 @@ def validate_scale_sample(recipe: dict[str, Any], sample: dict[str, Any],
         totals["active_chunks"] += actual["active_chunks"]
         if index in stress_regions:
             projectiles = row.get("projectile_candidates")
-            if not isinstance(projectiles, int) or projectiles < 0:
+            if type(projectiles) is not int or projectiles < 0:
                 raise ValueError("missing projectile owner candidates")
             totals["projectiles"] += projectiles
-    if totals["active"] != recipe["population"]["active_requested"]:
+    expected_active = recipe["population"]["active_requested"]
+    churn_extra = stress.get("requested_count", 0) if stress.get("kind") == "churn" else 0
+    if not expected_active <= totals["active"] <= expected_active + churn_extra:
         raise ValueError("observed active cohort differs from advertised population")
     return totals
+
+
+def exact_cohort_tick(samples: list[dict[str, Any]], field: str, requested: int) -> int:
+    if not samples or any(type(row.get("tick")) is not int or type(row.get(field)) is not int
+                          or row[field] < 0 for row in samples):
+        raise ValueError(f"missing {field} source-tick samples")
+    if requested == 0:
+        if any(row[field] != 0 for row in samples):
+            raise ValueError(f"{field} zero control observed a nonzero cohort")
+        return samples[0]["tick"]
+    for row in samples:
+        if row[field] == requested:
+            return row["tick"]
+    raise ValueError(f"no source tick observed exactly {requested} {field}")
+
+
+def validate_xp_observers(stress: dict[str, Any], bots: dict[str, Any]) -> dict[str, Any]:
+    players = bots.get("mechanics", {}).get("players")
+    anchors = stress["anchors"]
+    if not isinstance(players, list) or len(players) != stress["players"] or len(anchors) != stress["players"]:
+        raise ValueError("missing XP observer locality evidence")
+    centers = []
+    for player, anchor in zip(players, anchors):
+        center = [anchor[0] // 16, anchor[1] // 16]
+        if (player.get("initial_chunk_center") != center
+                or player.get("final_chunk_center") != center
+                or player.get("chunk_center_transitions") != 0):
+            raise ValueError("XP observer left requested chunk or locality evidence is missing")
+        centers.append(center)
+    return {"players": len(players), "locality": stress["locality"], "centers": centers,
+            "scope": "received chunk-center evidence, not exact player positions"}
 
 
 def visibility_summary(samples: list[dict[str, Any]], rows: list[dict[str, Any]],
@@ -618,6 +951,10 @@ def schedule(args: argparse.Namespace, recipe: dict[str, Any] | None = None) -> 
                          "chat_hz": 1 if args.mobs else 0}
                         for name, seconds in (("warmup", args.warmup_seconds),
                                               ("measurement", args.measure_seconds))]}
+    if recipe and recipe.get("stress", {}).get("kind") == "xp-orbs":
+        for window in plan["windows"]:
+            window["edit_hz"] = 0
+            window["chat_hz"] = 0
     if recipe and recipe.get("stress", {}).get("commands"):
         for window in plan["windows"]:
             window["command_interval_ms"] = recipe["stress"]["pulse_interval_ms"]
@@ -755,10 +1092,16 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                        *load.bot_command(args, directory, game, args.clients, {"group_size": 1}),
                        "--open-loop", "--schedule-file", str(directory / "schedule.json")]
             if args.mobs:
-                anchors = [region["anchor"] for index, region in enumerate(recipe["regions"])
-                           if "coverage" not in recipe or recipe["coverage"][index]["active"]]
+                anchors = (recipe["stress"]["anchors"] if recipe.get("stress", {}).get("kind") == "xp-orbs" else
+                           [region["anchor"] for index, region in enumerate(recipe["regions"])
+                            if "coverage" not in recipe or recipe["coverage"][index]["active"]])
                 load.scale.dump(directory / "anchors.json", [anchors[n % len(anchors)] for n in range(args.clients)])
                 command += ["--anchors", str(directory / "anchors.json")]
+                if recipe.get("stress", {}).get("kind") == "xp-orbs":
+                    load.scale.dump(directory / "xp-observers.json", {"schema_version": 1,
+                                    "entities": [], "blocks": [], "containers": [], "actions": []})
+                    command += ["--anchor-chunk-walk", "--no-edits",
+                                "--mechanic-spec", str(directory / "xp-observers.json")]
             else:
                 command += ["--explore", "--no-edits"]
             if hasattr(session, "bot_command"):  # remote server: bots dial the VPS, not loopback
@@ -837,18 +1180,18 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                                     "source_tick_samples": len(coverage_samples)}
             if recipe.get("stress", {}).get("kind") == "projectiles":
                 peak = max(row["projectiles"] for row in coverage_samples)
-                requested = recipe["stress"]["requested_peak"]
-                if (requested == 0 and peak != 0) or (requested > 0 and peak < requested):
-                    raise ValueError(f"projectile owner peak {peak} does not satisfy requested {requested}")
+                requested = recipe["stress"]["requested_count"]
+                matching_tick = exact_cohort_tick(coverage_samples, "projectiles", requested)
                 result["stress"] = {**recipe["stress"], "projectile_candidates_peak": peak,
-                                    "scope": "source-tick peak flight candidates, not sustained concurrency"}
+                                    "requested_cohort_tick": matching_tick,
+                                    "scope": "exact source-tick flight candidates, not sustained concurrency"}
             elif recipe.get("stress", {}).get("kind") == "xp-orbs":
                 peak = max(row["xp_orbs"] for row in coverage_samples)
                 projectile_peak = max(row["projectiles"] for row in coverage_samples)
-                requested = recipe["stress"]["requested_peak"]
-                if (requested == 0 and peak != 0) or (requested > 0 and peak < requested):
-                    raise ValueError(f"XP-orb owner peak {peak} does not satisfy requested {requested}")
+                requested = recipe["stress"]["requested_count"]
+                matching_tick = exact_cohort_tick(coverage_samples, "xp_orbs", requested)
                 result["stress"] = {**recipe["stress"], "xp_orbs_processed_peak": peak,
+                                    "requested_cohort_tick": matching_tick,
                                     "all_active_orbs_peak": max(row["xp_orbs_global"] for row in coverage_samples),
                                     "projectile_candidates_peak": projectile_peak,
                                     "scope": "source-tick active owner bodies, not sustained concurrency"}
@@ -869,6 +1212,10 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                                     "brain_candidates_min": min(row["brain_candidates"] for row in coverage_samples),
                                     "brain_admitted_min": min(row["brain_admitted"] for row in coverage_samples),
                                     "scope": "distinct isolated farmer crop cells changed in villager brain"}
+            elif recipe.get("stress", {}).get("kind") == "reactive-damage":
+                reactive = validate_reactive_samples(recipe["stress"], coverage_samples)
+                result["stress"] = {**recipe["stress"], "accepted_reactive_pieces_total": reactive,
+                                    "scope": "accepted marked reactive pieces across source ticks"}
             elif recipe.get("stress", {}).get("kind") == "damage":
                 peak = max(row["damage_victims"] for row in coverage_samples)
                 if peak < recipe["stress"]["requested_victims"]:
@@ -881,6 +1228,9 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
         result["shutdown"] = session.shutdown
         load.scale.dump(directory / "result.json", result)
     compare.clean_shutdown(session)
+    if not args.clients and recipe.get("stress", {}).get("kind") == "xp-orbs":
+        result["stress"]["observer_evidence"] = {"players": 0, "locality": recipe["stress"]["locality"],
+                                                  "scope": "zero live players in sampled dashboard batches"}
     if args.clients:
         bots = json.loads((directory / "bots-report.json").read_text())
         result["bots"] = bots
@@ -888,6 +1238,8 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
             raise ValueError("bot schedule failed or incomplete")
         if bots.get("movements_sent", 0) == 0:
             raise ValueError("requested active profile sent no movement")
+        if recipe.get("stress", {}).get("kind") == "xp-orbs":
+            result["stress"]["observer_evidence"] = validate_xp_observers(recipe["stress"], bots)
         if args.profile in ("explore-3", "explore-20") and bots.get("chunk_boundaries_crossed", 0) == 0:
             raise ValueError("exploration did not cross a chunk boundary")
         if recipe.get("stress", {}).get("commands"):
@@ -900,8 +1252,18 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                 raise ValueError("fixture measurement sent no trigger command")
     snapshot = await compare.snapshot(args, directory, world, config)
     result["entity_counts_after"] = {kind: group["active"] for kind, group in snapshot["entities"].items()}
-    after = compare.cohort(snapshot, recipe["expected"])
-    validate_cohort(prepared["cohort"], after, recipe["expected"])
+    if recipe.get("spawn_rules"):
+        result["spawn_rules_after"] = validate_spawn_rules(snapshot, recipe["spawn_rules"])
+    if recipe.get("stress", {}).get("kind") == "churn":
+        after, churn = validate_churn_cohort(recipe, prepared["cohort"], snapshot)
+        result["stress"] = {**recipe["stress"], "saved_turnover": churn,
+                            "scope": "distinct identities replaced between saved snapshots; not a per-tick rate"}
+    else:
+        after = compare.cohort(snapshot, recipe["expected"])
+        validate_cohort(prepared["cohort"], after, recipe["expected"])
+    if recipe.get("stress", {}).get("kind") in ("daylight-zombies", "wool-sheep"):
+        result["stress"] = {**recipe["stress"], "saved_state_after":
+                            validate_natural_snapshot(recipe["stress"], snapshot, before=False)}
     if recipe.get("stress", {}).get("kind") == "map-frames":
         maps_after = validate_map_frames(snapshot, recipe["stress"]["requested_frames"])
         if maps_after != validate_map_frames(prepared["snapshot"], recipe["stress"]["requested_frames"]):
@@ -938,14 +1300,24 @@ async def run(args: argparse.Namespace) -> int:
         result["build"] = {"server": server_pin, "bots": bots_pin}
         result["registry"] = load.tree_hash(args.vanilla_data_dir)
         base_residents = (args.mobs - (args.productive_npcs or 0)
-                          - (args.damage_victims or 0) - (args.map_frames or 0))
+                          - (args.damage_victims or 0) - (args.map_frames or 0)
+                          - (args.mobs * args.churn_percent // 100 if args.churn_percent is not None else 0)
+                          - (args.daylight_zombies or 0) - (args.wool_sheep or 0)
+                          - 2 * (args.reactive_pairs or 0))
+        excluded = (("cow", "pig") if args.churn_percent is not None else
+                    ("sheep", "zombie") if (args.daylight_zombies is not None or args.wool_sheep is not None
+                                            or args.reactive_pairs is not None) else
+                    ("cow",) if args.damage_victims is not None else ())
         recipe = (scale_fixture(base_residents, SCALE_PROFILES[args.profile][1],
-                                without_cows=args.damage_victims is not None)
+                                excluded_kinds=excluded,
+                                active_override=0 if args.xp_orbs is not None else None)
                   if args.profile in SCALE_PROFILES else fixture(args.mobs, args.villagers))
         if args.projectiles is not None:
             add_projectile_fixture(recipe, args.projectiles, smoke=args.smoke)
         if args.xp_orbs is not None:
-            add_xp_fixture(recipe, args.xp_orbs, smoke=args.smoke)
+            add_xp_fixture(recipe, args.xp_orbs, smoke=args.smoke,
+                           players=args.xp_players if args.xp_players is not None else 1,
+                           locality=args.xp_locality or "compact")
         if args.containers is not None:
             add_brewing_fixture(recipe, args.containers)
         if args.productive_npcs is not None:
@@ -954,16 +1326,48 @@ async def run(args: argparse.Namespace) -> int:
             add_damage_fixture(recipe, args.damage_victims, smoke=args.smoke)
         if args.map_frames is not None:
             add_map_frame_fixture(recipe, args.map_frames, smoke=args.smoke)
+        if args.churn_percent is not None:
+            add_churn_fixture(recipe, args.mobs * args.churn_percent // 100, args.churn_percent)
+        if args.daylight_zombies is not None:
+            add_natural_fixture(recipe, args.daylight_zombies, "daylight-zombies")
+        if args.wool_sheep is not None:
+            add_natural_fixture(recipe, args.wool_sheep, "wool-sheep")
+        if args.reactive_pairs is not None:
+            add_reactive_fixture(recipe, args.reactive_pairs)
+        spawn_rules = {name: value == "on" for name, value in
+                       (("spawn_mobs", args.spawn_mobs), ("spawn_monsters", args.spawn_monsters))
+                       if value is not None}
+        if spawn_rules:
+            recipe["spawn_rules"] = spawn_rules
+            recipe["regions"][-1]["commands"].extend(
+                f"gamerule minecraft:{name} {str(value).lower()}" for name, value in spawn_rules.items())
         if "coverage" in recipe:
-            args.clients = sum(row["active"] for row in recipe["coverage"])
+            args.clients = (recipe["stress"]["players"] if args.xp_orbs is not None
+                            else sum(row["active"] for row in recipe["coverage"]))
             result["conditions"]["clients"] = args.clients
             result["noncanonical"] = True
+            result["variant"] = recipe["variant"]
             result["recipe_sha256"] = load.digest(recipe)
             result["population"] = recipe["population"]
+        max_commands = max((len(region["commands"]) for region in recipe["regions"]), default=0)
+        args.readiness_seconds = max(args.readiness_seconds, (max_commands + 9) // 10 + 120)
+        result["conditions"]["readiness_seconds"] = args.readiness_seconds
         load.scale.dump(args.out / "fixture.json", recipe)
         key = compare.fixture_cache_key(args, recipe, result["registry"]["sha256"])
         world, prepared = await compare.prepare(args, args.out / "prepare", recipe, key, hashes)
         validate_prepared(recipe, prepared)
+        if recipe.get("spawn_rules"):
+            result["spawn_rules_before"] = validate_spawn_rules(prepared["snapshot"], recipe["spawn_rules"])
+        if recipe.get("stress", {}).get("kind") == "reactive-damage":
+            result["reactive_equipment_before"] = validate_reactive_equipment(prepared["snapshot"], args.reactive_pairs)
+        if recipe.get("stress", {}).get("kind") in ("daylight-zombies", "wool-sheep"):
+            result["natural_cohort_before"] = validate_natural_snapshot(
+                recipe["stress"], prepared["snapshot"], before=True)
+        if recipe.get("expected_blocks"):
+            block_snapshot = await load.native_snapshot(args, args.out / "fixture-blocks", world,
+                                                        args.out / "prepare" / "server.toml",
+                                                        fixture_block_spec(recipe))
+            result["fixture_blocks_before"] = validate_fixture_blocks(recipe, block_snapshot)
         if args.map_frames is not None:
             result["saved_filled_map_frames_before"] = len(validate_map_frames(prepared["snapshot"], args.map_frames))
         result["fixture_cache"] = prepared["fixture_cache"]
@@ -1038,9 +1442,9 @@ def main() -> int:
                         help="smaller noncanonical resident cohort for --smoke only")
     stress = parser.add_mutually_exclusive_group()
     stress.add_argument("--projectiles", type=int,
-                        help="noncanonical projectile peak: 0, 100 or 1000 (smoke may use smaller counts)")
+                        help="noncanonical exact projectile cohort: 0, 100 or 1000 (smoke may use smaller counts)")
     stress.add_argument("--xp-orbs", type=int,
-                        help="noncanonical active XP-orb peak: 0, 10000 or 100000 (smoke may use smaller counts)")
+                        help="noncanonical exact active XP-orb cohort: 0, 10000 or 100000 (smoke may use smaller counts)")
     stress.add_argument("--containers", type=int,
                         help="brewing discovery load: 1000 or 100000 containers (smoke may use smaller counts)")
     stress.add_argument("--productive-npcs", type=int,
@@ -1049,7 +1453,17 @@ def main() -> int:
                         help="distinct accepted projectile victims: 1, 1000, 10000 or 100000")
     stress.add_argument("--map-frames", type=int,
                         help="saved filled-map frames: 0, 10000 or 100000 (smoke may use smaller counts)")
+    parser.add_argument("--xp-players", type=int, choices=(0, 1, 100, 1000))
+    parser.add_argument("--xp-locality", choices=("compact", "spread"))
+    parser.add_argument("--spawn-mobs", choices=("on", "off"))
+    parser.add_argument("--spawn-monsters", choices=("on", "off"))
+    stress.add_argument("--churn-percent", type=int, choices=(0, 1, 10))
+    stress.add_argument("--daylight-zombies", type=int)
+    stress.add_argument("--wool-sheep", type=int)
+    stress.add_argument("--reactive-pairs", type=int)
     args = parser.parse_args()
+    if args.xp_orbs is None and (args.xp_players is not None or args.xp_locality is not None):
+        parser.error("XP player options require --xp-orbs")
     if args.profile in SCALE_PROFILES:
         if args.remote_host:
             parser.error("scale telemetry requires a local server")
@@ -1063,6 +1477,8 @@ def main() -> int:
                 args.projectiles < 0 or args.projectiles > 1000
                 or not args.smoke and args.projectiles not in (0, 100, 1000)):
             parser.error("projectiles must be 0, 100 or 1000 except in smoke")
+        if args.xp_players == 0 and args.xp_orbs != 0:
+            parser.error("zero XP observers require the zero-orb control")
         if args.xp_orbs is not None and (
                 args.xp_orbs < 0 or args.xp_orbs > 100000
                 or not args.smoke and args.xp_orbs not in (0, 10000, 100000)):
@@ -1079,15 +1495,26 @@ def main() -> int:
                 args.damage_victims < 1 or args.damage_victims > min(100000, args.mobs)
                 or not args.smoke and args.damage_victims not in (1, 1000, 10000, 100000)):
             parser.error("damage-victims must be 1, 1000, 10000 or 100000 and not exceed residents")
+        for count in (args.daylight_zombies, args.wool_sheep):
+            if count is not None and not 0 <= count <= args.mobs - 10:
+                parser.error("natural cohort count must leave at least 10 background residents")
+        if args.reactive_pairs is not None and not 1 <= args.reactive_pairs <= (args.mobs - 10) // 2:
+            parser.error("reactive pairs must leave at least 10 background residents")
+        if args.churn_percent and args.mobs * args.churn_percent // 100 == 0:
+            parser.error("churn percentage produces an empty cohort")
         if args.map_frames is not None and (
                 args.map_frames < 0 or args.map_frames > min(100000, args.mobs)
                 or not args.smoke and args.map_frames not in (0, 10000, 100000)):
             parser.error("map-frames must be 0, 10000 or 100000 and not exceed residents")
     else:
+        if args.spawn_mobs is not None or args.spawn_monsters is not None:
+            parser.error("spawn-rule controls require a scale profile")
         if args.smoke_residents is not None:
             parser.error("--smoke-residents requires a scale profile")
         if any(value is not None for value in (args.projectiles, args.xp_orbs, args.containers,
-                                                args.productive_npcs, args.damage_victims, args.map_frames)):
+                                                args.productive_npcs, args.damage_victims, args.map_frames,
+                                                args.churn_percent, args.daylight_zombies, args.wool_sheep,
+                                                args.reactive_pairs)):
             parser.error("stress fixtures require a scale profile")
         args.clients, args.mobs, args.villagers, args.view_distance = PROFILES[args.profile]
     args.seed, args.prepare_concurrency = 42, 3

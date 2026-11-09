@@ -140,11 +140,20 @@ coverage fails the run rather than shrinking it.
 The scale profiles also accept one noncanonical stress selector:
 
 - `--projectiles 0|100|1000` pulses a fixed-size bank of ordinary arrow-filled
-  dispensers. The count is a required source-tick **peak** of flight candidates,
-  not sustained concurrency; the unarmed control retains the same bank.
-- `--xp-orbs 0|10000|100000` uses banks of ordinary experience-bottle
-  dispensers. The count is a required peak of active orb bodies processed by the
-  XP owner, not the number of bottles offered or a sustained-orb claim.
+  dispensers. A source tick must contain exactly the requested number of flight
+  candidates; the peak is also reported, not a sustained-concurrency claim.
+  The unarmed control retains the same bank and must remain at zero.
+- `--xp-orbs 0|10000|100000 --xp-players 0|1|100|1000 --xp-locality compact|spread`
+  uses a single compact bank of ordinary experience-bottle dispensers. The
+  background is retained cold, independently of the explicitly counted observers;
+  XP observers move within their assigned chunks without edit or chat traffic.
+  Zero observers are allowed only with zero orbs; the dashboard must report zero
+  players throughout sampled batches, and all fixture regions stay inactive.
+  The receipt reports the actual active population, not the resident total. Zero
+  adds an observer region but no orb bank, and rejects active XP orbs. Positive
+  counts require an exact owner-observed source tick, not merely offered bottles
+  or sustained concurrency; the maximum observed count is also reported. Observer locality is checked against received chunk centers; it
+  does not claim exact positions.
 - `--containers 1000|100000` creates that many chests and five brewing stands.
   Public item-replace commands supply the stands; periodic water-bottle inputs
   keep useful brewing work present. The source receipt checks discovery counts
@@ -164,6 +173,29 @@ The scale profiles also accept one noncanonical stress selector:
   condition, not vanilla health or a canonical control. The receipt requires
   the requested number of distinct accepted victims in a single source tick
   and separately reports accepted reactive pieces, not command offers.
+- Scale variants accept `--spawn-mobs on|off` and `--spawn-monsters on|off`.
+  Public gamerule commands set them after fixture preparation; the saved native
+  checkpoint must match before and after the run. This proves endpoint state,
+  not per-tick rule or observer counters.
+- `--reactive-pairs N` confines marked iron golems with zombies wearing authored
+  thorns-X armor. Both have raised health. The setup checks saved armor; the run
+  requires at least N accepted reactive damage pieces in the source-tick window.
+  This is a total, not a claim that all pieces occur on one tick.
+- `--churn-percent 0|1|10` replaces that percentage of the background with
+  confined marked cows. Public commands alternate them with pigs and back; the
+  saved receipt checks unaffected identities and a lower bound of one complete
+  identity turnover between snapshots. This is not a per-tick churn-rate proof.
+  Churn, damage and wool triggers use public NBT selectors; their selector work
+  is part of the offered workload and is not attributed to the target owner.
+- `--daylight-zombies N` and `--wool-sheep N` replace background mobs with
+  isolated marked cohorts. Daylight is fixed at 2000 with clear weather; zombies
+  are authored with high health and no head equipment, and each saved after-image
+  must report burning. Sheep start sheared on stone; normal commands introduce
+  grass during the run. The receipt checks saved pre-run wool state and reports
+  the post-run state, not a per-tick density.
+- Fixture blocks used for projectile, XP, damage and brewing preparation and
+  every dispenser's ammunition are checked against the server's read-only
+  saved-world export before measurement.
 - `--map-frames 0|10000|100000` replaces background mobs with item frames.
   During preparation an ordinary protocol player creates a new filled map in
   survival for each batch of at most 256 frames, then switches to creative and
