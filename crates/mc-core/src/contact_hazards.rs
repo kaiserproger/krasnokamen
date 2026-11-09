@@ -14,6 +14,28 @@ use crate::tick::TickState;
 use mc_physics::mth::floor_i32;
 use std::sync::{Arc, LazyLock};
 
+// Test-only attribution of the whole contact pass, including the cauldron tail.
+// Counts are collected on the serial owner, never on classifier worker threads.
+#[cfg(test)]
+std::thread_local! {
+    static WORK: std::cell::Cell<[usize; 5]> = const { std::cell::Cell::new([0; 5]) };
+}
+
+#[cfg(test)]
+fn count_work(index: usize, amount: usize) {
+    WORK.with(|work| {
+        let mut counts = work.get();
+        counts[index] += amount;
+        work.set(counts);
+    });
+}
+
+/// Candidates, exact-scan rows, quiet rows, exact samples, cauldron samples.
+#[cfg(test)]
+pub(crate) fn take_work_counts() -> [usize; 5] {
+    WORK.with(|work| work.replace([0; 5]))
+}
+
 /// Reused per-pass section-predicate caches for the contact run.
 ///
 /// `hazard` gates body/foot-support samples on any nonzero hazard flag;
@@ -329,6 +351,8 @@ pub(crate) fn run_with(state: &mut TickState, intents: &mut Vec<Intent>, min_par
     scratch.hazard.reset(&state.world);
     scratch.suffocation.reset(&state.world);
     let rows = state.entities.len();
+    #[cfg(test)]
+    count_work(0, rows);
     if scratch.negative.len() < rows {
         scratch.negative.resize(rows, None);
     }
@@ -347,14 +371,22 @@ pub(crate) fn run_with(state: &mut TickState, intents: &mut Vec<Intent>, min_par
     // This pass cannot spawn/remove rows; indexing avoids an ID snapshot.
     for &(index, ref work) in pending.iter().flatten() {
         match work {
-            ContactWork::Scan => scan_row(state, &mut scratch, intents, index as usize),
-            ContactWork::Quiet => retained_burn(
-                state,
-                crate::entities::EntitySlot(index),
-                false,
-                false,
-                intents,
-            ),
+            ContactWork::Scan => {
+                #[cfg(test)]
+                count_work(1, 1);
+                scan_row(state, &mut scratch, intents, index as usize);
+            }
+            ContactWork::Quiet => {
+                #[cfg(test)]
+                count_work(2, 1);
+                retained_burn(
+                    state,
+                    crate::entities::EntitySlot(index),
+                    false,
+                    false,
+                    intents,
+                );
+            }
         }
     }
     state.contact_hazards_scratch = scratch;
@@ -396,6 +428,8 @@ pub(crate) fn cauldron_contact(state: &mut TickState, intents: &mut Vec<Intent>)
         if pos[1] - (cell.1 as f64) >= 1.0 || pos[1] - (cell.1 as f64) < 0.0 {
             continue;
         }
+        #[cfg(test)]
+        count_work(4, 1);
         let Some(current) = state.world.block_at(cell.0, cell.1, cell.2) else {
             continue;
         };
@@ -664,11 +698,15 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
     } else {
         None
     };
-    let block_at = |x: i32, y: i32, z: i32| match borrowed_chunk {
-        Some(chunk) => chunk
-            .get_block(x.rem_euclid(16) as u8, y, z.rem_euclid(16) as u8)
-            .map(|id| id.0),
-        None => state.world.block_at(x, y, z),
+    let block_at = |x: i32, y: i32, z: i32| {
+        #[cfg(test)]
+        count_work(3, 1);
+        match borrowed_chunk {
+            Some(chunk) => chunk
+                .get_block(x.rem_euclid(16) as u8, y, z.rem_euclid(16) as u8)
+                .map(|id| id.0),
+            None => state.world.block_at(x, y, z),
+        }
     };
     let flag_at = |x, y, z| {
         block_at(x, y, z)
