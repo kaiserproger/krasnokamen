@@ -8,7 +8,7 @@ This page explains how the runner works, how to diagnose it and what went
 wrong before.
 
 The runner's requirements and fresh-machine setup (systemd user scope, cgroup
-v2, `/tmp/solaris-mem-slots`, CPUs 8-11 for the `-p` lane, Landlock for the
+v2, `/tmp/solaris-mem-slots`, the last four CPUs for the `-p` lane, Landlock for the
 instrumentation guard) are in [`tools/dev/README.md`](../../tools/dev/README.md).
 Other scripts there: `scene-slot.sh` (graphical gate slots, see
 [real-client gates](real-client-gates.md#3-environment-block)),
@@ -70,8 +70,8 @@ to keep that from happening again without idling the machine.
   in [lessons](lessons.md)).
 - **Incremental** compilation is forced on for debug/test builds and off for
   `--release`/`--profile`. Measured once: cold `mc-core --tests` 26m48s to 19m07s.
-- **Lanes.** `-p` is the perf lane: one at a time (perf lock), pinned to CPUs
-  8-11 with `CPUWeight=10000`, nice 0, never frozen; for A/B benches and
+- **Lanes.** `-p` is the perf lane: one at a time (perf lock), pinned to the
+  last four CPUs with `CPUWeight=10000`, nice 0, never frozen; for A/B benches and
   profiles, never for builds. Compare `-p` numbers only with `-p` numbers.
   `-x` is a quiet measurement window: the watchdog freezes every preemptible
   command, the runner waits for the rest to finish and holds new commands at

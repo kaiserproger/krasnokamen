@@ -12,7 +12,8 @@ never change Git configuration.
 ## Words used here
 
 - **Owner**: kaiserproger. Decides scope, priorities, commits and publication.
-- **Owner host**: the owner's workstation, where many agents share one machine.
+- **Owner host**: the shared agent machine (since 2026-11-10 the Aeza dedicated
+  server muddy-lime; the owner's laptop is only his terminal), where many agents share one machine.
   You are on it when `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh`
   exists. Rules marked *owner host* apply only there; elsewhere run commands directly.
 - **Main**: the agent the owner talks to. It plans, delegates and integrates.

@@ -24,7 +24,7 @@ commands are in [PROFILES.md](../performance/PROFILES.md) and
    profile path in the result.
 
 In-process single-agent micro-benches pinned to the perf lane (`mem-run.sh -p`,
-CPUs 8-11) may run without a window if `uptime` is recorded; their numbers are
+the last four CPUs) may run without a window if `uptime` is recorded; their numbers are
 comparable only with other `-p` numbers from the same session.
 
 ## Comparing builds

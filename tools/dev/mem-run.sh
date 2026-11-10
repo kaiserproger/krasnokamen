@@ -23,7 +23,7 @@
 # Lanes: ordinary commands run on all CPUs, at most 12G each; every cargo under
 # mem-run shares the watchdog's make-style jobserver (one token per logical CPU, via
 # CARGO_MAKEFLAGS), so all builds together run about nproc compilers instead of nproc
-# per build. `-p` (perf lane: A/B benches, profiles) runs one at a time on CPUs 8-11 beside other
+# per build. `-p` (perf lane: A/B benches, profiles) runs one at a time on the last four CPUs beside other
 # work and is never frozen; `-x` (quiet measurement windows only, not memory) has the
 # watchdog freeze every preemptible command, waits for the rest to finish, holds new
 # commands at start until it ends, and runs on all CPUs. -p and -x drop
@@ -54,7 +54,11 @@ dir=/tmp/solaris-mem-slots
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 mkdir -p "$dir/run"
 slice=solaris-heavy.slice
-slice_gib=25
+# Capacity is derived from the host (owner host since 2026-11-10: Aeza, 16 CPUs, 90 GiB):
+# the slice gets all RAM but 16 GiB kept for agents and the system, and every CPU.
+ncpu=$(nproc --all)
+slice_gib=$(( $(awk '/MemTotal/{print int($2/1048576)}' /proc/meminfo) - 16 ))
+perf_cpus="$((ncpu - 4))-$((ncpu - 1))"
 # The slice is bounded by memory. Its CPUQuota is cleared on every call unless the
 # owner pins one in $dir/cpu-quota (e.g. "600%"): a stray CPUQuota once held every
 # heavy command to 2 CPUs for two days (2026-10-26..28), so only that file sets it.
@@ -63,7 +67,7 @@ if [ -r "$dir/cpu-quota" ]; then
   slice_quota=$(tr -d '[:space:]' < "$dir/cpu-quota")
   [[ "$slice_quota" =~ ^[1-9][0-9]*%$ ]] || { echo "mem-run: $dir/cpu-quota must be like 600%, got '$slice_quota'" >&2; exit 64; }
 fi
-systemctl --user set-property --runtime "$slice" MemoryMax=${slice_gib}G MemoryHigh=infinity MemorySwapMax=2G AllowedCPUs=0-11 CPUQuota=$slice_quota
+systemctl --user set-property --runtime "$slice" MemoryMax=${slice_gib}G MemoryHigh=infinity MemorySwapMax=2G AllowedCPUs=0-$((ncpu - 1)) CPUQuota=$slice_quota
 # After a reboot the slice is inactive and has no cgroup: start it, and fail closed
 # if it still has none (an empty path would account the root cgroup's scopes).
 systemctl --user start "$slice"
@@ -193,9 +197,9 @@ if [ "${cmd[0]:-}" = cargo ]; then
     test|t|bench) [[ " ${cmd[*]} " == *" --no-run "* ]] && preemptible=1 ;;
   esac
 fi
-# Ordinary commands now share CPUs 8-11 too, so the perf lane wins them by weight:
+# Ordinary commands share the perf CPUs too, so the perf lane wins them by weight:
 # CPUWeight 10000 vs 50 per build scope (diagnostic isolation; quiet numbers need -x).
-[ "$perf" = 1 ] && { niceness=0; cpu_pin=(taskset -c 8-11); preemptible=0; props=("${props[@]/CPUWeight=50/CPUWeight=10000}"); }
+[ "$perf" = 1 ] && { niceness=0; cpu_pin=(taskset -c "$perf_cpus"); preemptible=0; props=("${props[@]/CPUWeight=50/CPUWeight=10000}"); }
 [ "$exclusive" = 1 ] && { niceness=0; cpu_pin=(); preemptible=0; }
 echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf cpus=${cpu_pin[*]:-all} slice=$slice target=$target expect=$((est_kib / 1024))MiB key='$key'" >&2
 # The wrapper registers its scope, expectation, preemptible flag and target dir with
