@@ -61,8 +61,8 @@ def arguments():
     p.add_argument('--checkpoint-every-ticks', type=int, metavar='TICKS', help='[data] checkpoint cadence written to server.toml; default 1200, in take mode longer than the whole take')
     p.add_argument('--phase-log', action=argparse.BooleanOptionalAction, default=None, help='MC_CORE_PHASE_LOG for the server; default on, off in take mode')
     p.add_argument('--status-every', type=int, metavar='TICKS', help='after start, request battle status about every TICKS recorded ticks (0 = never); default 100, 0 in take mode. The pre-start population barrier always polls')
-    p.add_argument('--view-distance', type=int, default=12, metavar='CHUNKS', help='server and recorder view distance, 2..32')
-    p.add_argument('--recorder-render-distance', type=int, metavar='CHUNKS', help="the recorder client's own render_distance (it asks the server for this, whatever --view-distance says); default --view-distance")
+    p.add_argument('--view-distance', type=int, default=12, metavar='CHUNKS', help='server view distance, 2..32; a recorder always gets all of it')
+    p.add_argument('--pre-stage-ticks', type=int, default=0, metavar='TICKS', help='after the recorder has joined and before `battle setup`, wait this many server ticks (from the telemetry stream) so the terrain ring streams without the entity burst; about 1200 for view distance 18')
     p.add_argument('--allow-marker-gaps', action='store_true', help='record recorder marker and telemetry tick gaps instead of failing the run; implied by --take')
     p.add_argument('--server-scope', nargs='?', const='', default=None, metavar='SLICE', help='run the server in its own transient systemd user scope (optionally under SLICE) so the cgroup memory/CPU telemetry is the server alone')
     p.add_argument('--dry-run', action='store_true')
@@ -84,10 +84,8 @@ def arguments():
         p.error('invalid seed, duration, tick count or port')
     if not 2 <= a.view_distance <= 32:
         p.error('view distance must be 2..32')
-    if a.recorder_render_distance is None:
-        a.recorder_render_distance = a.view_distance
-    elif not 2 <= a.recorder_render_distance <= 32:
-        p.error('recorder render distance must be 2..32')
+    if a.pre_stage_ticks < 0:
+        p.error('pre-stage ticks must not be negative')
     if a.status_every is not None and a.status_every < 0:
         p.error('status interval must not be negative')
     if a.checkpoint_every_ticks is not None and a.checkpoint_every_ticks < 1:
@@ -147,6 +145,7 @@ def recording_chunk_stats(path, battle_start):
     zs = [z for _, z in seen]
     return {'distinct_chunks': len(seen), 'x_range': [min(xs), max(xs)], 'z_range': [min(zs), max(zs)],
             'max_ring_from_origin': max(max(abs(x), abs(z)) for x, z in seen),
+            'max_ring_estimate': max(max(xs) - min(xs), max(zs) - min(zs)) // 2,
             'first_sent_from_battle_start': sum(1 for first in seen.values() if first is not None and first >= battle_start)}
 
 
@@ -220,12 +219,15 @@ class StatusPolicy:
     def __init__(self, every):
         self.every = every
         self.barrier_open = True
+        self.hold = False
         self.last = None
 
     def close_barrier(self):
         self.barrier_open = False
 
     def due(self, tick):
+        if self.hold:
+            return False
         if self.barrier_open:
             return True
         if self.every == 0:
@@ -307,12 +309,18 @@ def take_report(a, rows, census, receipt, first, last, telemetry_gaps, setup_com
         reasons.append('telemetry tick gaps')
     if window['missing_ticks']:
         reasons.append('shot window ticks missing from telemetry')
+    if recording_chunks is not None:
+        ring = recording_chunks.get('max_ring_estimate')
+        if ring is None:
+            reasons.append('no terrain chunks in the recording')
+        elif ring < a.view_distance - 1:
+            reasons.append(f'recorded terrain reaches ring {ring}, below view distance {a.view_distance} - 1 (still streaming when the recording ended; raise --pre-stage-ticks)')
     return {
         'seed': a.seed, 'world_seed': a.world_seed, 'scenario': a.scenario, 'count_per_side_override': a.count,
         'setup_command': setup_command, 'census_before_start': census,
         'config': {'checkpoint_every_ticks': a.checkpoint_every_ticks, 'phase_log': a.phase_log, 'status_every': a.status_every,
                    'view_distance': a.view_distance, 'allow_marker_gaps': a.allow_marker_gaps, 'server_scope': a.server_scope,
-                   'forced_checkpoint_before_start': a.take, 'recorder_render_distance': a.recorder_render_distance},
+                   'forced_checkpoint_before_start': a.take, 'pre_stage_ticks': a.pre_stage_ticks},
         'checkpoint_spike_threshold_us': CHECKPOINT_SPIKE_US,
         'server_checkpoints': {'ticks': checkpoint_ticks, 'in_window': inside, 'last_before_window': before[-1] if before else None,
                                'next_periodic_margin_ticks': a.checkpoint_every_ticks - (last - before[-1]) if before else None},
@@ -544,10 +552,10 @@ def run(a):
                          'server argv: ' + ' '.join(server_argv(a, f'{a.pin}/<binary>', a.run_dir / 'server.toml', 'battle-<random>')),
                          f'server environment: MC_CORE_PHASE_LOG={"1" if a.phase_log else "unset"}',
                          f'server.toml:\n{shown_config.rstrip()}',
-                         f'recorder settings: {a.run_dir}/recorder-settings.json {{"render_distance": {a.recorder_render_distance}}} (SOLARIS_CLIENT_SETTINGS for the recorder process)',
                          f'recorder record --server 127.0.0.1:{a.port} --username BattleRecorder --output {a.run_dir}/take.solrec --header {a.run_dir}/header.json --duration {a.duration} --ready-file {a.run_dir}/take.ready --roster-file {a.run_dir}/roster.txt --roster-ready-file {a.run_dir}/roster.ready --roster-timeout 900 --data-dir {a.client_data}',
                          'wait for recorder initial readiness',
                          f'export GET http://127.0.0.1:{a.dashboard_port}/telemetry.jsonl; before start each telemetry batch requests battle status (population barrier), after start {status_after}',
+                         *([f'wait {a.pre_stage_ticks} server ticks (telemetry) with the recorder joined, before battle setup, so terrain streams without the entity load'] if a.pre_stage_ticks else []),
                          commands[0], 'battle roster',
                          'publish exact UUID roster and wait for recorder roster readiness',
                          'wait for fresh exact side counts and fully resident, active soldiers',
@@ -574,7 +582,6 @@ def run(a):
     config.write_text(server_config_text(a, server_name, world, cache))
     (root / 'commands.txt').touch(exist_ok=False)
     recorder_argv = [str(client), 'record', '--server', f'127.0.0.1:{a.port}', '--username', 'BattleRecorder', '--output', str(root / 'take.solrec'), '--header', str(root / 'header.json'), '--duration', str(a.duration), '--ready-file', str(root / 'take.ready'), '--roster-file', str(root / 'roster.txt'), '--roster-ready-file', str(root / 'roster.ready'), '--roster-timeout', '900', '--data-dir', str(client_data)]
-    (root / 'recorder-settings.json').write_text(json.dumps({'render_distance': a.recorder_render_distance}) + '\n')
     launch_argv = server_argv(a, binary, config, server_name)
     (root / 'manifest.json').write_text(json.dumps({'server_pin': manifest, 'client_sha256': sha256_file(client), 'seed': a.seed, 'world_seed': a.world_seed, 'scenario': a.scenario, 'count_per_side_override': a.count, 'world_source': str(a.world) if a.world else None, 'platform': platform.platform(), 'uname': list(platform.uname()), 'server_argv': launch_argv, 'recorder_argv': recorder_argv, 'server_environment_overrides': {'MC_CORE_PHASE_LOG': '1'} if a.phase_log else {}, 'server_environment_removed': [] if a.phase_log else ['MC_CORE_PHASE_LOG'], 'take': a.take, 'checkpoint_every_ticks': a.checkpoint_every_ticks, 'status_every': a.status_every, 'view_distance': a.view_distance, 'allow_marker_gaps': a.allow_marker_gaps, 'server_scope': a.server_scope}, indent=2) + '\n')
     if a.arena:
@@ -612,7 +619,7 @@ def run(a):
         header = root / 'header.json'
         header.write_text(json.dumps({'protocol_version': 777, 'server_build': manifest['head'], 'seed': a.seed, 'start_tick': 0, 'wall_time': 0}) + '\n')
         with (root / 'recorder.log').open('x') as recorder_log:
-            recorder = subprocess.Popen(recorder_argv, stdout=recorder_log, stderr=subprocess.STDOUT, cwd=root, env=dict(os.environ, SOLARIS_CLIENT_SETTINGS=str(root / 'recorder-settings.json')))
+            recorder = subprocess.Popen(recorder_argv, stdout=recorder_log, stderr=subprocess.STDOUT, cwd=root)
             watch_ready(root / 'take.ready', recorder)
             initial = json.loads((root / 'take.ready').read_text())
             if initial.get('phase') != 'play' or not initial.get('pose_known') or not initial.get('tick_marker_received'):
@@ -629,6 +636,11 @@ def run(a):
                     send('battle status')
             telemetry = threading.Thread(target=telemetry_worker, args=(a.dashboard_port, root / 'telemetry.jsonl', stop, failures, request_status, ticks, telemetry_gaps if a.allow_marker_gaps else None), daemon=True)
             telemetry.start()
+            if a.pre_stage_ticks:
+                # Terrain streams to the recorder first: staged units would compete with it in the recorder's world queue.
+                status_policy.hold = True
+                wait_paused_ticks(ticks, failures, recorder, a.pre_stage_ticks, initial.get('tick') or 0)
+                status_policy.hold = False
             send(commands[0])
             expect(messages, 'Battle staged:')
             send('battle roster')

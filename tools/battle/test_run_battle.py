@@ -156,7 +156,6 @@ def marker(tick):
 def chunk(x, z):
     return frame(b'\x2e' + x.to_bytes(4, 'big', signed=True) + z.to_bytes(4, 'big', signed=True) + b'data')
 output.write_bytes(b'{"protocol_version":777}\n' + marker(start - 1) + chunk(3, -5) + marker(start + 1) + chunk(-9, 2) + chunk(3, -5))
-Path('recorder-env.txt').write_text(os.environ.get('SOLARIS_CLIENT_SETTINGS', 'unset'))
 Path(str(output) + '.result.json').write_text(json.dumps({'clean_completion': True, 'first_tick': 1, 'last_tick': fake()['tick'], 'marker_gaps': 0}))
 '''
 
@@ -323,16 +322,6 @@ class BattleRunnerTests(unittest.TestCase):
             override = runner.arguments()
         self.assertEqual((override.phase_log, override.status_every, override.checkpoint_every_ticks), (True, 50, 5000))
 
-    def test_recorder_render_distance_follows_the_view_distance_unless_given(self):
-        runner = load_runner()
-        base = ['--pin', '/p', '--client', '/c', '--client-data', '/d', '--cache', '/k', '--run-dir', '/r']
-        def parse(*extra):
-            with unittest.mock.patch('sys.argv', ['run-battle.py', *base, *extra]):
-                return runner.arguments()
-        self.assertEqual(parse().recorder_render_distance, 12)
-        self.assertEqual(parse('--view-distance', '18').recorder_render_distance, 18)
-        self.assertEqual(parse('--view-distance', '18', '--recorder-render-distance', '16').recorder_render_distance, 16)
-
     def test_take_refuses_a_cadence_inside_the_take(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -377,6 +366,11 @@ class BattleRunnerTests(unittest.TestCase):
         runner = load_runner()
         quiet = runner.StatusPolicy(0)
         self.assertTrue(quiet.due(100) and quiet.due(200))
+        held = runner.StatusPolicy(0)
+        held.hold = True
+        self.assertFalse(held.due(100))
+        held.hold = False
+        self.assertTrue(held.due(200))
         quiet.close_barrier()
         self.assertFalse(any(quiet.due(tick) for tick in range(300, 5000, 100)))
         paced = runner.StatusPolicy(250)
@@ -440,10 +434,14 @@ class BattleRunnerTests(unittest.TestCase):
         runner = load_runner()
         rows = [{'tick': tick, 'wall_start_unix_ns': tick * 50_000_000, 'wall_us': 20_000, 'phase_us': {'owner_post_us': 300}, 'host': None} for tick in range(1, 11)]
         quiet = argparse.Namespace(seed=1, world_seed=1, scenario='field-100', count=None, checkpoint_every_ticks=4000, phase_log=False,
-                                   status_every=0, view_distance=12, recorder_render_distance=12, allow_marker_gaps=True, server_scope=None, take=True)
+                                   status_every=0, view_distance=12, pre_stage_ticks=0, allow_marker_gaps=True, server_scope=None, take=True)
         receipt = {'first_tick': 1, 'last_tick': 10, 'marker_gaps': 0}
         committed = lambda *ticks: ''.join(f'2026-11-11T00:00:00Z  INFO mc_core::core::journal: checkpoint committed tick={tick} total_ms=1\n' for tick in ticks)
         report = runner.take_report(quiet, rows, {'tick': 3}, receipt, 2, 10, [], 'battle setup 1 field-100', committed(1))
+        shallow = runner.take_report(quiet, rows, {}, receipt, 2, 10, [], 'x', '', {'distinct_chunks': 9, 'max_ring_estimate': 6})
+        self.assertEqual(shallow['unclean_reasons'], ['recorded terrain reaches ring 6, below view distance 12 - 1 (still streaming when the recording ended; raise --pre-stage-ticks)'])
+        self.assertEqual(runner.take_report(quiet, rows, {}, receipt, 2, 10, [], 'x', '', {'distinct_chunks': 0})['unclean_reasons'], ['no terrain chunks in the recording'])
+        self.assertTrue(runner.take_report(quiet, rows, {}, receipt, 2, 10, [], 'x', '', {'distinct_chunks': 9, 'max_ring_estimate': 11})['clean'])
         self.assertEqual((report['clean'], report['unclean_reasons']), (True, []))
         self.assertEqual(report['census_before_start'], {'tick': 3})
         spiky = [dict(rows[4], phase_us={'owner_post_us': 150_000})] + rows[5:]
@@ -568,7 +566,7 @@ class BattleRunnerTests(unittest.TestCase):
 
     def test_take_run_forces_one_checkpoint_before_start_and_stays_quiet_in_the_window(self):
         with tempfile.TemporaryDirectory() as directory:
-            commands, run = self.run_fake_battle(Path(directory), '--take', '--checkpoint-every-ticks', '1000', '--recorder-render-distance', '18')
+            commands, run = self.run_fake_battle(Path(directory), '--take', '--checkpoint-every-ticks', '1000', '--view-distance', '6', '--pre-stage-ticks', '150')
             start, pause = commands.index('battle start'), commands.index('battle pause')
             self.assertEqual(commands[start - 1], 'save-all')
             self.assertEqual(commands.count('save-all'), 1)
@@ -586,10 +584,8 @@ class BattleRunnerTests(unittest.TestCase):
             self.assertGreater(checkpoints['next_periodic_margin_ticks'], 0)
             self.assertGreaterEqual(take['window']['samples'], 300)
             self.assertEqual(take['census_before_start']['regiments'], 4)
-            self.assertEqual(take['config']['recorder_render_distance'], 18)
-            self.assertEqual(take['recording_chunks'], {'distinct_chunks': 2, 'x_range': [-9, 3], 'z_range': [-5, 2], 'max_ring_from_origin': 9, 'first_sent_from_battle_start': 1})
-            self.assertEqual(json.loads((run / 'recorder-settings.json').read_text()), {'render_distance': 18})
-            self.assertEqual((run / 'recorder-env.txt').read_text(), str(run / 'recorder-settings.json'))
+            self.assertEqual(take['config']['pre_stage_ticks'], 150)
+            self.assertEqual(take['recording_chunks'], {'distinct_chunks': 2, 'x_range': [-9, 3], 'z_range': [-5, 2], 'max_ring_from_origin': 9, 'max_ring_estimate': 6, 'first_sent_from_battle_start': 1})
             result = json.loads((run / 'result.json').read_text())
             self.assertEqual((result['status'], result['take_clean']), ('complete', True))
             rows = [json.loads(line) for line in (run / 'telemetry.jsonl').read_text().splitlines()]
