@@ -387,23 +387,36 @@ def workstation_blocks(probe: ProbeSteps, chest: tuple[int, int, int]) -> list[d
     return found
 
 
-def capture_iron_menu(probe: ProbeSteps, artifact: Path, pos: tuple[int, int, int],
-                      advanced: int) -> dict[str, Any]:
-    """Open the actual furnace as the player and capture its observed output slot."""
+def capture_iron_menu(probe: ProbeSteps, server: Any,
+                      read_container: Callable[[tuple[int, int, int]], dict[str, int]],
+                      artifact: Path, pos: tuple[int, int, int], advanced: int) -> dict[str, Any] | None:
+    """Open the actual furnace as the player and capture its observed output slot.
+
+    Residents collect furnace output, so the simulation is held from a fresh
+    output read until the menu is captured. An ingot collected before the hold
+    returns None and leaves the milestone to a later observation.
+    """
     x, y, z = pos
-    probe.call("minecraft_close_screen", {})
-    probe.call("minecraft_set_hotbar_slot", {"slot": 8})
-    probe.call("minecraft_use_item_on", {"x": x, "y": y, "z": z, "face": "up", "hand": "main_hand"})
-    state = probe.wait(
-        lambda s: (s.get("container") or {}).get("container_id", 0) != 0
-        and (s.get("container") or {}).get("menu_class") == "net.minecraft.world.inventory.FurnaceMenu"
-        and any(slot.get("slot") == 2 and slot.get("item_id") == "minecraft:iron_ingot"
-                and slot.get("count", 0) > 0 for slot in (s.get("container") or {}).get("slots", [])),
-        "furnace_iron_output_visible", timeout_seconds=15.0,
-    )
-    shot = native_client.capture(probe.client, artifact, f"civilization-iron-{advanced:06d}")
-    probe.call("minecraft_close_screen", {})
-    return {"screenshot": shot, "container": state["container"]}
+    item_merge._console(server, "tick freeze")
+    try:
+        # One ordered console: this read follows the freeze.
+        if read_container(pos).get("minecraft:iron_ingot", 0) <= 0:
+            return None
+        probe.call("minecraft_close_screen", {})
+        probe.call("minecraft_set_hotbar_slot", {"slot": 8})
+        probe.call("minecraft_use_item_on", {"x": x, "y": y, "z": z, "face": "up", "hand": "main_hand"})
+        state = probe.wait(
+            lambda s: (s.get("container") or {}).get("container_id", 0) != 0
+            and (s.get("container") or {}).get("menu_class") == "net.minecraft.world.inventory.FurnaceMenu"
+            and any(slot.get("slot") == 2 and slot.get("item_id") == "minecraft:iron_ingot"
+                    and slot.get("count", 0) > 0 for slot in (s.get("container") or {}).get("slots", [])),
+            "furnace_iron_output_visible", timeout_seconds=15.0,
+        )
+        shot = native_client.capture(probe.client, artifact, f"civilization-iron-{advanced:06d}")
+        probe.call("minecraft_close_screen", {})
+        return {"screenshot": shot, "container": state["container"]}
+    finally:
+        item_merge._console(server, "tick unfreeze")
 
 
 def standable_height(blocks: list[dict[str, Any]], player_y: float) -> int | None:
@@ -602,11 +615,15 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                 seen_furnaces.add(pos)
             if ((furnace.get("container_totals") or {}).get("minecraft:iron_ingot", 0) > 0
                     and pos not in baseline_furnaces and pos not in iron_captured):
-                furnace["iron_menu"] = capture_iron_menu(probe, artifact, pos, advanced)
+                iron_menu = capture_iron_menu(probe, server, read_container, artifact, pos, advanced)
+                if iron_menu is None:
+                    furnace["iron_menu_skipped"] = "output collected before the simulation hold"
+                    continue
+                furnace["iron_menu"] = iron_menu
                 iron_captured.add(pos)
                 detail["milestones"].setdefault("iron_smelted", {
-                    "sprint_ticks": advanced, "screenshot": furnace["iron_menu"]["screenshot"],
-                    "furnace": pos, "menu": furnace["iron_menu"]["container"],
+                    "sprint_ticks": advanced, "screenshot": iron_menu["screenshot"],
+                    "furnace": pos, "menu": iron_menu["container"],
                 })
         shot = native_client.capture(probe.client, artifact, f"civilization-{advanced:06d}")
         row = {"sprint_ticks": advanced, "elapsed_seconds": time.monotonic() - started,

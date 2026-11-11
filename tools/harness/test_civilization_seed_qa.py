@@ -269,11 +269,13 @@ class CivilizationEvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(TimeoutError, "sprint deadline expired"):
                 probe.remaining(limit=None)
 
-    def test_civilization_sprint_wait_can_outlast_one_mcp_request(self):
+    def first_observation(self, sprint, workstations=(), read_container=None, wait=None):
+        """Drive scenario() through its first snapshot up to the first sprint."""
         player = {"player": {"x": 1.0, "y": 70.0, "z": 1.0}}
         with patch("tools.harness.backends.probe_steps.time.monotonic", return_value=100.0):
             probe = qa.ProbeSteps(Mock(), None, 7200.0, "sprint")
-        probe.wait = Mock(return_value=player)
+        probe.wait = Mock(side_effect=wait or (lambda *_, **__: player))
+        probe.observe = Mock(return_value=player)
         probe.call = Mock(return_value={
             "entities": [], "visible_count": 0, "truncated": False, "next_cursor": None,
         })
@@ -282,11 +284,7 @@ class CivilizationEvidenceTests(unittest.TestCase):
             capture()
             return {"buildings_now": []}
 
-        def sprint(server, log, ticks, timeout):
-            self.assertEqual(ticks, 300)
-            self.assertEqual(timeout, 7200.0)
-            raise RuntimeError("completion event awaited")
-
+        detail = {}
         with patch.object(qa.time, "monotonic", return_value=100.0), \
              patch.object(qa, "walk_to_village", return_value=player), \
              patch.object(qa.village, "_send", side_effect=[
@@ -302,11 +300,42 @@ class CivilizationEvidenceTests(unittest.TestCase):
              patch.object(qa.village, "_probe_ecology", return_value={}), \
              patch.object(qa.village, "_gametime", return_value=0), \
              patch.object(qa, "building_blocks", return_value=[]), \
-             patch.object(qa, "workstation_blocks", return_value=[]), \
+             patch.object(qa, "workstation_blocks", side_effect=[[], list(workstations)]), \
              patch.object(qa, "baseline_server_tick", return_value=120), \
              patch.object(qa.item_merge, "_sprint", side_effect=sprint):
             with self.assertRaisesRegex(RuntimeError, "completion event awaited"):
-                qa.scenario(probe, {}, "artifact", Mock(), "server.log", Mock())
+                qa.scenario(probe, detail, "artifact", Mock(), "server.log", read_container or Mock())
+        return detail
+
+    def test_civilization_sprint_wait_can_outlast_one_mcp_request(self):
+        def sprint(server, log, ticks, timeout):
+            self.assertEqual(ticks, 300)
+            self.assertEqual(timeout, 7200.0)
+            raise RuntimeError("completion event awaited")
+
+        self.first_observation(sprint)
+
+    def test_furnace_output_collected_before_the_menu_does_not_abort_the_run(self):
+        # Seed-24 run o31rlnkb: the console read saw one ingot, a resident took
+        # it before the player's menu opened and the whole gate aborted on
+        # furnace_iron_output_visible. The held re-read now finds it gone.
+        reads = iter([{"minecraft:iron_ingot": 1}, {"minecraft:raw_iron": 1}])
+        player = {"player": {"x": 1.0, "y": 70.0, "z": 1.0}}
+
+        def wait(predicate, label, **kwargs):
+            if label == "furnace_iron_output_visible":
+                raise TimeoutError("civilization-seed-qa timed out waiting for furnace_iron_output_visible")
+            return player
+
+        def sprint(server, log, ticks, timeout):
+            raise RuntimeError("completion event awaited")
+
+        detail = self.first_observation(
+            sprint, workstations=[{"x": 134, "y": 78, "z": -217, "block_id": "minecraft:furnace"}],
+            read_container=lambda pos: next(reads), wait=wait)
+        self.assertNotIn("iron_smelted", detail["milestones"])
+        furnace = detail["snapshots"][0]["workstation_blocks"][0]
+        self.assertEqual(furnace["iron_menu_skipped"], "output collected before the simulation hold")
 
     def scan(self, buildings, response):
         probe = Mock()
@@ -367,20 +396,41 @@ class CivilizationEvidenceTests(unittest.TestCase):
         full = {"container": {"container_id": 4,
                               "menu_class": "net.minecraft.world.inventory.FurnaceMenu",
                               "slots": [{"slot": 2, "item_id": "minecraft:iron_ingot", "count": 2}]}}
+        events = []
 
         def wait(predicate, label, **kwargs):
             self.assertFalse(predicate(empty))
             self.assertTrue(predicate(full))
+            events.append("menu")
             return full
 
+        def read(pos):
+            events.append(("read", pos))
+            return {"minecraft:iron_ingot": 2}
+
         probe.wait.side_effect = wait
-        with patch.object(qa.native_client, "capture", return_value={"retained_path": "iron.png"}) as capture:
-            result = qa.capture_iron_menu(probe, "artifact", (1, 2, 3), 600)
+        with patch.object(qa.native_client, "capture", return_value={"retained_path": "iron.png"}) as capture, \
+             patch.object(qa.item_merge, "_console", side_effect=lambda _, command: events.append(command)):
+            result = qa.capture_iron_menu(probe, "server", read, "artifact", (1, 2, 3), 600)
         self.assertEqual(result["container"], full["container"])
         capture.assert_called_once_with(probe.client, "artifact", "civilization-iron-000600")
         self.assertEqual([call.args[0] for call in probe.call.call_args_list],
                          ["minecraft_close_screen", "minecraft_set_hotbar_slot",
                           "minecraft_use_item_on", "minecraft_close_screen"])
+        self.assertEqual(events, ["tick freeze", ("read", (1, 2, 3)), "menu", "tick unfreeze"])
+
+    def test_iron_collected_by_a_resident_before_the_hold_is_retried_not_fatal(self):
+        # Seed-24 run o31rlnkb: the console read saw one ingot, a resident
+        # took it before the player's menu opened, and the run aborted.
+        probe = Mock()
+        probe.wait.side_effect = TimeoutError("timed out waiting for furnace_iron_output_visible")
+        events = []
+        with patch.object(qa.item_merge, "_console", side_effect=lambda _, command: events.append(command)):
+            result = qa.capture_iron_menu(probe, "server", lambda pos: {"minecraft:raw_iron": 1},
+                                          "artifact", (1, 2, 3), 300)
+        self.assertIsNone(result)
+        probe.call.assert_not_called()
+        self.assertEqual(events, ["tick freeze", "tick unfreeze"])
 
     def test_observer_is_safe_only_after_ordinary_claim_and_stock_transfer(self):
         probe = Mock()

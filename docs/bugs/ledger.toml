@@ -3859,6 +3859,17 @@ failing_first = "Fails with only the stand fix hunks reverted (receipts/CivSimSe
 regression = ["cargo:mc-core:villager::building_preparation_tests::clearing_stand_on_a_hill_edge_is_within_felling_reach_of_the_pit_footing"]
 
 [[bug]]
+id = "CIV-IRON-CAPTURE-OUTPUT-COLLECTED"
+title = "civilization-seed-qa aborts when a resident collects the furnace ingot between the console read and the player's furnace menu"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T230450-civilization-seed-qa-o31rlnkb on server pin 107ddb91 (stand fix): after sprint 300 the read-only console read of furnace [134,78,-217] showed one iron ingot in its output slot (server.log line 33); the observer's furnace menu then opened (container 6, 111 transcript observations) with all three furnace slots empty for the whole 15 s wait, so the ingot had left the furnace in between (furnace output is collected by residents, docs/settlements/construction.md); the gate failed after 174 s on 'timed out waiting for furnace_iron_output_visible'. Iron was smelted; the failure is the harness observation race. tools/harness/backends/civilization_seed_qa.py capture_iron_menu now holds the simulation with tick freeze, re-reads the output, captures the menu, then unfreezes; output collected before the hold leaves the milestone to a later snapshot."
+failing_first = "python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/iron-hold-fix-hunks.patch, sha256 db052414) test_furnace_output_collected_before_the_menu_does_not_abort_the_run fails with the gate's TimeoutError on furnace_iron_output_visible (receipts/CivSimSeed24/iron-hold-negative-control.log); fixed tree 79/79 with test_village_autonomy_qa (receipts/CivSimSeed24/iron-hold-tests.log)."
+regression = []
+
+[[bug]]
 id = "TICK-FROZEN-GAME-AGE-WIRE"
 title = "SET_TIME advances client game age during tick freeze by sending the WAL frame counter"
 area = "gameplay"
