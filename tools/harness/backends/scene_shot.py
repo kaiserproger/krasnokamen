@@ -713,18 +713,18 @@ def check_entity_visuals(probe: ProbeSteps, artifact: Path) -> None:
             abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
         ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
     maroon = lambda r, g, b: r > g + 25 and r > b + 25
-    teal = lambda r, g, b: g > r + 15 and b > r + 15
+    teal = lambda r, g, b: g > r + 15 and b > r + 15 and b < 210
     pink = lambda r, g, b: r - b > 40 and r > 120
     white = lambda r, g, b: r > 170 and g > 170 and b > 170 and max(r, g, b) - min(r, g, b) < 35
     orange = lambda r, g, b: r > 150 and 60 < g < 210 and b < 110
     rope = lambda r, g, b: 60 < r < 140 and 40 < g < 100 and b < 70 and r > g > b
     vindicator = shots["vindicator"][1]
-    probe.check("vindicator_visible", _changed(shots["vindicator"][1], shots["empty"][1], (560, 280, 780, 560)) > 500)
-    probe.check("vindicator_torso_not_maroon", _count(vindicator, (600, 380, 680, 450), maroon) < 50)
-    arm_pixels = sum(_count(vindicator, box, teal) for box in ((590, 390, 615, 470), (665, 390, 700, 470)))
+    probe.check("vindicator_visible", _changed(shots["vindicator"][1], shots["empty"][1], (540, 280, 760, 580)) > 500)
+    probe.check("vindicator_torso_not_maroon", _count(vindicator, (610, 400, 680, 475), maroon) < 50)
+    arm_pixels = sum(_count(vindicator, box, teal) for box in ((545, 390, 600, 470), (690, 390, 735, 470)))
     probe.report["vindicator_teal_arm_pixels"] = arm_pixels
     probe.check("vindicator_arms_not_teal", arm_pixels < 50)
-    leg_teal = _count(vindicator, (600, 460, 680, 540), teal)
+    leg_teal = _count(vindicator, (600, 480, 690, 560), teal)
     probe.report["vindicator_teal_leg_pixels"] = leg_teal
     probe.check("vindicator_legs_teal", leg_teal > 150)
     ghast_box = (560, 260, 780, 470)
