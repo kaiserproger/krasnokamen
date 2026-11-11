@@ -4250,3 +4250,69 @@ status = "open"
 source = "Rule-5 review of the recorder fix c731c550 (ReviewRecorderOverflow, 2026-11-12, finding F2): pump.rs:398-406 repairs only geometry after a failed world try_send; LOD tiles are a second producer on world_tx (lod.rs:317, LOD on by default config.rs:383), so pump.rs:341-342 'Only the pump sends world packets' is false. Example: a dismount SetPassengers(horse,[]) is lost and the client keeps the rider mounted until the next link change or re-pairing. Fix direction: take LOD tiles off world_tx, or treat a lost entity frame as a re-pair."
 regression = []
 failing_first = "not recorded"
+
+[[bug]]
+id = "NATIVE-SET-PLAYER-TEAM-26-3-LAYOUT"
+title = "/team add disconnects the native client: it decodes set_player_team (Play 0x6f) in the pre-26.3 parameter order and fails with '4 trailing packet bytes'."
+area = "client"
+repro = "client"
+severity = "blocker"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F2, 2/2): server encodes the 26.3 layout (receipts/BreakJoinRows/javap/SetPlayerTeamParameters.txt: display name, prefix, suffix, visibility, collision, Optional<color>, options); solaris-client src/ui/hud.rs:304-318 decodes the old order. Being fixed on solaris-client wt/ClientTeamPacket."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "TELLRAW-PLAIN-STRING-COMPONENT-DROPPED"
+title = "tellraw with a plain JSON string component (tellraw @s \"text\") shows nothing and reports no error; {\"text\":...} works."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F3, 2/2, with send_command_feedback true and false). Vanilla 26.3 accepts a bare string as a text component."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "COMMAND-BLOCK-SETBLOCK-AUTO-NEVER-RUNS"
+title = "A command block placed by /setblock with {auto:1b} never runs; the same block powered by redstone runs."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F6, 2/2; javap receipts/BreakJoinRows/javap/CommandBlockEntity.txt: loadAdditional -> setAutomatic -> scheduleTick)."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "SP-PLAYER-ROTATION-LOST-ON-REOPEN"
+title = "Singleplayer: after a clean quit and reopen the player's position is kept but yaw/pitch come back as 0/0; vanilla persists Rotation."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F4, 8/8 including the uninterrupted control run); not caused by the WORLD-FIRST-START-INTERRUPTED fix."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "NATIVE-KICK-REASON-BROKEN-PIPE"
+title = "A duplicate-login kick of an incumbent in the Nether can show 'Broken pipe (os error 32)' on the native client instead of the kick reason the server sent."
+area = "client"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F5, 1/2, BREAK_DL_ATTACK=nether); the server log shows 'You logged in from another location' was sent."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "COMMAND-GAPS-BREAKJOINROWS-NOTICED"
+title = "Small command gaps seen once each: defaultgamemode is an unknown command; loot table minecraft:blocks/stone reported unsupported; failure messages show the raw key argument.entity.notfound.entity; command-block say shows [Server] instead of @ and ops get no [@: ...] admin broadcast."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md 'Noticed', single runs). Split into separate rows when one is picked up."
+regression = []
+failing_first = "reported"
