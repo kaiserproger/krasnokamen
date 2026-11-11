@@ -1,8 +1,10 @@
 //! Shared swept collision, ballistic motion, pickup and loyalty return.
-//! One post-move body snapshot owns exact hit geometry. Large volleys use a
-//! two-block XZ counting grid with Y rejection; small/sparse scenes use native
-//! chunks. Membership freezes before payload mutations. Pickup/riptide keep
-//! live native chunk queries and dense-slot priority.
+//! One post-move body snapshot owns exact hit geometry. It holds only bodies
+//! that meet some shot's frozen query box (plus deployed stands and dragon
+//! parts). Large volleys use a two-block XZ counting grid with Y rejection;
+//! small/sparse scenes use native chunks. Membership freezes before payload
+//! mutations. Pickup/riptide keep live native chunk queries and dense-slot
+//! priority.
 
 use std::sync::Arc;
 
@@ -35,12 +37,21 @@ pub(super) struct Hittable {
     battle_faction: u16,
 }
 
-fn hittables(state: &TickState, bodies: &mut Vec<Hittable>) {
+/// Freeze the hittable bodies in slot order. `include_items` holds when a
+/// fishing hook is among the shots: only hooks collide with dropped items.
+/// With a `cover`, a body that meets no shot's query box is left out before
+/// its cold row is read; deployed stands are kept for every shot.
+fn hittables(
+    state: &TickState,
+    include_items: bool,
+    cover: Option<&Cover>,
+    bodies: &mut Vec<Hittable>,
+) {
     bodies.clear();
-    let include_items = crate::projectiles::active_hook_present(state);
+    // `is_stand` depends only on the mob type: resolve each type once.
+    let mut stand_types: Vec<(u32, bool)> = Vec::new();
     bodies.extend(state.entities.slots().filter_map(|slot| {
         let body = state.entities.body(slot);
-        let row = state.entities.row(slot);
         if crate::end_fight::is_dragon(state, slot) {
             return None;
         }
@@ -56,26 +67,45 @@ fn hittables(state: &TickState, bodies: &mut Vec<Hittable>) {
                 EntityKind::Item { .. } => include_items,
                 EntityKind::ExperienceOrb { .. } => false,
             };
-        hittable.then(|| {
-            let pos = state.entities.pos(slot);
-            Hittable {
-                slot: Some(slot),
-                id: body.id,
-                uuid: row.uuid,
-                item: matches!(body.kind, EntityKind::Item { .. }),
-                battle_faction: if matches!(body.kind, EntityKind::Mob { .. }) {
-                    body.faction
-                } else {
-                    0
-                },
-                deployed_candidate: crate::armor_stand::is_stand(state, slot),
-                min: [pos[0] - body.half_width, pos[1], pos[2] - body.half_width],
-                max: [
-                    pos[0] + body.half_width,
-                    pos[1] + body.height,
-                    pos[2] + body.half_width,
-                ],
+        if !hittable {
+            return None;
+        }
+        let pos = state.entities.pos(slot);
+        let min = [pos[0] - body.half_width, pos[1], pos[2] - body.half_width];
+        let max = [
+            pos[0] + body.half_width,
+            pos[1] + body.height,
+            pos[2] + body.half_width,
+        ];
+        let deployed_candidate = match body.kind {
+            EntityKind::Mob { type_id } => {
+                match stand_types.iter().find(|(seen, _)| *seen == type_id) {
+                    Some(&(_, stand)) => stand,
+                    None => {
+                        let stand = crate::armor_stand::is_stand(state, slot);
+                        stand_types.push((type_id, stand));
+                        stand
+                    }
+                }
             }
+            _ => false,
+        };
+        if !deployed_candidate && cover.is_some_and(|cover| !cover.reaches(min, max)) {
+            return None;
+        }
+        Some(Hittable {
+            slot: Some(slot),
+            id: body.id,
+            uuid: state.entities.row(slot).uuid,
+            item: matches!(body.kind, EntityKind::Item { .. }),
+            battle_faction: if matches!(body.kind, EntityKind::Mob { .. }) {
+                body.faction
+            } else {
+                0
+            },
+            deployed_candidate,
+            min,
+            max,
         })
     }));
     if let Some(uuid) = state.end_fight.dragon_uuid
@@ -135,7 +165,9 @@ impl FineGrid {
         z * self.size[0] + x
     }
 
-    fn build(&mut self, bodies: &[Hittable]) -> bool {
+    /// `reach`: cells the caller already proved worth spanning (the shots'
+    /// cover); a covered snapshot may be sparser than `bodies.len()` implies.
+    fn build(&mut self, bodies: &[Hittable], reach: usize) -> bool {
         self.size = [0; 2];
         if bodies.is_empty() {
             return false;
@@ -168,7 +200,7 @@ impl FineGrid {
         };
         // Widely separated worlds must not allocate/enumerate empty continents.
         // The ordinary chunk path is still conservative for these sparse scenes.
-        if cells > Self::MAX_CELLS || cells > bodies.len().saturating_mul(16).max(4096) {
+        if cells > Self::MAX_CELLS || cells > bodies.len().saturating_mul(16).max(4096).max(reach) {
             return false;
         }
         self.origin = min;
@@ -204,8 +236,7 @@ impl FineGrid {
         radius: f64,
         out: &mut Vec<usize>,
     ) -> usize {
-        let low = std::array::from_fn::<_, 3, _>(|axis| start[axis].min(end[axis]) - radius);
-        let high = std::array::from_fn::<_, 3, _>(|axis| start[axis].max(end[axis]) + radius);
+        let (low, high) = query_box(start, end, radius);
         let mut cells = [[0_i64; 2]; 2];
         for (axis, world_axis) in [0, 2].into_iter().enumerate() {
             cells[axis][0] = (i64::from(Self::cell(low[world_axis] - self.half_extent))
@@ -242,6 +273,106 @@ impl FineGrid {
         {
             0
         }
+    }
+}
+
+/// The broad-phase box of one swept query: every body a shot can be tested
+/// against overlaps it (inclusive bounds, as `FineGrid::query` compares).
+fn query_box(start: [f64; 3], end: [f64; 3], radius: f64) -> ([f64; 3], [f64; 3]) {
+    (
+        std::array::from_fn(|axis| start[axis].min(end[axis]) - radius),
+        std::array::from_fn(|axis| start[axis].max(end[axis]) + radius),
+    )
+}
+
+/// Derived per-pass scratch: XZ cells over this pass's frozen shot query
+/// boxes, each holding the vertical span of the boxes that reach it. A body
+/// whose box meets no reached cell within that cell's span overlaps no query
+/// box, so it can be no shot's candidate on either broad phase. Bounded like
+/// `FineGrid`: a sparse or non-finite set of boxes builds no cover and every
+/// hittable body is kept.
+#[derive(Debug, Default)]
+pub(super) struct Cover {
+    origin: [i64; 2],
+    size: [usize; 2],
+    /// `[low, high]` Y per cell; an unreached cell holds an empty span.
+    spans: Vec<[f64; 2]>,
+}
+
+impl Cover {
+    /// Four-block cells: scaling by a power of two is exact, so this is
+    /// `floor(value).div_euclid(4)` without the integer division.
+    fn cell(value: f64) -> i64 {
+        (value * 0.25).floor() as i64
+    }
+
+    /// Two-block `FineGrid` cells spanning this built cover plus one cell of
+    /// margin on every side for body half widths.
+    fn fine_cells(&self) -> usize {
+        (self.size[0] + 2).saturating_mul(2) * (self.size[1] + 2).saturating_mul(2)
+    }
+
+    fn build(&mut self, boxes: &[([f64; 3], [f64; 3])]) -> bool {
+        self.size = [0; 2];
+        let mut min = [i64::MAX; 2];
+        let mut max = [i64::MIN; 2];
+        for (low, high) in boxes {
+            if low.iter().chain(high).any(|value| !value.is_finite()) {
+                return false;
+            }
+            for (axis, world_axis) in [0, 2].into_iter().enumerate() {
+                min[axis] = min[axis].min(Self::cell(low[world_axis]));
+                max[axis] = max[axis].max(Self::cell(high[world_axis]));
+            }
+        }
+        if boxes.is_empty() {
+            return false;
+        }
+        let width = (max[0] - min[0] + 1) as usize;
+        let height = (max[1] - min[1] + 1) as usize;
+        let Some(cells) = width.checked_mul(height) else {
+            return false;
+        };
+        if cells > FineGrid::MAX_CELLS || cells > boxes.len().saturating_mul(64).max(4096) {
+            return false;
+        }
+        self.origin = min;
+        self.size = [width, height];
+        self.spans.clear();
+        self.spans.resize(cells, [f64::INFINITY, f64::NEG_INFINITY]);
+        for (low, high) in boxes {
+            for z in Self::cell(low[2])..=Self::cell(high[2]) {
+                for x in Self::cell(low[0])..=Self::cell(high[0]) {
+                    let index = (z - min[1]) as usize * width + (x - min[0]) as usize;
+                    let span = &mut self.spans[index];
+                    span[0] = span[0].min(low[1]);
+                    span[1] = span[1].max(high[1]);
+                }
+            }
+        }
+        true
+    }
+
+    /// Whether a body box may overlap some query box. Non-finite bodies are
+    /// kept: the broad phases already treat them conservatively.
+    fn reaches(&self, min: [f64; 3], max: [f64; 3]) -> bool {
+        if min.iter().chain(&max).any(|value| !value.is_finite()) {
+            return true;
+        }
+        let range = |axis: usize, world_axis: usize| {
+            (
+                (Self::cell(min[world_axis]) - self.origin[axis]).max(0),
+                (Self::cell(max[world_axis]) - self.origin[axis]).min(self.size[axis] as i64 - 1),
+            )
+        };
+        let (x0, x1) = range(0, 0);
+        let (z0, z1) = range(1, 2);
+        (z0..=z1).any(|z| {
+            (x0..=x1).any(|x| {
+                let span = self.spans[z as usize * self.size[0] + x as usize];
+                max[1] >= span[0] && min[1] <= span[1]
+            })
+        })
     }
 }
 
@@ -296,26 +427,24 @@ pub(super) fn swept_slots(
     slots.dedup();
 }
 
+/// One shot's frozen broad-phase sweep.
+#[derive(Debug, Clone, Copy)]
+struct ShotQuery {
+    start: [f64; 3],
+    end: [f64; 3],
+    radius: f64,
+    hook: bool,
+}
+
 /// Freeze broad-phase membership at the same post-move version as `hittables`.
 /// Later payloads can teleport bodies, remove rows or swap slots. Neither those
 /// changes nor a newly spawned drop may change another shot's frozen candidates.
-fn shot_candidates(
-    state: &TickState,
-    id: EntityId,
-    bodies: &[Hittable],
-    exceptional: &[usize],
-    grid: Option<&FineGrid>,
-    slots: &mut Vec<EntitySlot>,
-    candidates: &mut Vec<usize>,
-) {
-    let Some(slot) = state.entities.slot_of(id) else {
-        return;
-    };
-    let Some(record) = state.entities.row(slot).projectile.as_deref() else {
-        return;
-    };
+/// `None`: the shot tests no bodies this tick.
+fn shot_query(state: &TickState, id: EntityId) -> Option<ShotQuery> {
+    let slot = state.entities.slot_of(id)?;
+    let record = state.entities.row(slot).projectile.as_deref()?;
     if record.stuck || record.kind == ProjectileKind::EyeOfEnder {
-        return;
+        return None;
     }
     let pos = state.entities.pos(slot);
     let velocity = state.entities.vel(slot).map(|v| v / 20.0);
@@ -323,7 +452,7 @@ fn shot_candidates(
         .map_or(0.3, |profile| profile.collision_radius);
     if pos.iter().any(|v| !v.is_finite()) || !radius.is_finite() || !(0.0..=128.0).contains(&radius)
     {
-        return;
+        return None;
     }
     let (start, end) = if matches!(record.data, super::ProjectileData::Homing { .. }) {
         // Homing may observe a target teleported by an earlier payload. Every
@@ -331,10 +460,30 @@ fn shot_candidates(
         (pos.map(|v| v - 128.0), pos.map(|v| v + 128.0))
     } else {
         if velocity.iter().any(|v| !v.is_finite() || v.abs() > 128.0) {
-            return;
+            return None;
         }
         (pos, std::array::from_fn(|axis| pos[axis] + velocity[axis]))
     };
+    Some(ShotQuery {
+        start,
+        end,
+        radius,
+        hook: record.kind == ProjectileKind::FishingHook,
+    })
+}
+
+fn query_candidates(
+    state: &TickState,
+    query: &ShotQuery,
+    bodies: &[Hittable],
+    exceptional: &[usize],
+    grid: Option<&FineGrid>,
+    slots: &mut Vec<EntitySlot>,
+    candidates: &mut Vec<usize>,
+) {
+    let ShotQuery {
+        start, end, radius, ..
+    } = *query;
     if let Some(grid) = grid {
         grid.query(bodies, start, end, radius, candidates);
     } else {
@@ -347,6 +496,21 @@ fn shot_candidates(
     }
     // Dragon parts and deployed planes need not fit the ordinary body bounds.
     candidates.extend_from_slice(exceptional);
+}
+
+#[cfg(test)]
+fn shot_candidates(
+    state: &TickState,
+    id: EntityId,
+    bodies: &[Hittable],
+    exceptional: &[usize],
+    grid: Option<&FineGrid>,
+    slots: &mut Vec<EntitySlot>,
+    candidates: &mut Vec<usize>,
+) {
+    if let Some(query) = shot_query(state, id) {
+        query_candidates(state, &query, bodies, exceptional, grid, slots, candidates);
+    }
 }
 
 pub(super) fn segment_enters(
@@ -483,11 +647,35 @@ fn first_solid(
             .div_ceil(16)
             .saturating_sub(1),
     );
+    // An overlay-free world is read through its resident columns: one map
+    // probe per column crossing instead of one per cell. Unfolded writes keep
+    // the overlay-first world read. Both refuse unloaded columns and heights.
+    let direct = state.world.overlay_is_empty();
+    let mut column: Option<(crate::boundary::ChunkPos, &crate::boundary::Chunk)> = None;
     let mut first: Option<(f64, crate::boundary::BlockPos)> = None;
     for y in min[1].saturating_sub(below)..=max[1] {
         for z in min[2]..=max[2] {
             for x in min[0]..=max[0] {
-                let block = state.world.block_at(x, y, z).ok_or(())?;
+                let block = if direct {
+                    let at = crate::boundary::ChunkPos {
+                        x: x.div_euclid(16),
+                        z: z.div_euclid(16),
+                    };
+                    let chunk = match column {
+                        Some((cached, chunk)) if cached == at => chunk,
+                        _ => {
+                            let chunk = state.world.chunk(at).ok_or(())?;
+                            column = Some((at, chunk));
+                            chunk
+                        }
+                    };
+                    chunk
+                        .get_block(x.rem_euclid(16) as u8, y, z.rem_euclid(16) as u8)
+                        .map(|id| id.0)
+                } else {
+                    state.world.block_at(x, y, z)
+                }
+                .ok_or(())?;
                 let Some(boxes) = state.registry.collision_boxes.get(block as usize) else {
                     return Err(());
                 };
@@ -570,23 +758,28 @@ pub(super) fn run(
         clock = now;
         elapsed
     };
+    let queries: Vec<_> = ids.iter().map(|&id| shot_query(state, id)).collect();
+    let boxes: Vec<_> = queries
+        .iter()
+        .flatten()
+        .map(|query| query_box(query.start, query.end, query.radius))
+        .collect();
     let mut bodies = std::mem::take(&mut state.projectiles.bodies);
     bodies.clear();
-    if ids.iter().any(|id| {
-        state.entities.slot_of(*id).is_some_and(|slot| {
-            state
-                .entities
-                .row(slot)
-                .projectile
-                .as_deref()
-                .is_some_and(|record| !record.stuck && record.kind != ProjectileKind::EyeOfEnder)
-        })
-    }) {
-        hittables(state, &mut bodies);
+    let mut reach = 0;
+    if !boxes.is_empty() {
+        let include_items = queries.iter().flatten().any(|query| query.hook);
+        let mut cover = std::mem::take(&mut state.projectiles.cover);
+        let covered = cover.build(&boxes);
+        if covered {
+            reach = cover.fine_cells();
+        }
+        hittables(state, include_items, covered.then_some(&cover), &mut bodies);
+        state.projectiles.cover = cover;
     }
     let hittables_us = lap();
     let mut grid = std::mem::take(&mut state.projectiles.grid);
-    let use_grid = ids.len() >= FineGrid::MIN_SHOTS && grid.build(&bodies);
+    let use_grid = ids.len() >= FineGrid::MIN_SHOTS && grid.build(&bodies, reach);
     let exceptional: Vec<_> = bodies
         .iter()
         .enumerate()
@@ -597,17 +790,19 @@ pub(super) fn run(
     let mut slots = Vec::new();
     let mut candidates = Vec::new();
     let mut ranges = Vec::with_capacity(ids.len());
-    for &id in &ids {
+    for query in &queries {
         let start = candidates.len();
-        shot_candidates(
-            state,
-            id,
-            &bodies,
-            &exceptional,
-            use_grid.then_some(&grid),
-            &mut slots,
-            &mut candidates,
-        );
+        if let Some(query) = query {
+            query_candidates(
+                state,
+                query,
+                &bodies,
+                &exceptional,
+                use_grid.then_some(&grid),
+                &mut slots,
+                &mut candidates,
+            );
+        }
         candidates[start..].sort_unstable();
         // Each query has unique slots, but exceptional stands may also be local.
         let mut end = start;
