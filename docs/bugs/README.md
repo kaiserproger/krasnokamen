@@ -302,16 +302,18 @@ The `entities` profile includes windowed native-client probes:
   captured camera and HUD pixels while the local client loop continues.
   `admin-commands` checks frozen/stepped server game time, not a stopped client
   clock: native input and rendering must keep running while the world is frozen.
-- `native-v2-input-sand`: `/setblock` airborne sand becomes a rendered entity
-  that a frozen world holds until `/tick step` moves it (the server must not
-  keep dropping it), predicts gravity between received position updates, then
-  lands and clears its source. Vanilla resends a moved falling block every 20
-  server ticks even while frozen, so the gate runs one tick per second, starts
-  on a received update and steps twice in one command: the predicted position
-  must equal vanilla's two-tick fall and the drawn pose must lie on that path,
-  below the received one. Received, predicted and presented positions are
-  distinct observations; only the captured frame and its reviewed pixels prove
-  drawing.
+- `native-v2-input-sand`: `/setblock` airborne sand in a frozen world becomes a
+  rendered entity after `/tick step`, predicts gravity between received
+  position updates, then lands and clears its source. Vanilla resends a moved
+  falling block every 20 server ticks even while frozen, so the gate runs one
+  tick per second, starts on a received update and steps twice in one command:
+  the predicted position must equal vanilla's two-tick fall and the drawn pose
+  must lie on that path, below the received one. The gate does not detect a
+  server that keeps dropping the block between steps (it stayed green with that
+  hold reverted, `docs/bugs/promotions/P1.json`); the cargo test
+  `frozen_world_holds_a_setblock_falling_block_until_stepped` proves the hold.
+  Received, predicted and presented positions are distinct observations; only
+  the captured frame and its reviewed pixels prove drawing.
 - Axolotl play-dead and potion custom-impact probes are unregistered prototypes;
   they cannot be run from the harness, and `AXOLOTL-PLAY-DEAD` and
   `POTION-CUSTOM-PAYLOAD` stay open.
