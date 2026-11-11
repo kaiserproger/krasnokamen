@@ -679,47 +679,78 @@ fn block_log_tick_survives_wal_and_old_records_are_unknown() {
 }
 
 #[test]
-#[ignore = "child process of replayed_wal_tail_survives_the_checkpoint_that_prunes_it"]
-fn block_log_crash_child() {
-    use std::io::Write;
-    let world = std::env::var_os("SOLARIS_BLOCK_LOG_CRASH_DIR").expect("world directory");
-    let tick: u64 = std::env::var("SOLARIS_BLOCK_LOG_CRASH_TICK")
-        .expect("tick")
-        .parse()
-        .expect("tick number");
-    let registry = CoreRegistry::load(None).expect("registry");
-    let mut old = record(2, unix_now());
-    old.tick = None;
-    old.change = Change::Block {
-        before: registry.states.stone,
-        after: registry.states.air,
-        entity: None,
-    };
-    let mut new = old.clone();
-    new.seq = 3;
-    new.tick = Some(tick);
-    let entry = crate::journal::JournalEntry::BlockLog {
+fn wal_tick_that_is_present_must_be_a_tick() {
+    let mut entry = serde_json::to_value(crate::journal::JournalEntry::BlockLog {
         value: Box::new(Delta {
-            records: vec![old, new],
+            records: vec![record(1, 99)],
             marks: Vec::new(),
         }),
-    };
-    let mut wal =
-        crate::journal::JournalWriter::open(std::path::Path::new(&world), 1).expect("wal");
-    wal.append(tick, tick, &[entry]).expect("append");
-    wal.flush().expect("flush");
-    println!("BLOCK_LOG_WAL_READY");
-    std::io::stdout().flush().expect("stdout");
-    let mut line = String::new();
-    std::io::stdin().read_line(&mut line).expect("stdin");
-    panic!("parent must kill child before any graceful shutdown");
+    })
+    .expect("entry json");
+    for wrong in [
+        serde_json::json!(null),
+        serde_json::json!("x"),
+        serde_json::json!(-1),
+    ] {
+        entry["BlockLog"]["value"]["records"][0]["tick"] = wrong.clone();
+        assert!(
+            serde_json::from_value::<crate::journal::JournalEntry>(entry.clone()).is_err(),
+            "WAL tick {wrong} decodes"
+        );
+    }
 }
 
-/// Crash -> replay -> checkpoint (prunes the WAL) -> reopen: the replayed
+#[test]
+fn row_tick_must_be_a_nonnegative_long() {
+    let blocks = required_blocks();
+    let items = mc_data::items::solaris_required_items();
+    let row = |tick: mc_nbt::Tag| {
+        let (_, mut root) =
+            mc_nbt::read_named(&mut old_format_row(&blocks, &items).as_slice()).expect("row nbt");
+        let mc_nbt::Tag::Compound(fields) = &mut root else {
+            panic!("block-log row is a compound");
+        };
+        fields.push(("tick".into(), tick));
+        let mut bytes = Vec::new();
+        mc_nbt::write_named(&mut bytes, "", &root).expect("write row");
+        bytes
+    };
+    assert_eq!(
+        decode_record(&row(mc_nbt::Tag::Long(7)), 1, &blocks, &items)
+            .expect("long tick")
+            .tick,
+        Some(7)
+    );
+    for wrong in [mc_nbt::Tag::Int(7), mc_nbt::Tag::Long(-1)] {
+        assert!(
+            decode_record(&row(wrong.clone()), 1, &blocks, &items).is_err(),
+            "row tick {wrong:?} decodes"
+        );
+    }
+}
+
+#[test]
+fn row_tick_beyond_an_nbt_long_is_not_encoded() {
+    let blocks = required_blocks();
+    let items = mc_data::items::solaris_required_items();
+    let mut huge = record(1, 99);
+    huge.tick = Some(u64::MAX);
+    huge.change = Change::Block {
+        before: blocks
+            .block(&id("minecraft:stone"))
+            .expect("stone")
+            .default
+            .0,
+        after: blocks.block(&id("minecraft:air")).expect("air").default.0,
+        entity: None,
+    };
+    assert!(encode_record(&huge, &blocks, &items).is_err());
+}
+
+/// Abrupt stop -> replay -> checkpoint (prunes the WAL) -> reopen: the replayed
 /// block-log tail reaches the native table before its WAL batch is pruned.
 #[test]
 fn replayed_wal_tail_survives_the_checkpoint_that_prunes_it() {
-    use std::io::BufRead;
     let world = tempfile::tempdir().expect("tempdir");
     let mut config = crate::CoreConfig::new(world.path().to_path_buf(), 42);
     config.view_distance = 1;
@@ -743,36 +774,29 @@ fn replayed_wal_tail_survives_the_checkpoint_that_prunes_it() {
         )
         .expect("write old row");
     drop(store);
-
-    let mut child = std::process::Command::new(std::env::current_exe().expect("test binary"))
-        .args([
-            "--exact",
-            "block_log::tests::block_log_crash_child",
-            "--ignored",
-            "--nocapture",
-        ])
-        .env("SOLARIS_BLOCK_LOG_CRASH_DIR", world.path())
-        .env("SOLARIS_BLOCK_LOG_CRASH_TICK", (base + 1).to_string())
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .spawn()
-        .expect("spawn crash child");
-    let mut reader = std::io::BufReader::new(child.stdout.take().expect("child stdout"));
-    let mut ready = false;
-    let mut line = String::new();
-    while reader.read_line(&mut line).expect("child output") != 0 {
-        if line.contains("BLOCK_LOG_WAL_READY") {
-            ready = true;
-            break;
-        }
-        line.clear();
-    }
-    if !ready {
-        let status = child.wait().expect("child status");
-        panic!("child failed before durable WAL: {status}");
-    }
-    child.kill().expect("kill child");
-    assert!(!child.wait().expect("child status").success());
+    // A durable WAL batch no checkpoint covered: what an abrupt stop leaves.
+    // `JournalWriter` has no shutdown work, so dropping it after the flush
+    // stands in for killing the process.
+    let mut old = record(2, unix_now());
+    old.tick = None;
+    old.change = Change::Block {
+        before: registry.states.stone,
+        after: registry.states.air,
+        entity: None,
+    };
+    let mut new = old.clone();
+    new.seq = 3;
+    new.tick = Some(base + 1);
+    let entry = crate::journal::JournalEntry::BlockLog {
+        value: Box::new(Delta {
+            records: vec![old, new],
+            marks: Vec::new(),
+        }),
+    };
+    let mut wal = crate::journal::JournalWriter::open(world.path(), 1).expect("wal");
+    wal.append(base + 1, base + 1, &[entry]).expect("append");
+    wal.flush().expect("flush");
+    drop(wal);
 
     let assert_rows = |stage: &str| {
         let store = crate::native_checkpoint::tests::fixture_store(&config).expect("store");

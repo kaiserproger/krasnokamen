@@ -37,7 +37,11 @@ The default capture interval is 1,200 ticks (`CoreConfig.checkpoint_every_ticks`
 The tick freezes owned images; only one checkpoint is in flight. Before opening
 checkpoint writes the writer gates and fsyncs WAL coverage through the captured
 tick. A single immediate redb transaction commits all dimensions and participating
-domains at that tick. Only after durable commit may it publish the committed
+domains at that tick. Block-log rows are the exception: their own immediate
+transaction upserts the queued rows and drops rows below the retention floor
+before that commit, so a crash between the two leaves the table ahead of the
+manifest while the WAL that replays the same rows idempotently is still durable.
+Only after durable commit may it publish the committed
 tick, acknowledge captured revisions and prune wholly covered WAL batches.
 A pre-commit failure publishes and prunes nothing; a post-commit lost ACK or
 failed prune leaves a recoverable checkpoint and possibly redundant WAL. Dirty

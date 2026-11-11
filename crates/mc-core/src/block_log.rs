@@ -60,7 +60,11 @@ pub struct Record {
     /// Per-dimension monotonic number; the table key and mark target.
     pub seq: u64,
     /// Committing server tick, absent for records created before tick capture.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_tick"
+    )]
     pub tick: Option<u64>,
     /// Unix seconds.
     pub time: u64,
@@ -74,6 +78,11 @@ pub struct Record {
 
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+/// A present `tick` must be a tick; only an absent field means "unknown".
+fn present_tick<'de, D: serde::Deserializer<'de>>(input: D) -> Result<Option<u64>, D::Error> {
+    u64::deserialize(input).map(Some)
 }
 
 /// One tick's journaled delta: new records plus rollback/restore marks.
@@ -636,7 +645,8 @@ fn encode_record(
         ),
     ];
     if let Some(tick) = record.tick {
-        fields.push(("tick".into(), Tag::Long(tick as i64)));
+        let tick = i64::try_from(tick).map_err(|_| "block-log tick exceeds an NBT Long")?;
+        fields.push(("tick".into(), Tag::Long(tick)));
     }
     match &record.change {
         Change::Block {
@@ -704,7 +714,7 @@ fn decode_record(
             .map(|(_, tag)| tag)
     };
     let tick = match field("tick") {
-        Some(Tag::Long(tick)) => Some(*tick as u64),
+        Some(Tag::Long(tick)) => Some(u64::try_from(*tick).map_err(|_| "negative block-log tick")?),
         None => None,
         _ => return Err("invalid block-log tick".into()),
     };

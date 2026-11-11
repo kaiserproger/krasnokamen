@@ -164,6 +164,33 @@ def destroy_census(stacks, item_ids):
     return result
 
 
+def destroy_after_census(snapshot, item_ids):
+    """Custody after the destroyed grave's menu closed: inventory, ground and cursor.
+
+    Closing the menu returns the carried stack, so whatever the cursor still
+    holds is custody the inventory and ground do not show (a dropped full-stack
+    copy beside the clicked copy left on the cursor). It counts under its own
+    key and so never balances the baseline.
+    """
+    cursor = snapshot.get('cursor')
+    if (not isinstance(cursor, dict) or not isinstance(cursor.get('item_id'), str)
+            or type(cursor.get('count')) is not int or cursor['count'] < 0):
+        raise MissingCapability('destroy:after_cursor_unobserved')
+    dropped = [entry for entry in snapshot['entities'] if entry['type'] == 'minecraft:item']
+    if any(not isinstance(entry.get('item'), dict) for entry in dropped):
+        raise MissingCapability('snapshot:dropped_item_stack')
+    # Ambient ground drops of other types are out of scope; a new item type can
+    # only enter custody through the inventory. The holder block's own barrel
+    # drop was not a container item.
+    inventory_ids = {stack['item_id'] for stack in snapshot['inventory'] if stack and stack.get('count')}
+    inventory_ids.discard('minecraft:barrel')
+    census = destroy_census(snapshot['inventory'] + [entry['item'] for entry in dropped],
+                            item_ids | inventory_ids)
+    if cursor['count']:
+        census['cursor:' + cursor['item_id']] += cursor['count']
+    return census
+
+
 def destroy_grave_during_interaction(ctx):
     """Prove the live grave click/break collision, not just the death custody."""
     if not grave_lane(ctx) or ctx.factors['game_mode'] != 'survival':
@@ -258,17 +285,7 @@ def destroy_grave_during_interaction(ctx):
     ctx.wait_until(lambda: not (actor.snapshot()['raw'].get('screen') or {}).get('open'),
                    description='destroyed grave menu closed')
     ticks(ctx, 40)
-    after = actor.snapshot()
-    dropped = [entry for entry in after['entities'] if entry['type'] == 'minecraft:item']
-    if any(not isinstance(entry.get('item'), dict) for entry in dropped):
-        raise MissingCapability('snapshot:dropped_item_stack')
-    # Ambient ground drops of other types are out of scope; a new item type can
-    # only enter custody through the inventory. The holder block's own barrel
-    # drop was not a container item.
-    inventory_ids = {stack['item_id'] for stack in after['inventory'] if stack and stack.get('count')}
-    inventory_ids.discard('minecraft:barrel')
-    ground = [entry['item'] for entry in dropped]
-    observed = destroy_census(after['inventory'] + ground, ids | inventory_ids)
+    observed = destroy_after_census(actor.snapshot(), ids)
     condition(ctx, 'destroy_grave_same_tick', True,
               {'tick': fence, 'inputs': inputs, 'block_log': records, 'client_batch': receipt['client_batch'],
                'mining_rate': rate, 'hardness': hardness, 'tool_speed': speeds[0],

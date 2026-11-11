@@ -11,7 +11,7 @@ import unittest
 from .matrix_api import MissingCapability
 from .protocol_concurrency import (concurrent_clicks, match_click_and_break, submit_click_and_break,
                                    verify_destroy_tick_fence, committed_destroy_records)
-from .matrix_domains.death_respawn import destroy_census
+from .matrix_domains.death_respawn import destroy_after_census, destroy_census
 
 
 class ConcurrentAdmissionTests(unittest.TestCase):
@@ -95,6 +95,21 @@ class ConcurrentAdmissionTests(unittest.TestCase):
         changed = [{'item_id': 'minecraft:diamond', 'count': 5,
                     'components': {'minecraft:custom_name': 'different'}}]
         self.assertNotEqual(destroy_census(changed, ids), destroy_census(container, ids))
+        # The after-census reads inventory, ground and cursor from one snapshot.
+        empty = {'item_id': 'minecraft:air', 'count': 0}
+        snapshot = lambda stacks, dropped, cursor: {
+            'inventory': inventory + stacks, 'cursor': cursor,
+            'entities': [{'type': 'minecraft:item', 'item': stack} for stack in dropped]}
+        clicked = [{'item_id': 'minecraft:diamond', 'count': 1, 'components': {}}]
+        self.assertEqual(destroy_after_census(snapshot(clicked, ground, empty), ids), baseline)
+        # A dropped full stack beside the clicked copy left on the cursor
+        # balances inventory + ground; only the cursor exposes the duplicate.
+        full = [{'item_id': 'minecraft:diamond', 'count': 5, 'components': {}}]
+        stuck = {'item_id': 'minecraft:diamond', 'count': 5}
+        self.assertEqual(destroy_census(inventory + full, ids), baseline)
+        self.assertNotEqual(destroy_after_census(snapshot([], full, stuck), ids), baseline)
+        with self.assertRaisesRegex(MissingCapability, 'after_cursor_unobserved'):
+            destroy_after_census(snapshot([], full, None), ids)
 
     def test_destroy_wal_requires_both_records(self):
         with tempfile.TemporaryDirectory() as tmp:
