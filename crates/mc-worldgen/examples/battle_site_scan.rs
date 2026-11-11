@@ -137,7 +137,12 @@ fn score(w: &Window) -> f64 {
     f64::from(w.range) + f64::from(w.robust) + 2.0 * w.rough + 50.0 * w.wet as f64
 }
 
-fn scan_seed(root: &Path, blocks: &Arc<BlockRegistry>, seed: i64, half: i32) -> Result<Vec<Window>> {
+fn scan_seed(
+    root: &Path,
+    blocks: &Arc<BlockRegistry>,
+    seed: i64,
+    half: i32,
+) -> Result<Vec<Window>> {
     let mut generator = TerrainGenerator::new(seed, Arc::clone(blocks));
     generator.load_vanilla_worldgen(root)?;
     let n = (2 * half / STEP + 1) as usize;
@@ -265,15 +270,24 @@ fn scan_seed(root: &Path, blocks: &Arc<BlockRegistry>, seed: i64, half: i32) -> 
 
 /// The serving overworld generator without plugins
 /// (`mc_core::core::overworld_terrain`).
-fn serving_generator(root: &Path, blocks: &Arc<BlockRegistry>, seed: i64) -> Result<TerrainGenerator> {
+fn serving_generator(
+    root: &Path,
+    blocks: &Arc<BlockRegistry>,
+    seed: i64,
+) -> Result<TerrainGenerator> {
     let mut terrain = TerrainGenerator::new(seed, Arc::clone(blocks));
     terrain.load_vanilla_worldgen(root)?;
     let data = Arc::new(mc_data::load(root)?);
     let tags = Arc::new(mc_data::tags::load(root, &data)?);
     let tags = Arc::new(CacheTags::new(Arc::clone(blocks), data, tags));
-    for (index, set) in ["villages", "ancient_cities", "trail_ruins", "trial_chambers"]
-        .into_iter()
-        .enumerate()
+    for (index, set) in [
+        "villages",
+        "ancient_cities",
+        "trail_ruins",
+        "trial_chambers",
+    ]
+    .into_iter()
+    .enumerate()
     {
         let closure = Arc::new(load_village_closure(
             root,
@@ -316,7 +330,17 @@ fn kind(path: &str) -> Kind {
     if matches!(path, "air" | "cave_air" | "void_air") {
         return Kind::Air;
     }
-    if matches!(path, "water" | "lava" | "bubble_column" | "seagrass" | "tall_seagrass" | "kelp" | "kelp_plant" | "ice") {
+    if matches!(
+        path,
+        "water"
+            | "lava"
+            | "bubble_column"
+            | "seagrass"
+            | "tall_seagrass"
+            | "kelp"
+            | "kelp_plant"
+            | "ice"
+    ) {
         return Kind::Fluid;
     }
     if path.ends_with("_log")
@@ -338,23 +362,72 @@ fn kind(path: &str) -> Kind {
         || path == "bush"
         || matches!(
             path,
-            "dandelion" | "poppy" | "blue_orchid" | "allium" | "azure_bluet" | "red_tulip"
-                | "orange_tulip" | "white_tulip" | "pink_tulip" | "oxeye_daisy" | "cornflower"
-                | "lily_of_the_valley" | "sunflower" | "lilac" | "rose_bush" | "peony"
-                | "torchflower" | "pink_petals" | "wildflowers" | "leaf_litter" | "snow"
-                | "moss_carpet" | "vine" | "sugar_cane" | "pumpkin" | "melon" | "cactus"
-                | "cactus_flower" | "open_eyeblossom" | "closed_eyeblossom" | "pitcher_plant"
-                | "short_dry_grass" | "tall_dry_grass" | "glow_lichen" | "hanging_roots"
+            "dandelion"
+                | "poppy"
+                | "blue_orchid"
+                | "allium"
+                | "azure_bluet"
+                | "red_tulip"
+                | "orange_tulip"
+                | "white_tulip"
+                | "pink_tulip"
+                | "oxeye_daisy"
+                | "cornflower"
+                | "lily_of_the_valley"
+                | "sunflower"
+                | "lilac"
+                | "rose_bush"
+                | "peony"
+                | "torchflower"
+                | "pink_petals"
+                | "wildflowers"
+                | "leaf_litter"
+                | "snow"
+                | "moss_carpet"
+                | "vine"
+                | "sugar_cane"
+                | "pumpkin"
+                | "melon"
+                | "cactus"
+                | "cactus_flower"
+                | "open_eyeblossom"
+                | "closed_eyeblossom"
+                | "pitcher_plant"
+                | "short_dry_grass"
+                | "tall_dry_grass"
+                | "glow_lichen"
+                | "hanging_roots"
         )
     {
         return Kind::Plant;
     }
     if matches!(
         path,
-        "grass_block" | "dirt" | "coarse_dirt" | "podzol" | "rooted_dirt" | "mud" | "stone"
-            | "andesite" | "diorite" | "granite" | "gravel" | "sand" | "red_sand" | "sandstone"
-            | "red_sandstone" | "clay" | "moss_block" | "snow_block" | "packed_ice" | "calcite"
-            | "tuff" | "deepslate" | "dripstone_block" | "mycelium" | "powder_snow"
+        "grass_block"
+            | "dirt"
+            | "coarse_dirt"
+            | "podzol"
+            | "rooted_dirt"
+            | "mud"
+            | "stone"
+            | "andesite"
+            | "diorite"
+            | "granite"
+            | "gravel"
+            | "sand"
+            | "red_sand"
+            | "sandstone"
+            | "red_sandstone"
+            | "clay"
+            | "moss_block"
+            | "snow_block"
+            | "packed_ice"
+            | "calcite"
+            | "tuff"
+            | "deepslate"
+            | "dripstone_block"
+            | "mycelium"
+            | "powder_snow"
     ) || path.ends_with("terracotta")
         || path.ends_with("_ore")
     {
@@ -417,7 +490,9 @@ fn detail(args: &[String]) -> Result<()> {
                             }
                             let (mut g, mut top, mut f) = (i16::MIN, i16::MIN, 0u8);
                             for y in (-64..=250).rev() {
-                                let Some(id) = chunk.get_block(lx, y, lz) else { continue };
+                                let Some(id) = chunk.get_block(lx, y, lz) else {
+                                    continue;
+                                };
                                 let state = blocks.by_id(id).expect("generated state");
                                 let path = state.block.id.path();
                                 let k = kind(path);
@@ -451,8 +526,11 @@ fn detail(args: &[String]) -> Result<()> {
                             local.push((iz as usize * aw + ix as usize, g, top, f));
                         }
                     }
-                    let (mut ground, mut tops, mut flags) =
-                        (ground.lock().unwrap(), tops.lock().unwrap(), flags.lock().unwrap());
+                    let (mut ground, mut tops, mut flags) = (
+                        ground.lock().unwrap(),
+                        tops.lock().unwrap(),
+                        flags.lock().unwrap(),
+                    );
                     for (i, g, t, f) in local {
                         ground[i] = g;
                         tops[i] = t;
@@ -498,10 +576,14 @@ fn detail(args: &[String]) -> Result<()> {
             plant += usize::from(f & F_PLANT != 0);
             other += usize::from(f & F_OTHER != 0);
             if ix + 1 < aw && inside(ix + 1, iz) {
-                *hist.entry((i32::from(ground[i + 1]) - g).abs()).or_insert(0) += 1;
+                *hist
+                    .entry((i32::from(ground[i + 1]) - g).abs())
+                    .or_insert(0) += 1;
             }
             if iz + 1 < ad && inside(ix, iz + 1) {
-                *hist.entry((i32::from(ground[i + aw]) - g).abs()).or_insert(0) += 1;
+                *hist
+                    .entry((i32::from(ground[i + aw]) - g).abs())
+                    .or_insert(0) += 1;
             }
         }
     }
@@ -562,12 +644,15 @@ fn detail(args: &[String]) -> Result<()> {
         "surroundings": {"columns": rcells, "ground_min": rlo, "top_max": rhi, "water_columns": rwater, "tree_columns": rtree},
         "village_and_jigsaw_starts_near": villages,
     });
-    std::fs::write(out.join("stats.json"), serde_json::to_string_pretty(&stats)? + "\n")?;
+    std::fs::write(
+        out.join("stats.json"),
+        serde_json::to_string_pretty(&stats)? + "\n",
+    )?;
     let mut bytes = Vec::with_capacity(aw * ad * 5);
-    for i in 0..aw * ad {
-        bytes.extend_from_slice(&ground[i].to_le_bytes());
-        bytes.extend_from_slice(&tops[i].to_le_bytes());
-        bytes.push(flags[i]);
+    for ((g, t), f) in ground.iter().zip(&tops).zip(&flags) {
+        bytes.extend_from_slice(&g.to_le_bytes());
+        bytes.extend_from_slice(&t.to_le_bytes());
+        bytes.push(*f);
     }
     std::fs::write(out.join("columns.bin"), bytes)?;
     println!("{}", serde_json::to_string(&stats)?);
