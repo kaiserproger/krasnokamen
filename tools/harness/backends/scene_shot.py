@@ -776,6 +776,11 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     operator = scenario.get("operator", True)
     if type(operator) is not bool:
         raise ValueError("operator must be true or false")
+    if "lod_enabled" in scenario and type(scenario["lod_enabled"]) is not bool:
+        raise ValueError("lod_enabled must be true or false")
+    if "lod_share_terrain_keys" in scenario:
+        if type(scenario["lod_share_terrain_keys"]) is not bool or scenario.get("lod_enabled") is not True:
+            raise ValueError("lod_share_terrain_keys requires lod_enabled=true and a boolean value")
     username = scene_username(scenario)
     client_latency_ms = scenario.get("client_latency_ms", 0)
     if type(client_latency_ms) is not int or not 0 <= client_latency_ms <= 5000:
@@ -829,6 +834,12 @@ def run(
         if source.count(old) != 1:
             raise RuntimeError(f"expected one config token: {old}")
         source = source.replace(old, new, 1)
+    if "lod_enabled" in scenario:
+        if "[lod]" in source:
+            raise RuntimeError("playable.toml already contains a lod section")
+        source += f'\n[lod]\nenabled = {str(scenario["lod_enabled"]).lower()}\n'
+        if "lod_share_terrain_keys" in scenario:
+            source += f'share_terrain_keys = {str(scenario["lod_share_terrain_keys"]).lower()}\n'
     config.write_text(source)
     if scenario.get("world"):
         shutil.copytree(Path(scenario["world"]).expanduser().resolve(), artifact / "world")

@@ -38,6 +38,55 @@ class SceneShotTests(unittest.TestCase):
             self.assertEqual(ctx.client_evidence['server_binary_sha256'],
                              hashlib.sha256(b'scene-server').hexdigest())
 
+    def test_lod_option_only_changes_generated_config(self):
+        from tools.harness import preflight
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'playable.toml').write_text(
+                (scene_shot.runtime.REPO_ROOT / 'playable.toml').read_text())
+            (root / 'template').mkdir()
+            binary = root / 'server'
+            binary.write_bytes(b'server')
+            binary.chmod(0o755)
+            env = {'SOLARIS_SERVER_BINARY': str(binary), 'XDG_DATA_HOME': str(root / 'xdg')}
+            configs = []
+            for enabled, share in ((None, None), (False, None), (True, None), (True, False), (True, True)):
+                artifact = root / f'{enabled}-{share}'
+                artifact.mkdir()
+                ctx = scene_shot.ProfileContext(artifact, client='native', windowed=True)
+                scenario = {'steps': []}
+                if enabled is not None:
+                    scenario['lod_enabled'] = enabled
+                if share is not None:
+                    scenario['lod_share_terrain_keys'] = share
+                with patch.dict('os.environ', env), patch.object(scene_shot.runtime, 'REPO_ROOT', root), \
+                        patch.object(scene_shot, 'prepare_operator_fixture'), \
+                        patch.object(preflight, 'client_template', return_value=root / 'template'), \
+                        patch.object(scene_shot.subprocess, 'Popen', side_effect=RuntimeError('launch stopped')):
+                    with self.assertRaisesRegex(RuntimeError, 'launch stopped'):
+                        scene_shot.run(ctx, scenario=scenario)
+                configs.append((artifact / 'scene-shot.toml').read_text())
+            import tomllib
+            baseline, disabled, enabled, unshared, shared = map(tomllib.loads, configs)
+            self.assertNotIn('lod', baseline)
+            self.assertEqual(disabled.pop('lod'), {'enabled': False})
+            self.assertEqual(enabled.pop('lod'), {'enabled': True})
+            self.assertEqual(unshared.pop('lod'), {'enabled': True, 'share_terrain_keys': False})
+            self.assertEqual(shared.pop('lod'), {'enabled': True, 'share_terrain_keys': True})
+            # Private ports, worlds and plugin directories differ between runs.
+            for config in (baseline, disabled, enabled, unshared, shared):
+                del config['network']['port'], config['data']['world_dir'], config['plugins']['directory']
+            for config in (disabled, enabled, unshared, shared):
+                self.assertEqual(baseline, config)
+            ctx = scene_shot.ProfileContext(root, client='native', windowed=True)
+            with self.assertRaisesRegex(ValueError, 'lod_enabled'):
+                scene_shot.validate_scenario(ctx, {'steps': [], 'lod_enabled': 1})
+            for scenario in ({'steps': [], 'lod_share_terrain_keys': True},
+                             {'steps': [], 'lod_enabled': False, 'lod_share_terrain_keys': True},
+                             {'steps': [], 'lod_enabled': True, 'lod_share_terrain_keys': 1}):
+                with self.assertRaisesRegex(ValueError, 'lod_share_terrain_keys'):
+                    scene_shot.validate_scenario(ctx, scenario)
+
     def test_scenario_username(self):
         self.assertEqual(scene_shot.scene_username({}), "SceneShot")
         self.assertEqual(scene_shot.scene_username({"username": "Other_Player"}), "Other_Player")
