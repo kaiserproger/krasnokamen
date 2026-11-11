@@ -239,6 +239,11 @@ do not reset or roll over; `snapshot.generation` identifies the current socket
 generation. Authentication still examines only that generation's received
 prompts. Structured `chat_components` remains the current connection's bounded
 diagnostic view; use cumulative `events` for cross-boundary assertions.
+The Java adapter maps the agent's applied system-chat journal to `events` and
+rejects a missing or nonzero loss counter; GUI chat history is not a fence.
+Java respawn uses the agent's `minecraft_respawn` action, which waits for
+received live-player confirmation.
+
 
 Protocol `snapshot.uuid` is the UUID accepted in LoginSuccess, not the requested
 offline identity. `snapshot.entity_id` is the actual LoginPlay local entity ID.
