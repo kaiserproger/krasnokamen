@@ -416,3 +416,52 @@ fn front_rank_outside_a_pulse_still_strikes_an_enemy_in_reach() {
     // Fifty cautious decisions: about one in six swings, never an aggressive surge.
     assert!((1..=20).contains(&swings), "swings={swings}");
 }
+
+#[test]
+fn a_broken_fugitive_at_bay_still_strikes_an_enemy_in_reach() {
+    use super::super::formation::{Order, RegimentSpec};
+    let (state, mut battle, actor, victim) = pair();
+    let origin = state.entities.pos(slot(&state, actor));
+    battle
+        .formation
+        .add_regiment(
+            RegimentSpec {
+                id: 0,
+                faction: 1,
+                origin,
+                facing: [1.0, 0.0],
+                files: 1,
+                frontage: 1.0,
+                order: Order::Hold,
+            },
+            &[actor],
+        )
+        .unwrap();
+    // The bound sits one block behind the fugitive: he can run no further.
+    battle
+        .formation
+        .set_bounds(
+            [origin[0] - 1.0, origin[2] - 50.0],
+            [origin[0] + 50.0, origin[2] + 50.0],
+        )
+        .unwrap();
+    prepare(&state, &mut battle, 0);
+    let a = index(&state, &battle, actor);
+    battle.formation.members[a].routing = true;
+    battle.formation.members[a].wavering = true;
+    let target = super::super::EnemyTarget {
+        id: victim,
+        pos: state.entities.pos(slot(&state, victim)),
+        distance: 2.0,
+    };
+    let swings = (0..1000)
+        .filter(|&tick| {
+            battle.columns.targets[a] = Some(target);
+            let out = step_at(&state, &mut battle, tick);
+            out.events.iter().any(|event| {
+                matches!(event, EntityEvent::Swing { entity, hand: Hand::Main, .. } if *entity == actor)
+            })
+        })
+        .count();
+    assert!(swings > 0, "a cornered fugitive never turned at bay");
+}

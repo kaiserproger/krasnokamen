@@ -316,11 +316,12 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         let id = battle.columns.ids[bi];
         // Outside a pulse a steady front-rank man still trades blows with an
         // enemy already in weapon reach, at the cautious rate, as does a
-        // fugitive at bay: pulses add the surge, they are not the only contact.
+        // fugitive at bay (broken, so also wavering): pulses add the surge,
+        // they are not the only contact.
         let in_order = bi >= battle.formation.members.len() || battle.formation.can_attack_at(bi);
         if !in_order
             && !context(battle, bi)
-                .is_some_and(|c| !c.wavering && (!c.routing || battle.formation.cornered_at(bi)))
+                .is_some_and(|c| (!c.routing && !c.wavering) || battle.formation.cornered_at(bi))
         {
             continue;
         }
