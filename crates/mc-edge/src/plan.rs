@@ -2018,30 +2018,6 @@ fn push_appearance_with(
     previous: Option<&EntityAppearance>,
     send_equipment: bool,
 ) {
-    if previous.is_none_or(|old| old.passengers != appearance.passengers)
-        && (previous.is_some() || !appearance.passengers.is_empty())
-    {
-        push_reliable(
-            out,
-            conn,
-            &mc_protocol::packets::play::ClientboundSetPassengers {
-                vehicle_id: id.0,
-                passenger_ids: appearance.passengers.iter().map(|id| id.0).collect(),
-            },
-        );
-    }
-    if previous.is_none_or(|old| old.leash_holder != appearance.leash_holder)
-        && (previous.is_some() || appearance.leash_holder.is_some())
-    {
-        push_reliable(
-            out,
-            conn,
-            &mc_protocol::packets::play::ClientboundSetEntityLeash {
-                source_entity_id: id.0,
-                holder_entity_id: appearance.leash_holder.map(|id| id.0),
-            },
-        );
-    }
     let mut values: Vec<WireEntityDataValue> = Vec::new();
     if let Some((value, _)) = appearance.experience_orb {
         values.push(WireEntityDataValue::Int { index: 8, value });
@@ -2173,6 +2149,36 @@ fn push_appearance_with(
                     index: ITEM_ENTITY_DATA_ITEM_INDEX,
                     stack: stack.clone(),
                 }],
+            },
+        );
+    }
+    // Links are world state like the rest of the pairing: on the world FIFO
+    // after the entity's AddEntity, in vanilla `ServerEntity.sendPairingData`
+    // order (data, equipment, passengers, leash), within the viewer's world
+    // credit. On the reliable queue a spawn burst of mounted or leashed
+    // entities overflowed it and closed a client that was still reading,
+    // and the link could overtake the AddEntity it refers to.
+    if previous.is_none_or(|old| old.passengers != appearance.passengers)
+        && (previous.is_some() || !appearance.passengers.is_empty())
+    {
+        push_best_effort(
+            out,
+            conn,
+            &mc_protocol::packets::play::ClientboundSetPassengers {
+                vehicle_id: id.0,
+                passenger_ids: appearance.passengers.iter().map(|id| id.0).collect(),
+            },
+        );
+    }
+    if previous.is_none_or(|old| old.leash_holder != appearance.leash_holder)
+        && (previous.is_some() || appearance.leash_holder.is_some())
+    {
+        push_best_effort(
+            out,
+            conn,
+            &mc_protocol::packets::play::ClientboundSetEntityLeash {
+                source_entity_id: id.0,
+                holder_entity_id: appearance.leash_holder.map(|id| id.0),
             },
         );
     }
