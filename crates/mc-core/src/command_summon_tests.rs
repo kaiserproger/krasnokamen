@@ -758,6 +758,30 @@ fn summon_equipment_rejects_invalid_stacks_components_and_chances_before_allocat
 }
 
 #[test]
+fn summon_battle_equipment_retains_custom_model_and_asset_in_appearance() {
+    let (mut state, id) = summon("zombie", "{equipment:{mainhand:{id:'minecraft:iron_sword',components:{'minecraft:item_model':'solaris_battle:iron_longsword'}},chest:{id:'minecraft:iron_chestplate',components:{'minecraft:equippable':{slot:'chest',asset_id:'solaris_battle:holy'}}}}}");
+    let row = state.entities.row(state.entities.slot_of(id).unwrap());
+    let held = row.appearance.equipment[0].as_ref().unwrap();
+    assert_eq!(held.item_model.as_ref().unwrap().as_str(), "solaris_battle:iron_longsword");
+    let chest = row.appearance.equipment[4].as_ref().unwrap();
+    let fields = mc_data::item_nbt::stack_to_fields(&state.registry.items, chest).unwrap();
+    let Some(Tag::Compound(components)) = mc_data::item_nbt::field(&fields, "components") else { panic!("missing components") };
+    let Some(Tag::Compound(equippable)) = mc_data::item_nbt::field(components, "minecraft:equippable") else { panic!("missing equippable") };
+    assert_eq!(mc_data::item_nbt::field(equippable, "asset_id"), Some(&Tag::String("solaris_battle:holy".into())));
+    let expected = row.appearance.equipment.clone();
+    let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+    let native = chunks.values().flat_map(|chunk| &chunk.entities)
+        .find(|entity| entity.uuid == row.uuid).unwrap();
+    let payload = Tag::Compound(mc_data::entity_nbt::entity_to_fields(&state.registry.items, native).unwrap());
+    let mut replay = crate::journal::Replay::default();
+    crate::native_checkpoint::hydrate_entity(&state.registry, &mut replay, &payload, state.tick).unwrap();
+    state.remove_entity(state.entities.slot_of(id).unwrap());
+    crate::core::restore_entity(&mut state, id.0, &replay.entities[&id.0]).unwrap();
+    let restored = state.entities.row(state.entities.slot_of(id).unwrap());
+    assert_eq!(restored.appearance.equipment, expected);
+}
+
+#[test]
 fn summon_equipment_components_match_give_and_survive_native_anvil() {
     let (state, id) = summon(
         "cow",

@@ -21,6 +21,7 @@ pub const ITEM_COMPONENT_CODECS: &[(&str, i32)] = &[
     ("minecraft:repair_cost", 19),
     ("minecraft:enchantment_glint_override", 21),
     ("minecraft:use_remainder", 25),
+    ("minecraft:equippable", 32),
     ("minecraft:death_protection", 36),
     ("minecraft:stored_enchantments", 45),
     ("minecraft:dyed_color", 47),
@@ -76,6 +77,7 @@ pub const TOOLTIP_DISPLAY: i32 = 18;
 pub const REPAIR_COST: i32 = 19;
 pub const ENCHANTMENT_GLINT_OVERRIDE: i32 = 21;
 pub const USE_REMAINDER: i32 = 25;
+pub const EQUIPPABLE: i32 = 32;
 pub const DEATH_PROTECTION: i32 = 36;
 pub const STORED_ENCHANTMENTS: i32 = 45;
 pub const DYED_COLOR: i32 = 47;

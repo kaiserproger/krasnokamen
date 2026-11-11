@@ -79,6 +79,7 @@ fn registry_name(registry: &str, name: &str) -> Result<(), &'static str> {
     let id = Identifier::parse(name).map_err(|_| "invalid identifier")?;
     let known = match registry {
         "data_component_type" => ids::id(&id).is_some(),
+        "sound_event" => crate::builtin_sounds_26_3::id(id.as_str()).is_some(),
         "entity_type" => {
             crate::entity_types::entity_type_contract_26_1_2_by_name(id.as_str()).is_some()
         }
@@ -301,6 +302,52 @@ fn value_shape(
         ids::ENCHANTMENT_GLINT_OVERRIDE => {
             if !matches!(integer(value)?, 0 | 1) {
                 return Err("invalid glint boolean");
+            }
+        }
+        ids::EQUIPPABLE => {
+            let fields = compound(value)?;
+            if fields.iter().enumerate().any(|(i, (name, _))| fields[..i].iter().any(|(old, _)| old == name)) {
+                return Err("duplicate equippable field");
+            }
+            if !matches!(string(required(fields, "slot")?)?,
+                "mainhand" | "offhand" | "feet" | "legs" | "chest" | "head" | "body" | "saddle")
+            {
+                return Err("invalid equipment slot");
+            }
+            for (name, value) in fields {
+                match name.as_str() {
+                    "slot" => {}
+                    "asset_id" | "camera_overlay" => { identifier(value)?; }
+                    "equip_sound" | "shearing_sound" => {
+                        match value {
+                            Tag::String(_) => { registry("sound_event", value)?; }
+                            Tag::Compound(sound) => {
+                                if sound.iter().enumerate().any(|(i, (name, _))| sound[..i].iter().any(|(old, _)| old == name)) {
+                                    return Err("duplicate sound field");
+                                }
+                                identifier(required(sound, "sound_id")?)?;
+                                if let Some(range) = field(sound, "range") {
+                                    if !number(range)?.is_finite() { return Err("invalid sound range"); }
+                                }
+                                if sound.iter().any(|(key, _)| !matches!(key.as_str(), "sound_id" | "range")) {
+                                    return Err("unknown sound field");
+                                }
+                            }
+                            _ => return Err("invalid sound"),
+                        }
+                    }
+                    "allowed_entities" => match value {
+                        Tag::String(name) if name.starts_with('#') => {
+                            Identifier::parse(&name[1..]).map_err(|_| "invalid entity tag")?;
+                        }
+                        Tag::String(_) => registry("entity_type", value)?,
+                        _ => for entity in list(value, 256)? { registry("entity_type", entity)?; },
+                    },
+                    "dispensable" | "swappable" | "damage_on_hurt" | "equip_on_interact" | "can_be_sheared" => {
+                        if !matches!(integer(value)?, 0 | 1) { return Err("invalid equipment boolean"); }
+                    }
+                    _ => return Err("unknown equippable field"),
+                }
             }
         }
         ids::USE_REMAINDER => template(items, value, depth)?,
