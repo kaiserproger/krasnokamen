@@ -21,7 +21,7 @@ from ..java_clients import client_group
 from ..java_matrix_client import JavaMatrixClient
 from ..matrix_api import MatrixContext, MissingCapability, load_adapter
 from ..matrix_execution import copy_plugins, plugin_set_fingerprint, prepare_access, run_subject, select_plugin_profile
-from .protocol_lifecycle import Blocked, ProtocolServer, reserve_matrix_port
+from .protocol_lifecycle import Blocked, PortReservation, ProtocolServer, reserve_matrix_port
 
 JAVA_KINDS = frozenset({"vanilla_java_26_1_2", "fabric_solaris_loader", "fabric_svc",
                         "fabric_distant_horizons", "neoforge_solaris_loader", "forge_solaris_loader"})
@@ -78,11 +78,11 @@ def receipt_dir(root: Path, scenario_id: str) -> Path:
 def server_instance(args: argparse.Namespace, directory: Path, count: int,
                     permission: str = "non_op_0", lifecycle: str = "steady",
                     excluded_plugins: set[str] | None = None):
-    """Reuse the shared release-server primitive on this driver's own 262xx ports.
-
-    Ports are bind-probed per instance, never hardcoded: concurrent harness
-    runs on the shared host would otherwise collide and the loser's clients
-    would join the winner's server.
+    """Reuse the shared release-server primitive; both ports are cross-process
+    flock leases in this driver's own 262xx range (never hardcoded, never
+    bind-probe-and-close): concurrent runs on the shared host can never be
+    handed the same port, and the leases live until the instance's final
+    close(), surviving stop/restart (clients cache server.port).
     """
     directory.mkdir(parents=True, exist_ok=True)
     plugin_dir = directory / "plugins"
@@ -108,6 +108,7 @@ def server_instance(args: argparse.Namespace, directory: Path, count: int,
         process = server._process
         if server.running:
             server.stop()
+        server.close()  # release the port leases at instance teardown
         args.context.exits[index] = process.returncode if process is not None else None
 
 
