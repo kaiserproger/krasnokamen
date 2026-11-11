@@ -754,6 +754,7 @@ RUNNERS = {
     "native-v2-cursor-close": _promotion_cursor,
     "native-v2-custody-mount-export": _promotion_custody,
     "native-v2-p2-optional-pack": _promotion_custody,
+    "native-v2-console-shutdown": _promotion_world,
     "native-v2-end-restart": _promotion_world,
     "native-v2-entity-gallery": _promotion_world,
     "native-v2-destroyed-chest": _destroyed_chest,

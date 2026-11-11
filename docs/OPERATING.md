@@ -819,6 +819,12 @@ separate from the backup. Missing, changed or extra files, incompatible
 manifests and symlinks are refused. Retain the TOML, plugin artifacts and access
 lists separately; backups are never pruned automatically.
 
+Database copies read through the file handle holding the lease, including on
+Windows; they do not release the lock or reopen `state.redb` to copy it.
+Anvil conversion and census receipts use `/`-separated world-relative paths on
+every host. The Windows `.solaris-world.lock` file is coordination, not imported
+world metadata or backup contents.
+
 #### Hot backup of a running server
 
 Set a destination and type `backup` in the server console (not available to

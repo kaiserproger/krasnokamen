@@ -231,6 +231,16 @@ SCENARIOS: dict[str, Scenario] = {
         proves="actual Configuration offer, matching serverbound Declined, subsequent Play login, ordered chat and graphical frame",
         limits="no installation, required-pack acceptance or Play-phase pack-offer claim",
     ),
+    "native-v2-console-shutdown": _entry(
+        id="native-v2-console-shutdown", summary="Console stop logs orderly shutdown and preserves a graphical session across restart",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-console-shutdown",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_world.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="private native server with console stdin and a graphical native player",
+        proves="console stop exits cleanly, commits a checkpoint without ERROR, and the same player reconnects",
+        limits="no injected storage failure; separate unit regression covers journal failure",
+    ),
     "native-v2-end-restart": _entry(
         id="native-v2-end-restart", summary="Live peaceful End dragon survives clean checkpoint and graphical reconnect",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-end-restart",

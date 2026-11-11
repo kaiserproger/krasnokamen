@@ -193,9 +193,13 @@ seed = 81
     try:
         server_log_path = artifact / "server.log"
         server_log = server_log_path.open("wb")
-        server = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],
-                                  cwd=runtime.REPO_ROOT, stdout=server_log,
-                                  stderr=subprocess.STDOUT, start_new_session=True)
+        console_shutdown = ctx.scenario_id == "native-v2-console-shutdown"
+        command = [str(binary), "--config", str(config)]
+        if not console_shutdown:
+            command.append("--no-console")
+        server = subprocess.Popen(command, cwd=runtime.REPO_ROOT, stdout=server_log,
+                                  stderr=subprocess.STDOUT, start_new_session=True,
+                                  stdin=subprocess.PIPE if console_shutdown else None)
         ctx.logs.append(str(server_log_path))
         runtime.wait_port(port, startup_timeout, server, log_path=server_log_path)
         if ctx.scenario_id in ("native-v2-shift-double-click", "native-v2-shift-chest-correction",
@@ -472,13 +476,25 @@ seed = 81
             mcp.server_log_path = server_log_path
             if (ctx.scenario_id in native_p4.RESTART_SCENARIOS
                     or ctx.scenario_id in (native_light.SCENARIO_ID, "native-v2-end-restart",
+                                           "native-v2-console-shutdown",
                                            "native-v2-custody-mount-export",
                                            "native-v2-corrupt-block-entities",
                                            "native-v2-corrupt-chunk-near-camera")):
                 def restart_server(remaining: float) -> str:
                     nonlocal server, server_log
                     old_pid = server.pid
-                    runtime.stop_process(server)
+                    if console_shutdown:
+                        start = server_log_path.stat().st_size
+                        assert server.stdin is not None
+                        server.stdin.write(b"stop\n")
+                        server.stdin.flush()
+                        server.wait(timeout=remaining)
+                        server_log.flush()
+                        with server_log_path.open("rb") as log:
+                            log.seek(start)
+                            mcp.console_shutdown_log = log.read().decode("utf-8", errors="replace")
+                    else:
+                        runtime.stop_process(server)
                     if server.returncode != 0:
                         raise RuntimeError(f"P4 server did not stop cleanly: {server.returncode}")
                     server_log.close()

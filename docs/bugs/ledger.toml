@@ -1651,7 +1651,14 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHUTDOWN-ERROR-LOG"
-regression = []
+regression = [
+  "cargo:mc-core:core::stop_tests::native_writer_explicit_shutdown_logs_info_without_waiting_for_channel_close",
+  "cargo:mc-core:core::stop_tests::native_writer_channel_close_logs_stop_cause",
+  "cargo:mc-core:core::stop_tests::journal_io_failure_still_logs_error_and_never_acknowledges",
+  "cargo:mc-edge:console::tests::console_stop_has_no_error_logs_and_keeps_checkpoint",
+  "harness:entities:native-v2-console-shutdown",
+]
+fix_commit = "3acf6374f2e67c0e413dff79b2c1049edee14904"
 
 [[bug]]
 id = "DEATH-PROTECTION-ACTIONS"
@@ -3537,7 +3544,18 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "WinFixReview (history://WinFixReview) on RC5 hotfix a76e1e80: mc-edge backup.rs ExclusiveLease, mc-core hot_backup.rs:123-127, world_conversion.rs:673-679, import.rs session.lock skip"
-regression = []
+regression = [
+  "cargo:mc-core:hot_backup_tests::copy_reads_the_owned_database_snapshot_not_a_second_path_handle",
+  "cargo:mc-core:hot_backup_tests::backup_of_a_running_core_restores_the_state_at_its_tick",
+  "cargo:mc-core:core::stop_tests::shutdown_releases_database_while_backup_admission_is_paused",
+  "cargo:mc-edge:backup::tests::offline_backup_restore_copies_database_under_real_file_leases",
+  "cargo:mc-edge:backup::tests::hot_backup_of_a_running_core_is_a_verified_restorable_backup",
+  "cargo:mc-world-conversion:path_tests::walked_paths_are_portable_metadata_keys_and_exclude_world_lease",
+  "cargo:mc-world-conversion:path_tests::syncing_staged_nested_files_preserves_every_byte",
+  "cargo:mc-world-conversion:roundtrip_tests::nested_paths_import_export_and_census_under_world_leases",
+  "cargo:mc-world:native::backup_tests::snapshot_reads_lease_holding_handle_without_releasing_database_custody",
+]
+fix_commit = "c1f387bbcb3c1f09d61c9e04c6d114b1b1e3cf0c"
 
 [[bug]]
 id = "SP-RELAUNCH-LEASE-RACE"
