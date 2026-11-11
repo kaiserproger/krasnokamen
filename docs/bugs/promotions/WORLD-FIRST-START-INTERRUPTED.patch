@@ -1,0 +1,13 @@
+diff --git a/crates/mc-core/src/core.rs b/crates/mc-core/src/core.rs
+index eea46f95..eb73a22f 100644
+--- a/crates/mc-core/src/core.rs
++++ b/crates/mc-core/src/core.rs
+@@ -562,7 +562,7 @@ impl Core {
+         let world_lease = lock_world_lease(&config.world_dir)?;
+         let path = config.world_dir.join("native/state.redb");
+         let first_start = config.world_dir.join(FIRST_START_MARKER);
+-        let resumed = false;
++        let resumed = first_start.exists();
+         let fresh = resumed || !path.exists();
+         if fresh && !resumed {
+             match std::fs::read_dir(&config.world_dir) {

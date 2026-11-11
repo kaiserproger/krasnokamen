@@ -863,6 +863,16 @@ def _mob_metadata(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     run(steps, origin)
 
 
+def _player_input(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from . import native_player_input
+
+    if not getattr(steps.client, "p4_window", None):
+        raise RuntimeError("player-input probes require the owned native window")
+    kind = steps.report["id"].removeprefix("native-v2-input-")
+    {"menus": native_player_input.menus, "camera": native_player_input.camera,
+     "pick": native_player_input.pick, "sand": native_player_input.sand}[kind](steps, origin)
+
+
 def _lease_navigation(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_lease_navigation import run
 
@@ -872,6 +882,10 @@ def _lease_navigation(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
 RUNNERS = {
     "native-v2-happy-ghast-harness": _happy_ghast,
     "native-v2-mob-metadata-spot": _mob_metadata,
+    "native-v2-input-menus": _player_input,
+    "native-v2-input-camera": _player_input,
+    "native-v2-input-pick": _player_input,
+    "native-v2-input-sand": _player_input,
     "native-v2-lease-navigation": _lease_navigation,
     "native-v2-ledger-painting": _ledger_painting,
     "native-v2-ledger-axe": _ledger_axe,
