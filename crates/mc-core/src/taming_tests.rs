@@ -64,7 +64,7 @@ fn malformed_present_animal_fields_fail_closed_transactionally() {
         ("Temper", Tag::Int(101)),
         ("CollarColor", Tag::Byte(16)),
         ("leash", Tag::Compound(vec![])),
-        ("solaris:Rider", Tag::String("broken".into())),
+        ("solaris:Riders", Tag::String("broken".into())),
     ] {
         let error =
             crate::mounts::persistence::from_fields(&mut life, &[(key.into(), tag)]).unwrap_err();

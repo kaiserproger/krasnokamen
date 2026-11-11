@@ -314,6 +314,7 @@ handles!(BoolRule, false:
     MOB_EXPLOSION_DROP_DECAY = "mob_explosion_drop_decay",
     MOB_GRIEFING = "mob_griefing",
     NATURAL_HEALTH_REGENERATION = "natural_health_regeneration",
+    PROJECTILES_CAN_BREAK_BLOCKS = "projectiles_can_break_blocks",
     PVP = "pvp",
     RAIDS = "raids",
     SEND_COMMAND_FEEDBACK = "send_command_feedback",

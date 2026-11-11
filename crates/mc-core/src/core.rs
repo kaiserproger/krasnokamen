@@ -321,6 +321,13 @@ struct CoreInner {
     moderation_selector_tx: Sender<moderation_selector::Request>,
     checkpoint_tx: std::sync::mpsc::Sender<std::sync::mpsc::Sender<bool>>,
     backup_tx: std::sync::mpsc::Sender<BackupJob>,
+    #[cfg(test)]
+    backup_admission_pause: std::sync::Mutex<
+        Option<(
+            std::sync::mpsc::SyncSender<()>,
+            std::sync::mpsc::Receiver<()>,
+        )>,
+    >,
     input_dropped: AtomicU64,
     /// Weak: only the tick thread owns the `Sender`, so its exit (halt or
     /// shutdown) closes every subscriber instead of leaving them waiting.
@@ -817,11 +824,13 @@ impl Core {
         // Seed the serialization mirror before the tick thread starts. Thereafter
         // only successfully appended post-images mutate it, in the work FIFO.
         let journal_plugins = tick_state.plugins.clone();
+        let journal_store = Arc::clone(&store);
         let journal_handle = std::thread::Builder::new()
             .name("mc-core-journal".to_owned())
             .spawn(move || {
                 journal_loop(
                     &journal_world_dir,
+                    journal_store,
                     work_rx,
                     journal_writer,
                     &journal_busy,
@@ -897,6 +906,8 @@ impl Core {
                 moderation_selector_tx,
                 checkpoint_tx,
                 backup_tx,
+                #[cfg(test)]
+                backup_admission_pause: std::sync::Mutex::new(None),
                 input_dropped: AtomicU64::new(0),
                 tick_tx: tick_tx.downgrade(),
                 timing_tx: timing_tx.downgrade(),
@@ -1262,6 +1273,17 @@ impl Core {
             out: out.to_path_buf(),
             reply,
         };
+        #[cfg(test)]
+        if let Some((entered, resume)) = self
+            .inner
+            .backup_admission_pause
+            .lock()
+            .expect("backup admission pause")
+            .as_ref()
+        {
+            entered.send(()).expect("backup admission observer");
+            resume.recv().expect("resume backup admission");
+        }
         if self.inner.backup_tx.send(job).is_err() {
             return Err(CoreError::Storage("hot backup: the core stopped".into()));
         }

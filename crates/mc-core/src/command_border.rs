@@ -116,6 +116,19 @@ impl Border {
             self.size += (self.lerp_target - self.size) / (self.lerp_remaining + 1) as f64;
         }
     }
+    /// Vanilla `WorldBorder.isWithinBounds(x, z)`: `minX <= x < maxX` and
+    /// `minZ <= z < maxZ`, each edge `centre -/+ size / 2` clamped to the
+    /// absolute limit (`MAX_SIZE / 2`).
+    #[must_use]
+    pub fn is_within_bounds(&self, x: f64, z: f64) -> bool {
+        let limit = MAX_SIZE / 2.0;
+        let half = self.size / 2.0;
+        let edge = |centre: f64, sign: f64| (centre + sign * half).clamp(-limit, limit);
+        x >= edge(self.center_x, -1.0)
+            && x < edge(self.center_x, 1.0)
+            && z >= edge(self.center_z, -1.0)
+            && z < edge(self.center_z, 1.0)
+    }
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BorderCommand {

@@ -283,6 +283,22 @@ regression = []
         with self.assertRaises(ValueError):
             regressions._client_command('entities', 'no-such-scenario')
 
+    def test_loader_live_ref_parse_and_command(self):
+        ref = 'harness:loader-live:loader-fabric-screen-admission'
+        self.assertEqual(regressions._parse_ref(ref), ('harness', 'loader-live', 'loader-fabric-screen-admission'))
+        argv = regressions._client_command('loader-live', 'loader-fabric-screen-admission')
+        self.assertEqual(argv[5], 'loader-fabric-screen-admission')
+        self.assertEqual(argv[6:], ['--platform', 'fabric', '--server-bin', '{server_bin}',
+                                    '--plugins-dir', '{plugins_dir}', '--timeout-seconds', '420'])
+
+    def test_loader_live_ref_fails_closed(self):
+        for bad in ('harness:loader-live:', 'harness:loader-live:no-such-scenario',
+                    'harness:loader-live:native-low-roof-house', 'harness:dh-gate:all',
+                    'harness:loader-live:loader-fabric-screen-admission:extra'):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    regressions._parse_ref(bad)
+
     def test_open_checks_are_run(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -623,6 +639,18 @@ class LedgerToolTests(unittest.TestCase):
         self.git(root, 'commit', '-qam', 'fix lib')
         with self.assertRaisesRegex(ledger.Refused, 'straddles'):
             ledger.non_test_patch(root, self.git(root, 'rev-parse', 'HEAD'))
+
+    def test_added_file_with_inline_test_module_is_reversed_whole(self):
+        root = self.scratch()
+        (root / 'src/other.rs').write_text('fn other() {}\n')
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'base')
+        (root / 'src/fresh.rs').write_text('pub fn value() -> u8 {\n    2\n}\n#[cfg(test)]\nmod tests {\n    fn it() {}\n}\n')
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'add fresh')
+        patch_text, reversed_files, _ = ledger.non_test_patch(root, self.git(root, 'rev-parse', 'HEAD'))
+        self.assertEqual(reversed_files, ['src/fresh.rs'])
+        self.assertIn('+mod tests', patch_text)
 
     def test_fixed_row_needs_a_matching_promotion_receipt(self):
         root = self.scratch()

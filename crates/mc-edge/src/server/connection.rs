@@ -438,6 +438,11 @@ async fn run_connection(
             .map(|session| session.platform()),
     );
     let screen = screen_client.then(|| {
+        tracing::info!(
+            connection = id.0,
+            platform = ?config_outcome.loader_session.as_ref().map(|s| s.platform()),
+            "screen service started for admitted loader session"
+        );
         crate::screen_service::Connection::start(
             Arc::clone(&server),
             id,

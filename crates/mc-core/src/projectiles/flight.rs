@@ -348,7 +348,63 @@ fn first_solid(
     }
     Ok(first)
 }
-fn water_hit_face(
+/// `AbstractArrow.shouldFall`: `noCollision(AABB(pos, pos).inflate(0.06))`,
+/// a strict-overlap test against every block collision box. An unloaded or
+/// unknown cell keeps the arrow in place.
+fn should_fall(state: &TickState, pos: [f64; 3]) -> bool {
+    const REACH: f64 = 0.06;
+    if pos.iter().any(|value| !value.is_finite()) {
+        return false;
+    }
+    let lower: [f64; 3] = std::array::from_fn(|axis| pos[axis] - REACH);
+    let upper: [f64; 3] = std::array::from_fn(|axis| pos[axis] + REACH);
+    let below = i32::from(
+        state
+            .registry
+            .max_collision_box_y
+            .div_ceil(16)
+            .saturating_sub(1),
+    );
+    for y in (lower[1].floor() as i32).saturating_sub(below)..=upper[1].floor() as i32 {
+        for z in lower[2].floor() as i32..=upper[2].floor() as i32 {
+            for x in lower[0].floor() as i32..=upper[0].floor() as i32 {
+                let Some(boxes) = state
+                    .world
+                    .block_at(x, y, z)
+                    .and_then(|block| state.registry.collision_boxes.get(block as usize))
+                else {
+                    return false;
+                };
+                let offset = [f64::from(x), f64::from(y), f64::from(z)];
+                if boxes.iter().any(|collision_box| {
+                    let local = collision_box.as_blocks();
+                    (0..3).all(|axis| {
+                        offset[axis] + local[axis] < upper[axis]
+                            && offset[axis] + local[axis + 3] > lower[axis]
+                    })
+                }) {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+/// The synced `IN_GROUND` flag the client uses to stop simulating the arrow.
+fn set_in_ground(state: &mut TickState, slot: EntitySlot, in_ground: bool) {
+    let extra = &mut Arc::make_mut(&mut state.entities.row_mut(slot).appearance).extra;
+    if let Some((_, value)) = extra
+        .iter_mut()
+        .find(|(index, _)| *index == ARROW_IN_GROUND_INDEX)
+    {
+        *value = EntityDataValue::Boolean(in_ground);
+    } else {
+        extra.push((ARROW_IN_GROUND_INDEX, EntityDataValue::Boolean(in_ground)));
+    }
+}
+
+fn hit_face(
     state: &TickState,
     pos: [f64; 3],
     velocity: [f64; 3],
@@ -649,6 +705,16 @@ fn step(
         return state.entities.slot_of(id).is_none();
     }
     if record.stuck {
+        // AbstractArrow.tick: an in-ground arrow whose box inflated by 0.06
+        // no longer collides (`shouldFall`) starts falling: in-ground cleared,
+        // its zero motion scaled, `life` reset, and no despawn tick.
+        if should_fall(state, pos) {
+            record.stuck = false;
+            record.age = 0;
+            state.entities.set_ground(slot, false);
+            set_in_ground(state, slot, false);
+            return false;
+        }
         if record.age > ARROW_STUCK_TICKS {
             return true;
         }
@@ -914,6 +980,8 @@ fn step(
             crate::vibration::GameEvent::ProjectileLand,
             owner,
         );
+        let face = hit_face(state, pos, velocity, block_position, t);
+        super::block_impact::react(state, slot, record, block_position, impact, face, velocity);
         if record.kind == ProjectileKind::FishingHook {
             super::fishing::impact(state, id, record, None, impact);
             return false;
@@ -923,23 +991,11 @@ fn step(
                 record.kind,
                 ProjectileKind::Potion | ProjectileKind::LingeringPotion
             ) && super::payloads::is_water_bottle(&record.stack)
-                && let Some(face) = water_hit_face(state, pos, velocity, block_position, t)
+                && let Some(face) = face
             {
                 super::payloads::water_douse_blocks(state, block_position, face);
             }
             return super::payloads::impact(state, intents, id, record, None, impact);
-        }
-        if record.kind != ProjectileKind::Trident
-            && (record.flame || state.entities.body(slot).burn_ticks != 0)
-        {
-            // Burning arrows ignite TNT, and relight a dry extinguished
-            // campfire (vanilla projectile ignition).
-            if crate::tnt::prime_block(state, block_position, 80).is_some() {
-                return true;
-            }
-            if crate::campfire::relight(state, block_position) {
-                return true;
-            }
         }
         // Target blocks charge from projectile strikes (vanilla output).
         let arrows = record.kind.arrow();
@@ -966,15 +1022,7 @@ fn step(
         state.entities.set_pos(slot, retracted);
         state.entities.set_vel(slot, [0.0; 3]);
         state.entities.set_ground(slot, true);
-        let extra = &mut Arc::make_mut(&mut state.entities.row_mut(slot).appearance).extra;
-        if let Some((_, value)) = extra
-            .iter_mut()
-            .find(|(index, _)| *index == ARROW_IN_GROUND_INDEX)
-        {
-            *value = EntityDataValue::Boolean(true);
-        } else {
-            extra.push((ARROW_IN_GROUND_INDEX, EntityDataValue::Boolean(true)));
-        }
+        set_in_ground(state, slot, true);
         return false;
     }
     state

@@ -500,7 +500,7 @@ fn permitted_airborne_states_do_not_trip_airtime() {
                 let uuid = state.entities.row(slot).uuid;
                 let row = state.entities.row_mut(slot);
                 row.entity_life.mount.vehicle = Some(player);
-                row.entity_life.mount.rider = Some(uuid);
+                row.entity_life.mount.riders = vec![uuid];
             }
             _ => unreachable!(),
         }

@@ -608,6 +608,10 @@ def run_loader_live(ctx: ProfileContext) -> dict[str, Any]:
         from .loader_settlements import run
 
         scenario = {"run": run}
+    elif ctx.scenario_id == "loader-fabric-screen-admission":
+        from .loader_screen_admission import run
+
+        scenario = {"run": run}
     elif ctx.scenario_id is not None:
         # Named first-party scenarios normally live beside their sibling package.
         plugins_root = Path(

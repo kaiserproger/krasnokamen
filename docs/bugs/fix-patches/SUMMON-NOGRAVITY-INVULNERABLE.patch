@@ -1,0 +1,23 @@
+diff --git a/crates/mc-core/src/command_summon.rs b/crates/mc-core/src/command_summon.rs
+index f5157b00..54bb0449 100644
+--- a/crates/mc-core/src/command_summon.rs
++++ b/crates/mc-core/src/command_summon.rs
+@@ -241,8 +241,8 @@ pub(crate) fn prepare(
+                 c.behavior.physical_simulation
+                     == mc_data::entity_types::PhysicalSimulationClass::ExperienceOrb
+             }),
+-            "CustomName" | "CustomNameVisible" | "Invulnerable" | "Motion" | "Rotation"
+-            | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" => true,
++            "CustomName" | "CustomNameVisible" | "Invulnerable" | "NoGravity" | "Motion"
++            | "Rotation" | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" => true,
+             _ => {
+                 return Err(error(format!(
+                     "Unknown or unsupported summon NBT field {key}"
+@@ -261,6 +261,7 @@ pub(crate) fn prepare(
+             | "CanPickUpLoot"
+             | "IsBaby"
+             | "Invulnerable"
++            | "NoGravity"
+             | "CustomNameVisible"
+             | "OnGround"
+             | "Tame"
