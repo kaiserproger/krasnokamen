@@ -931,7 +931,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-AABB"
-regression = ["cargo:mc-core:villager::brain::tests::golem_detection_uses_axis_aligned_range_and_ignores_dead_golems"]
+regression = ["cargo:mc-core:villager::brain::tests::golem_detection_uses_axis_aligned_range_and_ignores_dead_golems", "harness:entities:native-v2-golem"]
 
 [[bug]]
 id = "GOLEM-REPAIR"
@@ -941,7 +941,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-REPAIR"
-regression = ["cargo:mc-core:golems::tests::iron_ingot_repairs_golem_from_either_hand_without_overhealing"]
+regression = ["cargo:mc-core:golems::tests::iron_ingot_repairs_golem_from_either_hand_without_overhealing", "harness:entities:native-v2-golem"]
 
 [[bug]]
 id = "GOLEM-DIFFICULTY"
@@ -951,7 +951,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-DIFFICULTY"
-regression = ["cargo:mc-core:golems::tests::natural_golem_player_damage_scales_with_difficulty"]
+regression = ["cargo:mc-core:golems::tests::natural_golem_player_damage_scales_with_difficulty", "harness:entities:native-v2-golem"]
 
 [[bug]]
 id = "P4"
@@ -1798,7 +1798,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DOLPHIN-TREASURE"
-regression = ["cargo:mc-core:dolphin::tests::fed_dolphin_swims_toward_treasure_chest"]
+regression = ["cargo:mc-core:dolphin::tests::fed_dolphin_swims_toward_treasure_chest", "harness:entities:native-v2-dolphin-treasure", "cargo:mc-core:dolphin::tests::dolphin_feed_debit_reaches_the_client_inventory"]
 
 [[bug]]
 id = "TARGET-PROJECTILE-POWER"
@@ -1960,7 +1960,7 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AXOLOTL-PLAY-DEAD"
-regression = ["cargo:mc-core:mob_lanes::tests::hurt_axolotl_in_water_plays_dead_and_regenerates", "cargo:mc-core:mob_lanes::tests::playing_dead_axolotl_releases_attackers_and_wakes_after_200_active_ticks"]
+regression = ["cargo:mc-core:mob_lanes::tests::hurt_axolotl_in_water_plays_dead_and_regenerates", "cargo:mc-core:mob_lanes::tests::playing_dead_axolotl_releases_attackers_and_wakes_after_200_active_ticks", "harness:entities:native-v2-axolotl-play-dead"]
 failing_first = "reported"
 
 [[bug]]
@@ -2054,7 +2054,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOAT-RAM-ABSENT"
-regression = ["cargo:mc-core:mob_lanes::tests::goat_rams_a_nearby_living_target", "cargo:mc-core:mob_lanes::tests::goat_ram_into_stone_drops_one_horn_with_instrument_and_updates_metadata"]
+regression = ["cargo:mc-core:mob_lanes::tests::goat_rams_a_nearby_living_target", "cargo:mc-core:mob_lanes::tests::goat_ram_into_stone_drops_one_horn_with_instrument_and_updates_metadata", "harness:entities:native-v2-goat-ram"]
 
 [[bug]]
 id = "TURTLE-LAY-EGG-ABSENT"

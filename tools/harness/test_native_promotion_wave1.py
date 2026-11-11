@@ -140,13 +140,13 @@ class Wave1Tests(unittest.TestCase):
                     wave1._golem(steps, (0, 0, 0))
 
     def test_axolotl_requires_play_dead_metadata_19(self):
-        ax = _row("minecraft:axolotl", 1.5, 3.5, health=5.0,
+        ax = _row("minecraft:axolotl", 1.5, 3.5, health=6.0,
                   received_metadata={"19": {"kind": "bool", "value": True}})
         steps = Steps(rows=[ax], chat=["minecraft:regeneration"])
         with self._patch_common(steps, [ax]):
             with mock.patch.object(wave1, "_same_row", side_effect=lambda s, ident: ax):
                 wave1._axolotl(steps, (0, 0, 0))
-        ax2 = _row("minecraft:axolotl", 1.5, 3.5, health=5.0,
+        ax2 = _row("minecraft:axolotl", 1.5, 3.5, health=6.0,
                    received_metadata={"19": {"kind": "bool", "value": False}})
         steps = Steps(rows=[ax2], chat=[])
         with self._patch_common(steps, [ax2]):

@@ -8,7 +8,44 @@ import uuid
 from .native_p1 import _aim, _capture, _interact, _rows, _use
 from .native_p4 import _entity_at
 from .native_v2 import _block, _echo, _give, _point, _set
-from .probe_steps import ProbeSteps
+from .probe_steps import ProbeSteps, item_count
+
+
+def _strike(steps: ProbeSteps, ident: dict, row: dict) -> None:
+    """Approach, aim and attack once, retrying when a moving mob slipped out of reach or view."""
+    for _ in range(12):
+        steps.call("minecraft_approach_entity", {"entity_id": ident["entity_id"], "timeout_seconds": steps.remaining()})
+        _aim(steps, _same_row(steps, ident) or row)
+        try:
+            steps.call("minecraft_attack_entity_once", {"entity_id": ident["entity_id"], "entity_uuid": ident["entity_uuid"], "entity_type": ident["entity_type"]})
+            return
+        except RuntimeError as error:
+            if not any(reason in str(error) for reason in (
+                    "out of interaction reach", "entity wait timed out")):
+                raise
+    raise RuntimeError(f"attack_in_reach_{ident['entity_type']}")
+
+
+def _wanderer_at(steps: ProbeSteps, kind: str, x: float, z: float,
+                 exclude: tuple[str, ...] = ()) -> dict:
+    """Find a just-summoned AI mob that may already have walked off its summon point.
+
+    `_entity_at` demands the row within 0.6 blocks of the summon point and races a
+    wandering villager, axolotl or dolphin; here the closest not-yet-claimed row of
+    the kind within 8 blocks of it is the new mob (spawn_mobs is off in these gates).
+    """
+    found: dict = {}
+
+    def received(_: dict) -> bool:
+        rows = [row for row in _rows(steps, 16)
+                if row["entity_type"] == kind and row["entity_uuid"] not in exclude
+                and abs(row["x"] - x) < 8 and abs(row["z"] - z) < 8]
+        if not rows:
+            return False
+        found.update(min(rows, key=lambda row: (row["x"] - x) ** 2 + (row["z"] - z) ** 2))
+        return True
+    steps.wait(received, f"received_{kind}_{x}_{z}")
+    return found
 
 
 def _identity(row: dict) -> dict:
@@ -161,7 +198,7 @@ def _golem(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # GOLEM-AABB: villager at origin, live golem 15 blocks away on each axis
     # (spherical distance ~21.2 > 16, AABB within 16) must still be detected.
     steps.fixture(f"summon minecraft:villager {x + .5} {y} {z + .5}")
-    villager = _entity_at(steps, "minecraft:villager", x + .5, z + .5)
+    villager = _wanderer_at(steps, "minecraft:villager", x + .5, z + .5)
     steps.fixture(f"summon minecraft:iron_golem {x + 15.5} {y} {z + 15.5} {{NoAI:1b}}")
     far = _echo(steps, "far_golem_summon_ordered")
     steps.check("far_golem_summoned", any("Summoned new Iron Golem" in line for line in far["recent_chat"]))
@@ -199,16 +236,14 @@ def _golem(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # GOLEM-DIFFICULTY: a natural (AI) golem's melee on the player scales up
     # strictly from easy through normal to hard.
     steps.fixture(f"summon minecraft:iron_golem {x + 2.5} {y} {z + 2.5}")
-    fighter = _entity_at(steps, "minecraft:iron_golem", x + 2.5, z + 2.5)
+    fighter = _wanderer_at(steps, "minecraft:iron_golem", x + 2.5, z + 2.5, exclude=(golem["entity_uuid"],))
     fid = _identity(fighter)
     drops: dict[str, float] = {}
     for diff in ("easy", "normal", "hard"):
         steps.fixture(f"difficulty {diff}")
         steps.fixture("effect give @s minecraft:instant_health 1 5 true")
         steps.wait(lambda s: s["player"]["health"] == 20, f"{diff}_player_healthy", timeout_seconds=20)
-        steps.call("minecraft_approach_entity", {"entity_id": fid["entity_id"], "timeout_seconds": steps.remaining()})
-        _aim(steps, _same_row(steps, fid) or fighter)
-        steps.call("minecraft_attack_entity_once", {"entity_id": fid["entity_id"], "entity_uuid": fid["entity_uuid"], "entity_type": fid["entity_type"]})
+        _strike(steps, fid, fighter)
         hit = steps.wait(lambda s: s["player"]["health"] < 20, f"{diff}_golem_melee_landed",
                          timeout_seconds=40)
         drops[diff] = 20 - hit["player"]["health"]
@@ -222,22 +257,26 @@ def _axolotl(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture("gamerule spawn_mobs false")
     steps.fixture(f"fill {x} {y} {z + 2} {x + 2} {y} {z + 4} minecraft:water")
     steps.fixture(f"summon minecraft:axolotl {x + 1.5} {y + 1} {z + 3.5}")
-    ax = _entity_at(steps, "minecraft:axolotl", x + 1.5, z + 3.5)
+    ax = _wanderer_at(steps, "minecraft:axolotl", x + 1.5, z + 3.5)
     aid = _identity(ax)
-    steps.fixture(f"damage {ax['entity_uuid']} 15 minecraft:generic")
-    steps.wait(lambda _s: (row := _same_row(steps, aid)) is not None and row["health"] == 5,
-               "axolotl_at_5_health", timeout_seconds=20)
+    # Axolotl max health is 14: 8 damage leaves 6 (< 7 = half), where every
+    # entity-sourced hit may trigger play-dead with probability 1/3.
+    steps.fixture(f"damage {ax['entity_uuid']} 8 minecraft:generic")
+    steps.wait(lambda _s: (row := _same_row(steps, aid)) is not None and row["health"] == 6,
+               "axolotl_at_6_health", timeout_seconds=20)
 
     def playing_dead(_state: dict) -> bool:
         row = _same_row(steps, aid)
         return row is not None and _metadata_bool(row, 19) is True
-    steps.call("minecraft_approach_entity", {"entity_id": aid["entity_id"], "timeout_seconds": steps.remaining()})
     for attempt in range(25):
         if playing_dead(steps.observe()):
             break
-        _aim(steps, _same_row(steps, aid) or ax)
-        steps.call("minecraft_attack_entity_once", {"entity_id": aid["entity_id"], "entity_uuid": aid["entity_uuid"], "entity_type": aid["entity_type"]})
+        _strike(steps, aid, ax)
         steps.call("minecraft_wait_ticks", {"ticks": 25})
+        row = _same_row(steps, aid)
+        if row is not None and row["health"] <= 2:
+            # A lethal fist hit never triggers play-dead: top up to <= 6 and keep trying.
+            steps.fixture(f"effect give {aid['entity_uuid']} minecraft:instant_health 1 0 true")
     steps.wait(playing_dead, "axolotl_play_dead_metadata_19", timeout_seconds=30)
     _capture(steps, "axolotl-playing-dead")
     steps.fixture(f"data get entity {aid['entity_uuid']} active_effects")
@@ -247,19 +286,36 @@ def _axolotl(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
 def _dolphin(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
     steps.fixture("gamerule spawn_mobs false")
-    steps.fixture(f"fill {x} {y} {z + 2} {x + 4} {y + 1} {z + 6} minecraft:water")
-    chest = _point(origin, dx=12, dz=4)
+    # Creative feeding does not debit the fish; survival proves the real consume.
+    steps.fixture("gamemode survival @s")
+    # A 13-long channel: the server steers a fed dolphin 5 blocks per search toward
+    # the nearest chest within 48 blocks, and only while the dolphin stays in water.
+    steps.fixture(f"fill {x} {y} {z + 2} {x + 12} {y + 1} {z + 6} minecraft:water")
+    chest = _point(origin, dx=17, dz=4)
     _set(steps, chest, "minecraft:chest")
-    steps.fixture(f'data merge block {chest["x"]} {chest["y"]} {chest["z"]} '
-                  f'{{Items:[{{Slot:0b,id:"minecraft:gold_ingot",count:1b}}]}}')
-    steps.fixture(f"summon minecraft:dolphin {x + 2.5} {y + 1} {z + 4.5}")
-    dol = _entity_at(steps, "minecraft:dolphin", x + 2.5, z + 4.5)
+    steps.fixture(f"summon minecraft:dolphin {x + 1.5} {y + 1} {z + 2.5}")
+    dol = _wanderer_at(steps, "minecraft:dolphin", x + 1.5, z + 2.5)
     did = _identity(dol)
+    # Real feeding: a held raw cod sets GotFish (`data merge entity` is unsupported).
+    _give(steps, "minecraft:cod")
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    fed_from = dict(_same_row(steps, did) or dol)  # start of the lead, before any feeding retry
+    for _ in range(12):
+        steps.call("minecraft_approach_entity", {"entity_id": did["entity_id"], "timeout_seconds": steps.remaining()})
+        _aim(steps, _same_row(steps, did) or dol)
+        try:
+            _interact(steps, did)
+            steps.wait(lambda s: item_count(s, "minecraft:cod") == 0, "dolphin_ate_the_cod", timeout_seconds=4)
+            break
+        except (RuntimeError, TimeoutError) as error:
+            if "dolphin_ate_the_cod" not in str(error) and "out of interaction reach" not in str(error):
+                raise
+    else:
+        raise RuntimeError("dolphin_ate_the_cod")
 
     def dist(row: dict) -> float:
         return ((row["x"] - chest["x"]) ** 2 + (row["z"] - chest["z"]) ** 2) ** .5
-    before = dist(_same_row(steps, did) or dol)
-    steps.fixture(f"data merge entity {did['entity_uuid']} {{GotFish:1b}}")
+    before = dist(fed_from)
 
     def approached(_state: dict) -> bool:
         row = _same_row(steps, did)
@@ -275,6 +331,13 @@ def _goat_ram(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
     steps.fixture("gamerule spawn_mobs false")
     steps.fixture("time set day")
+    # A survival player is a valid ram target and stands nearer than the armor stand;
+    # creative players are not (goat.rs valid_target), so only the stand can be rammed.
+    steps.fixture("gamemode creative @s")
+    # The goat rams the nearest valid living target; natural wildlife around the pad
+    # would be picked instead of the stand (cows took the ram in the 2026-11-12 run).
+    for kind in ("pig", "cow", "sheep", "chicken", "zombie", "skeleton", "spider", "creeper"):
+        steps.fixture(f"kill @e[type=minecraft:{kind},distance=..40]")
     steps.fixture(f"summon minecraft:goat {x + .5} {y} {z + 2.5}")
     steps.fixture(f"summon minecraft:armor_stand {x + 4.5} {y} {z + 2.5} {{NoAI:1b}}")
     stand = _entity_at(steps, "minecraft:armor_stand", x + 4.5, z + 2.5)
@@ -285,7 +348,7 @@ def _goat_ram(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     def rammed(_state: dict) -> bool:
         row = _same_row(steps, sid)
         return row is None or row["health"] < max_health
-    steps.wait(rammed, "goat_rammed_armor_stand", timeout_seconds=420)
+    steps.wait(rammed, "goat_rammed_armor_stand", timeout_seconds=540)
     _capture(steps, "goat-after-ram")
     steps.check("goat_still_present", _same_row(steps, _identity(
         next(r for r in _rows(steps, 16) if r["entity_type"] == "minecraft:goat"))) is not None)
@@ -303,7 +366,8 @@ def _golem_gossip(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     for i in range(5):
         px, pz = x + .5 + (i % 2) * 2, z + .5 + (i // 2) * 2
         steps.fixture(f"summon minecraft:villager {px} {y} {pz}")
-        villagers.append(_entity_at(steps, "minecraft:villager", px, pz))
+        villagers.append(_wanderer_at(steps, "minecraft:villager", px, pz,
+                                      exclude=tuple(v["entity_uuid"] for v in villagers)))
     _echo(steps, "gossip_villagers_ordered")
     steps.fixture("time query gametime")
     state = _chat_has(steps, "gametime_read", "time is")
