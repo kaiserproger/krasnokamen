@@ -722,12 +722,12 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
     crate::settlements::construction_crafting::reset_scan_stats();
     // Include the real root's renewable resource growth rather than ticking
     // only settlement and brain systems. Closure is deterministic at tick
-    // 73,017 on this fixture; the bound leaves room without a wall clock.
+    // 72,901 on this fixture; the bound leaves room without a wall clock.
     state.day_time = 3000;
     for _ in 0..80_000 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
         // Deterministic work budget for the whole run (closure uses about
-        // 22,000 full proofs and 940,000 recipe candidates). Disabling the
+        // 20,000 full proofs and 870,000 recipe candidates). Disabling the
         // recipe index, dependency admission or the funding memo exceeds it.
         let work = crate::settlements::construction_crafting::scan_stats();
         assert!(

@@ -543,6 +543,26 @@ fn load_blueprint(registry: &CoreRegistry, raw: RawBlueprint) -> Result<Blueprin
             for z in 0..span[2] as i32 {
                 for x in 0..span[0] as i32 {
                     let (new, old) = (grid.at(x, y, z), prev.and_then(|p| p.at(x, y, z)));
+                    // Structure writes refuse a stocked container, so an upgrade
+                    // replacing one would stall on the village's own stock.
+                    if let Some(old) = old
+                        && new != Some(old)
+                        && crate::plugin_inventories::container_name(
+                            registry
+                                .blocks
+                                .by_id(old)
+                                .expect("known state")
+                                .block
+                                .id
+                                .as_str(),
+                        )
+                    {
+                        return Err(format!(
+                            "{} level {}: replaces the level {n} container at {x},{y},{z}",
+                            raw.id,
+                            n + 1
+                        ));
+                    }
                     match (new, old) {
                         (Some(n), o) if Some(n) != o => placed.push(([x, y, z], n)),
                         (None, Some(_)) => removals.push([x, y, z]),
