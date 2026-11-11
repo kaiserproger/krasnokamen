@@ -300,6 +300,9 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # the fire block, so the weather must stay clear however long the earlier rows ran.
     _disable_gamerule(steps, "advance_weather")
     steps.fixture("weather clear")
+    # The night must outlast the whole scenario: at dawn the authored thorns zombie burns, and the
+    # burn invulnerability swallows the player's weaker hit so no thorns reflect.
+    _disable_gamerule(steps, "advance_time")
     steps.fixture("time set 18000")
     _echo(steps, "damage_night_fixture_ordered_receipt")
     steps.call("minecraft_wait_ticks", {"ticks": 20})
@@ -618,9 +621,9 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
         **{key: target[key] for key in ("entity_id", "entity_uuid", "entity_type")},
         "timeout_seconds": steps.remaining(),
     })
-    thorn_state = steps.wait(lambda state: state["player"]["health"] < baseline and any(
+    thorn_state = _wait_damage_identity(steps, lambda state: state["player"]["health"] < baseline and any(
         event["entity_id"] == player_id and event["type"] == "minecraft:thorns"
-        for event in steps.client.p4_damage_wire()[start:]), "thorns_physical_identity_received",
+        for event in steps.client.p4_damage_wire()[start:]), "thorns_physical_identity_received", start,
         timeout_seconds=30)
     steps.check("player_attack_physical_identity_received", any(
         event["entity_id"] == target["entity_id"] and event["type"] == "minecraft:player_attack"
