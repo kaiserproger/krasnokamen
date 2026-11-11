@@ -1,12 +1,18 @@
 diff --git a/crates/mc-core/src/survival.rs b/crates/mc-core/src/survival.rs
 --- a/crates/mc-core/src/survival.rs
 +++ b/crates/mc-core/src/survival.rs
-@@ -50,7 +50,7 @@
-             Self::Peaceful => 0.0,
-             Self::Easy => (amount / 2.0 + 1.0).min(amount),
-             Self::Normal => amount,
--            Self::Hard => amount,
+@@ -46,8 +46,12 @@
+ 
+     /// Vanilla `Player.hurtServer` difficulty scaling of mob damage.
+     pub fn scale_mob_damage(self, amount: f32) -> f32 {
+-        let _ = self;
+-        amount
++        match self {
++            Self::Peaceful => 0.0,
++            Self::Easy => (amount / 2.0 + 1.0).min(amount),
++            Self::Normal => amount,
 +            Self::Hard => amount * 1.5,
-         }
++        }
      }
  
+     /// Starvation stops at this health (Hard kills).

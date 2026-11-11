@@ -1,0 +1,52 @@
+{
+  "id": "SPAWN-SPAWNER-EGG",
+  "verdict": "promoted",
+  "fix_commit": "patch:3b38fe9cf26516c2f1639bd071dd6b861c688d84c797dffe598be04ffd251125",
+  "fix_commit_full": "patch:3b38fe9cf26516c2f1639bd071dd6b861c688d84c797dffe598be04ffd251125",
+  "promoted_at": "2026-11-11T21:19:00+00:00",
+  "tree_head": "0ea7a8f4e3d9e840e92332e34f9f4f9469b6472f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "3b38fe9cf26516c2f1639bd071dd6b861c688d84c797dffe598be04ffd251125",
+  "reversed_files": [
+    "crates/mc-core/src/monster_spawner.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:spawn_egg::tests::fix_mobs_spawn_egg_configures_spawner_without_spawning_adjacent_mob": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:monster_spawner::tests::fix_mobs_placed_spawner_default_record_does_not_poison_chunk_hydration": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-spawner-egg": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-spawner-egg --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/A1MobsCommandsGate/.analysis/validation/20261111T211611-ledger-promote-94237k58/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:spawn_egg::tests::fix_mobs_spawn_egg_configures_spawner_without_spawning_adjacent_mob": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:monster_spawner::tests::fix_mobs_placed_spawner_default_record_does_not_poison_chunk_hydration": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/A1MobsCommandsGate/.analysis/validation/20261111T210519-native-v2-spawner-egg-0kb_5jay/result.json",
+    "tree_head": "0ea7a8f4e3d9e840e92332e34f9f4f9469b6472f",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "4b5069bc16e9099f1a5378bf96f8a096aedfcfac27cc2cb4d4ac5ea498ac7f45",
+    "covers": [
+      "harness:entities:native-v2-spawner-egg"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/A1MobsCommandsGate/.analysis/validation/20261111T211611-ledger-promote-94237k58"
+}
