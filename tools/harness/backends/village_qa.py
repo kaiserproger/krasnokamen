@@ -49,6 +49,8 @@ from .probe_steps import ProbeSteps
 
 USERNAME = "VillageQA"
 SETTLEMENT = "qa"
+PAD_RADIUS = 34
+PAD_HEIGHT = 16
 
 # Mining products the miner can deposit (drop_name() mapping + natural stone).
 MINING_ITEMS = frozenset({
@@ -90,11 +92,6 @@ def bed_facing_valid(foot: tuple[int, int, int], head: tuple[int, int, int], fac
 def house_headroom_ok(bed_y: int, roof_y: int) -> bool:
     """Two full air blocks above the bed: roof at least 3 above bed level."""
     return roof_y - bed_y >= 3
-
-
-def door_crossed(before_x: float, after_x: float, door_x: int) -> bool:
-    """True when a track flips sides of the door plane (block centre +/- 0.5)."""
-    return (before_x - (door_x + 0.5)) * (after_x - (door_x + 0.5)) < 0
 
 
 def chest_has(items: dict[str, int], wanted: frozenset[str] | set[str]) -> bool:
@@ -150,11 +147,42 @@ DOOR_LEFT_OPEN_SECONDS = 20.0
 NIGHT_DOOR_SETTLE_SECONDS = 60.0
 
 
-def crossed_door_plane(door: tuple[int, int, int], before: tuple[float, float, float],
-                       after: tuple[float, float, float]) -> bool:
-    """A track step that flips sides of the east-west door plane inside the door cell row."""
-    return (abs(after[1] - door[1]) < 3.5 and abs(after[2] - (door[2] + 0.5)) < 0.9
-            and door_crossed(before[0], after[0], door[0]))
+def building_zone(lo: tuple[int, int, int], hi: tuple[int, int, int],
+                  pos: tuple[float, float, float]) -> str:
+    """`in` (interior), `wall` (the wall ring, door cell included) or `out` for a body position."""
+    x, y, z = pos
+    if not lo[1] - 0.5 <= y < hi[1] + 1 or not (lo[0] <= x < hi[0] + 1 and lo[2] <= z < hi[2] + 1):
+        return "out"
+    return "in" if lo[0] + 1 <= x < hi[0] and lo[2] + 1 <= z < hi[2] else "wall"
+
+
+class BuildingCrossings:
+    """Door crossings from inside/outside flips of buildings sealed except for their one door.
+
+    A body seen inside at one observation and outside at a later one has passed through that
+    door however far apart the observations are, so a villager that walks several blocks
+    between two entity lists cannot slip through unseen (a door-plane flip sample can miss it).
+    """
+
+    def __init__(self, footprints: dict[tuple[int, int, int],
+                                        tuple[tuple[int, int, int], tuple[int, int, int]]]) -> None:
+        self.footprints = dict(footprints)
+        self.zone: dict[tuple[str, tuple[int, int, int]], str] = {}
+
+    def observe(self, villagers: dict[str, tuple[float, float, float]]
+                ) -> list[tuple[str, tuple[int, int, int], str]]:
+        """New `(uuid, door, direction)` crossings since the previous observation."""
+        crossed = []
+        for uuid, pos in villagers.items():
+            for door, (lo, hi) in self.footprints.items():
+                zone = building_zone(lo, hi, pos)
+                if zone == "wall":
+                    continue
+                before = self.zone.get((uuid, door))
+                self.zone[(uuid, door)] = zone
+                if before is not None and before != zone:
+                    crossed.append((uuid, door, zone))
+        return crossed
 
 
 class NightDoorWatch:
@@ -166,9 +194,10 @@ class NightDoorWatch:
     at the same cadence as the villager list.
     """
 
-    def __init__(self, doors: list[tuple[int, int, int]]) -> None:
+    def __init__(self, doors: list[tuple[int, int, int]],
+                 footprints: dict[tuple[int, int, int], tuple[tuple[int, int, int], tuple[int, int, int]]]) -> None:
         self.doors = tuple(doors)
-        self.last_pos: dict[str, tuple[float, float, float]] = {}
+        self.tracker = BuildingCrossings(footprints)
         self.crossings: dict[tuple[int, int, int], set[str]] = {cell: set() for cell in self.doors}
         self.opened: set[tuple[int, int, int]] = set()
         self.unattended_since: dict[tuple[int, int, int], float | None] = {cell: None for cell in self.doors}
@@ -182,13 +211,8 @@ class NightDoorWatch:
 
     def observe(self, villagers: dict[str, tuple[float, float, float]],
                 open_cells: set[tuple[int, int, int]], now: float) -> None:
-        for uuid, pos in villagers.items():
-            before = self.last_pos.get(uuid)
-            if before is not None:
-                for cell in self.doors:
-                    if crossed_door_plane(cell, before, pos):
-                        self.crossings[cell].add(uuid)
-            self.last_pos[uuid] = pos
+        for uuid, door, _direction in self.tracker.observe(villagers):
+            self.crossings[door].add(uuid)
         for cell in self.doors:
             if cell not in open_cells:
                 self.unattended_since[cell] = None
@@ -432,11 +456,15 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
 
     # --- level a pad through ordinary chat commands (one daylight freeze, no time spam) ---
     x0, y0, z0 = origin
-    # 61*61*17 exceeds vanilla's 32768-command block limit; each slab fits.
-    for low, high in ((-8, -1), (0, 7), (8, 8)):
-        fixture(f"fill {x0 - 30} {y0 + low} {z0 - 30} {x0 + 30} {y0 + high} {z0 + 30} minecraft:air")
-    fixture(f"fill {x0 - 30} {y0 - 2} {z0 - 30} {x0 + 30} {y0 - 2} {z0 + 30} minecraft:dirt")
-    fixture(f"fill {x0 - 30} {y0 - 1} {z0 - 30} {x0 + 30} {y0 - 1} {z0 + 30} minecraft:grass_block")
+    # The pad reaches PAD_RADIUS past the origin, beyond the settlement radius (31) and its hill
+    # slopes (+8), so no natural tree stands inside the lumberjack's search area to pre-empt the
+    # planted oaks. 69*69*6 stays under vanilla's 32768-command block limit; each slab fits.
+    for low in range(-8, PAD_HEIGHT + 1, 6):
+        high = min(low + 5, PAD_HEIGHT)
+        fixture(f"fill {x0 - PAD_RADIUS} {y0 + low} {z0 - PAD_RADIUS} {x0 + PAD_RADIUS} {y0 + high} "
+                f"{z0 + PAD_RADIUS} minecraft:air")
+    fixture(f"fill {x0 - PAD_RADIUS} {y0 - 2} {z0 - PAD_RADIUS} {x0 + PAD_RADIUS} {y0 - 2} {z0 + PAD_RADIUS} minecraft:dirt")
+    fixture(f"fill {x0 - PAD_RADIUS} {y0 - 1} {z0 - PAD_RADIUS} {x0 + PAD_RADIUS} {y0 - 1} {z0 + PAD_RADIUS} minecraft:grass_block")
     fixture(f"fill {x0 - 2} {y0 - 1} {z0 - 2} {x0 + 2} {y0 - 1} {z0 + 2} minecraft:stone")
     fixture("gamemode creative @s")
     fixture("effect give @s minecraft:regeneration infinite 255 true")
@@ -676,10 +704,13 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     stations = {"farmer": composter, "miner": entrance, "lumberjack": fletcher}
     worker_uuids = {role_uuid[role] for role in stations}
     doors = [door, work_door, store_door, camp_door]
+    footprints = {door: (house_lo, house_hi), work_door: (work_lo, work_hi),
+                  store_door: (store_lo, store_hi), camp_door: (camp_lo, camp_hi)}
     teleport(x0 + 6.5, y0 + 1.0, z0 + 7.5)
     probe.call("minecraft_look", {"yaw_deg": 180, "pitch_deg": 0})
 
-    # --- (1) door walk: frozen day 3000, worker crossing + open + awaited close ---
+    # --- (1) door walk: frozen day 3000; a worker walks through a certified building's only door
+    # (inside/outside flip, immune to polling gaps) and the door is awaited closed by block event ---
     fixture("time set 3000")
     settled("day_work_begins")
     for cell in doors:
@@ -688,54 +719,38 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
                      f"minecraft_read_block {cell[0]} {cell[1]} {cell[2]}")
             break
     else:
-        tracks: dict[str, list[tuple[float, float, float]]] = {}
-        crossed: dict[str, tuple[int, int, int]] = {}
-        opened_doors: set[tuple[int, int, int]] = set()
-        flips: dict[str, int] = {}
+        walk = BuildingCrossings(footprints)
+        crossing: tuple[str, tuple[int, int, int], str] | None = None
         deadline = _time.monotonic() + 70.0
-        while _time.monotonic() < deadline and not any(
-                cell in opened_doors for cell in crossed.values()):
-            for row in _villagers(probe):
-                uuid = str(row.get("entity_uuid"))
-                pos = (float(row["x"]), float(row["y"]), float(row["z"]))
-                history = tracks.setdefault(uuid, [])
-                history.append(pos)
-                if len(history) >= 2 and uuid in worker_uuids:
-                    for cell in doors:
-                        if abs(pos[1] - cell[1]) < 3.5 \
-                                and abs(pos[2] - (cell[2] + 0.5)) < 0.9 \
-                                and door_crossed(history[-2][0], pos[0], cell[0]):
-                            crossed[uuid] = cell
-                            flips[uuid] = flips.get(uuid, 0) + 1
-            for cell in doors:
-                if _props(_read(probe, cell)).get("open") == "true":
-                    opened_doors.add(cell)
-            if not any(cell in opened_doors for cell in crossed.values()):
+        while crossing is None and _time.monotonic() < deadline:
+            positions = {str(row["entity_uuid"]): (float(row["x"]), float(row["y"]), float(row["z"]))
+                         for row in _villagers(probe)}
+            crossing = next((item for item in walk.observe(positions) if item[0] in worker_uuids), None)
+            if crossing is None:
                 _tick(probe)
-        detail["door_flips"] = {uuid[:8]: count for uuid, count in flips.items()}
-        crossings = [(uuid, cell) for uuid, cell in crossed.items() if cell in opened_doors]
-        if crossings:
-            # Bounded exact predicate: the crossed door must actually close again.
-            crosser, cell = crossings[0]
-            close_deadline = _time.monotonic() + 40.0
-            closed = _props(_read(probe, cell)).get("open") == "false"
-            while not closed and _time.monotonic() < close_deadline:
-                _tick(probe)
-                closed = _props(_read(probe, cell)).get("open") == "false"
-            if closed:
+        if crossing is None:
+            _verdict(detail, "door_walk", "FAIL",
+                     "no worker went through any certified building door in 70s of day 3000",
+                     "time set 3000 (frozen); minecraft_list_entities radius 64 against the four building footprints; "
+                     "server log: villager door open/close lines")
+        else:
+            crosser, cell, direction = crossing
+            detail["door_flips"] = {crosser[:8]: f"{direction} through {list(cell)}"}
+            try:
+                probe.call("minecraft_wait_for_block_state",
+                           {"x": cell[0], "y": cell[1], "z": cell[2], "block_id": "minecraft:oak_door",
+                            "properties": {"open": "false"}, "timeout_seconds": 40.0})
+            except RuntimeError:
+                pass
+            if _props(_read(probe, cell)).get("open") == "false":
                 _verdict(detail, "door_walk", "PASS",
-                         f"worker {crosser[:8]} crossed door {list(cell)} "
-                         f"(open seen, flips={flips.get(crosser)}, ends open=false)")
+                         f"worker {crosser[:8]} went {direction} through door {list(cell)} "
+                         "and the door was received closed")
             else:
                 _verdict(detail, "door_walk", "FAIL",
-                         f"worker {crosser[:8]} crossed {list(cell)} but it never closed",
+                         f"worker {crosser[:8]} went {direction} through {list(cell)} but it never closed",
                          f"time set 3000 (frozen); minecraft_read_block {cell[0]} {cell[1]} {cell[2]}; "
                          "server log: villager door open/close lines")
-        else:
-            _verdict(detail, "door_walk", "FAIL",
-                     f"crossed={list(crossed)} opened={[list(c) for c in opened_doors]}",
-                     "time set 3000 (frozen); minecraft_read_block at the four doors; "
-                     "server log: villager door open/close lines")
     if ctx.windowed:
         native_client.capture(probe.client, artifact, "village-qa-workday")
 
@@ -748,7 +763,7 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     settled("night_falls")
     night_tracks: dict[str, tuple[float, float, float]] = {}
     sleeper: str | None = None
-    night_doors = NightDoorWatch(doors)
+    night_doors = NightDoorWatch(doors, footprints)
 
     def watch_night_doors(rows: list[dict[str, Any]]) -> tuple[dict[str, tuple[float, float, float]],
                                                                set[tuple[int, int, int]]]:

@@ -24,11 +24,6 @@ class VillageQaHelpersTests(unittest.TestCase):
         self.assertTrue(village_qa.house_headroom_ok(78, 81))
         self.assertFalse(village_qa.house_headroom_ok(78, 80))
 
-    def test_door_crossing_flips_sides(self) -> None:
-        self.assertTrue(village_qa.door_crossed(195.4, 196.6, 196))
-        self.assertTrue(village_qa.door_crossed(196.6, 195.4, 196))
-        self.assertFalse(village_qa.door_crossed(195.4, 195.6, 196))
-
     def test_chest_has_matches_any_wanted(self) -> None:
         self.assertTrue(village_qa.chest_has({"minecraft:cobblestone": 3}, village_qa.MINING_ITEMS))
         self.assertTrue(village_qa.chest_has({"minecraft:oak_log": 1}, {"minecraft:oak_log"}))
@@ -52,56 +47,85 @@ class VillageQaHelpersTests(unittest.TestCase):
         inconclusive = dict(good, lumberjack="INCONCLUSIVE")
         self.assertFalse(village_qa.all_behaviours_pass(inconclusive))
 
-    def _house_door_walk(self, watch: village_qa.NightDoorWatch, door: tuple[int, int, int],
-                         final_open: bool) -> None:
-        y, z = float(door[1]), door[2] + 0.5
-        watch.observe({"v": (door[0] - 2.0, y, z)}, set(), 0.0)
-        watch.observe({"v": (door[0] - 0.8, y, z)}, {door}, 1.0)
-        watch.observe({"v": (door[0] + 0.8, y, z)}, {door}, 2.0)
-        # The villager walks away to its bed; the door either closed behind it or not.
-        watch.observe({"v": (door[0] + 6.0, y, z)}, {door} if final_open else set(), 3.0)
+    DOOR = (10, 80, 5)
+    HOUSE = ((6, 79, 2), (10, 83, 8))
+
+    def _watch(self) -> village_qa.NightDoorWatch:
+        return village_qa.NightDoorWatch([self.DOOR], {self.DOOR: self.HOUSE})
+
+    def _walk_out(self, watch: village_qa.NightDoorWatch, final_open: bool) -> None:
+        # One long step from the interior to far outside: the door cell is never sampled.
+        watch.observe({"v": (8.5, 80.0, 6.5)}, set(), 0.0)
+        watch.observe({"v": (16.0, 80.0, 9.5)}, {self.DOOR}, 1.0)
+        watch.observe({"v": (19.0, 80.0, 9.5)}, {self.DOOR} if final_open else set(), 2.0)
+
+    def test_building_zone_separates_interior_wall_and_outside(self) -> None:
+        lo, hi = self.HOUSE
+        self.assertEqual(village_qa.building_zone(lo, hi, (8.5, 80.0, 5.5)), "in")
+        self.assertEqual(village_qa.building_zone(lo, hi, (8.5, 80.6, 5.5)), "in")
+        self.assertEqual(village_qa.building_zone(lo, hi, (10.4, 80.0, 5.5)), "wall")
+        self.assertEqual(village_qa.building_zone(lo, hi, (6.4, 80.0, 5.5)), "wall")
+        self.assertEqual(village_qa.building_zone(lo, hi, (12.0, 80.0, 5.5)), "out")
+        self.assertEqual(village_qa.building_zone(lo, hi, (8.5, 77.0, 5.5)), "out")
+
+    def test_crossing_is_seen_however_far_apart_the_observations_are(self) -> None:
+        crossings = village_qa.BuildingCrossings({self.DOOR: self.HOUSE})
+        self.assertEqual(crossings.observe({"v": (8.5, 80.0, 6.5)}), [])
+        self.assertEqual(crossings.observe({"v": (16.0, 80.0, 9.5)}), [("v", self.DOOR, "out")])
+        self.assertEqual(crossings.observe({"v": (8.0, 80.0, 3.5)}), [("v", self.DOOR, "in")])
+        # Standing in the door cell is neither side: no flip until it leaves.
+        self.assertEqual(crossings.observe({"v": (10.5, 80.0, 5.5)}), [])
+        self.assertEqual(crossings.observe({"v": (8.0, 80.0, 3.5)}), [])
+
+    def test_walking_around_the_building_is_not_a_crossing(self) -> None:
+        crossings = village_qa.BuildingCrossings({self.DOOR: self.HOUSE})
+        self.assertEqual(crossings.observe({"v": (14.0, 80.0, 0.5)}), [])
+        self.assertEqual(crossings.observe({"v": (3.0, 80.0, 9.5)}), [])
+
+    def test_door_walk_miss_from_the_recorded_run_is_a_crossing(self) -> None:
+        # Run 20261111T115144-village-qa-tr3_lp49: two entity lists ~6 blocks apart straddled the
+        # house door at x=196 with the second sample 3 blocks off the door row; the door-plane
+        # sampler reported crossed=[] although the farmer had walked out through it.
+        house = ((192, 77, -448), (196, 81, -444))
+        crossings = village_qa.BuildingCrossings({(196, 78, -446): house})
+        self.assertEqual(crossings.observe({"f6a5": (194.43, 78.6, -445.77)}), [])
+        self.assertEqual(crossings.observe({"f6a5": (200.53, 77.0, -442.54)}),
+                         [("f6a5", (196, 78, -446), "out")])
 
     def test_night_door_closed_behind_the_villager_passes(self) -> None:
-        door = (10, 80, 5)
-        watch = village_qa.NightDoorWatch([door])
-        self._house_door_walk(watch, door, final_open=False)
-        self.assertEqual(watch.verdict(door, set())[0], "PASS")
+        watch = self._watch()
+        self._walk_out(watch, final_open=False)
+        self.assertEqual(watch.verdict(self.DOOR, set())[0], "PASS")
 
     def test_night_door_left_open_with_nobody_near_fails(self) -> None:
-        door = (10, 80, 5)
-        watch = village_qa.NightDoorWatch([door])
-        self._house_door_walk(watch, door, final_open=True)
+        watch = self._watch()
+        self._walk_out(watch, final_open=True)
         # Still open well past the allowance with the villager far away.
-        watch.observe({"v": (door[0] + 6.0, 80.0, door[2] + 0.5)}, {door},
-                      3.0 + village_qa.DOOR_LEFT_OPEN_SECONDS + 1.0)
-        verdict, evidence = watch.verdict(door, {door})
+        watch.observe({"v": (19.0, 80.0, 9.5)}, {self.DOOR}, 2.0 + village_qa.DOOR_LEFT_OPEN_SECONDS + 1.0)
+        verdict, evidence = watch.verdict(self.DOOR, {self.DOOR})
         self.assertEqual(verdict, "FAIL")
         self.assertIn("left open", evidence)
 
     def test_night_door_open_beside_its_villager_is_not_left_open(self) -> None:
-        door = (10, 80, 5)
-        watch = village_qa.NightDoorWatch([door])
-        self._house_door_walk(watch, door, final_open=False)
-        beside = {"v": (door[0] + 1.0, 80.0, door[2] + 0.5)}
-        watch.observe(beside, {door}, 4.0)
-        watch.observe(beside, {door}, 4.0 + village_qa.DOOR_LEFT_OPEN_SECONDS * 2)
-        self.assertEqual(watch.verdict(door, set())[0], "PASS")
+        watch = self._watch()
+        self._walk_out(watch, final_open=False)
+        beside = {"v": (11.5, 80.0, 5.5)}
+        watch.observe(beside, {self.DOOR}, 4.0)
+        watch.observe(beside, {self.DOOR}, 4.0 + village_qa.DOOR_LEFT_OPEN_SECONDS * 2)
+        self.assertEqual(watch.verdict(self.DOOR, set())[0], "PASS")
 
     def test_night_door_crossing_between_polls_still_counts(self) -> None:
-        door = (10, 80, 5)
-        watch = village_qa.NightDoorWatch([door])
-        y, z = 80.0, door[2] + 0.5
+        watch = self._watch()
         # The open and the close both fall between two polls: the door is never read open.
-        watch.observe({"v": (door[0] - 0.8, y, z)}, set(), 0.0)
-        watch.observe({"v": (door[0] + 0.8, y, z)}, set(), 1.0)
+        watch.observe({"v": (8.5, 80.0, 6.5)}, set(), 0.0)
+        watch.observe({"v": (16.0, 80.0, 9.5)}, set(), 1.0)
         self.assertEqual(watch.opened, set())
-        self.assertEqual(watch.verdict(door, set())[0], "PASS")
+        self.assertEqual(watch.verdict(self.DOOR, set())[0], "PASS")
 
     def test_night_door_without_a_crossing_is_not_a_pass(self) -> None:
-        door = (10, 80, 5)
-        watch = village_qa.NightDoorWatch([door])
-        watch.observe({"v": (door[0] - 5.0, 80.0, door[2] + 0.5)}, set(), 0.0)
-        self.assertEqual(watch.verdict(door, set())[0], "FAIL")
+        watch = self._watch()
+        watch.observe({"v": (14.0, 80.0, 5.5)}, set(), 0.0)
+        self.assertEqual(watch.verdict(self.DOOR, set())[0], "FAIL")
 
     def test_trees_need_five_column_separation(self) -> None:
         self.assertTrue(village_qa.trees_separated([(0, 0, 0), (5, 0, 0)]))
