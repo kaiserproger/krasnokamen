@@ -57,6 +57,9 @@
       ]
     },
     {
+      "cmd": "setblock 1000 174 1007 minecraft:stone"
+    },
+    {
       "cmd": "setblock 1000 177 1000 minecraft:stone"
     },
     {
