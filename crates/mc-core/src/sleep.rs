@@ -283,17 +283,17 @@ fn cat_gifts(state: &mut TickState, owner: EntityId, sleeper: Sleeper) {
     let mut cats = std::mem::take(&mut state.serial_entity_slots);
     cats.extend(state.entities.mob_slots(kind));
     for &slot in &cats {
-        let row = state.entities.row_mut(slot);
-        if row.entity_life.taming.owner != Some(uuid) {
+        if state.entities.row(slot).entity_life.taming.owner != Some(uuid) {
             continue;
         }
-        let rested = std::mem::take(&mut row.entity_life.cat_bed_ticks) >= SLEEP_TICKS;
-        if !morning
-            || !rested
-            || !row.entity_life.tamed
-            || row.entity_life.sitting
-            || crate::taming::roll(row, 10) >= 7
-        {
+        let row = state.entities.row_mut_unmarked(slot);
+        let rested = std::mem::take(&mut row.cat_bed_ticks) >= SLEEP_TICKS;
+        if !morning || !rested || !row.entity_life.tamed || row.entity_life.sitting {
+            continue;
+        }
+        // The roll advances the persisted taming counter.
+        let row = state.entities.row_mut(slot);
+        if crate::taming::roll(row, 10) >= 7 {
             continue;
         }
         // data/minecraft/loot_table/gameplay/cat_morning_gift.json: six
@@ -343,8 +343,11 @@ fn rest_cats(state: &mut TickState) {
                     state.sleepers.contains_key(&state.entities.body(owner).id)
                         && crate::bees::distance(pos, state.entities.pos(owner)) < 9.0
                 });
-        let ticks = &mut state.entities.row_mut(slot).entity_life.cat_bed_ticks;
-        *ticks = if resting { ticks.saturating_add(1) } else { 0 };
+        // Runtime counter: an idle cat is not written at all.
+        if resting || state.entities.row(slot).cat_bed_ticks != 0 {
+            let ticks = &mut state.entities.row_mut_unmarked(slot).cat_bed_ticks;
+            *ticks = if resting { ticks.saturating_add(1) } else { 0 };
+        }
     }
     cats.clear();
     state.serial_entity_slots = cats;

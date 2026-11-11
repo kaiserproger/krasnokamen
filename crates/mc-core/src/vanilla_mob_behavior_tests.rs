@@ -1023,3 +1023,222 @@ fn camel_seats_three_riders_and_refuses_a_fourth() {
         3
     );
 }
+
+fn tamed_cat(
+    state: &mut TickState,
+    pos: [f64; 3],
+    owner: uuid::Uuid,
+) -> (EntityId, crate::entities::EntitySlot) {
+    let cat = spawn(state, "cat", pos);
+    let cat_slot = slot(state, cat);
+    let life = &mut state.entities.row_mut(cat_slot).entity_life;
+    life.tamed = true;
+    life.taming.owner = Some(owner);
+    life.sitting = false;
+    (cat, cat_slot)
+}
+
+#[test]
+fn frog_after_a_hunt_or_lost_prey_stays_untouched_while_idle() {
+    for lose_prey in [false, true] {
+        let (mut state, _player, pos) = fixture();
+        let frog = spawn(&mut state, "frog", [pos[0] + 3.0, pos[1], pos[2]]);
+        let prey = spawn(&mut state, "slime", [pos[0] + 2.0, pos[1], pos[2]]);
+        let prey_slot = slot(&state, prey);
+        crate::entity_loot::set_size(&mut state, prey_slot, 1, true);
+        state.entities.row_mut(prey_slot).controls.no_ai = true;
+        if lose_prey {
+            // Close enough to start the tongue, then the prey vanishes mid-attack.
+            for _ in 0..3 {
+                run_tick(&mut state, &[]);
+            }
+            assert!(
+                state
+                    .entities
+                    .row(slot(&state, frog))
+                    .appearance
+                    .extra
+                    .contains(&(
+                        19,
+                        EntityDataValue::OptionalUnsignedInt(Some(prey.0 as u32))
+                    )),
+                "the tongue never started"
+            );
+            state.remove_entity(slot(&state, prey));
+            run_tick(&mut state, &[]);
+        } else {
+            for _ in 0..40 {
+                run_tick(&mut state, &[]);
+            }
+            assert!(state.entities.slot_of(prey).is_none(), "prey survived");
+        }
+        // The tongue accessor now holds an explicit None; it must not keep the row hot.
+        assert!(
+            state
+                .entities
+                .row(slot(&state, frog))
+                .appearance
+                .extra
+                .contains(&(19, EntityDataValue::OptionalUnsignedInt(None))),
+            "the cleared tongue accessor is the case under test"
+        );
+        clear_touched(&mut state);
+        for tick in 1000..1400 {
+            state.tick = tick;
+            crate::frog::run(&mut state);
+        }
+        assert!(
+            !state.entities.touched_ids().contains(&frog),
+            "frog row written per tick after its prey is gone (lose_prey={lose_prey})"
+        );
+    }
+}
+
+#[test]
+fn idle_camel_is_not_written_and_a_running_dash_cooldown_is() {
+    let (mut state, _player, pos) = fixture();
+    let camel = spawn(&mut state, "camel", pos);
+    let camel_slot = slot(&state, camel);
+    clear_touched(&mut state);
+    for _ in 0..100 {
+        crate::mounts::tick(&mut state, &mut ChangeSet::default());
+    }
+    assert!(
+        !state.entities.touched_ids().contains(&camel),
+        "idle camel row written per tick"
+    );
+    state
+        .entities
+        .row_mut(camel_slot)
+        .entity_life
+        .mount
+        .dash_cooldown = 3;
+    clear_touched(&mut state);
+    crate::mounts::tick(&mut state, &mut ChangeSet::default());
+    assert!(state.entities.touched_ids().contains(&camel));
+    assert_eq!(
+        state
+            .entities
+            .row(camel_slot)
+            .entity_life
+            .mount
+            .dash_cooldown,
+        2
+    );
+}
+
+#[test]
+fn idle_cats_are_not_written_and_a_wake_touches_only_the_owners_cats() {
+    let (mut state, player, pos) = fixture();
+    let owner = state.entities.row(slot(&state, player)).uuid;
+    let (own, _) = tamed_cat(&mut state, [pos[0] + 2.0, pos[1], pos[2]], owner);
+    let (stranger, _) = tamed_cat(
+        &mut state,
+        [pos[0] - 2.0, pos[1], pos[2]],
+        uuid::Uuid::from_u128(0xfeed),
+    );
+    clear_touched(&mut state);
+    for tick in 0..200 {
+        state.tick = tick;
+        crate::sleep::run(&mut state);
+    }
+    let touched = state.entities.touched_ids();
+    assert!(
+        !touched.contains(&own) && !touched.contains(&stranger),
+        "idle cats written per tick"
+    );
+
+    let foot = BlockPos {
+        x: pos[0] as i32,
+        y: pos[1] as i32,
+        z: pos[2] as i32,
+    };
+    for (dx, part) in [(0, "foot"), (1, "head")] {
+        state.world.set_block(
+            foot.x + dx,
+            foot.y,
+            foot.z,
+            block(
+                &state,
+                "minecraft:red_bed",
+                &[("facing", "east"), ("part", part)],
+            ),
+        );
+    }
+    state.world.fold_overlay();
+    state.day_time = 13_000;
+    assert!(crate::sleep::use_bed(
+        &mut state,
+        player,
+        ConnectionId(1),
+        foot
+    ));
+    for _ in 0..10 {
+        crate::sleep::run(&mut state);
+    }
+    clear_touched(&mut state);
+    crate::sleep::wake(&mut state, player);
+    assert!(
+        !state.entities.touched_ids().contains(&stranger),
+        "a wake wrote a cat that belongs to someone else"
+    );
+}
+
+#[test]
+fn runtime_only_mob_state_is_not_part_of_the_journaled_image() {
+    let (mut state, _player, pos) = fixture();
+    let frog = spawn(&mut state, "frog", pos);
+    let frog_slot = slot(&state, frog);
+    let image = crate::journal::EntityStateImage::from_row(
+        state.entities.body(frog_slot),
+        state.entities.row(frog_slot),
+    );
+    let target = spawn(&mut state, "slime", [pos[0] + 1.0, pos[1], pos[2]]);
+    let row = state.entities.row_mut(frog_slot);
+    row.frog_prey = Some((target, [1.0, 2.0, 3.0]));
+    row.frog_tongue_ticks = 7;
+    row.cat_bed_ticks = 99;
+    assert!(
+        image.matches(
+            state.entities.body(frog_slot),
+            state.entities.row(frog_slot)
+        ),
+        "frog_prey, frog_tongue_ticks or cat_bed_ticks would write an EntityState WAL record"
+    );
+}
+
+#[test]
+fn rider_count_beyond_the_vehicle_seat_capacity_is_refused_by_the_image_reader() {
+    use mc_nbt::{ListTag, Tag, tag_type};
+    let (state, _player, _pos) = fixture();
+    let riders = |count: i32| {
+        Tag::List(ListTag {
+            element_type: tag_type::INT_ARRAY,
+            elements: (1..=count)
+                .map(|id| Tag::IntArray(vec![0, 0, 0, id]))
+                .collect(),
+        })
+    };
+    let record = |kind: &str, count: i32| mc_data::entity_nbt::VanillaEntity {
+        id: format!("minecraft:{kind}"),
+        extra_fields: vec![("solaris:Riders".into(), riders(count))],
+        ..Default::default()
+    };
+    let error = crate::journal::EntityStateImage::from_record(&state.registry, &record("cow", 2))
+        .unwrap_err();
+    assert!(error.to_string().contains("seat capacity 1"), "{error}");
+    assert!(
+        crate::journal::EntityStateImage::from_record(&state.registry, &record("cow", 1)).is_ok()
+    );
+    assert!(
+        crate::journal::EntityStateImage::from_record(&state.registry, &record("camel", 2)).is_ok()
+    );
+    assert!(
+        crate::journal::EntityStateImage::from_record(&state.registry, &record("camel", 4))
+            .is_err()
+    );
+    assert!(
+        crate::journal::EntityStateImage::from_record(&state.registry, &record("happy_ghast", 4))
+            .is_ok()
+    );
+}

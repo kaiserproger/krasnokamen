@@ -376,6 +376,18 @@ impl EntityStateImage {
             ..Default::default()
         };
         crate::mounts::persistence::from_fields(&mut image.entity_life, &record.extra_fields)?;
+        // The live image and WAL replay share one capacity bound, so a state
+        // accepted here (checkpoint load, /summon) can always be replayed.
+        let capacity = registry
+            .entity_type_id(&record.id)
+            .map_or(1, crate::mounts::seat_capacity);
+        if image.entity_life.mount.riders.len() > capacity {
+            return Err(CoreError::Storage(format!(
+                "solaris:Riders: {} riders exceed the seat capacity {capacity} of {}",
+                image.entity_life.mount.riders.len(),
+                record.id
+            )));
+        }
         crate::mounts::persistence::cargo_from_record(
             &mut image.entity_life.mount,
             &registry.items,

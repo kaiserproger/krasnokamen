@@ -977,9 +977,15 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         {
             continue;
         }
-        let cooldown = &mut state.entities.row_mut(slot).entity_life.mount.dash_cooldown;
-        *cooldown = cooldown.saturating_sub(1);
-        let cooldown = *cooldown;
+        // The cooldown is persisted: write only while it is running.
+        let cooldown = match state.entities.row(slot).entity_life.mount.dash_cooldown {
+            0 => 0,
+            running => {
+                let cooldown = running - 1;
+                state.entities.row_mut(slot).entity_life.mount.dash_cooldown = cooldown;
+                cooldown
+            }
+        };
         if cooldown < 50
             && state.entities.ground(slot)
             && state.entities.row(slot).appearance.extra.contains(&(

@@ -11,10 +11,10 @@ pub(crate) fn is_frog(type_id: u32) -> bool {
 }
 
 pub(crate) fn drive(row: &ColdRow) -> Option<([f64; 3], f64)> {
-    if let Some((_, target)) = row.entity_life.frog_prey {
+    if let Some((_, target)) = row.frog_prey {
         return Some((
             target,
-            if row.entity_life.frog_tongue_ticks > 0 {
+            if row.frog_tongue_ticks > 0 {
                 0.0
             } else {
                 f64::from(row.speed) * 2.0
@@ -130,12 +130,7 @@ fn hunt(state: &mut TickState, frog: crate::entities::EntitySlot) {
     use crate::boundary::EntityDataValue;
     let pos = state.entities.pos(frog);
     let id = state.entities.body(frog).id;
-    let previous = state
-        .entities
-        .row(frog)
-        .entity_life
-        .frog_prey
-        .map(|(id, _)| id);
+    let previous = state.entities.row(frog).frog_prey.map(|(id, _)| id);
     let prey = state
         .registry
         .blueprints
@@ -167,20 +162,18 @@ fn hunt(state: &mut TickState, frog: crate::entities::EntitySlot) {
         });
     let Some((distance, target, prey)) = prey else {
         let row = state.entities.row(frog);
-        if row.entity_life.frog_prey.is_none()
-            && row.entity_life.frog_tongue_ticks == 0
+        if row.frog_prey.is_none()
+            && row.frog_tongue_ticks == 0
             && row.appearance.pose != 9
-            && !row
-                .appearance
-                .extra
-                .iter()
-                .any(|(index, _)| *index == TONGUE_INDEX)
+            && !row.appearance.extra.iter().any(|(index, value)| {
+                *index == TONGUE_INDEX && *value != EntityDataValue::OptionalUnsignedInt(None)
+            })
         {
             return;
         }
         let row = state.entities.row_mut(frog);
-        row.entity_life.frog_prey = None;
-        row.entity_life.frog_tongue_ticks = 0;
+        row.frog_prey = None;
+        row.frog_tongue_ticks = 0;
         if row.appearance.pose == 9 {
             std::sync::Arc::make_mut(&mut row.appearance).pose = 0;
             state.appearance_changed.push(id);
@@ -194,19 +187,20 @@ fn hunt(state: &mut TickState, frog: crate::entities::EntitySlot) {
         return;
     };
     let target_pos = state.entities.pos(prey);
-    let row = state.entities.row_mut(frog);
+    // Runtime-only fields: written without marking the row for the journal.
+    let row = state.entities.row_mut_unmarked(frog);
     if previous != Some(target) {
-        row.entity_life.frog_tongue_ticks = 0;
+        row.frog_tongue_ticks = 0;
     }
-    let started = row.entity_life.frog_tongue_ticks > 0;
-    row.entity_life.frog_prey = Some((target, target_pos));
+    let started = row.frog_tongue_ticks > 0;
+    row.frog_prey = Some((target, target_pos));
     if !started && distance >= 1.75 * 1.75 {
         return;
     }
-    let row = state.entities.row_mut(frog);
-    row.entity_life.frog_tongue_ticks = row.entity_life.frog_tongue_ticks.saturating_add(1);
-    let ticks = row.entity_life.frog_tongue_ticks;
+    row.frog_tongue_ticks = row.frog_tongue_ticks.saturating_add(1);
+    let ticks = row.frog_tongue_ticks;
     if ticks == 1 {
+        let row = state.entities.row_mut(frog);
         std::sync::Arc::make_mut(&mut row.appearance).pose = 9;
         state.appearance_changed.push(id);
         crate::special_mobs::metadata(
@@ -272,7 +266,7 @@ fn hunt(state: &mut TickState, frog: crate::entities::EntitySlot) {
     }
     if ticks >= 12 {
         let row = state.entities.row_mut(frog);
-        row.entity_life.frog_tongue_ticks = 0;
+        row.frog_tongue_ticks = 0;
         std::sync::Arc::make_mut(&mut row.appearance).pose = 0;
         state.appearance_changed.push(id);
         crate::special_mobs::metadata(

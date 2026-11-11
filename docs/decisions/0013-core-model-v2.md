@@ -53,11 +53,13 @@ first live rider alone controls motion; a passenger's reverse link and the
 published passenger entity IDs are derived, never separate authorities.
 Removing one passenger preserves the other seats. Native images retain the
 list; offline animal NBT uses `solaris:Riders`, validated for duplicates and
-capacity before recovery. Only the camel (3, `Camel.canAddPassenger`) and happy
-ghast (4) seat more than
-one rider. The earlier scalar `solaris:Rider` NBT key and WAL `rider` field are
-refused outright, so an old image fails the load instead of silently unseating
-its rider.
+the vehicle type's seat capacity by the one image reader that checkpoint load,
+`/summon` and WAL replay share, so a state the live server accepts can always be
+replayed. Only the camel (3, `Camel.canAddPassenger`) and happy ghast (4) seat
+more than one rider. The earlier scalar `solaris:Rider` NBT key and WAL `rider`
+field are refused outright, so an old image fails the load instead of silently
+unseating its rider. Deploy this build after a clean stop: an unclean WAL tail
+written by an older build still carries `rider` and is refused at startup.
 
 ## Threads and backpressure
 

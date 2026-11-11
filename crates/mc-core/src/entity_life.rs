@@ -47,12 +47,6 @@ pub struct EntityLifeState {
     #[serde(skip)]
     pub frog_spawn_target: Option<[i32; 3]>,
     pub sniffer: Option<Box<crate::sniffer::Sniffer>>,
-    #[serde(skip)]
-    pub frog_prey: Option<(EntityId, [f64; 3])>,
-    #[serde(skip)]
-    pub frog_tongue_ticks: u8,
-    #[serde(skip)]
-    pub cat_bed_ticks: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
