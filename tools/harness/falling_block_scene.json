@@ -48,6 +48,9 @@
       "cmd": "fill 990 160 998 1010 185 998 minecraft:black_concrete"
     },
     {
+      "cmd": "fill 999 174 1006 1001 174 1008 minecraft:stone"
+    },
+    {
       "tp": [
         1000.5,
         175,
@@ -55,9 +58,6 @@
         180,
         -23
       ]
-    },
-    {
-      "cmd": "setblock 1000 174 1007 minecraft:stone"
     },
     {
       "cmd": "setblock 1000 177 1000 minecraft:stone"
