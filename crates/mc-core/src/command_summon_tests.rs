@@ -17,6 +17,26 @@ fn summon(kind: &str, nbt: &str) -> (TickState, EntityId) {
 }
 
 #[test]
+fn summon_faction_is_native_and_selector_visible() {
+    let (state, id) = summon("zombie", "{\"solaris:Faction\":65535}");
+    let slot = state.entities.slot_of(id).unwrap();
+    assert_eq!(state.entities.body(slot).faction, u16::MAX);
+    assert!(
+        state
+            .entities
+            .battle_slots()
+            .any(|candidate| candidate == slot)
+    );
+    let target =
+        crate::commands::target_of("@e[type=minecraft:zombie,nbt={\"solaris:Faction\":65535}]")
+            .unwrap();
+    assert_eq!(
+        crate::command_execution::resolve_target(&state, id, &target),
+        vec![id]
+    );
+}
+
+#[test]
 fn persistence_required_iron_golem_template_and_checkpoint_are_native() {
     let (state, id) = summon("iron_golem", "{NoAI:1b,PersistenceRequired:1b}");
     let slot = state.entities.slot_of(id).unwrap();

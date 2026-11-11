@@ -1,0 +1,651 @@
+use super::*;
+use rayon::prelude::*;
+
+fn unit(id: i32, faction: u16, x: f64, y: f64, z: f64) -> Unit {
+    Unit {
+        id: EntityId(id),
+        faction,
+        pos: [x, y, z],
+    }
+}
+
+fn oracle(units: &[Unit], actor: Unit, reach: f64) -> Option<EnemyTarget> {
+    units
+        .iter()
+        .filter(|other| enemies(actor.faction, other.faction))
+        .filter_map(|other| {
+            let d2: f64 = (0..3)
+                .map(|axis| (actor.pos[axis] - other.pos[axis]).powi(2))
+                .sum();
+            (d2 <= reach * reach).then_some((d2, *other))
+        })
+        .min_by(|(a, lhs), (b, rhs)| a.total_cmp(b).then(lhs.id.cmp(&rhs.id)))
+        .map(|(d2, other)| EnemyTarget {
+            id: other.id,
+            pos: other.pos,
+            distance: d2.sqrt(),
+        })
+}
+
+#[test]
+fn same_faction_and_neutral_never_target_each_other() {
+    let actor = unit(10, 1, -0.5, 64.0, -0.5);
+    let friend = unit(1, 1, -0.4, 64.0, -0.5);
+    let neutral = unit(2, 0, -0.5, 64.0, -0.4);
+    let enemy = unit(3, 2, -0.5, 64.0, 5.5);
+    let mut grid = TargetGrid::default();
+    grid.rebuild([actor, friend, neutral, enemy].into_iter());
+    let query = grid.nearest_enemy(actor, 6.0);
+    assert_eq!(query.target.unwrap().id, enemy.id);
+    assert_eq!(query.target.unwrap().distance, 6.0);
+    assert_eq!(query.examined, 1);
+    assert_eq!(grid.nearest_enemy(actor, 5.999).target, None);
+    assert_eq!(grid.nearest_enemy(neutral, 100.0).target, None);
+    grid.rebuild([actor, friend, neutral].into_iter());
+    assert_eq!(grid.nearest_enemy(actor, 100.0), Query::default());
+}
+
+#[test]
+fn nearest_enemy_matches_exhaustive_oracle_and_stable_id_ties() {
+    let actor = unit(100, 1, -4.0, 64.0, 0.0);
+    let mut units = vec![
+        actor,
+        unit(9, 2, -3.0, 64.0, 0.0),
+        unit(2, 3, -5.0, 64.0, 0.0),
+    ];
+    let mut seed = 0xb177_1e_u64;
+    let mut next = || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    for id in 101..601 {
+        let faction = (next() % 4) as u16;
+        let x = (next() % 200) as f64 * 0.5 - 50.0;
+        let y = (next() % 30) as f64 * 0.5 + 60.0;
+        let z = (next() % 200) as f64 * 0.5 - 50.0;
+        units.push(unit(id, faction, x, y, z));
+    }
+    let mut grid = TargetGrid::default();
+    for reverse in [false, true] {
+        if reverse {
+            units.reverse();
+        }
+        grid.rebuild(units.iter().copied());
+        assert_eq!(
+            grid.nearest_enemy(actor, 1.0).target.unwrap().id,
+            EntityId(2)
+        );
+        for actor in &units {
+            for reach in [0.0, 1.0, 6.0, 15.0] {
+                assert_eq!(
+                    grid.nearest_enemy(*actor, reach).target,
+                    oracle(&units, *actor, reach)
+                );
+            }
+        }
+    }
+    // A nearby horizontal point on another floor is outside the 3D radius.
+    grid.rebuild([unit(1, 2, -4.0, 71.0, 0.0)].into_iter());
+    assert!(grid.nearest_enemy(actor, 6.0).target.is_none());
+}
+
+#[test]
+fn stable_retarget_slices_visit_every_unit_once_in_any_ten_ticks() {
+    for start in [0, 7, 10_000, u64::MAX - 10] {
+        for id in -100..20_000 {
+            let ticks: Vec<_> = (start..start + 10)
+                .filter(|tick| retarget_due(EntityId(id), *tick))
+                .collect();
+            assert_eq!(ticks.len(), 1, "id {id}, start {start}");
+        }
+    }
+}
+
+#[test]
+fn target_results_are_identical_on_one_two_four_threads() {
+    let units: Vec<_> = (0..1024)
+        .map(|id| {
+            unit(
+                id,
+                (id % 3 + 1) as u16,
+                f64::from(id % 32) - 16.5,
+                64.0,
+                f64::from(id / 32),
+            )
+        })
+        .collect();
+    let mut grid = TargetGrid::default();
+    grid.rebuild(units.iter().copied());
+    let expected: Vec<_> = units
+        .iter()
+        .map(|unit| grid.nearest_enemy(*unit, 6.0))
+        .collect();
+    for threads in [1, 2, 4] {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
+        let actual: Vec<_> = pool.install(|| {
+            units
+                .par_iter()
+                .map(|unit| grid.nearest_enemy(*unit, 6.0))
+                .collect()
+        });
+        assert_eq!(actual, expected, "{threads} workers");
+    }
+}
+
+fn army_units(gap: f64) -> Vec<Unit> {
+    (0..20_000)
+        .map(|id| {
+            let team = id / 10_000;
+            let local = id % 10_000;
+            let x = f64::from(local % 100) + if team == 0 { -100.0 } else { gap };
+            unit(id + 1, (team + 1) as u16, x, 64.0, f64::from(local / 100))
+        })
+        .collect()
+}
+
+/// Work, not wall time: deterministic counters survive CPU contention. Run with
+/// --nocapture and retain the log as the 20k micro receipt.
+#[test]
+fn twenty_thousand_units_record_sliced_query_work() {
+    for (scene, gap) in [("contact", 0.0), ("approach", 40.0)] {
+        let units = army_units(gap);
+        let mut grid = TargetGrid::default();
+        grid.rebuild(units.iter().copied());
+        for reach in [6.0, 15.0, 220.0] {
+            let mut total = 0;
+            for tick in 0..RETARGET_TICKS {
+                let mut work = Work::default();
+                let mut acquired = 0;
+                for actor in units.iter().filter(|actor| retarget_due(actor.id, tick)) {
+                    work.retargeted += 1;
+                    let query = grid.nearest_enemy(*actor, reach);
+                    work.examined += query.examined;
+                    acquired += u64::from(query.target.is_some());
+                }
+                assert_eq!(work.retargeted, 2_000);
+                assert!(
+                    work.examined < 20_000_000,
+                    "search degenerated to a full enemy scan: {work:?}"
+                );
+                if scene == "approach" && reach < gap {
+                    assert_eq!(acquired, 0);
+                }
+                eprintln!(
+                    "battle20k scene={scene} reach={reach} tick={tick} retargeted={} examined={} acquired={acquired}",
+                    work.retargeted, work.examined
+                );
+                total += work.examined;
+            }
+            let unsliced: u64 = units
+                .iter()
+                .map(|actor| grid.nearest_enemy(*actor, reach).examined)
+                .sum();
+            assert_eq!(
+                total, unsliced,
+                "each decision executes exactly once in ten ticks"
+            );
+        }
+    }
+}
+
+fn fixture() -> crate::tick::TickState {
+    let registry = std::sync::Arc::new(CoreRegistry::load(None).unwrap());
+    let mut world = crate::horde_bench::flat_world(&registry);
+    let chunks = [crate::boundary::ChunkPos { x: 0, z: 0 }];
+    world.ensure_blocking(&chunks.into_iter().map(|chunk| (chunk, 0)).collect());
+    world.set_active_chunks(chunks.into_iter().collect(), 1);
+    crate::tick::TickState::new(registry, world, 2, 512)
+}
+
+fn spawn(state: &mut crate::tick::TickState, faction: u16, name: &str, pos: [f64; 3]) -> EntityId {
+    let type_id = state.registry.entity_type_id(name).unwrap();
+    let id = state.spawn_mob(type_id, pos, 20.0);
+    state
+        .entities
+        .set_faction(state.entities.slot_of(id).unwrap(), faction);
+    id
+}
+
+#[test]
+fn native_target_update_is_sliced_and_rechecks_dead_factions_and_range() {
+    let mut state = fixture();
+    let actor = spawn(&mut state, 1, "minecraft:zombie", [4.0, 100.0, 4.0]);
+    let friend = spawn(&mut state, 1, "minecraft:zombie", [4.5, 100.0, 4.0]);
+    let enemy = spawn(&mut state, 2, "minecraft:zombie", [7.0, 100.0, 4.0]);
+    let slot = state.entities.slot_of(actor).unwrap();
+    let enemy_slot = state.entities.slot_of(enemy).unwrap();
+    let mut battle = BattleState::default();
+    let update = |state: &crate::tick::TickState, battle: &mut BattleState, tick| {
+        let frame = Frame {
+            entities: &state.entities,
+            registry: &state.registry,
+            world: &state.world,
+            tick,
+        };
+        battle.columns.prepare(&frame, &battle.formation);
+        targeting::update(&frame, battle);
+    };
+    let due = i64::from(actor.0).rem_euclid(10) as u64;
+    update(&state, &mut battle, due + 1);
+    assert!(battle.columns.target(slot).is_none());
+    update(&state, &mut battle, due);
+    assert_eq!(battle.columns.target(slot).unwrap().id, enemy);
+    assert_ne!(battle.columns.target(slot).unwrap().id, friend);
+    state.entities.set_pos(enemy_slot, [8.0, 100.0, 4.0]);
+    update(&state, &mut battle, due + 1);
+    assert_eq!(battle.columns.target(slot).unwrap().pos, [8.0, 100.0, 4.0]);
+    state.entities.set_faction(enemy_slot, 1);
+    update(&state, &mut battle, due + 2);
+    assert!(battle.columns.target(slot).is_none());
+    state.entities.set_faction(enemy_slot, 2);
+    update(&state, &mut battle, due + 3);
+    assert!(
+        battle.columns.target(slot).is_none(),
+        "no off-slice reacquisition"
+    );
+    update(&state, &mut battle, due + 10);
+    assert_eq!(battle.columns.target(slot).unwrap().id, enemy);
+    state.entities.row_mut(enemy_slot).health = 0.0;
+    update(&state, &mut battle, due + 11);
+    assert!(battle.columns.target(slot).is_none());
+    state.entities.row_mut(enemy_slot).health = 20.0;
+    state.entities.set_pos(enemy_slot, [11.0, 100.0, 4.0]);
+    update(&state, &mut battle, due + 20);
+    assert!(
+        battle.columns.target(slot).is_none(),
+        "no 35-block follow-range targeting"
+    );
+    assert!(retained_enemy(&state.entities, slot, enemy, 6.0).is_none());
+}
+
+#[test]
+fn archers_target_with_attack_range_not_melee_or_follow_range() {
+    let mut state = fixture();
+    let archer = spawn(&mut state, 1, "minecraft:skeleton", [1.0, 100.0, 1.0]);
+    let enemy = spawn(&mut state, 2, "minecraft:zombie", [11.0, 100.0, 1.0]);
+    let slot = state.entities.slot_of(archer).unwrap();
+    state.entities.row_mut(slot).attack_reach = 15.0;
+    let mut battle = BattleState::default();
+    let frame = Frame {
+        entities: &state.entities,
+        registry: &state.registry,
+        world: &state.world,
+        tick: i64::from(archer.0).rem_euclid(10) as u64,
+    };
+    battle.columns.prepare(&frame, &battle.formation);
+    targeting::update(&frame, &mut battle);
+    assert_eq!(battle.columns.target(slot).unwrap().id, enemy);
+    assert_eq!(battle.columns.target(slot).unwrap().distance, 10.0);
+}
+
+#[test]
+fn faction_membership_survives_compaction_transfer_and_zero_reset() {
+    let mut state = fixture();
+    let first = spawn(&mut state, 0, "minecraft:cow", [1.0, 100.0, 1.0]);
+    let last = spawn(&mut state, 7, "minecraft:cow", [2.0, 100.0, 1.0]);
+    state
+        .entities
+        .remove(state.entities.slot_of(first).unwrap());
+    let moved = state.entities.slot_of(last).unwrap();
+    assert_eq!(state.entities.body(moved).faction, 7);
+    assert_eq!(
+        state.entities.battle_slots().collect::<Vec<_>>(),
+        vec![moved]
+    );
+    let mut destination = EntityStore::default();
+    let moved = state
+        .entities
+        .transfer_to(moved, &mut destination, [4.0, 100.0, 4.0], [0.0; 2]);
+    assert!(state.entities.battle_slots().next().is_none());
+    assert_eq!(destination.body(moved).faction, 7);
+    assert_eq!(destination.battle_slots().collect::<Vec<_>>(), vec![moved]);
+    destination.set_faction(moved, 0);
+    assert!(destination.battle_slots().next().is_none());
+}
+
+#[test]
+fn faction_fields_reject_invalid_native_and_json_values() {
+    use mc_nbt::Tag;
+    let state = fixture();
+    for tag in [
+        Tag::Int(-1),
+        Tag::Int(65536),
+        Tag::Short(1),
+        Tag::String("2".into()),
+    ] {
+        let record = mc_data::entity_nbt::VanillaEntity {
+            id: "minecraft:zombie".into(),
+            extra_fields: vec![("solaris:Faction".into(), tag)],
+            ..Default::default()
+        };
+        assert!(crate::journal::EntityStateImage::from_record(&state.registry, &record).is_err());
+    }
+    for value in [-1, 65536] {
+        assert!(
+            serde_json::from_str::<crate::journal::EntityStateImage>(&format!(
+                "{{\"faction\":{value}}}"
+            ))
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn paused_battle_keeps_its_clock_and_clears_motion() {
+    let mut state = fixture();
+    state.hostile.battle.elapsed_ticks = 41;
+    state
+        .hostile
+        .battle
+        .columns
+        .drive_by_slot
+        .push([1.0, 0.0, 0.0]);
+    assert!(step(&mut state).is_empty());
+    assert_eq!(state.hostile.battle.elapsed_ticks, 41);
+    assert!(
+        state
+            .hostile
+            .battle
+            .columns
+            .drive_by_slot
+            .iter()
+            .all(|drive| *drive == [0.0; 3])
+    );
+    state.hostile.battle.running = true;
+    assert!(step(&mut state).is_empty());
+    assert_eq!(state.hostile.battle.elapsed_ticks, 42);
+    state.hostile.battle.running = false;
+    assert!(step(&mut state).is_empty());
+    assert_eq!(state.hostile.battle.elapsed_ticks, 42);
+}
+
+#[test]
+fn per_tick_unit_counters_report_native_liveness_by_faction_even_when_paused() {
+    let mut state = fixture();
+    let friendly = spawn(&mut state, 1, "minecraft:zombie", [1.0, 100.0, 1.0]);
+    let enemy = spawn(&mut state, 2, "minecraft:zombie", [2.0, 100.0, 1.0]);
+    let dead = spawn(&mut state, 2, "minecraft:zombie", [3.0, 100.0, 1.0]);
+    spawn(&mut state, 0, "minecraft:zombie", [4.0, 100.0, 1.0]);
+    state
+        .entities
+        .body_mut(state.entities.slot_of(dead).unwrap())
+        .alive = false;
+    state.tick = 9;
+    step(&mut state);
+    let counts = unit_counters(&state.hostile);
+    assert_eq!(counts.tick, 9);
+    assert_eq!(counts.units, 3);
+    assert_eq!(
+        counts.alive_per_faction,
+        vec![
+            FactionAlive {
+                faction: 1,
+                alive: 1
+            },
+            FactionAlive {
+                faction: 2,
+                alive: 1
+            },
+        ]
+    );
+    state
+        .entities
+        .set_faction(state.entities.slot_of(friendly).unwrap(), 0);
+    state
+        .entities
+        .row_mut(state.entities.slot_of(enemy).unwrap())
+        .health = 0.0;
+    state.tick = 10;
+    step(&mut state);
+    let counts = unit_counters(&state.hostile);
+    assert_eq!(counts.tick, 10);
+    assert_eq!(counts.units, 2);
+    assert_eq!(
+        counts.alive_per_faction,
+        vec![FactionAlive {
+            faction: 2,
+            alive: 0
+        }]
+    );
+}
+
+#[test]
+fn published_population_recounts_post_merge_state_and_keeps_zero_alive_factions() {
+    let mut state = fixture();
+    let actor = spawn(&mut state, 1, "minecraft:zombie", [1.0, 100.0, 1.0]);
+    let enemy = spawn(&mut state, 2, "minecraft:zombie", [2.0, 100.0, 1.0]);
+    step(&mut state);
+    state
+        .entities
+        .row_mut(state.entities.slot_of(enemy).unwrap())
+        .health = 0.0;
+    let counts = publication_counts(&mut state).unwrap();
+    assert_eq!(counts.units, 2);
+    assert_eq!(counts.alive, vec![(1, 1), (2, 0)]);
+    assert_eq!(unit_counters(&state.hostile).alive_per_faction[1].alive, 0);
+    state
+        .entities
+        .set_faction(state.entities.slot_of(actor).unwrap(), 0);
+    state
+        .entities
+        .set_faction(state.entities.slot_of(enemy).unwrap(), 0);
+    assert!(publication_counts(&mut state).is_none());
+}
+
+#[test]
+fn dense_slot_projection_survives_compaction_and_classification_changes() {
+    let mut state = fixture();
+    let removed = spawn(&mut state, 1, "minecraft:zombie", [1.0, 100.0, 1.0]);
+    let actor = spawn(&mut state, 2, "minecraft:zombie", [2.0, 100.0, 1.0]);
+    state
+        .entities
+        .remove(state.entities.slot_of(removed).unwrap());
+    let slot = state.entities.slot_of(actor).unwrap();
+    let bow = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:bow").unwrap())
+        .unwrap();
+    let mut battle = BattleState::default();
+    {
+        let frame = Frame {
+            entities: &state.entities,
+            registry: &state.registry,
+            world: &state.world,
+            tick: 0,
+        };
+        battle.columns.prepare(&frame, &battle.formation);
+    }
+    let bi = battle.columns.index(slot).unwrap();
+    assert_eq!(battle.columns.ids[bi], actor);
+    assert!(!battle.columns.ranged[bi]);
+    battle.columns.drive[bi] = [2.0, 0.0, 1.0];
+    battle.columns.project();
+    assert_eq!(
+        battle.columns.drive_by_slot[slot.0 as usize],
+        [2.0, 0.0, 1.0]
+    );
+    std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).equipment[0] =
+        Some(mc_data::ItemStack::new(bow, 1));
+    let frame = Frame {
+        entities: &state.entities,
+        registry: &state.registry,
+        world: &state.world,
+        tick: 1,
+    };
+    battle.columns.prepare(&frame, &battle.formation);
+    assert!(battle.columns.ranged[bi]);
+    assert_eq!(battle.columns.drive_by_slot[slot.0 as usize], [0.0; 3]);
+}
+
+#[test]
+fn twenty_thousand_registered_archers_use_one_regiment_candidate_per_decision() {
+    let mut state = fixture();
+    let mut battle = BattleState::default();
+    for side in 1..=2_u16 {
+        let pos = [if side == 1 { 4.0 } else { 12.0 }, 100.0, 4.0];
+        for regiment in 0..10_u32 {
+            let ids: Vec<_> = (0..1000)
+                .map(|_| spawn(&mut state, side, "minecraft:skeleton", pos))
+                .collect();
+            for id in &ids {
+                state
+                    .entities
+                    .row_mut(state.entities.slot_of(*id).unwrap())
+                    .attack_reach = 220.0;
+            }
+            battle
+                .formation
+                .add_regiment(
+                    formation::RegimentSpec {
+                        id: u32::from(side) * 100 + regiment,
+                        faction: side,
+                        origin: pos,
+                        facing: [if side == 1 { 1.0 } else { -1.0 }, 0.0],
+                        files: 20,
+                        frontage: 1.0,
+                        order: formation::Order::Hold,
+                    },
+                    &ids,
+                )
+                .unwrap();
+        }
+    }
+    let mut examined = 0;
+    for tick in 0..10 {
+        let frame = Frame {
+            entities: &state.entities,
+            registry: &state.registry,
+            world: &state.world,
+            tick,
+        };
+        formation::update(&frame, &mut battle);
+        battle.columns.prepare(&frame, &battle.formation);
+        targeting::update(&frame, &mut battle);
+        assert_eq!(battle.work.retargeted, 2000);
+        assert!(battle.work.examined <= battle.work.retargeted);
+        assert!(battle.work.examined < 10_000);
+        examined += battle.work.examined;
+        eprintln!(
+            "battle20k registered_archers tick={tick} retargeted={} examined={}",
+            battle.work.retargeted, battle.work.examined
+        );
+        for (bi, target) in battle.columns.targets.iter().enumerate() {
+            if let Some(target) = target {
+                let slot = state.entities.slot_of(target.id).unwrap();
+                assert!(enemies(
+                    battle.columns.factions[bi],
+                    state.entities.body(slot).faction
+                ));
+                assert!(target.distance <= 220.0);
+            }
+        }
+    }
+    assert!(
+        examined > 0,
+        "live enemy regiments must supply actual candidates"
+    );
+}
+
+#[test]
+fn tick_metrics_publish_staged_battle_counts_and_clear_them_after_reset() {
+    let mut state = fixture();
+    let first = spawn(&mut state, 1, "minecraft:cow", [1.0, 100.0, 1.0]);
+    let second = spawn(&mut state, 2, "minecraft:cow", [2.0, 100.0, 1.0]);
+    for id in [first, second] {
+        let row = state.entities.row_mut(state.entities.slot_of(id).unwrap());
+        row.persistent = true;
+        row.controls.no_ai = true;
+    }
+    assert!(!state.hostile.battle.running);
+    let (output, _, times) = crate::tick::run_tick(&mut state, &[]);
+    let counts = times
+        .battle
+        .as_ref()
+        .expect("staged rows are observable before start");
+    assert_eq!(counts.units, 2);
+    assert_eq!(counts.alive, vec![(1, 1), (2, 1)]);
+    assert_eq!(unit_counters(&state.hostile).tick, output.tick);
+    for id in [first, second] {
+        state
+            .entities
+            .set_faction(state.entities.slot_of(id).unwrap(), 0);
+    }
+    let (_, _, times) = crate::tick::run_tick(&mut state, &[]);
+    assert!(times.battle.is_none());
+}
+
+/// In-process native tick diagnostic, not a paced/networked TPS or checkpoint
+/// gate. Build in the ordinary lane; run its frozen release test binary in -p
+/// with MC_CORE_PHASE_LOG=1 and retain host load alongside the receipt.
+#[test]
+#[ignore = "release battle phase diagnostic; run in the perf lane"]
+fn battle_phase_micro() {
+    assert!(std::env::var_os("MC_CORE_PHASE_LOG").is_some());
+    let side =
+        std::env::var("BATTLE_UNITS_PER_SIDE").map_or(10_000, |value| value.parse().unwrap());
+    let ticks =
+        std::env::var("BATTLE_MICRO_TICKS").map_or(200, |value| value.parse::<usize>().unwrap());
+    assert!(ticks > 0);
+    let mut state = fixture();
+    let mut changes = crate::boundary::ChangeSet::default();
+    let origin = [8.5, 64.0, 8.5];
+    staging::execute(
+        &mut state,
+        &mut changes,
+        origin,
+        &staging::BattleCommand::Setup {
+            seed: 42,
+            count: side,
+        },
+    )
+    .unwrap();
+    let desired = state.desired_chunks();
+    state.world.ensure_blocking(&desired);
+    state.refresh_active_chunks(state.tick);
+    for _ in 0..8 {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    for running in [false, true] {
+        if running {
+            staging::execute(
+                &mut state,
+                &mut changes,
+                origin,
+                &staging::BattleCommand::Start,
+            )
+            .unwrap();
+        }
+        let mut samples = Vec::with_capacity(ticks);
+        for _ in 0..ticks {
+            crate::tick::run_tick(&mut state, &[]);
+            samples.push(state.hostile.battle.timings);
+        }
+        let percentile = |pick: fn(Timings) -> u64, percentile: usize| {
+            let mut values: Vec<_> = samples.iter().copied().map(pick).collect();
+            values.sort_unstable();
+            values[((values.len() - 1) * percentile) / 100]
+        };
+        eprintln!(
+            "BATTLE_MICRO side={side} running={running} ticks={ticks} units={} total_us_p50={} total_us_p95={} total_us_p99={} counters_us_p95={} formation_us_p95={} columns_us_p95={} targets_us_p95={} steering_us_p95={} combat_us_p95={} morale_us_p95={} projection_us_p95={} emit_us_p95={}",
+            unit_counters(&state.hostile).units,
+            percentile(|t| t.total_us, 50),
+            percentile(|t| t.total_us, 95),
+            percentile(|t| t.total_us, 99),
+            percentile(|t| t.counters_us, 95),
+            percentile(|t| t.formation_us, 95),
+            percentile(|t| t.columns_us, 95),
+            percentile(|t| t.targeting_us, 95),
+            percentile(|t| t.steering_us, 95),
+            percentile(|t| t.combat_us, 95),
+            percentile(|t| t.morale_us, 95),
+            percentile(|t| t.projection_us, 95),
+            percentile(|t| t.emit_us, 95),
+        );
+    }
+}

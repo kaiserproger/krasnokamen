@@ -116,6 +116,40 @@ Future simultaneously ready systems would need separate ordered output lanes;
 letting completion order allocate sequences is forbidden even if writes do not
 conflict. Floating-point sums cannot become unordered parallel reductions.
 
+### Battle preparation barrier (2026-11-11)
+
+Faction battle preparation is ordered owner work before EntityStep admission,
+not another independently scheduled graph node. Its frozen `Frame` feeds
+formation update, dense-column preparation, target pairing, steering, combat
+(including archery/cavalry), morale, then native-slot drive projection.
+The formation roster supplies the stable battle-index prefix; unregistered
+faction bodies and horses occupy a derived tail. Targets, classification and
+drive share this index. Slot caches are refreshed before consumers; native
+compaction/removal never gives a cached row authority over another identity.
+
+Workers read slot-indexed drive/look arrays, not ID hash maps. A battle row
+with zero thrust may use the existing rest proof only while grounded, motionless
+and unaffected by impulse/hurt/effects or changed geometry. Moving rows still use
+ordinary block collision, ordered movement writeback and native intent merge.
+No position writer or second physics path is introduced.
+
+Melee targeting retains exact nearest-enemy queries at six blocks. Registered
+archers select a live member of the cached nearest enemy regiment in constant
+work, validating allegiance and actual range before retaining it. Standalone
+native faction units, which have no regiment, use the local spatial oracle.
+Both policies stagger decisions by stable ID over ten ticks; retained targets
+are checked every tick. All output lanes retain their deterministic order.
+Sub-step timers are exposed only with `MC_CORE_PHASE_LOG`; concurrency is not
+enabled merely by introducing columns. A measured kernel exceeding 5 ms is the
+threshold for evaluating indexed parallel sub-steps on the existing worker pool.
+
+Population counters use the same sparse native faction membership owner.
+The hook samples pre-motion; publication refreshes the sample after merge before
+creating immutable `TickTimes.battle`. The extra observer pass is part of tick
+CPU cost, not WAL or checkpoint work. Faction remains native persisted state;
+all battle columns, targets, clocks and counters are restart-local.
+
+
 ## One or two cores, and scaling up
 
 One core runs the row kernel directly; no Rayon splitting/queueing is needed for

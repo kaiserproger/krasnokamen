@@ -15,6 +15,18 @@ use serde::Deserialize;
 const RETAINED: &str = "solaris:ProjectileRuntime";
 
 pub(crate) fn validate_state(state: &ProjectileState) -> Result<(), &'static str> {
+    if state.ground_lifetime == 0 || state.ground_lifetime > super::ARROW_GROUND_LIFETIME {
+        return Err("ground_lifetime: expected 1..=1201");
+    }
+    if state.grounded_at_age.is_some()
+        && (!state.stuck
+            || !matches!(
+                state.kind,
+                ProjectileKind::Arrow | ProjectileKind::SpectralArrow
+            ))
+    {
+        return Err("grounded_at_age: expected grounded arrow");
+    }
     if !state.damage.is_finite() || state.damage < 0.0 {
         return Err("damage: expected finite nonnegative number");
     }
@@ -234,7 +246,13 @@ fn default_stack(kind: ProjectileKind, items: &ItemRegistry) -> ItemStack {
 
 /// Full retained state plus the exact vanilla projection. `Item` is a shared
 /// entity field; checkpoint callers move that one field into VanillaEntity.item.
-pub(crate) fn to_fields(state: &ProjectileState, items: &ItemRegistry) -> Vec<(String, Tag)> {
+/// Grounded arrows project effective age to vanilla `life`; their retained anchor
+/// stays paired with EntityStateImage's `solaris:LifetimeAge` for native replay.
+pub(crate) fn to_fields(
+    state: &ProjectileState,
+    items: &ItemRegistry,
+    entity_age: u32,
+) -> Vec<(String, Tag)> {
     validate_state(state).expect("live projectile persistence invariants");
     let mut fields = vec![(
         RETAINED.into(),
@@ -274,7 +292,7 @@ pub(crate) fn to_fields(state: &ProjectileState, items: &ItemRegistry) -> Vec<(S
         fields.extend([
             (
                 "life".into(),
-                Tag::Short(state.age.min(i16::MAX as u32) as i16),
+                Tag::Short(state.ground_age(entity_age).min(i16::MAX as u32) as i16),
             ),
             ("inGround".into(), Tag::Byte(i8::from(state.stuck))),
             ("pickup".into(), Tag::Byte(i8::from(state.pickup))),
