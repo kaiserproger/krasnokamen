@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import tempfile
 import unittest
 from pathlib import Path
@@ -177,6 +178,8 @@ class NativeV2ProbeTests(unittest.TestCase):
                 "native-v2-cursor-close", "native-v2-banner-placement",
                 "native-v2-snow-golem-shear", "native-v2-destroyed-chest-race",
                 "native-v2-duplicate-login", "native-v2-corrupt-block-entities",
+                "native-v2-shift-double-click", "native-v2-shift-components",
+                "native-v2-shift-chest-correction",
                 "native-v2-corrupt-chunk-near-camera", "native-v2-chest-drag-disconnect") else "tcp")
             self.assertEqual(entry.evidence, expected)
 
@@ -299,8 +302,11 @@ class NativeV2ProbeTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            with socket.socket() as listener:
+                listener.bind(("127.0.0.1", 0))
+                mcp_port = listener.getsockname()[1]
             args = dict(game_dir=root / "game", log_path=root / "client.log",
-                        token="unit-test-only", mcp_port=12345,
+                        token="unit-test-only", mcp_port=mcp_port,
                         username="HarnessUnit", display=":99")
             with self.assertRaisesRegex(ValueError, "platform"):
                 runtime.start_client(**args, platform="invalid")
