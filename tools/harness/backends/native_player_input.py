@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ctypes as c
 import time
+import uuid
 
 from . import native_client
 from .menu_observer import holds, observe_menu
@@ -278,6 +279,26 @@ def sand(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     falling = steps.call("minecraft_wait_for_visible_entity", {
         "entity_type": "minecraft:falling_block", "radius": 64, "timeout_seconds": steps.remaining()})
     steps.report["falling_spawn"] = falling
+    # A frozen world holds the block between steps (vanilla TickRateManager.isEntityFrozen).
+    # Each server Pos read is sent only after the previous reply and a chat marker behind
+    # it reached the client, so a later server tick answers it. The spawn may arrive before
+    # `tick step 3` is spent; a held block then stops changing, a dropping one never does.
+    data, reads, prior = "has the following entity data: ", [], None
+    for index in range(8):
+        steps.fixture("data get entity @e[type=minecraft:falling_block,limit=1] Pos")
+        marker = f"sand hold {index} {uuid.uuid4().hex}"
+        steps.call("minecraft_send_chat", {"message": marker, "command": False})
+        chat = steps.wait(lambda s, marker=marker: any(marker in line for line in s["recent_chat"]),
+                          f"sand_hold_read_{index}")["recent_chat"]
+        end = next(i for i, line in enumerate(chat) if marker in line)
+        start = next((i + 1 for i, line in enumerate(chat[:end]) if prior is not None and prior in line), 0)
+        reads.append(next((line.split(data, 1)[1] for line in reversed(chat[start:end]) if data in line), None))
+        prior = marker
+        if reads[-1] is not None and reads[-2:] == [reads[-1]] * 2:
+            break
+    steps.report["falling_server_pos"] = reads
+    steps.check("sand_server_holds_frozen_block",
+                len(reads) > 1 and reads[-1] is not None and reads[-1] == reads[-2])
     _aim(steps, falling)
     def sample() -> dict:
         rows = steps.call("minecraft_list_entities", {

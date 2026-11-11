@@ -437,7 +437,7 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-v2-input-sand", requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_player_input.py"),
         fixture="sand 30 blocks above a private obsidian pad; stepped at one tick per second, then running world",
-        proves="falling entity predicts vanilla gravity between position updates, source clears, sand lands; retained airborne/descent/landing frames",
+        proves="frozen server holds the falling block between steps; falling entity predicts vanilla gravity between position updates, source clears, sand lands; retained airborne/descent/landing frames",
         limits="frames require visual review; not Windows/VNC transport",
     ),
     "native-v2-input-menus": _entry(

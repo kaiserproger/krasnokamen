@@ -1381,7 +1381,7 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "Negative controls of P1 and QA5-SETBLOCK-SAND (docs/bugs/promotions/P1.json, QA5-SETBLOCK-SAND.json): with the crates/mc-core/src/falling.rs frozen hold reversed, the cargo ref went red and harness:entities:native-v2-input-sand stayed green. tools/harness/backends/native_player_input.py sand() checks client prediction only."
-regression = []
+regression = ["harness:entities:native-v2-input-sand"]
 failing_first = "reported"
 
 [[bug]]
