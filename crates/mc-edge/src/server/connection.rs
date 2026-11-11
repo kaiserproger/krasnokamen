@@ -887,49 +887,10 @@ pub(super) async fn play_writer(
                 }
                 let rtt = i32::try_from(sent_at.elapsed().as_millis()).unwrap_or(i32::MAX);
                 latency = smooth_latency(latency, rtt);
-                let update = mc_protocol::packets::play::PlayerInfoUpdate {
-                    actions: mc_protocol::packets::play::PlayerInfoActions::UPDATE_LATENCY,
-                    entries: vec![mc_protocol::packets::play::PlayerInfoEntry {
-                        profile_id,
-                        name: String::new(),
-                        properties: Vec::new(),
-                        listed: false,
-                        latency,
-                        game_mode: 0,
-                        list_order: 0,
-                        show_hat: false,
-                    }],
-                };
-                if let Err(error) = writer.send_packet(&update).await {
-                    warn!(%error, connection = id.0, "latency update write failed");
-                    return ("latency-write-failed", None);
-                }
-                let mut body = Vec::new();
-                if let Err(error) = update.encode(&mut body) {
-                    warn!(%error, connection = id.0, "latency update encode failed");
-                    return ("latency-encode-failed", None);
-                }
-                let mut frame = bytes::BytesMut::new();
-                if let Err(error) = mc_protocol::frame::append_frame(
-                    &mut frame,
-                    mc_protocol::packets::play::PlayerInfoUpdate::ID,
-                    &body,
-                    mc_protocol::frame::Compression::Threshold(256),
-                ) {
-                    warn!(%error, connection = id.0, "latency frame encode failed");
-                    return ("latency-encode-failed", None);
-                }
-                let frame = frame.freeze();
-                let recipients: Vec<_> = connections.inner.lock().handles.iter()
-                    .filter(|(other, _)| **other != id)
-                    .map(|(other, handles)| (*other, handles.reliable_tx.clone()))
-                    .collect();
-                for (other, sender) in recipients {
-                    if sender.try_send(frame.clone()).is_err() {
-                        connections.remove(other);
-                        net_counters.reliable_drops.fetch_add(1, Ordering::Relaxed);
-                    }
-                }
+                // Vanilla does not broadcast per keepalive reply: PlayerList
+                // sends one UPDATE_LATENCY listing every player per 601 ticks.
+                // Record here; the pump broadcasts (pump.rs `broadcast_latencies`).
+                connections.set_latency(id, profile_id, latency);
                 pending = None;
                 continue;
             }

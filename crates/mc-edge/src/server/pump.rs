@@ -6,6 +6,11 @@ use mc_core::boundary::EntityId;
 
 const COREPERF_COLD_PAIR_LIMIT: usize = 1_000_000;
 
+/// Vanilla 26.3 `PlayerList.tick()` (javap) increments `sendAllPlayerInfoIn`
+/// and, once it exceeds 600, broadcasts one `UPDATE_LATENCY` player-info packet
+/// listing every player and resets it to 0: one packet per 601 ticks.
+pub(super) const LATENCY_BROADCAST_INTERVAL_TICKS: u64 = 601;
+
 fn bounded_tracked_union(
     pairs: usize,
     ids: impl Iterator<Item = EntityId>,
@@ -46,6 +51,9 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         // resync, and recompute forever without ever routing. The cache
         // makes re-plans O(1) per chunk; block changes evict their chunk.
         let mut chunk_cache = crate::plan::ChunkPacketCache::with_anti_xray(anti_xray);
+        // Latest routed global roster; seeds fresh viewers' player profiles
+        // so a first routed Roster never mass-removes tracked entities.
+        let mut latest_roster: Arc<[mc_core::dimensions::RosterPlayer]> = Arc::from(Vec::new());
         let coreperf = std::env::var_os("SOLARIS_COREPERF_REGIONS").is_some();
         loop {
             let out = match rx.recv().await {
@@ -67,7 +75,13 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                     // Drain terminal reliable disconnects before closing, both
                     // for graceful shutdown and for an authoritative failure.
                     let (mut connections, _) = server.connections.routing_snapshot();
-                    route_outbox(&server, &mut viewers, &mut connections, None);
+                    route_outbox(
+                        &server,
+                        &mut viewers,
+                        &mut connections,
+                        None,
+                        &mut latest_roster,
+                    );
                     if server.hub.shutdown_requested() {
                         tracing::info!(
                             connections = connections.len(),
@@ -84,7 +98,13 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
             };
             server.tick_stats.record(out.tick);
             let (mut connections, roster) = server.connections.routing_snapshot();
-            route_outbox(&server, &mut viewers, &mut connections, Some(out.tick));
+            route_outbox(
+                &server,
+                &mut viewers,
+                &mut connections,
+                Some(out.tick),
+                &mut latest_roster,
+            );
             server.console_state.drained(out.tick);
             let publish_start = std::time::Instant::now();
             publish_and_route(
@@ -96,6 +116,12 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                 &mut connections,
             )
             .await;
+            broadcast_latencies(
+                &server.connections,
+                &server.net_counters,
+                &mut connections,
+                out.tick,
+            );
             let publish_us = publish_start
                 .elapsed()
                 .as_micros()
@@ -198,6 +224,44 @@ pub(super) fn route_outbox(
     viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
     connections: &mut HashMap<ConnectionId, ConnectionHandles>,
     through_tick: Option<u64>,
+    latest_roster: &mut Arc<[mc_core::dimensions::RosterPlayer]>,
+) {
+    route_outbox_batches(
+        server,
+        viewers,
+        connections,
+        through_tick.map_or_else(
+            || server.hub.try_drain_outbox(),
+            |tick| server.hub.try_drain_outbox_through(tick),
+        ),
+        latest_roster,
+    );
+}
+
+/// Seed a freshly created viewer's player profiles from the latest routed
+/// roster. Pre-registration rosters are stashed and replayed through a
+/// throwaway viewer, so without this seeding a new viewer's
+/// `player_profiles` stays empty while publish already tracks entities; the
+/// next routed Roster then treats every tracked player as uuid-replaced and
+/// fans out one reliable `RemoveEntities` per player into the bounded queue
+/// (at 1000 players that alone overflows the 512-slot bound in one tick).
+/// Vanilla sends one roster packet per join and never per-player removals on
+/// roster changes.
+fn seed_player_profiles(
+    viewer: &mut crate::plan::ViewerState,
+    roster: &[mc_core::dimensions::RosterPlayer],
+) {
+    for player in roster {
+        viewer.player_profiles.insert(player.entity, player.uuid);
+    }
+}
+
+pub(super) fn route_outbox_batches(
+    server: &Arc<EdgeServer>,
+    viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
+    connections: &mut HashMap<ConnectionId, ConnectionHandles>,
+    batches: Vec<(ConnectionId, Vec<mc_core::boundary::PlayerChange>)>,
+    latest_roster: &mut Arc<[mc_core::dimensions::RosterPlayer]>,
 ) {
     // Ensure every live connection has a viewer entry before planning.
     // The entity id comes from the stashed `Joined` when available (the
@@ -206,7 +270,7 @@ pub(super) fn route_outbox(
     // the entity still unknown — `plan_player_changes` adopts it from the
     // first `Joined` it plans.
     for &id in connections.keys() {
-        viewers.entry(id).or_insert_with(|| {
+        if let std::collections::hash_map::Entry::Vacant(slot) = viewers.entry(id) {
             let (entity, position, dimension) = server
                 .connections
                 .take_join(id)
@@ -216,14 +280,16 @@ pub(super) fn route_outbox(
                     [0.5, 64.0, 0.5],
                     Default::default(),
                 ));
-            configured_viewer(server, id, entity, position, dimension)
-        });
+            let viewer = slot.insert(configured_viewer(server, id, entity, position, dimension));
+            seed_player_profiles(viewer, latest_roster);
+        }
     }
-    let batches = through_tick.map_or_else(
-        || server.hub.try_drain_outbox(),
-        |tick| server.hub.try_drain_outbox_through(tick),
-    );
     for (connection, changes) in batches {
+        for change in changes.iter() {
+            if let mc_core::boundary::PlayerChange::Roster { players, .. } = change {
+                *latest_roster = Arc::clone(players);
+            }
+        }
         if connection == mc_core::command_console::CONNECTION {
             crate::console::output(&server.console_state, &changes);
             continue;
@@ -266,9 +332,12 @@ pub(super) fn route_outbox(
                     [0.5, 64.0, 0.5],
                     Default::default(),
                 ));
-            viewers.entry(connection).or_insert_with(|| {
-                configured_viewer(server, connection, entity, position, dimension)
-            });
+            if let std::collections::hash_map::Entry::Vacant(slot) = viewers.entry(connection) {
+                let viewer = slot.insert(configured_viewer(
+                    server, connection, entity, position, dimension,
+                ));
+                seed_player_profiles(viewer, latest_roster);
+            }
         }
         let Some(handles) = connections.get(&connection) else {
             continue;
@@ -410,6 +479,69 @@ pub(super) async fn publish_and_route(
     flush_setup_world_fences(server, viewers, connections, out, view_distance);
 }
 
+/// Broadcast tab-list latencies at vanilla cadence: every
+/// [`LATENCY_BROADCAST_INTERVAL_TICKS`] ticks one batched
+/// `PlayerInfoUpdate(UPDATE_LATENCY)` frame with every measured player goes
+/// to every connection. That is one reliable-queue slot per interval per
+/// connection, not one slot per other connection per keepalive reply: the
+/// per-reply fan-out filled the 512-slot reliable queue of a slow reader in
+/// seconds and the delivery policy disconnected it.
+pub(super) fn broadcast_latencies(
+    registry: &ConnectionRegistry,
+    net_counters: &NetCounters,
+    connections: &mut HashMap<ConnectionId, ConnectionHandles>,
+    tick: u64,
+) {
+    use mc_protocol::packets::Packet as _;
+    if tick % LATENCY_BROADCAST_INTERVAL_TICKS != 0 {
+        return;
+    }
+    let entries = registry.latencies();
+    if entries.is_empty() {
+        return;
+    }
+    let update = mc_protocol::packets::play::PlayerInfoUpdate {
+        actions: mc_protocol::packets::play::PlayerInfoActions::UPDATE_LATENCY,
+        entries: entries
+            .into_iter()
+            .map(
+                |(profile_id, latency)| mc_protocol::packets::play::PlayerInfoEntry {
+                    profile_id,
+                    name: String::new(),
+                    properties: Vec::new(),
+                    listed: false,
+                    latency,
+                    game_mode: 0,
+                    list_order: 0,
+                    show_hat: false,
+                },
+            )
+            .collect(),
+    };
+    let mut body = Vec::new();
+    if update.encode(&mut body).is_err() {
+        return;
+    }
+    let mut frame = bytes::BytesMut::new();
+    if mc_protocol::frame::append_frame(
+        &mut frame,
+        mc_protocol::packets::play::PlayerInfoUpdate::ID,
+        &body,
+        mc_protocol::frame::Compression::Threshold(256),
+    )
+    .is_err()
+    {
+        return;
+    }
+    let frame = frame.freeze();
+    for (id, handles) in connections.iter() {
+        if handles.reliable_tx.try_send(frame.clone()).is_err() {
+            registry.remove(*id);
+            net_counters.reliable_drops.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+}
+
 pub(super) fn flush_setup_world_fences(
     server: &EdgeServer,
     viewers: &HashMap<ConnectionId, crate::plan::ViewerState>,
@@ -548,5 +680,156 @@ mod coreperf_visibility_tests {
             Some(3)
         );
         assert_eq!(bounded_tracked_union(ids.len(), ids.into_iter(), 3), None);
+    }
+}
+
+#[cfg(test)]
+mod roster_seed_tests {
+    use super::*;
+    use mc_core::boundary::PlayerChange;
+    use mc_core::dimensions::RosterPlayer;
+    use mc_protocol::frame::{Compression, try_decode_frame};
+    use mc_protocol::packets::play::RemoveEntities;
+
+    fn test_server(root: &std::path::Path) -> Arc<EdgeServer> {
+        let mut config = mc_core::CoreConfig::new(root.join("world"), 42);
+        config.vanilla_data_dir =
+            Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"));
+        let hub = Arc::new(mc_core::Core::open(config).unwrap());
+        let mut cfg = EdgeConfig {
+            server_dir: root.join("server"),
+            ..Default::default()
+        };
+        cfg.auth.online_mode = false;
+        std::fs::create_dir_all(&cfg.server_dir).unwrap();
+        Arc::new(
+            EdgeServer::new(
+                hub,
+                Arc::new(mc_data::solaris_required_data()),
+                Arc::default(),
+                cfg,
+            )
+            .unwrap(),
+        )
+    }
+
+    fn register(
+        server: &EdgeServer,
+        id: ConnectionId,
+        bound: usize,
+    ) -> mpsc::Receiver<bytes::Bytes> {
+        let (reliable_tx, reliable_rx) = mpsc::channel(bound);
+        let (world_tx, _world_rx) = mpsc::channel(bound);
+        server
+            .connections
+            .register(
+                id,
+                ConnectionHandles {
+                    reliable_tx,
+                    world_tx,
+                },
+            )
+            .unwrap();
+        reliable_rx
+    }
+
+    /// A viewer created after other connections already routed the global
+    /// roster must be seeded with those profiles. Publish can track entities
+    /// for it before any Roster is routed to it; the next routed Roster must
+    /// then NOT fan out one reliable RemoveEntities per tracked player (that
+    /// burst alone overflows the 512-slot queue at 1000 players).
+    /// Regression: without the seeding hunks this emits 600 RemoveEntities.
+    #[tokio::test]
+    async fn fresh_viewer_seeded_from_latest_roster_does_not_mass_remove_tracked_entities() {
+        let root = tempfile::tempdir().unwrap();
+        let server = test_server(root.path());
+        let a = server.connections.joining_id();
+        let _a_rx = register(&server, a, crate::fanout::OUTBOUND_QUEUE_BOUND);
+
+        let players: Arc<[RosterPlayer]> = (1..=600i32)
+            .map(|i| RosterPlayer {
+                connection: ConnectionId(u64::try_from(i).unwrap() + 1000),
+                entity: EntityId(i),
+                uuid: uuid::Uuid::from_u128(u128::try_from(i).unwrap()),
+                name: format!("scale_{i:04}"),
+                game_mode: 1,
+            })
+            .collect::<Vec<_>>()
+            .into();
+        let roster_change = || PlayerChange::Roster {
+            players: Arc::clone(&players),
+            removed: Arc::from([]),
+        };
+
+        let mut latest_roster: Arc<[RosterPlayer]> = Arc::from(Vec::new());
+        let mut connections: HashMap<ConnectionId, ConnectionHandles> =
+            server.connections.snapshot().into_iter().collect();
+        let mut viewers: HashMap<ConnectionId, crate::plan::ViewerState> = HashMap::new();
+        // Tick 1: connection A routes the roster; latest_roster now has 600 players.
+        route_outbox_batches(
+            &server,
+            &mut viewers,
+            &mut connections,
+            vec![(a, vec![roster_change()])],
+            &mut latest_roster,
+        );
+        assert_eq!(latest_roster.len(), 600);
+        // Connection B registers only now (pre-registration rosters were stashed
+        // and replayed through the throwaway join-replay viewer, as in the
+        // xp-1000 failure), so its pump viewer is created after the roster.
+        let b = server.connections.joining_id();
+        let mut b_rx = register(&server, b, 8);
+        connections.extend(
+            server
+                .connections
+                .snapshot()
+                .into_iter()
+                .filter(|(id, _)| *id == b),
+        );
+        // Tick 2: no batches; B's viewer is created by the ensure loop and must
+        // be seeded from latest_roster.
+        route_outbox_batches(
+            &server,
+            &mut viewers,
+            &mut connections,
+            vec![],
+            &mut latest_roster,
+        );
+        // Publish tracked 600 entities for B before any roster reached it.
+        let viewer_b = viewers.get_mut(&b).expect("viewer B created");
+        for i in 1..=600i32 {
+            viewer_b
+                .tracked_entities
+                .insert(EntityId(i), crate::plan::TrackedEntity::default());
+        }
+        // Tick 3: the same roster routes to B through the reliable queue.
+        route_outbox_batches(
+            &server,
+            &mut viewers,
+            &mut connections,
+            vec![(b, vec![roster_change()])],
+            &mut latest_roster,
+        );
+        assert!(viewers.contains_key(&b), "B must survive routing");
+        let mut remove_entities = 0usize;
+        let mut frames = 0usize;
+        while let Ok(data) = b_rx.try_recv() {
+            frames += 1;
+            let mut buf = bytes::BytesMut::from(data.as_ref());
+            let frame = try_decode_frame(&mut buf, Compression::Threshold(256))
+                .unwrap()
+                .unwrap();
+            if frame.id == RemoveEntities::ID {
+                remove_entities += 1;
+            }
+        }
+        assert_eq!(
+            remove_entities, 0,
+            "seeded viewer must not mass-remove tracked entities (frames={frames})"
+        );
+        assert_eq!(
+            frames, 1,
+            "only the single roster PlayerInfoUpdate is expected"
+        );
     }
 }
