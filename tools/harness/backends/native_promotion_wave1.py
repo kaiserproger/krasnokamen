@@ -13,7 +13,7 @@ from .probe_steps import ProbeSteps, item_count
 
 def _strike(steps: ProbeSteps, ident: dict, row: dict) -> None:
     """Approach, aim and attack once, retrying when a moving mob slipped out of reach or view."""
-    for _ in range(12):
+    for _ in range(30):
         steps.call("minecraft_approach_entity", {"entity_id": ident["entity_id"], "timeout_seconds": steps.remaining()})
         _aim(steps, _same_row(steps, ident) or row)
         try:
@@ -161,6 +161,9 @@ def _spawner_egg(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture("difficulty peaceful")
     steps.fixture("gamemode survival @s")
     spawner = _point(origin, dx=0, dy=0, dz=2)
+    # Spawner spawns obey the creature placement rule (grass floor, as in vanilla): give the
+    # whole SpawnRange (4) around the spawner a grass floor instead of the obsidian pad.
+    steps.fixture(f"fill {x - 4} {y - 1} {z - 2} {x + 4} {y - 1} {z + 6} minecraft:grass_block")
     # Place the spawner with the client, not an operator setblock: the block log
     # resyncs client uses on operator-set blocks, which would drop the egg use.
     _give(steps, "minecraft:spawner")
@@ -195,18 +198,25 @@ def _golem(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
     steps.fixture("gamerule spawn_mobs false")
     steps.fixture("gamemode survival @s")
-    # GOLEM-AABB: villager at origin, live golem 15 blocks away on each axis
-    # (spherical distance ~21.2 > 16, AABB within 16) must still be detected.
+    # GOLEM-AABB: villager at origin, live golem 14 blocks away on each axis
+    # (spherical distance ~19.8 > 16, AABB within 16) must still be detected.
     steps.fixture(f"summon minecraft:villager {x + .5} {y} {z + .5}")
     villager = _wanderer_at(steps, "minecraft:villager", x + .5, z + .5)
-    steps.fixture(f"summon minecraft:iron_golem {x + 15.5} {y} {z + 15.5} {{NoAI:1b}}")
+    vid = _identity(villager)
+    steps.fixture(f"summon minecraft:iron_golem {x + 14.5} {y} {z + 14.5} {{NoAI:1b}}")
     far = _echo(steps, "far_golem_summon_ordered")
     steps.check("far_golem_summoned", any("Summoned new Iron Golem" in line for line in far["recent_chat"]))
+    far_golem = _entity_at(steps, "minecraft:iron_golem", x + 14.5, z + 14.5)
     steps.call("minecraft_wait_ticks", {"ticks": 100})
     steps.call("minecraft_wait_ticks", {"ticks": 100})
 
     def detected(state: dict) -> bool:
         return any("entity data: 1b" in line for line in state["recent_chat"])
+
+    def axes_and_sphere() -> tuple[float, float]:
+        row = _same_row(steps, vid) or villager
+        deltas = (abs(row["x"] - far_golem["x"]), abs(row["z"] - far_golem["z"]))  # both stand on the pad
+        return max(deltas), sum(d * d for d in deltas) ** .5
     for _ in range(10):
         steps.fixture(f'data get entity {villager["entity_uuid"]} '
                       f'Brain.memories."minecraft:golem_detected_recently".value')
@@ -217,6 +227,11 @@ def _golem(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             continue
     else:
         raise RuntimeError("villager_detects_diagonal_aabb_golem")
+    axis, sphere = axes_and_sphere()
+    steps.report["golem_detection_geometry"] = {"max_axis": axis, "sphere": sphere}
+    # A wandering villager that walked inside spherical range would make a spherical
+    # (buggy) detector pass too: refuse that run as evidence.
+    steps.check("detection_geometry_is_axis_only", axis <= 16.0 < sphere)
     # GOLEM-REPAIR: hurt a near golem to 40, then heal exactly +25 with an ingot.
     steps.fixture(f"summon minecraft:iron_golem {x + .5} {y} {z + 2.5} {{NoAI:1b}}")
     golem = _entity_at(steps, "minecraft:iron_golem", x + .5, z + 2.5)
@@ -283,9 +298,10 @@ def _axolotl(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             # A lethal fist hit never triggers play-dead: top up to <= 6 and keep trying.
             steps.fixture(f"effect give {aid['entity_uuid']} minecraft:instant_health 1 0 true")
     steps.wait(playing_dead, "axolotl_play_dead_metadata_19", timeout_seconds=30)
-    _capture(steps, "axolotl-playing-dead")
+    # Play-dead and its Regeneration last 200 ticks: read the effect before the capture.
     steps.fixture(f"data get entity {aid['entity_uuid']} active_effects")
     _chat_has(steps, "axolotl_regeneration_from_play_dead", "minecraft:regeneration", timeout_seconds=30)
+    _capture(steps, "axolotl-playing-dead")
 
 
 def _dolphin(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:

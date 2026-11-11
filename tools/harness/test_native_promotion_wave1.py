@@ -123,7 +123,7 @@ class Wave1Tests(unittest.TestCase):
 
     def test_golem_repair_requires_exact_65_not_overheal(self):
         villager = _row("minecraft:villager", .5, .5)
-        far = _row("minecraft:iron_golem", 15.5, 15.5)
+        far = _row("minecraft:iron_golem", 14.5, 14.5)
         golem = _row("minecraft:iron_golem", .5, 2.5, health=40.0)
         rows = [villager, far, golem]
         steps = Steps(rows=rows, chat=["Summoned new Iron Golem", "Villager has the following entity data: 1b"], health=20.0)
