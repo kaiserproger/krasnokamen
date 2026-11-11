@@ -314,20 +314,10 @@ fn crossable(
             continue;
         }
         probed[i] = (x, z);
-        let solid = |y| {
-            world
-                .physics_block_at(x, y, z)
-                .is_none_or(|state| registry.materials.classify(state) == BlockMaterial::Solid)
+        let Some(step) = footing(world, registry, x, z, feet) else {
+            return false;
         };
-        let step = solid(feet);
-        if solid(feet + 1) || (step && solid(feet + 2)) {
-            return false;
-        }
         if step && !*rise.get_or_insert_with(|| free_above(world, registry, pos, half_width, feet + 2)) {
-            return false;
-        }
-        // On level ground the cell under the feet is solid: one read.
-        if !solid(feet - 1) && (2..=MAX_DROP as i32 + 1).all(|depth| !solid(feet - depth)) {
             return false;
         }
         let above = cover(world, registry, x, z, feet + 2);
@@ -341,6 +331,27 @@ fn crossable(
         }
     }
     true
+}
+
+/// Whether a body with its feet at `feet` can stand in column (x, z): no
+/// block at head height, a step of at most one block with room above it, and
+/// ground within [`MAX_DROP`] blocks below (water is no ground). `Some(step)`
+/// when it can. Unknown blocks are obstacles.
+fn footing(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32, feet: i32) -> Option<bool> {
+    let solid = |y| {
+        world
+            .physics_block_at(x, y, z)
+            .is_none_or(|state| registry.materials.classify(state) == BlockMaterial::Solid)
+    };
+    let step = solid(feet);
+    if solid(feet + 1) || (step && solid(feet + 2)) {
+        return None;
+    }
+    // On level ground the cell under the feet is solid: one read.
+    if !solid(feet - 1) && (2..=MAX_DROP as i32 + 1).all(|depth| !solid(feet - depth)) {
+        return None;
+    }
+    Some(step)
 }
 
 /// Terrain blocks (not trees) over column (x, z) at or above `y`: 0 under
@@ -372,19 +383,23 @@ fn cover(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32, y: i32) ->
 }
 
 /// From a body under rock (pushed or knocked into a cave mouth), the way to
-/// the first open-sky column on the nearest ring within [`AROUND`] blocks;
-/// `None` under open sky or with no opening near.
+/// the first open-sky column it can stand in (no wall, no drop: see
+/// [`footing`]) on the nearest ring within [`AROUND`] blocks; `None` under
+/// open sky or with no such opening near.
 fn exit(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3]) -> Option<[f64; 2]> {
-    let y = (pos[1] + CONTACT).floor() as i32 + 2;
+    let feet = (pos[1] + CONTACT).floor() as i32;
     let (x, z) = (pos[0].floor() as i32, pos[2].floor() as i32);
-    if cover(world, registry, x, z, y) == 0 {
+    if cover(world, registry, x, z, feet + 2) == 0 {
         return None;
     }
     (1..=AROUND).find_map(|radius| {
         (-radius..=radius)
             .flat_map(|dz| (-radius..=radius).map(move |dx| (dx, dz)))
             .filter(|(dx, dz)| dx.abs().max(dz.abs()) == radius)
-            .find(|&(dx, dz)| cover(world, registry, x + dx, z + dz, y) == 0)
+            .find(|&(dx, dz)| {
+                cover(world, registry, x + dx, z + dz, feet + 2) == 0
+                    && footing(world, registry, x + dx, z + dz, feet).is_some()
+            })
             .map(|(dx, dz)| {
                 [
                     f64::from(x + dx) + 0.5 - pos[0],
