@@ -2,7 +2,7 @@
 # Run one graphical scene-shot/gate command in one of three shared host slots.
 # A waiter blocks (flock) on all three slots at once and takes whichever frees
 # first, so a long run in one slot never starves the queue. No polling; the
-# lock is held until the command exits (the fd is inherited across exec).
+# lock is held until the command exits (an fd >= 10 is inherited across exec).
 exec python3 -c '
 import fcntl, os, sys, threading
 
@@ -25,6 +25,8 @@ def take(slot):
 for slot in "abc":
     threading.Thread(target=take, args=(slot,), daemon=True).start()
 won.wait()
-os.set_inheritable(chosen[0], True)
+# Inheritable copy at fd >= 10: mem-run.sh reopens and closes fds 3-8 (exec 3>, 3>&-),
+# which would release a low lock fd before the gate ends; bash {fd} only allocates.
+fcntl.fcntl(chosen[0], fcntl.F_DUPFD, 10)
 os.execvp(cmd[0], cmd)
 ' "$@"
