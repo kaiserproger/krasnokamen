@@ -1,0 +1,44 @@
+{
+  "id": "DEATH-COMPONENT",
+  "verdict": "promoted",
+  "fix_commit": "patch:3a1a6a0e69602a5bc4c02fab1b404e437842661605fb9914840ab96bbdda9dbc",
+  "fix_commit_full": "patch:3a1a6a0e69602a5bc4c02fab1b404e437842661605fb9914840ab96bbdda9dbc",
+  "promoted_at": "2026-11-11T23:34:17+00:00",
+  "tree_head": "cd5abd6b012e51c6c41ef69774d2bf0c99224a91",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "3a1a6a0e69602a5bc4c02fab1b404e437842661605fb9914840ab96bbdda9dbc",
+  "reversed_files": [
+    "crates/mc-core/src/tick/death_message.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-team-deaths": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-team-deaths --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/TeamDeathRows/.analysis/validation/20261111T233059-ledger-promote-gdr3fs_q/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/TeamDeathRows/.analysis/validation/20261111T231329-native-v2-team-deaths-f1toqw80/result.json",
+    "tree_head": "cd5abd6b012e51c6c41ef69774d2bf0c99224a91",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "a0f26763573446e73e9f2ac370cc68ba802102a606793f9d3f4cb16e70aecbb5",
+    "covers": [
+      "harness:entities:native-v2-team-deaths"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/TeamDeathRows/.analysis/validation/20261111T233059-ledger-promote-gdr3fs_q"
+}
