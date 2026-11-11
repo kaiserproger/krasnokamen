@@ -487,7 +487,7 @@ def purge_trash(slot: Path, report: SlotReport) -> None:
 def gc_slot(slot: Path, roots: Roots, lock_dir: Path, delete: bool, users: dict[str, list[int]] | None = None) -> SlotReport:
     """Classes 0 (dead units and incremental dirs) and 1 (superseded incremental sessions)."""
     report = SlotReport(slot.name)
-    m = re.fullmatch(r"slot-([a-z])", slot.name)
+    m = re.fullmatch(r"slot-([a-z]{1,2})", slot.name)
     if not m:
         report.status = "unmanaged"  # no pool lock exists for it: nothing proves it idle
         return report
@@ -588,7 +588,7 @@ def rotate(names: list[str], roots: Roots, lock_dir: Path, delete: bool, thresho
         return evictions, notes, errors
     candidates = sorted(
         (last_use(roots.targets / n, lock_dir), n)
-        for n in names if re.fullmatch(r"slot-[a-z]", n) and (roots.targets / n).is_dir() and not (roots.targets / n).is_symlink()
+        for n in names if re.fullmatch(r"slot-[a-z]{1,2}", n) and (roots.targets / n).is_dir() and not (roots.targets / n).is_symlink()
     )
     now = time.time()
     for stamp, name in candidates:

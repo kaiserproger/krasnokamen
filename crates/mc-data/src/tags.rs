@@ -42,6 +42,12 @@ const LAVA_RAW_ID: i32 = 4;
 /// Built-in effect registry shared by tag admission and gameplay lookups.
 pub const MOB_EFFECT_REGISTRY: &str = "minecraft:mob_effect";
 
+/// Entity type registry, for gameplay tag lookups by entity type raw id.
+pub const ENTITY_TYPE_REGISTRY: &str = "minecraft:entity_type";
+
+/// Entity types whose block hits may break blocks (`Projectile.mayBreak`).
+pub const IMPACT_PROJECTILES: &str = "minecraft:impact_projectiles";
+
 /// `(tags/<fs subpath>, "minecraft:<registry id>")` pairs the loader
 /// knows about. We deliberately limit the set to registries the
 /// vanilla client either knows natively (built-in `block`, `item`,

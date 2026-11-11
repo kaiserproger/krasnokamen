@@ -497,6 +497,54 @@ fn modern_fixture(root: &Path, config: &CoreConfig) {
     .unwrap();
 }
 
+#[test]
+fn nested_paths_import_export_and_census_under_world_leases() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("anvil");
+    let native = root.path().join("native");
+    let output = root.path().join("export");
+    let config = crate::test_support::config(native.clone(), 42);
+    modern_fixture(&source, &config);
+    fs::write(
+        source.join(mc_world::storage::WORLD_LEASE_FILE_NAME),
+        b"coordination only",
+    )
+    .unwrap();
+    let before = hashes(&source).unwrap();
+    let nested = Path::new("dimensions")
+        .join("minecraft")
+        .join("the_end")
+        .join("data")
+        .join("minecraft")
+        .join("raids.dat");
+    assert!(source.join(&nested).is_file());
+    assert!(before.contains_key("dimensions/minecraft/the_end/data/minecraft/raids.dat"));
+    assert!(before.keys().all(|path| !path.contains('\\')));
+    assert!(!before.contains_key(mc_world::storage::WORLD_LEASE_FILE_NAME));
+    assert_eq!(
+        import_anvil(&config, &source, &native, &root.path().join("import.json"))
+            .unwrap()
+            .status,
+        "PASS"
+    );
+    let native_before = hashes(&native).unwrap();
+    let census = census_native(&config, &native, &root.path().join("census.json")).unwrap();
+    assert_eq!(census.status, "PASS");
+    assert!(census.read_only);
+    assert_eq!(
+        export_anvil(&config, &native, &output, &root.path().join("export.json"))
+            .unwrap()
+            .status,
+        "PASS"
+    );
+    assert_eq!(
+        read_nbt(&source.join(&nested)).unwrap(),
+        read_nbt(&output.join(&nested)).unwrap()
+    );
+    assert_eq!(hashes(&source).unwrap(), before);
+    assert_eq!(hashes(&native).unwrap(), native_before);
+}
+
 fn has_field(tag: &Tag, key: &str) -> bool {
     matches!(tag, Tag::Compound(fields) if fields.iter().any(|(name, _)| name == key))
 }

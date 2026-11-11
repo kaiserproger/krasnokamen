@@ -262,6 +262,83 @@ fn frequency_comparator_distance_power_and_cooldown_are_independent() {
     assert_eq!(comparator(&s, SENSOR), Some(7));
     assert_eq!(prop(&s, SENSOR, "power"), "12");
 }
+
+#[test]
+fn note_frequency_reaches_downward_latches_after_sensor_replacement() {
+    let mut s = state(None);
+    let actor = crate::command_console::EXECUTOR;
+    let sensor = BlockPos {
+        x: 8,
+        y: 201,
+        z: 10,
+    };
+    let frequency_bulb = BlockPos {
+        x: 6,
+        y: 200,
+        z: 10,
+    };
+    let strength_bulb = BlockPos {
+        x: 9,
+        y: 200,
+        z: 10,
+    };
+    for distance in [2, 6] {
+        for line in [
+            "fill 4 201 2 12 203 13 air",
+            "fill 4 200 2 12 200 13 stone",
+            "setblock 8 201 10 sculk_sensor",
+            "setblock 9 200 10 copper_bulb",
+            "setblock 9 201 10 redstone_wire",
+            "setblock 7 201 10 comparator[facing=east]",
+            "setblock 6 200 10 copper_bulb",
+            "setblock 6 201 10 redstone_wire",
+            &format!("setblock 8 201 {} note_block", 10 - distance),
+        ] {
+            command(&mut s, actor, line);
+            crate::tick::run_tick(&mut s, &[]);
+        }
+        for _ in 0..45 {
+            crate::tick::run_tick(&mut s, &[]);
+        }
+        assert_eq!(
+            prop(&s, frequency_bulb, "lit"),
+            "false",
+            "baseline distance={distance}"
+        );
+        assert_eq!(
+            prop(&s, strength_bulb, "lit"),
+            "false",
+            "baseline distance={distance}"
+        );
+        command(
+            &mut s,
+            actor,
+            &format!("setblock 7 201 {} redstone_block", 10 - distance),
+        );
+        for _ in 0..distance + 3 {
+            crate::tick::run_tick(&mut s, &[]);
+        }
+        assert_eq!(
+            prop(&s, sensor, "sculk_sensor_phase"),
+            "active",
+            "distance={distance}"
+        );
+        assert_eq!(comparator(&s, sensor), Some(10), "distance={distance}");
+        for _ in 0..45 {
+            crate::tick::run_tick(&mut s, &[]);
+        }
+        assert_eq!(
+            prop(&s, frequency_bulb, "lit"),
+            "true",
+            "distance={distance}"
+        );
+        assert_eq!(
+            prop(&s, strength_bulb, "lit"),
+            "true",
+            "distance={distance}"
+        );
+    }
+}
 #[test]
 fn calibrated_sensor_filters_only_its_back_and_has_sixteen_block_range() {
     let mut s = state(None);

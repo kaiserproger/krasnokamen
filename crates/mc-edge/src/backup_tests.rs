@@ -89,6 +89,7 @@ fn backup_roundtrip_preserves_real_core_store_wal_and_metadata() {
         );
     }
     assert!(!restored.join(BACKUP_MANIFEST).exists());
+    #[cfg(not(windows))]
     assert!(!restored.join(".solaris-world.lock").exists());
     let recovered = mc_core::Core::open({
         let mut config = mc_core::CoreConfig::new(restored, 42);
@@ -137,7 +138,11 @@ fn empty_target_directory_lease_blocks_restore() {
     lease.try_lock().unwrap();
     let error = run_restore(&backup, &target).unwrap_err();
     assert!(error.to_string().contains("leased"), "{error:#}");
-    assert!(std::fs::read_dir(&target).unwrap().next().is_none());
+    assert!(
+        std::fs::read_dir(&target)
+            .unwrap()
+            .all(|entry| is_lease_file(&entry.unwrap().path()))
+    );
     drop(lease);
     run_restore(&backup, &target).unwrap();
 }
@@ -180,6 +185,28 @@ fn restore_refuses_a_backup_opened_by_a_native_writer() {
 }
 
 #[test]
+fn offline_backup_restore_copies_database_under_real_file_leases() {
+    let root = tempfile::tempdir().unwrap();
+    let world = root.path().join("world");
+    seed_world(&world);
+    let expected = std::fs::read(world.join(NATIVE_DATABASE)).unwrap();
+    let backup = root.path().join("backup");
+    run_backup(&world, &backup).unwrap();
+    let restored = root.path().join("restored");
+    run_restore(&backup, &restored).unwrap();
+    assert_eq!(
+        std::fs::read(restored.join(NATIVE_DATABASE)).unwrap(),
+        expected
+    );
+    assert_eq!(
+        std::fs::read(restored.join("operator/world.json")).unwrap(),
+        b"world metadata"
+    );
+    NativeReadOnlyStore::open_with_cache(&restored.join(NATIVE_DATABASE), [7; 32], 1024 * 1024)
+        .unwrap();
+}
+
+#[test]
 fn restore_refuses_nonempty_target_without_changing_data() {
     let root = tempfile::tempdir().unwrap();
     let (_, backup) = fixture_backup(root.path());
@@ -192,7 +219,12 @@ fn restore_refuses_nonempty_target_without_changing_data() {
         std::fs::read(target.join("existing")).unwrap(),
         b"live data"
     );
-    assert_eq!(std::fs::read_dir(&target).unwrap().count(), 1);
+    let entries: Vec<_> = std::fs::read_dir(&target)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .filter(|name| name != mc_world::storage::WORLD_LEASE_FILE_NAME)
+        .collect();
+    assert_eq!(entries, ["existing"]);
 }
 
 #[test]
@@ -212,7 +244,11 @@ fn every_hash_is_verified_before_any_target_data_is_written() {
     let empty = root.path().join("empty");
     std::fs::create_dir(&empty).unwrap();
     assert!(run_restore(&backup, &empty).is_err());
-    assert!(std::fs::read_dir(&empty).unwrap().next().is_none());
+    assert!(
+        std::fs::read_dir(&empty)
+            .unwrap()
+            .all(|entry| entry.unwrap().file_name() == mc_world::storage::WORLD_LEASE_FILE_NAME)
+    );
 }
 
 #[test]

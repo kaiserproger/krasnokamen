@@ -61,9 +61,9 @@ select_slot() {
     free_gb=$(df --output=avail -BG "$slots" 2>/dev/null | tail -1 | tr -dc 0-9)
     for pass in own existing new; do
       [ "$pass" = new ] && [ "${free_gb:-0}" -lt "$min_free" ] && break
-      for l in {a..z}; do
+      for l in {a..z} {a..z}{a..z}; do  # 26 one-letter slots, then two-letter ones while disk allows
         case $pass in
-          own) [ "$(slot_tree "$slots/slot-$l")" = "$tree" ] || continue ;;
+          own) [ -f "$slots/slot-$l/.solaris-tree" ] && [ "$(slot_tree "$slots/slot-$l")" = "$tree" ] || continue ;;
           existing) [ -d "$slots/slot-$l" ] || continue ;;
           new) [ -d "$slots/slot-$l" ] && continue ;;
         esac
@@ -82,8 +82,8 @@ select_slot() {
   real=$(realpath -m "$target")
   slots_real=$(realpath -m "$slots")
   case $real in
-    "$slots_real"/slot-[a-z]) l=${real##*/slot-} ;;
-    "$slots_real"/slot-[a-z]/*)
+    "$slots_real"/slot-[a-z] | "$slots_real"/slot-[a-z][a-z]) l=${real##*/slot-} ;;
+    "$slots_real"/slot-[a-z]/* | "$slots_real"/slot-[a-z][a-z]/*)
       # slot-gc treats it as part of the slot, but no lock would protect it.
       echo "mem-run: CARGO_TARGET_DIR $target is inside pooled ${real#"$slots_real"/}; use the slot itself or drop CARGO_TARGET_DIR (exit 75)" >&2
       exit 75

@@ -38,6 +38,55 @@ class SceneShotTests(unittest.TestCase):
             self.assertEqual(ctx.client_evidence['server_binary_sha256'],
                              hashlib.sha256(b'scene-server').hexdigest())
 
+    def test_lod_option_only_changes_generated_config(self):
+        from tools.harness import preflight
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'playable.toml').write_text(
+                (scene_shot.runtime.REPO_ROOT / 'playable.toml').read_text())
+            (root / 'template').mkdir()
+            binary = root / 'server'
+            binary.write_bytes(b'server')
+            binary.chmod(0o755)
+            env = {'SOLARIS_SERVER_BINARY': str(binary), 'XDG_DATA_HOME': str(root / 'xdg')}
+            configs = []
+            for enabled, share in ((None, None), (False, None), (True, None), (True, False), (True, True)):
+                artifact = root / f'{enabled}-{share}'
+                artifact.mkdir()
+                ctx = scene_shot.ProfileContext(artifact, client='native', windowed=True)
+                scenario = {'steps': []}
+                if enabled is not None:
+                    scenario['lod_enabled'] = enabled
+                if share is not None:
+                    scenario['lod_share_terrain_keys'] = share
+                with patch.dict('os.environ', env), patch.object(scene_shot.runtime, 'REPO_ROOT', root), \
+                        patch.object(scene_shot, 'prepare_operator_fixture'), \
+                        patch.object(preflight, 'client_template', return_value=root / 'template'), \
+                        patch.object(scene_shot.subprocess, 'Popen', side_effect=RuntimeError('launch stopped')):
+                    with self.assertRaisesRegex(RuntimeError, 'launch stopped'):
+                        scene_shot.run(ctx, scenario=scenario)
+                configs.append((artifact / 'scene-shot.toml').read_text())
+            import tomllib
+            baseline, disabled, enabled, unshared, shared = map(tomllib.loads, configs)
+            self.assertNotIn('lod', baseline)
+            self.assertEqual(disabled.pop('lod'), {'enabled': False})
+            self.assertEqual(enabled.pop('lod'), {'enabled': True})
+            self.assertEqual(unshared.pop('lod'), {'enabled': True, 'share_terrain_keys': False})
+            self.assertEqual(shared.pop('lod'), {'enabled': True, 'share_terrain_keys': True})
+            # Private ports, worlds and plugin directories differ between runs.
+            for config in (baseline, disabled, enabled, unshared, shared):
+                del config['network']['port'], config['data']['world_dir'], config['plugins']['directory']
+            for config in (disabled, enabled, unshared, shared):
+                self.assertEqual(baseline, config)
+            ctx = scene_shot.ProfileContext(root, client='native', windowed=True)
+            with self.assertRaisesRegex(ValueError, 'lod_enabled'):
+                scene_shot.validate_scenario(ctx, {'steps': [], 'lod_enabled': 1})
+            for scenario in ({'steps': [], 'lod_share_terrain_keys': True},
+                             {'steps': [], 'lod_enabled': False, 'lod_share_terrain_keys': True},
+                             {'steps': [], 'lod_enabled': True, 'lod_share_terrain_keys': 1}):
+                with self.assertRaisesRegex(ValueError, 'lod_share_terrain_keys'):
+                    scene_shot.validate_scenario(ctx, scenario)
+
     def test_scenario_username(self):
         self.assertEqual(scene_shot.scene_username({}), "SceneShot")
         self.assertEqual(scene_shot.scene_username({"username": "Other_Player"}), "Other_Player")
@@ -125,6 +174,43 @@ class SceneShotTests(unittest.TestCase):
             proxy.close()
             thread.join()
 
+    def test_tool_wall_visibility_requires_close_target_and_visible_tool(self):
+        from PIL import Image, ImageDraw
+
+        class Probe:
+            def __init__(self):
+                self.report = {}
+                self.distance = 0.5
+            def observe(self):
+                return {"target": {"block_id": "minecraft:obsidian",
+                                   "location": {"x": 0, "y": 0, "z": self.distance}},
+                        "selected_item": {"item_id": "minecraft:diamond_pickaxe"},
+                        "player": {"camera_position": [0, 0, 0]}}
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "screenshots").mkdir()
+            image = Image.new("RGB", (1280, 720), (10, 10, 20))
+            ImageDraw.Draw(image).rectangle((1000, 400, 1040, 440), fill=(5, 120, 120))
+            path = root / "screenshots" / "tool.png"
+            image.save(path)
+            probe = Probe()
+            scene_shot.validate_steps([{"tool_wall_visible": "tool"}], "native")
+            scene_shot.execute(probe, root, [{"tool_wall_visible": "tool"}])
+            probe.distance = 1.0
+            with self.assertRaisesRegex(AssertionError, "tool_wall_fixture"):
+                scene_shot.execute(probe, root, [{"tool_wall_visible": "tool"}])
+            probe.distance = 0.5
+            Image.new("RGB", (1280, 720), (10, 10, 20)).save(path)
+            with self.assertRaisesRegex(AssertionError, "tool_wall_visible"):
+                scene_shot.execute(probe, root, [{"tool_wall_visible": "tool"}])
+            Image.new("RGB", (1280, 720), (5, 120, 120)).save(path)
+            with self.assertRaisesRegex(AssertionError, "tool_wall_close_background"):
+                scene_shot.execute(probe, root, [{"tool_wall_visible": "tool"}])
+
     def test_walk_phase_rejects_idle_missing_and_wrong_phase(self):
         spec = {"name": "walk", "entity_type": "minecraft:zombie", "phase": 0.0,
                 "tolerance": 0.25, "min_speed": 0.1, "max_ticks": 30}
@@ -142,14 +228,16 @@ class SceneShotTests(unittest.TestCase):
         spec = {"name": "walk", "entity_type": "minecraft:zombie", "phase": 1.5,
                 "tolerance": 0.25, "min_speed": 0.1, "max_ticks": 30}
         entity = {"entity_type": "minecraft:zombie", "entity_uuid": "mob",
-                  "walk_position": 1.5, "walk_speed": 0.2}
+                  "walk_position": 1.4, "walk_speed": 0.2}
 
         class Probe:
             def __init__(self):
                 self.calls = 0
             def call(self, name, args):
+                if name == "minecraft_wait_ticks":
+                    raise AssertionError("capture should start at bracket entry without waiting")
                 self.calls += 1
-                return {"entities": [entity if self.calls == 1 else {**entity, "walk_position": 3.0}]}
+                return {"entities": [entity if self.calls == 1 else {**entity, "walk_position": 1.6}]}
             def check(self, name, value):
                 if not value:
                     raise AssertionError(name)
@@ -166,7 +254,20 @@ class SceneShotTests(unittest.TestCase):
                     write_frame(1.5)
                     self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
                     evidence = json.loads((root / "walk-walk.json").read_text())
-                    self.assertEqual(evidence["after"]["entities"][0]["walk_position"], 3.0)
+                    self.assertEqual(evidence["after"]["entities"][0]["walk_position"], 1.6)
+                    # A frame that lagged one tick step below the bracket still
+                    # matches the triggering observation and is accepted.
+                    write_frame(1.2)
+                    self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
+                    if client == "java":
+                        # Java render-state frames carry no entity uuid; a single
+                        # typed frame entity is matched by type.
+                        items = [{key: value for key, value in entity.items() if key != "entity_uuid"}
+                                 | {"walk_position": 1.2}]
+                        frame_path.write_text(json.dumps(items))
+                        self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
+                    # A frame outside the bracket and further from the observation
+                    # than one tick of walk advance is rejected.
                     write_frame(2.5)
                     with self.assertRaisesRegex(AssertionError, "walk_render_phase"):
                         scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client)
@@ -238,6 +339,52 @@ class SceneShotTests(unittest.TestCase):
             with patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": "/tmp/other.json"}):
                 with self.assertRaisesRegex(ValueError, "without overrides"):
                     scene_shot.validate_scenario(Context())
+
+    def test_named_low_roof_scene_rejects_overrides(self):
+        class Context:
+            client = "native"
+            windowed = True
+            platform = None
+            scenario_id = "native-low-roof-house"
+            extra_args = []
+            timeout_seconds = 180
+        with patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": ""}):
+            scenario = scene_shot.validate_scenario(Context())[0]
+            self.assertTrue(any("assert_chat" in step for step in scenario["steps"]))
+            with self.assertRaisesRegex(ValueError, "without overrides"):
+                scene_shot.validate_scenario(Context(), {"steps": []})
+
+    def test_named_falling_scene_rejects_overrides(self):
+        class Context:
+            client = "native"
+            windowed = True
+            platform = None
+            scenario_id = "native-falling-block-prediction"
+            extra_args = []
+            timeout_seconds = 180
+        with patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": ""}):
+            scenario = scene_shot.validate_scenario(Context())[0]
+            self.assertTrue(any("falling_block_capture" in step for step in scenario["steps"]))
+            with self.assertRaisesRegex(ValueError, "without overrides"):
+                scene_shot.validate_scenario(Context(), {"steps": []})
+
+    def test_falling_frame_packet_fence_and_sand_pixels(self):
+        from PIL import Image, ImageDraw
+        from tools.harness.backends import falling_block_oracle
+
+        first = {"observed_tick": 10, "sample_tick": 10, "received_position": [1, 2, 3], "position": [1, 2, 3]}
+        second = {**first, "sample_tick": 11, "position": [1, 1.96, 3]}
+        self.assertTrue(falling_block_oracle.same_packet(first, second))
+        self.assertFalse(falling_block_oracle.same_packet(first, {**second, "observed_tick": 11}))
+        self.assertFalse(falling_block_oracle.same_packet(first, {**second, "received_position": [1, 1, 3]}))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "frame.png"
+            image = Image.new("RGB", (1280, 720), "black")
+            image.save(path)
+            self.assertIsNone(falling_block_oracle.sand_bounds(path))
+            ImageDraw.Draw(image).rectangle((600, 300, 630, 330), fill=(210, 190, 120))
+            image.save(path)
+            self.assertEqual(falling_block_oracle.sand_bounds(path), (600, 300, 630, 330))
 
     def test_named_frozen_age_scene_rejects_overrides(self):
         class Context:

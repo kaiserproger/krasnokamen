@@ -59,6 +59,13 @@ pub enum Change {
 pub struct Record {
     /// Per-dimension monotonic number; the table key and mark target.
     pub seq: u64,
+    /// Committing server tick, absent for records created before tick capture.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_tick"
+    )]
+    pub tick: Option<u64>,
     /// Unix seconds.
     pub time: u64,
     /// Player name or `#source`.
@@ -71,6 +78,11 @@ pub struct Record {
 
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+/// A present `tick` must be a tick; only an absent field means "unknown".
+fn present_tick<'de, D: serde::Deserializer<'de>>(input: D) -> Result<Option<u64>, D::Error> {
+    u64::deserialize(input).map(Some)
 }
 
 /// One tick's journaled delta: new records plus rollback/restore marks.
@@ -169,6 +181,18 @@ impl BlockLog {
             log.push_record(record);
         }
         log.evict(unix_now());
+        log
+    }
+
+    /// Retain the recovered tail until the native writer durably upserts it.
+    pub(crate) fn restore_replay(
+        settings: BlockLogSettings,
+        mut rows: Vec<Delta>,
+        tail: Vec<Delta>,
+    ) -> Self {
+        rows.extend(tail.iter().cloned());
+        let mut log = Self::restore(settings, rows);
+        log.unpersisted = tail;
         log
     }
 
@@ -393,7 +417,11 @@ pub(crate) fn note_container(
 
 /// Seal this tick's captures against the final world and journal them with
 /// any rollback marks.
-pub(crate) fn journal(state: &mut TickState, entries: &mut Vec<crate::journal::JournalEntry>) {
+pub(crate) fn journal(
+    state: &mut TickState,
+    tick: u64,
+    entries: &mut Vec<crate::journal::JournalEntry>,
+) {
     let log = &state.block_log;
     if log.blocks.is_empty() && log.containers.is_empty() && log.marks.is_empty() {
         return;
@@ -410,6 +438,7 @@ pub(crate) fn journal(state: &mut TickState, entries: &mut Vec<crate::journal::J
         }
         records.push(Record {
             seq: 0,
+            tick: Some(tick),
             time: now,
             actor: pending.actor,
             pos: [pos.x, pos.y, pos.z],
@@ -432,6 +461,7 @@ pub(crate) fn journal(state: &mut TickState, entries: &mut Vec<crate::journal::J
         if !slots.is_empty() {
             records.push(Record {
                 seq: 0,
+                tick: Some(tick),
                 time: now,
                 actor: pending.actor,
                 pos: [pending.cell.0, pending.cell.1, pending.cell.2],
@@ -614,6 +644,10 @@ fn encode_record(
             Tag::Byte(i8::from(record.rolled_back)),
         ),
     ];
+    if let Some(tick) = record.tick {
+        let tick = i64::try_from(tick).map_err(|_| "block-log tick exceeds an NBT Long")?;
+        fields.push(("tick".into(), Tag::Long(tick)));
+    }
     match &record.change {
         Change::Block {
             before,
@@ -678,6 +712,11 @@ fn decode_record(
             .iter()
             .find(|(key, _)| key == name)
             .map(|(_, tag)| tag)
+    };
+    let tick = match field("tick") {
+        Some(Tag::Long(tick)) => Some(u64::try_from(*tick).map_err(|_| "negative block-log tick")?),
+        None => None,
+        _ => return Err("invalid block-log tick".into()),
     };
     let (Some(Tag::Long(time)), Some(Tag::String(actor)), Some(Tag::IntArray(pos))) =
         (field("time"), field("actor"), field("pos"))
@@ -754,6 +793,7 @@ fn decode_record(
     };
     Ok(Record {
         seq,
+        tick,
         time: *time as u64,
         actor: Arc::from(actor.as_str()),
         pos,
@@ -1401,8 +1441,11 @@ fn describe(state: &TickState, record: &Record, now: u64) -> String {
     };
     let [x, y, z] = record.pos;
     format!(
-        "{ago} ago - {} {what} at {x} {y} {z}{}",
+        "{ago} ago - {} {what} at {x} {y} {z} [tick={}]{}",
         record.actor,
+        record
+            .tick
+            .map_or_else(|| "unknown".to_owned(), |tick| tick.to_string()),
         if record.rolled_back {
             " (rolled back)"
         } else {

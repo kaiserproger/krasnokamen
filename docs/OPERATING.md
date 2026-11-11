@@ -659,6 +659,8 @@ a record whose block (or container slots) someone else changed afterwards is
 skipped and counted, never overwritten. A rolled-back chest gets its recorded
 contents back; items the griefer already took stay with them. Rolled-back
 records stay listed `(rolled back)` and are skipped by a second rollback.
+Each listed record shows its committing server tick as `[tick=N]`; records
+written before ticks were recorded show `[tick=unknown]`.
 Commands and records are per dimension.
 
 Records ride the tick WAL and live in the `block_log` table of
@@ -818,6 +820,12 @@ inventory and hashes before writing; the target must be empty or absent and
 separate from the backup. Missing, changed or extra files, incompatible
 manifests and symlinks are refused. Retain the TOML, plugin artifacts and access
 lists separately; backups are never pruned automatically.
+
+Database copies read through the file handle holding the lease, including on
+Windows; they do not release the lock or reopen `state.redb` to copy it.
+Anvil conversion and census receipts use `/`-separated world-relative paths on
+every host. The Windows `.solaris-world.lock` file is coordination, not imported
+world metadata or backup contents.
 
 #### Hot backup of a running server
 

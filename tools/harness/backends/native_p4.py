@@ -277,10 +277,25 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _capture(steps, "p4-damage-after")
     steps.report["visual_review_required"] = ["hit frame hurt direction/tilt versus before", "no client errors or runtime disconnect"]
 
+    _death_protection(steps, origin)
+
+    _warden_damage(steps, origin)
+    _damage_environment(steps, origin, steps.observe()["player"]["entity_id"])
+
+
+def _death_protection(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    player_id = steps.observe()["player"]["entity_id"]
+    steps.fixture("gamerule natural_health_regeneration false")
     # Real client receives and consumes a non-totem death-protection component.
     steps.fixture("kill @e[type=minecraft:zombie,distance=..32]")
     steps.fixture("gamemode creative @s")
     steps.fixture("effect give @s minecraft:instant_health 1 5 true")
+    steps.fixture("effect give @s minecraft:slowness 60 0 true")
+    steps.fixture("data get entity @s active_effects")
+    steps.wait(lambda state: any("has the following entity data:" in line and
+                               "minecraft:slowness" in line
+                               for line in state.get("recent_chat", [])),
+               "custom_death_protection_initial_effect_received")
     steps.fixture("clear @s")
     steps.fixture(
         "give @s minecraft:stick[death_protection={death_effects:["
@@ -310,12 +325,19 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.check("no_generic_totem_effects",
                 all(name not in effects for name in (
                     "minecraft:regeneration", "minecraft:absorption", "minecraft:fire_resistance")))
+    steps.check("custom_death_protection_clears_initial_effect",
+                "minecraft:slowness" not in effects)
     steps.report["custom_death_protection"] = {"health": saved["player"]["health"], "effects": effects}
+    _capture(steps, "custom-death-protection")
 
+
+def _warden_damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    x, y, z = origin
+    player_id = steps.observe()["player"]["entity_id"]
     # Provoke a real warden with ordinary lever vibrations, then observe its
     # sonic attack on the native connection (not a /damage identity alias).
     steps.fixture("gamemode creative @s")
-    steps.fixture("gamerule natural_regeneration false")
+    steps.fixture("gamerule natural_health_regeneration false")
     steps.fixture("effect clear @s")
     steps.fixture("effect give @s minecraft:instant_health 1 5 true")
     steps.fixture(f"tp @s {x + .5} {y} {z + .5}")
@@ -323,6 +345,7 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                abs(state["player"]["z"] - z - .5) < .3, "warden_fixture_player_ready")
     lever = _point(origin, dz=-2)
     _set(steps, lever, "minecraft:lever[face=floor,facing=north]")
+    steps.fixture(f"fill {x - 5} {y} {z - 4} {x + 5} {y + 4} {z - 4} minecraft:stone")
     steps.fixture(f"summon minecraft:warden {x + .5} {y} {z - 7.5} {{UUID:[I;0,0,0,123457]}}")
     warden: dict[str, Any] = {}
     def warden_received(_: dict[str, Any]) -> bool:
@@ -338,7 +361,6 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     for _ in range(3):
         _use(steps, lever)
         steps.call("minecraft_wait_ticks", {"ticks": 50})
-    steps.fixture(f"fill {x - 5} {y} {z - 4} {x + 5} {y + 4} {z - 4} minecraft:stone")
     steps.fixture("damage @s 13 minecraft:generic")
     steps.wait(lambda state: 0 < state["player"]["health"] < 10, "warden_lethal_health_prepared")
 
@@ -360,7 +382,34 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture("gamemode creative @s")
     steps.fixture("kill @e[type=minecraft:warden]")
     steps.call("minecraft_wait_ticks", {"ticks": 70})
-    _damage_environment(steps, origin, steps.observe()["player"]["entity_id"])
+
+
+def _damage_identities(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    """Identity admission and emission, not absent physical implementations."""
+    player_id = steps.observe()["player"]["entity_id"]
+    steps.fixture("gamerule natural_health_regeneration false")
+    events = []
+    for kind in ("freeze", "fly_into_wall", "cramming", "sonic_boom",
+                 "stalagmite", "dragon_breath", "indirect_magic"):
+        steps.fixture("gamemode creative @s")
+        steps.fixture("effect give @s minecraft:instant_health 1 5 true")
+        steps.wait(lambda state: state["player"]["health"] == 20, f"{kind}_healed")
+        steps.call("minecraft_wait_ticks", {"ticks": 25})
+        steps.fixture("effect clear @s")
+        start = len(steps.client.p4_damage_wire())
+        steps.fixture("gamemode survival @s")
+        steps.fixture(f"damage @s 2 minecraft:{kind}")
+        steps.wait(lambda state: state["player"]["health"] < 20 and any(
+            event["entity_id"] == player_id and event["type"] == f"minecraft:{kind}"
+            for event in steps.client.p4_damage_wire()[start:]),
+            f"{kind}_command_identity_received")
+        events.extend(steps.client.p4_damage_wire()[start:])
+    steps.report["command_damage_identities"] = events
+    _warden_damage(steps, origin)
+    steps.report["limits"] = [
+        "Command identity cases do not claim freeze, cramming or wall collision mechanics.",
+        "Physical source: angered warden sonic attack, including death and respawn.",
+    ]
 
 
 def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_id: int) -> None:
@@ -659,6 +708,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int], surface: str) -> None:
     steps.report["surface"] = surface
     try:
         {"nameplates": _nameplates, "advancements": _advancements, "damage": _damage,
+         "identities": _damage_identities, "death-protection": _death_protection,
          "hopper": _hopper, "statistics": _stats}[surface](steps, origin)
     except Exception:
         try:
