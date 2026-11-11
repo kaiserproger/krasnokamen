@@ -59,6 +59,8 @@ def _die(steps: ProbeSteps, peer: ProbeSteps, display: str, actor_pid: int, labe
     steps.call("minecraft_respawn", {"timeout_seconds": steps.remaining()})
     steps.wait(lambda state: state["player"]["health"] > 0 and not state["screen"]["open"],
                f"{label}_respawn_received", wait_for_play=True)
+    # A respawned player is briefly invulnerable to most damage types; let it lapse before the next case.
+    steps.call("minecraft_wait_ticks", {"ticks": 100})
     victim_state, peer_state = _flush(steps, peer, label)
     rows = steps.report.setdefault("death_chat", {})
     rows[label] = {"command": command, "expect": f"{VICTIM} {text}", "victim_chat": _chat(victim_state),
