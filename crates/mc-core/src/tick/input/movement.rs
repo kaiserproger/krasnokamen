@@ -453,15 +453,8 @@ pub(in crate::tick) fn vehicle_input(
     state: &mut TickState,
     (connection, flags): (&ConnectionId, &u8),
 ) {
-    if let Some(entity) = state.connections.entity_of(*connection)
-        && let Some(slot) = state.entities.slot_of(entity)
-    {
-        let input = if crate::mounts::vehicle(state, entity).is_some() {
-            *flags
-        } else {
-            0
-        };
-        state.entities.row_mut(slot).entity_life.mount.input = input;
+    if let Some(entity) = state.connections.entity_of(*connection) {
+        crate::mounts::input(state, entity, *flags);
     }
 }
 

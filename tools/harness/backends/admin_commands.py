@@ -21,7 +21,6 @@ import json
 import os
 import re
 import subprocess
-import time
 from pathlib import Path
 from typing import Any
 
@@ -228,18 +227,12 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             probe.fixture("tick freeze")
             probe.wait(lambda s: any("frozen" in l.lower() for l in _chat(s)), "tick_freeze_feedback")
             held = game_time("gametime_frozen_a")
-            # A frozen server tells the client (ClientboundTickingState) to stop its own ticking.
-            frozen_client = probe.observe()["client_tick"]
-            time.sleep(3.0)
+            # Freeze stops the server world, not the client's input/render loop.
+            client_ticks(60, "local_client_ticks_while_world_frozen")
             held_after = game_time("gametime_frozen_b")
             probe.check("frozen_game_time_does_not_advance", held_after == held)
-            probe.check("client_halts_ticks_while_frozen",
-                        probe.observe()["client_tick"] == frozen_client)
             probe.fixture("tick step 5")
-            probe.wait(lambda s: s["client_tick"] >= frozen_client + 5, "client_steps_five_ticks")
-            time.sleep(1.0)
-            probe.check("client_ticks_exactly_the_stepped_count",
-                        probe.observe()["client_tick"] == frozen_client + 5)
+            client_ticks(60, "local_client_ticks_after_world_step")
             stepped = game_time("gametime_after_step")
             probe.check("step_advances_exactly_five_ticks", stepped - held == 5)
             probe.report["tick_game_time"] = {"frozen": held, "after_wait": held_after, "after_step": stepped}

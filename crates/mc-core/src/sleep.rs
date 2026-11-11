@@ -256,6 +256,7 @@ pub(crate) fn use_bed(
 /// Get `entity` out of its bed (leave-bed command, morning, hit, death).
 pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
     if let Some(sleeper) = state.sleepers.remove(&entity) {
+        cat_gifts(state, entity, sleeper);
         if let Some(slot) = state.entities.slot_of(entity) {
             let [yaw, pitch, _] = state.entities.rot(slot);
             if let Some(exit) = bed_exit(state, sleeper.bed, yaw) {
@@ -270,10 +271,93 @@ pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
     }
 }
 
+fn cat_gifts(state: &mut TickState, owner: EntityId, sleeper: Sleeper) {
+    let morning = state.day_time.rem_euclid(24_000) < 1000 && sleeper.ticks >= SLEEP_TICKS;
+    let Some(owner_slot) = state.entities.slot_of(owner) else {
+        return;
+    };
+    let uuid = state.entities.row(owner_slot).uuid;
+    let Some(kind) = crate::piglin::type_id_of("minecraft:cat") else {
+        return;
+    };
+    let mut cats = std::mem::take(&mut state.serial_entity_slots);
+    cats.extend(state.entities.mob_slots(kind));
+    for &slot in &cats {
+        if state.entities.row(slot).entity_life.taming.owner != Some(uuid) {
+            continue;
+        }
+        let row = state.entities.row_mut_unmarked(slot);
+        let rested = std::mem::take(&mut row.cat_bed_ticks) >= SLEEP_TICKS;
+        if !morning || !rested || !row.entity_life.tamed || row.entity_life.sitting {
+            continue;
+        }
+        // The roll advances the persisted taming counter.
+        let row = state.entities.row_mut(slot);
+        if crate::taming::roll(row, 10) >= 7 {
+            continue;
+        }
+        // data/minecraft/loot_table/gameplay/cat_morning_gift.json: six
+        // weight-ten entries, then phantom membrane with weight two.
+        let pick = crate::taming::roll(row, 62) / 10;
+        let gift = [
+            "rabbit_hide",
+            "rabbit_foot",
+            "chicken",
+            "feather",
+            "rotten_flesh",
+            "string",
+            "phantom_membrane",
+        ][pick as usize];
+        let gift = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(format!("minecraft:{gift}")).unwrap())
+            .expect("cat gift item");
+        state
+            .merge_life_drops
+            .push((state.entities.pos(slot), mc_data::ItemStack::new(gift, 1)));
+    }
+    cats.clear();
+    state.serial_entity_slots = cats;
+}
+
+fn rest_cats(state: &mut TickState) {
+    let Some(kind) = crate::piglin::type_id_of("minecraft:cat") else {
+        return;
+    };
+    let mut cats = std::mem::take(&mut state.serial_entity_slots);
+    cats.extend(state.entities.mob_slots(kind));
+    for &slot in &cats {
+        let pos = state.entities.pos(slot);
+        let row = state.entities.row(slot);
+        let resting = state.entities.body(slot).alive
+            && row.entity_life.tamed
+            && !row.entity_life.sitting
+            && !row.controls.no_ai
+            && row
+                .entity_life
+                .taming
+                .owner
+                .and_then(|uuid| state.entities.slot_of_uuid(uuid))
+                .is_some_and(|owner| {
+                    state.sleepers.contains_key(&state.entities.body(owner).id)
+                        && crate::bees::distance(pos, state.entities.pos(owner)) < 9.0
+                });
+        // Runtime counter: an idle cat is not written at all.
+        if resting || state.entities.row(slot).cat_bed_ticks != 0 {
+            let ticks = &mut state.entities.row_mut_unmarked(slot).cat_bed_ticks;
+            *ticks = if resting { ticks.saturating_add(1) } else { 0 };
+        }
+    }
+    cats.clear();
+    state.serial_entity_slots = cats;
+}
+
 /// Once per tick: count sleep time, wake those whose bed is gone, whose
 /// night is over or who were hurt, and skip the night when the gamerule's
 /// percentage of active non-spectator players sleeps soundly.
 pub(crate) fn run(state: &mut TickState) {
+    rest_cats(state);
     if state.sleepers.is_empty() {
         return;
     }

@@ -137,7 +137,7 @@ fn contact_alive(
 ) -> bool {
     let row = entities.row(slot);
     entities.body(slot).alive
-        && row.entity_life.mount.rider.is_none()
+        && row.entity_life.mount.riders.is_empty()
         && row.entity_life.mount.vehicle.is_none()
         && !matches!(entities.body(slot).kind, crate::entities::EntityKind::Mob { type_id } if Some(type_id) == filter.dragon || Some(type_id) == filter.wither)
 }

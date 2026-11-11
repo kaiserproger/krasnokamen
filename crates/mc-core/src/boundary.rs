@@ -683,6 +683,7 @@ pub enum EntityDataValue {
     Boolean(bool),
     WeatheringCopper(u8),
     CopperGolemState(u8),
+    SnifferState(u8),
     Direction(u8),
     PaintingVariant(u32),
     String(String),

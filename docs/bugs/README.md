@@ -308,6 +308,17 @@ The `entities` profile includes windowed native-client probes:
   custom death protection, writable death/player/total kill counters and a swap,
   stored result/success for give, clear and failed clear, and inventory counts.
   A graphical receipt and negative control are required before promotion.
+- `native-v2-happy-ghast-harness`: an ordinary survival harness debit admits the
+  graphical player and three independent native peers; a fifth peer is refused.
+  Received passenger packets prove distinct seats and independent dismount.
+  The public NBT view hides `solaris:` keys, so the refusal is fenced by the
+  fourth rider's later dismount in the same ordered passenger stream: no
+  passenger event before it may carry a fifth id. The focused native
+  checkpoint regression separately checks harness/rider custody on disk.
+- `native-v2-mob-metadata-spot`: one frog, strider, camel and sniffer stand in
+  frame on a private pad, a small slime is then eaten by the frog; the client
+  must stay in play and its log must carry no decode failure (sniffer state is
+  accessor 18; frog tongue, strider cold and camel dash are 19).
 - `native-v2-p4-identities`: seven named `/damage` identities must reach the
   actual client's damage stream with health loss, followed by a lever-provoked
   warden's sonic attack through a preplaced wall, death screen and respawn. Command cases prove identity
@@ -331,6 +342,28 @@ The `entities` profile includes windowed native-client probes:
   toggle, inventory clone tracking, pumpkin hiding, terrain shading and Nether
   terrain repros. Read-only receipts reconstruct the graphical viewer's exact
   map packets; screenshots still require review, especially marker visibility.
+- `native-v2-input-menus`: physical number/F/Q/Ctrl-Q keys and sub-tick pointer
+  edges in survival and creative inventory. Server snapshots check the source,
+  reopened destination and survival carried stack. Creative cursors are local:
+  captures must show the held stack, then its exact count must survive placement
+  and reopening.
+- `native-v2-input-pick`: physical middle-click and gameplay F in both modes;
+  block/entity picking must not create free items in survival.
+- `native-v2-input-camera`: frozen-world teleport and F1 hide/restore, checking
+  captured camera and HUD pixels while the local client loop continues.
+  `admin-commands` checks frozen/stepped server game time, not a stopped client
+  clock: native input and rendering must keep running while the world is frozen.
+- `native-v2-input-sand`: `/setblock` airborne sand in a frozen world becomes a
+  rendered entity after `/tick step`, and the server holds it between steps:
+  `data get entity … Pos` read in successive server ticks must stop changing
+  (a server that keeps dropping it never does). The client predicts gravity
+  between received position updates, then the sand lands and clears its source.
+  Vanilla resends a moved falling block every 20 server ticks even while frozen,
+  so the gate runs one tick per second, starts on a received update and steps
+  twice in one command: the predicted position must equal vanilla's two-tick
+  fall and the drawn pose must lie on that path, below the received one.
+  Received, predicted and presented positions are distinct observations; only
+  the captured frame and its reviewed pixels prove drawing.
 - Axolotl play-dead and potion custom-impact probes are unregistered prototypes;
   they cannot be run from the harness, and `AXOLOTL-PLAY-DEAD` and
   `POTION-CUSTOM-PAYLOAD` stay open.
