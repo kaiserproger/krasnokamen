@@ -1,0 +1,91 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 995 159 995 1005 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 995 160 995 1005 165 1010 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "cmd": "clear @s"
+    },
+    {
+      "cmd": "give @s minecraft:diamond_pickaxe[damage=781]"
+    },
+    {
+      "cmd": "give @s minecraft:bundle[bundle_contents=[{id:\"minecraft:stone\",count:32}]]"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "bars-damaged"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:diamond_pickaxe"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:bundle"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "bars-clean"
+    },
+    {
+      "observe": "inventory"
+    }
+  ]
+}

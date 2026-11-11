@@ -2885,7 +2885,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:156"
-regression = []
+regression = ["harness:scene-shot:native-entity-visuals"]
 
 [[bug]]
 id = "MODEL-OPUS-13"
@@ -2925,7 +2925,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:174"
-regression = []
+regression = ["harness:scene-shot:native-entity-visuals"]
 
 [[bug]]
 id = "MODEL-OPUS-N1"
@@ -2955,7 +2955,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:107"
-regression = []
+regression = ["harness:scene-shot:native-player-head"]
 
 [[bug]]
 id = "MODEL-OPUS-N4"
@@ -3108,7 +3108,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:32"
-regression = ["harness:scene-shot:native-shelf-clock"]
+regression = ["harness:scene-shot:native-shelf-clock", "harness:scene-shot:native-dynamic-context"]
 
 [[bug]]
 id = "MODEL-BLOCK-ENTITY-DRAW"
@@ -3128,7 +3128,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:86"
-regression = []
+regression = ["harness:scene-shot:native-entity-visuals"]
 
 [[bug]]
 id = "MODEL-ENTITY-TNT-FALLING-LIGHTNING"
@@ -3148,7 +3148,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:88"
-regression = []
+regression = ["harness:scene-shot:native-entity-visuals"]
 
 [[bug]]
 id = "MODEL-PANE-ALPHA"
@@ -3168,7 +3168,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:84"
-regression = []
+regression = ["harness:scene-shot:native-shade-override"]
 
 [[bug]]
 id = "MODEL-ENTITY-263-RIGS"
@@ -3188,7 +3188,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:86"
-regression = []
+regression = ["harness:scene-shot:native-item-bars"]
 
 [[bug]]
 id = "MODEL-SHIELD-GUI"

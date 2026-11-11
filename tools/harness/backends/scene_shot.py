@@ -679,6 +679,209 @@ def check_shelf_clock(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("clock_face_visible", all(sum(mask) >= 20 for mask in masks))
     probe.check("clock_face_changed", changes >= 20)
 
+def _load_shots(probe: ProbeSteps, artifact: Path, names: tuple[str, ...]) -> dict:
+    from PIL import Image
+    shots = {}
+    for name in names:
+        frame = json.loads((artifact / f"screenshots/{name}.json").read_text())
+        probe.check(f"{name}_gpu_complete", frame.get("gpu_completion") is True)
+        with Image.open(artifact / f"screenshots/{name}.png") as image:
+            probe.check(f"{name}_image_size", image.size == (1280, 720))
+            shots[name] = (frame, image.convert("RGB"))
+    return shots
+
+
+def _changed(a, b, box) -> int:
+    return sum(
+        max(abs(x - y) for x, y in zip(p, q)) > 25
+        for p, q in zip(a.crop(box).getdata(), b.crop(box).getdata())
+    )
+
+
+def _count(image, box, pred) -> int:
+    return sum(1 for p in image.crop(box).getdata() if pred(*p))
+
+
+def check_entity_visuals(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-12, MODEL-OPUS-16, MODEL-ENTITY-FIRE, MODEL-ENTITY-LEASH."""
+    names = ("empty", "vindicator", "ghastling", "burning", "plain", "leashed")
+    shots = _load_shots(probe, artifact, names)
+    ref = shots["empty"][0]
+    for name in names[1:]:
+        frame = shots[name][0]
+        probe.check(f"{name}_camera_unchanged", all(
+            abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+        ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    maroon = lambda r, g, b: r > g + 25 and r > b + 25
+    teal = lambda r, g, b: g > r + 15 and b > r + 15
+    pink = lambda r, g, b: r - b > 40 and r > 120
+    white = lambda r, g, b: r > 170 and g > 170 and b > 170 and max(r, g, b) - min(r, g, b) < 35
+    orange = lambda r, g, b: r > 150 and 60 < g < 210 and b < 110
+    rope = lambda r, g, b: 60 < r < 140 and 40 < g < 100 and b < 70 and r > g > b
+    vindicator = shots["vindicator"][1]
+    probe.check("vindicator_visible", _changed(shots["vindicator"][1], shots["empty"][1], (560, 280, 780, 560)) > 500)
+    probe.check("vindicator_torso_not_maroon", _count(vindicator, (600, 380, 680, 450), maroon) < 50)
+    arm_pixels = sum(_count(vindicator, box, teal) for box in ((590, 390, 615, 470), (665, 390, 700, 470)))
+    probe.report["vindicator_teal_arm_pixels"] = arm_pixels
+    probe.check("vindicator_arms_not_teal", arm_pixels < 50)
+    leg_teal = _count(vindicator, (600, 460, 680, 540), teal)
+    probe.report["vindicator_teal_leg_pixels"] = leg_teal
+    probe.check("vindicator_legs_teal", leg_teal > 150)
+    ghast_box = (560, 260, 780, 470)
+    pink_n = _count(shots["ghastling"][1], ghast_box, pink)
+    white_excess = _count(shots["ghastling"][1], ghast_box, white) - _count(shots["empty"][1], ghast_box, white)
+    probe.report["ghastling_pink_pixels"] = pink_n
+    probe.report["ghastling_white_excess"] = white_excess
+    probe.check("ghastling_not_pink", pink_n < 500)
+    probe.check("ghastling_body_white", white_excess > 3000)
+    fire_box = (560, 300, 760, 520)
+    burning_orange = _count(shots["burning"][1], fire_box, orange)
+    plain_orange = _count(shots["plain"][1], fire_box, orange)
+    probe.report["fire_orange_pixels"] = [plain_orange, burning_orange]
+    probe.check("fire_overlay_only_when_burning", burning_orange - plain_orange > 4000)
+    probe.check("fire_overlay_present", burning_orange > 5000)
+    rope_n = _count(shots["leashed"][1], (560, 400, 760, 500), rope)
+    probe.report["leash_rope_pixels"] = rope_n
+    probe.check("leash_rope_drawn", rope_n > 300)
+    probe.report["visual_review_required"] = [
+        "Inspect vindicator/ghastling/burning/plain/leashed frames; pixel predicates do not prove full model parity."
+    ]
+
+
+def check_item_bars(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-ITEM-BARS: durability bar and bundle fullness bar in the GUI hotbar."""
+    shots = _load_shots(probe, artifact, ("bars-damaged", "bars-clean"))
+    ref = shots["bars-damaged"][0]
+    frame = shots["bars-clean"][0]
+    probe.check("bars_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+    ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    yellow = lambda r, g, b: r > 70 and g > 70 and b < r - 20 and b < g - 10
+    blue = lambda r, g, b: b > r + 25 and b > g + 10 and b > 70
+    damaged, clean = shots["bars-damaged"][1], shots["bars-clean"][1]
+    slot0, slot2 = (376, 664, 420, 712), (420, 664, 464, 712)
+    probe.report["pickaxe_slot_changed_pixels"] = _changed(damaged, clean, slot0)
+    probe.report["bundle_slot_changed_pixels"] = _changed(damaged, clean, slot2)
+    probe.check("pickaxe_slot_bar_changes", _changed(damaged, clean, slot0) > 50)
+    probe.check("bundle_slot_bar_changes", _changed(damaged, clean, slot2) > 50)
+    probe.report["durability_bar_pixels"] = _count(damaged, (376, 698, 420, 710), yellow)
+    probe.report["fullness_bar_pixels"] = _count(damaged, (420, 698, 464, 710), blue)
+    probe.check("durability_bar_drawn", _count(damaged, (376, 698, 420, 710), yellow) > 20)
+    probe.check("fullness_bar_drawn", _count(damaged, (420, 698, 464, 710), blue) > 15)
+
+
+def check_shade_override(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-SHADE-OVERRIDE: cross plants get no directional face shading in 26.3."""
+    shots = _load_shots(probe, artifact, ("shade-north", "shade-east"))
+    north_f, east_f = shots["shade-north"][0], shots["shade-east"][0]
+    probe.check("shade_north_camera", all(
+        abs(a - b) < 0.01 for a, b in zip(north_f["camera_position"], (1000.5, 161.62, 1000.5))
+    ) and abs(north_f["yaw"]) < 0.01)
+    probe.check("shade_east_camera", all(
+        abs(a - b) < 0.01 for a, b in zip(east_f["camera_position"], (1004.5, 161.62, 1004.5))
+    ) and abs(east_f["yaw"] - 90.0) < 0.01)
+    plant = lambda r, g, b: (r > 120 and g < 100 and b < 100) or (g > 90 and r < 120 and b < 120)
+    box = (560, 440, 720, 580)
+    lums = []
+    counts = []
+    for name in ("shade-north", "shade-east"):
+        image = shots[name][1]
+        pixels = [p for p in image.crop(box).getdata() if plant(*p)]
+        counts.append(len(pixels))
+        lums.append(sum(sum(p) for p in pixels) / len(pixels) / 3 if pixels else 0.0)
+    probe.report["poppy_plant_pixels"] = counts
+    probe.report["poppy_mean_luminance"] = [round(v, 2) for v in lums]
+    probe.check("poppy_visible_both_views", all(c > 3000 for c in counts))
+    probe.check("poppy_no_directional_shading", abs(lums[0] - lums[1]) < 8.0)
+
+
+def check_player_head(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-N3: placed and worn player heads render (hat layer needs an online skin)."""
+    shots = _load_shots(probe, artifact, ("head-empty", "head-block", "head-worn", "head-none"))
+    empty_f, block_f = shots["head-empty"][0], shots["head-block"][0]
+    probe.check("head_front_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(empty_f["camera_position"], block_f["camera_position"])
+    ) and abs(empty_f["yaw"] - block_f["yaw"]) < 0.01 and abs(empty_f["pitch"] - block_f["pitch"]) < 0.01)
+    worn_f, none_f = shots["head-worn"][0], shots["head-none"][0]
+    probe.check("head_back_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(worn_f["camera_position"], none_f["camera_position"])
+    ) and abs(worn_f["yaw"] - none_f["yaw"]) < 0.01 and abs(worn_f["pitch"] - none_f["pitch"]) < 0.01)
+    placed = _changed(shots["head-block"][1], shots["head-empty"][1], (880, 520, 1080, 680))
+    worn = _changed(shots["head-worn"][1], shots["head-none"][1], (560, 280, 760, 420))
+    probe.report["placed_head_changed_pixels"] = placed
+    probe.report["worn_head_changed_pixels"] = worn
+    probe.check("placed_head_renders", placed > 100)
+    probe.check("worn_head_renders", worn > 500)
+
+def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-DYNAMIC-CONTEXT: shelf, dropped and held clocks plus two shelf
+    compasses at different positions all receive world context."""
+    import math
+    shots = _load_shots(probe, artifact, ("ctx-day", "ctx-night", "compass-day"))
+    ref = shots["ctx-day"][0]
+    for name in ("ctx-night", "compass-day"):
+        frame = shots[name][0]
+        probe.check(f"{name}_camera_unchanged", all(
+            abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+        ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    probe.check("ctx_received_time_changed",
+                shots["ctx-day"][0]["environment"]["time_of_day"] == "1000"
+                and shots["ctx-night"][0]["environment"]["time_of_day"] == "13000"
+                and shots["compass-day"][0]["environment"]["time_of_day"] == "1000")
+    def axis_angle(points):
+        cx = sum(p[0] for p in points) / len(points)
+        cy = sum(p[1] for p in points) / len(points)
+        sxx = sum((x - cx) ** 2 for x, _ in points) / len(points)
+        syy = sum((y - cy) ** 2 for _, y in points) / len(points)
+        sxy = sum((x - cx) * (y - cy) for x, y in points) / len(points)
+        return math.degrees(0.5 * math.atan2(2 * sxy, sxx - syy))
+
+    def axis_diff(a, b):
+        d = abs(a - b) % 180.0
+        return min(d, 180.0 - d)
+
+    blue = lambda r, g, b: b > r * 1.35 and b > g * 1.15 and b > 15
+    day, night = shots["ctx-day"][1], shots["ctx-night"][1]
+    for name, box, threshold in (
+        ("shelf_clock_left", (385, 480, 410, 505), 20),
+        ("shelf_clock_right", (975, 470, 1005, 500), 20),
+        ("held_clock", (660, 390, 705, 435), 50),
+    ):
+        m1 = [blue(*p) for p in day.crop(box).getdata()]
+        m2 = [blue(*p) for p in night.crop(box).getdata()]
+        changed = sum(a != b for a, b in zip(m1, m2))
+        probe.report[f"{name}_blue_pixels"] = [sum(m1), sum(m2)]
+        probe.report[f"{name}_changed"] = changed
+        probe.check(f"{name}_face_changed", changed >= threshold)
+    # Dropped clock: the dark needle angle must change between received day and night.
+    dark = lambda r, g, b: max(r, g, b) < 95 and max(r, g, b) - min(r, g, b) < 25
+    drop_box = (335, 640, 395, 700)
+    drop_angles = []
+    for name, image in (("day", day), ("night", night)):
+        crop = image.crop(drop_box)
+        w, h = crop.size
+        px = [(x, y) for y in range(h) for x in range(w) if dark(*crop.getpixel((x, y)))]
+        probe.report[f"dropped_clock_dark_pixels_{name}"] = len(px)
+        probe.check(f"dropped_clock_face_{name}", len(px) >= 100)
+        drop_angles.append(axis_angle(px))
+    probe.report["dropped_clock_axis_angles"] = [round(a, 1) for a in drop_angles]
+    probe.check("dropped_clock_face_changed", axis_diff(drop_angles[0], drop_angles[1]) > 30.0)
+    red = lambda r, g, b: r > g * 1.25 and r > b * 1.25 and r > 50
+    comp = shots["compass-day"][1]
+    angles = []
+    for name, box in (("compass_left", (425, 485, 450, 510)), ("compass_right", (1000, 480, 1025, 505))):
+        crop = comp.crop(box)
+        w, h = crop.size
+        px = [(x, y) for y in range(h) for x in range(w) if red(*crop.getpixel((x, y)))]
+        probe.report[f"{name}_needle_pixels"] = len(px)
+        probe.check(f"{name}_needle_visible", len(px) >= 50)
+        angles.append(axis_angle(px))
+    probe.report["compass_needle_axis_angles"] = [round(a, 1) for a in angles]
+    probe.check("compass_needle_follows_position", axis_diff(angles[0], angles[1]) > 30.0)
+    probe.report["visual_review_required"] = [
+        "Inspect ctx-day/ctx-night/compass-day frames; mask predicates do not prove vanilla needle parity."
+    ]
+
 
 
 def start_java(ctx: ProfileContext, artifact: Path, address: str | None, username: str, timeout: float,
@@ -729,6 +932,18 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
             raise ValueError("native-shelf-clock requires its registered native fixture without overrides")
         scenario = json.loads((runtime.REPO_ROOT / "tools/harness/shelf_clock_scene.json").read_text())
+    elif ctx.scenario_id in ("native-entity-visuals", "native-item-bars", "native-shade-override",
+                            "native-player-head", "native-dynamic-context"):
+        fixtures = {
+            "native-entity-visuals": "entity_visuals_scene.json",
+            "native-item-bars": "item_bars_scene.json",
+            "native-shade-override": "shade_override_scene.json",
+            "native-player-head": "player_head_scene.json",
+            "native-dynamic-context": "dynamic_context_scene.json",
+        }
+        if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
+            raise ValueError(f"{ctx.scenario_id} requires its registered native fixture without overrides")
+        scenario = json.loads((runtime.REPO_ROOT / "tools/harness" / fixtures[ctx.scenario_id]).read_text())
     elif ctx.scenario_id == "native-command-feedback":
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
             raise ValueError("native-command-feedback requires its registered native fixture without overrides")
@@ -910,6 +1125,16 @@ def run(
                 check_263_entity_rigs(probe, artifact)
             elif ctx.scenario_id == "native-shelf-clock":
                 check_shelf_clock(probe, artifact)
+            elif ctx.scenario_id == "native-entity-visuals":
+                check_entity_visuals(probe, artifact)
+            elif ctx.scenario_id == "native-item-bars":
+                check_item_bars(probe, artifact)
+            elif ctx.scenario_id == "native-shade-override":
+                check_shade_override(probe, artifact)
+            elif ctx.scenario_id == "native-player-head":
+                check_player_head(probe, artifact)
+            elif ctx.scenario_id == "native-dynamic-context":
+                check_dynamic_context(probe, artifact)
         result = {"screenshots": shots, "scenario": probe.report, "seed": seed, "settings": settings, "client_latency_ms": client_latency_ms}
     finally:
         if mcp is not None:

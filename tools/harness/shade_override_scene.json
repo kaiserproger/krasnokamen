@@ -1,0 +1,85 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 995 159 995 1005 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 995 160 995 1005 165 1010 minecraft:air"
+    },
+    {
+      "cmd": "setblock 1000 159 1004 minecraft:grass_block"
+    },
+    {
+      "cmd": "setblock 1000 160 1004 minecraft:poppy"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "shot": "shade-north"
+    },
+    {
+      "tp": [
+        1004.5,
+        160,
+        1004.5,
+        90,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "shade-east"
+    }
+  ]
+}

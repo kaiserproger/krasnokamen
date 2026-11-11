@@ -278,6 +278,33 @@ clock-face pattern in a fixed shelf position at received day and night times;
 it also checks camera and GPU completion. It covers that shelf-clock surface
 only, not compass, other contexts, or exact vanilla appearance.
 
+`run scenario native-entity-visuals --client native --windowed` fails if the
+vindicator's torso reads maroon or its arms read teal (MODEL-OPUS-12), the baby
+happy ghast renders pink instead of white (MODEL-OPUS-16), a burning pig shows
+no fire quads or a plain pig shows them (MODEL-ENTITY-FIRE), or a leashed pair
+shows no rope (MODEL-ENTITY-LEASH). One entity per shot, fixed camera.
+
+`run scenario native-item-bars --client native --windowed` fails if the damaged
+pickaxe or filled bundle slot does not change against undamaged/empty
+replacements, or the durability/fullness bar fill is missing (MODEL-ITEM-BARS).
+
+`run scenario native-shade-override --client native --windowed` fails if the
+poppy's plant pixels differ in mean luminance between the north and east views
+(26.3 `shade_direction_override` must suppress per-face directional shading;
+MODEL-SHADE-OVERRIDE). Vanilla pixel parity still needs the Java oracle.
+
+`run scenario native-player-head --client native --windowed` fails if a placed
+or worn player head does not change its frame region (MODEL-OPUS-N3). The hat
+layer itself needs an online skin: the client rejects profile texture URLs whose
+host is not `textures.minecraft.net` (`src/profile_textures.rs`).
+
+`run scenario native-dynamic-context --client native --windowed` fails if the
+left/right shelf clocks' blue face pattern or the held clock's pattern does not
+change between received day and night, if the dropped clock's needle axis does
+not rotate, or if two shelf compasses at different positions show the same
+needle axis (MODEL-DYNAMIC-CONTEXT). Item frames cannot hold an item through
+`summon` on this server, so that surface is not covered here.
+
 `use_phases` (native only) takes `name` and `ticks` (1–100), holds use across
 start and hold captures, releases it even on failure, and requires the client's
 `using` state to transition idle → active → active → idle.

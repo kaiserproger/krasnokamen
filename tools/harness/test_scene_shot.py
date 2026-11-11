@@ -63,6 +63,140 @@ class SceneShotTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "clock_face_changed"):
                 scene_shot.check_shelf_clock(probe, root)
 
+    @staticmethod
+    def _write_shot(root, name, camera, yaw=0.0, draw=None):
+        from PIL import Image, ImageDraw
+        frame = {"gpu_completion": True, "camera_position": camera, "yaw": yaw, "pitch": 0}
+        (root / f"screenshots/{name}.json").write_text(json.dumps(frame))
+        image = Image.new("RGB", (1280, 720), (0, 0, 0))
+        if draw is not None:
+            draw(ImageDraw.Draw(image))
+        image.save(root / f"screenshots/{name}.png")
+
+    def test_entity_visuals_asserts_regions(self):
+        from PIL import Image, ImageDraw
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "screenshots").mkdir()
+            cam = [1000.5, 161.62, 1000.5]
+            probe = scene_shot.ProbeSteps(None, root, 10, "test")
+            def vindicator(d):
+                d.rectangle((600, 460, 680, 540), fill=(28, 57, 58))
+                d.rectangle((600, 380, 680, 450), fill=(46, 44, 42))
+                d.rectangle((590, 390, 615, 470), fill=(59, 60, 60))
+                d.rectangle((665, 390, 700, 470), fill=(55, 54, 52))
+            self._write_shot(root, "empty", cam)
+            self._write_shot(root, "vindicator", cam, draw=vindicator)
+            self._write_shot(root, "ghastling", cam,
+                             draw=lambda d: d.rectangle((560, 260, 780, 470), fill=(240, 240, 240)))
+            self._write_shot(root, "burning", cam,
+                             draw=lambda d: d.rectangle((560, 300, 760, 520), fill=(220, 120, 40)))
+            self._write_shot(root, "plain", cam)
+            self._write_shot(root, "leashed", cam,
+                             draw=lambda d: d.rectangle((560, 400, 760, 500), fill=(100, 70, 40)))
+            scene_shot.check_entity_visuals(probe, root)
+            self._write_shot(root, "vindicator", cam,
+                             draw=lambda d: d.rectangle((600, 380, 680, 450), fill=(120, 40, 40)))
+            with self.assertRaisesRegex(RuntimeError, "vindicator_torso_not_maroon"):
+                scene_shot.check_entity_visuals(probe, root)
+            self._write_shot(root, "vindicator", cam, draw=vindicator)
+            self._write_shot(root, "ghastling", cam,
+                             draw=lambda d: d.rectangle((560, 260, 780, 470), fill=(240, 120, 160)))
+            with self.assertRaisesRegex(RuntimeError, "ghastling_not_pink"):
+                scene_shot.check_entity_visuals(probe, root)
+            self._write_shot(root, "ghastling", cam,
+                             draw=lambda d: d.rectangle((560, 260, 780, 470), fill=(240, 240, 240)))
+            self._write_shot(root, "leashed", cam)
+            with self.assertRaisesRegex(RuntimeError, "leash_rope_drawn"):
+                scene_shot.check_entity_visuals(probe, root)
+
+    def test_item_bars_asserts_slot_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "screenshots").mkdir()
+            cam = [1000.5, 161.62, 1000.5]
+            probe = scene_shot.ProbeSteps(None, root, 10, "test")
+            def bars(d):
+                d.rectangle((376, 698, 420, 710), fill=(200, 200, 40))
+                d.rectangle((420, 698, 464, 710), fill=(40, 80, 220))
+            self._write_shot(root, "bars-damaged", cam, draw=bars)
+            self._write_shot(root, "bars-clean", cam)
+            scene_shot.check_item_bars(probe, root)
+            self._write_shot(root, "bars-clean", cam, draw=bars)
+            with self.assertRaisesRegex(RuntimeError, "pickaxe_slot_bar_changes"):
+                scene_shot.check_item_bars(probe, root)
+
+    def test_shade_override_asserts_equal_luminance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "screenshots").mkdir()
+            probe = scene_shot.ProbeSteps(None, root, 10, "test")
+            north_cam, east_cam = [1000.5, 161.62, 1000.5], [1004.5, 161.62, 1004.5]
+            self._write_shot(root, "shade-north", north_cam, yaw=0.0,
+                             draw=lambda d: d.rectangle((560, 440, 720, 580), fill=(60, 140, 60)))
+            self._write_shot(root, "shade-east", east_cam, yaw=90.0,
+                             draw=lambda d: d.rectangle((560, 440, 720, 580), fill=(62, 142, 62)))
+            scene_shot.check_shade_override(probe, root)
+            self._write_shot(root, "shade-east", east_cam, yaw=90.0,
+                             draw=lambda d: d.rectangle((560, 440, 720, 580), fill=(45, 100, 45)))
+            with self.assertRaisesRegex(RuntimeError, "poppy_no_directional_shading"):
+                scene_shot.check_shade_override(probe, root)
+
+    def test_player_head_asserts_placed_and_worn(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "screenshots").mkdir()
+            probe = scene_shot.ProbeSteps(None, root, 10, "test")
+            front, back = [1000.5, 161.62, 1001.5], [1000.5, 161.62, 1001.5]
+            self._write_shot(root, "head-empty", front)
+            self._write_shot(root, "head-block", front,
+                             draw=lambda d: d.rectangle((880, 520, 1080, 680), fill=(120, 80, 40)))
+            self._write_shot(root, "head-worn", back,
+                             draw=lambda d: d.rectangle((560, 280, 760, 420), fill=(180, 120, 80)))
+            self._write_shot(root, "head-none", back)
+            scene_shot.check_player_head(probe, root)
+            self._write_shot(root, "head-worn", back)
+            with self.assertRaisesRegex(RuntimeError, "worn_head_renders"):
+                scene_shot.check_player_head(probe, root)
+
+    def test_dynamic_context_asserts_clock_and_compass_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "screenshots").mkdir()
+            cam = [1000.5, 161.62, 1001.5]
+            probe = scene_shot.ProbeSteps(None, root, 10, "test")
+            clock_boxes = [(385, 480, 410, 505), (975, 470, 1005, 500), (660, 390, 705, 435)]
+            def day(d):
+                for box in clock_boxes:
+                    d.rectangle(box, fill=(30, 30, 200))
+                d.rectangle((335, 640, 395, 700), fill=(200, 200, 180))
+                d.line((426, 498, 449, 487), fill=(200, 40, 40), width=3)
+                d.line((1001, 488, 1024, 498), fill=(200, 40, 40), width=3)
+                d.line((340, 695, 390, 645), fill=(40, 40, 40), width=3)
+            def night(d):
+                for box in clock_boxes:
+                    d.rectangle(box, fill=(200, 30, 30))
+                d.rectangle((335, 640, 395, 700), fill=(200, 200, 180))
+                d.line((426, 498, 449, 487), fill=(200, 40, 40), width=3)
+                d.line((1001, 488, 1024, 498), fill=(200, 40, 40), width=3)
+                d.line((340, 645, 390, 695), fill=(40, 40, 40), width=3)
+            for name, time_of_day, draw in (("ctx-day", "1000", day), ("ctx-night", "13000", night),
+                                           ("compass-day", "1000", day)):
+                frame = {"gpu_completion": True, "camera_position": cam, "yaw": 0, "pitch": 0,
+                         "environment": {"time_of_day": time_of_day}}
+                (root / f"screenshots/{name}.json").write_text(json.dumps(frame))
+                from PIL import Image, ImageDraw
+                image = Image.new("RGB", (1280, 720), (0, 0, 0))
+                draw(ImageDraw.Draw(image))
+                image.save(root / f"screenshots/{name}.png")
+            scene_shot.check_dynamic_context(probe, root)
+            # Frozen clocks (same pattern day and night) must fail.
+            (root / "screenshots/ctx-night.png").rename(root / "screenshots/ctx-night.bak")
+            from PIL import Image as _Image
+            _Image.open(root / "screenshots/ctx-day.png").save(root / "screenshots/ctx-night.png")
+            with self.assertRaisesRegex(RuntimeError, "shelf_clock_left_face_changed"):
+                scene_shot.check_dynamic_context(probe, root)
+
     def test_server_identity_is_recorded_at_launch(self):
         import hashlib
         with tempfile.TemporaryDirectory() as directory:
