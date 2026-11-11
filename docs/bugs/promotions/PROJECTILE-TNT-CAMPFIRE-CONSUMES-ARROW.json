@@ -1,0 +1,54 @@
+{
+  "id": "PROJECTILE-TNT-CAMPFIRE-CONSUMES-ARROW",
+  "verdict": "promoted",
+  "fix_commit": "cd727225",
+  "fix_commit_full": "cd727225099c6319f371a27d8fa2a5148d2e3e7c",
+  "promoted_at": "2026-11-11T19:56:11+00:00",
+  "tree_head": "da57a7fbaee6dc6ff6dcf92a0810b767ca5bb3bf",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/command_border.rs",
+    "crates/mc-core/src/command_sound.rs",
+    "crates/mc-core/src/command_world.rs",
+    "crates/mc-core/src/projectiles/block_impact.rs",
+    "crates/mc-core/src/projectiles/can_break.rs",
+    "crates/mc-core/src/projectiles/flight.rs",
+    "crates/mc-core/src/projectiles/mod.rs",
+    "crates/mc-core/src/redstone/big_dripleaf.rs",
+    "crates/mc-core/src/redstone/mod.rs",
+    "crates/mc-data/src/blocks.rs",
+    "crates/mc-data/src/builtin_sounds_26_3.rs",
+    "crates/mc-data/src/item_nbt.rs",
+    "crates/mc-data/src/tags.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/projectiles/can_break_tests.rs",
+    "crates/mc-core/src/projectiles/flight_tests.rs",
+    "crates/mc-core/src/redstone/big_dripleaf_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:projectiles::flight_tests::flaming_arrow_relights_dry_but_not_waterlogged_campfire": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:projectiles::flight_tests::burning_arrow_primes_exact_tnt_cell_once_on_negative_axis_impact": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:projectiles::flight_tests::flaming_arrow_relights_dry_but_not_waterlogged_campfire": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::burning_arrow_primes_exact_tnt_cell_once_on_negative_axis_impact": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/ProjectileImpactParity/.analysis/validation/20261111T195044-ledger-promote-ymd3qxrv"
+}

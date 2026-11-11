@@ -1,5 +1,6 @@
 //! Native tick-owner redstone. Delayed components retain their queue through WAL
 //! and checkpoints; block-state changes use the ordinary published block writes.
+pub(crate) mod big_dripleaf;
 mod blocks;
 pub(crate) mod containers;
 pub(crate) mod custody;
@@ -301,6 +302,7 @@ pub(crate) fn neighbours(state: &mut TickState, writes: &[(BlockPos, u32)]) {
             crate::fire::changed(state, cell);
             crate::eggs::changed(state, cell);
             crate::tnt::changed(state, cell);
+            big_dripleaf::changed(state, cell);
             crate::command_blocks::changed(state, cell);
             crate::enchantment_locations::changed(state, cell);
             if at(state, cell).is_some_and(conducts) {
@@ -309,6 +311,7 @@ pub(crate) fn neighbours(state: &mut TickState, writes: &[(BlockPos, u32)]) {
                         continue;
                     };
                     crate::tnt::changed(state, consumer);
+                    big_dripleaf::changed(state, consumer);
                     if at(state, consumer).is_some_and(|block| {
                         let path = block.block.id.path();
                         reactive(path)
@@ -782,6 +785,7 @@ fn tick_cell(
         "composter" => {
             crate::composter::mature(state, pos, writes);
         }
+        "big_dripleaf" => big_dripleaf::scheduled(state, pos, writes),
         "fire" | "soul_fire" => {
             crate::fire::scheduled_tick(state, pos, writes, spawned);
         }
