@@ -20,8 +20,11 @@ battlefield. Its reply ends with the ground census of the standing bodies,
 In battle, soldiers and horses keep the formation's horizontal drive over
 relief: one-block steps are jumped, slopes walked down, and a drive into a
 trunk, a wall of two or more blocks, a step with no room to jump (a canopy
-overhead) or a drop deeper than two blocks turns 45 or 90 degrees (on the
-block grid) toward the obstacle's nearer reachable end. The
+overhead), a drop deeper than two blocks, or a cave mouth or overhang (no
+body walks from open sky under a terrain roof, so fugitives never vanish
+underground) turns 45 or 90 degrees (on the block grid) toward the
+obstacle's nearer reachable end. Advancing, routing and pursuing soldiers
+steer alike. The
 formation's virtual leader never waits for its soldiers, so a body that is
 stuck or falls into a hole anyway does not hold its regiment back. `battle
 status` ends with `grounding=` (bodies still awaiting ground) and the last

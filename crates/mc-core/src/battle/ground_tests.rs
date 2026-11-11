@@ -377,3 +377,82 @@ fn a_fighter_in_a_sinkhole_does_not_freeze_its_regiment() {
     let median = moved[moved.len() / 2];
     assert!(median >= 4.0, "the regiment froze: median soldier moved {median}");
 }
+
+/// A broken regiment whose flight crosses a cave opening runs round it:
+/// fugitives keep the drop avoidance of advancing troops.
+#[test]
+fn routers_run_round_a_cave_opening_in_their_flight() {
+    let mut state = relief_fixture();
+    stage(&mut state, 100);
+    let formation = &state.hostile.battle.formation;
+    let regiment = formation
+        .regiments
+        .iter()
+        .position(|r| {
+            r.spec.faction == 2
+                && r.spec.order == crate::battle::formation::Order::Advance
+                && r.spec.frontage <= 1.0
+        })
+        .expect("an advancing infantry regiment of the second side");
+    let r = &formation.regiments[regiment];
+    let ids: Vec<_> = formation.members[r.start..r.start + r.len].iter().map(|m| m.id).collect();
+    // The second side flees +z; put the regiment just south of the 3x3
+    // opening (x -20..-18, z 20..22) so its flight runs straight over it.
+    for (k, &id) in ids.iter().enumerate() {
+        let x = -23.5 + (k % 8) as f64;
+        let z = 12.5 + (k / 8) as f64;
+        let Some(Ok(y)) = support(&state.world, &state.registry, [x, 0.0, z], 0.3) else {
+            panic!("no ground at {x} {z}");
+        };
+        let slot = state.entities.slot_of(id).unwrap();
+        state.entities.set_pos(slot, [x, y, z]);
+    }
+    let formation = &mut state.hostile.battle.formation;
+    formation.regiments[regiment].morale.broken = true;
+    let r = &formation.regiments[regiment];
+    for m in &mut formation.members[r.start..r.start + r.len] {
+        m.routing = true;
+    }
+    let start: Vec<f64> = ids.iter().map(|&id| state.entities.pos(state.entities.slot_of(id).unwrap())[2]).collect();
+    for tick in 0..200 {
+        run_tick(&mut state, &[]);
+        for &id in &ids {
+            let Some(slot) = state.entities.slot_of(id) else { continue };
+            let p = state.entities.pos(slot);
+            let (x, z) = (p[0].floor() as i32, p[2].floor() as i32);
+            assert!(
+                hole(x, z).is_none_or(|_| p[1] > f64::from(height(x, z)) - 2.0),
+                "a fugitive fell into the cave opening at {p:?}, tick {tick}"
+            );
+        }
+    }
+    let mut fled: Vec<f64> = ids
+        .iter()
+        .zip(&start)
+        .filter_map(|(&id, &z)| state.entities.slot_of(id).map(|slot| state.entities.pos(slot)[2] - z))
+        .collect();
+    fled.sort_by(f64::total_cmp);
+    let median = fled[fled.len() / 2];
+    assert!(median >= 8.0, "the regiment did not flee: median {median}");
+}
+
+/// A cave mouth or overhang is never walked into from open ground (fugitives
+/// in the G1 take walked down a ravine ramp into a cave and vanished
+/// underground); a body already under the roof walks out.
+#[test]
+fn bodies_never_walk_from_open_ground_under_a_terrain_roof() {
+    let mut state = relief_fixture();
+    let stone = state.registry.states.stone;
+    for x in 106..=108 {
+        for z in -100..=-98 {
+            state.world.set_block(x, height(x, z) + 3, z, stone);
+        }
+    }
+    state.world.fold_overlay();
+    let (world, registry) = (&state.world, &state.registry);
+    let ground = |x: i32, z: i32| [f64::from(x) + 0.5, f64::from(height(x, z)), f64::from(z) + 0.5];
+    let east = [1.0, 0.0];
+    assert!(!crossable(world, registry, ground(105, -99), 0.3, east), "walked under the roof");
+    assert!(crossable(world, registry, ground(105, -97), 0.3, east), "open ground beside it");
+    assert!(crossable(world, registry, ground(108, -99), 0.3, east), "a body under it walks out");
+}

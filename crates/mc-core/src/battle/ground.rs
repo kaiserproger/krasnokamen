@@ -21,6 +21,9 @@ const AROUND: i32 = 8;
 /// Deepest drop a body walks into, in blocks; deeper holes are steered around
 /// and never staged in (vanilla mobs avoid falls over about three blocks).
 const MAX_DROP: f64 = 2.0;
+/// Cells above head height always read for a terrain roof (cave mouths and
+/// overhangs on edited terrain, whose heightmaps are stale).
+const ROOF_BAND: i32 = 4;
 /// Contact tolerance for the staging census: physics rests bodies exactly on
 /// collision tops, so anything beyond this is a real gap or overlap.
 const CONTACT: f64 = 1e-3;
@@ -279,10 +282,12 @@ pub(crate) fn audit(
 /// feet cell holds a step the cell above the step too (vanilla jump
 /// headroom) and the cell two above the feet over the body's own footprint
 /// (a jump first lifts the body where it stands: a canopy over a terrace
-/// edge stops it), and ground lies within [`MAX_DROP`] blocks below the feet
-/// (a cave opening or sinkhole is an obstacle; water is no ground). Slots sit
-/// on block boundaries, so one body often straddles two columns. Unknown
-/// blocks are obstacles.
+/// edge stops it), ground lies within [`MAX_DROP`] blocks below the feet
+/// (a cave opening or sinkhole is an obstacle; water is no ground), and the
+/// cell lies under open sky when the body does (a cave mouth or overhang is
+/// an obstacle: fugitives walked down a ravine ramp into a cave and vanished
+/// underground). Slots sit on block boundaries, so one body often straddles
+/// two columns. Unknown blocks are obstacles.
 fn crossable(
     world: &ChunkWorld,
     registry: &CoreRegistry,
@@ -297,6 +302,7 @@ fn crossable(
     let feet = (pos[1] + CONTACT).floor() as i32;
     let mut probed = [(i32::MIN, i32::MIN); 3];
     let mut rise = None;
+    let mut sheltered = None;
     for (i, lateral) in [0.0, edge, -edge].into_iter().enumerate() {
         let x = (ahead[0] + right[0] * lateral).floor() as i32;
         let z = (ahead[1] + right[1] * lateral).floor() as i32;
@@ -320,8 +326,40 @@ fn crossable(
         if !solid(feet - 1) && (2..=MAX_DROP as i32 + 1).all(|depth| !solid(feet - depth)) {
             return false;
         }
+        if roofed(world, registry, x, z, feet + 2)
+            && !*sheltered.get_or_insert_with(|| {
+                roofed(world, registry, pos[0].floor() as i32, pos[2].floor() as i32, feet + 2)
+            })
+        {
+            return false;
+        }
     }
     true
+}
+
+/// Whether terrain (not a tree) covers column (x, z) at or above `y`: a cave
+/// or an overhang, not open ground. The column's motion-blocking heightmap
+/// bounds the scan on generated terrain; block edits do not refresh
+/// heightmaps (`fold_overlay` writes `Chunk::set_block`), so the
+/// [`ROOF_BAND`] cells from `y` up are always read.
+fn roofed(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32, y: i32) -> bool {
+    let Some(chunk) = world.chunk(mc_world::ChunkPos {
+        x: x.div_euclid(16),
+        z: z.div_euclid(16),
+    }) else {
+        return false;
+    };
+    let (lx, lz) = (x.rem_euclid(16) as u8, z.rem_euclid(16) as u8);
+    let top = chunk
+        .heightmaps
+        .get("MOTION_BLOCKING")
+        .map_or(y, |map| chunk.geometry().min_y() + map.get(lx, lz) as i32)
+        .max(y + ROOF_BAND);
+    (y..top).any(|y| {
+        chunk.get_block(lx, y, lz).is_some_and(|state| {
+            !tree(registry, state.0) && registry.materials.classify(state.0) == BlockMaterial::Solid
+        })
+    })
 }
 
 /// Whether the cells at height `y` over a body's footprint hold no collision
