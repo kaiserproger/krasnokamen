@@ -368,13 +368,27 @@ def telemetry_worker(port, output, stop, failures, on_batch, ticks, gaps=None):
         ticks.put(None)
 
 
-def stream_log(pipe, file, messages):
-    with file.open('x') as output:
-        for line in pipe:
-            output.write(line)
-            output.flush()
-            if any(marker in line for marker in ('Solaris is listening (edge v2)', 'Battle staged:', 'Battle roster:', 'Battle started', 'Battle paused', 'Saved the game', 'Failed to save the game', 'Command failed:', 'Battle error:')):
-                messages.put(line)
+LOG_MARKERS = ('Solaris is listening (edge v2)', 'Battle staged:', 'Battle roster:', 'Battle started', 'Battle paused', 'Saved the game', 'Failed to save the game', 'Command failed:', 'Battle error:')
+
+
+def stream_logs(pipes, path, messages):
+    """Copy the server's stdout and stderr to one log, a whole line at a time, and queue marker lines.
+    They are separate pipes on purpose: the console writes the roster as one ~800 KB stdout line while the
+    phase log (stderr) prints in between, and a merged pipe interleaves them mid-line."""
+    lock = threading.Lock()
+    with path.open('x') as output:
+        def copy(pipe):
+            for line in pipe:
+                with lock:
+                    output.write(line)
+                    output.flush()
+                if any(marker in line for marker in LOG_MARKERS):
+                    messages.put(line)
+        copiers = [threading.Thread(target=copy, args=(pipe,), daemon=True) for pipe in pipes]
+        for copier in copiers:
+            copier.start()
+        for copier in copiers:
+            copier.join()
     messages.put(None)
 
 
@@ -531,7 +545,7 @@ def run(a):
     log_thread = None
     try:
         environment = server_environment(a, os.environ)
-        server = subprocess.Popen(launch_argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env=environment, cwd=root)
+        server = subprocess.Popen(launch_argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, env=environment, cwd=root)
         command_lock = threading.Lock()
         def send(command):
             with command_lock:
@@ -539,7 +553,7 @@ def run(a):
                     record.write(command + '\n')
                 server.stdin.write(command + '\n')
                 server.stdin.flush()
-        log_thread = threading.Thread(target=stream_log, args=(server.stdout, root / 'server.log', messages), daemon=True)
+        log_thread = threading.Thread(target=stream_logs, args=((server.stdout, server.stderr), root / 'server.log', messages), daemon=True)
         log_thread.start()
         expect(messages, 'Solaris is listening (edge v2)')
         ignored = ignored_config_keys((root / 'server.log').read_text(errors='replace'))

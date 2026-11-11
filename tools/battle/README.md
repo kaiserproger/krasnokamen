@@ -57,7 +57,7 @@ This does not establish real-time performance or all-dirty residency.
 `tools/battle/prepare-arena.py` builds a stopped world with a cinematic grass
 arena instead of the stone slab at y=250. It starts a pinned server on private
 ports, edits the world through public console commands (RCON `fill`/`setblock`,
-about 2,800 commands, several minutes on a loaded host) and shuts it down
+about 2,420 commands, several minutes on a loaded host) and shuts it down
 gracefully. Nothing but blocks is placed and every natural entity in the loaded
 square is removed, so the arena adds no entity and no tick cost beyond terrain.
 
@@ -65,8 +65,8 @@ Layout (a pure function of `--seed`; `result.json` records the SHA-256 of the
 command list and `--dry-run` prints it without a server): a 512x512 square
 centred on the world origin, grass at y=66 (sea level is 63), world spawn
 (0, 67, 0). Dead flat within 200 blocks of the centre line (the battle bounds of
-`battle setup` at the spawn chunk are -176..192); beyond that eight one-block
-terraces rise to a rim, with a dome hill (centre 226,-60, height 14) for the
+`battle setup` at the spawn chunk are -176..192); beyond that five one-block
+terraces (11 blocks wide, irregular edges) rise to a rim, with a dome hill (centre 228,-60, height 12) for the
 camera, 5 large and 55 ordinary oaks and birches, 14 boulders, 1,200 grass tufts
 and 240 flowers. Time is fixed at 3000 and the weather at clear. After the build
 the script proves flat grass on a 24-block grid and no natural block above y=162

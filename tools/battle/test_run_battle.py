@@ -96,7 +96,13 @@ for line in sys.stdin:
         print(f'Battle staged: {state["per_side"]} per side, seed {words[2]}', flush=True)
     elif words[:2] == ['battle', 'roster']:
         count = 2 * state['per_side'] + 2 * (state['per_side'] // 10)
-        print('Battle roster: ' + ','.join(str(uuid.uuid4()) for _ in range(count)), flush=True)
+        roster = 'Battle roster: ' + ','.join(str(uuid.uuid4()) for _ in range(count))
+        sys.stdout.write(roster[:len(roster) // 2])
+        sys.stdout.flush()
+        print('tick outer ms: tick=1 pre=0.10 run=1.00', file=sys.stderr, flush=True)  # the phase log, mid roster line
+        time.sleep(0.05)
+        sys.stdout.write(roster[len(roster) // 2:] + '\n')
+        sys.stdout.flush()
     elif words[:2] == ['battle', 'status']:
         state['status_calls'] += 1
         per = state['per_side']
