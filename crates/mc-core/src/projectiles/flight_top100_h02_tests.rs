@@ -60,12 +60,27 @@ fn arrow(
     super::super::launch(state, record, from, velocity).unwrap()
 }
 
+/// The exhaustive snapshot: every hittable body, with items whenever any live
+/// fishing hook exists anywhere in the store.
+fn every_body(state: &TickState, bodies: &mut Vec<Hittable>) {
+    let hook = state.entities.slots().any(|slot| {
+        state.entities.body(slot).alive
+            && state
+                .entities
+                .row(slot)
+                .projectile
+                .as_deref()
+                .is_some_and(|record| record.kind == ProjectileKind::FishingHook)
+    });
+    hittables(state, hook, None, bodies);
+}
+
 fn exhaustive(state: &mut TickState, intents: &mut Vec<Intent>, ids: &[EntityId]) {
     if ids.is_empty() {
         return;
     }
     let mut bodies = Vec::new();
-    hittables(state, &mut bodies);
+    every_body(state, &mut bodies);
     let candidates: Vec<_> = (0..bodies.len()).collect();
     run_shots(
         state,
@@ -189,7 +204,7 @@ fn neighbouring_chunk_omission_changes_boundary_hit_oracle() {
     let victim = mob(&mut state, "minecraft:cow", [-15.8, 201.0, -0.1]);
     let id = arrow(&mut state, player, [-16.7, 201.7, -0.1], [2.0, 0.0, 0.0], 0);
     let mut bodies = Vec::new();
-    hittables(&state, &mut bodies);
+    every_body(&state, &mut bodies);
     let mut candidates = Vec::new();
     shot_candidates(
         &state,
@@ -244,7 +259,7 @@ fn wide_moved_body_and_duplicate_memberships_remain_conservative() {
     state.entities.set_pos(slot, [18.0, 201.0, -0.1]);
     let id = arrow(&mut state, player, [-20.0, 201.7, -0.1], [4.0, 0.0, 0.0], 0);
     let mut bodies = Vec::new();
-    hittables(&state, &mut bodies);
+    every_body(&state, &mut bodies);
     let mut candidates = Vec::new();
     shot_candidates(
         &state,
@@ -360,7 +375,7 @@ fn rejected_fast_or_nonfinite_flight_does_not_expand_world_query() {
     let id = arrow(&mut state, player, [-16.7, 201.7, -0.1], [2.0, 0.0, 0.0], 0);
     let slot = state.entities.slot_of(id).unwrap();
     let mut bodies = Vec::new();
-    hittables(&state, &mut bodies);
+    every_body(&state, &mut bodies);
     for speed in [f64::INFINITY, f64::NAN, 1e20] {
         state.entities.set_vel(slot, [speed; 3]);
         let mut candidates = Vec::new();
@@ -427,7 +442,7 @@ fn projectile_candidate_cpu_micro() {
                 .map(|_| arrow(&mut state, player, [-16.7, 201.7, -0.1], [3.0, 0.0, 0.0], 4))
                 .collect();
             let mut bodies = Vec::new();
-            hittables(&state, &mut bodies);
+            every_body(&state, &mut bodies);
             let mut h = 0;
             let mut slots = Vec::new();
             let mut candidates = Vec::new();
@@ -556,14 +571,14 @@ fn deployed_candidate_outside_body_chunks_is_not_pruned() {
     let stand = mob(&mut state, "minecraft:armor_stand", [70.0, 201.0, 25.0]);
     let id = arrow(&mut state, owner, [-16.7, 201.7, -0.1], [2.0, 0.0, 0.0], 0);
     let mut bodies = Vec::new();
-    hittables(&state, &mut bodies);
+    every_body(&state, &mut bodies);
     let exceptional: Vec<_> = bodies
         .iter()
         .enumerate()
         .filter_map(|(i, b)| b.deployed_candidate.then_some(i))
         .collect();
     let mut grid = FineGrid::default();
-    assert!(grid.build(&bodies));
+    assert!(grid.build(&bodies, 0));
     for grid in [None, Some(&grid)] {
         let mut candidates = Vec::new();
         shot_candidates(
@@ -744,7 +759,7 @@ fn fine_grid_twenty_thousand_bodies_bounds_work_and_rejects_other_heights() {
         })
         .collect();
     let mut grid = FineGrid::default();
-    assert!(grid.build(&bodies));
+    assert!(grid.build(&bodies, 0));
     assert_eq!(
         grid.items.len(),
         bodies.len(),
@@ -752,7 +767,7 @@ fn fine_grid_twenty_thousand_bodies_bounds_work_and_rejects_other_heights() {
     );
     assert!(grid.offsets.len() <= 10_101);
     let storage = grid.items.as_ptr();
-    assert!(grid.build(&bodies));
+    assert!(grid.build(&bodies, 0));
     assert_eq!(
         grid.items.as_ptr(),
         storage,
@@ -819,7 +834,7 @@ fn fine_grid_includes_wide_bodies_across_negative_cell_edges_and_bounds_sparse_s
         max: [3.0, 70.0, 9.0],
     }];
     let mut grid = FineGrid::default();
-    assert!(grid.build(&bodies));
+    assert!(grid.build(&bodies, 0));
     let mut candidates = Vec::new();
     grid.query(
         &bodies,
@@ -843,7 +858,7 @@ fn fine_grid_includes_wide_bodies_across_negative_cell_edges_and_bounds_sparse_s
         max: [30_000_000.0, 66.0, 30_000_000.0],
     });
     assert!(
-        !grid.build(&bodies),
+        !grid.build(&bodies, 0),
         "sparse worlds use the conservative native chunk path"
     );
     assert_eq!(grid.size, [0; 2]);
@@ -910,4 +925,202 @@ fn grounded_arrow_idle_ticks_do_not_touch_rows_or_appearance_and_pickup_still_wo
             .sum::<i32>(),
         1
     );
+}
+
+/// A battle-scale volley: low arrows through a crowd, high arrows over it and
+/// descending ones into it, a dropped item in a low lane and a live hook that
+/// is not among the shots. The frozen snapshot keeps every body some shot's
+/// query box reaches, leaves the crowd under the high arrows out, and the pass
+/// matches the exhaustive oracle (which also offers the item).
+#[test]
+fn volley_snapshot_keeps_reached_bodies_only_and_matches_exhaustive_oracle() {
+    let simulate = |indexed| {
+        let (mut state, player) = scene();
+        for x in (-60..=60).step_by(3) {
+            for z in (-24..=36).step_by(4) {
+                mob(
+                    &mut state,
+                    "minecraft:cow",
+                    [f64::from(x) + 0.2, 201.0, f64::from(z) + 0.1],
+                );
+            }
+        }
+        let diamond = item(&state, "minecraft:diamond");
+        crate::tick::spawn_item_entity(&mut state, [-30.8, 201.0, 0.1], diamond);
+        let owner = state
+            .entities
+            .row(state.entities.slot_of(player).unwrap())
+            .uuid;
+        let rod = item(&state, "minecraft:fishing_rod");
+        let hook = ProjectileState::new(ProjectileKind::FishingHook, Some(owner), rod);
+        super::super::launch(&mut state, hook, [80.0, 230.0, 40.0], [0.0; 3]).unwrap();
+        let mut ids = Vec::new();
+        for i in 0..24 {
+            let x = -62.0 + f64::from(i) * 5.0;
+            let z = -24.0 + f64::from(i % 16) * 4.0 + 0.1;
+            ids.push(arrow(&mut state, player, [x, 201.7, z], [2.5, 0.0, 0.0], 0));
+            ids.push(arrow(&mut state, player, [x, 230.0, z], [3.0, 0.5, 0.0], 0));
+        }
+        for i in 0..16 {
+            let from = [-50.0 + f64::from(i) * 7.0, 204.0, f64::from(i) * 3.0 - 20.0];
+            ids.push(arrow(&mut state, player, from, [1.5, -2.5, 1.0], 0));
+        }
+        let names = identities(&state);
+        let mut intents = Vec::new();
+        if indexed {
+            let mut every = Vec::new();
+            every_body(&state, &mut every);
+            let boxes: Vec<_> = ids
+                .iter()
+                .filter_map(|&id| shot_query(&state, id))
+                .map(|query| query_box(query.start, query.end, query.radius))
+                .collect();
+            run(&mut state, &mut intents, ids.into_iter());
+            let frozen: Vec<_> = state
+                .projectiles
+                .bodies
+                .iter()
+                .map(|body| body.id)
+                .collect();
+            for body in every.iter().filter(|body| !body.item) {
+                let reached = boxes.iter().any(|(low, high)| {
+                    (0..3).all(|axis| body.max[axis] >= low[axis] && body.min[axis] <= high[axis])
+                });
+                assert!(
+                    !reached || frozen.contains(&body.id),
+                    "{:?} meets a query box but left the snapshot",
+                    body.id
+                );
+            }
+            assert!(
+                frozen.len() * 2 < every.len(),
+                "the crowd outside the low lanes stays out: {} of {}",
+                frozen.len(),
+                every.len()
+            );
+        } else {
+            exhaustive(&mut state, &mut intents, &ids);
+        }
+        assert!(!intents.is_empty(), "fixture must actually hit a body");
+        digest(&state, &intents, &names)
+    };
+    assert_eq!(simulate(true), simulate(false));
+}
+
+/// The overlay-first world read `first_solid` used for every cell.
+fn first_solid_by_world_reads(
+    state: &TickState,
+    from: [f64; 3],
+    step: [f64; 3],
+    radius: f64,
+) -> Result<Option<(f64, crate::boundary::BlockPos)>, ()> {
+    let end: [f64; 3] = std::array::from_fn(|axis| from[axis] + step[axis]);
+    let min: [i32; 3] =
+        std::array::from_fn(|axis| (from[axis].min(end[axis]) - radius).floor() as i32);
+    let max: [i32; 3] =
+        std::array::from_fn(|axis| (from[axis].max(end[axis]) + radius).floor() as i32);
+    let below = i32::from(
+        state
+            .registry
+            .max_collision_box_y
+            .div_ceil(16)
+            .saturating_sub(1),
+    );
+    let mut first: Option<(f64, crate::boundary::BlockPos)> = None;
+    for y in min[1].saturating_sub(below)..=max[1] {
+        for z in min[2]..=max[2] {
+            for x in min[0]..=max[0] {
+                let block = state.world.block_at(x, y, z).ok_or(())?;
+                let boxes = state
+                    .registry
+                    .collision_boxes
+                    .get(block as usize)
+                    .ok_or(())?;
+                for collision_box in boxes {
+                    let local = collision_box.as_blocks();
+                    let offset = [f64::from(x), f64::from(y), f64::from(z)];
+                    let lower = std::array::from_fn(|axis| offset[axis] + local[axis]);
+                    let upper = std::array::from_fn(|axis| offset[axis] + local[axis + 3]);
+                    if let Some(t) = swept_sphere_enters(from, step, lower, upper, radius)
+                        && first.is_none_or(|(old, _)| t < old)
+                    {
+                        first = Some((t, crate::boundary::BlockPos { x, y, z }));
+                    }
+                }
+            }
+        }
+    }
+    Ok(first)
+}
+
+/// Direct column reads give the same hits, ties and refusals (unloaded
+/// columns, heights outside the world) as world reads, both while block
+/// writes are pending in the overlay and after they fold into the columns.
+#[test]
+fn first_solid_column_reads_match_world_reads_before_and_after_folding() {
+    let (mut state, _) = scene();
+    let shape = |state: &TickState, keep: fn(&[f64; 6]) -> bool| {
+        state
+            .registry
+            .collision_boxes
+            .iter()
+            .position(|boxes| {
+                !boxes.is_empty() && boxes.iter().all(|shape| keep(&shape.as_blocks()))
+            })
+            .unwrap() as u32
+    };
+    let tall = shape(&state, |shape| shape[4] > 1.0);
+    let low = shape(&state, |shape| shape[4] <= 0.5 && shape[3] == 1.0);
+    let stone = state.registry.states.stone;
+    let air = state.registry.states.air;
+    // A mixed cluster across the x = -16 and z = 0 column seams.
+    for x in -18_i32..=-14 {
+        for y in 200..=202 {
+            for z in -2..=1 {
+                let block = [stone, tall, low, air][(x + y + z).rem_euclid(4) as usize];
+                state.world.set_block(x, y, z, block);
+            }
+        }
+    }
+    let mut segments = vec![
+        // Into an unloaded column, and across the world's top and bottom.
+        ([1000.0, 201.0, 0.0], [4.0, 0.0, 0.0], 0.3),
+        ([0.5, 318.0, 0.5], [0.0, 4.0, 0.0], 0.0),
+        ([0.5, -62.0, 0.5], [0.0, -4.0, 0.0], 0.3),
+    ];
+    let mut seed = 0x9E37_79B9_7F4A_7C15_u64;
+    let mut next = |range: f64| {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        (seed >> 11) as f64 / (1_u64 << 53) as f64 * 2.0 * range - range
+    };
+    for _ in 0..400 {
+        let from = [-16.0 + next(3.0), 201.5 + next(2.0), next(3.0)];
+        let step = [next(4.0), next(3.0), next(4.0)];
+        let radius = [0.0, 0.3, 0.5][segments.len() % 3];
+        segments.push((from, step, radius));
+    }
+    let compare = |state: &TickState| {
+        let mut hits = 0;
+        for &(from, step, radius) in &segments {
+            let expected = first_solid_by_world_reads(state, from, step, radius);
+            hits += usize::from(matches!(expected, Ok(Some(_))));
+            assert_eq!(
+                first_solid(state, from, step, radius),
+                expected,
+                "from={from:?} step={step:?} radius={radius}"
+            );
+        }
+        for refused in &segments[..3] {
+            assert_eq!(first_solid(state, refused.0, refused.1, refused.2), Err(()));
+        }
+        hits
+    };
+    assert!(!state.world.overlay_is_empty());
+    let pending = compare(&state);
+    state.world.fold_overlay();
+    assert!(state.world.overlay_is_empty());
+    assert_eq!(compare(&state), pending);
+    assert!(pending > 20, "fixture must hit placed shapes: {pending}");
 }
