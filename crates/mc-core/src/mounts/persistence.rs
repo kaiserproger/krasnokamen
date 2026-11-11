@@ -265,8 +265,12 @@ pub(crate) fn validate_replay(replay: &crate::journal::Replay) -> Result<(), Cor
     let entity_uuids = replay
         .entities
         .values()
-        .map(|entity| Uuid::parse_str(&entity.uuid).map_err(|_| invalid("UUID")))
-        .collect::<Result<std::collections::HashSet<_>, _>>()?;
+        .map(|entity| {
+            Uuid::parse_str(&entity.uuid)
+                .map(|uuid| (uuid, entity))
+                .map_err(|_| invalid("UUID"))
+        })
+        .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
     let mut riders = std::collections::BTreeMap::new();
     for (id, entity) in &replay.entities {
         let Some(rider) = entity.state.entity_life.mount.rider else {
@@ -277,9 +281,11 @@ pub(crate) fn validate_replay(replay: &crate::journal::Replay) -> Result<(), Cor
                 "invalid mounted passenger {rider}: vehicles {previous} and {id}"
             )));
         }
-        if entity_uuids.contains(&rider) {
+        if let Some(passenger) = entity_uuids.get(&rider)
+            && (passenger.uuid == entity.uuid || passenger.state.entity_life.mount.rider.is_some())
+        {
             return Err(CoreError::Storage(format!(
-                "invalid mounted passenger {rider}: expected player UUID"
+                "invalid mounted passenger {rider}: self or nested vehicle"
             )));
         }
     }

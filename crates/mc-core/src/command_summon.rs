@@ -234,6 +234,7 @@ pub(crate) fn prepare(
             | "Pose" => name == "minecraft:armor_stand",
             "Size" => matches!(name, "minecraft:slime" | "minecraft:magma_cube"),
             "facing" | "variant" => name == "minecraft:painting",
+            "solaris:Faction" => true,
             "CustomName" | "CustomNameVisible" | "Invulnerable" | "NoGravity" | "Motion"
             | "Rotation" | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" => true,
             _ => {
@@ -633,6 +634,7 @@ pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
     state
         .entities
         .set_entity_life(slot, image.state.entity_life);
+    state.entities.set_faction(slot, image.state.faction);
     let (body, row) = state.entities.parts_mut(slot);
     row.health = native.health;
     row.age = image.state.age;

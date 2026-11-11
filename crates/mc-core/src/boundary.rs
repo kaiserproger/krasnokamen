@@ -719,6 +719,14 @@ pub struct ChangeSet {
     pub explosions: Vec<ExplosionEvent>,
 }
 
+/// Native attack-presentation categories; edge maps to the verified 26.3 ids.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SwingKind {
+    None,
+    Whack,
+    Stab,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EntityEvent {
     /// Verified vanilla entity status event (guardian beam, sonic, fangs).
@@ -729,6 +737,9 @@ pub enum EntityEvent {
     Swing {
         entity: EntityId,
         hand: Hand,
+        animation: SwingKind,
+        /// Full animation span; battle damage lands at its authored contact tick.
+        duration_ticks: u16,
     },
     Hurt {
         entity: EntityId,

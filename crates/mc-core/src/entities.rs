@@ -53,6 +53,8 @@ pub struct Body {
     pub burn_ticks: u32,
     pub alive: bool,
     pub movement: MovementClass,
+    /// Native allegiance: zero is unaffiliated. Change through `set_faction`.
+    pub faction: u16,
     pub air_supply: i32,
     pub pickup_delay: u32,
     /// Ticks until this mob may melee again (vanilla `MeleeAttackGoal`).
@@ -175,6 +177,8 @@ pub struct EntityStore {
     orbs: std::collections::BTreeSet<EntityId>,
     /// Module-owned primed TNT; empty worlds skip population scans.
     tnt: std::collections::BTreeSet<EntityId>,
+    /// Sparse stable identities: ordinary worlds do no battle population scan.
+    battle_members: std::collections::BTreeSet<EntityId>,
     /// Sparse, sorted native warden IDs; vibration delivery never scans other bodies.
     wardens: Vec<EntityId>,
     /// Journal custody (see [`Self::row_mut`]): per-slot flag deduplicating the
@@ -611,6 +615,7 @@ impl EntityStore {
             id,
             kind,
             alive: true,
+            faction: 0,
             half_width: cold.half_width,
             height: cold.height,
             burn_ticks: 0,
@@ -713,6 +718,7 @@ impl EntityStore {
         }
         self.orbs.remove(&removed_id);
         self.tnt.remove(&removed_id);
+        self.battle_members.remove(&removed_id);
         self.unregister_warden(removed_id);
         self.pos.swap_remove(idx);
         self.vel.swap_remove(idx);
@@ -795,6 +801,9 @@ impl EntityStore {
         self.uuid_index.remove(&uuid);
         let orb = self.orbs.remove(&id);
         let tnt = self.tnt.remove(&id);
+        if self.battle_members.remove(&id) {
+            destination.battle_members.insert(id);
+        }
         let warden = self.unregister_warden(id);
         if index != self.bodies.len() {
             let moved = &self.bodies[index];
@@ -1033,6 +1042,27 @@ impl EntityStore {
 
     pub fn body(&self, slot: EntitySlot) -> &Body {
         &self.bodies[slot.0 as usize]
+    }
+
+    /// Set native allegiance with WAL and incremental-checkpoint custody.
+    pub fn set_faction(&mut self, slot: EntitySlot, faction: u16) {
+        let body = self.body(slot);
+        if body.faction == faction {
+            return;
+        }
+        let id = body.id;
+        if faction == 0 {
+            self.battle_members.remove(&id);
+        } else {
+            self.battle_members.insert(id);
+        }
+        self.body_mut(slot).faction = faction;
+    }
+
+    pub(crate) fn battle_slots(&self) -> impl Iterator<Item = EntitySlot> + '_ {
+        self.battle_members
+            .iter()
+            .filter_map(|id| self.slot_of_any(*id))
     }
 
     /// Mutable body custody: same marks as [`Self::row_mut`] (motion-dirty,
