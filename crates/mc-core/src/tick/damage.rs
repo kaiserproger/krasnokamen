@@ -371,8 +371,10 @@ impl TickState {
                     }
                 }
                 let health = row.health;
+                // Vanilla `LivingEntity.setHealth` clamps DATA_HEALTH_ID at 0,
+                // so a corpse publishes 0, never the overkill remainder.
                 let appearance = std::sync::Arc::make_mut(&mut row.appearance);
-                appearance.health = health;
+                appearance.health = health.max(0.0);
                 self.appearance_changed.push(id);
                 let killed = row.health <= 0.0 && was_alive;
                 let villager = row
@@ -834,6 +836,10 @@ impl TickState {
         events: &mut Vec<EntityEvent>,
         spawned: &mut Vec<EntityId>,
     ) -> bool {
+        // Vanilla `hurtServer` refuses a body that is already dead or dying.
+        if !self.entities.body(slot).alive {
+            return false;
+        }
         let victim = self.entities.body(slot).id;
         if self
             .players

@@ -249,3 +249,75 @@ fn commands_require_operator_and_enforce_count_bounds() {
         crate::command_execution::CommandResult::Failed
     );
 }
+
+#[test]
+fn status_counts_a_corpse_as_dead_until_its_body_leaves() {
+    let mut state = fixture();
+    let mut changes = ChangeSet::default();
+    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 9, 100).unwrap();
+    let victim = state.hostile.battle.formation.members[0].id;
+    let slot = state.entities.slot_of(victim).unwrap();
+    let side = state.entities.body(slot).faction;
+    let before = crate::battle::publication_counts(&mut state).unwrap();
+    let alive_on = |counts: &crate::boundary::BattleCounts| {
+        counts
+            .alive
+            .iter()
+            .find(|(faction, _)| *faction == side)
+            .map(|(_, alive)| *alive)
+    };
+    state.merge_damage.push((
+        slot,
+        crate::tick::DamagePiece {
+            amount: 1000.0,
+            kind: crate::survival::DamageKind::GenericKill,
+            source: None,
+            physical: None,
+            custom_armor: false,
+        },
+    ));
+    state.commit_merge_effects();
+    assert!(
+        state.entities.slot_of_any(victim).is_some(),
+        "the body lies 20 ticks"
+    );
+    let sides = if side == 1 {
+        "side1=99 side2=100"
+    } else {
+        "side1=100 side2=99"
+    };
+    let status = execute(&mut state, &mut changes, [0.0; 3], &BattleCommand::Status).unwrap();
+    assert!(
+        status.contains(sides) && status.ends_with("dead=1"),
+        "{status}"
+    );
+    let counts = crate::battle::publication_counts(&mut state).unwrap();
+    assert_eq!(counts.units, before.units, "the corpse is a retained unit");
+    assert_eq!(
+        alive_on(&counts),
+        alive_on(&before).map(|alive| alive - 1),
+        "{:?}",
+        counts.alive
+    );
+    state.hostile.battle.running = true;
+    crate::battle::step(&mut state);
+    let member = state
+        .hostile
+        .battle
+        .formation
+        .members
+        .iter()
+        .find(|member| member.id == victim)
+        .unwrap();
+    assert!(!member.alive, "a corpse does not keep fighting");
+    state.hostile.battle.running = false;
+    for _ in 0..20 {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    assert!(state.entities.slot_of_any(victim).is_none());
+    let status = execute(&mut state, &mut changes, [0.0; 3], &BattleCommand::Status).unwrap();
+    assert!(
+        status.contains(sides) && status.ends_with("dead=0"),
+        "{status}"
+    );
+}

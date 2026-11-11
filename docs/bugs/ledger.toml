@@ -4027,3 +4027,25 @@ status = "open"
 source = "SeatAttachmentQA reproduced the visible defect in two fresh two-client scenes on native 4f96c55b and Core5e, with actual SetPassengers receipts and mounted, movement and dismount frames. The shared first-passenger attachment agrees with the local reference source. The authored adult camel back was 0.625 blocks below the standing seat anchor; camel and camel_husk had the same low geometry. Fixed in the unintegrated client branch only: the authored camel, camel husk and saddle rigs now reach the two-block seat, and the adult sitting depth matches the sitting seat. The seat rule and core body are unchanged. Regression camel_back_and_saddle_carry_the_received_standing_and_sitting_seat fails on the old geometry. The unchanged two-client probe on native e5fd1c08 and Core5e showed the rider seated on the back in 2/2 fresh scenes. Evidence: receipts/SeatAttachmentQA/report.yaml, receipts/ClientSeatAttachment/camel-owner-diagnosis.json and receipts/ClientCamelGeometry/verification.json. Sitting is not constructible on core. No matched vanilla frame, independent QA, integration or promotion."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "MOB-DEATH-NO-CORPSE"
+title = "A killed mob vanishes in the tick it dies: clients get entity event 3 and its removal together, so no death tilt and no poof"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "crates/mc-core/src/tick/merge.rs removed every dead non-player row in the death commit. Vanilla 26.3 LivingEntity.tickDeath (javap) keeps the body until deathTime reaches 20, then broadcasts entity event 60 and removes it; die() drops loot and experience at death. Every client saw mobs disappear without the death animation, including the battle video."
+regression = ["cargo:mc-core:tick::dying::tests::killed_mob_keeps_its_body_twenty_ticks_then_poofs_and_leaves", "cargo:mc-core:tick::dying::tests::corpse_takes_no_damage_interaction_ai_or_mob_cap", "cargo:mc-core:tick::dying::tests::death_drops_once_and_removal_drops_nothing", "cargo:mc-core:core::checkpoint_custody_tests::corpse_is_a_durable_removal_across_checkpoint_crash_and_reopen", "cargo:mc-core:battle::staging::tests::status_counts_a_corpse_as_dead_until_its_body_leaves", "cargo:mc-core:tick::dying::tests::corpse_leaves_the_special_mob_index", "cargo:mc-core:core::checkpoint_custody_tests::retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "RETIRED-DEPLOYED-STAND-RETURNS-ON-RESTART"
+title = "A retracted or broken deployed stand stays in the entity store and comes back as a live empty armor stand after a checkpoint and restart"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "crates/mc-core/src/plugin_npcs/orders/deployment.rs retire (RetractItem and broken wear) empties the stand, sets health 0 and alive = false, but never removes the row or logs its UUID removal. The dead row stays in the store, so every later checkpoint stores it with Health 0, and native_checkpoint.rs restores checkpoint records with alive = true: after a checkpoint and restart the empty stand is live again. A crash before the next checkpoint instead replays the retirement's alive = false WAL image as a removal, so the restart outcome depends on checkpoint timing. Found by the DeathLifetime persistence review; pre-existing at 0e558c76 and independent of corpses."
+regression = []
+failing_first = "not recorded"

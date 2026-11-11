@@ -106,7 +106,8 @@ keeps `durable_tick`, the last ACKed checkpoint.
 - **Capture.** At `c`, select slots with `changed_tick > durable_tick`, plus
   rules 2–3, and build them with the same `entity_capture_record`. Tombstone a
   logged UUID newer than `durable_tick` only if it is live in no dimension at
-  `c`, so transfers and rebirths become upserts.
+  `c`, so transfers and rebirths become upserts. A corpse (a row on the dying
+  clock) is not live.
 - **Commit.** In the same transaction the writer upserts and writes explicit
   tombstones. A tombstone with no stored live row is skipped, so short-lived
   items never reach the DB. The full-table omission scan is deleted; per-row
@@ -137,6 +138,7 @@ state without WAL marks. Each must set `changed_tick`:
   previous UUID as a removal.
 - **`remove` (665) and `transfer_to` (727–828):** log the UUID, move the mark
   with the swapped slot, and mark the destination.
+- **`begin_dying`:** logs the UUID of a killed living mob at death.
 
 Chunk eviction (`world.rs` 624–667) removes chunks, not entities, so it never
 creates an entity tombstone. Checkpoint marks are independent of WAL and wire
@@ -152,6 +154,19 @@ transfer moves the index membership, removal deletes it. Targets and battle
 timers are transient and do not dirty checkpoints. No new table, journal
 domain, checkpoint fence or alternate persistence owner is introduced.
 
+**Corpse extension (2026-11-11).** A killed living mob keeps its body as an
+inert `alive = false` row for vanilla `deathTime` (20 ticks, `tick/dying.rs`),
+but its death is the durable removal. `EntityStore::begin_dying` logs the UUID
+and starts the dying clock. `entity_capture_record` builds no record for a
+corpse (a row on the dying clock, `EntityStore::is_dying`), and the tombstone
+filter treats it as not live, so a checkpoint taken while the body lies there
+deletes the stored row. Other dead non-player rows, such as a retired deployed
+stand (`plugin_npcs/orders/deployment.rs` `retire`), are not corpses and keep
+their record, so a checkpoint rewrites them. WAL images of a corpse carry
+`alive = false`, which replay already folds as a removal. Vanilla saves
+`DeathTime`; Solaris does not resume a corpse after restart. Regressions:
+`corpse_is_a_durable_removal_across_checkpoint_crash_and_reopen`,
+`retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart`.
 
 **Reopen seeding.** The WAL fold drops a row, and its UUID, on `RemoveEntity`
 and on `Entity`/`EntityVitals` with `alive = false` (`journal/replay.rs`

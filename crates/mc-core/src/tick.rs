@@ -36,6 +36,7 @@ pub(crate) use auth::unlock_session;
 mod container_access;
 pub(crate) mod damage;
 mod death_message;
+mod dying;
 mod elytra;
 mod entity_lifecycle;
 mod entity_phase;
@@ -1409,6 +1410,7 @@ fn run_dimension_tick_inner<'a>(
     // 2. Entity phase (parallel by data over the fixed pool).
     let entity_start = std::time::Instant::now();
     if sim {
+        dying::tick(state, &mut changes);
         crate::entity_life::advance(state);
         crate::brushing::run(state);
         crate::axolotl::run(state);
