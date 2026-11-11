@@ -268,6 +268,18 @@ class InputKeyTests(unittest.TestCase):
             (home / "config.toml").write_text("[profile.release]\nopt-level = 0\n")
             self.assertNotEqual(self.key(), empty_home, "CARGO_HOME config changes the build")
 
+    def test_identical_trees_at_different_depths_share_a_key(self):
+        nested = Path(self.temp.name) / "wt" / "tree2"
+        shutil.copytree(self.top, nested)
+        tree, _ = pin.w.working_state(nested)
+        with patch.object(pin.subprocess, "check_output", return_value=self.rustc):
+            nested_key = pin.inputs_sha256(nested, tree, "server", LINUX, True)
+        self.assertEqual(nested_key, self.key(), "main and wt/<name> with the same inputs reuse each other")
+        (nested.parent / ".cargo").mkdir()
+        (nested.parent / ".cargo" / "config.toml").write_text("[profile.release]\nopt-level = 0\n")
+        with patch.object(pin.subprocess, "check_output", return_value=self.rustc):
+            self.assertNotEqual(pin.inputs_sha256(nested, tree, "server", LINUX, True), self.key())
+
 
 class ReuseTests(unittest.TestCase):
     def setUp(self):
