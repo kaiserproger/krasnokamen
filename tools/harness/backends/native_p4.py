@@ -242,6 +242,12 @@ def _disable_natural_regeneration(steps: ProbeSteps) -> None:
     )
 
 
+# A falling stalactite deals 6 damage per fallen block (cap 40); from y+5 that is
+# 24 and kills the 20 HP survival player before the scenario can clean up, so it
+# starts lower. The anvil row keeps y+5 (2 per block, 8 damage).
+_STALACTITE_DROP = 3
+
+
 _DAMAGE_ZOMBIE_UUID = "00000000-0000-0000-0000-00000001e242"  # UUID:[I;0,0,0,123458]
 
 
@@ -439,7 +445,7 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
         ("fall", f"tp @s {x + .5} {y + 10} {z + .5}"),
         ("stalagmite", f"tp @s {x + .5} {y + 10} {z + .5}"),
         ("falling_anvil", f"setblock {x} {y + 5} {z} minecraft:anvil"),
-        ("falling_stalactite", f"setblock {x} {y + 5} {z} minecraft:pointed_dripstone[vertical_direction=down,thickness=tip]"),
+        ("falling_stalactite", f"setblock {x} {y + _STALACTITE_DROP} {z} minecraft:pointed_dripstone[vertical_direction=down,thickness=tip]"),
         ("arrow", f"summon minecraft:arrow {x + .5} {y + 1} {z + 4.5} {{Motion:[0d,0d,-1d]}}"),
         ("trident", f"summon minecraft:trident {x + .5} {y + 1} {z + 4.5} {{Motion:[0d,0d,-1d]}}"),
         ("thrown", f"summon minecraft:wind_charge {x + .5} {y + 1} {z + 4.5} {{Motion:[0d,0d,-1d]}}"),
@@ -464,7 +470,7 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
         if kind in ("fall", "stalagmite", "falling_anvil", "falling_stalactite"):
             steps.fixture(f"fill {x} {y + 4} {z} {x} {y + 11} {z} minecraft:air")
         if kind == "falling_stalactite":
-            steps.fixture(f"setblock {x} {y + 6} {z} minecraft:stone")
+            steps.fixture(f"setblock {x} {y + _STALACTITE_DROP + 1} {z} minecraft:stone")
         if kind == "cactus":
             steps.fixture(f"setblock {x + 1} {y - 1} {z} minecraft:sand")
         steps.fixture(f"setblock {x} {y - 1} {z} minecraft:obsidian")
@@ -484,7 +490,7 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
             steps.fixture(f"setblock {x} {y} {z} minecraft:pointed_dripstone[vertical_direction=up,thickness=tip]")
         steps.fixture(fixture)
         if kind == "falling_stalactite":
-            steps.fixture(f"setblock {x} {y + 6} {z} minecraft:air")
+            steps.fixture(f"setblock {x} {y + _STALACTITE_DROP + 1} {z} minecraft:air")
         if kind in ("cactus", "sweet_berry_bush"):
             steps.call("minecraft_look", {"yaw_deg": -90, "pitch_deg": 0})
             steps.call("minecraft_press_inputs", {"keys": ["forward"], "ticks": 10})
