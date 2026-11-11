@@ -9,11 +9,15 @@ doc` and `cargo test --no-run`, decided once from argv. Tests, harness runs,
 servers and clients are never frozen, so their timeouts stay honest.
 - Only real memory shortage freezes (no prediction at start): a PSI trigger on the
   slice (its tasks stalling on reclaim) or the slice hitting its MemoryMax freezes the youngest
-  preemptible command, one per event; the oldest running command is never frozen,
-  so something always finishes.
+  preemptible command, one per event, but only while the room left (below) is under the
+  4G reserve; the oldest running command is never frozen, so something always finishes.
+  Builds fill the slice with clean page cache that the kernel drops at the cap, so
+  hitting MemoryMax or a short reclaim stall alone is not a shortage.
 - When a command exits it thaws frozen commands oldest first while their expected
-  remaining growth (measured peaks) fits MemAvailable minus a 4G reserve and the slice
-  cap; with nothing running it thaws the oldest frozen one regardless.
+  remaining growth (measured peaks) fits the room: MemAvailable minus a 4G reserve,
+  and the slice cap minus its unreclaimable memory (memory.current without clean page
+  cache; tmpfs, dirty and writeback pages count). With nothing running it thaws the
+  oldest frozen one regardless.
 - While `<dir>/exclusive` names a live mem-run -x, it freezes every preemptible command,
   thaws nothing and writes `<dir>/quiet` once every registered command is frozen.
 
@@ -146,11 +150,19 @@ def exclusive_window() -> bool:
     return False
 
 
+def unreclaimable_kib(cg: Path) -> int:
+    """memory.current minus the clean page cache the kernel drops at the cap."""
+    fields = dict(line.split() for line in (read(cg / "memory.stat") or "").splitlines())
+    cache = (int(fields.get("file", 0)) - int(fields.get("shmem", 0))
+             - int(fields.get("file_dirty", 0)) - int(fields.get("file_writeback", 0)))
+    return (int(read(cg / "memory.current") or 0) - max(0, cache)) // 1024
+
+
 def headroom_kib() -> int:
     slice_max = (read(SLICE / "memory.max") or "max").strip()
     room = avail_kib() - RESERVE_KIB
     if slice_max != "max":
-        room = min(room, (int(slice_max) - int(read(SLICE / "memory.current") or 0)) // 1024)
+        room = min(room, int(slice_max) // 1024 - unreclaimable_kib(SLICE))
     return room
 
 
@@ -187,7 +199,7 @@ def balance(pressure: bool) -> None:
             except OSError:
                 pass
         return
-    if not pressure:
+    if not pressure or headroom_kib() >= RESERVE_KIB:
         thaw(rows)
         return
     running = [row for row in rows if not row["frozen"]]

@@ -46,9 +46,12 @@ to keep that from happening again without idling the machine.
   killed). Preemptible is decided once from argv: plain `cargo
   build/check/clippy/doc/fetch` and `cargo test/bench --no-run`. Tests, harness
   runs, servers and clients are never frozen, so their timeouts stay honest;
-  the oldest running command is never frozen. When commands exit it thaws
-  frozen ones oldest first while their expected growth fits `MemAvailable`
-  minus a 4 GiB reserve.
+  the oldest running command is never frozen. A PSI or `MemoryMax` event
+  freezes only while the room left is under the 4 GiB reserve: clean page cache
+  that builds leave in the slice is dropped by the kernel at the cap and does not
+  count. When commands exit it thaws frozen ones oldest first while their
+  expected growth fits `MemAvailable` minus a 4 GiB reserve and the slice cap
+  minus its unreclaimable memory (tmpfs, dirty and writeback pages count).
 - **Expected peaks are measured.** Every successful command appends its scope's
   `memory.peak` to `/tmp/solaris-mem-slots/peaks` under an argv signature
   (paths and leading `env` words removed). The next run expects 1.25 x the
