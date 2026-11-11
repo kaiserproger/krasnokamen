@@ -274,7 +274,7 @@ scripted capture. Set `SOLARIS_SERVER_BINARY`, `SOLARIS_CLIENT_BINARY`, the nati
 env block above and `SCENE_SHOT_SCENARIO` to a JSON file. The JSON has `steps`,
 each one of `cmd`, `tp` (five coordinates), `look`, `hotbar`, `wait_ticks`, `wait_play`,
 `wait_respawn` (waits for live health and a closed death screen), `pause` (native only), `wait_terrain`, `shot`, `observe`, `use_item_on`, `click_screen_button`,
-`scan_blocks`, `read_block`, `navigate_to_block`, `list_entities`, `timed_entities`,
+`scan_blocks`, `read_block`, `navigate_to_block`, `list_entities`, `require_entities`, `timed_entities`,
 `mob_motion`, or `key` (`keys` and `ticks` MCP arguments; released when the step finishes). Optional
 `seed` defaults to 100, `world` copies an existing world, `server_view_distance`
 defaults to 4, `lod_enabled` optionally sets `[lod].enabled` in the private
@@ -292,6 +292,12 @@ obsidian from far and close positions, including held attack frames.
 then requires turquoise tool pixels over a dark wall in the fixed close-view
 frame. Inspect the attack frames separately; the pixel check covers rest only.
 
+
+`require_entities` takes `name`, `args` for `minecraft_list_entities`, and a nonempty
+`types` list of namespaced entity IDs. Place it immediately before a shot: it
+records the client-visible entity snapshot as `<name>.json` and fails if any
+required type is absent. It works with native and Java MCP clients, but presence
+in the snapshot does not establish that the entity appears in the captured frame.
 
 `use_phases` (native only) takes `name` and `ticks` (1–100), holds use across
 start and hold captures, releases it even on failure, and requires the client's

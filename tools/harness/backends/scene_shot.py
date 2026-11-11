@@ -244,7 +244,7 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
             yield SCENE_TOOLS[kind], value
         elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities", "wait_terrain"):
             yield SCENE_TOOLS[kind], value["args"]
-        elif kind == "timed_entities":
+        elif kind in ("timed_entities", "require_entities"):
             yield "minecraft_list_entities", value["args"]
         elif kind == "wait_ticks":
             yield "minecraft_wait_ticks", {"ticks": min(value, 100)}
@@ -364,6 +364,15 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and isinstance(value["samples"], list) and len(value["samples"]) == 3
                      and all(isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_-]+", item)
                              for item in value["samples"]))
+        elif kind == "require_entities":
+            valid = (isinstance(value, dict) and set(value) == {"name", "args", "types"}
+                     and isinstance(value["name"], str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and isinstance(value["args"], dict)
+                     and isinstance(value["types"], list) and bool(value["types"])
+                     and all(isinstance(item, str)
+                             and re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", item)
+                             for item in value["types"]))
         elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities", "wait_terrain", "timed_entities"):
             if kind == "wait_terrain" and client != "native":
                 raise ValueError("wait_terrain requires --client native")
@@ -692,6 +701,15 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             receipt = artifact / f"{name}.json"
             receipt.write_text(json.dumps(result, indent=2) + "\n")
             probe.report.setdefault("terrain_waits", []).append({"receipt": str(receipt), "result": result})
+        elif kind == "require_entities":
+            result = probe.call("minecraft_list_entities", value["args"])
+            (artifact / f"{value['name']}.json").write_text(json.dumps(result, indent=2) + "\n")
+            entities = result.get("entities")
+            if not isinstance(entities, list) or any(not isinstance(row, dict) for row in entities):
+                raise RuntimeError("entity snapshot omitted entities")
+            present = {row.get("entity_type") for row in entities}
+            for entity_type in value["types"]:
+                probe.check(f"{value['name']}_{entity_type}", entity_type in present)
         elif kind == "timed_entities":
             result = probe.call("minecraft_list_entities", value["args"])
             if type(result.get("game_time")) is not int:

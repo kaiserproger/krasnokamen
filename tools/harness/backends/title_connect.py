@@ -33,7 +33,7 @@ USERNAME = "TitleProof"
 class _TitleProbeSteps(ProbeSteps):
     """Title observations are deliberately pre-play; opt-in waits stay strict."""
 
-    def observe(self, *, wait_for_play: bool = False) -> dict[str, Any]:
+    def observe(self, *, wait_for_play: bool = False, outside_play: bool = False) -> dict[str, Any]:
         if wait_for_play:
             return super().observe(wait_for_play=True)
         return self.call("minecraft_observe")

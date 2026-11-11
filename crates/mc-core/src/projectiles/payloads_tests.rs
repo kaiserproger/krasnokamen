@@ -2406,3 +2406,25 @@ fn splash_harming_and_swiftness_ignore_armor_stand_but_hit_cow() {
         );
     }
 }
+
+#[test]
+fn splash_harming_thrown_at_own_feet_hurts_its_thrower_as_indirect_magic() {
+    // Vanilla: the thrower is an ordinary splash target; with pvp on the owner
+    // check is skipped for owner == target (graphical gate native-v2-p4-damage).
+    let (mut state, player) = fixture();
+    let slot = state.entities.slot_of(player).unwrap();
+    let uuid = state.entities.row(slot).uuid;
+    let feet = state.entities.pos(slot);
+    let record = ProjectileState::new(
+        ProjectileKind::Potion,
+        Some(uuid),
+        potion(&state, "minecraft:splash_potion", "minecraft:harming"),
+    );
+    let (id, mut record) = launch_record(&mut state, record, feet);
+    let mut intents = Vec::new();
+    assert!(impact(&mut state, &mut intents, id, &mut record, None, feet));
+    let damage = damage_to(&intents, player);
+    assert_eq!(damage.len(), 1, "{damage:?}");
+    assert_eq!(damage[0].1, DamageKind::IndirectMagic);
+    assert!(damage[0].0 > 0.0);
+}
