@@ -6,6 +6,11 @@
 //! have no floor. With a roof close above the bed the reposition always failed,
 //! the A* start cell (the bed itself) is not standable for a 1.95-high body, so
 //! the woken villager kept `navigation_search_failed` and never returned to work.
+//!
+//! The client sees a job through the VillagerData profession. The allocator
+//! releases a lost job in its own phase, before the brain snapshots
+//! VillagerData, so the change used to reach the client only when the next
+//! sleep toggled the pose: the job vanished "after sleeping".
 use crate::boundary::ChangeSet;
 use crate::settlements::allocator::tests::{bed, block, test_state, villager};
 use crate::settlements::allocator::{JOB_SITE_REACH_SQUARED, centre, distance};
@@ -116,8 +121,24 @@ fn woken_bound_resident_stands_up_and_returns_to_its_job_site() {
     );
 }
 
+/// The VillagerData profession a vanilla client renders (the job outfit).
+fn wire_profession(state: &TickState, slot: crate::entities::EntitySlot) -> Option<i32> {
+    state
+        .entities
+        .row(slot)
+        .appearance
+        .extra
+        .iter()
+        .find_map(|(index, value)| match (index, value) {
+            (19, crate::boundary::EntityDataValue::VillagerData { profession, .. }) => {
+                Some(*profession)
+            }
+            _ => None,
+        })
+}
+
 #[test]
-fn claimed_job_site_assigns_its_profession_before_arrival() {
+fn allocator_job_loss_reaches_the_client_villager_data_at_once() {
     use crate::settlements::buildings::{BuildingKind, certify};
     use crate::villager::VillagerProfession as Profession;
     let mut state = test_state();
@@ -142,28 +163,43 @@ fn claimed_job_site_assigns_its_profession_before_arrival() {
         mc_script::ScriptWorldBounds::new([3, 200, 3], [7, 204, 7]).unwrap(),
     )
     .unwrap();
-    // Far beyond JOB_SITE_REACH of the only certified workstation.
-    let slot = villager(&mut state, [12.5, 201.0, 12.5]);
+    let slot = villager(&mut state, [2.5, 201.0, 2.5]);
     let entity = state.entities.body(slot).id;
     crate::settlements::bind(&mut state, id, entity).unwrap();
+    let data = |state: &TickState| state.entities.row(slot).villager.as_ref().unwrap().data;
     for _ in 0..400 {
         step(&mut state);
-        let v = state.entities.row(slot).villager.as_ref().unwrap();
-        if v.job_site.is_some() {
+        if data(&state).profession == Profession::Farmer {
+            break;
+        }
+    }
+    assert_eq!(
+        data(&state).profession,
+        Profession::Farmer,
+        "the bound resident takes the farmer job at its composter"
+    );
+    assert_eq!(
+        wire_profession(&state, slot),
+        Some(Profession::Farmer.profession_id()),
+        "the job reaches the client when it is taken"
+    );
+
+    // The allocator, not the brain, releases a destroyed workstation and the
+    // untraded profession with it.
+    state.world.set_block(4, 201, 4, state.registry.states.air);
+    state.world.fold_overlay();
+    for _ in 0..40 {
+        step(&mut state);
+        if data(&state).profession == Profession::None {
             break;
         }
     }
     let v = state.entities.row(slot).villager.as_ref().unwrap();
-    let job = v
-        .job_site
-        .expect("bound villager claims the certified composter");
-    assert!(
-        distance(state.entities.pos(slot), centre(job)) > JOB_SITE_REACH_SQUARED,
-        "the villager must still be far from the station when the claim lands"
-    );
+    assert_eq!(v.job_site, None, "the destroyed workstation is released");
+    assert_eq!(v.data.profession, Profession::None);
     assert_eq!(
-        v.data.profession,
-        Profession::Farmer,
-        "claiming a job site assigns its profession immediately (vanilla AssignProfessionFromJobSite), not only on arrival"
+        wire_profession(&state, slot),
+        Some(Profession::None.profession_id()),
+        "the client must see the job change when it happens, not at the next sleep"
     );
 }

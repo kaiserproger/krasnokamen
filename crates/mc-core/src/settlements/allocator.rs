@@ -1646,6 +1646,12 @@ fn validate_changed_claims(state: &mut TickState, cache: &mut PoiCache) -> usize
             state.entities.row_mut(slot);
             cache.allocator_updates.push(id);
         }
+        // The brain diffs VillagerData only across its own decision, which
+        // runs after this phase: a profession lost here must reach the client
+        // now, not when the next sleep toggles the pose.
+        if before.3 != after.3 {
+            crate::villager::sync_appearance(state, slot);
+        }
         cache.sync_search(state, slot);
     }
     cache.promote_searches(state.tick);
@@ -1839,19 +1845,6 @@ impl PoiCtx<'_> {
                 if !uncertified {
                     lose_profession(v);
                 }
-            } else if let Some(PoiKind::Job(p)) = kind
-                && !traded(v)
-                && !matches!(
-                    v.data.profession,
-                    Profession::Builder | Profession::Soldier | Profession::Nitwit
-                )
-                && v.data.profession != p
-            {
-                // Vanilla parity (AssignProfessionFromJobSite): claiming a job
-                // site assigns its profession immediately, not only once the
-                // villager walks into workstation reach.
-                v.data.profession = p;
-                v.offers.clear();
             }
         } else if v.settlement.is_none() {
             // Only unbound jobless villagers reset here. Bound residents

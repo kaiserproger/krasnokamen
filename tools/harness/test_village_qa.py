@@ -75,6 +75,41 @@ class VillageQaHelpersTests(unittest.TestCase):
         row["health"] = 0
         self.assertFalse(village_qa.sleeping_at_bed(row, (2, 78, 3)))
 
+    STATIONS = {"farmer": (201, 78, -447), "miner": (207, 78, -449),
+                "lumberjack": (207, 78, -435)}
+
+    @staticmethod
+    def _row(x: float, z: float, plate: str, profession: int) -> dict:
+        return {"x": x, "y": 78.0, "z": z, "received_metadata": {
+            "2": {"kind": "optional_component", "value": plate},
+            "19": {"kind": "villager", "value": [2, profession, 1]}}}
+
+    def test_job_comes_from_client_data_not_summon_role(self) -> None:
+        # ot1z1c9j: summoned as the miner, the allocator made it the lumberjack.
+        row = self._row(205.44, -434.22, "Николай · лесоруб · работа", 7)
+        self.assertEqual(village_qa.villager_job(row), "lumberjack")
+        self.assertEqual(village_qa.villager_job(
+            self._row(0, 0, "Дмитрий · шахтёр · работа", 13)), "miner")
+        self.assertEqual(village_qa.villager_job(
+            self._row(0, 0, "Андрей · фермер · отдых", 5)), "farmer")
+        # Nameplate and the outfit the client renders must agree.
+        self.assertIsNone(village_qa.villager_job(
+            self._row(0, 0, "Николай · лесоруб · работа", 0)))
+        self.assertIsNone(village_qa.villager_job(
+            self._row(0, 0, "Наталья · безработный · работа", 0)))
+        self.assertIsNone(village_qa.villager_job({"x": 0, "z": 0}))
+
+    def test_return_needs_the_same_job_at_that_jobs_station(self) -> None:
+        # ot1z1c9j morning: 2.08 from the fletcher, 5.9 from the mine its
+        # summon role pointed at.
+        row = self._row(205.44, -434.22, "Николай · лесоруб · работа", 7)
+        self.assertTrue(village_qa.returned_to_job(row, "lumberjack", self.STATIONS))
+        self.assertFalse(village_qa.returned_to_job(row, "miner", self.STATIONS))
+        far = self._row(204.5, -434.5, "Николай · лесоруб · работа", 7)
+        self.assertFalse(village_qa.returned_to_job(far, "lumberjack", self.STATIONS))
+        jobless = self._row(207.5, -434.5, "Николай · безработный · работа", 0)
+        self.assertFalse(village_qa.returned_to_job(jobless, "lumberjack", self.STATIONS))
+
 
 if __name__ == "__main__":
     unittest.main()

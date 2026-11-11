@@ -15,8 +15,10 @@ event ticks, single `time set` per phase (3000 work, 18000 night, 3000 morning, 
 
 1. a worker physically crosses a certified door (open seen + plane flip by a
    worker UUID, close awaited on a bounded exact predicate);
-2. the same 4 entities persist through the night, one in sleep pose by the
-   bed, and each worker returns within 6 blocks of its station at 3000;
+2. the same 4 entities persist through the night; a villager holding a fixture
+   job (nameplate and received VillagerData agree, whatever role it was
+   summoned for) sleeps in the bed, still holds that job on waking at 3000
+   and returns within 2.5 blocks of that job's station;
 3. farmer harvests mature wheat (age 7 -> replanted);
 4. miner digs inside the zone and the chest holds mining products;
 5. lumberjack cuts a mature oak AND replants AND the chest holds oak logs
@@ -137,6 +139,41 @@ def sleeping_at_bed(row: dict[str, Any], bed: tuple[int, int, int]) -> bool:
             and is_sleep_pose(float(row["y"]), bed[1], 0.5)
             and math.dist((float(row["x"]), float(row["z"])),
                           (bed[0] + 0.5, bed[2] + 0.5)) < 0.75)
+
+
+# Fixture jobs as the server shows them on a villager: the nameplate word
+# (`name · job · activity`) and the vanilla VillagerData profession a vanilla
+# client renders as the outfit (miner -> toolsmith, lumberjack -> fletcher).
+JOB_ROLES = {"фермер": "farmer", "шахтёр": "miner", "лесоруб": "lumberjack"}
+JOB_WIRE_PROFESSION = {"farmer": 5, "miner": 13, "lumberjack": 7}
+RETURN_RADIUS = 2.5
+
+
+def nameplate(row: dict[str, Any]) -> str | None:
+    text = ((row.get("received_metadata") or {}).get("2") or {}).get("value")
+    return text if isinstance(text, str) else None
+
+
+def villager_job(row: dict[str, Any]) -> str | None:
+    """Fixture role of the job a villager holds, from client-received data.
+
+    Jobs follow the allocator, not summon order, so the role a villager was
+    summoned for proves nothing. Both client-visible signals must agree."""
+    parts = (nameplate(row) or "").split(" · ")
+    role = JOB_ROLES.get(parts[1]) if len(parts) == 3 else None
+    data = ((row.get("received_metadata") or {}).get("19") or {}).get("value")
+    if role is None or not isinstance(data, list) or len(data) != 3:
+        return None
+    return role if data[1] == JOB_WIRE_PROFESSION[role] else None
+
+
+def returned_to_job(row: dict[str, Any], job: str,
+                    stations: dict[str, tuple[int, int, int]]) -> bool:
+    """Still holds `job` and stands within RETURN_RADIUS of that job's station."""
+    station = stations[job]
+    return (villager_job(row) == job
+            and math.dist((float(row["x"]), float(row["z"])),
+                          (station[0] + 0.5, station[2] + 0.5)) < RETURN_RADIUS)
 
 
 def _block_id(block: dict[str, Any]) -> str:
@@ -649,101 +686,83 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
                      "server log: villager door open/close lines")
     if ctx.windowed:
         native_client.capture(probe.client, artifact, "village-qa-workday")
-    # --- (1b) record each worker's held station during the frozen workday ---
-    # Jobs are assigned by proximity, not summon order, so a role label is only
-    # a fallback: the station the worker actually works at during the day (the
-    # station it is seen at most often) is its real job site for sleep_return.
-    station_sightings: dict[str, dict[tuple[int, int, int], int]] = {}
-    station_deadline = _time.monotonic() + 90.0
-    while _time.monotonic() < station_deadline:
-        for row in _villagers(probe):
-            uuid = str(row.get("entity_uuid"))
-            if uuid not in worker_uuids:
-                continue
-            here = (float(row["x"]), float(row["z"]))
-            near = sorted(
-                (math.dist(here, (cell[0] + 0.5, cell[2] + 0.5)), cell)
-                for cell in stations.values()
-            )
-            if near[0][0] < 6.0:
-                counts = station_sightings.setdefault(uuid, {})
-                counts[near[0][1]] = counts.get(near[0][1], 0) + 1
-        if all(len(station_sightings.get(u, {})) > 0
-               and max(station_sightings[u].values()) >= 3 for u in worker_uuids):
+    # --- (1b) every fixture job is taken before the night ---
+    # Bounded wait for the exact state: each of the three jobs is shown held by
+    # some villager (nameplate and VillagerData agree), whoever was summoned
+    # for which role.
+    day_jobs: dict[str, str] = {}
+    jobs_deadline = _time.monotonic() + 90.0
+    while _time.monotonic() < jobs_deadline:
+        day_jobs = {str(row.get("entity_uuid")): job for row in _villagers(probe)
+                    if (job := villager_job(row)) is not None}
+        if set(day_jobs.values()) == set(stations):
             break
         _tick(probe)
-    held_station: dict[str, tuple[int, int, int]] = {
-        uuid: max(counts.items(), key=lambda kv: kv[1])[0]
-        for uuid, counts in station_sightings.items()
-    }
-    detail["held_stations"] = {u[:8]: list(c) for u, c in held_station.items()}
+    detail["day_jobs"] = {uuid[:8]: job for uuid, job in day_jobs.items()}
 
-
-    # --- (2) night sleep: same entities persist, one in sleep pose by the bed ---
+    # --- (2) night sleep: same entities persist, a worker in sleep pose by the bed ---
     evening = {str(row["entity_uuid"]): (float(row["x"]), float(row["y"]), float(row["z"]))
                for row in _villagers(probe)}
     fixture("time set 18000")
     settled("night_falls")
     night_tracks: dict[str, tuple[float, float, float]] = {}
+    bed_sleepers: dict[str, str | None] = {}
     sleeper: str | None = None
+    sleeper_job: str | None = None
     night_deadline = _time.monotonic() + 50.0
     while _time.monotonic() < night_deadline:
         for row in _villagers(probe):
             uuid = str(row.get("entity_uuid"))
             pos = (float(row["x"]), float(row["y"]), float(row["z"]))
             night_tracks[uuid] = pos
-            if uuid in worker_uuids and sleeping_at_bed(row, bed_head):
-                sleeper = uuid
+            if sleeping_at_bed(row, bed_head):
+                bed_sleepers[uuid[:8]] = nameplate(row)
+                if (job := villager_job(row)) is not None:
+                    sleeper, sleeper_job = uuid, job
         if sleeper is not None and set(evening) <= set(night_tracks):
             break
         _tick(probe)
-    # --- morning return at work hours 3000 (not idle 23000), same UUIDs to same jobs ---
+    detail["bed_sleepers"] = bed_sleepers
+    # --- morning at work hours 3000 (not idle 23000): the same entity still
+    # holds the same job and walks back to that job's station ---
     fixture("time set 3000")
     settled("morning_returns")
-    def sleeper_station_of() -> tuple[int, int, int] | None:
-        # The sleeper's own job site: the station it held during the workday,
-        # falling back to the role's default station only if never observed.
-        if sleeper is None:
-            return None
-        if sleeper in held_station:
-            return held_station[sleeper]
-        for role, uuid in role_uuid.items():
-            if uuid == sleeper:
-                return stations[role]
-        return None
-    def sleeper_returned(morning_now: dict[str, tuple[float, float, float]]) -> bool:
-        station = sleeper_station_of()
-        return (sleeper is not None and sleeper in morning_now and station is not None
-                and math.dist((morning_now[sleeper][0], morning_now[sleeper][2]),
-                              (station[0] + 0.5, station[2] + 0.5)) < 2.5)
     morning: dict[str, tuple[float, float, float]] = {}
+    woke_plate: str | None = None
+    closest: float | None = None
+    returned = False
     morning_deadline = _time.monotonic() + 45.0
-    morning_near: dict[str, bool] = {}
     while _time.monotonic() < morning_deadline:
         for row in _villagers(probe):
-            morning[str(row.get("entity_uuid"))] = (float(row["x"]), float(row["y"]), float(row["z"]))
-        morning_near = {
-            role: role_uuid[role] in morning and math.dist(
-                (morning[role_uuid[role]][0], morning[role_uuid[role]][2]),
-                (stations[role][0] + 0.5, stations[role][2] + 0.5)) < 2.5
-            for role in stations
-        }
-        if set(evening) <= set(morning) and sleeper_returned(morning):
+            uuid = str(row.get("entity_uuid"))
+            morning[uuid] = (float(row["x"]), float(row["y"]), float(row["z"]))
+            if uuid == sleeper and sleeper_job is not None:
+                woke_plate = nameplate(row)
+                station = stations[sleeper_job]
+                gap = math.dist((float(row["x"]), float(row["z"])),
+                                (station[0] + 0.5, station[2] + 0.5))
+                closest = gap if closest is None else min(closest, gap)
+                returned = returned or returned_to_job(row, sleeper_job, stations)
+        if set(evening) <= set(morning) and returned:
             break
         _tick(probe)
     same_entities = set(evening) != set() and set(evening) <= set(morning)
-    returned = sleeper_returned(morning)
-    station = sleeper_station_of()
-    if same_entities and sleeper is not None and returned:
+    held_by_day = sleeper is not None and day_jobs.get(sleeper) == sleeper_job
+    station = list(stations[sleeper_job]) if sleeper_job else None
+    detail["sleeper"] = {"uuid": sleeper, "job": sleeper_job, "day_job": day_jobs.get(sleeper or ""),
+                         "station": station, "closest": closest, "woke_nameplate": woke_plate}
+    if same_entities and held_by_day and returned:
         _verdict(detail, "sleep_return", "PASS",
-                 f"same 4 entities persist; {sleeper[:8]} slept by bed {list(bed_head)}; "
-                 f"same worker returned within 2.5 of its held station {list(station) if station else None} "
-                 f"(role-default proximity: {morning_near})")
+                 f"same 4 entities persist; {sleeper[:8]} held {sleeper_job} by day, slept by bed "
+                 f"{list(bed_head)}, still held it on waking and returned within {RETURN_RADIUS} "
+                 f"of the {sleeper_job} station {station} (closest {closest:.2f})")
     else:
         _verdict(detail, "sleep_return", "FAIL",
-                 f"same_entities={same_entities} sleeper={sleeper} held_station={list(station) if station else None} morning_near={morning_near}",
+                 f"same_entities={same_entities} sleeper={sleeper} job={sleeper_job} "
+                 f"day_job={day_jobs.get(sleeper or '')} station={station} closest={closest} "
+                 f"woke_nameplate={woke_plate!r} bed_sleepers={bed_sleepers}",
                  "time set 18000; minecraft_list_entities radius 64; time set 3000; "
-                 "re-observe same entity_uuid near the station it held before sleeping")
+                 "re-observe the sleeper's nameplate/VillagerData job and its distance to that job's station")
     if ctx.windowed:
         native_client.capture(probe.client, artifact, "village-qa-morning")
 
