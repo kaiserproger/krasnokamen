@@ -235,6 +235,9 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
             &grid,
             f64::from(row.sight_range),
         );
+        // A held target is chased from memory, but attacked only in sight
+        // (vanilla `MeleeAttackGoal.canPerformAttack` -> `Sensing.hasLineOfSight`).
+        let seen = held.is_some_and(|held| held.unseen == 0);
         match held {
             Some(held) => {
                 state.hostile.native.raider_targets.insert(id, held);
@@ -331,8 +334,8 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
         if let Some(kind) = state.registry.blueprint(type_id).and_then(goal) {
             super::run(state, intents, id, kind, &grid);
         } else if raider == Raider::Illusioner {
-            illusioner(state, id, slot, target);
-        } else if let Some((victim, at)) = target {
+            illusioner(state, id, slot, target.filter(|_| seen));
+        } else if let Some((victim, at)) = target.filter(|_| seen) {
             let reach = state.entities.body(slot).half_width + 1.5;
             if distance_sq(pos, at) < reach * reach
                 && state.entities.body(slot).attack_cooldown == 0
