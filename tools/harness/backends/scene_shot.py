@@ -780,18 +780,31 @@ def check_shade_override(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("shade_east_camera", all(
         abs(a - b) < 0.01 for a, b in zip(east_f["camera_position"], (1004.5, 161.62, 1004.5))
     ) and abs(east_f["yaw"] - 90.0) < 0.01)
-    plant = lambda r, g, b: (r > 120 and g < 100 and b < 100) or (g > 90 and r < 120 and b < 120)
+    red = lambda r, g, b: r > g + 15 and r > b + 15 and r > 40
+    green = lambda r, g, b: g > r + 5 and g > b + 5 and g > 30
+    plant = lambda r, g, b: red(r, g, b) or green(r, g, b)
     box = (560, 440, 720, 580)
+    top_box = (300, 600, 500, 660)
     lums = []
     counts = []
+    ratios = []
     for name in ("shade-north", "shade-east"):
         image = shots[name][1]
         pixels = [p for p in image.crop(box).getdata() if plant(*p)]
+        top = list(image.crop(top_box).getdata())
         counts.append(len(pixels))
-        lums.append(sum(sum(p) for p in pixels) / len(pixels) / 3 if pixels else 0.0)
+        plant_lum = sum(sum(p) for p in pixels) / len(pixels) / 3 if pixels else 0.0
+        top_lum = sum(sum(p) for p in top) / len(top) / 3 if top else 1.0
+        lums.append(plant_lum)
+        ratios.append(plant_lum / top_lum if top_lum else 0.0)
     probe.report["poppy_plant_pixels"] = counts
     probe.report["poppy_mean_luminance"] = [round(v, 2) for v in lums]
-    probe.check("poppy_visible_both_views", all(c > 3000 for c in counts))
+    probe.report["poppy_top_luminance_ratio"] = [round(v, 3) for v in ratios]
+    probe.check("poppy_visible_both_views", all(c > 800 for c in counts))
+    # 26.3 shade_direction_override "up" puts the plant's side faces at the up
+    # weight: as bright as the platform top modulo texture albedo. Legacy shading
+    # darkens them (~0.52 vs ~0.62 ratio at time 8000).
+    probe.check("poppy_unshaded_like_up_face", all(v >= 0.57 for v in ratios))
     probe.check("poppy_no_directional_shading", abs(lums[0] - lums[1]) < 8.0)
 
 

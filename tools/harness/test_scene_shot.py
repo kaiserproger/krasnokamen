@@ -132,14 +132,16 @@ class SceneShotTests(unittest.TestCase):
             (root / "screenshots").mkdir()
             probe = scene_shot.ProbeSteps(None, root, 10, "test")
             north_cam, east_cam = [1000.5, 161.62, 1000.5], [1004.5, 161.62, 1004.5]
-            self._write_shot(root, "shade-north", north_cam, yaw=0.0,
-                             draw=lambda d: d.rectangle((560, 440, 720, 580), fill=(60, 140, 60)))
-            self._write_shot(root, "shade-east", east_cam, yaw=90.0,
-                             draw=lambda d: d.rectangle((560, 440, 720, 580), fill=(62, 142, 62)))
+            def view(plant_fill):
+                def draw(d):
+                    d.rectangle((300, 600, 500, 660), fill=(120, 120, 120))
+                    d.rectangle((560, 440, 720, 580), fill=plant_fill)
+                return draw
+            self._write_shot(root, "shade-north", north_cam, yaw=0.0, draw=view((60, 140, 60)))
+            self._write_shot(root, "shade-east", east_cam, yaw=90.0, draw=view((62, 142, 62)))
             scene_shot.check_shade_override(probe, root)
-            self._write_shot(root, "shade-east", east_cam, yaw=90.0,
-                             draw=lambda d: d.rectangle((560, 440, 720, 580), fill=(45, 100, 45)))
-            with self.assertRaisesRegex(RuntimeError, "poppy_no_directional_shading"):
+            self._write_shot(root, "shade-east", east_cam, yaw=90.0, draw=view((45, 100, 45)))
+            with self.assertRaisesRegex(RuntimeError, "poppy_unshaded_like_up_face"):
                 scene_shot.check_shade_override(probe, root)
 
     def test_player_head_asserts_placed_and_worn(self):

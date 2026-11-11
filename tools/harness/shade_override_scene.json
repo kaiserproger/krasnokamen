@@ -25,7 +25,7 @@
       "cmd": "gamerule advance_time false"
     },
     {
-      "cmd": "time set 6000"
+      "cmd": "time set 8000"
     },
     {
       "tp": [
