@@ -838,11 +838,12 @@ title = "Destroy an open single chest, then click before ordinary commit: extrac
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-1"
 regression = ["cargo:mc-core:dimensions::tests::destroyed_open_chest_rejects_extract_and_insert_clicks", "cargo:mc-core:dimensions::tests::shared_destroy_command_settles_open_chest_before_the_next_click", "cargo:mc-core:dimensions::tests::destroying_command_and_stale_click_in_one_input_batch_never_duplicate_or_discard", "harness:entities:native-v2-destroyed-chest-race"]
 fix_commit = "6da185e3"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/HS-1.json"
 
 [[bug]]
 id = "END-RESTART"
@@ -872,11 +873,12 @@ title = "Native join/load retires solaris-auth after wall-clock epoch deadline; 
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUTH-BUDGET"
 regression = ["cargo:mc-plugin-host:ordinary_callback_survives_host_scheduling_jitter", "cargo:mc-plugin-host:generous_epoch_hang_guard_still_retires_a_callback", "harness:entities:native-v2-auth-budget"]
 fix_commit = "94aaa6d6"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/AUTH-BUDGET.json"
 
 [[bug]]
 id = "DUPLICATE-LOGIN"
@@ -884,11 +886,12 @@ title = "Second same-account connection times out in Join instead of replacing i
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DUPLICATE-LOGIN"
 regression = ["cargo:mc-core:dimensions::tests::duplicate_login_kicks_the_old_session_and_hands_over_inventory_without_duplicating", "harness:entities:native-v2-duplicate-login"]
 fix_commit = "e767ee11"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/DUPLICATE-LOGIN.json"
 
 [[bug]]
 id = "HS-2"
@@ -1196,10 +1199,12 @@ title = "A player stack reserved by a plugin can be moved into entity cargo belo
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "BUGS.md#CUSTODY-ENTITY-MENU-FLOOR: \"original source-only finding, no demonstrated live duplication/loss\" (Main ruling 2026-11-11: repro is source, not manual)"
 regression = ["cargo:mc-core:plugin_inventories::tests::entity_menu_clicks_preserve_reserved_player_inventory_and_resync"]
-fix_commit = "2ccf8cc1"
+# Fix 2ccf8cc1 (floor check in mounts/menus.rs, vehicles/containers.rs) is spread over a 32-file commit whose reversal does not build; the control neutralises the two floor checks only.
+fix_commit = "patch:93d96cba20ed65cefc6fc3c23b12b8db2bc5d78b241d191458df30bf8f3cc92a"
+promotion = "docs/bugs/promotions/CUSTODY-ENTITY-MENU-FLOOR.json"
 
 [[bug]]
 id = "CUSTODY-MOUNT-EXPORT"
@@ -3582,12 +3587,13 @@ id = "CORE-PICKUP-FULL-INVENTORY"
 title = "Every successful pickup republishes the full player inventory instead of the changed active-menu slots"
 area = "gameplay"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "External critique of 4d32f28, crates/mc-core/src/tick/merge.rs pickup commit"
 repro = "source"
 regression = ["cargo:mc-core:tick_tests::statistics_tests::pickup_publishes_only_changed_slots_for_active_menu", "cargo:mc-core:tick_tests::statistics_tests::pickup_into_offhand_syncs_inventory_with_or_without_open_chest", "cargo:mc-core:tick_tests::statistics_tests::pickup_with_lectern_open_updates_hidden_player_inventory"]
 fix_commit = "d330c4a7"
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/CORE-PICKUP-FULL-INVENTORY.json"
 
 [[bug]]
 id = "EDGE-OP-QUEUE-POLL"
@@ -3616,12 +3622,14 @@ id = "CORE-PICKUP-HIDDEN-MENU-IMAGE"
 title = "Hidden pickup slots republish an inactive inventory menu and cursor"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Independent review of 0504a280 pickup fallback; vanilla 775/776/777 client handler javap"
 repro = "source"
 regression = ["cargo:mc-core:tick_tests::statistics_tests::pickup_into_offhand_syncs_inventory_with_or_without_open_chest", "cargo:mc-core:tick_tests::statistics_tests::pickup_with_lectern_open_updates_hidden_player_inventory", "cargo:mc-edge:plan::plan_tests::hidden_pickup_plans_player_inventory_packet"]
-fix_commit = "878f1535"
+# Fix 878f1535 adds PlayerChange::PlayerInventorySlot, which its tests need; the control restores only the old full-inventory republish in pickup_changes.
+fix_commit = "patch:7928a945df0a58d4d75703e74f3aa8537d186ce42e8646251b5be39ec2f4d7c1"
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/CORE-PICKUP-HIDDEN-MENU-IMAGE.json"
 
 [[bug]]
 id = "EDGE-QUEUED-OP-AFTER-DEOP"
@@ -3662,11 +3670,13 @@ title = "More than the per-connection outbox cap (512) of chat or system lines i
 area = "gameplay"
 repro = "cargo"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "CoreBlockers (wave/core-blockers): reproduced by datapacks::tests::function_chat_flood_in_one_tick_reaches_every_recipient before the TextBurst compaction; found while checking the HS-1 batch path."
 regression = ["cargo:mc-core:datapacks::tests::function_chat_flood_in_one_tick_reaches_every_recipient", "cargo:mc-edge:server::lifecycle_tests::text_burst_live_updates_fit_reliable_queue"]
-fix_commit = "82434561"
+# Fix 82434561 also refuses undecodable block-entity records, and its reversal does not build; the control disables only the TextBurst compaction (tick.rs) and the edge frame merge.
+fix_commit = "patch:8f5c5749fbc27e368a7c4f0e833783794c6fb803f7bf10ca0241c3a30213f1fd"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/OUTBOX-TEXT-FLOOD-KICK.json"
 
 [[bug]]
 id = "CHUNK-REFUSAL-BLOCKS-CHECKPOINTS"
@@ -3835,11 +3845,12 @@ title = "Player command success replies ignore send_command_feedback"
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Native gait scene retained summon and effect success messages after send_command_feedback false"
 regression = ["cargo:mc-core:command_execution::tests::gamerule_suppresses_player_scene_success_but_not_failure_or_console", "cargo:mc-core:dimensions::tests::dimensional_teleport_success_obeys_player_feedback_rule", "harness:scene-shot:native-command-feedback"]
 fix_commit = "3fe868f1"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/COMMAND-SUCCESS-FEEDBACK-GAMERULE.json"
 
 [[bug]]
 id = "TICK-FROZEN-GAME-AGE-WIRE"
