@@ -181,8 +181,10 @@ proofs need a physical XTest click (pattern: `_scroll` in
 
 ## Isolation (owner rules, 2026-10-23/24)
 
-- **Never the owner's desktop.** Every agent client runs on its own Xvfb display
-  (never `:0`/`:1`) with `WAYLAND_DISPLAY` unset; the harness forces X11
+- **Never the owner's desktop.** Every agent client runs on an Xvfb display the
+  harness started itself (`-displayfd` takes the first free number, so it never
+  attaches to an existing display; on the headless owner host `:0`/`:1` are such
+  harness displays) with `WAYLAND_DISPLAY` unset; the harness forces X11
   (`SDL_VIDEODRIVER`/`GDK_BACKEND=x11`) and scene-shot fails if `client.log` says
   `video driver: wayland`. Browser/noVNC viewers need their own proven headless
   isolation (QA protocol, breaker procedure).
