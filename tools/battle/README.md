@@ -132,9 +132,20 @@ the shot window is off or moved before it:
   summarises the shot window `battle_start+1 .. recorder last_tick`: samples,
   missing ticks, `wall_us` mean/p50/p95/p99/max, TPS from `wall_start_unix_ns`,
   max `process_rss_bytes`, deferred updates.
-- `--view-distance N` sets the server and recorder view distance (default 12;
-  the staging ticket stays 12 chunks, so more only adds terrain around the
-  field). `--server-scope [SLICE]` starts the server in its own transient
+- `--view-distance N` sets the **server's** view distance (default 12; the
+  staging ticket stays 12 chunks, so more only adds terrain around the
+  field). The recorder asks for its own `render_distance`, which a recorder
+  client otherwise reads from `client-settings.json` (the template data has none,
+  so recorded terrain stopped at ring 12-13 whatever the server allowed). The
+  runner therefore writes `recorder-settings.json` (`{"render_distance": N}`,
+  `--recorder-render-distance`, default `--view-distance`) and passes it to the
+  recorder as `SOLARIS_CLIENT_SETTINGS`. For the arena rim and hill at 200-256
+  blocks use 16 or more. `take.json` `recording_chunks` reports the distinct
+  chunks in the recording, their x/z range, the farthest Chebyshev ring around
+  chunk (0,0), and how many were first sent at or after battle start (terrain
+  that pops in during the shot; chunks stream at roughly 35 per second under
+  load, so a large radius is not complete at the first frame).
+- `--server-scope [SLICE]` starts the server in its own transient
   `systemd-run --user --scope` unit (`server-scope.json` records its cgroup), so
   the `cgroup_*` host series is the server alone, not server plus recorder.
 

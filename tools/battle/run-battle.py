@@ -62,6 +62,7 @@ def arguments():
     p.add_argument('--phase-log', action=argparse.BooleanOptionalAction, default=None, help='MC_CORE_PHASE_LOG for the server; default on, off in take mode')
     p.add_argument('--status-every', type=int, metavar='TICKS', help='after start, request battle status about every TICKS recorded ticks (0 = never); default 100, 0 in take mode. The pre-start population barrier always polls')
     p.add_argument('--view-distance', type=int, default=12, metavar='CHUNKS', help='server and recorder view distance, 2..32')
+    p.add_argument('--recorder-render-distance', type=int, metavar='CHUNKS', help="the recorder client's own render_distance (it asks the server for this, whatever --view-distance says); default --view-distance")
     p.add_argument('--allow-marker-gaps', action='store_true', help='record recorder marker and telemetry tick gaps instead of failing the run; implied by --take')
     p.add_argument('--server-scope', nargs='?', const='', default=None, metavar='SLICE', help='run the server in its own transient systemd user scope (optionally under SLICE) so the cgroup memory/CPU telemetry is the server alone')
     p.add_argument('--dry-run', action='store_true')
@@ -83,6 +84,10 @@ def arguments():
         p.error('invalid seed, duration, tick count or port')
     if not 2 <= a.view_distance <= 32:
         p.error('view distance must be 2..32')
+    if a.recorder_render_distance is None:
+        a.recorder_render_distance = a.view_distance
+    elif not 2 <= a.recorder_render_distance <= 32:
+        p.error('recorder render distance must be 2..32')
     if a.status_every is not None and a.status_every < 0:
         p.error('status interval must not be negative')
     if a.checkpoint_every_ticks is not None and a.checkpoint_every_ticks < 1:
@@ -103,6 +108,46 @@ def arguments():
 def command_list(a):
     setup = f'battle setup {a.seed} {a.scenario}' + (f' {a.count}' if a.count is not None else '')
     return [setup, 'battle start', 'battle pause', 'stop']
+
+
+def read_varint(data, offset):
+    value = shift = 0
+    while True:
+        byte = data[offset]
+        offset += 1
+        value |= (byte & 0x7F) << shift
+        if not byte & 0x80:
+            return value, offset
+        shift += 7
+
+
+def recording_chunk_stats(path, battle_start):
+    """Terrain in the recording: distinct LevelChunkWithLight packets (id 0x2E, protocol 777) with their
+    Chebyshev ring around chunk (0,0), and how many were first sent at or after tick `battle_start`
+    (tick from the `solaris:tick` markers), i.e. terrain that pops in during the shot."""
+    seen = {}
+    tick = None
+    with path.open('rb') as source:
+        source.readline()
+        while True:
+            head = source.read(8)
+            if len(head) < 8:
+                break
+            length = int.from_bytes(head[4:], 'big')
+            packet = source.read(length)
+            if packet[:1] == b'\x2e' and len(packet) >= 9:
+                seen.setdefault((int.from_bytes(packet[1:5], 'big', signed=True), int.from_bytes(packet[5:9], 'big', signed=True)), tick)
+            elif packet[:1] == b'\x18':
+                size, offset = read_varint(packet, 1)
+                if packet[offset:offset + size] == b'solaris:tick':
+                    tick = int.from_bytes(packet[offset + size:offset + size + 8], 'big')
+    if not seen:
+        return {'distinct_chunks': 0}
+    xs = [x for x, _ in seen]
+    zs = [z for _, z in seen]
+    return {'distinct_chunks': len(seen), 'x_range': [min(xs), max(xs)], 'z_range': [min(zs), max(zs)],
+            'max_ring_from_origin': max(max(abs(x), abs(z)) for x, z in seen),
+            'first_sent_from_battle_start': sum(1 for first in seen.values() if first is not None and first >= battle_start)}
 
 
 def take_checkpoint_ticks(duration):
@@ -238,7 +283,7 @@ def ignored_config_keys(log_text):
     return re.findall(r'ignoring unknown config key .*?\bkey=(\S+)', log_text)
 
 
-def take_report(a, rows, census, receipt, first, last, telemetry_gaps, setup_command, server_log):
+def take_report(a, rows, census, receipt, first, last, telemetry_gaps, setup_command, server_log, recording_chunks=None):
     """take.json: what was configured, what the window measured, and whether it is a clean take."""
     window = window_summary(rows, first, last)
     checkpoint_ticks = server_checkpoint_ticks(server_log)
@@ -267,11 +312,12 @@ def take_report(a, rows, census, receipt, first, last, telemetry_gaps, setup_com
         'setup_command': setup_command, 'census_before_start': census,
         'config': {'checkpoint_every_ticks': a.checkpoint_every_ticks, 'phase_log': a.phase_log, 'status_every': a.status_every,
                    'view_distance': a.view_distance, 'allow_marker_gaps': a.allow_marker_gaps, 'server_scope': a.server_scope,
-                   'forced_checkpoint_before_start': a.take},
+                   'forced_checkpoint_before_start': a.take, 'recorder_render_distance': a.recorder_render_distance},
         'checkpoint_spike_threshold_us': CHECKPOINT_SPIKE_US,
         'server_checkpoints': {'ticks': checkpoint_ticks, 'in_window': inside, 'last_before_window': before[-1] if before else None,
                                'next_periodic_margin_ticks': a.checkpoint_every_ticks - (last - before[-1]) if before else None},
         'server_ignored_config_keys': ignored,
+        'recording_chunks': recording_chunks,
         'window': window,
         'recorder': {key: receipt.get(key) for key in ('first_tick', 'last_tick', 'marker_gaps')},
         'telemetry': {'rows': len(rows), 'first_tick': rows[0]['tick'] if rows else None, 'last_tick': rows[-1]['tick'] if rows else None,
@@ -498,6 +544,7 @@ def run(a):
                          'server argv: ' + ' '.join(server_argv(a, f'{a.pin}/<binary>', a.run_dir / 'server.toml', 'battle-<random>')),
                          f'server environment: MC_CORE_PHASE_LOG={"1" if a.phase_log else "unset"}',
                          f'server.toml:\n{shown_config.rstrip()}',
+                         f'recorder settings: {a.run_dir}/recorder-settings.json {{"render_distance": {a.recorder_render_distance}}} (SOLARIS_CLIENT_SETTINGS for the recorder process)',
                          f'recorder record --server 127.0.0.1:{a.port} --username BattleRecorder --output {a.run_dir}/take.solrec --header {a.run_dir}/header.json --duration {a.duration} --ready-file {a.run_dir}/take.ready --roster-file {a.run_dir}/roster.txt --roster-ready-file {a.run_dir}/roster.ready --roster-timeout 900 --data-dir {a.client_data}',
                          'wait for recorder initial readiness',
                          f'export GET http://127.0.0.1:{a.dashboard_port}/telemetry.jsonl; before start each telemetry batch requests battle status (population barrier), after start {status_after}',
@@ -527,6 +574,7 @@ def run(a):
     config.write_text(server_config_text(a, server_name, world, cache))
     (root / 'commands.txt').touch(exist_ok=False)
     recorder_argv = [str(client), 'record', '--server', f'127.0.0.1:{a.port}', '--username', 'BattleRecorder', '--output', str(root / 'take.solrec'), '--header', str(root / 'header.json'), '--duration', str(a.duration), '--ready-file', str(root / 'take.ready'), '--roster-file', str(root / 'roster.txt'), '--roster-ready-file', str(root / 'roster.ready'), '--roster-timeout', '900', '--data-dir', str(client_data)]
+    (root / 'recorder-settings.json').write_text(json.dumps({'render_distance': a.recorder_render_distance}) + '\n')
     launch_argv = server_argv(a, binary, config, server_name)
     (root / 'manifest.json').write_text(json.dumps({'server_pin': manifest, 'client_sha256': sha256_file(client), 'seed': a.seed, 'world_seed': a.world_seed, 'scenario': a.scenario, 'count_per_side_override': a.count, 'world_source': str(a.world) if a.world else None, 'platform': platform.platform(), 'uname': list(platform.uname()), 'server_argv': launch_argv, 'recorder_argv': recorder_argv, 'server_environment_overrides': {'MC_CORE_PHASE_LOG': '1'} if a.phase_log else {}, 'server_environment_removed': [] if a.phase_log else ['MC_CORE_PHASE_LOG'], 'take': a.take, 'checkpoint_every_ticks': a.checkpoint_every_ticks, 'status_every': a.status_every, 'view_distance': a.view_distance, 'allow_marker_gaps': a.allow_marker_gaps, 'server_scope': a.server_scope}, indent=2) + '\n')
     if a.arena:
@@ -564,7 +612,7 @@ def run(a):
         header = root / 'header.json'
         header.write_text(json.dumps({'protocol_version': 777, 'server_build': manifest['head'], 'seed': a.seed, 'start_tick': 0, 'wall_time': 0}) + '\n')
         with (root / 'recorder.log').open('x') as recorder_log:
-            recorder = subprocess.Popen(recorder_argv, stdout=recorder_log, stderr=subprocess.STDOUT, cwd=root)
+            recorder = subprocess.Popen(recorder_argv, stdout=recorder_log, stderr=subprocess.STDOUT, cwd=root, env=dict(os.environ, SOLARIS_CLIENT_SETTINGS=str(root / 'recorder-settings.json')))
             watch_ready(root / 'take.ready', recorder)
             initial = json.loads((root / 'take.ready').read_text())
             if initial.get('phase') != 'play' or not initial.get('pose_known') or not initial.get('tick_marker_received'):
@@ -660,7 +708,8 @@ def run(a):
                 log_thread.join(timeout=10)
             rows = [json.loads(line) for line in (root / 'telemetry.jsonl').read_text().splitlines() if line]
             server_log = (root / 'server.log').read_text(errors='replace')
-            report = take_report(a, rows, census, record_receipt, battle_start + 1, last_tick, telemetry_gaps, commands[0], server_log)
+            chunks = recording_chunk_stats(root / 'take.solrec', battle_start)
+            report = take_report(a, rows, census, record_receipt, battle_start + 1, last_tick, telemetry_gaps, commands[0], server_log, chunks)
             (root / 'take.json').write_text(json.dumps(report, indent=2) + '\n')
             result.update({'take': 'take.json', 'take_clean': report['clean']})
             if not report['clean']:
