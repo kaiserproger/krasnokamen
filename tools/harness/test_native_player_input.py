@@ -23,7 +23,8 @@ class FrozenFall:
     follow the wall clock. Each harness request costs `latency` seconds. The client
     draws a frozen block at its previous predicted pose (the native client's
     partial-0 presentation), which the gate must accept along with vanilla's.
-    `holds=False` models a server that keeps dropping the block while frozen.
+    `holds=False` models a server that keeps dropping the block while frozen. Chat
+    observations are the native client's `recent_chat`: the last 20 lines, newest first.
     """
 
     def __init__(self, latency: float, phase: int, holds: bool = True) -> None:
@@ -109,7 +110,7 @@ class FrozenFall:
         deadline = self.now + (timeout_seconds or 600.)
         while self.now < deadline:
             self.advance(self.latency)  # observe; the predicate's own requests add theirs
-            state = {"recent_chat": list(self.chat)}
+            state = {"recent_chat": self.chat[::-1][:20]}
             if predicate(state):
                 self.check(label, True)
                 return state
