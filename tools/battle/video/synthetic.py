@@ -12,6 +12,7 @@ with (out/'telemetry.jsonl').open('w') as f:
         if tick % 20 == 0:
             host = {'sampled_unix_ns':1_000_000_000+tick*50_000_000,
                     'cgroup_memory_current_bytes':3_000_000_000+tick*1_000_000,
+                    'process_rss_bytes':800_000_000+tick*500_000,
                     'cgroup_cpu_usage_usec':1_000_000+tick*100_000,
                     'cpu_total_ticks':10000+tick*40,'cpu_steal_ticks':20+tick//20}
         s = {'tick':tick,'wall_start_unix_ns':1_000_000_000+tick*50_000_000,
