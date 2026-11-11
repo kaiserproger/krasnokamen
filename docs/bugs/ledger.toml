@@ -4167,3 +4167,37 @@ status = "open"
 source = "VisualRigsA runs 20261111T115908-scene-shot-wxnrjw82 and 20261111T120609-scene-shot-uo3_ay_m passed despite missing intended visual subjects; the scenario had no assertion for their presence."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "DEATH-MESSAGE-SELF-OWNED-MOB-ATTACKER"
+title = "A player killed by a special mob (warden-style attack submitted as a self-owned projectile) receives death.attack.mob with one argument; the native client rejects the system chat with `missing translation argument` and drops the session"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "native-v2-p4-damage rerun 20261111T131605-native-v2-p4-damage-9ys_sijn: `session failed: Play packet 0x7c sequence 14847: missing translation argument`; the same scenario with `gamerule show_death_messages false` (20261111T132303-native-v2-p4-damage-wdwexu3s) passes that point. Cause: statistics::attacker returns None for a projectile the mob owns itself, so death_message built the component without the attacker."
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::parity_special_mob_melee_death_names_the_mob_for_the_two_argument_template"]
+fix_commit = "cfac52dd669b3070289f839d08da1abce24ca033"
+failing_first = "reported"
+
+[[bug]]
+id = "DEATH-MESSAGE-OUTSIDE-BORDER-KEY"
+title = "Death by the world border sends the key death.attack.outside_border; the vanilla language key is death.attack.outsideBorder, so players see the raw key"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Probe of every DamageKind through the real death path (HarnessRows): death_message.rs maps message ids to camelCase keys but omits outside_border; en_us.json has no death.attack.outside_border."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL"
+title = "native-v2-p4-damage kills its own survival player: the authored zombie keeps attacking during slow captures, and the falling-stalactite row (6 damage per fallen block) is lethal from 5 blocks"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "20261111T120956-native-v2-p4-damage-6mwbxea3 (wait_for_inventory timeout; the player was slain by the zombie) and 20261111T132303-native-v2-p4-damage-wdwexu3s (wait_ticks interrupted: stalactite from y+5 deals 24 damage to a 20 HP player)."
+regression = []
+failing_first = "reported"
