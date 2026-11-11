@@ -639,6 +639,45 @@ fn category(name: &str) -> Option<MobCategory> {
 pub const SHEEP_WOOL_DATA_INDEX: u8 = 18;
 /// Chicken variant accessor; checked against the protocol index at the edge.
 pub const CHICKEN_VARIANT_DATA_INDEX: u8 = 18;
+/// Variant accessors from the supplied 26.3 entity metadata facts.
+pub const COW_VARIANT_DATA_INDEX: u8 = 18;
+pub const PIG_VARIANT_DATA_INDEX: u8 = 19;
+pub const ZOMBIE_NAUTILUS_VARIANT_DATA_INDEX: u8 = 21;
+
+pub(crate) const VARIANT_CHICKEN: &str = "minecraft:chicken";
+pub(crate) const VARIANT_COW: &str = "minecraft:cow";
+pub(crate) const VARIANT_PIG: &str = "minecraft:pig";
+pub(crate) const VARIANT_ZOMBIE_NAUTILUS: &str = "minecraft:zombie_nautilus";
+
+pub(crate) fn variant_registry(entity: &str) -> Option<&'static str> {
+    match entity {
+        VARIANT_CHICKEN => Some("chicken_variant"),
+        VARIANT_COW => Some("cow_variant"),
+        VARIANT_PIG => Some("pig_variant"),
+        VARIANT_ZOMBIE_NAUTILUS => Some("zombie_nautilus_variant"),
+        _ => None,
+    }
+}
+
+pub(crate) fn variant_data(
+    entity: &str,
+    value: u32,
+) -> Option<(u8, crate::boundary::EntityDataValue)> {
+    use crate::boundary::EntityDataValue;
+    Some(match entity {
+        VARIANT_CHICKEN => (
+            CHICKEN_VARIANT_DATA_INDEX,
+            EntityDataValue::ChickenVariant(value),
+        ),
+        VARIANT_COW => (COW_VARIANT_DATA_INDEX, EntityDataValue::CowVariant(value)),
+        VARIANT_PIG => (PIG_VARIANT_DATA_INDEX, EntityDataValue::PigVariant(value)),
+        VARIANT_ZOMBIE_NAUTILUS => (
+            ZOMBIE_NAUTILUS_VARIANT_DATA_INDEX,
+            EntityDataValue::ZombieNautilusVariant(value),
+        ),
+        _ => return None,
+    })
+}
 
 /// Dye colors by id, as the loot tables name them (`minecraft:sheep/color`).
 pub const DYE_COLORS: [&str; 16] = [

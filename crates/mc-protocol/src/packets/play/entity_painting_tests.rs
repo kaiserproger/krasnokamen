@@ -35,3 +35,57 @@ fn chicken_variant_holder_wire_roundtrip() {
         packet
     );
 }
+
+#[test]
+fn climate_variant_holders_use_their_own_serializer_and_direct_registry_id() {
+    // Supplied 26.3 EntityDataSerializers registration order and entity accessors.
+    for (value, index, serializer) in [
+        (
+            EntityDataValue::CowVariant {
+                index: 18,
+                value: 2,
+            },
+            18,
+            23,
+        ),
+        (
+            EntityDataValue::PigVariant {
+                index: 19,
+                value: 2,
+            },
+            19,
+            28,
+        ),
+        (
+            EntityDataValue::ZombieNautilusVariant {
+                index: 21,
+                value: 2,
+            },
+            21,
+            32,
+        ),
+    ] {
+        let packet = ClientboundSetEntityData {
+            entity_id: 17,
+            values: vec![value],
+        };
+        let mut bytes = Vec::new();
+        packet.encode(&mut bytes).unwrap();
+        assert_eq!(bytes, [17, index, serializer, 2, 255]);
+        assert_eq!(
+            ClientboundSetEntityData::decode(&mut bytes.as_slice()).unwrap(),
+            packet,
+        );
+        // Registry zero is a reference, not an inline holder sentinel.
+        assert!(
+            ClientboundSetEntityData::decode(&mut [17, index, serializer, 0, 255].as_slice())
+                .is_ok()
+        );
+        assert!(
+            ClientboundSetEntityData::decode(
+                &mut [17, index, serializer, 255, 255, 255, 255, 15, 255].as_slice(),
+            )
+            .is_err()
+        );
+    }
+}

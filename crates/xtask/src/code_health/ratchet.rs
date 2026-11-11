@@ -34,7 +34,10 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     cycle_modules: 184,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
-    vanilla_id_literals: 2_617,
+    // Q04 climate variants, 2026-11-11: +1 (2618). The cow, pig, chicken and
+    // zombie_nautilus identifiers live once as blueprint::VARIANT_* constants
+    // that key both the registry mapping and the capture path.
+    vanilla_id_literals: 2_618,
     path_equality: 114,
     panics: 5,
     merge_block_write_pushes: 17,

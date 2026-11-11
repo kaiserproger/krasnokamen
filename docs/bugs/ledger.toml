@@ -4102,3 +4102,102 @@ status = "open"
 source = "JavaAuthAck acceptance: 8/8 runs authenticated, then the adapter TypeError (receipts/JavaAuthAck/report.md)."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-ZOMBIE-BABY-HELMET-HEIGHT"
+title = "Native baby zombie proportions and armor regions differ from the Java control"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 matched 26.3 controls on 2026-11-11: the original burning baby frame confounded the first helmet estimate. Clean fire-free native pin 90c4850a282a-844cc39b and canonical Java frames retain the same camera and subject UUID ending 0fa400000003. They confirm an elevated helmet, oversized torso/limbs and opaque native forearm armor where Java shows green forearms. The supplied child armor atlas and clean paired frames are retained under ClientQ04Variants/final-native-r1-clean and final-java-r1. Client tests: entities::solaris_models::tests::baby_zombie_head_and_helmet_follow_the_matched_control_height, entities::solaris_models::tests::baby_zombie_and_shared_husk_armor_keep_child_body_proportions, entities::solaris_models::baby_armor_alignment_tests::baby_armor_encloses_animated_body_parts."
+repro = "client"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-HELD-TRIDENT-ORIENTATION"
+title = "Shared trident geometry uses the wrong shaft and held-grip frame"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 paired actual-window 26.3 third-person frames, native pin 90c4850a282a-db192b2f versus Java, retain UUID ending 0fa400000004 and show the held trident displaced above its Java placement even after the candidate-only extra half-turn was removed. Main explicitly required local TridentModel.createLayer data, retained as ClientQ04Variants/javap-trident-model-create-layer-26.3.txt: neutral pivots, one 1x25x1 shaft at Y=2..27 and four base/spike boxes replace the baseline negative-Y planar approximation. In-hand placement remains owned by the supplied item graph and display transforms, not an eye-fitted offset. Actual baseline-asset reversion fails geometry, held-grip and thrown-axis regressions (2 passed, 3 failed): ClientQ04Variants/trident-layer-baseline-negative.json. The earlier baseline-angle guess stays withdrawn. Client tests: entities::presentation::tests::authored_trident_prongs_join_crossbar_at_shaft_tip, entities::presentation::tests::held_trident_preserves_coordinates_for_the_resource_item_graph, entities::presentation::tests::trident_and_arrow_authored_axes_follow_same_projectile_orientation."
+repro = "client"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-DECORATED-POT-NECK"
+title = "Native decorated pot body and neck proportions differ from the Java control"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 matched 26.3 block-special controls on 2026-11-11 first showed the native lip below Java. A raised v1 lip aligns, but clean HUD-free pairs still expose an oversized shoulder, protruding bottom stripe and narrow stepped neck against Java's broad neck. The retained supplied PNG and paired frames under ClientQ04Variants/final-native-r1-clean and final-java-r1 support an independent connected body/cap/neck fit, not copied Java model geometry. Client tests: entities::solaris_models::tests::decorated_pot_body_supports_its_neck_at_the_matched_control_height."
+repro = "client"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-BELL-AUTHORED-SILHOUETTE"
+title = "Native bell body and rim side textures are vertically inverted"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 clean HUD-free 26.3 block-special controls on 2026-11-11, native pin 90c4850a282a-844cc39b versus canonical Java: body/rim outlines agree, so the initial silhouette interpretation is withdrawn. The native body dark edge and rim stripe are vertically reversed against Java on the same block/camera. Supplied PNG inspection and emitted wall-UV regression isolate inverted side-net V, not geometry or chat brightness. Raw pairs remain in ClientQ04Variants/final-native-r1-clean and final-java-r1. Client tests: entities::solaris_models::tests::bell_wall_texels_follow_the_clean_control_orientation."
+repro = "client"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-BED-DEFAULT-TEXTURE-PATH"
+title = "The shipped bed model default texture is absent from the 26.3 resource layout"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 catalog suite observed every_shipped_model_is_well_formed fail because bed_foot.json declares entity/bed/red.png, absent from the supplied 26.3 resources. The broader suite result was 22 passed and 1 failed; focused coverage passes did not replace it. Client tests: entities::solaris_models::tests::every_shipped_model_is_well_formed, entities::solaris_models::tests::obsolete_bed_entity_texture_rigs_are_not_shipped_in_26_3, entities::asset_model_regression_tests::bed_item_uses_resource_model_halves_without_a_legacy_entity_texture."
+repro = "cargo"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-WITHER-SKULL-MATERIAL-SELECTION"
+title = "The native wither skull default material selection remains unresolved"
+area = "client"
+severity = "major"
+status = "open"
+source = "ClientQ04 production material-selection coverage observed selection/minecraft:wither_skull/adult/default return variant material not yet received/resolved despite an authored wither_skull rig. The actual production selector takes the empty family default texture and has no wither-skull material branch. This is source-fixture evidence, not a claimed runtime crash. Client tests: entities::solaris_models::tests::entity_selection_coverage_wither_skull_material_tracks_received_dangerous_flag."
+repro = "source"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-BABY-CHICKEN-LAYOUT"
+title = "Baby chickens use an inflated adult-style stack and lose their proper feet"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 clean 26.3 native/Java cold-baby pair on 2026-11-11, UUID ending 0fa400000011: the native chick is an oversized floating gray stack with no proper visible toes. The shared chicken_baby layout also serves temperate/warm babies. Main explicitly assigned that shared caller; local BabyChickenModel anatomy and the three supplied 16-pixel skin nets ground a body/beak assembly with planar shanks, toes and wings. Raw original pairs remain under ClientQ04Variants/final-native-r1-clean and final-java-r1. Client tests: entities::solaris_models::tests::baby_chicken_body_and_planar_feet_follow_the_26_3_texture_net."
+repro = "client"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-CLIMATE-COW-HORNS"
+title = "Native climate cow horns and the cold adult muzzle use the wrong shapes or net"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 clean same-camera 26.3 climate pairs on 2026-11-11 show long curved cold horns against Java short stubs, thin diagonal warm horns against squared bends, absent native calf stubs and a gray cold muzzle against Java pink nostrils. Exact four UUIDs and front/side frames are retained in expected-subjects.json, native-r1-variant-proof.json and the clean native/Java artifact roots. Supplied cow skin nets independently locate the gray horn, child stub and pink muzzle islands. Client tests: entities::solaris_models::tests::climate_cow_horns_and_cold_muzzle_follow_the_clean_controls."
+repro = "client"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-WARM-NAUTILUS-ROOT"
+title = "The authored warm zombie nautilus faces backward and its shell floats above its feet"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 clean 26.3 warm zombie nautilus pair on 2026-11-11, UUID ending 0fa400000014, has actual native received warm selection. Native front shows the green head where Java shows the shell; native side places the head on the opposite end. The short floating shell, roof-only fans and short tentacles also disagree with the paired side outline. Source-facing root, connected ground-reaching shell and fan/tentacle fits are independently authored from both retained views and the supplied PNG, not copied Java model arrays. Client tests: entities::solaris_models::tests::warm_nautilus_shell_and_face_follow_both_matched_views."
+repro = "client"
+regression = []
+failing_first = "reported"

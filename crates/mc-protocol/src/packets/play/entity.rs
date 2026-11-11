@@ -773,12 +773,12 @@ impl EffectParticle {
     }
 }
 
-/// Entity-data serializers implemented for 26.1.2.
+/// Entity-data serializers implemented for the supported Java protocol family.
 ///
-/// Supported serializer ids are 0-6, 7-20, and 42. Particle serializers
-/// support the options used by built-in effects; other particle types and
-/// variant, global-position, vector, quaternion, and resolvable-profile
-/// serializers are rejected explicitly.
+/// Primitive serializers 0..=20 and 42, the painting and climate/nautilus
+/// registry holders, and copper-golem/weathering enums are supported. Particles
+/// cover built-in effects; other particle types, variant holders, global positions,
+/// vectors, quaternions and resolvable profiles are rejected explicitly.
 #[derive(Debug, Clone)]
 pub enum EntityDataValue {
     /// 26.1.2 serializer 34: registry holder reference (wire id = registry id + 1).
@@ -788,6 +788,19 @@ pub enum EntityDataValue {
     },
     /// 26.1.2 serializer 30: chicken variant registry holder reference.
     ChickenVariant {
+        index: u8,
+        value: u32,
+    },
+    /// Climate and zombie-nautilus holders use direct registry VarInts.
+    CowVariant {
+        index: u8,
+        value: u32,
+    },
+    PigVariant {
+        index: u8,
+        value: u32,
+    },
+    ZombieNautilusVariant {
         index: u8,
         value: u32,
     },
@@ -913,6 +926,12 @@ impl PartialEq for EntityDataValue {
             (
                 Self::ChickenVariant { value: left, .. },
                 Self::ChickenVariant { value: right, .. },
+            )
+            | (Self::CowVariant { value: left, .. }, Self::CowVariant { value: right, .. })
+            | (Self::PigVariant { value: left, .. }, Self::PigVariant { value: right, .. })
+            | (
+                Self::ZombieNautilusVariant { value: left, .. },
+                Self::ZombieNautilusVariant { value: right, .. },
             ) => left == right,
             (Self::Byte { value: left, .. }, Self::Byte { value: right, .. }) => left == right,
             (
@@ -1018,6 +1037,9 @@ impl EntityDataValue {
             Self::Byte { index, .. }
             | Self::PaintingVariant { index, .. }
             | Self::ChickenVariant { index, .. }
+            | Self::CowVariant { index, .. }
+            | Self::PigVariant { index, .. }
+            | Self::ZombieNautilusVariant { index, .. }
             | Self::CopperGolemState { index, .. }
             | Self::WeatheringCopper { index, .. }
             | Self::Int { index, .. }
@@ -1049,6 +1071,9 @@ impl EntityDataValue {
         match self {
             Self::PaintingVariant { .. } => 34,
             Self::ChickenVariant { .. } => 30,
+            Self::CowVariant { .. } => 23,
+            Self::PigVariant { .. } => 28,
+            Self::ZombieNautilusVariant { .. } => 32,
             Self::Byte { .. } => ENTITY_DATA_BYTE_SERIALIZER_ID,
             Self::CopperGolemState { .. } => 37,
             Self::WeatheringCopper { .. } => 38,
@@ -1082,10 +1107,13 @@ impl EntityDataValue {
         buf.write_u8(self.index());
         buf.write_varint(self.serializer_id());
         match self {
-            Self::ChickenVariant { value, .. } => {
+            Self::ChickenVariant { value, .. }
+            | Self::CowVariant { value, .. }
+            | Self::PigVariant { value, .. }
+            | Self::ZombieNautilusVariant { value, .. } => {
                 buf.write_varint(
                     i32::try_from(*value)
-                        .map_err(|_| CodecError::NotSupported("chicken variant id out of range"))?,
+                        .map_err(|_| CodecError::NotSupported("entity variant id out of range"))?,
                 );
             }
             Self::PaintingVariant { value, .. } => {
@@ -1324,6 +1352,15 @@ impl EntityDataValue {
                     EffectParticle::decode,
                 )?,
             },
+            23 | 28 | 32 => {
+                let value = u32::try_from(buf.read_varint()?)
+                    .map_err(|_| CodecError::NotSupported("negative entity variant id"))?;
+                match serializer_id {
+                    23 => Self::CowVariant { index, value },
+                    28 => Self::PigVariant { index, value },
+                    _ => Self::ZombieNautilusVariant { index, value },
+                }
+            }
             30 => {
                 let value = buf.read_varint()?;
                 if value < 0 {

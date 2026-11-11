@@ -729,6 +729,15 @@ pub(super) fn restore_data_value(
         crate::journal::EntityDataValueImage::ChickenVariant(v) => {
             crate::boundary::EntityDataValue::ChickenVariant(*v)
         }
+        crate::journal::EntityDataValueImage::CowVariant(v) => {
+            crate::boundary::EntityDataValue::CowVariant(*v)
+        }
+        crate::journal::EntityDataValueImage::PigVariant(v) => {
+            crate::boundary::EntityDataValue::PigVariant(*v)
+        }
+        crate::journal::EntityDataValueImage::ZombieNautilusVariant(v) => {
+            crate::boundary::EntityDataValue::ZombieNautilusVariant(*v)
+        }
         crate::journal::EntityDataValueImage::VillagerData {
             kind,
             profession,
@@ -777,3 +786,7 @@ pub(super) fn restore_data_value(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "recovery_tests.rs"]
+mod variant_tests;

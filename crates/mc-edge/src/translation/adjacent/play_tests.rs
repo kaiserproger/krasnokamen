@@ -18,6 +18,25 @@ fn session() -> Session {
         ..Tables::default()
     })
 }
+#[test]
+fn variant_metadata_survives_776_to_775_translation() {
+    let mut s = test_session(Tables {
+        formats: super::super::tables::Formats {
+            upper: 776,
+            lower: 775,
+        },
+        ..Tables::default()
+    });
+    for (index, serializer) in [(18, 23), (19, 28), (21, 32)] {
+        let data = [7, index, serializer, 2, 255];
+        assert_eq!(
+            clientbound(&mut s, "minecraft:set_entity_data", &data)
+                .unwrap()
+                .unwrap(),
+            data
+        );
+    }
+}
 
 #[test]
 fn particle_registry_delta_maps_each_exact_wire_layout() {

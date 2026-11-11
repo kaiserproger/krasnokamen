@@ -701,6 +701,9 @@ pub enum EntityDataValue {
         level: i32,
     },
     ChickenVariant(u32),
+    CowVariant(u32),
+    PigVariant(u32),
+    ZombieNautilusVariant(u32),
 }
 
 /// Everything that changed in one tick, in commit order within each list.

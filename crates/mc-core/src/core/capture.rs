@@ -9,6 +9,23 @@ pub(crate) fn velocity_from_vanilla_motion(motion: [f64; 3]) -> [f64; 3] {
     motion.map(|component| component * 20.0)
 }
 
+/// Decode vanilla registry-backed variant fields for checkpoint import.
+pub(crate) fn variant_from_vanilla_entity(
+    record: &mc_data::entity_nbt::VanillaEntity,
+) -> Option<(u8, crate::boundary::EntityDataValue)> {
+    let registry = crate::blueprint::variant_registry(&record.id)?;
+    let name = record.extra_fields.iter().find_map(|(key, value)| {
+        if let ("variant", mc_nbt::Tag::String(name)) = (key.as_str(), value) {
+            Some(name.as_str())
+        } else {
+            None
+        }
+    })?;
+    let id = mc_data::Identifier::parse(name).ok()?;
+    let value = mc_data::required_registry_entry_id(registry, &id)?;
+    crate::blueprint::variant_data(&record.id, value)
+}
+
 /// Restore sheep's canonical vanilla fields into its synchronized wool byte.
 pub(crate) fn appearance_from_vanilla_entity(
     record: &mc_data::entity_nbt::VanillaEntity,
@@ -24,22 +41,14 @@ pub(crate) fn appearance_from_vanilla_entity(
             crate::journal::EntityDataValueImage::Byte(wool as i8),
         ));
     }
+    if let Some((index, value)) = variant_from_vanilla_entity(record) {
+        image.extra.push((index, (&value).into()));
+    }
     for (key, tag) in &record.extra_fields {
         match (key.as_str(), tag) {
             ("CustomName", mc_nbt::Tag::String(name)) => image.custom_name = Some(name.clone()),
             ("CustomNameVisible", mc_nbt::Tag::Byte(value)) => {
                 image.custom_name_visible = *value != 0;
-            }
-            ("variant", mc_nbt::Tag::String(name)) if record.id == "minecraft:chicken" => {
-                if let Ok(id) = mc_data::Identifier::parse(name.as_str())
-                    && let Some(variant) =
-                        mc_data::required_registry_entry_id("chicken_variant", &id)
-                {
-                    image.extra.push((
-                        crate::blueprint::CHICKEN_VARIANT_DATA_INDEX,
-                        crate::journal::EntityDataValueImage::ChickenVariant(variant),
-                    ));
-                }
             }
             ("Pumpkin", mc_nbt::Tag::Byte(value)) if record.id == "minecraft:snow_golem" => {
                 image.extra.push((
@@ -388,18 +397,33 @@ pub(super) fn entity_capture_record(
             mc_nbt::Tag::Byte(i8::from(row.appearance.baby)),
         ));
     }
-    if name == "minecraft:chicken"
-        && let Some(variant) =
-            row.appearance
-                .extra
-                .iter()
-                .find_map(|(index, value)| match (index, value) {
-                    (
-                        &crate::blueprint::CHICKEN_VARIANT_DATA_INDEX,
-                        crate::boundary::EntityDataValue::ChickenVariant(id),
-                    ) => mc_data::required_registry_entry("chicken_variant", *id),
-                    _ => None,
-                })
+    if let Some(registry) = crate::blueprint::variant_registry(&name)
+        && let Some(variant) = row.appearance.extra.iter().find_map(|(index, value)| {
+            let id = match (name.as_str(), *index, value) {
+                (
+                    crate::blueprint::VARIANT_CHICKEN,
+                    crate::blueprint::CHICKEN_VARIANT_DATA_INDEX,
+                    crate::boundary::EntityDataValue::ChickenVariant(id),
+                )
+                | (
+                    crate::blueprint::VARIANT_COW,
+                    crate::blueprint::COW_VARIANT_DATA_INDEX,
+                    crate::boundary::EntityDataValue::CowVariant(id),
+                )
+                | (
+                    crate::blueprint::VARIANT_PIG,
+                    crate::blueprint::PIG_VARIANT_DATA_INDEX,
+                    crate::boundary::EntityDataValue::PigVariant(id),
+                )
+                | (
+                    crate::blueprint::VARIANT_ZOMBIE_NAUTILUS,
+                    crate::blueprint::ZOMBIE_NAUTILUS_VARIANT_DATA_INDEX,
+                    crate::boundary::EntityDataValue::ZombieNautilusVariant(id),
+                ) => *id,
+                _ => return None,
+            };
+            mc_data::required_registry_entry(registry, id)
+        })
     {
         extra_fields.push((
             "variant".into(),
