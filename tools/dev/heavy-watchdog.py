@@ -9,15 +9,15 @@ doc` and `cargo test --no-run`, decided once from argv. Tests, harness runs,
 servers and clients are never frozen, so their timeouts stay honest.
 - Only real memory shortage freezes (no prediction at start): a PSI trigger on the
   slice (its tasks stalling on reclaim) or the slice hitting its MemoryMax freezes the youngest
-  preemptible command, one per event, but only while the room left (below) is under the
-  4G reserve; the oldest running command is never frozen, so something always finishes.
-  Builds fill the slice with clean page cache that the kernel drops at the cap, so
-  hitting MemoryMax or a short reclaim stall alone is not a shortage.
-- When a command exits it thaws frozen commands oldest first while their expected
-  remaining growth (measured peaks) fits the room: MemAvailable minus a 4G reserve,
-  and the slice cap minus its unreclaimable memory (memory.current without clean page
-  cache; tmpfs, dirty and writeback pages count). With nothing running it thaws the
-  oldest frozen one regardless.
+  preemptible command, one per event, but only while the room (below) is negative; the
+  oldest running command is never frozen, so something always finishes. Builds fill the
+  slice with clean page cache that the kernel drops at the cap, so hitting MemoryMax or
+  a short reclaim stall alone is not a shortage.
+- Room = the smaller of MemAvailable and the slice cap minus its unreclaimable memory
+  (memory.current without clean page cache; tmpfs, dirty and writeback pages count),
+  each minus a 4G reserve. When a command exits it thaws frozen commands oldest first
+  while their expected remaining growth (measured peaks) fits the room; with nothing
+  running it thaws the oldest frozen one regardless.
 - While `<dir>/exclusive` names a live mem-run -x, it freezes every preemptible command,
   thaws nothing and writes `<dir>/quiet` once every registered command is frozen.
 
@@ -159,10 +159,11 @@ def unreclaimable_kib(cg: Path) -> int:
 
 
 def headroom_kib() -> int:
+    """Room left above the 4G reserve on the host and under the slice cap."""
     slice_max = (read(SLICE / "memory.max") or "max").strip()
     room = avail_kib() - RESERVE_KIB
     if slice_max != "max":
-        room = min(room, int(slice_max) // 1024 - unreclaimable_kib(SLICE))
+        room = min(room, int(slice_max) // 1024 - unreclaimable_kib(SLICE) - RESERVE_KIB)
     return room
 
 
@@ -199,7 +200,7 @@ def balance(pressure: bool) -> None:
             except OSError:
                 pass
         return
-    if not pressure or headroom_kib() >= RESERVE_KIB:
+    if not pressure or headroom_kib() >= 0:
         thaw(rows)
         return
     running = [row for row in rows if not row["frozen"]]
@@ -240,6 +241,22 @@ def watch_events(cg: Path) -> None:
     POLLER.register(fd, select.POLLPRI)
 
 
+def open_jobserver(path: Path) -> int:
+    """Open the shared jobserver FIFO. A restart while builds run must not refill it:
+    their cargos still hold tokens and return them later; balance() refills to exactly
+    JOBS once nothing runs."""
+    global JOBSERVER
+    if path.exists() and not stat.S_ISFIFO(path.stat().st_mode):
+        path.unlink()
+    fresh = not path.exists()
+    if fresh:
+        os.mkfifo(path)
+    JOBSERVER = os.open(path, os.O_RDWR | os.O_NONBLOCK)
+    if fresh or not commands():
+        reset_tokens()
+    return JOBSERVER
+
+
 def main() -> None:
     (DIR / "run").mkdir(parents=True, exist_ok=True)
     fifo = DIR / "events"
@@ -249,18 +266,7 @@ def main() -> None:
     events = os.open(fifo, os.O_RDWR | os.O_NONBLOCK)
     # One make-style jobserver for every cargo under mem-run (CARGO_MAKEFLAGS): all
     # builds together run about JOBS compilers instead of JOBS per build.
-    global JOBSERVER
-    jobserver = DIR / "jobserver"
-    if jobserver.exists() and not stat.S_ISFIFO(jobserver.stat().st_mode):
-        jobserver.unlink()
-    fresh = not jobserver.exists()
-    if fresh:
-        os.mkfifo(jobserver)
-    JOBSERVER = os.open(jobserver, os.O_RDWR | os.O_NONBLOCK)
-    # A restart while builds run must not refill: their cargos still hold tokens and
-    # return them later. balance() refills to exactly JOBS once nothing runs.
-    if fresh or not commands():
-        reset_tokens()
+    open_jobserver(DIR / "jobserver")
     # Slice PSI also counts stalls its tasks suffer from host-wide shortage (the host
     # pressure file refuses unprivileged triggers).
     psi = os.open(SLICE / "memory.pressure", os.O_RDWR | os.O_NONBLOCK)
