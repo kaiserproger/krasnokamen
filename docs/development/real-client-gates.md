@@ -268,6 +268,16 @@ defaults to 4, and `client_settings` accepts `graphics_preset`, `render_distance
 and `fov` (default 70: the owner's saved fov is never inherited). PNG paths are
 recorded in `result.json`; settings and world are isolated per run.
 
+`run scenario native-263-entity-rigs --client native --windowed` records a
+four-entity 26.3 fixture and fails if a summoned entity is absent, its
+captured frame reports an unrendered rig, or a per-entity pixel region does not
+change. Inspect the retained image too: changed pixels do not prove model parity.
+
+`run scenario native-shelf-clock --client native --windowed` checks the blue
+clock-face pattern in a fixed shelf position at received day and night times;
+it also checks camera and GPU completion. It covers that shelf-clock surface
+only, not compass, other contexts, or exact vanilla appearance.
+
 `use_phases` (native only) takes `name` and `ticks` (1–100), holds use across
 start and hold captures, releases it even on failure, and requires the client's
 `using` state to transition idle → active → active → idle.

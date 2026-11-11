@@ -605,6 +605,82 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
     return shots
 
 
+def check_263_entity_rigs(probe: ProbeSteps, artifact: Path) -> None:
+    kinds = ("minecraft:sulfur_cube", "minecraft:cushion",
+             "minecraft:poplar_boat", "minecraft:poplar_chest_boat")
+    received = json.loads((artifact / "entities.json").read_text())
+    for kind in kinds:
+        probe.check(f"received_{kind}", sum(row.get("entity_type") == kind
+                                            for row in received["entities"]) == 1)
+    frame = json.loads((artifact / "screenshots/entity-rigs.json").read_text())
+    before_frame = json.loads((artifact / "screenshots/before-rigs.json").read_text())
+    probe.check("rig_frames_gpu_complete", before_frame["gpu_completion"] is True and frame["gpu_completion"] is True)
+    probe.check("rig_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(before_frame["camera_position"], frame["camera_position"])
+    ) and abs(before_frame["yaw"] - frame["yaw"]) < 0.01
+      and abs(before_frame["pitch"] - frame["pitch"]) < 0.01)
+    unrendered = frame["entity_extraction"]["unrendered"]
+    for kind in kinds:
+        probe.check(f"rendered_{kind}", kind not in unrendered)
+        row = next(row for row in received["entities"] if row.get("entity_type") == kind)
+        probe.check(f"resolved_{kind}", row.get("cached_rig_status") == "resolved")
+    probe.check("four_entities_submitted", frame["entity_extraction"]["submitted"] >= 4)
+    from PIL import Image
+    with Image.open(artifact / "screenshots/before-rigs.png") as before_image, \
+            Image.open(artifact / "screenshots/entity-rigs.png") as after_image:
+        before, after = before_image.convert("RGB"), after_image.convert("RGB")
+        probe.check("matched_rig_frames", before.size == after.size == (1280, 720))
+        # Fixed camera, flat platform and separate boxes isolate each received entity.
+        # The two pale foreground models must brighten the platform, not merely cast a shadow.
+        regions = {
+            "cushion": ((430, 520, 580, 560), True),
+            "sulfur_cube": ((740, 495, 805, 545), True),
+            "poplar_chest_boat": ((410, 415, 550, 480), False),
+            "poplar_boat": ((720, 415, 860, 480), False),
+        }
+        for name, (box, bright) in regions.items():
+            old = before.crop(box).getdata()
+            new = after.crop(box).getdata()
+            pixels = sum(
+                all(y > x + 25 for x, y in zip(a, b)) if bright
+                else max(abs(x - y) for x, y in zip(a, b)) > 25
+                for a, b in zip(old, new)
+            )
+            probe.report[f"{name}_changed_pixels"] = pixels
+            probe.check(f"visible_pixels_{name}", pixels >= 200)
+    probe.report["visual_review_required"] = ["Inspect all four models in entity-rigs.png; pixel changes alone do not prove model parity."]
+
+def check_shelf_clock(probe: ProbeSteps, artifact: Path) -> None:
+    frames = [
+        json.loads((artifact / f"screenshots/clocks-{phase}.json").read_text())
+        for phase in ("day", "night")
+    ]
+    day, night = frames
+    probe.check("clock_frames_gpu_complete", all(frame["gpu_completion"] is True for frame in frames))
+    probe.check("clock_camera_at_fixture", all(
+        abs(a - b) < 0.01 for a, b in zip(day["camera_position"], (1000.5, 161.62, 1000.5))
+    ) and abs(day["yaw"]) < 0.01 and abs(day["pitch"]) < 0.01)
+    probe.check("clock_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(day["camera_position"], night["camera_position"])
+    ) and abs(day["yaw"] - night["yaw"]) < 0.01 and abs(day["pitch"] - night["pitch"]) < 0.01)
+    probe.check("clock_received_time_changed",
+                day["environment"]["time_of_day"] == "1000"
+                and night["environment"]["time_of_day"] == "13000")
+    from PIL import Image
+    masks = []
+    for phase in ("day", "night"):
+        with Image.open(artifact / f"screenshots/clocks-{phase}.png") as image:
+            probe.check(f"clock_{phase}_image_size", image.size == (1280, 720))
+            pixels = image.convert("RGB").crop((435, 457, 453, 481)).getdata()
+            masks.append([b > r * 1.35 and b > g * 1.15 and b > 15 for r, g, b in pixels])
+    probe.report["clock_blue_pixels"] = [sum(mask) for mask in masks]
+    changes = sum(a != b for a, b in zip(*masks))
+    probe.report["clock_changed_blue_pixels"] = changes
+    probe.check("clock_face_visible", all(sum(mask) >= 20 for mask in masks))
+    probe.check("clock_face_changed", changes >= 20)
+
+
+
 def start_java(ctx: ProfileContext, artifact: Path, address: str | None, username: str, timeout: float,
                display: str, render_distance: int, fov: int, *, plain: bool = False) -> tuple[Any, Any, McpClient]:
     """Launch the requested Java client, optionally connecting to a server."""
@@ -645,7 +721,15 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     """Load and validate exactly the inputs used by the scene runner."""
     if ctx.client not in ("native", "java") or not ctx.windowed or ctx.platform is not None:
         raise ValueError("scene-shot requires --client native|java --windowed")
-    if ctx.scenario_id == "native-command-feedback":
+    if ctx.scenario_id == "native-263-entity-rigs":
+        if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
+            raise ValueError("native-263-entity-rigs requires its registered native fixture without overrides")
+        scenario = json.loads((runtime.REPO_ROOT / "tools/harness/entity_263_rigs_scene.json").read_text())
+    elif ctx.scenario_id == "native-shelf-clock":
+        if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
+            raise ValueError("native-shelf-clock requires its registered native fixture without overrides")
+        scenario = json.loads((runtime.REPO_ROOT / "tools/harness/shelf_clock_scene.json").read_text())
+    elif ctx.scenario_id == "native-command-feedback":
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
             raise ValueError("native-command-feedback requires its registered native fixture without overrides")
         scenario = json.loads((runtime.REPO_ROOT / "tools/harness/command_feedback_scene.json").read_text())
@@ -822,6 +906,10 @@ def run(
                 "observed_version": before["state_version"], "timeout_seconds": probe.remaining(),
             })
             shots = script(probe, artifact, scenario["steps"], ctx.client)
+            if ctx.scenario_id == "native-263-entity-rigs":
+                check_263_entity_rigs(probe, artifact)
+            elif ctx.scenario_id == "native-shelf-clock":
+                check_shelf_clock(probe, artifact)
         result = {"screenshots": shots, "scenario": probe.report, "seed": seed, "settings": settings, "client_latency_ms": client_latency_ms}
     finally:
         if mcp is not None:

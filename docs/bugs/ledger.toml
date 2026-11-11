@@ -3108,7 +3108,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:32"
-regression = []
+regression = ["harness:scene-shot:native-shelf-clock"]
 
 [[bug]]
 id = "MODEL-BLOCK-ENTITY-DRAW"
@@ -3178,7 +3178,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:85"
-regression = []
+regression = ["harness:scene-shot:native-263-entity-rigs"]
 
 [[bug]]
 id = "MODEL-ITEM-BARS"

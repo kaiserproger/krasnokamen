@@ -12,6 +12,57 @@ from tools.harness.backends import scene_shot
 
 
 class SceneShotTests(unittest.TestCase):
+    def test_entity_263_rigs_asserts_received_and_unrendered(self):
+        kinds = ("minecraft:sulfur_cube", "minecraft:cushion",
+                 "minecraft:poplar_boat", "minecraft:poplar_chest_boat")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "screenshots").mkdir()
+            from PIL import Image
+            before = Image.new("RGB", (1280, 720), (0, 0, 0))
+            before.save(root / "screenshots/before-rigs.png")
+            after = Image.new("RGB", (1280, 720), (255, 255, 255))
+            after.save(root / "screenshots/entity-rigs.png")
+            received = root / "entities.json"
+            frame = root / "screenshots/entity-rigs.json"
+            camera = {"gpu_completion": True, "camera_position": [0, 0, 0], "yaw": 0, "pitch": 0}
+            (root / "screenshots/before-rigs.json").write_text(json.dumps(camera))
+            received.write_text(json.dumps({"entities": [{"entity_type": kind, "cached_rig_status": "resolved"} for kind in kinds]}))
+            probe = scene_shot.ProbeSteps(None, root, 10, "test")
+            frame.write_text(json.dumps({**camera, "entity_extraction": {"unrendered": {}, "submitted": 4}}))
+            scene_shot.check_263_entity_rigs(probe, root)
+            before.save(root / "screenshots/entity-rigs.png")
+            with self.assertRaisesRegex(RuntimeError, "visible_pixels_cushion"):
+                scene_shot.check_263_entity_rigs(probe, root)
+            after.save(root / "screenshots/entity-rigs.png")
+            frame.write_text(json.dumps({**camera, "entity_extraction": {"unrendered": {"minecraft:cushion": "no rig"}, "submitted": 3}}))
+            with self.assertRaisesRegex(RuntimeError, "rendered_minecraft:cushion"):
+                scene_shot.check_263_entity_rigs(probe, root)
+            frame.write_text(json.dumps({**camera, "entity_extraction": {"unrendered": {}, "submitted": 3}}))
+            with self.assertRaisesRegex(RuntimeError, "four_entities_submitted"):
+                scene_shot.check_263_entity_rigs(probe, root)
+            received.write_text(json.dumps({"entities": [{"entity_type": kind} for kind in kinds[:-1]]}))
+            with self.assertRaisesRegex(RuntimeError, "received_minecraft:poplar_chest_boat"):
+                scene_shot.check_263_entity_rigs(probe, root)
+
+    def test_shelf_clock_asserts_changed_visible_pattern(self):
+        from PIL import Image, ImageDraw
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "screenshots").mkdir()
+            probe = scene_shot.ProbeSteps(None, root, 10, "test")
+            for phase, world_time, top in (("day", "1000", 459), ("night", "13000", 470)):
+                frame = {"gpu_completion": True, "camera_position": [1000.5, 161.62, 1000.5],
+                         "yaw": 0, "pitch": 0, "environment": {"time_of_day": world_time}}
+                (root / f"screenshots/clocks-{phase}.json").write_text(json.dumps(frame))
+                image = Image.new("RGB", (1280, 720))
+                ImageDraw.Draw(image).rectangle((437, top, 449, top + 4), fill=(0, 0, 255))
+                image.save(root / f"screenshots/clocks-{phase}.png")
+            scene_shot.check_shelf_clock(probe, root)
+            Image.open(root / "screenshots/clocks-day.png").save(root / "screenshots/clocks-night.png")
+            with self.assertRaisesRegex(RuntimeError, "clock_face_changed"):
+                scene_shot.check_shelf_clock(probe, root)
+
     def test_server_identity_is_recorded_at_launch(self):
         import hashlib
         with tempfile.TemporaryDirectory() as directory:

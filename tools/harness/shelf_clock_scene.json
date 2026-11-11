@@ -1,0 +1,85 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 995 159 995 1005 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 995 160 995 1005 165 1010 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "cmd": "setblock 1000 161 1005 minecraft:stone"
+    },
+    {
+      "cmd": "setblock 1002 160 1005 minecraft:oak_shelf[facing=north]{Items:[{Slot:1b,id:\"minecraft:clock\",count:1}]}"
+    },
+    {
+      "cmd": "summon minecraft:item 998.5 160 1004.5 {NoGravity:1b,Item:{id:\"minecraft:clock\",count:1}}"
+    },
+    {
+      "cmd": "summon minecraft:vindicator 999.5 160 1005.5 {NoAI:1b,Rotation:[180f,0f],equipment:{mainhand:{id:\"minecraft:clock\",count:1}}}"
+    },
+    {
+      "cmd": "time set 1000"
+    },
+    {
+      "wait_ticks": 120
+    },
+    {
+      "shot": "clocks-day"
+    },
+    {
+      "cmd": "time set 13000"
+    },
+    {
+      "wait_ticks": 120
+    },
+    {
+      "shot": "clocks-night"
+    }
+  ]
+}
