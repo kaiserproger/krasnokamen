@@ -209,6 +209,18 @@ class NativeV2ProbeTests(unittest.TestCase):
                          {"native-v2-p4-nameplates", "native-v2-p4-advancements",
                           "native-v2-p4-statistics"})
 
+    def test_damage_regeneration_fixture_requires_supported_rule_and_ack(self) -> None:
+        from .backends.native_p4 import _disable_natural_regeneration
+
+        steps = mock.Mock()
+        _disable_natural_regeneration(steps)
+        steps.fixture.assert_called_once_with("gamerule natural_health_regeneration false")
+        predicate, label = steps.wait.call_args.args
+        self.assertEqual(label, "natural_regeneration_disabled")
+        self.assertFalse(predicate({"recent_chat": ["Unknown game rule"]}))
+        self.assertFalse(predicate({"recent_chat": ["Game rule natural_health_regeneration is now set to true"]}))
+        self.assertTrue(predicate({"recent_chat": ["Game rule natural_health_regeneration is now set to false"]}))
+
     def test_p4_advancement_labels_are_actual_visible_ui_nodes(self) -> None:
         from .backends.native_p4 import _advancement_labels
 

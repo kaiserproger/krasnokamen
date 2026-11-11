@@ -233,6 +233,15 @@ def _advancements(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.report["visual_review_required"] = ["Minecraft story root", "Stone Age and Getting an Upgrade completion", "same completions after server restart", "completion chat; no join toast flood"]
 
 
+def _disable_natural_regeneration(steps: ProbeSteps) -> None:
+    steps.fixture("gamerule natural_health_regeneration false")
+    steps.wait(
+        lambda state: "Game rule natural_health_regeneration is now set to false"
+        in state.get("recent_chat", []),
+        "natural_regeneration_disabled",
+    )
+
+
 def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
     steps.fixture("time set 18000")
@@ -337,7 +346,7 @@ def _warden_damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # Provoke a real warden with ordinary lever vibrations, then observe its
     # sonic attack on the native connection (not a /damage identity alias).
     steps.fixture("gamemode creative @s")
-    steps.fixture("gamerule natural_health_regeneration false")
+    _disable_natural_regeneration(steps)
     steps.fixture("effect clear @s")
     steps.fixture("effect give @s minecraft:instant_health 1 5 true")
     steps.fixture(f"tp @s {x + .5} {y} {z + .5}")
