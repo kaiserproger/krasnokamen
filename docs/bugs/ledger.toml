@@ -2156,10 +2156,11 @@ title = "Cats never bring morning gifts: no `morning_gift/MorningGift` logic exi
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAT-GIFT-ABSENT"
 regression = ["cargo:mc-core:vanilla_mob_behavior_tests::tamed_cat_gives_one_morning_gift_not_an_arbitrary_wake_gift"]
 fix_commit = "patch:7bba9a462bce17ac86f6ed568d778aff0eeafa453b0c9990cb99b17e8488b19e"
+promotion = "docs/bugs/promotions/CAT-GIFT-ABSENT.json"
 
 [[bug]]
 id = "STRIDER-COLD-ABSENT"
@@ -2181,10 +2182,11 @@ title = "Parrots never dance to music: no `dance/Dance` logic exists in core. Va
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PARROT-DANCE-ABSENT"
 regression = ["cargo:mc-core:vanilla_mob_behavior_tests::parrot_record_events_and_nearby_hostile_imitation"]
 fix_commit = "patch:9a0887f770f42d564833bdc7dd038433ee7f4803e16c4dee3051eb49cb17bbe7"
+promotion = "docs/bugs/promotions/PARROT-DANCE-ABSENT.json"
 
 [[bug]]
 id = "DATA-MUTATION-STORAGE"
