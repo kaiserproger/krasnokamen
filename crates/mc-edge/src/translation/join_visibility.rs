@@ -1,6 +1,7 @@
 //! Two raw clients of different releases on one server: each must receive the
 //! other's player-list entry and player entity, whichever joined first.
 use super::*;
+use std::sync::atomic::{AtomicBool, Ordering};
 use mc_protocol::packets::play::{
     AddEntity, PlayerInfoActions, PlayerInfoRemove, PlayerInfoUpdate, RemoveEntities,
 };
@@ -16,10 +17,16 @@ struct Seen {
 
 /// Plays `viewer` until it holds both the player-list entry and a player
 /// entity for `subject`.
-async fn sees(viewer: &mut Client, subject: &str, player_type: i32) -> Seen {
+async fn sees(
+    viewer: &mut Client,
+    subject: &str,
+    player_type: i32,
+    mine: &AtomicBool,
+    other: &AtomicBool,
+) {
     let uuid = crate::crypto::offline_uuid(subject);
     let mut seen = Seen::default();
-    let outcome = tokio::time::timeout(
+    tokio::time::timeout(
         Duration::from_secs(150),
         viewer.play_until(|client, frame| {
             let mut body = frame.body.as_ref();
@@ -47,16 +54,20 @@ async fn sees(viewer: &mut Client, subject: &str, player_type: i32) -> Seen {
                     seen.entity = None;
                 }
             }
-            (seen.listed && seen.entity.is_some()).then_some(())
+            if seen.listed && seen.entity.is_some() {
+                mine.store(true, Ordering::SeqCst);
+            }
+            // Keep answering keep-alives until the other viewer is done too.
+            (mine.load(Ordering::SeqCst) && other.load(Ordering::SeqCst)).then_some(())
         }),
     )
-    .await;
+    .await
+    .ok();
     assert!(
-        outcome.is_ok(),
+        mine.load(Ordering::SeqCst),
         "{} client never saw {subject} ({seen:?})",
         viewer.profile.version.release
     );
-    seen
 }
 
 /// `first` joins, settles in Play, then `second` joins; both must see each other.
@@ -87,11 +98,13 @@ async fn mutual_visibility(first: i32, second: i32) {
             })
             .await;
         let mut late = Client::join(address, "Late", second_profile, true).await;
-        // Both are read at once so each keeps answering keep-alives: an unread
-        // client is kicked and its player-list entry removed after 30 s.
+        // Both are read until both are satisfied so each keeps answering
+        // keep-alives: an unread client is kicked after 30 s and its player-list
+        // entry removed, which would look like a visibility failure.
+        let (early_done, late_done) = (AtomicBool::new(false), AtomicBool::new(false));
         tokio::join!(
-            sees(&mut late, "Early", second_player),
-            sees(&mut early, "Late", first_player)
+            sees(&mut late, "Early", second_player, &late_done, &early_done),
+            sees(&mut early, "Late", first_player, &early_done, &late_done)
         );
     })
     .await
