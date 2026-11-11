@@ -474,8 +474,7 @@ fn population_cache_reads_changed_health_and_keeps_corpses_until_removal() {
 
     let enemy_slot = state.entities.slot_of(enemy).unwrap();
     state.entities.row_mut(enemy_slot).health = 0.0;
-    invalidate_wire_facts(&mut state);
-    let _ = state.entities.views();
+    let _ = drain_entity_views(&mut state);
     let counts = publication_counts(&mut state).unwrap();
     assert_eq!(counts.alive, vec![(1, 1), (2, 0)]);
     assert_eq!(state.hostile.battle.population.health_reads, reads + 1);
@@ -483,8 +482,7 @@ fn population_cache_reads_changed_health_and_keeps_corpses_until_removal() {
     let actor_slot = state.entities.slot_of(actor).unwrap();
     state.entities.body_mut(actor_slot).alive = false;
     state.entities.begin_dying(actor_slot);
-    invalidate_wire_facts(&mut state);
-    let _ = state.entities.views();
+    let _ = drain_entity_views(&mut state);
     let counts = publication_counts(&mut state).unwrap();
     assert_eq!(counts.units, 2, "the corpse is still a native row");
     assert_eq!(counts.alive, vec![(1, 0), (2, 0)]);
@@ -662,11 +660,76 @@ fn late_wire_fact_invalidation_precedes_the_views_drain() {
     // A canonical late-phase write after the frozen battle frame. Its wire
     // notification will be gone at the next battle frame, just as in run_tick.
     state.entities.row_mut(slot).controls.no_ai = true;
-    invalidate_wire_facts(&mut state);
-    let _ = state.entities.views();
+    let _ = drain_entity_views(&mut state);
     step(&mut state);
     let bi = state.hostile.battle.columns.index(slot).unwrap();
     assert!(!state.hostile.battle.columns.active[bi]);
+}
+
+#[test]
+fn deferred_multi_dimension_commands_invalidate_facts_before_the_travel_drain() {
+    let (mut state, rider, _) = native_cache_fixture();
+    // A second dimension defers player commands to travel::finish, after the
+    // tick's own publication drain; its refresh drains the wire feed again.
+    let registry = std::sync::Arc::clone(&state.registry);
+    let mut nether = crate::tick::TickState::new(
+        std::sync::Arc::clone(&registry),
+        crate::horde_bench::flat_world(&registry),
+        2,
+        512,
+    );
+    nether.dimension = crate::dimensions::Dimension::Nether;
+    state
+        .other_dimensions
+        .insert(crate::dimensions::Dimension::Nether, Box::new(nether));
+    let connection = crate::boundary::ConnectionId(1);
+    crate::tick::run_tick(
+        &mut state,
+        &[crate::boundary::PlayerInput::Join {
+            connection,
+            uuid: uuid::Uuid::from_u128(7),
+            name: "battle-op".into(),
+            permission_level: 2,
+        }],
+    );
+    let slot = state.entities.slot_of(rider).unwrap();
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(!state.hostile.battle.columns.ranged[bi]);
+    let command = |command: &str| crate::boundary::PlayerInput::Command {
+        connection,
+        command: command.into(),
+        permission_level: 2,
+    };
+    // The spawn makes the deferred work publish entity changes, so refresh
+    // drains the rider's equipment notification together with it.
+    crate::tick::run_tick(
+        &mut state,
+        &[
+            command(
+                "item replace entity @e[type=minecraft:husk] weapon.mainhand with minecraft:bow",
+            ),
+            command("summon minecraft:pig 12 64 4"),
+        ],
+    );
+    let slot = state.entities.slot_of(rider).unwrap();
+    let bow = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:bow").unwrap())
+        .unwrap();
+    assert_eq!(
+        state.entities.row(slot).appearance.equipment[0]
+            .as_ref()
+            .map(|stack| stack.item_id),
+        Some(bow),
+        "the deferred command ran this tick"
+    );
+    crate::tick::run_tick(&mut state, &[]);
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(
+        state.hostile.battle.columns.ranged[bi],
+        "the travel drain consumed the equipment change without invalidating battle facts"
+    );
 }
 
 #[test]

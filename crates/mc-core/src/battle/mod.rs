@@ -268,9 +268,17 @@ pub(crate) fn publication_counts(
             .collect(),
     }))
 }
-/// Read after merge and late native writes, immediately before `views()` drains
-/// the wire feed. Only derived facts are invalidated; native custody is unchanged.
-pub(crate) fn invalidate_wire_facts(state: &mut TickState) {
+/// Every `EntityStore::views()` drain consumes the pending-wire feed: tick
+/// publication and the dimension-travel refresh both drain through here, so
+/// late native writes (including deferred multi-dimension commands) reach the
+/// battle's derived facts first. Native custody is unchanged.
+pub(crate) fn drain_entity_views(state: &mut TickState) -> crate::boundary::EntityViews {
+    invalidate_wire_facts(state);
+    state.entities.views()
+}
+
+/// Only derived facts are invalidated; native custody is unchanged.
+fn invalidate_wire_facts(state: &mut TickState) {
     let battle = &mut state.hostile.battle;
     invalidate_facts(&mut battle.columns, &mut battle.population, &state.entities);
 }

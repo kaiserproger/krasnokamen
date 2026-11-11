@@ -171,11 +171,14 @@ cold-fact refresh. Health, NoAI, mount occupancy, attack reach and equipment
 classification are derived cached facts, never a second authority. Equipment
 changes stay latched until an active fighter consumes classification.
 
-The read-only pending-wire feed conservatively invalidates these facts twice:
-at column preparation after input/pre-hints, before battle/merge, and after merge
-and late native writes immediately before `EntityStore::views()` drains it.
-The latter invalidates column scratch for the next frame and population health
-for imminent publication; its cost is charged to the views timer.
+The read-only pending-wire feed conservatively invalidates these facts at
+column preparation after input/pre-hints, before battle/merge, and before every
+`EntityStore::views()` drain: tick publication after merge and late native
+writes, and the dimension-travel refresh that publishes deferred
+multi-dimension command and travel work. Both drain through
+`battle::drain_entity_views`. The drain-time read invalidates column scratch
+for the next frame and population health for imminent publication; its cost is
+charged to the views timer.
 The feed includes movement, so a moving row may refresh more often
 than a static-fact change requires. No custody, feed drain, WAL, view ordering
 or publication owner changes; full tick CPU, not just battle timings, measures

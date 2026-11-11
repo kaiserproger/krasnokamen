@@ -140,9 +140,12 @@ clock are runtime-only. Restart restores allegiance, not an in-progress fight.
 The native checkpoint/WAL/restart regression is
 `battle_faction_survives_native_checkpoint_wal_and_restart`; persistence
 changes require Main's independent review before commit.
-`battle_restart_reset_removes_checkpoint_roster_and_ticket_durably` additionally
-checks that reset after restart removes the tagged roster and ticket through the
-next native checkpoint and reopen.
+The staged units' `solaris:battle` tags and the `solaris:battle` chunk ticket
+are native state and survive restart, but the formation roster does not:
+`/battle start` after restart refuses with "setup required", and the operator
+runs `/battle reset` (then a new setup). `battle_restart_reset_removes_checkpoint_roster_and_ticket_durably`
+checks that refusal and that reset after restart removes the tagged roster and
+ticket through the next native checkpoint and reopen.
 
 
 On genuine first start, `Core::open` writes and fsyncs
