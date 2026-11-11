@@ -53,11 +53,29 @@ def _nextest_listing(text):
     raise ValueError('nextest did not produce a test listing')
 
 
+def _loader_live_command(scenario):
+    """argv template for one loader-live scenario ref. `{server_bin}` and `{plugins_dir}`
+    are substituted by ledger._run_harness once the tree's release server is built; the
+    scenario must be a registered graphical loader-live entry (fail-closed otherwise)."""
+    from . import scenarios
+
+    entry = scenarios.SCENARIOS.get(scenario)
+    if entry is None or entry.profile != 'loader-live' or entry.evidence != 'graphical':
+        raise ValueError(f'unknown runnable scenario loader-live:{scenario}')
+    return [sys.executable, '-m', 'tools.harness', 'run', 'scenario', scenario,
+            '--platform', LOADER_LIVE_PLATFORM, '--server-bin', '{server_bin}',
+            '--plugins-dir', '{plugins_dir}', '--timeout-seconds', '420']
+
+
 def _client_command(profile, scenario):
     from . import scenarios
 
     entry = scenarios.SCENARIOS.get(scenario)
-    if entry is None or entry.profile != profile or entry.evidence not in ('graphical', 'tcp', 'native') or profile in ('loader-live', 'dh-gate'):
+    if entry is None or entry.profile != profile or entry.evidence not in ('graphical', 'tcp', 'native'):
+        raise ValueError(f'unknown runnable scenario {profile}:{scenario}')
+    if profile == 'loader-live':
+        return _loader_live_command(scenario)
+    if profile == 'dh-gate':
         raise ValueError(f'unknown runnable scenario {profile}:{scenario}')
     argv = [sys.executable, '-m', 'tools.harness', 'run', 'scenario', scenario]
     if scenario.startswith('native-'):
@@ -201,6 +219,8 @@ def _failed_ids(text, cargo):
 
 
 MEM_RUN = Path(os.environ.get('SOLARIS_MEM_RUN', '/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh'))
+LOADER_LIVE_PLATFORM = 'fabric'
+
 
 
 def is_other_tree(tree):

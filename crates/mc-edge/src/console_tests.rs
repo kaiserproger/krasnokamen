@@ -80,6 +80,48 @@ async fn console_runs_native_and_admin_commands_and_stop_checkpoints() {
 }
 
 #[test]
+fn console_stop_has_no_error_logs_and_keeps_checkpoint() {
+    const CHILD: &str = "SOLARIS_CONSOLE_STOP_LOG_CHILD";
+    if std::env::var_os(CHILD).is_some() {
+        tracing_subscriber::fmt()
+            .without_time()
+            .with_ansi(false)
+            .with_writer(std::io::stderr)
+            .init();
+        console_runs_native_and_admin_commands_and_stop_checkpoints();
+        return;
+    }
+    // Capture the actual tick and journal threads without affecting other tests.
+    let full_name = concat!(
+        module_path!(),
+        "::console_stop_has_no_error_logs_and_keeps_checkpoint"
+    );
+    let child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            full_name.split_once("::").unwrap().1,
+            "--nocapture",
+        ])
+        .env(CHILD, "1")
+        .output()
+        .unwrap();
+    let log = String::from_utf8_lossy(&child.stderr);
+    assert!(
+        child.status.success(),
+        "{log}\n{}",
+        String::from_utf8_lossy(&child.stdout)
+    );
+    for message in [
+        "core tick owner stopping",
+        "native checkpoint writer stopped",
+        "checkpoint committed",
+    ] {
+        assert!(log.contains(message), "missing {message}: {log}");
+    }
+    assert!(!log.contains("ERROR"), "{log}");
+}
+
+#[test]
 fn console_feedback_keeps_translated_arguments_and_literal_text() {
     let language = [("commands.time.set".into(), "Set the time to %s".into())].into();
     let content = mc_nbt::Tag::Compound(vec![

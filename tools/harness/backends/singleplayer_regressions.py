@@ -33,7 +33,11 @@ def _click(probe, state, label):
     })
 
 
-def _server_child(client):
+def _server_child(client, binary):
+    """The one direct child of `client` running the staged release server `binary`.
+
+    Matched on the resolved executable, not its file name: the ledger tooling hard-links the
+    server it built under a content-addressed name."""
     children = set()
     for path in Path(f"/proc/{client.pid}/task").glob("*/children"):
         try:
@@ -43,7 +47,7 @@ def _server_child(client):
     servers = []
     for child in children:
         try:
-            if Path(os.readlink(f"/proc/{child}/exe")).name == "solaris-v2":
+            if Path(os.readlink(f"/proc/{child}/exe")).resolve() == binary:
                 servers.append(int(child))
         except FileNotFoundError:
             continue
@@ -222,7 +226,7 @@ def run(ctx: ProfileContext) -> dict:
                 marker = world / "world" / ".solaris-first-start"
                 def interrupt():
                     _wait_path(database, min(timeout, 180))
-                    pid = _server_child(client)
+                    pid = _server_child(client, server)
                     if not marker.is_file():
                         raise RuntimeError("first-start marker absent when database appeared")
                     os.kill(pid, signal.SIGKILL)
@@ -250,7 +254,7 @@ def run(ctx: ProfileContext) -> dict:
             else:
                 _play(probe, state)
                 native_client.capture(mcp, artifact, "singleplayer-before-relaunch")
-                holder = _server_child(client)
+                holder = _server_child(client, server)
                 holder_fd = os.pidfd_open(holder)
                 signal.pidfd_send_signal(holder_fd, signal.SIGSTOP)
                 probe.report["holder_pid"] = holder

@@ -268,7 +268,7 @@ class ProtocolMatrixClient(ProtocolStationVerbs, ProtocolInputVerbs):
     def select_hotbar(self, slot):
         if not 0 <= slot <= 8:
             raise ValueError('hotbar slot outside 0..8')
-        self.observer.send(0x35, struct.pack('>h', slot))
+        self.observer.send(0x36, struct.pack('>h', slot))
         self.observer.send(0x0D)
 
     def read_block_state(self, position):

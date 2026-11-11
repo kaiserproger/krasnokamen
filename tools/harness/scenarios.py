@@ -85,6 +85,40 @@ def _entry(**kwargs: object) -> Scenario:
 
 
 SCENARIOS: dict[str, Scenario] = {
+    "native-v2-ledger-painting": _entry(
+        id="native-v2-ledger-painting", summary="Place a painting and remove its support",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-painting",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One painting on a fixture wall; privileged support removal.",
+    ),
+
+    "native-v2-ledger-axe": _entry(
+        id="native-v2-ledger-axe", summary="Use an axe to strip, scrape and unwax blocks",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-axe",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One log orientation and two copper states; fixture-supplied axe.",
+    ),
+
+    "native-v2-ledger-sponge": _entry(
+        id="native-v2-ledger-sponge", summary="Place a sponge beside a water source and observe absorption",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-sponge",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One adjacent source; not the full absorption radius.",
+    ),
+
+    "native-v2-ledger-setblock-snbt": _entry(
+        id="native-v2-ledger-setblock-snbt", summary="Open a chest populated by setblock SNBT and withdraw its contents",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-setblock-snbt",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One chest with seven diamonds in slot zero; privileged setup.",
+    ),
+    "native-v2-ledger-crafting-pickup": _entry(
+        id="native-v2-ledger-crafting-pickup", summary="Crafting table remains open on the first inventory pickup",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-crafting-pickup",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One first pickup from 16 fixture-supplied planks; not the disconnect path.",
+    ),
+
     "native-world-first-start-interrupted": _entry(
         id="native-world-first-start-interrupted",
         summary="Recover a singleplayer world interrupted during its first start",
@@ -351,6 +385,27 @@ SCENARIOS: dict[str, Scenario] = {
         proves="actual Configuration offer, matching serverbound Declined, subsequent Play login, ordered chat and graphical frame",
         limits="no installation, required-pack acceptance or Play-phase pack-offer claim",
     ),
+    "native-v2-console-shutdown": _entry(
+        id="native-v2-console-shutdown", summary="Console stop logs orderly shutdown and preserves a graphical session across restart",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-console-shutdown",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_world.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="private native server with console stdin and a graphical native player",
+        proves="console stop exits cleanly, commits a checkpoint without ERROR, and the same player reconnects",
+        limits="no injected storage failure; separate unit regression covers journal failure",
+    ),
+    "native-v2-lease-navigation": _entry(
+        id="native-v2-lease-navigation",
+        summary="Native writer lifetime, cancellation handoff, edge and open-door navigation",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-lease-navigation",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_lease_navigation.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="private operator platform, airborne stand, two MCP sessions, support edge and open-door corridor",
+        proves="bounded 120-second action retains writer; cancelled old writer leaves replacement and its held input; grounded edge and open-door routes arrive",
+        limits="single Linux native fixture; cancellation scheduling is nondeterministic",
+    ),
     "native-v2-end-restart": _entry(
         id="native-v2-end-restart", summary="Live peaceful End dragon survives clean checkpoint and graphical reconnect",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-end-restart",
@@ -444,6 +499,36 @@ SCENARIOS: dict[str, Scenario] = {
         proves="disabled success messages are absent, failure and chat remain visible, enabled success is visible",
         limits="native player command path; console behavior is covered separately by a Rust regression",
     ),
+    "native-frozen-game-age": _entry(
+        id="native-frozen-game-age",
+        summary="Frozen simulated age stays fixed across teleport and local input",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-frozen-game-age", requires=("xvfb",),
+        sources=("tools/harness/backends/scene_shot.py", "tools/harness/frozen_game_age_scene.json"),
+        fixture="private native client, operator freeze and teleport, local input",
+        proves="received game age stays constant across held frames and teleport",
+        limits="one native client; does not cover restart",
+    ),
+    "native-low-roof-house": _entry(
+        id="native-low-roof-house",
+        summary="Certify a house with an ordinary bed under a low roof",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-low-roof-house", requires=("xvfb",),
+        sources=("tools/harness/backends/scene_shot.py", "tools/harness/low_roof_house_scene.json"),
+        fixture="private world with a two-block-high enclosed house and paired bed",
+        proves="the native player receives house certification despite absent breeding headroom",
+        limits="certification only; villager sleep and breeding are not checked",
+    ),
+    "native-falling-block-prediction": _entry(
+        id="native-falling-block-prediction",
+        summary="A received falling sand block renders and moves between server updates",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-falling-block-prediction", requires=("xvfb",),
+        sources=("tools/harness/backends/scene_shot.py", "tools/harness/falling_block_scene.json"),
+        fixture="private windowed client; sand dropped in front of a dark backdrop",
+        proves="the same rendered falling block moves downward between received movement updates",
+        limits="one sand block in air over solid terrain; no landing, restart or TNT coverage",
+    ),
     "native-v2-chest-drag-disconnect": _entry(
         id="native-v2-chest-drag-disconnect",
         summary="Physical chest drag then disconnect with an item on the cursor",
@@ -534,6 +619,17 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="explicit --server-bin and --plugins-dir; isolated Loader permission/cache; no settlements package deployed",
         proves="Loader connection, core-owned C binding opens the native settlement dialog, and native settlement create/list/info",
         limits="minimal native settlement smoke, not plugin production/war coverage; visual review required",
+    ),
+    "loader-fabric-screen-admission": _entry(
+        id="loader-fabric-screen-admission",
+        summary="Release server starts the solaris:screen service for a real Fabric Loader session",
+        owner="core:harness", evidence="graphical", profile="loader-live",
+        scenario_id="loader-fabric-screen-admission",
+        requires=("sibling:solaris-loader", "client-token", "xvfb"),
+        sources=("tools/harness/loader.py", "tools/harness/loader_screen_admission.py"),
+        fixture="explicit --server-bin and --plugins-dir; real Solaris Loader Fabric client joins; assertion reads the server log",
+        proves="the server log records 'screen service started for admitted loader session' with platform=Fabric for the joined session",
+        limits="admission of the screen service only; no H264 frame flow or viewer-side rendering is asserted",
     ),
     "native-composter-chance": _entry(
         id="native-composter-chance",
@@ -749,7 +845,7 @@ SCENARIOS: dict[str, Scenario] = {
         owner="core:harness", evidence="tcp", profile="entities", scenario_id="native-v2-automation-storage",
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/client_probes.py"),
         fixture="native v2 only; explicit crafter/log, shelf/one diamond/one emerald, lever/sensor fixtures",
-        proves="one ordinary pulse yields four planks without held-power duplicate; shelf swap/withdraw conserves both items; sensor active/cooldown/inactive follows ordinary use",
+        proves="one ordinary pulse yields four planks without held-power duplicate; shelf swap/withdraw conserves both items; sensor active then inactive follows ordinary use",
         limits="no powered shelf chains, disabled crafter slots, calibrated filtering, shrieker/warden or visual model parity",
     ),
     "native-v2-storage-adversarial": _entry(
@@ -839,6 +935,22 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="native v2; nighttime zombie beside healthy survival player",
         proves="received health loss and live client/input after the hit",
         limits="hurt tilt/direction requires hit-frame visual review; health loss alone is not presentation",
+    ),
+    "native-v2-p4-identities": _entry(
+        id="native-v2-p4-identities", summary="Named damage identities and an angered warden sonic attack",
+        owner="core:harness", evidence="tcp", profile="entities", scenario_id="native-v2-p4-identities",
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_p4.py"),
+        fixture="seven explicit damage types on a healthy survival player, then lever-provoked warden behind a wall",
+        proves="received command damage identities and health loss; real warden sonic cause, death screen and respawn",
+        limits="command cases prove identities, not freeze/cramming/wall collision mechanics; no complete damage or rendering parity",
+    ),
+    "native-v2-p4-death-protection": _entry(
+        id="native-v2-p4-death-protection", summary="Custom held death protection consumes authored effects",
+        owner="core:harness", evidence="tcp", profile="entities", scenario_id="native-v2-p4-death-protection",
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_p4.py"),
+        fixture="held stick with clear-all and speed actions, followed by lethal generic damage",
+        proves="survival at one health, one item consumed, authored speed without default totem effects",
+        limits="clear/apply actions only; remove, probability, sound and codec variants have separate Cargo regressions",
     ),
     "native-v2-p4-hopper": _entry(
         id="native-v2-p4-hopper", summary="Native Q drop enters nearby hopper, exact withdrawal and no duplicate",

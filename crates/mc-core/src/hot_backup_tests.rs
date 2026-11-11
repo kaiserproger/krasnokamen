@@ -2,7 +2,17 @@ use crate::boundary::{ChunkPos, PlayerInput, TickOutput};
 use crate::command_console::ConsoleCommand;
 use crate::config::CoreConfig;
 use crate::core::Core;
-use crate::hot_backup::copy_world;
+
+fn copy_world(
+    world: &std::path::Path,
+    out: &std::path::Path,
+    checkpoint: u64,
+    through: u64,
+) -> Result<crate::hot_backup::HotBackup, crate::config::CoreError> {
+    let mut database = std::fs::File::open(world.join("native/state.redb")).unwrap();
+    database.try_lock().unwrap();
+    crate::hot_backup::copy_world(world, out, &mut database, checkpoint, through)
+}
 
 fn batch(dir: &std::path::Path, lo: u64, hi: u64) {
     std::fs::write(
@@ -55,6 +65,25 @@ fn copy_takes_database_and_only_the_wal_between_checkpoint_and_through() {
     assert_eq!(
         backup.files["native/state.redb"],
         format!("{:x}", Sha256::digest(b"database"))
+    );
+}
+
+#[test]
+fn copy_reads_the_owned_database_snapshot_not_a_second_path_handle() {
+    let world = fake_world();
+    let out = tempfile::tempdir().unwrap();
+    let bytes = b"lease-holder snapshot";
+    let backup =
+        crate::hot_backup::copy_world(world.path(), out.path(), &mut bytes.as_slice(), 10, 10)
+            .unwrap();
+    assert_eq!(
+        std::fs::read(out.path().join("native/state.redb")).unwrap(),
+        bytes
+    );
+    use sha2::{Digest, Sha256};
+    assert_eq!(
+        backup.files["native/state.redb"],
+        format!("{:x}", Sha256::digest(bytes))
     );
 }
 

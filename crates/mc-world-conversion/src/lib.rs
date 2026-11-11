@@ -21,6 +21,8 @@ mod import;
 #[cfg(test)]
 mod old_world_import_tests;
 #[cfg(test)]
+mod path_tests;
+#[cfg(test)]
 mod projectile_import_tests;
 #[cfg(test)]
 mod recovery_roundtrip_tests;
@@ -676,7 +678,12 @@ fn files(root: &Path) -> Result<Vec<PathBuf>, CoreError> {
             .map_err(fail)?;
         entries.sort_by_key(|entry| entry.file_name());
         for entry in entries {
-            let path = relative.join(entry.file_name());
+            // Keep the interchange path slash-separated even when directory
+            // traversal returns Windows separators. Consumers use these names
+            // as metadata keys as well as filesystem-relative paths.
+            let name = mc_data::resource_path::slash_relative(root, &entry.path())
+                .ok_or_else(|| fail("non-UTF8 source path"))?;
+            let path = PathBuf::from(&name);
             let kind = entry.file_type().map_err(fail)?;
             if kind.is_symlink() {
                 return Err(fail(format!("symlink rejected: {}", path.display())));
@@ -684,9 +691,10 @@ fn files(root: &Path) -> Result<Vec<PathBuf>, CoreError> {
             if kind.is_dir() {
                 walk(root, &path, out)?;
             } else if kind.is_file() {
-                mc_core::level_metadata::validate_relative_path(
-                    path.to_str().ok_or_else(|| fail("non-UTF8 source path"))?,
-                )?;
+                if name == mc_world::storage::WORLD_LEASE_FILE_NAME {
+                    continue;
+                }
+                mc_core::level_metadata::validate_relative_path(&name)?;
                 out.push(path);
             } else {
                 return Err(fail(format!(
@@ -939,7 +947,11 @@ fn check_version(tag: &Tag, path: &Path) -> Result<(), CoreError> {
 }
 fn sync_tree(root: &Path) -> Result<(), CoreError> {
     for path in files(root)? {
-        File::open(root.join(path))
+        // Only the conversion's output staging is synced here. Windows
+        // FlushFileBuffers requires GENERIC_WRITE; never create or truncate.
+        OpenOptions::new()
+            .write(true)
+            .open(root.join(path))
             .map_err(fail)?
             .sync_all()
             .map_err(fail)?;

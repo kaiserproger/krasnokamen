@@ -16,7 +16,7 @@ SCRIPT = Path(__file__).resolve().parent / "scene-slot.sh"
 PROBE = (
     "import fcntl, os, sys\n"
     "held = []\n"
-    "for slot in 'abc':\n"
+    "for slot in 'abcdef':\n"
     "    fd = os.open('%s/solaris-scene-slot-%s.lock' % (sys.argv[1], slot), os.O_WRONLY | os.O_CREAT)\n"
     "    try:\n"
     "        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
@@ -53,7 +53,7 @@ class SceneSlot(unittest.TestCase):
             os.close(fd)
 
     def test_waiter_takes_whichever_slot_frees_first(self) -> None:
-        held = {slot: self.hold(slot) for slot in "abc"}
+        held = {slot: self.hold(slot) for slot in "abcdef"}
         ready_r, ready_w = os.pipe()
         try:
             waiter = subprocess.Popen(

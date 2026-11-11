@@ -10,7 +10,9 @@ records how fleets were run on the owner's machine and what went wrong.
 - **Keep the fleet small.** On 2026-10-24 about 26 parallel agents burned 30%
   of the owner's weekly usage on two accounts in one hour, and the owner
   collapsed the fleet. Limits since 2026-11-07: at most 10 live agents and 3
-  concurrent builders; no child agent for a part under 30 minutes; reserve the
+  concurrent builders (enforced since 2026-11-11 by the runner's
+  [build tokens](heavy-commands-and-memory.md#how-toolsdevmem-runsh-works-current-since-2026-10-28));
+  no child agent for a part under 30 minutes; reserve the
   review and breaker budget before spawning builders. Prefer one long-lived
   lane per ledger area that batches rows; split a lane when its queue exceeds
   eight rows. Larger fleets (the 22-slice QA hunt of 2026-10-29) run only on
@@ -48,6 +50,7 @@ memory slots and a GO after the runner dropped both; deleted 2026-11-07).
 ```text
 # Target     rows or paths (ids only; attach `ledger probe` output for rows)
 # Base       <sha>; worktree name
+# Claim      task id and timebox; Main runs `task-claim` before launch (below)
 # Write set  owned files and dirs; everything else read-only
 # Evidence   per row: cargo:<crate>:<test> | harness:<profile> (real client) |
 #            review-only
@@ -106,6 +109,48 @@ final `QA_RESULT` line.
   escalated a worker's "unresolved symbol" report into "the committed
   baseline is broken"; `git grep` at the pinned commit showed the functions
   existed and were public (2026-10-24). Briefs cite `file:line` you read.
+
+## Claims and fleet status
+
+Every task an agent works on is claimed, so no two agents take the same task
+and an overrun is visible without reading transcripts (owner, 2026-11-11).
+
+- **Claim at launch.** Main runs
+  `<work>/solaris/tools/dev/task-claim <task-id> --agent <name> --timebox <min>`
+  for every agent it launches (`wt-new` prints the command; the task id is
+  usually the worktree name) and `task-release <task-id>` when the agent's
+  final result arrives. The claim is the file
+  `<work>/fleet/claims/<task-id>.json` (agent, start, timebox, lease end).
+- **A claim is a lease, not a PID.** Main's subagents run inside Main's own
+  process, so several logical agents share one PID. A lease is live until it
+  is released or until start + timebox + grace (default 15 minutes);
+  `task-claim --renew <task-id> --agent <name> [--timebox <min>]` starts a new
+  lease from now and works only for the holder. A claim of a live lease is
+  refused with the holder's name (exit 1); a released or expired lease is
+  taken over, and the takeover is logged with the previous holder in
+  `<work>/fleet/claims.log` (append-only JSONL of every claim, refusal,
+  renewal, release and takeover).
+- **`tools/dev/fleet-status`** prints one screen: unreleased claims with
+  agent, start, timebox left or `OVERRUN`, and lease end (`EXPIRED ..., can be
+  taken over`); build tokens in use with the holder's command and tree, and
+  the commands waiting for one; scene slots the same way; host load, memory
+  and running runner commands. Main and the owner read it instead of
+  reconstructing state from transcripts. Tests:
+  `python3 tools/dev/test_task_claim.py`.
+- **Slices close in hours; nothing claimed waits a day** (owner, 2026-11-12).
+  The owner runs the full allowed fleet (10 agents, 3 build tokens) and must
+  not wait days for one task. Main cuts every task into slices that finish
+  within hours and claims each with its timebox. The brief states the
+  timebox; when it runs out the agent returns its final YAML itself (`done`,
+  or `partial` with the remaining work). Main handles an overrun from that
+  result or from the task's completion or failure event (split, reassign, or
+  report the exact blocker); it reads `fleet-status` only in response to such
+  an event, never on a schedule (no polling of agent status or lists). A task
+  is reassigned only after the previous agent returned or was stopped
+  (`task-release` or kill), so two agents never do the same work. No claimed
+  task goes more than 24 hours without a result the owner can look at (a
+  receipt, frames, a commit or a written blocker). The battle video stays
+  first.
 
 ## Messaging
 
