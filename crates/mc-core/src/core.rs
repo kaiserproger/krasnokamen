@@ -327,6 +327,9 @@ struct CoreInner {
     tick_tx: broadcast::WeakSender<TickOutput>,
     /// Read-only timings published after all active tick work, never blocking.
     timing_tx: broadcast::WeakSender<(u64, TickTimes)>,
+    /// Test-only acknowledgement from the tick owner's pause branch.
+    #[cfg(test)]
+    pause_state: tokio::sync::watch::Receiver<Option<u64>>,
     outbox: ReliableOutbox,
     shutdown_tx: std::sync::Mutex<Option<std::sync::mpsc::Sender<()>>>,
     tick_handle: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
@@ -817,6 +820,8 @@ impl Core {
         } else {
             None
         };
+        #[cfg(test)]
+        let (pause_state_tx, pause_state_rx) = tokio::sync::watch::channel(None);
         let channels = TickChannels {
             checkpoint_every: checkpoint_every.max(1),
             pause_when_empty_seconds: config.pause_when_empty_seconds,
@@ -826,6 +831,8 @@ impl Core {
             moderation_selector_rx,
             tick_broadcast: tick_tx.clone(),
             timing_broadcast: timing_tx.clone(),
+            #[cfg(test)]
+            pause_state: pause_state_tx,
             outbox: outbox_tx,
             work_tx,
             journal_budget,
@@ -862,6 +869,8 @@ impl Core {
                 input_dropped: AtomicU64::new(0),
                 tick_tx: tick_tx.downgrade(),
                 timing_tx: timing_tx.downgrade(),
+                #[cfg(test)]
+                pause_state: pause_state_rx,
                 outbox: ReliableOutbox(parking_lot::Mutex::new(OutboxReceiver {
                     receiver: outbox_rx,
                     pending: None,
@@ -993,6 +1002,11 @@ impl Core {
             Some(tx) => tx.subscribe(),
             None => broadcast::channel(1).1,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn subscribe_pause(&self) -> tokio::sync::watch::Receiver<Option<u64>> {
+        self.inner.pause_state.clone()
     }
 
     /// Full active tick timings, published after checkpoint capture and

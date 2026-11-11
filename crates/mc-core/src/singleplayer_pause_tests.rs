@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::boundary::{ConnectionId, PlayerInput};
 use crate::composter::tests::{POS, data_dir, fixture, snapshot_block};
 use crate::core::Core;
-use crate::pause_when_empty_tests::{config, drain_until_idle, next_tick, runtime};
+use crate::pause_when_empty_tests::{config, next_tick, runtime, wait_for_pause};
 use crate::tick::run_tick;
 use mc_data::Identifier;
 use mc_world::ScheduledBlockTick;
@@ -27,7 +27,8 @@ fn singleplayer_pause_stops_world_until_resume() {
         command: "solaris_pause on".into(),
         permission_level: 4,
     });
-    let paused_at = drain_until_idle(&rt, &mut rx).max(joined.tick);
+    let (paused_at, _) = wait_for_pause(&core, &rt, &mut rx);
+    assert!(paused_at >= joined.tick);
     assert!(
         next_tick(&rt, &mut rx, Duration::from_millis(400)).is_none(),
         "world ticks must stop while paused"
@@ -74,7 +75,7 @@ fn singleplayer_pause_requires_one_operator_and_join_resumes() {
         command: "solaris_pause on".into(),
         permission_level: 4,
     });
-    drain_until_idle(&rt, &mut rx);
+    wait_for_pause(&core, &rt, &mut rx);
     assert!(next_tick(&rt, &mut rx, Duration::from_millis(400)).is_none());
     core.submit(PlayerInput::Join {
         connection: ConnectionId(2),
@@ -194,7 +195,8 @@ fn singleplayer_pause_holds_scheduled_block_deadline_and_entity() {
         command: "solaris_pause on".into(),
         permission_level: 4,
     });
-    while let Some(output) = next(&mut rx, Duration::from_millis(500)) {
+    let (_, last) = wait_for_pause(&core, &rt, &mut rx);
+    if let Some(output) = last {
         held = Some(output.snapshot);
     }
     let held = held.expect("last snapshot before pause");

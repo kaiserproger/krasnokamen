@@ -282,6 +282,12 @@ warped case, including a negative control that skips a consequential tick.
 `/tick sprint`, including the civilization-seed QA sprint, removes waits but
 still executes every tick.
 
+Live pause tests await `pause_when_empty_tests::wait_for_pause`, which observes
+the tick owner's test-only pause acknowledgement and drains only broadcasts
+at or before that acknowledged tick. A quiet broadcast channel is not proof
+of pause: a busy tick can exceed the old idle-gap window. Tests for continued
+simulation await a concrete number of ticks instead.
+
 Concurrency: `RUST_TEST_THREADS` (first priority), else `NEXTEST_TEST_THREADS`
 (default `num-cpus`), selects the gate default; nextest's `--test-threads=N`
 overrides it (place it before any `--`). Unsupported Cargo/libtest and

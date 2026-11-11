@@ -278,6 +278,7 @@ async fn queued_save_requests_keep_one_capture_in_flight_and_both_receive_durabl
                 outbox: outbox_tx,
                 tick_broadcast,
                 timing_broadcast,
+                pause_state: tokio::sync::watch::channel(None).0,
                 work_tx,
                 journal_budget: tick_budget,
                 generated_busy,
