@@ -659,6 +659,8 @@ a record whose block (or container slots) someone else changed afterwards is
 skipped and counted, never overwritten. A rolled-back chest gets its recorded
 contents back; items the griefer already took stay with them. Rolled-back
 records stay listed `(rolled back)` and are skipped by a second rollback.
+Each listed record shows its committing server tick as `[tick=N]`; records
+written before ticks were recorded show `[tick=unknown]`.
 Commands and records are per dimension.
 
 Records ride the tick WAL and live in the `block_log` table of

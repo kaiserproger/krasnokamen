@@ -117,6 +117,9 @@ class PinReleaseTests(unittest.TestCase):
         tree = self.root / "Tree"
         tree.mkdir()
         (self.slot / ".solaris-tree").write_text(str(tree))
+        host_build = self.slot / "release/build/zstd-sys-0/output"  # a build script of the host profile dir
+        host_build.parent.mkdir(parents=True)
+        host_build.write_text("cargo:rerun-if-env-changed=ZSTD_SYS_USE_PKG_CONFIG\n")
         provenance = {"id": "123456789abc-dirty123", "head": "1" * 40, "tree": "2" * 40,
                       "diff_sha256": "3" * 64, "dirty": True, "untracked_files": 0}
         paths = []
@@ -141,6 +144,8 @@ class PinReleaseTests(unittest.TestCase):
                 build = stack.enter_context(patch.object(pin, "build", return_value=(["test-build", target], artifact)))
                 mark = stack.enter_context(patch.object(pin.w, "in_use_add"))
                 stack.enter_context(patch.object(sys, "argv", ["pin-release", str(tree), *flags, "--target", target]))
+                stack.enter_context(patch.dict(os.environ))
+                os.environ.pop("ZSTD_SYS_USE_PKG_CONFIG", None)
                 with redirect_stdout(output):
                     pin.main()
                     pin.main()
@@ -155,6 +160,7 @@ class PinReleaseTests(unittest.TestCase):
             self.assertEqual((manifest["kind"], manifest["target"], manifest["incremental"]), (kind, target, incremental))
             self.assertEqual("inputs_sha256" in manifest, kind != "client")  # the client's pin is unchanged
             self.assertEqual("build_tree" in manifest, kind != "client")
+            self.assertEqual(manifest.get("env_deps"), None if kind == "client" else {"ZSTD_SYS_USE_PKG_CONFIG": None})
             self.assertEqual(final.read_bytes(), artifact.read_bytes())
         self.assertEqual(len(set(paths)), 5)
 
@@ -315,7 +321,8 @@ class ReuseTests(unittest.TestCase):
         binary.chmod(0o555)
         manifest = {"repo": "core", "kind": kind, "target": LINUX, "incremental": True, "head": "1" * 40,
                     "diff_sha256": "2" * 64, "binary": str(binary), "binary_sha256": pin.w.sha256_file(binary),
-                    "command": "mem-run cargo build", "inputs_sha256": "K", "source": "/old", "build_tree": "/old"}
+                    "command": "mem-run cargo build", "inputs_sha256": "K", "source": "/old", "build_tree": "/old",
+                    "env_deps": {}}
         manifest.update(overrides)
         (directory / "manifest.json").write_text(json.dumps(manifest))
         return directory, binary
@@ -436,6 +443,128 @@ class ReuseTests(unittest.TestCase):
         mark.assert_called_with(new, self.top.name, "pin")
         self.assertEqual(output.getvalue().strip(), f"SOLARIS_SERVER_BINARY={new / 'solaris-v2'}")
         self.assertEqual(json.loads((new / "manifest.json").read_text())["reused_from"], directory.name)
+
+
+class EnvDepTests(unittest.TestCase):
+    """Variables cargo tracks for a build (build scripts' rerun-if-env-changed, dep-info env-dep) gate reuse."""
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.slot = self.root / "targets" / "slot-a"
+        self.release = self.slot / "release"
+        (self.release / "build/zstd-sys-1/output").parent.mkdir(parents=True)
+        (self.release / "build/zstd-sys-1/output").write_text(
+            "cargo:rerun-if-changed=zstd\ncargo:rerun-if-env-changed=ZSTD_SYS_USE_PKG_CONFIG\n"
+            "cargo::rerun-if-env-changed=PKG_CONFIG_PATH\ncargo:rustc-link-lib=static=zstd\n")
+        (self.release / "deps").mkdir()
+        (self.release / "deps/mc_edge-1.d").write_text(
+            "/x/lib.rs: /x/lib.rs\n\n# env-dep:GIT_REV=abc\n# env-dep:CARGO_PKG_VERSION\n")
+        self.artifact = self.release / "solaris-v2"
+        self.artifact.write_bytes(b"bin")
+        (self.release / "solaris-v2.d").write_text("solaris-v2: /x/main.rs\n# env-dep:BINARY_ONLY=1\n")
+        self.pins = self.root / "pins"
+        self.pins.mkdir()
+        self.top = self.root / "Tree"
+        self.top.mkdir()
+        patcher = patch.object(pin.w, "PINS", self.pins)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        env = patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        for name in ("ZSTD_SYS_USE_PKG_CONFIG", "PKG_CONFIG_PATH", "GIT_REV", "BINARY_ONLY"):
+            os.environ.pop(name, None)
+        self.before = {"head": "9" * 40, "diff_sha256": "8" * 64, "dirty": False, "untracked_files": 0}
+
+    def recorded(self):
+        return pin.build_env_deps(pin.build_env_names(self.artifact, self.slot), pin.build_env(True))
+
+    def source_pin(self, **overrides):
+        directory = self.pins / "old-server"
+        directory.mkdir(exist_ok=True)
+        binary = directory / "solaris-v2"
+        binary.write_bytes(b"old binary")
+        manifest = {"repo": "core", "kind": "server", "target": LINUX, "incremental": True,
+                    "binary": str(binary), "binary_sha256": pin.w.sha256_file(binary), "command": "c",
+                    "inputs_sha256": "K", "build_tree": "/old", "env_deps": self.recorded()}
+        manifest.update(overrides)
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        return directory
+
+    def reuse(self):
+        new = self.pins / "new-server"
+        shutil.rmtree(new, ignore_errors=True)
+        return pin.reuse_pin(new, self.top, "server", LINUX, True, "K", self.before)
+
+    def test_names_come_from_build_script_output_and_dep_info(self):
+        self.assertEqual(
+            self.recorded(),
+            {"BINARY_ONLY": None, "CARGO_PKG_VERSION": None, "GIT_REV": None, "PKG_CONFIG_PATH": None,
+             "ZSTD_SYS_USE_PKG_CONFIG": None})
+        os.environ["ZSTD_SYS_USE_PKG_CONFIG"] = "1"
+        os.environ["GIT_REV"] = ""
+        self.assertEqual((self.recorded()["ZSTD_SYS_USE_PKG_CONFIG"], self.recorded()["GIT_REV"]), ("1", ""))
+        self.assertEqual(list(self.recorded()), sorted(self.recorded()))
+
+    def test_cross_target_build_scripts_of_the_host_profile_are_read(self):
+        artifact = self.slot / LINUX / "release" / "solaris-v2"
+        artifact.parent.mkdir(parents=True)
+        artifact.touch()
+        self.assertIn("ZSTD_SYS_USE_PKG_CONFIG", pin.build_env_names(artifact, self.slot))
+
+    def test_reuse_flips_with_a_build_script_variable(self):
+        self.source_pin()
+        self.assertIsNotNone(self.reuse())
+        os.environ["ZSTD_SYS_USE_PKG_CONFIG"] = "1"
+        self.assertIsNone(self.reuse(), "set now, unset when built")
+        self.assertFalse((self.pins / "new-server").exists())
+        self.source_pin(env_deps=self.recorded())  # a pin built with it set
+        self.assertIsNotNone(self.reuse())
+        os.environ["ZSTD_SYS_USE_PKG_CONFIG"] = "0"
+        self.assertIsNone(self.reuse(), "another value")
+        del os.environ["ZSTD_SYS_USE_PKG_CONFIG"]
+        self.assertIsNone(self.reuse(), "unset now, set when built")
+
+    def test_reuse_flips_with_a_dep_info_variable(self):
+        os.environ["GIT_REV"] = "abc"
+        self.source_pin()
+        self.assertIsNotNone(self.reuse())
+        os.environ["GIT_REV"] = "def"
+        self.assertIsNone(self.reuse())
+
+    def test_a_reused_manifest_carries_the_map(self):
+        os.environ["GIT_REV"] = "abc"
+        self.source_pin()
+        manifest = json.loads((self.reuse().parent / "manifest.json").read_text())
+        self.assertEqual(manifest["env_deps"]["GIT_REV"], "abc")
+
+    def test_a_manifest_without_the_map_is_not_reused(self):
+        directory = self.source_pin()
+        for broken in (None, [], "ZSTD_SYS_USE_PKG_CONFIG"):
+            with self.subTest(env_deps=broken):
+                manifest = json.loads((directory / "manifest.json").read_text())
+                manifest.pop("env_deps", None)
+                if broken is not None:
+                    manifest["env_deps"] = broken
+                (directory / "manifest.json").write_text(json.dumps(manifest))
+                self.assertIsNone(self.reuse())
+        self.source_pin(env_deps={})
+        self.assertIsNotNone(self.reuse(), "an explicit empty map is a map")
+
+    def test_the_same_named_pin_is_refused_after_a_tracked_variable_changes(self):
+        directory = self.source_pin()
+        binary = directory / "solaris-v2"
+        self.assertEqual(pin.existing_pin(directory, "server", LINUX, True, "K"), binary)
+        os.environ["ZSTD_SYS_USE_PKG_CONFIG"] = "1"
+        with self.assertRaisesRegex(pin.w.ToolError, "tracks"):
+            pin.existing_pin(directory, "server", LINUX, True, "K")
+        del os.environ["ZSTD_SYS_USE_PKG_CONFIG"]
+        manifest = json.loads((directory / "manifest.json").read_text())
+        manifest.pop("env_deps")
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        os.environ["ZSTD_SYS_USE_PKG_CONFIG"] = "1"
+        self.assertEqual(pin.existing_pin(directory, "server", LINUX, True, "K"), binary, "pin from before the map")
 
 
 if __name__ == "__main__":

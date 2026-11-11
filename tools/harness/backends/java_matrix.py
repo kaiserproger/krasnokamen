@@ -77,7 +77,7 @@ def receipt_dir(root: Path, scenario_id: str) -> Path:
 @contextmanager
 def server_instance(args: argparse.Namespace, directory: Path, count: int,
                     permission: str = "non_op_0", lifecycle: str = "steady",
-                    excluded_plugins: set[str] | None = None):
+                    excluded_plugins: set[str] | None = None, input_log: bool = False):
     """Reuse the shared release-server primitive; both ports are cross-process
     flock leases in this driver's own 262xx range (never hardcoded, never
     bind-probe-and-close): concurrent runs on the shared host can never be
@@ -96,6 +96,8 @@ def server_instance(args: argparse.Namespace, directory: Path, count: int,
                             server_name="RunJava", pause_when_empty_seconds=1 if lifecycle == "pause_when_empty_resume" else 0,
                             startup_timeout_seconds=args.timeout_seconds)
     server.enabled_plugins = enabled_plugins
+    if input_log:
+        server.config_overrides = {'server': {'input_log': True}}
     index = len(args.context.commands)
     args.context.commands.append([str(args.server_bin), "--config", str(server.config_path)])
     args.context.cwds.append(str(Path(__file__).resolve().parents[3]))
@@ -153,7 +155,8 @@ def run_cell(args: argparse.Namespace, row: dict[str, Any], directory: Path) -> 
             row, args.plugin_profiles, adapter_exclusions=adapter.exclude_plugins,
             requested_exclusions=getattr(args, "exclude_plugin", []))
         with server_instance(args, directory / "server", count, factors["permission"],
-                             factors["server_lifecycle"], excluded_plugins=excluded) as server:
+                             factors["server_lifecycle"], excluded_plugins=excluded,
+                             input_log=row.get("origin") == "triple:dupe:destroy_during_interaction") as server:
             actual = plugin_set_fingerprint(server.plugins_dir)
             if expected is not None and actual != expected:
                 raise MissingCapability(f"plugin_set_mismatch:expected {expected}; actual {actual}")

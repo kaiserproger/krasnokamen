@@ -455,9 +455,12 @@ def _automation_storage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None
     steps.report["sensor_active_wait"] = active
     read = steps.call("minecraft_read_block", sensor)
     steps.check("sensor_ordinary_use_vibration_power", int(read["properties"]["power"]) > 0)
-    _block(steps, sensor, "minecraft:sculk_sensor", {"sculk_sensor_phase": "cooldown", "power": "0"})
+    # Cooldown lasts ten ticks, shorter than a software-rendered client frame, so
+    # an observer may legitimately see active and then inactive. The cooldown
+    # phase itself is asserted by the Rust sculk tests; here the client must see
+    # the pulse and then a quiet sensor.
     _block(steps, sensor, "minecraft:sculk_sensor", {"sculk_sensor_phase": "inactive", "power": "0"})
-    steps.check("sensor_active_cooldown_inactive_received", True)
+    steps.check("sensor_active_then_inactive_received", True)
     _sculk_latch(steps, origin)
     steps.report["limits"] = ["one crafter pulse/no held-power duplicate; one unpowered shelf slot swap; sensor phase, output and downward-latch cases; no powered shelf chains, shrieker/warden or visual model parity"]
 
@@ -468,6 +471,9 @@ def _sculk_latch(steps: ProbeSteps, origin: tuple[int, int, int], fixture=None) 
     fixture = fixture or steps.fixture
     x, y, z = origin
     z += 8
+    # Bulbs toggle: an ambient mob's footsteps can undo the intended pulse.
+    fixture("gamerule doMobSpawning false")
+    fixture("kill @e[type=!minecraft:player]")
     results = []
     for calibrated, distance, selected in (
         (False, 2, 0), (False, 6, 0),
@@ -475,34 +481,35 @@ def _sculk_latch(steps: ProbeSteps, origin: tuple[int, int, int], fixture=None) 
     ):
         kind = "minecraft:calibrated_sculk_sensor" if calibrated else "minecraft:sculk_sensor"
         fixture(f"fill {x - 18} {y} {z - 14} {x + 17} {y + 2} {z + 3} minecraft:air")
+        fixture(f"fill {x - 18} {y - 1} {z - 14} {x + 17} {y - 1} {z + 3} minecraft:stone")
         fixture(f"setblock {x} {y} {z} {kind}" + ("[facing=north]" if calibrated else ""))
         fixture(f"fill {x + 1} {y - 1} {z} {x + 15} {y - 1} {z} minecraft:copper_bulb")
         fixture(f"fill {x + 1} {y} {z} {x + 15} {y} {z} minecraft:redstone_wire")
         # Perpendicular bulb is the historical incorrect latch geometry.
         fixture(f"setblock {x + 3} {y} {z + 1} minecraft:copper_bulb")
-        fixture(f"setblock {x - 1} {y} {z} minecraft:comparator[facing=west]")
+        # Diode FACING points toward its input, not its output.
+        fixture(f"setblock {x - 1} {y} {z} minecraft:comparator[facing=east]")
         fixture(f"fill {x - 16} {y - 1} {z} {x - 2} {y - 1} {z} minecraft:copper_bulb")
         fixture(f"fill {x - 16} {y} {z} {x - 2} {y} {z} minecraft:redstone_wire")
         if calibrated:
             fixture(f"setblock {x} {y} {z + 3} minecraft:cake[bites={(14 - selected) // 2}]")
-            fixture(f"setblock {x} {y} {z + 2} minecraft:comparator[facing=north]")
+            fixture(f"setblock {x} {y} {z + 2} minecraft:comparator[facing=south]")
             fixture(f"setblock {x} {y} {z + 1} minecraft:redstone_wire")
         fixture(f"setblock {x} {y} {z - distance} minecraft:note_block")
         _echo(steps, "sculk_latch_fixture_ordered")
         steps.call("minecraft_wait_ticks", {"ticks": 45})
         sensor = {"x": x, "y": y, "z": z}
         _block(steps, sensor, kind, {"sculk_sensor_phase": "inactive"})
-        fixture(f"setblock {x - 1} {y} {z - distance} minecraft:redstone_block")
+        _block(steps, {"x": x + 1, "y": y - 1, "z": z}, "minecraft:copper_bulb", {"lit": "false"})
+        _block(steps, {"x": x - 2, "y": y - 1, "z": z}, "minecraft:copper_bulb", {"lit": "false"})
         accepts = not calibrated or selected == 10
         strength = max(1, 15 - (15 * distance // (16 if calibrated else 8))) if accepts else 0
-        if accepts:
-            active = _block(steps, sensor, kind, {"sculk_sensor_phase": "active", "power": str(strength)})
-            cooldown = _block(steps, sensor, kind, {"sculk_sensor_phase": "cooldown", "power": "0"})
-            _block(steps, sensor, kind, {"sculk_sensor_phase": "inactive", "power": "0"})
-        else:
-            steps.call("minecraft_wait_ticks", {"ticks": distance + 45})
-            active = cooldown = None
-            _block(steps, sensor, kind, {"sculk_sensor_phase": "inactive", "power": "0"})
+        # Keep scheduled comparator updates on the ordinary simulation clock.
+        # The preceding sensor probe observes phases; these bulbs retain the
+        # entire pulse without freezing between network observations.
+        fixture(f"setblock {x - 1} {y} {z - distance} minecraft:redstone_block")
+        steps.call("minecraft_wait_ticks", {"ticks": distance + 45})
+        _block(steps, sensor, kind, {"sculk_sensor_phase": "inactive", "power": "0"})
         note = steps.call("minecraft_read_block", {"x": x, "y": y, "z": z - distance})
         steps.check("sculk_note_powered", note["properties"]["powered"] == "true")
         horizontal = steps.call("minecraft_read_block", {"x": x + 3, "y": y, "z": z + 1})
@@ -520,7 +527,7 @@ def _sculk_latch(steps: ProbeSteps, origin: tuple[int, int, int], fixture=None) 
                 lights.append(lit)
                 steps.check(f"sculk_latch_{calibrated}_{distance}_{selected}_{bx}", lit == expected)
         results.append({"calibrated": calibrated, "distance": distance, "selected": selected,
-                        "active": active, "cooldown": cooldown, "horizontal": horizontal,
+                        "horizontal": horizontal,
                         "strength_lights": strength_lights, "frequency_lights": frequency_lights})
     steps.report["sculk_downward_latches"] = results
 
@@ -741,7 +748,15 @@ def _promotion_custody(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     run(steps, origin, steps.report["id"])
 
 
+def _lease_navigation(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_lease_navigation import run
+
+    run(steps, origin)
+
+
+
 RUNNERS = {
+    "native-v2-lease-navigation": _lease_navigation,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,
@@ -789,6 +804,8 @@ RUNNERS = {
     "native-v2-p4-nameplates": _p4,
     "native-v2-p4-advancements": _p4,
     "native-v2-p4-damage": _p4,
+    "native-v2-p4-identities": _p4,
+    "native-v2-p4-death-protection": _p4,
     "native-v2-p4-hopper": _p4,
     "native-v2-p4-statistics": _p4,
     "native-v2-p5-humanoid-armor": _p5,

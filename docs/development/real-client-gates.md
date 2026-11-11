@@ -140,7 +140,8 @@ into the run's artifact dir.
   see [OPERATING](../OPERATING.md#vanilla-content-cache)); they copy it into the
   private client data root as `servers/content/26.3`.
 - Run each graphical gate through the scene slot so at most six run on the
-  host: `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G
+  host and the gate's scope outranks tests and builds for CPU:
+  `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G
   python3 -m tools.harness run <profile> --client native --windowed`.
 
 ### 4. Which gates need owner-held access
@@ -264,9 +265,21 @@ each one of `cmd`, `tp` (five coordinates), `look`, `hotbar`, `wait_ticks`, `wai
 `scan_blocks`, `read_block`, `navigate_to_block`, `list_entities`, `timed_entities`,
 `mob_motion`, or `key` (`keys` and `ticks` MCP arguments; released when the step finishes). Optional
 `seed` defaults to 100, `world` copies an existing world, `server_view_distance`
-defaults to 4, and `client_settings` accepts `graphics_preset`, `render_distance`
-and `fov` (default 70: the owner's saved fov is never inherited). PNG paths are
+defaults to 4, `lod_enabled` optionally sets `[lod].enabled` in the private
+server config, and `lod_share_terrain_keys` optionally sets
+`[lod].share_terrain_keys` when LOD is enabled. Sharing reveals seed-derived
+terrain parameters to the client; use only with an isolated test world.
+`client_settings` accepts `graphics_preset`, `render_distance`
+and `fov` (default 70: the owner's saved fov is never inherited). Set
+`RUST_LOG=mc_edge::lod=debug` to retain a server log line for each successfully
+queued LOD tile response. PNG paths are
 recorded in `result.json`; settings and world are isolated per run.
+`tools/harness/tool_clipping_scene.json` captures the diamond pickaxe against
+obsidian from far and close positions, including held attack frames.
+`tool_wall_visible` checks the received target, selected tool and eye distance,
+then requires turquoise tool pixels over a dark wall in the fixed close-view
+frame. Inspect the attack frames separately; the pixel check covers rest only.
+
 
 `use_phases` (native only) takes `name` and `ticks` (1–100), holds use across
 start and hold captures, releases it even on failure, and requires the client's
@@ -305,6 +318,11 @@ notifications until `recent_chat` contains it. Use a received acknowledgement
 before observing a server-driven transition; waiting client ticks does not
 acknowledge a command. This checks current chat history, not freshness: use a
 unique ordered fence when the same reply could already be present.
+
+`native-low-roof-house` certifies a two-block-high enclosed house with a paired
+bed. An ordered command fence and block predicates check the bed and roof before
+the native client asserts the certification reply. This checks certification,
+not whether a villager sleeps or breeds.
 
 
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains

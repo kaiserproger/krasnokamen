@@ -48,6 +48,14 @@ class MobOracleTests(unittest.TestCase):
         self.assertEqual(bounds(VANILLA,'entities/cow',True),
                          {'minecraft:leather':(0,2),'minecraft:beef':(1,3)})
 
+    def test_melee_stand_is_not_below_the_floor_the_target_stands_on(self):
+        # The received cow y was 199.999755859375 on a floor topped at 200: a
+        # physical client teleported there falls through the floor.
+        x,y,z=mobs.melee_stand(6.4,199.999755859375,-0.7)
+        self.assertGreaterEqual(y,200.0)
+        self.assertEqual((x,z),(6.4,-2.7))
+        self.assertEqual(mobs.melee_stand(1.5,77.0,3.0),(1.5,77.0,1.0))
+
     def test_player_kill_condition_is_not_silently_assumed(self):
         condition={'condition':'minecraft:killed_by_player'}
         self.assertEqual(_condition(condition,False),(False,False))
