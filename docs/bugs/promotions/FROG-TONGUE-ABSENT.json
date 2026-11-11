@@ -1,0 +1,30 @@
+{
+  "id": "FROG-TONGUE-ABSENT",
+  "verdict": "promoted",
+  "fix_commit": "patch:5a40bebc829c62b81020f603368e0758b0da222ee79768b5afab3c4e6491c306",
+  "fix_commit_full": "patch:5a40bebc829c62b81020f603368e0758b0da222ee79768b5afab3c4e6491c306",
+  "promoted_at": "2026-11-11T20:16:20+00:00",
+  "tree_head": "ec3a463a5e699c452e3c33f17161e3de57056f01",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "5a40bebc829c62b81020f603368e0758b0da222ee79768b5afab3c4e6491c306",
+  "reversed_files": [
+    "crates/mc-core/src/frog.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:vanilla_mob_behavior_tests::frog_tongue_consumes_only_small_prey_and_drops_vanilla_loot": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:vanilla_mob_behavior_tests::frog_tongue_consumes_only_small_prey_and_drops_vanilla_loot": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/LedgerMobsB01/.analysis/validation/20261111T200910-ledger-promote-vw9cts4y"
+}
