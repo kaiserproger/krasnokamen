@@ -288,6 +288,7 @@ fn modern_fixture(root: &Path, config: &CoreConfig) {
         difficulty: mc_core::survival::Difficulty::Hard,
         climate: Some(mc_core::weather::ClimateImage {
             day_time: 18000,
+            game_clock: Default::default(),
             weather_kind: 2,
             remaining_ticks: 1234,
             thunder_remaining_ticks: 4321,

@@ -14,10 +14,28 @@ pub(crate) mod lightning;
 mod surface;
 const LEVEL_STEP_PER_TICK: f32 = 0.01;
 
+/// Persisted simulated game clock: the quantity its current mode keeps
+/// constant. Running ticks keep the held-tick count, held ticks keep the age,
+/// so the image changes only when the mode does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GameClockImage {
+    Running { held_ticks: u64 },
+    Held { game_ticks: u64 },
+}
+
+impl Default for GameClockImage {
+    fn default() -> Self {
+        Self::Running { held_ticks: 0 }
+    }
+}
+
 /// Absolute clock/weather post-image. Float bits preserve mid-fade restarts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ClimateImage {
     pub day_time: i64,
+    #[serde(default)]
+    pub game_clock: GameClockImage,
     pub weather_kind: u8,
     pub remaining_ticks: i64,
     /// A zero clock draws a fresh natural duration on the next tick.
@@ -34,6 +52,7 @@ impl ClimateImage {
     pub(crate) fn capture(state: &TickState) -> Self {
         Self {
             day_time: state.day_time,
+            game_clock: state.tick_control.clock_image(state.tick),
             weather_kind: match state.weather.0 {
                 Weather::Clear => 0,
                 Weather::Rain => 1,

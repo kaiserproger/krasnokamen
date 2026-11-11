@@ -3,7 +3,8 @@
 //! Source: net/minecraft/world/TickRateManager.java, net/minecraft/server/
 //! ServerTickRateManager.java (26.1.2). The manager is one global authority
 //! (moved between dimension worlds by `dimensions_tick::swap_globals`) and is
-//! session state: like vanilla it is never persisted.
+//! session state like vanilla; only the simulated age it implies is persisted
+//! ([`GameClockImage`] in the climate post-image).
 //!
 //! * `rate` stretches or shrinks the tick period (`1e9 / rate` ns); the global
 //!   tick number, WAL batches and every tick-keyed clock keep advancing one per
@@ -21,6 +22,7 @@ use std::time::Duration;
 use crate::boundary::{ConnectionId, PlayerChange};
 use crate::command_feedback::text;
 use crate::tick::TickState;
+use crate::weather::GameClockImage;
 
 /// Vanilla `TickRateManager.tickrate` default.
 pub const DEFAULT_RATE: f32 = 20.0;
@@ -177,6 +179,20 @@ impl TickControl {
     /// Simulated game ticks at global tick `tick` (`/time query gametime`).
     pub(crate) fn game_ticks(&self, tick: u64) -> u64 {
         tick.saturating_sub(self.held_ticks)
+    }
+
+    /// Persisted form of the simulated clock at global tick `tick`, taken
+    /// between ticks.
+    pub(crate) fn clock_image(&self, tick: u64) -> GameClockImage {
+        if self.runs_normally {
+            GameClockImage::Running {
+                held_ticks: self.held_ticks,
+            }
+        } else {
+            GameClockImage::Held {
+                game_ticks: self.game_ticks(tick),
+            }
+        }
     }
 
     /// `TickRateManager.tick` plus `checkShouldSprintThisTick`. Returns the

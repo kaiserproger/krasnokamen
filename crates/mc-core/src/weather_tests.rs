@@ -276,6 +276,7 @@ fn real_core_reopen_uses_checkpoint_and_tail_climate_not_the_tick_number() {
         let mut manifest = read_manifest(&config).unwrap();
         let image = ClimateImage {
             day_time: 123_987,
+            game_clock: Default::default(),
             weather_kind: 2,
             remaining_ticks: 1_234,
             thunder_remaining_ticks: 4321,
