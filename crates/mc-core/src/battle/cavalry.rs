@@ -135,6 +135,13 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             let velocity = battle
                 .formation
                 .constrain_velocity(frame.entities.pos(horse), velocity);
+            let velocity = super::steering::around_obstacles(
+                frame,
+                &battle.formation,
+                horse,
+                frame.entities.body(horse).id,
+                velocity,
+            );
             battle.columns.drive[horse_bi] = velocity;
             battle.columns.drive[bi] = [0.0; 3];
             continue;
@@ -197,6 +204,13 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             [toward[0] * speed, 0.0, toward[1] * speed]
         };
         let velocity = battle.formation.constrain_velocity(position, velocity);
+        let velocity = super::steering::around_obstacles(
+            frame,
+            &battle.formation,
+            horse,
+            frame.entities.body(horse).id,
+            velocity,
+        );
         battle.columns.drive[horse_bi] = velocity;
         battle.columns.drive[bi] = [0.0; 3];
     }

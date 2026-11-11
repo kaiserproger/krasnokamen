@@ -454,7 +454,7 @@ fn status_counts_a_corpse_as_dead_until_its_body_leaves() {
     };
     let status = execute(&mut state, &mut changes, [0.0; 3], &BattleCommand::Status).unwrap();
     assert!(
-        status.contains(sides) && status.ends_with("dead=1"),
+        status.contains(sides) && status.contains(" dead=1 grounding="),
         "{status}"
     );
     let counts = crate::battle::publication_counts(&mut state).unwrap();
@@ -483,7 +483,7 @@ fn status_counts_a_corpse_as_dead_until_its_body_leaves() {
     assert!(state.entities.slot_of_any(victim).is_none());
     let status = execute(&mut state, &mut changes, [0.0; 3], &BattleCommand::Status).unwrap();
     assert!(
-        status.contains(sides) && status.ends_with("dead=0"),
+        status.contains(sides) && status.contains(" dead=0 grounding="),
         "{status}"
     );
 }
