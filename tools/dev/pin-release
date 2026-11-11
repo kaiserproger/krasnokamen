@@ -29,6 +29,21 @@ KINDS = {
     "client": {"repo": "client", "package": "solaris-client", "bin": "solaris-client", "env": "SOLARIS_CLIENT_BINARY"},
     "bots": {"repo": "core", "package": "mc-test-harness", "bin": "player-scale-bots", "env": "SOLARIS_BOTS_BINARY"},
 }
+# Everything a server or bots release build reads: Cargo workspace files, every crate, the guest SDK
+# and the Java sources mc-edge embeds with include_str! (crates/mc-edge/src/content_import.rs, the
+# only include outside crates/ and sdk/; audited 2026-11-11 over every build.rs, include_str!,
+# include_bytes!, include! and env!("CARGO_MANIFEST_DIR") in crates/ and sdk/). A pin whose inputs
+# match an existing pin's is that pin's binary: see reuse_pin.
+INPUT_PATHS = (
+    "crates", "sdk", "Cargo.toml", "Cargo.lock", ".cargo", "rust-toolchain.toml",
+    "tools/extract-block-map-colors", "tools/extract-block-light", "tools/extract-block-mining",
+    "tools/extract-block-explosion", "tools/VanillaWorldgenOracle.java",
+)
+# Environment that changes what cargo/rustc produce (build() pops the target variables itself).
+BUILD_ENV = re.compile(
+    r"^(RUSTFLAGS|RUSTDOCFLAGS|CARGO_ENCODED_RUSTFLAGS|RUSTC.*|CARGO_PROFILE_.*|CARGO_BUILD_.*|"
+    r"CARGO_TARGET_.*|CARGO_CFG_.*|CC|CXX|CFLAGS|CXXFLAGS|LDFLAGS)$")
+BUILD_ENV_IGNORED = {"CARGO_BUILD_JOBS", "CARGO_BUILD_TARGET", "CARGO_TARGET_DIR", "CARGO_INCREMENTAL"}
 # mem-run's pool lock files: slot-<l> is held through /tmp/solaris-mem-slots/<l>.
 SLOT_LOCKS = Path("/tmp/solaris-mem-slots")
 
@@ -58,7 +73,74 @@ def provenance(top: Path) -> dict:
     }
 
 
-def existing_pin(pin_dir: Path, kind: str, rust_target: str, incremental: bool) -> Path | None:
+def inputs_sha256(top: Path, tree: str, kind: str, rust_target: str, incremental: bool) -> str:
+    """Digest of everything the build reads, from the tree object of the working state.
+
+    `tree` is wtlib.working_state's tree (HEAD plus uncommitted and untracked non-ignored files), so a
+    tracked, dirty or untracked change inside INPUT_PATHS changes the key and one outside does not.
+    Ignored files are not part of it (nothing in the audited includes reads one)."""
+    parts = [f"{path}={w.git(top, 'rev-parse', '--verify', '--quiet', f'{tree}:{path}', check=False) or 'absent'}"
+             for path in INPUT_PATHS]
+    parts.append("rustc=" + str(subprocess.check_output(["rustc", "-vV"], cwd=top, text=True)).strip())
+    parts += [f"env.{name}={value}" for name, value in sorted(os.environ.items())
+              if BUILD_ENV.match(name) and name not in BUILD_ENV_IGNORED]
+    parts += [f"target={rust_target}", f"kind={kind}", f"incremental={int(incremental)}"]
+    return w.sha256_bytes("\n".join(parts).encode())
+
+
+def reuse_pin(pin_dir: Path, top: Path, kind: str, rust_target: str, incremental: bool, inputs: str,
+              before: dict) -> Path | None:
+    """Create `pin_dir` from an existing pin with the same build inputs, without building, or return None.
+
+    Candidates are valid pins only (same repo/kind/target/incremental, binary present with its recorded
+    sha256); a damaged one is skipped, never repaired. The binary is hard-linked (copied if linking
+    fails) and the manifest records this tree's provenance, the shared inputs and `reused_from`. A bots pin
+    is reused only by the tree that built it (see below)."""
+    spec = KINDS[kind]
+    for candidate in sorted(w.PINS.glob("*/manifest.json")):
+        try:
+            info = json.loads(candidate.read_text())
+        except (OSError, ValueError):
+            continue
+        source_dir = candidate.parent
+        if (info.get("inputs_sha256") != inputs or info.get("repo") != spec["repo"] or info.get("kind") != kind
+                or info.get("target") != rust_target or bool(info.get("incremental", False)) != incremental):
+            continue
+        binary = Path(info.get("binary", ""))
+        if binary.parent != source_dir or not binary.is_file() or w.sha256_file(binary) != info.get("binary_sha256"):
+            continue
+        if kind == "bots" and info.get("build_tree") != str(top):
+            # player-scale-bots reads <build tree>/data/vanilla/reports at every run (CARGO_MANIFEST_DIR is baked
+            # in): a copy built in another tree stops working when that tree is removed. Reuse only your own.
+            continue
+        stage = w.PINS / f".tmp-{pin_dir.name}-{os.getpid()}"
+        try:
+            stage.mkdir()
+            staged = stage / binary.name
+            try:
+                os.link(binary, staged)
+            except OSError:
+                shutil.copyfile(binary, staged)
+                staged.chmod(0o555)
+            manifest = {
+                "repo": spec["repo"], "head": before["head"], "diff_sha256": before["diff_sha256"],
+                "kind": kind, "target": rust_target, "incremental": incremental,
+                "dirty": before["dirty"], "untracked_files": before["untracked_files"], "source": str(top),
+                "binary": str(pin_dir / binary.name), "binary_sha256": info["binary_sha256"],
+                "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "command": info.get("command", ""),
+                "inputs_sha256": inputs, "build_tree": info.get("build_tree"), "reused_from": source_dir.name,
+            }
+            (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+            (stage / "manifest.json").chmod(0o444)
+            os.rename(stage, pin_dir)
+        finally:
+            shutil.rmtree(stage, ignore_errors=True)
+        return pin_dir / binary.name
+    return None
+
+
+def existing_pin(pin_dir: Path, kind: str, rust_target: str, incremental: bool,
+                 inputs: str | None = None) -> Path | None:
     """The binary of a valid existing pin, or None; a damaged pin is an error (pins are never overwritten)."""
     manifest = pin_dir / "manifest.json"
     if not manifest.is_file():
@@ -72,6 +154,11 @@ def existing_pin(pin_dir: Path, kind: str, rust_target: str, incremental: bool) 
     # Pins from before the field existed were all built without incremental.
     if bool(info.get("incremental", False)) != incremental:
         raise w.ToolError(f"{pin_dir} records incremental={info.get('incremental', False)}, not {incremental}; refusing a different binary")
+    # Same head and diff but other build inputs (toolchain, RUSTFLAGS, ...): not this tree's binary.
+    # Pins from before `inputs_sha256` existed carry no key and stay accepted.
+    if inputs and info.get("inputs_sha256") and info["inputs_sha256"] != inputs:
+        raise w.ToolError(f"{pin_dir} was built with other build inputs (toolchain or build environment changed since); "
+                          "pins are immutable, so it is not reused or rebuilt: the owner must remove it deliberately")
     if not binary.is_file() or w.sha256_file(binary) != info.get("binary_sha256"):
         raise w.ToolError(f"pin {pin_dir} is damaged (binary missing or sha256 differs); pins are immutable, "
                           "so it is not rebuilt: the owner must remove it deliberately")
@@ -172,20 +259,27 @@ def main() -> None:
     incremental = not args.no_incremental
     pin_id = f"{before['id']}-{kind}-{rust_target}" + ("-incr" if incremental else "")
     pin_dir = w.PINS / pin_id
+    inputs = inputs_sha256(top, before["tree"], kind, rust_target, incremental) if kind in ("server", "bots") else None
 
-    def done(binary: Path, built: bool) -> None:
+    def done(binary: Path, how: str) -> None:
         w.in_use_add(pin_dir, top.name, "pin")  # owner: the tree that asked for the pin
-        say(f"{'built and pinned' if built else 'already pinned, not building'}: {pin_dir.name}")
+        say(f"{how}: {pin_dir.name}")
         print(f"{spec['env']}={binary}")
 
     w.PINS.mkdir(parents=True, exist_ok=True)
     with open(w.PINS / f".lock-{pin_id}", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)  # a concurrent build of the same tree is waited for, not repeated
-        binary = existing_pin(pin_dir, kind, rust_target, incremental)
+        binary = existing_pin(pin_dir, kind, rust_target, incremental, inputs)
         if binary:
-            return done(binary, False)
+            return done(binary, "already pinned, not building")
         if pin_dir.exists():
             raise w.ToolError(f"{pin_dir} exists without a manifest; refusing to touch it")
+
+        if inputs:
+            reused = reuse_pin(pin_dir, top, kind, rust_target, incremental, inputs, before)
+            if reused:
+                return done(reused, "same build inputs as "
+                            + json.loads((pin_dir / "manifest.json").read_text())["reused_from"] + ", reused its binary without building")
 
         cmd, artifact = build(top, kind, args.target, incremental)
         # The runner releases the slot when the build exits, and another tree may
@@ -227,12 +321,14 @@ def main() -> None:
                 "binary": str(final_binary), "binary_sha256": binary_sha,
                 "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "command": shlex.join(cmd),
             }
+            if inputs:
+                manifest.update(inputs_sha256=inputs, build_tree=str(top))
             (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
             (stage / "manifest.json").chmod(0o444)
             os.rename(stage, pin_dir)  # atomic; fails rather than replacing an existing pin
         finally:
             shutil.rmtree(stage, ignore_errors=True)
-        return done(final_binary, True)
+        return done(final_binary, "built and pinned")
 
 
 if __name__ == "__main__":
