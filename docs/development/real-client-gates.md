@@ -255,6 +255,18 @@ proofs need a physical XTest click (pattern: `_scroll` in
   (`SOLARIS_SERVER_BINARY` or `--server-bin`, plus `--plugins-dir`); they never
   build a server.
 
+- `native-v2-ledger-painting` places one painting and observes its removal
+  after its fixture support is removed.
+- `native-v2-ledger-axe` uses a fixture axe to strip a log, scrape oxidized
+  copper and unwax weathered copper, observing each received block state.
+- `native-v2-ledger-sponge` places a sponge beside one water source and observes
+  the wet sponge and absorbed source through the graphical client's received blocks.
+- `native-v2-ledger-setblock-snbt` opens a fixture chest created with `/setblock`
+  SNBT and withdraws the seven diamonds received in its first slot.
+- `native-v2-ledger-crafting-pickup` opens a crafting table and checks that its
+  menu remains open and 16 planks are on the cursor after the first pickup.
+  This does not exercise disconnect custody.
+
 ## Scene shots
 
 `python3 -m tools.harness run scene-shot --client native --windowed` runs a

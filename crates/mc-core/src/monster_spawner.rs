@@ -18,6 +18,14 @@ pub(crate) struct Spawners {
     active: Vec<Key>,
     scratch: Vec<Key>,
 }
+
+impl Spawners {
+    pub(crate) fn contains(&self, pos: BlockPos) -> bool {
+        self.chunks
+            .get(&(pos.x.div_euclid(16), pos.z.div_euclid(16)))
+            .is_some_and(|entries| entries.contains_key(&(pos.x, pos.y, pos.z)))
+    }
+}
 #[derive(Debug)]
 pub(crate) struct Spawner {
     fields: Fields,

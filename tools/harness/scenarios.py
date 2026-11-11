@@ -85,6 +85,40 @@ def _entry(**kwargs: object) -> Scenario:
 
 
 SCENARIOS: dict[str, Scenario] = {
+    "native-v2-ledger-painting": _entry(
+        id="native-v2-ledger-painting", summary="Place a painting and remove its support",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-painting",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One painting on a fixture wall; privileged support removal.",
+    ),
+
+    "native-v2-ledger-axe": _entry(
+        id="native-v2-ledger-axe", summary="Use an axe to strip, scrape and unwax blocks",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-axe",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One log orientation and two copper states; fixture-supplied axe.",
+    ),
+
+    "native-v2-ledger-sponge": _entry(
+        id="native-v2-ledger-sponge", summary="Place a sponge beside a water source and observe absorption",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-sponge",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One adjacent source; not the full absorption radius.",
+    ),
+
+    "native-v2-ledger-setblock-snbt": _entry(
+        id="native-v2-ledger-setblock-snbt", summary="Open a chest populated by setblock SNBT and withdraw its contents",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-setblock-snbt",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One chest with seven diamonds in slot zero; privileged setup.",
+    ),
+    "native-v2-ledger-crafting-pickup": _entry(
+        id="native-v2-ledger-crafting-pickup", summary="Crafting table remains open on the first inventory pickup",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-crafting-pickup",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One first pickup from 16 fixture-supplied planks; not the disconnect path.",
+    ),
+
     "native-world-first-start-interrupted": _entry(
         id="native-world-first-start-interrupted",
         summary="Recover a singleplayer world interrupted during its first start",

@@ -155,6 +155,207 @@ fn interact_parity_painting_places_on_wall() {
     assert_eq!(drops.len(), 1);
 }
 
+/// Drive one player command through the shared tick boundary the way a live
+/// multi-dimension server does: queued during the tick while
+/// dimension_globals is active, executed with command_context.shared, and
+/// settled by dimensions::commands::commit instead of the tick block phase.
+fn shared_command(
+    state: &mut TickState,
+    actor: EntityId,
+    text: &str,
+) -> crate::boundary::ChangeSet {
+    state.dimension_globals.active = true;
+    let mut changes = crate::boundary::ChangeSet::default();
+    let context = crate::command_context::Context::source(state, ConnectionId(1), actor, 4);
+    crate::command_context::submit(state, text, context, &mut changes);
+    let job = state.command_context.jobs.pop().expect("command queued");
+    state.command_context.shared = true;
+    crate::command_context::run(state, &job.text, job.context, &mut changes);
+    state.command_context.shared = false;
+    state.dimension_globals.active = false;
+    changes
+}
+
+#[test]
+fn painting_drops_when_shared_command_commit_removes_support() {
+    let (mut state, actor) = setup();
+    install(&mut state, "stone", &[]);
+    give(&mut state, actor, "painting", 1);
+    use_on(&mut state, POS, 2, [0.5; 3]);
+    let painting = state.registry.entity_type_id("minecraft:painting").unwrap();
+    let id = state
+        .entities
+        .mob_slots(painting)
+        .map(|slot| state.entities.body(slot).id)
+        .next()
+        .expect("painting placed");
+    let changes = shared_command(
+        &mut state,
+        actor,
+        &format!("setblock {} {} {} minecraft:air", POS.x, POS.y, POS.z),
+    );
+    assert!(
+        state.entities.slot_of(id).is_none(),
+        "painting remains after the shared command commit removed its support"
+    );
+    assert!(
+        state.hostile.removed.contains(&id),
+        "removal staged for the next tick's publish"
+    );
+    assert_eq!(
+        changes.entities_spawned.len(),
+        1,
+        "painting item drop missing from the commit changes"
+    );
+}
+
+#[test]
+fn item_frame_drops_when_shared_command_commit_removes_support() {
+    let (mut state, actor) = setup();
+    install(&mut state, "stone", &[]);
+    give(&mut state, actor, "item_frame", 1);
+    let (output, _, _) = run_tick(
+        &mut state,
+        &[PlayerInput::UseItemOn {
+            connection: ConnectionId(1),
+            hand: Hand::Main,
+            position: POS,
+            face: 2,
+            cursor: [0.5; 3],
+            sequence: 1,
+        }],
+    );
+    let id = *output
+        .changes
+        .entities_spawned
+        .first()
+        .expect("frame placed");
+    let changes = shared_command(
+        &mut state,
+        actor,
+        &format!("setblock {} {} {} minecraft:air", POS.x, POS.y, POS.z),
+    );
+    assert!(
+        state.entities.slot_of(id).is_none(),
+        "item frame remains after the shared command commit removed its support"
+    );
+    assert!(
+        state.hostile.removed.contains(&id),
+        "frame removal staged for the next tick's publish"
+    );
+    assert_eq!(
+        changes.entities_spawned.len(),
+        1,
+        "frame item drop missing from the commit changes"
+    );
+}
+
+#[test]
+fn staged_item_components_commit_through_shared_command_boundary() {
+    let (mut state, actor) = setup();
+    let pos = BlockPos {
+        x: 3,
+        y: Y + 1,
+        z: 0,
+    };
+    let pot = state
+        .registry
+        .blocks
+        .block(&Identifier::parse("minecraft:decorated_pot").unwrap())
+        .expect("decorated pot block")
+        .default
+        .0;
+    // An accepted placement stages the block-entity image carrying the item's
+    // components; the shared commit must install it like the tick does.
+    let sherds = mc_nbt::Tag::List(mc_nbt::ListTag {
+        element_type: mc_nbt::tag_type::STRING,
+        elements: vec![mc_nbt::Tag::String("minecraft:angler_pottery_sherd".into()); 4],
+    });
+    let image = mc_nbt::Tag::Compound(vec![
+        (
+            "id".into(),
+            mc_nbt::Tag::String("minecraft:decorated_pot".into()),
+        ),
+        ("x".into(), mc_nbt::Tag::Int(pos.x)),
+        ("y".into(), mc_nbt::Tag::Int(pos.y)),
+        ("z".into(), mc_nbt::Tag::Int(pos.z)),
+        ("sherds".into(), sherds),
+    ]);
+    let mut bytes = Vec::new();
+    mc_nbt::write_network(&mut bytes, &image).expect("staged image encodes");
+    state
+        .merge_item_component_placements
+        .push((pos, pot, bytes));
+    shared_command(
+        &mut state,
+        actor,
+        &format!(
+            "setblock {} {} {} minecraft:decorated_pot",
+            pos.x, pos.y, pos.z
+        ),
+    );
+    let chunk = state
+        .world
+        .chunk(crate::boundary::ChunkPos {
+            x: pos.x.div_euclid(16),
+            z: pos.z.div_euclid(16),
+        })
+        .expect("chunk materialized");
+    let bytes = &chunk.block_entities[&pos];
+    let mc_nbt::Tag::Compound(fields) = mc_nbt::read_network(&mut bytes.as_slice()).unwrap() else {
+        panic!("block entity image decodes to a compound")
+    };
+    assert!(
+        fields.iter().any(|(key, _)| key == "sherds"),
+        "staged item components were not committed at the shared boundary"
+    );
+}
+
+#[test]
+fn monster_spawner_index_updates_through_shared_command_commit() {
+    let (mut state, _actor) = setup();
+    let pos = BlockPos {
+        x: 5,
+        y: Y + 1,
+        z: 0,
+    };
+    // World hydration left spawner NBT in the chunk alongside the block.
+    let spawner = block(&state, "spawner", &[]);
+    put(&mut state, pos.x, pos.y, pos.z, spawner);
+    let fields = vec![
+        (
+            "id".into(),
+            mc_nbt::Tag::String("minecraft:mob_spawner".into()),
+        ),
+        ("x".into(), mc_nbt::Tag::Int(pos.x)),
+        ("y".into(), mc_nbt::Tag::Int(pos.y)),
+        ("z".into(), mc_nbt::Tag::Int(pos.z)),
+        ("Delay".into(), mc_nbt::Tag::Short(0)),
+        (
+            "SpawnData".into(),
+            mc_nbt::Tag::Compound(vec![(
+                "entity".into(),
+                mc_nbt::Tag::Compound(vec![(
+                    "id".into(),
+                    mc_nbt::Tag::String("minecraft:zombie".into()),
+                )]),
+            )]),
+        ),
+    ];
+    let mut bytes = Vec::new();
+    mc_nbt::write_network(&mut bytes, &mc_nbt::Tag::Compound(fields)).expect("spawner encodes");
+    state.world.set_opaque_block_entity(pos, Some(bytes));
+    // A command edit at the shared boundary stages the write and settles
+    // through dimensions::commands::commit; the spawner index must follow.
+    state.merge_block_writes.push((pos, spawner));
+    let mut changes = crate::boundary::ChangeSet::default();
+    crate::dimensions::commands::commit(&mut state, &mut changes);
+    assert!(
+        state.monster_spawners.contains(pos),
+        "spawner was not admitted to the runtime index at the shared boundary"
+    );
+}
+
 #[test]
 fn interact_parity_brushing_completes_once() {
     for (source, result) in [("suspicious_sand", "sand"), ("suspicious_gravel", "gravel")] {
