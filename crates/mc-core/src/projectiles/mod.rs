@@ -9,7 +9,7 @@ mod eye_tests;
 pub mod fishing;
 pub(crate) mod flight;
 #[cfg(test)]
-mod flight_tests;
+pub(crate) mod flight_tests;
 pub mod payloads;
 pub mod persistence;
 pub mod weapons;

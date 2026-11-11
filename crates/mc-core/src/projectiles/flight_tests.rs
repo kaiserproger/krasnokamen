@@ -1067,7 +1067,7 @@ fn shooter_uuid(
 
 /// The required-content test registry carries no entity type tags; a server
 /// loads 26.3 `data/minecraft/tags/entity_type/impact_projectiles.json`.
-fn vanilla_impact_projectiles(state: &mut TickState) {
+pub(crate) fn vanilla_impact_projectiles(state: &mut TickState) {
     let members = [
         "minecraft:arrow",
         "minecraft:spectral_arrow",
@@ -1277,6 +1277,177 @@ fn projectile_cracks_pot_before_destroying_it() {
                 if *position == pos && *data == cracked as i32
         )));
     }
+}
+
+/// Places an intact decorated pot two cells ahead of `centre` whose block
+/// entity carries four decorations (two sherds, two bricks) and holds three
+/// diamonds, under the vanilla loot tables; returns its cell and state.
+fn sherd_pot(state: &mut TickState, centre: [f64; 3]) -> (crate::boundary::BlockPos, u32) {
+    let vanilla = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    state.registry = Arc::new(CoreRegistry::load(Some(&vanilla)).unwrap());
+    vanilla_impact_projectiles(state);
+    let pos = crate::boundary::BlockPos {
+        x: centre[0].floor() as i32 + 2,
+        y: centre[1] as i32,
+        z: centre[2].floor() as i32,
+    };
+    let pot = default_block(state, "minecraft:decorated_pot");
+    state.world.set_block(pos.x, pos.y, pos.z, pot);
+    let sherds = [
+        "minecraft:angler_pottery_sherd",
+        "minecraft:brick",
+        "minecraft:archer_pottery_sherd",
+        "minecraft:brick",
+    ];
+    let mut bytes = Vec::new();
+    mc_nbt::write_network(
+        &mut bytes,
+        &mc_nbt::Tag::Compound(vec![
+            (
+                "id".into(),
+                mc_nbt::Tag::String("minecraft:decorated_pot".into()),
+            ),
+            ("x".into(), mc_nbt::Tag::Int(pos.x)),
+            ("y".into(), mc_nbt::Tag::Int(pos.y)),
+            ("z".into(), mc_nbt::Tag::Int(pos.z)),
+            (
+                "sherds".into(),
+                mc_nbt::Tag::List(mc_nbt::ListTag {
+                    element_type: mc_nbt::tag_type::STRING,
+                    elements: sherds
+                        .iter()
+                        .map(|name| mc_nbt::Tag::String((*name).into()))
+                        .collect(),
+                }),
+            ),
+        ]),
+    )
+    .unwrap();
+    state.world.set_opaque_block_entity(pos, Some(bytes));
+    state.world.fold_overlay();
+    let diamond = item(state, "minecraft:diamond");
+    state.block_entities.insert(
+        (pos.x, pos.y, pos.z),
+        crate::tick::BlockEntityState {
+            slots: vec![ItemStack::new(diamond, 3)],
+            furnace: None,
+        },
+    );
+    (pos, pot)
+}
+
+fn item(state: &TickState, name: &str) -> u32 {
+    state
+        .registry
+        .items
+        .id_of(&Identifier::parse(name).unwrap())
+        .unwrap()
+}
+
+/// Two arrows strike one sherd-decorated pot in the same tick: one accepted
+/// break, and the commit spills its sherds and stored stack exactly once.
+#[test]
+fn two_shots_at_one_sherd_pot_drop_its_sherds_and_contents_once() {
+    let (mut state, player, centre) = setup();
+    let owner = state
+        .entities
+        .row(state.entities.slot_of(player).unwrap())
+        .uuid;
+    let (pos, pot) = sherd_pot(&mut state, centre);
+    let shots: Vec<_> = [-0.2, 0.2]
+        .into_iter()
+        .map(|dz| {
+            let record =
+                ProjectileState::new(ProjectileKind::Arrow, Some(owner), arrow_stack(&state));
+            launch(
+                &mut state,
+                record,
+                [f64::from(pos.x) - 0.75, centre[1] + 0.25, centre[2] + dz],
+                [3.0, 0.0, 0.0],
+            )
+            .unwrap()
+        })
+        .collect();
+    super::flight::run(&mut state, &mut Vec::new(), shots.iter().copied());
+    let cracked = with_property(&state, pot, "cracked", "true");
+    assert_eq!(
+        state
+            .merge_command_broken
+            .iter()
+            .map(|(at, broken, _)| (*at, *broken))
+            .collect::<Vec<_>>(),
+        [(pos, cracked)],
+        "the second shot finds no pot to break again"
+    );
+    let (_, _, spawned, _) = state.commit_merge_effects();
+    let mut drops: Vec<(u32, i32)> = spawned
+        .iter()
+        .filter_map(|id| state.entities.slot_of(*id))
+        .filter_map(|slot| state.entities.row(slot).item.as_ref())
+        .map(|row| (row.item_id, row.count))
+        .collect();
+    drops.sort_unstable();
+    let mut expected = vec![
+        (item(&state, "minecraft:angler_pottery_sherd"), 1),
+        (item(&state, "minecraft:brick"), 1),
+        (item(&state, "minecraft:archer_pottery_sherd"), 1),
+        (item(&state, "minecraft:brick"), 1),
+        (item(&state, "minecraft:diamond"), 3),
+    ];
+    expected.sort_unstable();
+    assert_eq!(drops, expected);
+    assert!(state.merge_command_broken.is_empty());
+    assert!(!state.block_entities.contains_key(&(pos.x, pos.y, pos.z)));
+    assert!(
+        state.commit_merge_effects().2.is_empty(),
+        "a consumed break is never replayed by a later commit"
+    );
+}
+
+/// The arrow that broke a pot stays stuck where it hit and its shooter can
+/// still pick it up.
+#[test]
+fn arrow_that_breaks_a_pot_stays_stuck_and_pickable() {
+    let (mut state, player, centre) = setup();
+    let owner = state
+        .entities
+        .row(state.entities.slot_of(player).unwrap())
+        .uuid;
+    let mut record = ProjectileState::new(ProjectileKind::Arrow, Some(owner), arrow_stack(&state));
+    record.pickup = true;
+    let (pos, _) = sherd_pot(&mut state, centre);
+    let id = launch(
+        &mut state,
+        record,
+        [f64::from(pos.x) - 0.75, centre[1] + 0.25, centre[2]],
+        [3.0, 0.0, 0.0],
+    )
+    .unwrap();
+    super::flight::run(&mut state, &mut Vec::new(), std::iter::once(id));
+    assert_eq!(state.merge_command_broken.len(), 1);
+    state.commit_merge_effects();
+    let slot = state
+        .entities
+        .slot_of(id)
+        .expect("the arrow survives the break");
+    let arrow = state.entities.row(slot).projectile.as_ref().unwrap();
+    assert!(arrow.stuck && arrow.pickup);
+    let at = state.entities.pos(slot);
+    let player_slot = state.entities.slot_of(player).unwrap();
+    state.entities.set_pos(player_slot, at);
+    run_tick(&mut state, &[]);
+    assert!(state.entities.slot_of(id).is_none());
+    let arrows = item(&state, "minecraft:arrow");
+    assert_eq!(
+        state.players[&player]
+            .inventory
+            .slots
+            .iter()
+            .filter(|stack| stack.item_id == arrows)
+            .map(|stack| stack.count)
+            .sum::<i32>(),
+        1
+    );
 }
 
 /// TntBlock and CampfireBlock need `Projectile.mayInteract`: a mob's burning

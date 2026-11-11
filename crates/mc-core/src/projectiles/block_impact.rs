@@ -97,6 +97,7 @@ pub(super) fn destroy(
     };
     if !may_interact(state, record, pos)
         || !may_break(state, slot, record)
+        || !zone_allows(state, record, pos)
         || !state.stage_command_break(pos, broken)
     {
         return;
@@ -113,4 +114,15 @@ pub(super) fn destroy(
         2001,
         broken as i32,
     );
+}
+
+/// Plugin protected zones: a player's shot breaks only where the zone admits
+/// that player; any other shot never breaks a protected cell (as explosions).
+fn zone_allows(state: &TickState, record: &ProjectileState, pos: BlockPos) -> bool {
+    match super::owner_id(state, record) {
+        Some(owner) if state.players.contains_key(&owner) => {
+            crate::plugin_player::allows_block(state, owner, pos)
+        }
+        _ => !crate::plugin_player::protects_cell(state, pos),
+    }
 }
