@@ -3,6 +3,7 @@
 import argparse
 import ctypes
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -19,6 +20,8 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+# prepare-arena.py default: the arena's surroundings generate from this world seed.
+ARENA_WORLD_SEED = 42
 TICKS_PER_SECOND = 20
 DEFAULT_CHECKPOINT_EVERY_TICKS = 1200
 DEFAULT_STATUS_EVERY_TICKS = 100
@@ -42,6 +45,9 @@ def arguments():
     p.add_argument('--cache', required=True, type=Path, help='server content cache')
     p.add_argument('--run-dir', required=True, type=Path, help='new directory; never overwritten')
     p.add_argument('--world', type=Path, help='stopped native world to copy; omitted creates a fresh generated world')
+    p.add_argument('--arena', choices=['grass'], help='stage on the deterministic grass arena of prepare-arena.py: built into <run-dir>/arena with this pin and --cache (minutes), then copied; its world seed is 42 unless --world-seed says otherwise')
+    p.add_argument('--arena-world', type=Path, help='reuse an already built arena world directory instead of building (implies --arena grass); its sibling result.json supplies the world seed')
+    p.add_argument('--arena-seed', type=int, default=42, help='arena layout seed when building')
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--world-seed', type=int, help='seed of the chosen world; defaults to battle seed')
     p.add_argument('--scenario', choices=['field-100', 'field-1k', 'field-10k'], default='field-10k')
@@ -60,8 +66,17 @@ def arguments():
     p.add_argument('--server-scope', nargs='?', const='', default=None, metavar='SLICE', help='run the server in its own transient systemd user scope (optionally under SLICE) so the cgroup memory/CPU telemetry is the server alone')
     p.add_argument('--dry-run', action='store_true')
     a = p.parse_args()
+    if a.arena_world is not None:
+        a.arena = 'grass'
+    if a.arena and a.world:
+        p.error('--arena replaces --world')
+    if not 0 <= a.arena_seed <= 2**63 - 1:
+        p.error('arena seed out of range')
+    recorded_seed = arena_receipt_seed(a.arena_world) if a.arena_world is not None else None
     if a.world_seed is None:
-        a.world_seed = a.seed
+        a.world_seed = (recorded_seed if recorded_seed is not None else ARENA_WORLD_SEED) if a.arena else a.seed
+    elif recorded_seed is not None and recorded_seed != a.world_seed:
+        p.error(f'--world-seed {a.world_seed} differs from the arena receipt world seed {recorded_seed}: the surroundings generate from it')
     if not -(2**63) <= a.world_seed <= 2**63 - 1:
         p.error('world seed must fit a signed 64-bit value')
     if not 0 <= a.seed <= 2**63 - 1 or a.duration < 1 or a.paused_ticks < 0 or a.minimum_battle_ticks < 0 or not (1 <= a.port <= 65535 and 1 <= a.dashboard_port <= 65535):
@@ -95,6 +110,36 @@ def take_checkpoint_ticks(duration):
     the server's tick counter for the cadence (tick_loop.rs); the recorder stops `duration` seconds
     after the roster barrier, so no periodic checkpoint is due before the take ends."""
     return (duration + TAKE_CHECKPOINT_MARGIN_SECONDS) * TICKS_PER_SECOND
+
+
+def arena_receipt(world):
+    """result.json that prepare-arena.py writes next to its world, or None."""
+    path = Path(world).parent / 'result.json'
+    if not path.is_file():
+        return None
+    receipt = json.loads(path.read_text())
+    return receipt if receipt.get('status') == 'complete' else None
+
+
+def arena_receipt_seed(world):
+    receipt = arena_receipt(world)
+    return None if receipt is None else receipt.get('world_seed')
+
+
+def arena_builder():
+    spec = importlib.util.spec_from_file_location('prepare_arena', Path(__file__).with_name('prepare-arena.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.build
+
+
+def stage_arena(a, binary, cache, root):
+    """World directory to copy for --arena, and the arena receipt (built or recorded beside a reused world)."""
+    if a.arena_world is not None:
+        world = a.arena_world.resolve(strict=True)
+        return world, arena_receipt(world)
+    receipt = arena_builder()(root / 'arena', binary, cache, seed=a.arena_seed, world_seed=a.world_seed)
+    return Path(receipt['world']), receipt
 
 
 def server_config_text(a, server_name, world, cache):
@@ -431,8 +476,11 @@ def run(a):
     commands = command_list(a)
     if a.dry_run:
         shown_config = server_config_text(a, 'battle-<random>', a.run_dir / 'world', a.cache)
+        arena_plan = ([f'arena: reuse prebuilt grass arena world {a.arena_world}'] if a.arena_world is not None
+                      else [f'arena: build grass arena (layout seed {a.arena_seed}, world seed {a.world_seed}) with this pin into {a.run_dir}/arena via prepare-arena.py'] if a.arena else [])
         status_after = 'never' if a.status_every == 0 else f'about every {a.status_every} ticks'
         print('\n'.join([f'server from {a.pin}/manifest.json --config {a.run_dir}/server.toml',
+                         *arena_plan,
                          'server argv: ' + ' '.join(server_argv(a, f'{a.pin}/<binary>', a.run_dir / 'server.toml', 'battle-<random>')),
                          f'server environment: MC_CORE_PHASE_LOG={"1" if a.phase_log else "unset"}',
                          f'server.toml:\n{shown_config.rstrip()}',
@@ -455,6 +503,9 @@ def run(a):
     root.mkdir(parents=True, exist_ok=False)
     a.created_dir = root
     world = root / 'world'
+    arena_info = None
+    if a.arena:
+        a.world, arena_info = stage_arena(a, binary, cache, root)
     if a.world:
         shutil.copytree(a.world.resolve(strict=True), world, symlinks=False)
     server_name = f'battle-{uuid.uuid4().hex}'
@@ -464,6 +515,8 @@ def run(a):
     recorder_argv = [str(client), 'record', '--server', f'127.0.0.1:{a.port}', '--username', 'BattleRecorder', '--output', str(root / 'take.solrec'), '--header', str(root / 'header.json'), '--duration', str(a.duration), '--ready-file', str(root / 'take.ready'), '--roster-file', str(root / 'roster.txt'), '--roster-ready-file', str(root / 'roster.ready'), '--roster-timeout', '900', '--data-dir', str(client_data)]
     launch_argv = server_argv(a, binary, config, server_name)
     (root / 'manifest.json').write_text(json.dumps({'server_pin': manifest, 'client_sha256': sha256_file(client), 'seed': a.seed, 'world_seed': a.world_seed, 'scenario': a.scenario, 'count_per_side_override': a.count, 'world_source': str(a.world) if a.world else None, 'platform': platform.platform(), 'uname': list(platform.uname()), 'server_argv': launch_argv, 'recorder_argv': recorder_argv, 'server_environment_overrides': {'MC_CORE_PHASE_LOG': '1'} if a.phase_log else {}, 'server_environment_removed': [] if a.phase_log else ['MC_CORE_PHASE_LOG'], 'take': a.take, 'checkpoint_every_ticks': a.checkpoint_every_ticks, 'status_every': a.status_every, 'view_distance': a.view_distance, 'allow_marker_gaps': a.allow_marker_gaps, 'server_scope': a.server_scope}, indent=2) + '\n')
+    if a.arena:
+        (root / 'arena.json').write_text(json.dumps({'kind': a.arena, 'reused': a.arena_world is not None, 'world_source': str(a.world), 'receipt': arena_info}, indent=2) + '\n')
     with (root / 'host-commands.txt').open('x') as host:
         for cmd in (['uname', '-a'], ['lscpu']):
             host.write('$ ' + ' '.join(cmd) + '\n')

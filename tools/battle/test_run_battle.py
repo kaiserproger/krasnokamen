@@ -471,6 +471,71 @@ class BattleRunnerTests(unittest.TestCase):
         commands = (root / 'run' / 'commands.txt').read_text().splitlines()
         return commands, root / 'run'
 
+    def test_arena_arguments_default_to_the_arena_world_seed_and_follow_a_receipt(self):
+        runner = load_runner()
+        base = ['--pin', '/p', '--client', '/c', '--client-data', '/d', '--cache', '/k', '--run-dir', '/r', '--seed', '7']
+        def parse(*extra):
+            with unittest.mock.patch('sys.argv', ['run-battle.py', *base, *extra]):
+                return runner.arguments()
+        self.assertEqual(parse().world_seed, 7)
+        built = parse('--arena', 'grass')
+        self.assertEqual((built.arena, built.world_seed, built.arena_seed), ('grass', 42, 42))
+        self.assertEqual(parse('--arena', 'grass', '--world-seed', '5').world_seed, 5)
+        with tempfile.TemporaryDirectory() as directory:
+            world = Path(directory) / 'arena' / 'world'
+            world.mkdir(parents=True)
+            (world.parent / 'result.json').write_text(json.dumps({'status': 'complete', 'world_seed': 99}))
+            reused = parse('--arena-world', str(world))
+            self.assertEqual((reused.arena, reused.world_seed), ('grass', 99))
+            with unittest.mock.patch('sys.stderr'), self.assertRaises(SystemExit):
+                parse('--arena-world', str(world), '--world-seed', '5')
+        with unittest.mock.patch('sys.stderr'), self.assertRaises(SystemExit):
+            parse('--arena', 'grass', '--world', '/w')
+
+    def test_stage_arena_builds_with_the_runner_pin_and_cache_or_reuses_a_world(self):
+        runner = load_runner()
+        self.assertTrue(callable(runner.arena_builder()))
+        calls = []
+        def build(run_dir, binary, cache, seed, world_seed):
+            calls.append((run_dir, binary, cache, seed, world_seed))
+            return {'world': '/arena/world', 'world_seed': world_seed}
+        with unittest.mock.patch.object(runner, 'arena_builder', lambda: build):
+            world, receipt = runner.stage_arena(argparse.Namespace(arena_world=None, arena_seed=3, world_seed=42), '/bin/server', '/cache', Path('/run'))
+        self.assertEqual(calls, [(Path('/run/arena'), '/bin/server', '/cache', 3, 42)])
+        self.assertEqual((world, receipt['world_seed']), (Path('/arena/world'), 42))
+        with tempfile.TemporaryDirectory() as directory:
+            prebuilt = Path(directory) / 'arena' / 'world'
+            prebuilt.mkdir(parents=True)
+            (prebuilt.parent / 'result.json').write_text(json.dumps({'status': 'complete', 'world_seed': 42, 'command_sha256': 'abc'}))
+            world, receipt = runner.stage_arena(argparse.Namespace(arena_world=prebuilt), '/bin/server', '/cache', Path('/run'))
+            self.assertEqual((world, receipt['command_sha256']), (prebuilt.resolve(), 'abc'))
+
+    def test_dry_run_names_the_arena_step(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            common = [str(Path(__file__).with_name('run-battle.sh')), '--dry-run', '--pin', str(root / 'pin'), '--client', str(root / 'c'),
+                      '--client-data', str(root / 'd'), '--cache', str(root / 'k'), '--run-dir', str(root / 'run')]
+            built = subprocess.run([*common, '--arena', 'grass'], text=True, capture_output=True, check=True).stdout
+            self.assertIn('arena: build grass arena (layout seed 42, world seed 42)', built)
+            self.assertIn('seed = 42', built)
+            reused = subprocess.run([*common, '--arena-world', str(root / 'w')], text=True, capture_output=True, check=True).stdout
+            self.assertIn(f'arena: reuse prebuilt grass arena world {root / "w"}', reused)
+            self.assertNotIn('arena:', subprocess.run(common, text=True, capture_output=True, check=True).stdout)
+
+    def test_run_on_a_reused_arena_copies_it_and_records_where_it_came_from(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            world = root / 'arena' / 'world'
+            world.mkdir(parents=True)
+            (world / 'level.marker').write_text('arena')
+            (world.parent / 'result.json').write_text(json.dumps({'status': 'complete', 'world_seed': 31, 'command_sha256': 'abc'}))
+            commands, run = self.run_fake_battle(root, '--arena-world', str(world))
+            self.assertEqual((run / 'world' / 'level.marker').read_text(), 'arena')
+            self.assertIn('seed = 31', (run / 'server.toml').read_text())
+            info = json.loads((run / 'arena.json').read_text())
+            self.assertEqual((info['kind'], info['reused'], info['receipt']['command_sha256']), ('grass', True, 'abc'))
+            self.assertEqual(json.loads((run / 'manifest.json').read_text())['world_source'], str(world.resolve()))
+
     def test_take_refuses_a_server_pin_that_ignores_the_cadence_key(self):
         with tempfile.TemporaryDirectory() as directory:
             result, run = self.run_fake_battle(Path(directory), '--take', '--checkpoint-every-ticks', '1000', expect_success=False, FAKE_IGNORE_KEY='1')
