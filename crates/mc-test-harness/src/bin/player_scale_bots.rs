@@ -303,6 +303,8 @@ struct LoadWindow {
     #[serde(default)]
     command_interval_ms: Option<u64>,
     #[serde(default)]
+    command_fence: bool,
+    #[serde(default)]
     chat_hz: u32,
     #[serde(default)]
     commands: Vec<String>,
@@ -395,6 +397,10 @@ impl LoadWindow {
             || elapsed_slots(elapsed, self.command_hz),
             |ms| (elapsed.as_millis() / u128::from(ms)) as u64,
         )
+    }
+    fn offered_commands(&self, elapsed: Duration) -> u64 {
+        let end = Duration::from_millis(self.duration_ms);
+        self.command_slots(elapsed.min(end.saturating_sub(Duration::from_nanos(1))))
     }
     fn due_command_slot(&self, elapsed: Duration, accounted: &mut u64) -> Option<(u64, u64)> {
         let Some(ms) = self.command_interval_ms else {
@@ -1283,6 +1289,20 @@ fn fixture_save_succeeded(text: &str) -> bool {
     })
 }
 
+fn landing_step_in_chunk(
+    x: i32,
+    z: i32,
+    step_x: i32,
+    step_z: i32,
+    stride: i32,
+    chunk: Option<(i32, i32)>,
+) -> Option<(i32, i32)> {
+    let (sx, sz) = (x + step_x * stride, z + step_z * stride);
+    chunk
+        .is_none_or(|chunk| (sx.div_euclid(16), sz.div_euclid(16)) == chunk)
+        .then_some((sx, sz))
+}
+
 struct Bot {
     index: u32,
     username: String,
@@ -1808,7 +1828,11 @@ impl Bot {
                     // streamed window. All group members share the anchor, so
                     // each bot offsets along its own direction to avoid
                     // stacking on the same column.
-                    let stride = 4 + i32::try_from(self.index % 4).unwrap_or(0) * 4;
+                    let stride = if self.walk_chunk.is_some() {
+                        4
+                    } else {
+                        4 + i32::try_from(self.index % 4).unwrap_or(0) * 4
+                    };
                     let (step_x, step_z) = match self.index.wrapping_mul(0x9e3779b9) % 4 {
                         0 => (1, 0),
                         1 => (0, 1),
@@ -1845,7 +1869,16 @@ impl Bot {
                             {
                                 continue;
                             }
-                            let (sx, sz) = (x + step_x * stride, z + step_z * stride);
+                            let Some((sx, sz)) = landing_step_in_chunk(
+                                x,
+                                z,
+                                step_x,
+                                step_z,
+                                stride,
+                                self.walk_chunk,
+                            ) else {
+                                continue;
+                            };
                             let Some(start_y) = at(sx, sz) else {
                                 continue;
                             };
@@ -3040,6 +3073,11 @@ impl Bot {
                             .await?;
                         self.metrics.commands_sent += 1;
                         self.metrics.windows[index].command.writes_completed += 1;
+                        if window.command_fence {
+                            self.setup_fence(client, &format!("run_command_{index}_{slot}"), false)
+                                .await?;
+                            self.metrics.windows[index].command.completed += 1;
+                        }
                     }
                     _ => {
                         if self.pending_chats.len() >= ACTION_CAP {
@@ -3256,7 +3294,9 @@ fn aggregate(
                 "movement": totals.movement.json(offered(window.movement_hz, u64::from(args.clients))),
                 "edit": totals.edit.json(offered(window.edit_hz, u64::from(args.clients))),
                 "edit_unavailable": totals.edit_unavailable,
-                "command": totals.command.json(if args.mechanic_read_only { 0 } else { local.map_or(0, |local| window.command_slots(local)) }),
+                "command": totals.command.json(if args.mechanic_read_only { 0 } else {
+                    local.map_or(0, |local| window.offered_commands(local))
+                }),
                 "chat": totals.chat.json(offered(window.chat_hz, u64::from(args.clients))),
                 "received": totals.received,
                 "automatic_respawn": {"requests": totals.automatic_respawn_requests, "deferred": totals.automatic_respawn_deferred},
@@ -3294,7 +3334,7 @@ fn aggregate(
             "queue_capacity": 0, "pending_edit_capacity_per_bot": ACTION_CAP,
             "pending_chat_capacity_per_bot": ACTION_CAP, "poll_ms": 10,
             "slot_accounting": "wall elapsed, slots at n/rate for n>=1; missed slots are not replayed",
-            "completed_scope": "edit: matching observed block update; chat: exact own server echo; movement/command: no completion oracle (zero)",
+            "completed_scope": "edit: matching observed block update; chat: exact own server echo; fenced command: input-ordered echo, not mechanic completion; movement and unfenced command: no completion oracle",
             "receipt_scope": "actual receive window; admission and sends are not mechanic completion",
             "windows": windows, "bots": bots,
         }));

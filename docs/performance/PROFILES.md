@@ -151,9 +151,14 @@ The scale profiles also accept one noncanonical stress selector:
   players throughout sampled batches, and all fixture regions stay inactive.
   The receipt reports the actual active population, not the resident total. Zero
   adds an observer region but no orb bank, and rejects active XP orbs. Positive
-  counts require an exact owner-observed source tick, not merely offered bottles
-  or sustained concurrency; the maximum observed count is also reported. Observer locality is checked against received chunk centers; it
-  does not claim exact positions.
+  canonical counts require an exact owner-observed source tick, not merely offered
+  bottles or sustained concurrency; the maximum observed count is also reported.
+  The noncanonical one-bottle smoke instead requires 3–11 total XP in 1–3
+  owner-observed orb bodies, as a bottle's yield splits into denominations
+  ([Bottle o' Enchanting](https://minecraft.wiki/w/Bottle_o%27_Enchanting),
+  [Experience orb](https://minecraft.wiki/w/Experience_orb)). It is not proof
+  of the canonical exact-body workload. Observer locality is checked against
+  received chunk centers; it does not claim exact positions.
 - `--containers 1000|100000` creates that many chests and five brewing stands.
   Public item-replace commands supply the stands; periodic water-bottle inputs
   keep useful brewing work present. The source receipt checks discovery counts

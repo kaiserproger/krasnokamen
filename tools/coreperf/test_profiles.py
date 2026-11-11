@@ -298,6 +298,7 @@ class ProfilesTests(unittest.TestCase):
                 for i, row in enumerate(recipe["coverage"])]
         sample = {"tick": 3, "coreperf": {"tick": 3, "resident_entities": 90,
                   "xp_orbs_processed": 9, "xp_orbs_by_region": {str(recipe["stress"]["regions"][0]): 7},
+                  "xp_value_by_region": {str(recipe["stress"]["regions"][0]): 10},
                   "regions": rows}}
         self.assertEqual(profiles.validate_scale_sample(recipe, sample)["xp_orbs"], 7)
         del sample["coreperf"]["xp_orbs_processed"]
@@ -317,7 +318,7 @@ class ProfilesTests(unittest.TestCase):
         row = {"region": index, "active_chunks": 16, "motion_admitted": 0,
                "motion_full": 0, "motion_resting": 0}
         sample = {"tick": 1, "coreperf": {"tick": 1, "resident_entities": 11,
-                  "regions": [row], "xp_orbs_processed": 0, "xp_orbs_by_region": {}}}
+                  "regions": [row], "xp_orbs_processed": 0, "xp_orbs_by_region": {}, "xp_value_by_region": {}}}
         observed = profiles.validate_scale_sample(recipe, sample)
         self.assertEqual((observed["xp_orbs"], observed["active"]), (0, 0))
         row["active_chunks"] = 15
@@ -357,6 +358,37 @@ class ProfilesTests(unittest.TestCase):
         sample["coreperf"]["brewing_discovery_by_region"][region] = 7
         with self.assertRaisesRegex(ValueError, "below requested containers"):
             profiles.validate_scale_sample(recipe, sample)
+
+    def test_mutating_workload_commands_are_fenced_after_passive_warmup(self):
+        args = argparse.Namespace(profile="scale-100k-all-active", mobs=80,
+                                  warmup_seconds=2, measure_seconds=5)
+        for kind in ("brewing-containers", "churn"):
+            recipe = {"stress": {"kind": kind, "pulse_interval_ms": 500, "commands": ["a", "b"]}}
+            warmup, measured = profiles.schedule(args, recipe)["windows"]
+            self.assertNotIn("commands", warmup)
+            self.assertTrue(measured["command_fence"])
+            self.assertEqual(measured["commands"], ["a", "b"])
+
+    def test_churn_measurement_ends_after_a_complete_replacement_cycle(self):
+        recipe = {"stress": {"kind": "churn", "pulse_interval_ms": 500,
+                             "commands": ["summon-pig", "kill-cow", "summon-cow", "kill-pig"]}}
+        for seconds in (5, 120):
+            args = argparse.Namespace(profile="scale-100k-all-active", mobs=80,
+                                      warmup_seconds=2, measure_seconds=seconds)
+            window = profiles.schedule(args, recipe)["windows"][1]
+            slots = (window["duration_ms"] - 1) // window["command_interval_ms"]
+            self.assertGreater(slots, 0)
+            self.assertEqual(slots % len(window["commands"]), 0)
+
+    def test_one_bottle_smoke_pulses_early_enough_to_observe_yield(self):
+        recipe = profiles.scale_fixture(10, "all-active", active_override=0)
+        profiles.add_xp_fixture(recipe, 1, smoke=True, players=100, locality="spread")
+        self.assertEqual(recipe["stress"]["pulse_interval_ms"], 1500)
+        args = argparse.Namespace(profile="scale-100k-all-active", mobs=10, smoke=True,
+                                  warmup_seconds=2, measure_seconds=5)
+        warmup, measurement = profiles.schedule(args, recipe)["windows"]
+        self.assertNotIn("commands", warmup)
+        self.assertEqual(measurement["command_interval_ms"], 1500)
 
     def test_productive_workers_require_real_distinct_farm_cell_changes(self):
         recipe = profiles.scale_fixture(78, "all-active")
@@ -548,7 +580,7 @@ class ProfilesTests(unittest.TestCase):
         self.assertFalse(any(row["active"] for row in recipe["coverage"]))
         self.assertEqual(recipe["stress"]["anchors"], [])
         sample = {"tick": 2, "coreperf": {"tick": 2, "resident_entities": 10,
-                  "regions": [], "xp_orbs_processed": 0, "xp_orbs_by_region": {}}}
+                  "regions": [], "xp_orbs_processed": 0, "xp_orbs_by_region": {}, "xp_value_by_region": {}}}
         self.assertEqual(profiles.validate_scale_sample(recipe, sample)["active"], 0)
         with self.assertRaisesRegex(ValueError, "invalid XP workload"):
             profiles.add_xp_fixture(profiles.scale_fixture(10, "all-active", active_override=0),
@@ -578,6 +610,18 @@ class ProfilesTests(unittest.TestCase):
             with self.subTest(bad=bad, count=count), self.assertRaises(ValueError):
                 profiles.exact_cohort_tick(bad, "xp_orbs", count)
         self.assertEqual(profiles.exact_cohort_tick([{"tick": 12, "xp_orbs": 0}], "xp_orbs", 0), 12)
+
+    def test_bottle_yield_uses_orb_value_and_count_not_bottle_count(self):
+        samples = [{"tick": 1, "xp_orbs": 0, "xp_value": 0},
+                   {"tick": 2, "xp_orbs": 2, "xp_value": 10}]
+        self.assertEqual(profiles.xp_bottle_cohort_tick(samples, 1), 2)
+        for sample in ({"tick": 1, "xp_orbs": 1, "xp_value": 2},
+                       {"tick": 1, "xp_orbs": 4, "xp_value": 10},
+                       {"tick": 1, "xp_orbs": 1, "xp_value": 12},
+                       {"tick": 1, "xp_orbs": 1}):
+            with self.subTest(sample=sample), self.assertRaises(ValueError):
+                profiles.xp_bottle_cohort_tick([sample], 1)
+        self.assertEqual(profiles.xp_bottle_cohort_tick([samples[0]], 0), 1)
 
     def test_saved_fixture_block_census_rejects_wrong_or_missing_blocks(self):
         recipe = {"expected_blocks": [{"position": [1, 2, 3], "block": "minecraft:chest"}]}

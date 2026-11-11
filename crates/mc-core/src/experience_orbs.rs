@@ -427,6 +427,14 @@ fn run_inner(
                 crate::tick::coreperf_block_region(pos[0].floor() as i32, pos[2].floor() as i32)
             {
                 *sample.xp_orbs_by_region.entry(region).or_default() += 1;
+                let (value, count) = state
+                    .entities
+                    .row(slot)
+                    .appearance
+                    .experience_orb
+                    .expect("orb");
+                *sample.xp_value_by_region.entry(region).or_default() +=
+                    i64::from(value) * i64::from(count);
             }
         }
         let mut velocity = state.entities.vel(slot).map(|component| component / 20.0);

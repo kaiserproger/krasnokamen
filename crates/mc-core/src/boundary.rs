@@ -495,6 +495,8 @@ pub struct CorePerfTick {
     pub xp_orbs_processed: u64,
     /// Active XP-orb bodies processed by their owner, by fixture region.
     pub xp_orbs_by_region: std::collections::HashMap<usize, u64>,
+    /// Total XP represented by active orb bodies processed in each fixture region.
+    pub xp_value_by_region: std::collections::HashMap<usize, i64>,
     /// Distinct fixture victims with accepted positive damage, by fixture region.
     pub damage_victims_by_region: std::collections::HashMap<usize, u64>,
     /// Accepted reactive damage pieces against fixture entities, by region.
