@@ -37,7 +37,9 @@ to keep that from happening again without idling the machine.
 - **Scope properties.** `MemoryMax=<cap>`, `MemorySwapMax=1G`,
   `CPUQuota=<physical cores x 100>%`, `CPUWeight=50`, `nice 19`. These are the
   harness's own scope properties, so harness runs keep their canonical CPU
-  budget. The runner exports `SOLARIS_HARNESS_CPU_SCOPE=1`; without it the
+  budget. Preemptible builds (below) get `CPUWeight=10`, so under contention
+  tests, servers and real-client gates, which have deadlines, win the CPU five
+  to one and builds only slow down. The runner exports `SOLARIS_HARNESS_CPU_SCOPE=1`; without it the
   harness re-runs itself in its own scope outside the slice and escapes the cap.
 - **`tools/dev/heavy-watchdog.py`** (user unit `solaris-heavy-watchdog`,
   started by the runner) is the only thing that pauses work. On real memory

@@ -19,7 +19,9 @@
 # Replace this file atomically (write + mv), never in place: running callers read it
 # incrementally.
 # The scope gets the harness's own CPU properties (CPUQuota = physical cores x 100%,
-# CPUWeight=50), so harness runs keep their canonical CPU budget.
+# CPUWeight=50), so harness runs keep their canonical CPU budget. Preemptible builds
+# get CPUWeight=10: under contention tests, servers and real-client gates (which have
+# deadlines) win the CPU five to one; builds only slow down.
 # Lanes: ordinary commands run on all CPUs, at most 12G each; every cargo under
 # mem-run shares the watchdog's make-style jobserver (one token per logical CPU, via
 # CARGO_MAKEFLAGS), so all builds together run about nproc compilers instead of nproc
@@ -228,6 +230,7 @@ fi
 # CPUWeight 10000 vs 50 per build scope (diagnostic isolation; quiet numbers need -x).
 [ "$perf" = 1 ] && { niceness=0; cpu_pin=(taskset -c "$perf_cpus"); preemptible=0; props=("${props[@]/CPUWeight=50/CPUWeight=10000}"); }
 [ "$exclusive" = 1 ] && { niceness=0; cpu_pin=(); preemptible=0; }
+[ "$preemptible" = 1 ] && props=("${props[@]/CPUWeight=50/CPUWeight=10}")
 echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf cpus=${cpu_pin[*]:-all} slice=$slice target=$target expect=$((est_kib / 1024))MiB key='$key'" >&2
 # The wrapper registers its scope, expectation, preemptible flag and target dir with
 # the watchdog (the watchdog never freezes a command whose target dir another running
