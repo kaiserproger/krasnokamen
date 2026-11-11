@@ -8,7 +8,6 @@ import select
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from pathlib import Path
 
@@ -53,37 +52,30 @@ class SceneSlot(unittest.TestCase):
         finally:
             os.close(fd)
 
-    def wait_blocked_on(self, slot: str, deadline: float) -> None:
-        """Return once /proc/locks shows a waiter blocked on this slot's lock file."""
-        st = os.stat(self.lock_path(slot))
-        key = f"{os.major(st.st_dev):02x}:{os.minor(st.st_dev):02x}:{st.st_ino}"
-        while time.monotonic() < deadline:
-            with open("/proc/locks") as locks:
-                if any("->" in line and key in line.split() for line in locks):
-                    return
-            os.sched_yield()
-        self.fail(f"no waiter blocked on slot {slot}")
-
     def test_waiter_takes_whichever_slot_frees_first(self) -> None:
         held = {slot: self.hold(slot) for slot in "abc"}
+        ready_r, ready_w = os.pipe()
         try:
             waiter = subprocess.Popen(
                 [str(SCRIPT), "sh", "-c", "echo run; read _"],
-                env=self.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+                env={**self.env, "SOLARIS_SCENE_SLOT_READY_FD": str(ready_w)}, pass_fds=(ready_w,),
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
             )
             self.addCleanup(waiter.kill)
-            deadline = time.monotonic() + 30
-            # The waiter has given up on non-blocking attempts once it waits on slot a.
-            self.wait_blocked_on("a", deadline)
+            os.close(ready_w)
+            # The script writes once its slot waiters are queued; 30 s only bounds a failure.
+            queued, _, _ = select.select([ready_r], [], [], 30)
+            self.assertTrue(queued and os.read(ready_r, 1) == b"w", "waiter never reported it is queued")
             os.close(held.pop("b"))
-            ready, _, _ = select.select([waiter.stdout], [], [], max(0.0, deadline - time.monotonic()))
-            self.assertTrue(ready, "waiter did not start when slot b freed while a stayed held")
+            started, _, _ = select.select([waiter.stdout], [], [], 30)
+            self.assertTrue(started, "waiter did not start when slot b freed while a stayed held")
             self.assertEqual(waiter.stdout.readline().strip(), "run")
             self.assertTrue(self.held_by_other("b"), "the running command holds slot b")
             waiter.stdin.close()
             waiter.wait(timeout=30)
             self.assertFalse(self.held_by_other("b"), "slot b is free after the command exits")
         finally:
+            os.close(ready_r)
             for fd in held.values():
                 os.close(fd)
 

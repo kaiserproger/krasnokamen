@@ -25,6 +25,11 @@ def take(slot):
 
 for slot in "abc":
     threading.Thread(target=take, args=(slot,), daemon=True).start()
+# Tests pass a pipe fd and wait on it instead of polling for the queued waiter.
+ready = os.environ.pop("SOLARIS_SCENE_SLOT_READY_FD", None)
+if ready:
+    os.write(int(ready), b"w")
+    os.close(int(ready))
 won.wait()
 # Inheritable copy at fd >= 10: mem-run.sh reopens and closes fds 3-8 (exec 3>, 3>&-),
 # which would release a low lock fd before the gate ends; bash {fd} only allocates.
