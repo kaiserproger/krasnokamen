@@ -253,10 +253,14 @@ def main() -> None:
     jobserver = DIR / "jobserver"
     if jobserver.exists() and not stat.S_ISFIFO(jobserver.stat().st_mode):
         jobserver.unlink()
-    if not jobserver.exists():
+    fresh = not jobserver.exists()
+    if fresh:
         os.mkfifo(jobserver)
     JOBSERVER = os.open(jobserver, os.O_RDWR | os.O_NONBLOCK)
-    reset_tokens()
+    # A restart while builds run must not refill: their cargos still hold tokens and
+    # return them later. balance() refills to exactly JOBS once nothing runs.
+    if fresh or not commands():
+        reset_tokens()
     # Slice PSI also counts stalls its tasks suffer from host-wide shortage (the host
     # pressure file refuses unprivileged triggers).
     psi = os.open(SLICE / "memory.pressure", os.O_RDWR | os.O_NONBLOCK)
