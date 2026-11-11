@@ -17,8 +17,10 @@ event ticks, single `time set` per phase (3000 work, 18000 night, 3000 morning, 
    worker UUID, close awaited on a bounded exact predicate);
 2. the same 3 entities persist through the night; a villager holding a fixture
    job (nameplate and received VillagerData agree, whatever role it was
-   summoned for) sleeps in the bed, still holds that job on waking at 3000
-   and returns within 2.5 blocks of that job's station;
+   summoned for) sleeps in the bed within NIGHT_TICKS game ticks, still holds
+   that job on waking at 3000 and gets back to work within MORNING_TICKS:
+   within 2.5 blocks of its station, or (miner) inside the mine, or
+   (lumberjack) a log beside the spot where it stopped is cut while it stands there;
 3. farmer harvests mature wheat (age 7 -> replanted);
 4. miner digs inside the zone and the chest holds mining products;
 5. lumberjack cuts a mature oak AND replants AND the chest holds oak logs
@@ -177,6 +179,109 @@ def returned_to_job(row: dict[str, Any], job: str,
     return (villager_job(row) == job
             and math.dist((float(row["x"]), float(row["z"])),
                           (station[0] + 0.5, station[2] + 0.5)) < RETURN_RADIUS)
+
+
+# The server cuts a tree within this distance of its trunk (lumber.rs REACH).
+LUMBER_REACH = 4.0
+# Game ticks after `time set 3000` for the woken sleeper to get back to work:
+# a lumberjack's tree can be a long route away inside the settlement radius.
+MORNING_TICKS = 2400
+# Game ticks after `time set 18000` for a worker to walk home and lie down.
+NIGHT_TICKS = 1200
+
+
+def log_cells_near(rows: list[dict[str, Any]], pos: tuple[float, float, float],
+                   reach: float = LUMBER_REACH) -> list[tuple[int, int, int]]:
+    """Received log blocks within cutting reach of a standing villager."""
+    cells = [(int(row["x"]), int(row["y"]), int(row["z"])) for row in rows
+             if str(row.get("block_id", "")).endswith("_log")]
+    near = [cell for cell in cells
+            if math.dist((pos[0], pos[2]), (cell[0] + 0.5, cell[2] + 0.5)) <= reach]
+    return sorted(near, key=lambda cell: math.dist((pos[0], pos[2]), (cell[0] + 0.5, cell[2] + 0.5)))[:8]
+
+
+class WorkReturn:
+    """Whether a woken worker got back to work, from client-received state only.
+
+    Every job: it still shows the job and stands within RETURN_RADIUS of that
+    job's station. Or it starts the job's work where the job is done: a miner
+    stands inside the mine footprint; a lumberjack cuts a tree, i.e. a log
+    block within LUMBER_REACH of where it stopped turns into something else
+    while it is still there. A farmer has only the station check."""
+
+    def __init__(self, job: str, stations: dict[str, tuple[int, int, int]],
+                 mine: tuple[tuple[int, int, int], tuple[int, int, int]]) -> None:
+        self.job = job
+        self.stations = stations
+        self.mine = mine
+        self.evidence: str | None = None
+        self.pos: tuple[float, float, float] | None = None
+        self.stationary = False
+        self.scanned_at: tuple[float, float, float] | None = None
+        self.watched: list[tuple[int, int, int]] = []
+        self.travelled = 0.0
+
+    def see(self, row: dict[str, Any]) -> None:
+        pos = (float(row["x"]), float(row["y"]), float(row["z"]))
+        if self.pos is not None:
+            step = math.dist(self.pos, pos)
+            self.travelled += step
+            self.stationary = step < 0.2
+        self.pos = pos
+        if self.evidence is not None or villager_job(row) != self.job:
+            return
+        if returned_to_job(row, self.job, self.stations):
+            self.evidence = f"within {RETURN_RADIUS} of its station {list(self.stations[self.job])}"
+        elif self.job == "miner":
+            (x0, _, z0), (x1, y1, z1) = self.mine
+            if x0 <= pos[0] < x1 + 1 and z0 <= pos[2] < z1 + 1 and pos[1] <= y1 + 1:
+                self.evidence = f"inside the mine at {[round(v, 2) for v in pos]}"
+
+    def scan_spot(self) -> tuple[float, float, float] | None:
+        """Where to look for its tree: a lumberjack that stopped somewhere new."""
+        if (self.job != "lumberjack" or self.evidence is not None or not self.stationary
+                or self.pos is None):
+            return None
+        if self.scanned_at is not None and math.dist(self.scanned_at, self.pos) < 1.0:
+            return None
+        return self.pos
+
+    def scanned(self, spot: tuple[float, float, float], rows: list[dict[str, Any]]) -> None:
+        self.scanned_at = spot
+        self.watched = log_cells_near(rows, spot)
+
+    def logs_now(self, blocks: dict[tuple[int, int, int], str]) -> None:
+        """Fresh reads of the watched logs; a vanished one next to it is a cut."""
+        if self.evidence is not None or self.pos is None:
+            return
+        for cell, block_id in blocks.items():
+            if (cell in self.watched and not block_id.endswith("_log")
+                    and math.dist((self.pos[0], self.pos[2]), (cell[0] + 0.5, cell[2] + 0.5))
+                    <= LUMBER_REACH + 0.5):
+                self.evidence = f"cut the log at {list(cell)} -> {block_id}"
+                return
+
+
+def _game_time(steps: ProbeSteps) -> int:
+    """Server world age as the client received it (advances while daylight is frozen)."""
+    return int((steps.observe().get("time") or {}).get("game_time") or 0)
+
+
+def _scan(steps: ProbeSteps, lo: tuple[int, int, int], hi: tuple[int, int, int]) -> list[dict[str, Any]]:
+    """Every received block in the box, following the scan's byte-bounded pages."""
+    rows: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        page = steps.call("minecraft_scan_blocks", {
+            "min_x": lo[0], "min_y": lo[1], "min_z": lo[2],
+            "max_x": hi[0], "max_y": hi[1], "max_z": hi[2], "offset": offset})
+        rows.extend(row for row in page.get("blocks", []) if isinstance(row, dict))
+        following = page.get("next_offset")
+        if following is None:
+            return rows
+        if following <= offset:
+            raise RuntimeError(f"village-qa scan did not advance past offset {offset}")
+        offset = following
 
 
 def _block_id(block: dict[str, Any]) -> str:
@@ -712,8 +817,11 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     bed_sleepers: dict[str, str | None] = {}
     sleeper: str | None = None
     sleeper_job: str | None = None
-    night_deadline = _time.monotonic() + 50.0
-    while _time.monotonic() < night_deadline:
+    # Game ticks, not seconds: a loaded host slows the server, and a worker far
+    # from home needs the same simulated walk either way.
+    night_start = _game_time(probe)
+    night_ticks = 0
+    while night_ticks < NIGHT_TICKS:
         for row in _villagers(probe):
             uuid = str(row.get("entity_uuid"))
             pos = (float(row["x"]), float(row["y"]), float(row["z"]))
@@ -725,47 +833,61 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
         if sleeper is not None and set(evening) <= set(night_tracks):
             break
         _tick(probe)
+        night_ticks = _game_time(probe) - night_start
+    detail["night_ticks"] = night_ticks
     detail["bed_sleepers"] = bed_sleepers
     # --- morning at work hours 3000 (not idle 23000): the same entity still
-    # holds the same job and walks back to that job's station ---
+    # holds the same job and gets back to work, within MORNING_TICKS game ticks ---
     fixture("time set 3000")
     settled("morning_returns")
     morning: dict[str, tuple[float, float, float]] = {}
     woke_plate: str | None = None
     closest: float | None = None
-    returned = False
-    morning_deadline = _time.monotonic() + 45.0
-    while _time.monotonic() < morning_deadline:
+    work = WorkReturn(sleeper_job, stations, (mine_lo, mine_hi)) if sleeper_job else None
+    morning_start = _game_time(probe)
+    morning_ticks = 0
+    while morning_ticks < MORNING_TICKS:
         for row in _villagers(probe):
             uuid = str(row.get("entity_uuid"))
             morning[uuid] = (float(row["x"]), float(row["y"]), float(row["z"]))
-            if uuid == sleeper and sleeper_job is not None:
+            if uuid == sleeper and work is not None:
                 woke_plate = nameplate(row)
-                station = stations[sleeper_job]
+                station = stations[work.job]
                 gap = math.dist((float(row["x"]), float(row["z"])),
                                 (station[0] + 0.5, station[2] + 0.5))
                 closest = gap if closest is None else min(closest, gap)
-                returned = returned or returned_to_job(row, sleeper_job, stations)
-        if set(evening) <= set(morning) and returned:
+                work.see(row)
+        if work is not None and (spot := work.scan_spot()) is not None:
+            x, y, z = (math.floor(v) for v in spot)
+            work.scanned(spot, _scan(probe, (x - 5, y - 1, z - 5), (x + 5, y + 7, z + 5)))
+        if work is not None and work.watched and work.evidence is None:
+            work.logs_now({cell: _block_id(_read(probe, cell)) for cell in work.watched})
+        if set(evening) <= set(morning) and work is not None and work.evidence is not None:
             break
         _tick(probe)
+        morning_ticks = _game_time(probe) - morning_start
     same_entities = set(evening) != set() and set(evening) <= set(morning)
     held_by_day = sleeper is not None and day_jobs.get(sleeper) == sleeper_job
     station = list(stations[sleeper_job]) if sleeper_job else None
+    evidence = work.evidence if work is not None else None
     detail["sleeper"] = {"uuid": sleeper, "job": sleeper_job, "day_job": day_jobs.get(sleeper or ""),
-                         "station": station, "closest": closest, "woke_nameplate": woke_plate}
-    if same_entities and held_by_day and returned:
+                         "station": station, "closest": closest, "woke_nameplate": woke_plate,
+                         "back_to_work": evidence, "morning_ticks": morning_ticks,
+                         "travelled": round(work.travelled, 1) if work is not None else None,
+                         "watched_logs": [list(cell) for cell in work.watched] if work is not None else []}
+    if same_entities and held_by_day and evidence is not None:
         _verdict(detail, "sleep_return", "PASS",
                  f"same {len(evening)} entities persist; {sleeper[:8]} held {sleeper_job} by day, slept by bed "
-                 f"{list(bed_head)}, still held it on waking and returned within {RETURN_RADIUS} "
-                 f"of the {sleeper_job} station {station} (closest {closest:.2f})")
+                 f"{list(bed_head)}, still held it on waking and got back to work: {evidence}")
     else:
         _verdict(detail, "sleep_return", "FAIL",
                  f"same_entities={same_entities} sleeper={sleeper} job={sleeper_job} "
                  f"day_job={day_jobs.get(sleeper or '')} station={station} closest={closest} "
+                 f"back_to_work={evidence} morning_ticks={morning_ticks} "
                  f"woke_nameplate={woke_plate!r} bed_sleepers={bed_sleepers}",
-                 "time set 18000; minecraft_list_entities radius 64; time set 3000; "
-                 "re-observe the sleeper's nameplate/VillagerData job and its distance to that job's station")
+                 "time set 18000; minecraft_list_entities radius 64; time set 3000; re-observe the "
+                 "sleeper's nameplate/VillagerData job, its station distance and (miner) mine "
+                 "footprint or (lumberjack) the logs around where it stops")
     if ctx.windowed:
         native_client.capture(probe.client, artifact, "village-qa-morning")
 
