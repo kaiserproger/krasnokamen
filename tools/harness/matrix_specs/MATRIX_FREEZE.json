@@ -2,7 +2,7 @@
  "frozen_at": "2026-10-24T11:39:13+07:00",
  "wave1_id_set_sha256": "a0eafa07c74744cfe5b808e9760989ea58d6de6a559558e5d351f69cb0af0d45",
  "id_set_hash_rule": "sha256 of the sorted wave-1 scenario ids joined by '\\n' (no trailing newline)",
- "matrix_yaml_sha256": "202855a0f3471ccbaf014e4fdd80e228f29d34cbf78ffdb10d946843dc76b8a9",
+ "matrix_yaml_sha256": "a0085be183b82165799f75d95e601d55bd78f59f1952b6730522129d5c1a35a7",
  "wave1_scenarios": 1409,
  "by_client": {
   "fabric_distant_horizons": 44,
