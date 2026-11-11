@@ -68,16 +68,6 @@ class ProfileTaskTests(unittest.TestCase):
         self.preflight = patcher.start()
         self.addCleanup(patcher.stop)
 
-    def test_svc_selects_only_the_requested_minecraft_release(self) -> None:
-        with mock.patch.dict(os.environ, {"SOLARIS_SVC_MINECRAFT_VERSION": "26.3"}):
-            entry = runtime._select_mod_entry("svc", "fabric")
-            self.assertEqual(entry["filename"], "voicechat-fabric-2.6.27+26.3.jar")
-            with self.assertRaisesRegex(RuntimeError, "26.3"):
-                runtime._select_mod_entry("svc", "forge")
-        with mock.patch.dict(os.environ, {"SOLARIS_SVC_MINECRAFT_VERSION": "26.1.2"}):
-            entry = runtime._select_mod_entry("svc", "fabric")
-            self.assertEqual(entry["filename"], "voicechat-fabric-2.6.25+26.1.2.jar")
-
     def test_every_lane_fails_closed_before_launch_when_audio_is_unsafe(self) -> None:
         self.preflight.side_effect = RuntimeError("unsafe hardware audio graph")
         with tempfile.TemporaryDirectory() as directory, \
@@ -121,6 +111,30 @@ class ProfileTaskTests(unittest.TestCase):
                 finally:
                     handle.close()
             self.assertEqual(seen["env"]["SOLARIS_CLIENT_MCP_USERNAME"], "SvcProfile")
+
+    def test_client_stays_on_the_harness_display_and_plays_into_its_own_sink(self) -> None:
+        # Loom reruns a CI client under its own xvfb-run; an audible client opens its sink by name.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for sink, device, master in ((None, "SolarisAgentsNull", "0.0"),
+                                         ("viewer_out", "viewer_out", "1.0")):
+                with self.subTest(sink=sink), _gradlew_present(), \
+                        mock.patch.dict(runtime.os.environ, {"CI": "true"}), \
+                        mock.patch.object(runtime.os, "access", return_value=True), \
+                        mock.patch.object(runtime, "port_open", return_value=False), \
+                        mock.patch.object(runtime, "wait_port"), \
+                        mock.patch.object(runtime.subprocess, "Popen") as launch:
+                    launch.return_value = mock.Mock()
+                    game = root / str(sink)
+                    _, handle = runtime.start_client(**_valid_kwargs(game, root / f"{sink}.log"), sound_sink=sink)
+                    handle.close()
+                    env = launch.call_args.kwargs["env"]
+                    self.assertNotIn("CI", env)
+                    self.assertEqual(env["DISPLAY"], ":99")
+                    self.assertEqual(env["PULSE_SINK"], sink or "agents-null")
+                    options = (game / "options.txt").read_text().splitlines()
+                    self.assertIn(f"soundDevice:{device}", options)
+                    self.assertIn(f"soundCategory_master:{master}", options)
 
     def test_vanilla_explicit_uses_direct_mojang_command(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

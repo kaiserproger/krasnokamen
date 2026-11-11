@@ -97,26 +97,6 @@
       "version_id": "ZAcyqBHe",
       "version_number": "forge-2.6.25+26.1.2",
       "version_type": "beta"
-    },
-    {
-      "date_published": "2026-10-28T08:54:34.575564Z",
-      "environment": "client_or_server_prefers_both",
-      "filename": "voicechat-fabric-2.6.27+26.3.jar",
-      "game_versions": [
-        "26.3"
-      ],
-      "loaders": [
-        "fabric"
-      ],
-      "name": "Simple Voice Chat 2.6.27+26.3",
-      "sha1": "23442735927fe3839650196c0656eb82b0322d87",
-      "sha512": "f2de66761c0f249bb0f9a4b348f98b97ab4e89d3ed3fd37638420364b7431b757933aa08c0cc3e7ba3dd85a602d6c2de313c2309fc587e93cabf31fc5f6df27e",
-      "size": 5611159,
-      "status": "listed",
-      "url": "https://cdn.modrinth.com/data/9eGKb6K1/versions/x9jLR94Q/voicechat-fabric-2.6.27%2B26.3.jar",
-      "version_id": "x9jLR94Q",
-      "version_number": "fabric-2.6.27+26.3",
-      "version_type": "beta"
     }
   ],
   "baseline": {
@@ -125,7 +105,7 @@
     "simple_voice_chat": "2.6.25+26.1.2"
   },
   "client_requirements": [
-    "Licensed graphical Minecraft Java client matching the selected artifact version",
+    "Licensed graphical Minecraft Java 26.1.2 client for the Fabric lane",
     "Pinned Fabric loader/dependency artifact hashes for the :loader-fabric:runClientMcp lane",
     "Java 25 and fresh Xvfb display, client bridge/MCP credentials",
     "SVC scenario driver in sibling solaris-loader (matrix adapter owns the oracle)",
@@ -133,5 +113,5 @@
     "Worktree-built solaris-v2 candidate, exact config/world/epoch and binary SHA-256"
   ],
   "protocol": 1,
-  "source": "Simple Voice Chat publisher API (Modrinth project 9eGKb6K1): 26.1.2 artifacts pinned 2026-10-24; Fabric 26.3 version x9jLR94Q pinned 2026-11-11"
+  "source": "Simple Voice Chat publisher API (Modrinth project 9eGKb6K1, query pinned 2026-10-24): game_versions 26.1.2, loaders fabric+neoforge+forge, latest version per loader"
 }

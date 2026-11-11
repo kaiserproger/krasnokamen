@@ -33,6 +33,7 @@ _ARGUMENT_VALIDATORS = {
     'logical-native': 'native_logical',
     'native-scale': 'native_scale',
     'pause-empty': 'pause_empty',
+    'screens-voice-qa': 'screens_voice_qa',
     'singleplayer-regressions': 'singleplayer_regressions',
     'survival': 'gameplay',
     'title-connect': 'title_connect',

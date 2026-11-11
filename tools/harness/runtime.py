@@ -63,20 +63,19 @@ def _hash_file(path: Path, algorithm: str) -> str:
 
 
 def _select_mod_entry(profile: str, platform: str) -> dict[str, Any]:
-    """Return the publisher-pinned artifact for the requested profile/platform."""
+    """Return the pinned publisher artifact for this MC 26.1.2 profile/platform cell."""
     payload = json.loads(_mod_artifact_path(profile).read_text())
-    minecraft = os.environ.get("SOLARIS_SVC_MINECRAFT_VERSION", "26.1.2") if profile == "svc" else "26.1.2"
     if profile == "dh":
         entries = [item for item in payload["artifacts"] if item["minecraft"] == "26.1.2"]
     else:
         entries = [
             item for item in payload["artifacts"]
-            if minecraft in item["game_versions"] and platform in item["loaders"]
+            if "26.1.2" in item["game_versions"] and platform in item["loaders"]
         ]
     compatible = [item for item in entries if platform in item["loaders"]]
     if not compatible:
         raise MissingCapability(
-            f"no published {profile} artifact covers MC {minecraft} on {platform}; "
+            f"no published {profile} artifact covers MC 26.1.2 on {platform}; "
             "the profile is blocked until the publisher ships one"
         )
     if profile == "dh":
@@ -842,6 +841,7 @@ def start_client(
     launch_manifest: Path | None = None,
     client_profile: str | None = None,
     window_size: tuple[int, int] | None = None,
+    sound_sink: str | None = None,
 ) -> tuple[subprocess.Popen[Any], Any]:
     """Launch a real client and return (process, log_handle) once MCP is ready.
 
@@ -862,6 +862,11 @@ def start_client(
     log/process events); the call never returns merely because time passed.
     Profile artifacts stay under the caller's game dir (runs/RunJava or a
     worktree .analysis dir on the games disk), never the root disk.
+    ``sound_sink`` names an audible client's own null sink on the private
+    graph, whose description equals its name: OpenAL opens it by that name
+    (``soundDevice``; OpenAL Soft ignores ``PULSE_SINK`` for its default)
+    and game sound is at full volume. Without it the client plays muted
+    into ``agents-null``.
     """
     if not token:
         raise ValueError("token must not be empty")
@@ -882,8 +887,9 @@ def start_client(
     game_dir = REPO_ROOT / game_dir if not game_dir.is_absolute() else game_dir
     game_dir.mkdir(parents=True, exist_ok=True)
     options = game_dir / "options.txt"
-    audio_options = {"soundDevice": "SolarisAgentsNull",
-                     "soundCategory_master": "0.0", "soundCategory_music": "0.0"}
+    audio_options = {"soundDevice": "SolarisAgentsNull" if sound_sink is None else sound_sink,
+                     "soundCategory_master": "0.0" if sound_sink is None else "1.0",
+                     "soundCategory_music": "0.0"}
     lines = options.read_text().splitlines() if options.exists() else ["version:4790", "onboardAccessibility:false"]
     lines = [line for line in lines if line.partition(":")[0] not in audio_options]
     options.write_text("\n".join(lines + [f"{key}:{value}" for key, value in audio_options.items()]) + "\n")
@@ -906,6 +912,9 @@ def start_client(
     ).strip()
     # Only the harness-owned Xvfb and private Pulse graph may reach this client.
     env.pop("WAYLAND_DISPLAY", None)
+    # Loom wraps Linux client runs in its own `xvfb-run --auto-servernum` whenever CI is set,
+    # which would put the game on an unowned display instead of `display`.
+    env.pop("CI", None)
     env.update(
         {
             "DISPLAY": display,
@@ -913,8 +922,8 @@ def start_client(
             "SDL_VIDEO_DRIVER": "x11",
             "GDK_BACKEND": "x11",
             "XDG_SESSION_TYPE": "x11",
-            "PIPEWIRE_NODE": "agents-null",
-            "PULSE_SINK": "agents-null",
+            "PIPEWIRE_NODE": sound_sink or "agents-null",
+            "PULSE_SINK": sound_sink or "agents-null",
             "SOLARIS_CLIENT_MCP_TOKEN": token,
             "SOLARIS_CLIENT_MCP_PORT": str(mcp_port),
             "SOLARIS_CLIENT_MCP_GAME_DIR": str(game_dir),

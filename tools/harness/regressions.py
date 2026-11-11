@@ -74,6 +74,7 @@ _WINDOWED_PROFILES = frozenset({
     'composter-chance', 'village-qa', 'village-autonomy-qa',
     'civilization-seed-qa', 'village-owner-order-qa', 'scene-shot',
     'settlement-map-qa', 'claim-only-qa', 'buildings-qa', 'army-qa', 'autocraft-qa',
+    'screens-voice-qa',
 })
 _AUTONOMY_VERDICTS = frozenset({
     'walk_to_village', 'ownerless_settlement', 'founding_chest_empty',
@@ -86,6 +87,13 @@ _AUTONOMY_VERDICTS = frozenset({
 _BOOLEAN_PROFILE_VERDICTS = {
     'civilization-seed-qa': frozenset({
         'new_house', 'births', 'second_building', 'iron_smelted', 'all',
+    }),
+    'screens-voice-qa': frozenset({
+        'native_loads_computer_monitor', 'owner_consent_names_app_audio', 'owner_deny_sends_no_audio',
+        'owner_allow_streams_picture_and_audio', 'fabric_loader_plays_screen_audio',
+        'viewer_keeps_screen_after_same_dimension_respawn', 'svc_proximity_fabric_to_fabric',
+        'svc_proximity_fabric_and_native', 'svc_group_fabric_to_fabric',
+        'native_outsider_hears_no_group_audio', 'native_voice_resets_on_non_voice_server', 'all',
     }),
 }
 _PROFILE_VERDICTS = {
@@ -111,6 +119,7 @@ _PROFILE_OVERRIDES = {
     'army-qa': ('SOLARIS_ARMY_QA_PHASE', 'SOLARIS_ARMY_QA_PLUGINS'),
     'village-autonomy-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE'),
     'civilization-seed-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE'),
+    'screens-voice-qa': ('SCREENS_VOICE_QA_LEG',),
 }
 
 

@@ -1,4 +1,4 @@
-"""Real audio-output checks for the Loader live gate; no synthetic playback acknowledgement."""
+"""Real audio-output checks on the private graph; no synthetic playback acknowledgement."""
 from __future__ import annotations
 
 import array
@@ -13,16 +13,42 @@ from typing import Any, Callable
 
 from .matrix_api import MissingCapability
 
+
+def tone_amplitudes(mono: Any, rate: int, frequencies: tuple[int, ...]) -> dict[str, float]:
+    """Mean Goertzel amplitude (full scale 1.0) of each frequency over consecutive 100 ms blocks.
+
+    Relayed audio arrives in packets whose phases need not line up; one coherent sum over
+    seconds would cancel a tone that is plainly audible, so each block is measured alone."""
+    size = rate // 10
+    blocks = [mono[start:start + size] for start in range(0, len(mono) - size + 1, size)] or [mono]
+    amplitudes = {}
+    for frequency in frequencies:
+        coefficient = 2 * math.cos(2 * math.pi * frequency / rate)
+        total = 0.0
+        for block in blocks:
+            previous = before_previous = 0.0
+            for value in block:
+                current = value + coefficient * previous - before_previous
+                before_previous, previous = previous, current
+            power = max(0.0, previous * previous + before_previous * before_previous
+                        - coefficient * previous * before_previous)
+            total += 2 * math.sqrt(power) / len(block) if len(block) else 0.0
+        amplitudes[str(frequency)] = total / len(blocks)
+    return amplitudes
+
+
 class SoundCapture:
+    """Record one private null sink's monitor; offsets mark measurement windows."""
     RATE = 48000
     BYTES_PER_FRAME = 8
 
-    def __init__(self, artifact_dir: Path):
-        self.path = artifact_dir / "audio.f32le"
-        self.sink = f"solaris_loader_gate_{os.getpid()}"
+    def __init__(self, artifact_dir: Path, sink: str | None = None,
+                 description: str = "SolarisLoaderGate"):
+        self.sink = sink or f"solaris_loader_gate_{os.getpid()}"
+        self.path = artifact_dir / ("audio.f32le" if sink is None else f"{sink}.f32le")
         self.module = subprocess.check_output([
             "pactl", "load-module", "module-null-sink", f"sink_name={self.sink}",
-            "rate=48000", "channels=2", "sink_properties=device.description=SolarisLoaderGate",
+            "rate=48000", "channels=2", f"sink_properties=device.description={description}",
         ], text=True).strip()
         self.condition = threading.Condition()
         self.written = 0
@@ -34,13 +60,22 @@ class SoundCapture:
             self.process = subprocess.Popen([
                 "parec", f"--device={self.sink}.monitor", "--format=float32le",
                 "--rate=48000", "--channels=2", "--latency-msec=20",
-            ], stdout=subprocess.PIPE, stderr=(artifact_dir / "audio-capture.log").open("wb"))
+            ], stdout=subprocess.PIPE, stderr=(artifact_dir / f"{self.sink}-capture.log").open("wb"))
             self.thread = threading.Thread(target=self._read, daemon=True)
             self.thread.start()
             self.sample(0.1)  # Readiness means actual monitor samples, not elapsed time.
         except BaseException:
+            self._record_graph(artifact_dir)
             self.close()
             raise
+
+    def _record_graph(self, artifact_dir: Path) -> None:
+        """Keep the graph next to the capture log when the monitor never became ready."""
+        with (artifact_dir / f"{self.sink}-graph.txt").open("w") as out:
+            out.write(f"parec returncode: {None if self.process is None else self.process.poll()}\n")
+            for command in (["pw-top", "-b", "-n", "2"], ["pactl", "list", "source-outputs"], ["pw-dump"]):
+                result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+                out.write(f"$ {' '.join(command)} (exit {result.returncode})\n{result.stdout}{result.stderr}\n")
 
     def _read(self) -> None:
         assert self.process is not None and self.process.stdout is not None
@@ -58,35 +93,38 @@ class SoundCapture:
                 self.ended = True
                 self.condition.notify_all()
 
-    def sample(self, seconds: float = 1.0) -> dict[str, Any]:
-        size = int(seconds * self.RATE) * self.BYTES_PER_FRAME
+    def position(self) -> int:
+        """Byte offset of the newest whole recorded frame."""
         with self.condition:
-            start = self.written - self.written % self.BYTES_PER_FRAME
-            deadline = time.monotonic() + 15
-            while self.written < start + size:
+            return self.written - self.written % self.BYTES_PER_FRAME
+
+    def wait_for(self, offset: int) -> None:
+        """Block until the monitor has delivered audio up to `offset`."""
+        with self.condition:
+            deadline = time.monotonic() + 15 + (offset - self.written) / (self.RATE * self.BYTES_PER_FRAME)
+            while self.written < offset:
                 if self.ended:
-                    raise RuntimeError(f"audio monitor stopped: {self.error}")
+                    raise RuntimeError(f"audio monitor {self.sink} stopped: {self.error}")
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise RuntimeError("audio monitor sample deadline elapsed")
+                    raise RuntimeError(f"audio monitor {self.sink} delivered no samples up to byte {offset}")
                 self.condition.wait(remaining)
+
+    def segment(self, start: int, end: int, frequencies: tuple[int, ...] = (440, 660)) -> dict[str, Any]:
+        """Measure the recorded window [start, end) of this sink."""
+        self.wait_for(end)
         with self.path.open("rb") as source:
             source.seek(start)
-            raw = source.read(size)
+            raw = source.read(end - start)
         samples = array.array("f", raw)
         mono = [(samples[i] + samples[i + 1]) * 0.5 for i in range(0, len(samples), 2)]
-        amplitudes = {}
-        for frequency in (440, 660):
-            coefficient = 2 * math.cos(2 * math.pi * frequency / self.RATE)
-            previous = before_previous = 0.0
-            for value in mono:
-                current = value + coefficient * previous - before_previous
-                before_previous, previous = previous, current
-            power = max(0.0, previous * previous + before_previous * before_previous
-                        - coefficient * previous * before_previous)
-            amplitudes[str(frequency)] = 2 * math.sqrt(power) / len(mono)
-        return {"byte_offset": start, "byte_length": size, "frames": len(mono),
-                "amplitude": amplitudes, "rms": math.sqrt(sum(value * value for value in mono) / len(mono))}
+        rms = math.sqrt(sum(value * value for value in mono) / len(mono)) if mono else 0.0
+        return {"byte_offset": start, "byte_length": end - start, "frames": len(mono),
+                "amplitude": tone_amplitudes(mono, self.RATE, frequencies), "rms": rms}
+
+    def sample(self, seconds: float = 1.0, frequencies: tuple[int, ...] = (440, 660)) -> dict[str, Any]:
+        start = self.position()
+        return self.segment(start, start + int(seconds * self.RATE) * self.BYTES_PER_FRAME, frequencies)
 
     def close(self) -> None:
         if self.process is not None:

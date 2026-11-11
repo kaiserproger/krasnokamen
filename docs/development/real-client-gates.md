@@ -271,10 +271,35 @@ An optional `--plugins-dir PATH` is copied into the isolated scene for either
 client; the harness never edits the source pack.
 For native scenes, `{"wait_loader_block":"namespace:id"}` waits for a
 hash-verified, acknowledged Loader block and records the full Loader receipt.
-For an SVC 26.3 lane, set `SOLARIS_SVC_MINECRAFT_VERSION=26.3` and
-`SOLARIS_SVC_JAR` to the pinned publisher jar; the Loader checkout and Minecraft
-client must also be 26.3. The default SVC artifact remains 26.1.2. Both size and
-publisher SHA-1/SHA-512 are checked before staging.
+
+## Screen sharing and voice
+
+`python3 -m tools.harness run screens-voice-qa --client native --windowed`
+runs both legs of `tools/harness/backends/screens_voice_qa.py` with the native
+env block above, `SOLARIS_SERVER_BINARY`, `SOLARIS_CLIENT_BINARY`,
+`SOLARIS_LOADER_ROOT` (a Loader checkout with the Fabric screen client) and
+`SOLARIS_SVC_JAR` (the pinned 26.1.2 Simple Voice Chat jar, verified against
+`svc-artifacts.json`). Plugins come from `--plugins-dir` or
+`$SOLARIS_WORK_ROOT/scenarios/live-plugins`; each server gets a private copy.
+The profile re-enters itself inside `screen_audio_graph.sh`, so every client
+plays and records only on the private graph; each client has its own Xvfb.
+
+- `screens`: a native owner shares the Test pattern with a 440 Hz tone; a
+  native viewer is denied (no capture, no frames), then allowed (frames and
+  audio); a Fabric Loader viewer is allowed and its real OpenAL output must
+  carry the tone; the native viewer then dies and respawns in the same
+  dimension and must keep the monitor and its frames.
+- `voice`: two Fabric SVC clients (440/660 Hz microphones) and a native
+  client (880 Hz) hear each other by proximity; the Fabric players then form a
+  NORMAL group through SVC's own screens and stand 200 blocks apart, still
+  hearing each other while the native beside the speaker hears nothing;
+  finally the native reconnects to a server with voice disabled and must drop
+  its voice state.
+
+`result.json` `details.verdicts` names each behaviour (ledger refs
+`harness:screens-voice-qa:<verdict>`); per-phase tone amplitudes, consent
+dialog text and screenshots are under `details.screens_voice`.
+`SCREENS_VOICE_QA_LEG=screens|voice` runs one leg while developing.
 
 `use_phases` (native only) takes `name` and `ticks` (1–100), holds use across
 start and hold captures, releases it even on failure, and requires the client's

@@ -810,7 +810,7 @@ repro = "manual"
 severity = "blocker"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LOADER-SOUND-MIXIN"
-regression = []
+regression = ["harness:screens-voice-qa:fabric_loader_plays_screen_audio"]
 
 [[bug]]
 id = "SERVER-FABRIC-SCREEN-ADMISSION"
@@ -830,7 +830,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#NATIVE-SCREEN-AUDIO-CONSENT"
-regression = []
+regression = ["harness:screens-voice-qa:owner_consent_names_app_audio", "harness:screens-voice-qa:owner_deny_sends_no_audio"]
 
 [[bug]]
 id = "HS-1"
@@ -1266,7 +1266,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-1"
-regression = []
+regression = ["harness:screens-voice-qa:native_voice_resets_on_non_voice_server"]
 
 [[bug]]
 id = "HC-2"
@@ -1306,7 +1306,7 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P3"
-regression = []
+regression = ["harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn"]
 
 [[bug]]
 id = "PICK-SERVER"
@@ -1601,7 +1601,7 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SVC-BRIDGE"
-regression = ["cargo:mc-edge:svc_service::tests::svc_group_audio_stays_inside_the_password_protected_group"]
+regression = ["cargo:mc-edge:svc_service::tests::svc_group_audio_stays_inside_the_password_protected_group", "harness:screens-voice-qa:svc_proximity_fabric_to_fabric", "harness:screens-voice-qa:svc_group_fabric_to_fabric", "harness:screens-voice-qa:native_outsider_hears_no_group_audio"]
 fix_commit = "20bfb62a"
 
 [[bug]]
