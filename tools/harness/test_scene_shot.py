@@ -172,14 +172,14 @@ class SceneShotTests(unittest.TestCase):
                 d.rectangle((335, 640, 395, 700), fill=(200, 200, 180))
                 d.line((426, 498, 449, 487), fill=(200, 40, 40), width=3)
                 d.line((1001, 488, 1024, 498), fill=(200, 40, 40), width=3)
-                d.line((340, 695, 390, 645), fill=(40, 40, 40), width=3)
+                d.line((340, 695, 375, 668), fill=(40, 40, 40), width=3)
             def night(d):
                 for box in clock_boxes:
                     d.rectangle(box, fill=(200, 30, 30))
                 d.rectangle((335, 640, 395, 700), fill=(200, 200, 180))
                 d.line((426, 498, 449, 487), fill=(200, 40, 40), width=3)
                 d.line((1001, 488, 1024, 498), fill=(200, 40, 40), width=3)
-                d.line((340, 645, 390, 695), fill=(40, 40, 40), width=3)
+                d.line((340, 645, 375, 672), fill=(40, 40, 40), width=3)
             for name, time_of_day, draw in (("ctx-day", "1000", day), ("ctx-night", "13000", night),
                                            ("compass-day", "1000", day)):
                 frame = {"gpu_completion": True, "camera_position": cam, "yaw": 0, "pitch": 0,

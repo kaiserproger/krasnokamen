@@ -828,17 +828,15 @@ def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:
                 shots["ctx-day"][0]["environment"]["time_of_day"] == "1000"
                 and shots["ctx-night"][0]["environment"]["time_of_day"] == "13000"
                 and shots["compass-day"][0]["environment"]["time_of_day"] == "1000")
-    def axis_angle(points):
+    def needle_angle(points, w, h):
         cx = sum(p[0] for p in points) / len(points)
         cy = sum(p[1] for p in points) / len(points)
-        sxx = sum((x - cx) ** 2 for x, _ in points) / len(points)
-        syy = sum((y - cy) ** 2 for _, y in points) / len(points)
-        sxy = sum((x - cx) * (y - cy) for x, y in points) / len(points)
-        return math.degrees(0.5 * math.atan2(2 * sxy, sxx - syy))
+        return math.degrees(math.atan2(-(cy - h / 2), cx - w / 2))
 
-    def axis_diff(a, b):
-        d = abs(a - b) % 180.0
-        return min(d, 180.0 - d)
+    def angle_diff(a, b):
+        d = abs(a - b) % 360.0
+        return min(d, 360.0 - d)
+
 
     blue = lambda r, g, b: b > r * 1.35 and b > g * 1.15 and b > 15
     day, night = shots["ctx-day"][1], shots["ctx-night"][1]
@@ -863,9 +861,9 @@ def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:
         px = [(x, y) for y in range(h) for x in range(w) if dark(*crop.getpixel((x, y)))]
         probe.report[f"dropped_clock_dark_pixels_{name}"] = len(px)
         probe.check(f"dropped_clock_face_{name}", len(px) >= 100)
-        drop_angles.append(axis_angle(px))
-    probe.report["dropped_clock_axis_angles"] = [round(a, 1) for a in drop_angles]
-    probe.check("dropped_clock_face_changed", axis_diff(drop_angles[0], drop_angles[1]) > 30.0)
+        drop_angles.append(needle_angle(px, w, h))
+    probe.report["dropped_clock_angles"] = [round(a, 1) for a in drop_angles]
+    probe.check("dropped_clock_face_changed", angle_diff(drop_angles[0], drop_angles[1]) > 30.0)
     red = lambda r, g, b: r > g * 1.25 and r > b * 1.25 and r > 50
     comp = shots["compass-day"][1]
     angles = []
@@ -875,9 +873,9 @@ def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:
         px = [(x, y) for y in range(h) for x in range(w) if red(*crop.getpixel((x, y)))]
         probe.report[f"{name}_needle_pixels"] = len(px)
         probe.check(f"{name}_needle_visible", len(px) >= 50)
-        angles.append(axis_angle(px))
-    probe.report["compass_needle_axis_angles"] = [round(a, 1) for a in angles]
-    probe.check("compass_needle_follows_position", axis_diff(angles[0], angles[1]) > 30.0)
+        angles.append(needle_angle(px, w, h))
+    probe.report["compass_needle_angles"] = [round(a, 1) for a in angles]
+    probe.check("compass_needle_follows_position", angle_diff(angles[0], angles[1]) > 30.0)
     probe.report["visual_review_required"] = [
         "Inspect ctx-day/ctx-night/compass-day frames; mask predicates do not prove vanilla needle parity."
     ]
