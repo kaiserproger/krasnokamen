@@ -406,6 +406,26 @@ impl TrackedEntity {
     }
 }
 
+/// Point the passengers of tracked `vehicle` at it, replacing the entries of
+/// its `old` passengers. Every change to a tracked appearance goes through
+/// here, so the map holds exactly the passengers of the vehicles a viewer
+/// tracks ([`ViewerState::vehicles`]).
+fn relink_passengers(
+    vehicles: &mut HashMap<EntityId, EntityId>,
+    vehicle: EntityId,
+    old: &[EntityId],
+    new: &[EntityId],
+) {
+    for passenger in old {
+        if vehicles.get(passenger) == Some(&vehicle) {
+            vehicles.remove(passenger);
+        }
+    }
+    for &passenger in new {
+        vehicles.insert(passenger, vehicle);
+    }
+}
+
 /// Per-viewer cached world view. Tracks what this connection already has so
 /// planning emits only deltas. Teleport ids are allocated by the core.
 #[derive(Debug)]
@@ -434,6 +454,10 @@ pub struct ViewerState {
     border_baseline: Option<mc_core::command_border::Border>,
     /// Includes the self appearance baseline, but self is never spawned/removed.
     pub(crate) tracked_entities: HashMap<EntityId, TrackedEntity>,
+    /// Passenger -> vehicle for the passengers of the vehicles in
+    /// `tracked_entities`, as last sent; a passenger keeps its entry while it
+    /// is out of view, so its pairing can mount it when it comes back.
+    vehicles: HashMap<EntityId, EntityId>,
     /// Player-only identity baselines, changed by reliable roster events, not
     /// per-entity tick work. Authentication may replace a provisional UUID.
     pub(crate) player_profiles: HashMap<EntityId, uuid::Uuid>,
@@ -508,6 +532,7 @@ impl ViewerState {
             boss_baseline: crate::boss_bars::BossBaseline::default(),
             border_baseline: None,
             tracked_entities: HashMap::default(),
+            vehicles: HashMap::default(),
             player_profiles: HashMap::default(),
             plan_stamp: 0,
             entity_tick: None,
@@ -572,6 +597,37 @@ impl ViewerState {
                 })
             })
     }
+
+    /// Record `entity` as delivered with its current appearance.
+    fn track(&mut self, entity: &EntityView) {
+        let old = self.tracked_entities.insert(
+            entity.id,
+            TrackedEntity::new(entity, self.plan_stamp, self.entity_round),
+        );
+        relink_passengers(
+            &mut self.vehicles,
+            entity.id,
+            old.as_ref()
+                .map_or(&[][..], |old| old.appearance.passengers.as_slice()),
+            &entity.appearance.passengers,
+        );
+    }
+
+    /// Forget a delivered entity and the passenger entries it owned; false
+    /// when it was not tracked.
+    fn untrack(&mut self, id: EntityId) -> bool {
+        let Some(old) = self.tracked_entities.remove(&id) else {
+            return false;
+        };
+        relink_passengers(&mut self.vehicles, id, &old.appearance.passengers, &[]);
+        true
+    }
+
+    /// The client holds no entity of this view any more.
+    fn untrack_all(&mut self) {
+        self.tracked_entities.clear();
+        self.vehicles.clear();
+    }
 }
 
 /// Remove every held entity and forget every held chunk, within credit.
@@ -606,7 +662,7 @@ fn forget_everything(
             return false;
         }
     }
-    viewer.tracked_entities.clear();
+    viewer.untrack_all();
     viewer.entity_tick = None;
     viewer.entity_interest = entity_interest::EntityInterest::default();
     scratch.chunks.clear();
@@ -1560,7 +1616,7 @@ fn plan_entities(
             removals_deferred = 0;
             for &id in &packet.entity_ids {
                 let id = EntityId(id);
-                viewer.tracked_entities.remove(&id);
+                viewer.untrack(id);
                 interest.removed(id);
             }
         }
@@ -1589,9 +1645,7 @@ fn plan_entities(
             )
         })
     {
-        viewer
-            .tracked_entities
-            .insert(own.id, TrackedEntity::new(own, viewer.plan_stamp, round));
+        viewer.track(own);
     }
     interest.spawned(viewer.entity_id);
 
@@ -1611,6 +1665,22 @@ fn plan_entities(
     for &(id, _) in &scratch.spawns {
         let entity = snapshot.entities.get(id).expect("live spawn");
         let position = entity_spawn_position(entity);
+        // A passenger's pairing ends with its vehicle's passengers (vanilla
+        // `ServerEntity.sendPairingData`, the `isPassenger` branch): the client
+        // skips passenger ids it does not know yet, so a rider that comes into
+        // view after its vehicle is mounted only by this packet.
+        let vehicle = viewer.vehicles.get(&id).map(|vehicle| {
+            let tracked = &viewer.tracked_entities[vehicle];
+            mc_protocol::packets::play::ClientboundSetPassengers {
+                vehicle_id: vehicle.0,
+                passenger_ids: tracked
+                    .appearance
+                    .passengers
+                    .iter()
+                    .map(|id| id.0)
+                    .collect(),
+            }
+        });
         let spawned = try_push(out, credit, |out| {
             push_best_effort(
                 out,
@@ -1630,14 +1700,14 @@ fn plan_entities(
                 },
             );
             push_appearance(out, conn, entity, None);
+            if let Some(link) = &vehicle {
+                push_best_effort(out, conn, link);
+            }
         });
         if !spawned {
             break;
         }
-        viewer.tracked_entities.insert(
-            entity.id,
-            TrackedEntity::new(entity, viewer.plan_stamp, round),
-        );
+        viewer.track(entity);
         interest.spawned(entity.id);
         spawns_sent += 1;
     }
@@ -1725,6 +1795,12 @@ fn plan_entities(
             break;
         }
         if update.stale {
+            relink_passengers(
+                &mut viewer.vehicles,
+                update.id,
+                &tracked.appearance.passengers,
+                &entity.appearance.passengers,
+            );
             tracked.appearance = Arc::clone(&entity.appearance);
         }
         if let Some(packet) = update.movement {
