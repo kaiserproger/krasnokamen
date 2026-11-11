@@ -3834,6 +3834,20 @@ regression = [
 ]
 
 [[bug]]
+id = "CIV-SEED24-HOUSE-BED-IRON-NEVER-SMELTED"
+title = "Seed-24 town never smelts the stocked raw iron for shears, so the House bed and every later birth wait forever."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa 20261111T200623-90d4lq2w on 5ae49587, 96,000 sprint ticks: wood was not the blocker (64 birch logs by sprint 1200, 148 at the end), the town furnace at [134,78,-217] stayed empty in all 41 reads while 8 raw iron and 7-13 coal sat in storage, and the House stayed 'White Bed 0/1 awaiting production' behind funded mason, lumber camp, mine and road projects. construction::iron_demand returned only the active project's bill (no iron), and only unemployed residents or shepherds loaded ore; the one unemployed adult died to a zombie at tick 7536, leaving a lumberjack, a miner, a builder and two nitwits."
+failing_first = "not recorded"
+regression = [
+  "cargo:mc-core:settlements::construction::planner_tests::funded_project_keeps_iron_demand_for_the_skipped_house_bed",
+  "cargo:mc-core:villager::smelting_tests::employed_miner_smelts_construction_iron_through_native_ticks",
+]
+
+[[bug]]
 id = "TICK-FROZEN-GAME-AGE-WIRE"
 title = "SET_TIME advances client game age during tick freeze by sending the WAL frame counter"
 area = "gameplay"

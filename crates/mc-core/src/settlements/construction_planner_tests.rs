@@ -1247,6 +1247,38 @@ fn unfunded_house_skips_to_funded_farm_without_debiting_stock() {
     );
 }
 
+/// Seed-24 civilization run 90d4lq2w: a funded mason, lumber camp and mine ran
+/// back to back for 96,000 ticks while the house waited on its bed, and the
+/// town furnace never received the 8 stocked raw iron for the shears.
+#[test]
+fn funded_project_keeps_iron_demand_for_the_skipped_house_bed() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "storage", 1, None);
+    fund(&mut state, "storage", 1);
+    complete(&mut state, id, slot);
+    fund(&mut state, "farm", 1);
+    let idle = iron_demand(&state, id, None);
+    assert_eq!(idle, 2, "the unfunded house bed needs shears");
+    plan_until_started(&mut state, id);
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .expect("funded farm starts")
+            .blueprint,
+        "farm"
+    );
+    assert_eq!(
+        iron_demand(&state, id, None),
+        idle,
+        "an active farm without iron must not cancel the skipped house's shears"
+    );
+}
+
 #[test]
 fn funded_house_retains_priority_over_later_needs() {
     let (mut state, id, slot) = fixture();
