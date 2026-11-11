@@ -174,7 +174,7 @@ fn named_damage_identities_reach_committed_events() {
     ] {
         let (mut state, actor, _) = crate::hostile_tests::setup(8.0);
         let before = state.players[&actor].vitals.health;
-        let identity = mc_data::Identifier::parse(&format!("minecraft:{name}")).unwrap();
+        let identity = mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap();
         let type_id = mc_data::required_registry_entry_id("damage_type", &identity).unwrap() as i32;
         let changes = run(&mut state, actor, &format!("damage @s 2 {identity}"));
         assert_eq!(state.players[&actor].vitals.health, before - 2.0, "{name}");
