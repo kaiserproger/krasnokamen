@@ -638,6 +638,12 @@ pub(super) fn tick_players(
         let Some(slot) = state.entities.slot_of(entity) else {
             continue;
         };
+        // Vanilla LivingEntity.rideTick resets a passenger's fall distance every tick.
+        if crate::mounts::vehicle(state, entity).is_some()
+            && let Some(player) = state.players.get_mut(&entity)
+        {
+            player.fall_distance = 0.0;
+        }
         elytra::tick(state, entity);
         let bundle_in_use = state
             .players

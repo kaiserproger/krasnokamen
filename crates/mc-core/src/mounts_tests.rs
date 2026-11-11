@@ -476,6 +476,21 @@ fn mounted_packet_burst_has_one_displacement_budget_without_success_corrections(
 }
 
 #[test]
+fn riding_player_fall_distance_resets_every_tick_like_vanilla_ride_tick() {
+    let (mut state, actor, pos) = fixture();
+    let pig = spawn(&mut state, "pig", pos);
+    equip(&mut state, actor, pig, "saddle");
+    run_tick(&mut state, &[use_entity(pig)]);
+    assert!(crate::mounts::vehicle(&state, actor).is_some());
+    // The join teleport is still unacknowledged, so no movement input is
+    // accepted: the reset must come from the tick itself, not from a packet.
+    assert!(state.players[&actor].awaiting_teleport.is_some());
+    state.players.get_mut(&actor).unwrap().fall_distance = 12.0;
+    run_tick(&mut state, &[]);
+    assert_eq!(state.players[&actor].fall_distance, 0.0);
+}
+
+#[test]
 fn rider_eject_and_respawn_clear_both_links_and_steering_input() {
     let (mut state, actor, pos) = fixture();
     let pig = spawn(&mut state, "pig", pos);
