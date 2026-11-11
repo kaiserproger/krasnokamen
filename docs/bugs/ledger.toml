@@ -3496,6 +3496,16 @@ source = "/run/media/kaiserroman/games/solaris-work/receipts/MapMarkers (agent f
 regression = []
 
 [[bug]]
+id = "NATIVE-DEATH-TILT-PIVOT"
+title = "The native client tilts a dying living entity about the model origin on a sqrt(t/20) curve, so the body turns about chest height and the upright legs lift off the ground; vanilla LivingEntityRenderer.setupRotations turns about the feet with min(sqrt((deathTime-1)/20*1.6),1) * flipDegrees (180 for spider, cave spider, silverfish, endermite). The local avatar never tilted because local.rs reset its death tick every tick."
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/BvDeathTilt (native scene-shot base vs candidate, death-tilt-base-vs-candidate.png; fix death-tilt.patch 642165ec on client wt/ClientBattleIntegration 45ceeaf with entities::animation_tests::death_tilt_turns_about_the_feet_on_the_vanilla_curve and entities::crowd::tests::dying_crowd_instances_tilt_about_the_feet_like_the_cpu_pose)"
+regression = []
+
+[[bug]]
 id = "NATIVE-POTION-IMPACT-EFFECT"
 title = "The native client ignores splash/lingering potion impact level events (2002/2007): src/session/packets.rs:518 routes LevelEvent to present_block_break and block_effects.rs:10 accepts only 2001, so impact particles and custom colors never appear."
 area = "client"
