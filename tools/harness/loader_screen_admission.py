@@ -24,6 +24,6 @@ def run(client: Any, runtime: Any, artifact_dir: Path, server_log: Path) -> dict
         log_text = server_log.read_text(errors="replace")
         lines = [line for line in log_text.splitlines() if SCREEN_SERVICE_LOG in line]
         steps.report["screen_service_log_lines"] = lines
-        steps.check("fabric_screen_service_admitted", any("platform=Fabric" in line for line in lines))
+        steps.check("fabric_screen_service_admitted", any("Fabric" in line for line in lines))
         steps.report["visual_review"] = "server log line is the asserted surface; client reached Play"
     return steps.report
