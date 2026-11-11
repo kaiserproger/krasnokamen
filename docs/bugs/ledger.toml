@@ -3548,11 +3548,12 @@ title = "A new world whose first start is stopped before the initial checkpoint 
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Windows 11 VM, RC5 release build: world 'rc5 world' timed out at 180 s under host load, then 'Server exited during startup' (receipts/WinLease, winvm/shared/rc5-server.log)"
 regression = ["cargo:mc-core:core::native_checkpoint_crash_tests::first_start_stopped_before_its_initial_checkpoint_reopens_as_a_new_world", "harness:singleplayer-regressions:native-world-first-start-interrupted"]
-fix_commit = "922d9dd6"
+fix_commit = "patch:f04c88996f254f5477db049b6bbbaa06e428ac9d4aa95772a0919dd3a5abd7c5"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/WORLD-FIRST-START-INTERRUPTED.json"
 
 [[bug]]
 id = "WINDOWS-BACKUP-CONVERSION"
