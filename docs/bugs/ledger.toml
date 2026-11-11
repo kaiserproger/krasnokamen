@@ -4188,8 +4188,9 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "Probe of every DamageKind through the real death path (HarnessRows): death_message.rs maps message ids to camelCase keys but omits outside_border; en_us.json has no death.attack.outside_border."
-regression = []
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::parity_death_message_keys_match_the_damage_type_registry_and_language_file"]
 failing_first = "reported"
+fix_commit = "da9bca085da0c0c542cac42f95f38b373849bd99"
 
 [[bug]]
 id = "HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL"
@@ -4203,12 +4204,13 @@ regression = []
 failing_first = "reported"
 
 [[bug]]
-id = "HARNESS-DAMAGE-GATE-SPLASH-ROW-BURNING"
-title = "native-v2-p4-damage splash-potion row times out: in the observed window the player is still burning (only minecraft:on_fire wire events, health falls 1 per second) and no minecraft:indirect_magic event arrives; the row passed once (20261111T151144) and failed twice"
+id = "CREATIVE-PLAYER-FIRE-NEVER-DOUSED"
+title = "A burning player in creative or spectator mode keeps burning: contact_hazards skips the whole fire clock for immune players, so water neither douses it nor does it tick down, and damage resumes in survival"
 area = "gameplay"
 repro = "client"
 severity = "major"
 status = "open"
-source = "20261111T144354-native-v2-p4-damage-uxdbw87g and 20261111T151955-native-v2-p4-damage-wtrafs5z (scenario.json damage_wire_on_timeout lists 13 on_fire events and nothing else). Owner undetermined: either the water extinguish before the row does not clear fire ticks (core/harness) or the thrown harming splash applies no damage to its thrower at pitch 90 (core projectiles/payloads.rs apply_potion)."
-regression = []
+source = "native-v2-p4-damage splash row: receipts 20261111T144354-native-v2-p4-damage-uxdbw87g and 20261111T151955-native-v2-p4-damage-wtrafs5z show only minecraft:on_fire wire events after a water fill in creative. Core splash_harming_thrown_at_own_feet passes, so the potion path was not the owner."
+regression = ["cargo:mc-core:contact_hazards_tests::creative_player_burn_clock_runs_and_water_douses_it"]
+fix_commit = "da9bca085da0c0c542cac42f95f38b373849bd99"
 failing_first = "reported"
