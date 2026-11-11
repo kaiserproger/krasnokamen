@@ -370,10 +370,10 @@ pub(crate) fn command(
             return crate::command_storage::command(state, context, input);
         }
         (Some("merge" | "modify" | "remove"), Some("entity")) => {
-            return crate::command_entity_data::command(state, context, input);
+            return entity::command(state, context, input);
         }
         (Some("merge" | "modify" | "remove"), Some("block")) => {
-            return crate::command_block_data::command(state, context, input);
+            return block::command(state, context, input);
         }
         (Some("get"), _) => {}
         _ => {
@@ -394,6 +394,9 @@ pub(crate) fn command(
         }
     }
 }
+
+mod block;
+mod entity;
 
 #[cfg(test)]
 #[path = "command_data_tests.rs"]
