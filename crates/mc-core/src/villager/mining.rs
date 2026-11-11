@@ -635,10 +635,28 @@ fn open_and_dry(state: &TickState, current: BlockPos, height: i32) -> bool {
 }
 
 /// A hostile mob within its sensor reach of `cell` (plus the cell's own height
-/// and the miner's dig reach). It never has to reach the miner: residents panic
-/// at any hostile in range (a zombie in a cave under the quarry), so the miner
-/// would flee back and forth from a cell it can never dig.
-fn hostile_near(state: &TickState, cell: BlockPos) -> bool {
+/// and the miner's dig reach) that the miner would meet there: residents panic
+/// at a hostile they can see, so the miner would flee back and forth from a
+/// cell it can never dig. It counts while it is visible from `stand` (where
+/// the miner works) or lies in the quarry, where digging opens its cave. One
+/// sealed in rock outside the quarry never meets the miner and must not park it.
+fn hostile_near(
+    state: &TickState,
+    bounds: ScriptWorldBounds,
+    cell: BlockPos,
+    stand: BlockPos,
+) -> bool {
+    let eye = [
+        f64::from(stand.x) + 0.5,
+        f64::from(stand.y) + 1.62,
+        f64::from(stand.z) + 0.5,
+    ];
+    let quarry = |at: [f64; 3]| {
+        (0..3).all(|axis| {
+            let n = at[axis].floor() as i32;
+            n >= bounds.min[axis] - 1 && n <= bounds.max[axis] + 1
+        })
+    };
     let centre = [
         f64::from(cell.x) + 0.5,
         f64::from(cell.y) + 0.5,
@@ -672,6 +690,12 @@ fn hostile_near(state: &TickState, cell: BlockPos) -> bool {
                     + (at[1] - centre[1]).powi(2)
                     + (at[2] - centre[2]).powi(2)
                     <= range * range
+                && (quarry(at)
+                    || crate::projectiles::flight::clear_segment(
+                        state,
+                        eye,
+                        [at[0], at[1] + 1.62, at[2]],
+                    ))
         })
 }
 
@@ -889,10 +913,10 @@ pub(super) fn work(
     if state.tick < v.harvest_at {
         return Some(previous);
     }
-    let hostile = hostile_near(state, current);
+    let hostile = hostile_near(state, bounds, current, previous);
     let walking = !hostile && !near(state, slot, current, 3.0);
     if hostile || walking {
-        // Villagers panic at any hostile in range, so the cell can never be
+        // Villagers panic at a hostile they meet, so the cell can never be
         // dug while it stays; a route may also be impossible (a pit under a
         // level's row, a pocket). Give it time, then close the lane.
         if v.mining_progress.stalled_since == 0 {

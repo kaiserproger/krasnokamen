@@ -1136,6 +1136,62 @@ fn miner_gives_up_a_lane_after_a_hostile_outstays_its_patience() {
     panic!("the miner stayed parked behind a hostile that never leaves");
 }
 
+/// village-qa u2wl2u3f: a zombie villager sealed in rock beside the quarry, nine
+/// blocks under the miner and within sensor reach of the first dig cell, parked
+/// the miner for the whole day. Digging never opens its pocket and no resident
+/// can see it, so it must not stop the mine.
+#[test]
+fn hostile_sealed_in_rock_outside_the_quarry_does_not_stop_the_miner() {
+    let (mut state, slot, mut v) = fixture(BuildingKind::Mine);
+    let air = state.registry.states.air;
+    let old = v.job_site.unwrap();
+    state.world.set_block(old.x, old.y, old.z, air);
+    let job = BlockPos { x: 4, y: 201, z: 3 };
+    let station = block(&state, "crafting_table");
+    state.world.set_block(job.x, job.y, job.z, station);
+    v.job_site = Some(job);
+    let settlement = v.settlement.unwrap();
+    for building in state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .buildings
+        .values_mut()
+    {
+        building.bounds = ScriptWorldBounds::new([3, 192, 1], [14, 204, 14]).unwrap();
+        building.work_points = vec![[job.x, job.y, job.z]];
+    }
+    let zombie_villager = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:zombie_villager").unwrap())
+        .unwrap();
+    state.spawn_mob(zombie_villager, [0.5, 192.0, 3.5], 20.0);
+    let mut changes = ChangeSet::default();
+    for step in 0..200u64 {
+        state.tick = step * 20;
+        if let Some(target) = mining::work(&mut state, slot, &mut v, &mut changes) {
+            state.entities.set_pos(
+                slot,
+                [
+                    f64::from(target.x) + 0.5,
+                    f64::from(target.y),
+                    f64::from(target.z) + 0.5,
+                ],
+            );
+        }
+        if !changes.blocks.is_empty() {
+            break;
+        }
+    }
+    assert!(
+        !changes.blocks.is_empty(),
+        "a sealed hostile outside the quarry parked the miner: lane {} stalled_since {}",
+        v.mining_progress.lane,
+        v.mining_progress.stalled_since
+    );
+}
+
 /// Routing to the solid dig cell lets the pathfinder's closest-point fallback
 /// lead the miner into whatever open pocket lies nearest to it (a lower level's
 /// row directly beneath), where it stands for good. A miner far from the open
