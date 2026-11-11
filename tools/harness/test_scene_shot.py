@@ -125,6 +125,43 @@ class SceneShotTests(unittest.TestCase):
             proxy.close()
             thread.join()
 
+    def test_tool_wall_visibility_requires_close_target_and_visible_tool(self):
+        from PIL import Image, ImageDraw
+
+        class Probe:
+            def __init__(self):
+                self.report = {}
+                self.distance = 0.5
+            def observe(self):
+                return {"target": {"block_id": "minecraft:obsidian",
+                                   "location": {"x": 0, "y": 0, "z": self.distance}},
+                        "selected_item": {"item_id": "minecraft:diamond_pickaxe"},
+                        "player": {"camera_position": [0, 0, 0]}}
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "screenshots").mkdir()
+            image = Image.new("RGB", (1280, 720), (10, 10, 20))
+            ImageDraw.Draw(image).rectangle((1000, 400, 1040, 440), fill=(5, 120, 120))
+            path = root / "screenshots" / "tool.png"
+            image.save(path)
+            probe = Probe()
+            scene_shot.validate_steps([{"tool_wall_visible": "tool"}], "native")
+            scene_shot.execute(probe, root, [{"tool_wall_visible": "tool"}])
+            probe.distance = 1.0
+            with self.assertRaisesRegex(AssertionError, "tool_wall_fixture"):
+                scene_shot.execute(probe, root, [{"tool_wall_visible": "tool"}])
+            probe.distance = 0.5
+            Image.new("RGB", (1280, 720), (10, 10, 20)).save(path)
+            with self.assertRaisesRegex(AssertionError, "tool_wall_visible"):
+                scene_shot.execute(probe, root, [{"tool_wall_visible": "tool"}])
+            Image.new("RGB", (1280, 720), (5, 120, 120)).save(path)
+            with self.assertRaisesRegex(AssertionError, "tool_wall_close_background"):
+                scene_shot.execute(probe, root, [{"tool_wall_visible": "tool"}])
+
     def test_walk_phase_rejects_idle_missing_and_wrong_phase(self):
         spec = {"name": "walk", "entity_type": "minecraft:zombie", "phase": 0.0,
                 "tolerance": 0.25, "min_speed": 0.1, "max_ticks": 30}
@@ -142,14 +179,16 @@ class SceneShotTests(unittest.TestCase):
         spec = {"name": "walk", "entity_type": "minecraft:zombie", "phase": 1.5,
                 "tolerance": 0.25, "min_speed": 0.1, "max_ticks": 30}
         entity = {"entity_type": "minecraft:zombie", "entity_uuid": "mob",
-                  "walk_position": 1.5, "walk_speed": 0.2}
+                  "walk_position": 1.4, "walk_speed": 0.2}
 
         class Probe:
             def __init__(self):
                 self.calls = 0
             def call(self, name, args):
+                if name == "minecraft_wait_ticks":
+                    raise AssertionError("capture should start at bracket entry without waiting")
                 self.calls += 1
-                return {"entities": [entity if self.calls == 1 else {**entity, "walk_position": 3.0}]}
+                return {"entities": [entity if self.calls == 1 else {**entity, "walk_position": 1.6}]}
             def check(self, name, value):
                 if not value:
                     raise AssertionError(name)
@@ -166,7 +205,20 @@ class SceneShotTests(unittest.TestCase):
                     write_frame(1.5)
                     self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
                     evidence = json.loads((root / "walk-walk.json").read_text())
-                    self.assertEqual(evidence["after"]["entities"][0]["walk_position"], 3.0)
+                    self.assertEqual(evidence["after"]["entities"][0]["walk_position"], 1.6)
+                    # A frame that lagged one tick step below the bracket still
+                    # matches the triggering observation and is accepted.
+                    write_frame(1.2)
+                    self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
+                    if client == "java":
+                        # Java render-state frames carry no entity uuid; a single
+                        # typed frame entity is matched by type.
+                        items = [{key: value for key, value in entity.items() if key != "entity_uuid"}
+                                 | {"walk_position": 1.2}]
+                        frame_path.write_text(json.dumps(items))
+                        self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
+                    # A frame outside the bracket and further from the observation
+                    # than one tick of walk advance is rejected.
                     write_frame(2.5)
                     with self.assertRaisesRegex(AssertionError, "walk_render_phase"):
                         scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client)

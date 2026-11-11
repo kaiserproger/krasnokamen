@@ -180,6 +180,22 @@ def png_size(path: str) -> tuple[int, int]:
         header = image.read(24)
     return int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
 
+def tool_wall_pixels(image: Path) -> tuple[int, int]:
+    """Count diamond-tool and dark wall pixels in the fixed close-wall scene."""
+    from PIL import Image
+
+    with Image.open(image) as source:
+        frame = source.convert("RGB")
+        if frame.size != WINDOW:
+            raise ValueError("tool-wall check requires a 1280x720 frame")
+        pixels = frame.crop((1000, 390, 1154, 535)).getdata()
+        tool = wall = 0
+        for r, g, b in pixels:
+            tool += g > 30 and b > 30 and g > r * 1.5 and b > r * 1.5 and abs(g - b) < 50
+            wall += max(r, g, b) < 45
+        return tool, wall
+
+
 
 def capture_java(probe: ProbeSteps, artifact: Path, name: str) -> str:
     path = java_p5.capture(probe, name)
@@ -266,7 +282,7 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
         if not isinstance(step, dict) or len(step) != 1:
             raise ValueError(f"invalid scene step: {step!r}")
         kind, value = next(iter(step.items()))
-        if kind in ("shot", "observe", "goat_horns_upright", "goat_side_horn"):
+        if kind in ("shot", "observe", "goat_horns_upright", "goat_side_horn", "tool_wall_visible"):
             valid = isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value)
         elif kind == "assert_chat":
             valid = (client == "native" and isinstance(value, dict)
@@ -479,9 +495,9 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             for _ in range(value["max_ticks"]):
                 before = probe.call("minecraft_list_entities", args)
                 candidate = matching_walk(before, value)
-                # The observation samples the end of the tick; rendering
-                # interpolates from the previous tick's smaller walk position.
-                if candidate and candidate["walk_position"] >= value["phase"]:
+                # Start as soon as the observation enters the bracket. Capture
+                # is asynchronous and can cross several client ticks.
+                if candidate:
                     break
                 probe.call("minecraft_wait_ticks", {"ticks": 1})
             else:
@@ -500,7 +516,30 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 json.dumps({"before": before, "after": after, "frame": frame,
                             "frame_path": str(frame_path), "spec": value}, indent=2) + "\n")
             probe.check(f"{value['name']}_same_entity", first is not None and len(same_entity) == 1)
-            probe.check(f"{value['name']}_render_phase", matching_walk(frame, value) is not None)
+            # The captured frame is the last presented render: it is sampled
+            # with partial-tick interpolation and can lag the triggering
+            # observation by up to one game tick of walk advance (about the
+            # observed walk speed). Accept a frame that still matches that
+            # observation within that allowance, even if it fell just below
+            # the bracket; a frame further off still fails.
+            frame_entity = None
+            lag_ok = False
+            if first is not None:
+                typed = [entity for entity in frame["entities"]
+                         if entity.get("entity_type") == value["entity_type"]]
+                if first.get("entity_uuid"):
+                    frame_entity = next((entity for entity in typed
+                                         if entity.get("entity_uuid") == first["entity_uuid"]), None)
+                if frame_entity is None and len(typed) == 1:
+                    # Java render-state frames carry no entity uuid.
+                    frame_entity = typed[0]
+                if frame_entity is not None and same_entity:
+                    step = max(0.0, float(same_entity[0]["walk_position"]) - float(first["walk_position"]))
+                    allowance = max(step, float(first.get("walk_speed") or 0.0),
+                                    float(frame_entity.get("walk_speed") or 0.0))
+                    lag_ok = abs(float(frame_entity["walk_position"]) - float(first["walk_position"])) <= allowance + 1e-9
+            probe.check(f"{value['name']}_render_phase",
+                        matching_walk(frame, value) is not None or lag_ok)
             shots.append(image)
         elif kind == "goat_horns_upright":
             from . import goat_horn_oracle
@@ -520,6 +559,20 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             edges = goat_horn_oracle.side_horn_left_edges(artifact / "screenshots" / f"{value}.png")
             probe.report["goat_side_horn_left_edges"] = edges
             probe.check("goat_side_horn_aligned", goat_horn_oracle.side_horn_aligned(edges))
+        elif kind == "tool_wall_visible":
+            state = probe.observe()
+            target = state.get("target") or {}
+            item = state.get("selected_item") or {}
+            player = state.get("player") or {}
+            eye = player.get("camera_position") or []
+            hit = target.get("location") or {}
+            distance = math.dist(eye, [hit.get(axis, math.inf) for axis in ("x", "y", "z")]) if len(eye) == 3 else math.inf
+            tool, wall = tool_wall_pixels(artifact / "screenshots" / f"{value}.png")
+            probe.report["tool_wall_pixels"] = {"tool": tool, "wall": wall, "distance": distance}
+            probe.check("tool_wall_fixture", target.get("block_id") == "minecraft:obsidian"
+                        and item.get("item_id") == "minecraft:diamond_pickaxe" and distance <= 0.6)
+            probe.check("tool_wall_close_background", wall >= 10000)
+            probe.check("tool_wall_visible", tool >= 500)
         elif kind == "cmd":
             wait_play(probe)
             probe.call("minecraft_send_chat", {"message": value, "command": True})

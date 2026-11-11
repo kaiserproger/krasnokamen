@@ -268,6 +268,12 @@ each one of `cmd`, `tp` (five coordinates), `look`, `hotbar`, `wait_ticks`, `wai
 defaults to 4, and `client_settings` accepts `graphics_preset`, `render_distance`
 and `fov` (default 70: the owner's saved fov is never inherited). PNG paths are
 recorded in `result.json`; settings and world are isolated per run.
+`tools/harness/tool_clipping_scene.json` captures the diamond pickaxe against
+obsidian from far and close positions, including held attack frames.
+`tool_wall_visible` checks the received target, selected tool and eye distance,
+then requires turquoise tool pixels over a dark wall in the fixed close-view
+frame. Inspect the attack frames separately; the pixel check covers rest only.
+
 
 `use_phases` (native only) takes `name` and `ticks` (1–100), holds use across
 start and hold captures, releases it even on failure, and requires the client's
