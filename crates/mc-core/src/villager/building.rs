@@ -14,6 +14,8 @@ use crate::tick::TickState;
 const MARGIN: i32 = 2;
 /// Placement reach from the builder's feet to the next cell.
 const REACH: f64 = 12.0;
+/// Felling and clearing reach from the builder's feet to the cell's footing.
+pub(super) const PREPARATION_REACH: f64 = 4.0;
 
 /// Containers are approached; a perimeter cell must actually be reached.
 pub(crate) struct WorkTarget {
@@ -71,6 +73,19 @@ fn preparation_target(
     project: &construction::Project,
     next: [i32; 3],
 ) -> Option<BlockPos> {
+    let base = preparation_footing(state, project, next)?;
+    preparation_stand(state, slot, project.settlement, next, base)
+}
+
+/// A dry, open footing near the cell `next` whose own footing is `base`.
+pub(super) fn preparation_stand(
+    state: &TickState,
+    slot: EntitySlot,
+    settlement: SettlementId,
+    next: [i32; 3],
+    base: BlockPos,
+) -> Option<BlockPos> {
+    let _ = base;
     let here = state.entities.pos(slot);
     let mut best: Option<(f64, BlockPos)> = None;
     for dx in -3_i32..=3 {
@@ -80,7 +95,7 @@ fn preparation_target(
             }
             let Some(at) = crate::settlements::forestry::footing(
                 state,
-                project.settlement,
+                settlement,
                 [next[0] + dx, next[1], next[2] + dz],
             ) else {
                 continue;
@@ -202,7 +217,7 @@ fn in_reach(
     if let Some(base) = preparation_footing(state, project, next) {
         // As with lumberjacks, felling is rooted at the trunk's footing; its
         // crown need not be reachable as an independently placed roof block.
-        return super::mining::near(state, slot, base, 4.0);
+        return super::mining::near(state, slot, base, PREPARATION_REACH);
     }
     let pos = state.entities.pos(slot);
     let width = state.entities.body(slot).half_width;
