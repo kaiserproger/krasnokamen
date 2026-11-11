@@ -17,6 +17,7 @@ then stages at the world spawn, which sits on the arena centre.
         --run-dir /abs/new-dir [--seed 42] [--world-seed 42] [--no-decor]
 """
 import argparse
+import functools
 import hashlib
 import json
 import socket
@@ -34,10 +35,10 @@ FLAT = 200  # nothing but flat grass within |x|,|z| < FLAT (battle bounds are +-
 LOAD_HALF = 288  # force-loaded square: arena plus a ring cleared of natural entities
 BASE_Y = 30  # dirt fill starts here; seabed or caves below are invisible
 CLEAR_TOP = 162  # air up to here; verification proves nothing natural above
-STEPS = 8  # rim terraces, 1 block high each
-STEP_W = 7
+STEPS = 5  # rim terraces, 1 block high each
+STEP_W = 11
 SEGMENT = 16
-HILL = {"x": 226, "z": -60, "radius": 24, "height": 14}
+HILL = {"x": 228, "z": -60, "radius": 26, "height": 12}
 FILL_LIMIT = 4_194_304
 DECOR_TUFTS = 1200
 DECOR_FLOWERS = 240
@@ -60,8 +61,8 @@ def mix(*values):
 
 def rim_start(seed, side, segment, step):
     """First distance from the centre line (in blocks) of a terrace on one side."""
-    wobble = mix(seed, 1, side, segment, step) % 5 - 2
-    return FLAT + 2 + STEP_W * (step - 1) + wobble
+    wobble = mix(seed, 1, side, segment, step) % 7 - 3
+    return FLAT + 3 + STEP_W * (step - 1) + wobble
 
 
 def side_of(x, z):
@@ -84,13 +85,17 @@ def rim_level(seed, x, z):
     return level
 
 
-def hill_layers():
+@functools.lru_cache(maxsize=None)
+def hill_layers(seed):
     """Per layer j=1..height: rectangles (half widths) approximating a rounded dome.
 
-    The profile is a smoothstep fall-off, so the steepest slope stays near 45 degrees.
+    The profile is a smoothstep fall-off, so the steepest slope stays near 45 degrees;
+    a seeded jitter on each half width (never growing with height) keeps the dome from
+    reading as concentric rings.
     """
     height, radius = HILL["height"], HILL["radius"]
     layers = []
+    previous = None
     for j in range(1, height + 1):
         want = 1.0 - (j - 0.5) / height  # smoothstep value at the layer's outer edge
         lo, hi = 0.0, 1.0
@@ -101,26 +106,29 @@ def hill_layers():
             else:
                 lo = mid
         r = int(radius * lo + 0.5)
-        if r < 1:
+        if r < 2:
             break
-        layers.append((j, [(r, max(1, int(r * 0.41))), (max(1, int(r * 0.41)), r), (int(r * 0.8), int(r * 0.8))]))
+        halves = [(r, max(1, int(r * 0.41))), (max(1, int(r * 0.41)), r), (int(r * 0.8), int(r * 0.8))]
+        halves = [(a + mix(seed, 8, j, i, 0) % 3 - 1, b + mix(seed, 8, j, i, 1) % 3 - 1) for i, (a, b) in enumerate(halves)]
+        halves = [(max(1, a), max(1, b)) for a, b in halves]
+        if previous:
+            halves = [(min(a, pa), min(b, pb)) for (a, b), (pa, pb) in zip(halves, previous)]
+        previous = halves
+        layers.append((j, halves))
     return layers
 
 
-HILL_LAYERS = hill_layers()
-
-
-def hill_level(x, z):
+def hill_level(seed, x, z):
     dx, dz = abs(x - HILL["x"]), abs(z - HILL["z"])
     level = 0
-    for j, rects in HILL_LAYERS:
+    for j, rects in hill_layers(seed):
         if any(dx <= a and dz <= b for a, b in rects):
             level = j
     return level
 
 
 def surface(seed, x, z):
-    return GRASS_Y + max(rim_level(seed, x, z), hill_level(x, z))
+    return GRASS_Y + max(rim_level(seed, x, z), hill_level(seed, x, z))
 
 
 def place_features(seed):
@@ -207,7 +215,7 @@ def plan(seed, decor=True):
             add("rim", fill((east, y, s0), (hi, y, s1), "minecraft:grass_block"))
             west = rim_start(seed, 3, segment, step)
             add("rim", fill((lo, y, s0), (-west - 1, y, s1), "minecraft:grass_block"))
-    for j, rects in HILL_LAYERS:
+    for j, rects in hill_layers(seed):
         y = GRASS_Y + j
         for a, b in rects:
             add("hill", fill((HILL["x"] - a, y, HILL["z"] - b), (HILL["x"] + a, y, HILL["z"] + b), "minecraft:grass_block"))
