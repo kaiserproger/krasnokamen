@@ -5,7 +5,7 @@ use crate::commands::CommandError;
 use crate::tick::TickState;
 use mc_nbt::{tag_type, ListTag, Tag};
 
-const OWNER: &str = "solaris:battle";
+pub(super) const OWNER: &str = "solaris:battle";
 const TICKET_RADIUS: i32 = 12;
 const MAX_SIDE: usize = 10_000;
 
@@ -80,20 +80,38 @@ fn plan(seed: u64, count: usize, origin: [f64; 3], side: u16) -> Vec<(RegimentSp
         };
         result.push((spec, kind, size));
     };
-    let flank = front.len() as f64 * 15.0 + 25.0;
-    add(Kind::Cavalry, cavalry / 2, -flank, 36.0, 20);
+    // Fit 322 front files inside the existing ticket even at a chunk edge;
+    // mounted files remain on the flanks, just behind the shallower foot.
+    let flank = front.len().saturating_sub(1) as f64 * 23.0 + 4.0;
+    add(Kind::Cavalry, cavalry / 2, -flank, 84.0, 20);
     for (index, &(kind, size)) in front.iter().enumerate() {
-        let x = (index as f64 - (front.len() - 1) as f64 / 2.0) * 30.0;
-        add(kind, size, x, 36.0, 25);
+        let x = (index as f64 - (front.len() - 1) as f64 / 2.0) * 46.0;
+        add(kind, size, x, 36.0, 46);
     }
     let archer_regiments = archers.div_ceil(1000);
     for index in 0..archer_regiments {
         let size = (archers - index * 1000).min(1000);
         let x = (index as f64 - (archer_regiments - 1) as f64 / 2.0) * 52.0;
-        add(Kind::Archer, size, x, 125.0, 50);
+        add(Kind::Archer, size, x, 120.0, 50);
     }
-    add(Kind::Cavalry, cavalry - cavalry / 2, flank, 36.0, 20);
+    add(Kind::Cavalry, cavalry - cavalry / 2, flank, 84.0, 20);
     result
+}
+
+/// Pursue routed opponents without disabling the pulse-based fight beforehand.
+pub(super) fn update_orders(formation: &mut crate::battle::formation::FormationRuntime) {
+    for index in 0..formation.regiments.len() {
+        let regiment = &formation.regiments[index];
+        let order = match (regiment.spec.order, regiment.enemy_routing, regiment.morale.broken) {
+            (Order::Advance, true, false) => Some(Order::Pursue),
+            (Order::Pursue, false, _) | (Order::Pursue, _, true) => Some(Order::Advance),
+            _ => None,
+        };
+        if let Some(order) = order {
+            let id = regiment.spec.id;
+            formation.set_order(id, order);
+        }
+    }
 }
 
 
