@@ -4259,8 +4259,9 @@ title = "A Loader client stalled for tens of seconds after the manifest (verifyi
 area = "gameplay"
 repro = "cargo"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "loader-live run 20261111T154235-loader-fabric-screen-admission-4rd2c0iz: server.log connection=2 stage=configuration error=read timed out in Configuration; client.log disconnect reason 'Loader negotiation failed: read timed out in Configuration' (copied to <work>/receipts/LoaderLivePromote/flake-run-20261111T154235)"
 regression = ["cargo:mc-edge:configuration::tests::loader_negotiation_keeps_a_90_second_stall_alive_with_keepalives", "cargo:mc-edge:configuration::tests::loader_negotiation_closes_a_dripping_client_at_the_total_deadline", "cargo:mc-edge:configuration::tests::required_loader_content_refuses_a_vanilla_client_with_the_loader_message_quickly"]
 failing_first = "not recorded"
 fix_commit = "patch:573f0b25b4303aecf1bcce423b6565d8cd8472c3782e3bdc4625a06b7fc32af2"
+promotion = "docs/bugs/promotions/LOADER-NEGOTIATE-CONFIGURATION-TIMEOUT.json"
