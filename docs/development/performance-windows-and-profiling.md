@@ -59,7 +59,7 @@ comparable only with other `-p` numbers from the same session.
 - **Frame-pointer release build** for attribution:
   `CARGO_TARGET_DIR=<work>/targets/fp RUSTFLAGS="-C force-frame-pointers=yes"
   CARGO_PROFILE_RELEASE_DEBUG=line-tables-only <work>/solaris/tools/dev/mem-run.sh -m 12G env
-  RUSTC_WRAPPER= CARGO_INCREMENTAL=0 cargo build --release --bin solaris-v2 --bin player-scale-bots`;
+  CARGO_INCREMENTAL=0 cargo build --release --bin solaris-v2 --bin player-scale-bots`;
   record the SHA-256 of `solaris-v2`.
 - **perf:** `perf report -i perf.data --no-children --comm mc-core-tick --sort sym
   --stdio -g none --no-inline` for self time, `--children` for inclusive.

@@ -37,7 +37,7 @@ else:
             env = os.environ.copy()
             env.update(PATH=f'{root}:' + env['PATH'], TEST_READY=str(fifo),
                        SOLARIS_VALIDATION_ROOT=str(root / 'receipts'))
-            proc = subprocess.Popen([str(RUNNER), '-m', '1G', 'env', 'RUSTC_WRAPPER=',
+            proc = subprocess.Popen([str(RUNNER), '-m', '1G',
                                      'python3', '-m', 'tools.harness', 'run', 'test', '-p', 'mc-core', '--lib'],
                                     cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             grandchild = stage = harness = None

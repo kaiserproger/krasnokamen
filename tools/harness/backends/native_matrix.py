@@ -526,7 +526,7 @@ def run(ctx: Any) -> dict[str, Any]:
         'TMPDIR','SA_SCRATCH') if name in os.environ}
     resource_env['SOLARIS_AUDIO_RECEIPT_DIR']=str(args.run_root.resolve()/'repro-audio')
     result['repro_prefix']=['env','-u','WAYLAND_DISPLAY',*(f'{key}={value}' for key,value in resource_env.items()),
-        '/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh','-m','6G','env','RUSTC_WRAPPER=','sh',
+        '/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh','-m','6G','sh',
         str(runtime.REPO_ROOT/'tools/harness/screen_audio_graph.sh'),sys.executable,'-m','tools.harness',
         'run','native-matrix','--client','native','--windowed','--server-bin',str(binary),
         '--plugins-dir',str(ctx.plugins_dir.resolve()),'--matrix',str(args.matrix.resolve()),
