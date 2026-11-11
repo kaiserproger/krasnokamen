@@ -506,6 +506,10 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
         steps.wait(lambda state: state["player"]["health"] >= 18 and
                    abs(state["player"]["z"] - z - .5) < .3, f"{kind}_fixture_ready")
         steps.call("minecraft_wait_ticks", {"ticks": 25})
+        if kind == "in_fire":
+            # Water still flowing back into the cell when the fire lands blocks ignition and the
+            # on_fire row never starts; let the douse water settle first.
+            steps.call("minecraft_wait_ticks", {"ticks": 60})
         baseline = steps.observe()["player"]["health"]
         start = len(steps.client.p4_damage_wire())
         steps.fixture("gamemode survival @s")

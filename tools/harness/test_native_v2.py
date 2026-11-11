@@ -291,6 +291,28 @@ class NativeV2ProbeTests(unittest.TestCase):
             native_p4._damage_environment(steps, (10, 70, 10), 1)
         self.assertIn("fill 10 70 10 11 70 10 minecraft:sweet_berry_bush[age=3]", events)
 
+    def test_damage_in_fire_row_lets_the_douse_water_settle_before_the_fire(self) -> None:
+        from .backends import native_p4
+
+        class Stop(Exception):
+            pass
+
+        events: list[str] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = events.append
+        steps.call.side_effect = lambda tool, args=None: events.append(f"{tool}:{(args or {}).get('ticks')}")
+
+        def wait(_predicate, label, **_kwargs):
+            if label == "in_fire_physical_identity_received":
+                raise Stop
+            return mock.MagicMock()
+
+        steps.wait.side_effect = wait
+        with self.assertRaises(Stop):
+            native_p4._damage_environment(steps, (10, 70, 10), 1)
+        fire = events.index("setblock 10 70 10 minecraft:fire")
+        self.assertIn("minecraft_wait_ticks:60", events[fire - 8:fire])
+
     def test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack(self) -> None:
         from .backends import native_p4
 
