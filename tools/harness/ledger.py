@@ -158,8 +158,9 @@ def _loader_live_setup(ctx, env, tree) -> str | None:
     env['SOLARIS_AUDIO_RECEIPT_DIR'] = str(ctx.artifact_dir)
     plugins_dir = ctx.artifact_dir / 'loader-live-plugins'
     plugins_dir.mkdir(parents=True, exist_ok=True)
+    data_source = Path(os.environ.get('SOLARIS_VANILLA_DATA_ROOT') or (REPO_ROOT.parent / 'solaris' / 'data'))
     for name in ('vanilla-steps', f'vanilla-{version or ""}'):
-        source = REPO_ROOT / 'data' / name
+        source = data_source / name
         target = Path(tree) / 'data' / name
         if target.exists():
             continue
