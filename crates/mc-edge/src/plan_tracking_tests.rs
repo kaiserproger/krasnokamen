@@ -414,3 +414,113 @@ fn incremental_wire_snapshots_match_full_packet_recompute_after_skips_and_remova
     assert!(!incremental.tracked_entities.contains_key(&EntityId(11)));
     assert!(incremental.tracked_entities.contains_key(&EntityId(99)));
 }
+
+/// What a vanilla client makes of entity and link packets, in wire order:
+/// `ClientPacketListener.handleSetEntityPassengersPacket` drops a link to an
+/// unknown vehicle and skips passenger ids it does not know.
+fn apply_links(
+    packets: &[PlannedPacket],
+    known: &mut std::collections::HashSet<i32>,
+    riding: &mut HashMap<i32, i32>,
+) {
+    use mc_protocol::packets::play::ClientboundSetPassengers;
+    for packet in packets {
+        match packet.id {
+            AddEntity::ID => {
+                known.insert(AddEntity::decode(&mut body_of(packet)).unwrap().entity_id);
+            }
+            RemoveEntities::ID => {
+                for id in RemoveEntities::decode(&mut body_of(packet))
+                    .unwrap()
+                    .entity_ids
+                {
+                    known.remove(&id);
+                    riding.remove(&id);
+                    riding.retain(|_, vehicle| *vehicle != id);
+                }
+            }
+            ClientboundSetPassengers::ID => {
+                let link = ClientboundSetPassengers::decode(&mut body_of(packet)).unwrap();
+                if known.contains(&link.vehicle_id) {
+                    riding.retain(|_, vehicle| *vehicle != link.vehicle_id);
+                    for passenger in link.passenger_ids {
+                        if known.contains(&passenger) {
+                            riding.insert(passenger, link.vehicle_id);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Vanilla `ServerEntity.sendPairingData` (26.3 and 26.1.2) ends a
+/// passenger's pairing with its vehicle's `SetPassengers`. A rider that comes
+/// into view after its vehicle, first or again, is mounted only by that; the
+/// viewer keeps passenger entries only for the vehicles it tracks.
+#[test]
+fn rider_entering_view_after_its_vehicle_is_mounted_by_its_own_pairing() {
+    let type_of = |name| {
+        mc_data::entity_types::entity_type_contract_26_1_2_by_name(name)
+            .unwrap()
+            .protocol_id
+    };
+    let cache = ChunkPacketCache::new();
+    let (pos, chunk) = chunk_at(0, 0);
+    let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
+    let mut horse = entity(10, [8.0, 64.0, 8.0]);
+    horse.type_id = type_of("minecraft:horse");
+    horse.appearance = Arc::new(EntityAppearance {
+        passengers: vec![EntityId(11)],
+        ..Default::default()
+    });
+    // Seated above the horse: farther from the viewer, so it spawns second.
+    let mut rider = entity(11, [8.0, 65.0, 8.0]);
+    rider.type_id = type_of("minecraft:zombie");
+    let away = |mut row: EntityView| {
+        row.position[0] += 100.0;
+        row
+    };
+    let plan = |tick, rows: Vec<EntityView>, viewer: &mut ViewerState| {
+        let snapshot = output(vec![(pos, chunk.clone())], rows, ChangeSet::default());
+        plan_viewer(&at_tick(snapshot, tick), viewer, 4, &cache)
+    };
+    let mut known = std::collections::HashSet::new();
+    let mut riding = HashMap::default();
+
+    let first = plan(1, vec![horse.clone(), rider.clone()], &mut viewer);
+    let spawned: Vec<i32> = first
+        .iter()
+        .filter(|packet| packet.id == AddEntity::ID)
+        .map(|packet| AddEntity::decode(&mut body_of(packet)).unwrap().entity_id)
+        .collect();
+    assert_eq!(spawned, [10, 11], "the vehicle comes into view first");
+    apply_links(&first, &mut known, &mut riding);
+    assert_eq!(riding.get(&11), Some(&10), "rider mounted at first sight");
+
+    let left = plan(2, vec![horse.clone(), away(rider.clone())], &mut viewer);
+    apply_links(&left, &mut known, &mut riding);
+    assert!(!known.contains(&11));
+    assert_eq!(
+        viewer.vehicles.iter().collect::<Vec<_>>(),
+        [(&EntityId(11), &EntityId(10))],
+        "the out-of-view rider keeps its entry while the vehicle is tracked"
+    );
+
+    let back = plan(3, vec![horse.clone(), rider.clone()], &mut viewer);
+    apply_links(&back, &mut known, &mut riding);
+    assert_eq!(
+        riding.get(&11),
+        Some(&10),
+        "rider mounted again on re-entry"
+    );
+
+    let gone = plan(4, vec![away(horse), away(rider)], &mut viewer);
+    apply_links(&gone, &mut known, &mut riding);
+    assert!(known.is_empty());
+    assert!(
+        viewer.vehicles.is_empty(),
+        "entries end with the vehicle's tracking"
+    );
+}
