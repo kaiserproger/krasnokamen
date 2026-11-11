@@ -818,10 +818,11 @@ title = "Combined server-fixes runtime4bcd34fc started screen service only for n
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SERVER-FABRIC-SCREEN-ADMISSION"
 regression = ["harness:loader-live:loader-fabric-screen-admission"]
 fix_commit = "patch:2648c6c627acfa146ef27b63ba53e169f37ed63addc88a84ee84609b6048471a"
+promotion = "docs/bugs/promotions/SERVER-FABRIC-SCREEN-ADMISSION.json"
 
 [[bug]]
 id = "NATIVE-SCREEN-AUDIO-CONSENT"

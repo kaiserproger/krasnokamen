@@ -1,0 +1,41 @@
+{
+  "id": "SERVER-FABRIC-SCREEN-ADMISSION",
+  "verdict": "promoted",
+  "fix_commit": "patch:2648c6c627acfa146ef27b63ba53e169f37ed63addc88a84ee84609b6048471a",
+  "fix_commit_full": "patch:2648c6c627acfa146ef27b63ba53e169f37ed63addc88a84ee84609b6048471a",
+  "promoted_at": "2026-11-11T21:34:56+00:00",
+  "tree_head": "2fca553f6e2685c0c603d9c377e79fc1f73ac124",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "2648c6c627acfa146ef27b63ba53e169f37ed63addc88a84ee84609b6048471a",
+  "reversed_files": [
+    "crates/mc-edge/src/server.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "harness:loader-live:loader-fabric-screen-admission": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /run/media/kaiserroman/games/solaris-work/wt/LoaderLivePromote/tools/harness/screen_audio_graph.sh /usr/bin/python3 -m tools.harness run scenario loader-fabric-screen-admission --platform fabric --server-bin /run/media/kaiserroman/games/solaris-work/wt/LoaderLivePromote/.analysis/validation/20261111T213310-ledger-promote-ymp_uq_e/bin/solaris-v2-97194903797330402dc873c2eb3195f5020ac2e4227c63e462724f3e5502c7ea --plugins-dir /run/media/kaiserroman/games/solaris-work/wt/LoaderLivePromote/.analysis/validation/20261111T213310-ledger-promote-ymp_uq_e/loader-live-plugins --timeout-seconds 420 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/LoaderLivePromote/.analysis/validation/20261111T213310-ledger-promote-ymp_uq_e/regressions-client-1.log"
+    }
+  },
+  "restored": {
+    "harness:loader-live:loader-fabric-screen-admission": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261111T213430-loader-fabric-screen-admission-6pedji32/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/LoaderLivePromote/.analysis/validation/20261111T211552-loader-fabric-screen-admission-vz95axc6/result.json",
+    "tree_head": "2fca553f6e2685c0c603d9c377e79fc1f73ac124",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "32896e2344332c873d90dae8456826d0c6ccf278b0425b452ee5564190647ef7",
+    "covers": [
+      "harness:loader-live:loader-fabric-screen-admission"
+    ],
+    "profile": "loader-live"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/LoaderLivePromote/.analysis/validation/20261111T213310-ledger-promote-ymp_uq_e"
+}
