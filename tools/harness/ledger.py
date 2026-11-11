@@ -366,6 +366,11 @@ def _split_non_test(diff, source_of):
             found = _CFG_TEST_MOD.search(source)
             if found:
                 threshold = source.count('\n', 0, found.start()) + 1
+            if threshold is not None and threshold > 1 and any(
+                    text.startswith('new file mode') for text in header):
+                # A file the fix commit adds is one hunk: reversing it deletes the file and
+                # its inline test module together, so there is no boundary to straddle.
+                threshold = None
         kept = []
         for hunk in hunks:
             changed = _hunk_changed_lines(hunk)
