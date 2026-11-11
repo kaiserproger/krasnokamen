@@ -1401,6 +1401,7 @@ status = "open"
 source = "crates/mc-core/src/command_summon.rs"
 regression = ["cargo:mc-core:command_summon::tests::summon_no_gravity_and_invulnerable_are_effective_and_persistent", "cargo:mc-core:command_summon::tests::summon_no_gravity_floats_in_multiple_mob_motion_lanes", "cargo:mc-core:command_summon::tests::item_summon_no_gravity_and_invulnerability_survive_checkpoint", "cargo:mc-core:core::entity_state_persistence_tests::native_no_gravity_restore_rehydrates_wire_metadata_and_motion", "cargo:mc-core:tick_tests::no_gravity_experience_orb_hovers_without_suppressing_normal_gravity", "cargo:mc-edge:plan::plan_tests::no_gravity_metadata_reaches_viewer_on_spawn_and_change"]
 repro_check = "cargo:mc-core:command_summon::tests::summon_no_gravity_and_invulnerable_are_effective_and_persistent"
+fix_commit = "b7020b427b33ca547d0e152fecdb70527b3072dd"
 
 [[bug]]
 id = "SELECTOR-OPTION-COVERAGE"
@@ -2551,6 +2552,7 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-BASELINE-RANDOM-SAMPLER"
 regression = ["cargo:mc-core:farming_tests::plants_tests::native_random_sampler_reaches_extra_plants_and_support_cascade", "cargo:mc-core:farming_tests::plants_tests::native_random_sampler_grows_chorus_flowers"]
+fix_commit = "f945cba85234105543de42b37709cf31e8eb253a"
 
 [[bug]]
 id = "TEST-BASELINE-WATER-DESCENT"
@@ -2561,6 +2563,7 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-BASELINE-WATER-DESCENT"
 regression = ["cargo:mc-core:fluids_tests::parity::physics_water_selects_nearest_descent"]
+fix_commit = "f945cba85234105543de42b37709cf31e8eb253a"
 
 [[bug]]
 id = "GAP-EGG-HATCH-CLOCKS"
