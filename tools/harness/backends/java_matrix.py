@@ -78,18 +78,19 @@ def receipt_dir(root: Path, scenario_id: str) -> Path:
 def server_instance(args: argparse.Namespace, directory: Path, count: int,
                     permission: str = "non_op_0", lifecycle: str = "steady",
                     excluded_plugins: set[str] | None = None):
-    """Reuse the shared release-server primitive; the game port is chosen by
-    the server itself (port 0, reported in its listening log line) so concurrent
-    runs on the shared host can never collide on it. The dashboard port is a
-    cross-process flock lease in the driver's own 262xx range, released when
-    the instance stops.
+    """Reuse the shared release-server primitive; both ports are cross-process
+    flock leases in this driver's own 262xx range (never hardcoded, never
+    bind-probe-and-close): concurrent runs on the shared host can never be
+    handed the same port, and the leases live until the instance's final
+    close(), surviving stop/restart (clients cache server.port).
     """
     directory.mkdir(parents=True, exist_ok=True)
     plugin_dir = directory / "plugins"
     enabled_plugins = copy_plugins(args.plugins_dir, plugin_dir, excluded_plugins or set())
     prepare_access(directory, [f"JMatrix{index:02d}" for index in range(count)], permission)
-    server = ProtocolServer(binary=args.server_bin, run_dir=directory, port=0,
-                            dashboard_port=reserve_matrix_port(port_range=PORT_RANGE),
+    port = reserve_matrix_port(port_range=PORT_RANGE)
+    server = ProtocolServer(binary=args.server_bin, run_dir=directory, port=port,
+                            dashboard_port=reserve_matrix_port(exclude=port, port_range=PORT_RANGE),
                             port_range=PORT_RANGE,
                             vanilla_data=args.data_dir, seed=81, plugins_dir=plugin_dir,
                             server_name="RunJava", pause_when_empty_seconds=1 if lifecycle == "pause_when_empty_resume" else 0,
@@ -107,6 +108,7 @@ def server_instance(args: argparse.Namespace, directory: Path, count: int,
         process = server._process
         if server.running:
             server.stop()
+        server.close()  # release the port leases at instance teardown
         args.context.exits[index] = process.returncode if process is not None else None
 
 

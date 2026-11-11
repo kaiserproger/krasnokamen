@@ -29,6 +29,7 @@ import os
 import re
 import socket
 import subprocess
+import tempfile
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -54,14 +55,25 @@ class Blocked(RuntimeError):
     """Missing real prerequisite (binary, vanilla data, plugins, ports, config)."""
 
 
-def _check_port(port: int, name: str, port_range=(PORT_MIN, PORT_MAX), *, allow_zero: bool = False) -> int:
-    if not isinstance(port, int) or not (port_range[0] <= port <= port_range[1] or (allow_zero and port == 0)):
+def _check_port(port: int, name: str, port_range=(PORT_MIN, PORT_MAX)) -> int:
+    if not isinstance(port, int) or not (port_range[0] <= port <= port_range[1]):
         raise ValueError(f"{name} must be an int in {port_range}, got {port!r}")
     return port
 
 
-WORK_ROOT = Path(os.environ.get("SOLARIS_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
-PORT_LOCK_DIR = WORK_ROOT / "port-locks"
+def _default_lock_dir() -> Path:
+    """Portable cross-process lock root: env override, then the shared work
+    root when set, otherwise the system temp dir (works on any Linux/CI)."""
+    override = os.environ.get("SOLARIS_PORT_LOCK_DIR")
+    if override:
+        return Path(override)
+    work_root = os.environ.get("SOLARIS_WORK_ROOT")
+    if work_root:
+        return Path(work_root) / "port-locks"
+    return Path(tempfile.gettempdir()) / "solaris-port-locks"
+
+
+PORT_LOCK_DIR = _default_lock_dir()
 
 
 class PortReservation(int):
@@ -151,9 +163,9 @@ class ProtocolServer:
         self._reservations: list[PortReservation] = []
         if isinstance(port, PortReservation):
             self._reservations.append(port)
-        # port 0 means the server chooses its own game port and reports the
-        # bound address in its "Solaris is listening (edge v2)" log line.
-        self.port = _check_port(port, "port", port_range, allow_zero=True)
+        # Clients cache server.port across restarts, so ports are fixed per
+        # instance and leased with a cross-process flock (see PortReservation).
+        self.port = _check_port(port, "port", port_range)
         if dashboard_port is not None:
             if isinstance(dashboard_port, PortReservation):
                 self._reservations.append(dashboard_port)
@@ -312,8 +324,6 @@ seed = {self.seed}
                 stderr=subprocess.STDOUT,
                 start_new_session=True,
             )
-            if self.port == 0:
-                self.port = self._await_own_listening_port(limit)
             runtime.wait_port(self.port, limit, self._process, log_path=self.log_path)
         except BaseException:
             runtime.stop_process(self._process)
@@ -332,32 +342,6 @@ seed = {self.seed}
             if callable(release):
                 release()
         self._reservations.clear()
-
-    LISTENING_RE = re.compile(r"Solaris is listening \(edge v2\) addr=127\.0\.0\.1:(\d+)")
-
-    def _await_own_listening_port(self, limit: float) -> int:
-        """Learn the server-chosen game port from its own listening log line.
-
-        port 0 makes solaris-v2 bind an OS-assigned port and report it as
-        `addr=` in "Solaris is listening (edge v2)". The fence is inotify log
-        growth (no polling); the process exiting fails closed.
-        """
-        proc = self._process
-        assert proc is not None
-        before = len(self.LISTENING_RE.findall(self.log_path.read_text(errors="replace")))
-
-        def bound() -> tuple[bool, Any]:
-            if proc.poll() is not None:
-                raise runtime.ChildExited(
-                    f"server exited with {proc.returncode} before announcing its port; "
-                    f"log {self.log_path}: {self.log_path.read_text(errors='replace')[-2000:]}",
-                    proc.returncode, self.log_path,
-                )
-            text = self.log_path.read_text(errors="replace")
-            ports = self.LISTENING_RE.findall(text)[before:]
-            return (bool(ports), int(ports[-1]) if ports else text)
-
-        return int(runtime.wait_for_path_condition(self.log_path, limit, bound))
 
     def console(self, command: str, expect: str, timeout: float | None = None) -> str:
         proc = self._process
@@ -471,14 +455,15 @@ seed = {self.seed}
                 self._log_handle.close()
             finally:
                 self._log_handle = None
-        self._release_reservations()
+        # Port leases intentionally survive stop()/restarts (clients cache
+        # server.port); they are released by the final close() only.
 
     def close(self) -> None:
-
         try:
             runtime.stop_process(self._process)
         finally:
             self._close_handles()
+            self._release_reservations()
 
     def __enter__(self) -> ProtocolServer:
         return self

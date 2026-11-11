@@ -10,6 +10,7 @@ python3 -m unittest tools.harness.test_protocol_lifecycle
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -409,7 +410,9 @@ class PortLeaseTests(unittest.TestCase):
                 if callable(release):
                     release()
 
-    def test_auto_dashboard_port_releases_its_lease_on_close(self) -> None:
+    def test_leases_survive_stop_and_release_on_final_close(self) -> None:
+        # Restarts (stop/start, kill9) reuse the same fixed port, so the lease
+        # must survive _close_handles (stop) and drop only on close().
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "vanilla").mkdir()
             server = _harness(tmp)
@@ -419,13 +422,27 @@ class PortLeaseTests(unittest.TestCase):
                 reservation = server._reservations[-1]
                 self.assertIsInstance(reservation, PortReservation)
                 self.assertEqual(int(reservation), server.dashboard_port)
-                server._close_handles()
-                # after release the same port can be leased again
+                server._close_handles()  # what stop() does
+                with self.assertRaises(Blocked):
+                    lifecycle.reserve_matrix_port(port_range=(int(reservation), int(reservation)))
+                server.close()
                 again = lifecycle.reserve_matrix_port(port_range=(int(reservation), int(reservation)))
                 self.assertEqual(int(again), int(reservation))
                 release = getattr(again, "release", None)
                 if callable(release):
                     release()
+
+    def test_lock_dir_default_is_portable_without_work_root(self) -> None:
+        import tempfile
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("SOLARIS_PORT_LOCK_DIR", "SOLARIS_WORK_ROOT")}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(lifecycle._default_lock_dir(),
+                             Path(tempfile.gettempdir()) / "solaris-port-locks")
+        with mock.patch.dict(os.environ, {"SOLARIS_WORK_ROOT": "/w"}, clear=True):
+            self.assertEqual(lifecycle._default_lock_dir(), Path("/w/port-locks"))
+        with mock.patch.dict(os.environ, {"SOLARIS_PORT_LOCK_DIR": "/locks"}, clear=True):
+            self.assertEqual(lifecycle._default_lock_dir(), Path("/locks"))
 
 
 if __name__ == "__main__":
