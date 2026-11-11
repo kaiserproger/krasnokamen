@@ -991,6 +991,38 @@ fn burning_player_melts_powder_snow_cauldron_one_level() {
     }
 }
 
+/// The classifier lists cauldron candidates before the tail runs; the tail
+/// must still act on the cell as earlier rows left it.
+#[test]
+fn second_burning_body_meets_the_cauldron_the_first_emptied() {
+    let (mut state, entity, pos) = flat_player_fixture();
+    place(&mut state, pos, "water_cauldron", &[("level", "1")]);
+    let player = state.entities.slot_of(entity).unwrap();
+    let cow = state.spawn_mob(state.registry.cow_type_id, pos, 10.0);
+    let cow = state.entities.slot_of(cow).unwrap();
+    for slot in [player, cow] {
+        state.entities.body_mut(slot).burn_ticks = 100;
+    }
+    crate::contact_hazards::run(&mut state, &mut Vec::new());
+    let (first, second) = if player.0 < cow.0 {
+        (player, cow)
+    } else {
+        (cow, player)
+    };
+    assert_eq!(state.entities.body(first).burn_ticks, 0);
+    assert_eq!(state.entities.body(second).burn_ticks, 99);
+    let current = state
+        .world
+        .block_at(pos[0] as i32, pos[1] as i32, pos[2] as i32)
+        .unwrap();
+    let block = state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(current))
+        .unwrap();
+    assert_eq!(block.block.id.path(), "cauldron");
+}
+
 #[test]
 fn lava_cauldron_burns_the_entity_standing_inside() {
     let (mut state, entity, pos) = flat_player_fixture();

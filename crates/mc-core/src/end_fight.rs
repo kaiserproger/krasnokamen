@@ -240,13 +240,19 @@ pub(crate) fn type_id(state: &TickState, name: &str) -> u32 {
         .id_of(&mc_data::Identifier::parse(name).expect("canonical entity"))
         .expect("vanilla dragon registry")
 }
+// Per-row predicates (journal, projectile hit lists): resolve the generated
+// contract ids once instead of parsing an identifier per call.
+static DRAGON_TYPE: std::sync::LazyLock<Option<u32>> =
+    std::sync::LazyLock::new(|| crate::piglin::type_id_of("minecraft:ender_dragon"));
+static CRYSTAL_TYPE: std::sync::LazyLock<Option<u32>> =
+    std::sync::LazyLock::new(|| crate::piglin::type_id_of("minecraft:end_crystal"));
 pub(crate) fn is_dragon(state: &TickState, slot: EntitySlot) -> bool {
     matches!(state.entities.body(slot).kind, crate::entities::EntityKind::Mob {type_id: id}
-        if id == type_id(state,"minecraft:ender_dragon"))
+        if Some(id) == *DRAGON_TYPE)
 }
 pub(crate) fn is_crystal(state: &TickState, slot: EntitySlot) -> bool {
     matches!(state.entities.body(slot).kind, crate::entities::EntityKind::Mob {type_id: id}
-        if id == type_id(state,"minecraft:end_crystal"))
+        if Some(id) == *CRYSTAL_TYPE)
 }
 fn dragon_slot(state: &TickState) -> Option<EntitySlot> {
     state

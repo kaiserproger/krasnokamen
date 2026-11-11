@@ -495,6 +495,18 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
                     .saturating_sub(pre_time.as_micros() as u64) as f64
                     / 1000.0,
             );
+            // Stages of `journal` above, in order; they partition it.
+            let build = state.journal_scan.times;
+            let ms = |span: std::time::Duration| span.as_secs_f64() * 1000.0;
+            eprintln!(
+                "journal build ms: tick={} before_entities={:.2} entity_touched={:.2} entity_images={:.2} entity_compare={:.2} after_entities={:.2}",
+                tick,
+                ms(build.before_entities),
+                ms(build.touched),
+                ms(build.images),
+                ms(build.compare),
+                ms(build.after_entities),
+            );
         }
         let _ = channels.timing_broadcast.send((tick, tick_times));
         // Keep the hook-free shutdown/deadline wait unchanged. A hook-enabled

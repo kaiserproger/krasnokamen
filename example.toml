@@ -163,6 +163,10 @@ world_dir = "world"
 # vanilla_data_dir = "data/vanilla"
 # Console `backup` copies the running world here (see docs/OPERATING.md).
 # backup_dir = "backups"
+# Periodic checkpoint cadence in ticks. Each capture runs on the tick thread;
+# a longer cadence means fewer capture ticks but a longer journal replay after a
+# crash. Stop and the empty-server pause still checkpoint.
+# checkpoint_every_ticks = 1200
 # Changing the seed requires a fresh world directory.
 seed = 0
 
