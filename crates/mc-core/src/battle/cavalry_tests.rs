@@ -548,6 +548,10 @@ fn a_chase_ends_when_the_fugitives_reach_the_edge() {
         );
     };
     assert_eq!(plan.origin, [0.0, 64.0, 4.0]);
+    // A broken mounted regiment keeps its plan for its rallied riders.
+    battle.formation.regiments[2].morale.broken = true;
+    plan_sweeps(&battle, &mut plans);
+    assert_eq!(plans[2], Some(Sweep::Flank(plan)));
 }
 
 /// Eight riders (4 files x 2 ranks) swing round an enemy foot block: their

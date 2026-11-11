@@ -120,6 +120,9 @@ pub(crate) struct Member {
     pub routing: bool,
     pub wavering: bool,
     pub nerve: f32,
+    /// A rider who fled to the edge of the field and rallied there: he fights
+    /// on until he falls, whatever his regiment's morale.
+    pub rallied: bool,
     /// Position at the start of the current stall window, (x, z).
     pub anchor: [f64; 2],
 }
@@ -304,6 +307,7 @@ impl FormationRuntime {
                 routing: false,
                 wavering: false,
                 nerve: nerve(id.0, rank, ranks),
+                rallied: false,
                 anchor: [pos[0], pos[2]],
             });
         }
@@ -802,24 +806,25 @@ impl FormationRuntime {
             r.broke_now = !was_broken && r.morale.broken;
             let mut new_panics = 0_u16;
             // A rider who fled to the edge of the field rallies there and rides
-            // back into the fight; he panics again only if his regiment breaks.
-            // Fled riders stood idle on the bounds for the rest of the G1
-            // rehearsal (groups of 100-175 from t 150). Foot fugitives stay.
-            let rally = r.spec.frontage > 1.0 && !r.morale.broken;
+            // back into the fight until he falls, even when his regiment has
+            // broken: mounted regiments broke at 25-40 % losses in the G1
+            // rehearsals and their fled riders (groups of 100-175) stood idle
+            // on the bounds from t 150 to the end. Foot fugitives stay.
+            let mounted = r.spec.frontage > 1.0;
             let bounds = self.bounds;
             for m in &mut self.members[r.start..r.start + r.len] {
-                if rally
+                if mounted
                     && m.routing
                     && m.alive
                     && !m.wounded
                     && near_bounds(bounds, m.pos, AT_BAY_BLOCKS)
                 {
                     m.routing = false;
-                    m.nerve = 0.0;
+                    m.rallied = true;
                 }
                 let was_routing = m.routing;
-                m.wavering = r.morale.value < m.nerve + 15.0;
-                m.routing |= r.morale.value < m.nerve || r.morale.broken;
+                m.wavering = !m.rallied && r.morale.value < m.nerve + 15.0;
+                m.routing |= !m.rallied && (r.morale.value < m.nerve || r.morale.broken);
                 new_panics += u16::from(!was_routing && m.routing);
             }
             r.morale.pressure.panicking = new_panics;

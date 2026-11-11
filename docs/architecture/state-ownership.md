@@ -93,8 +93,9 @@ Horses refuse steady frontal foot ranks and run out to a flank; accepted charge
 bonus decays over 260 ticks. Once their own foot closes, unengaged riders swing
 round the nearest enemy foot regiment into its rear, and ride down the
 fugitives of the nearest broken foot regiment until those reach the edge of
-the field. A rider who fled to the edge rallies there and rides back unless
-his regiment has broken; foot fugitives stay at bay on the edge. A regiment rides these sweeps as
+the field. A rider who fled to the edge rallies there and rides back until he
+falls, even when his regiment has broken; foot fugitives stay at bay on the
+edge. A regiment rides these sweeps as
 a block, never toward one shared point: each rider follows the sweep from its
 own file/rank slot. Targets and swings are laid round the regiments' live
 centroids, not their virtual leaders, which march ahead of files lagging on

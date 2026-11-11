@@ -139,12 +139,13 @@ fn flank_round(own: &Regiment, e: &Regiment) -> Flank {
 
 /// Per-tick plan, bounded by regiments squared (at most 128²), never per rider.
 /// A broken regiment's origin is its live centroid, so a chase follows the rout
-/// until the fugitives reach the edge of the field.
+/// until the fugitives reach the edge of the field. A broken mounted regiment
+/// keeps its plan: only its rallied riders, no longer routing, ride it.
 fn plan_sweeps(battle: &BattleState, plans: &mut Vec<Option<Sweep>>) {
     let regiments = &battle.formation.regiments;
     plans.clear();
     for own in regiments {
-        let plan = if own.spec.frontage <= 1.0 || own.morale.broken {
+        let plan = if own.spec.frontage <= 1.0 {
             None
         } else if let Some(fugitives) = nearest_enemy_foot(battle, own, true) {
             Some(Sweep::Chase(fugitives.spec.origin))
