@@ -1128,7 +1128,7 @@ fn idle_camel_is_not_written_and_a_running_dash_cooldown_is() {
 }
 
 #[test]
-fn idle_cats_are_not_written_and_a_wake_touches_only_the_owners_cats() {
+fn idle_cats_are_not_written_per_tick() {
     let (mut state, player, pos) = fixture();
     let owner = state.entities.row(slot(&state, player)).uuid;
     let (own, _) = tamed_cat(&mut state, [pos[0] + 2.0, pos[1], pos[2]], owner);
@@ -1147,7 +1147,18 @@ fn idle_cats_are_not_written_and_a_wake_touches_only_the_owners_cats() {
         !touched.contains(&own) && !touched.contains(&stranger),
         "idle cats written per tick"
     );
+}
 
+#[test]
+fn a_wake_touches_only_the_owners_cats() {
+    let (mut state, player, pos) = fixture();
+    let owner = state.entities.row(slot(&state, player)).uuid;
+    tamed_cat(&mut state, [pos[0] + 2.0, pos[1], pos[2]], owner);
+    let (stranger, _) = tamed_cat(
+        &mut state,
+        [pos[0] - 2.0, pos[1], pos[2]],
+        uuid::Uuid::from_u128(0xfeed),
+    );
     let foot = BlockPos {
         x: pos[0] as i32,
         y: pos[1] as i32,
