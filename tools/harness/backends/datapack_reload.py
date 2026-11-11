@@ -169,6 +169,12 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     write_pack(world)
     barrier("enable_reported", f"datapack enable {PACK_ID}")
     probe.report["recipe_book"]["enabled"] = probe.call("minecraft_read_recipe_book", {"limit": 8192})
+    # The client's own recipe book (display ids it was sent) changes with the reload.
+    # The native MCP exposes only counts and display ids, not the recipe results, so the
+    # craft output slot stays the proof of the recipe itself.
+    book = probe.report["recipe_book"]
+    probe.check("client_recipe_book_changed_on_enable",
+                set(book["enabled"]["display_ids"]) != set(book["before"]["display_ids"]))
     probe.check("pack_recipe_after_hot_enable", craft("enabled") == PACK_RESULT)
 
     barrier("disable_reported", f"datapack disable {PACK_ID}")

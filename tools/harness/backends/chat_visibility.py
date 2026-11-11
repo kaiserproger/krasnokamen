@@ -12,7 +12,8 @@ Per connection (operator fixture commands, ordered by a give/inventory fence):
 
 * full: `/say` (chat) and `/tellraw` (system text) both reach the client;
 * commands only: only the system text arrives;
-* hidden: neither arrives, also after the player left in the Nether and joins
+* hidden: no text line at all arrives (not even the join tip, `/help` or an unknown command's
+  error, which the edge writes itself), also after the player left in the Nether and joins
   into it again (the setting must follow the join into another dimension).
 """
 from __future__ import annotations
@@ -352,6 +353,10 @@ def scenario(probe: ProbeSteps, proxy: RewritingProxy, address: str) -> None:
         """Chat and system text to the operator, then an inventory change that orders them."""
         nonlocal dirt
         chat, system = f"ChatMark_{label}", f"SystemMark_{label}"
+        if MODES[index] == HIDDEN:
+            # Text the edge writes itself, not the core: a command list and an unknown command.
+            probe.fixture("help")
+            probe.fixture("nosuchcommand")
         probe.fixture(f"say {chat}")
         probe.fixture(f'tellraw @s {{"text":"{system}"}}')
         probe.fixture("give @s minecraft:dirt 1")
@@ -359,7 +364,8 @@ def scenario(probe: ProbeSteps, proxy: RewritingProxy, address: str) -> None:
         probe.call("minecraft_wait_for_inventory", {"item_id": "minecraft:dirt", "count": dirt,
                                                     "timeout_seconds": probe.remaining()})
         state = probe.observe()
-        result = {"chat": heard(state, chat), "system": heard(state, system)}
+        result = {"chat": heard(state, chat), "system": heard(state, system),
+                  "lines": len(state.get("recent_chat", []))}
         probe.report["connections"].append({"index": index, "label": label, "mode": MODES[index],
                                             "heard": result, "recent_chat": state.get("recent_chat", [])})
         return result
@@ -384,6 +390,7 @@ def scenario(probe: ProbeSteps, proxy: RewritingProxy, address: str) -> None:
     hidden = speak(2, "hidden")
     probe.check("hidden_misses_chat", not hidden["chat"])
     probe.check("hidden_misses_system_text", not hidden["system"])
+    probe.check("hidden_receives_no_text_line_at_all", hidden["lines"] == 0)
 
     # Leave in the Nether: the next join is routed into that dimension, and the setting must follow it.
     probe.fixture("execute in minecraft:the_nether run tp @s 0 80 0")
@@ -394,4 +401,5 @@ def scenario(probe: ProbeSteps, proxy: RewritingProxy, address: str) -> None:
     nether = speak(3, "hidden_nether")
     probe.check("hidden_in_nether_misses_chat", not nether["chat"])
     probe.check("hidden_in_nether_misses_system_text", not nether["system"])
+    probe.check("hidden_in_nether_receives_no_text_line_at_all", nether["lines"] == 0)
     probe.check("one_dirt_per_connection", item_count(probe.observe(), "minecraft:dirt") == dirt)
