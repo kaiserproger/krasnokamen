@@ -1,0 +1,164 @@
+diff --git a/crates/mc-core/src/villager/brain.rs b/crates/mc-core/src/villager/brain.rs
+index 7a1c2857..720046e4 100644
+--- a/crates/mc-core/src/villager/brain.rs
++++ b/crates/mc-core/src/villager/brain.rs
+@@ -938,19 +938,29 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
+             state.entities.set_half_width(slot, width);
+             state.entities.body_mut(slot).height = height;
+             let cell = at(pos);
+-            for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+-                if let Some(p) = standing(
+-                    &state.world,
+-                    &state.registry,
+-                    BlockPos {
+-                        x: cell.x + dx,
+-                        y: cell.y,
+-                        z: cell.z + dz,
+-                    },
+-                    width,
+-                    height,
+-                ) {
+-                    state.entities.set_pos(slot, p);
++            // A sleeping body rests at bed.y + 0.6875, which `at` rounds up to
++            // bed.y + 1; the stand-up cells beside the bed sit at bed level, so
++            // search one block down first, then the rounded cell itself.
++            for dy in [-1, 0] {
++                let mut placed = false;
++                for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
++                    if let Some(p) = standing(
++                        &state.world,
++                        &state.registry,
++                        BlockPos {
++                            x: cell.x + dx,
++                            y: cell.y + dy,
++                            z: cell.z + dz,
++                        },
++                        width,
++                        height,
++                    ) {
++                        state.entities.set_pos(slot, p);
++                        placed = true;
++                        break;
++                    }
++                }
++                if placed {
+                     break;
+                 }
+             }
+@@ -1145,7 +1155,11 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
+                 // A one-cell arrival tolerance can leave a builder inside the
+                 // future footprint despite its selected perimeter goal.
+                 exact_target = worker_exact;
++                // Nothing to work on yet (e.g. just woken, or between tree
++                // sweeps): walk to the job site like any vanilla worker in its
++                // work period instead of standing wherever the villager is.
+                 worker_target
++                    .or(job_site.filter(|job| distance(pos, centre(*job)) > JOB_SITE_REACH_SQUARED))
+             } else {
+                 match v.activity {
+                     Activity::Work
+diff --git a/crates/mc-core/src/settlements/allocator.rs b/crates/mc-core/src/settlements/allocator.rs
+index 209168ea..c9e17600 100644
+--- a/crates/mc-core/src/settlements/allocator.rs
++++ b/crates/mc-core/src/settlements/allocator.rs
+@@ -1646,6 +1646,12 @@ fn validate_changed_claims(state: &mut TickState, cache: &mut PoiCache) -> usize
+             state.entities.row_mut(slot);
+             cache.allocator_updates.push(id);
+         }
++        // The brain diffs VillagerData only across its own decision, which
++        // runs after this phase: a profession lost here must reach the client
++        // now, not when the next sleep toggles the pose.
++        if before.3 != after.3 {
++            crate::villager::sync_appearance(state, slot);
++        }
+         cache.sync_search(state, slot);
+     }
+     cache.promote_searches(state.tick);
+diff --git a/crates/mc-core/src/villager/mining.rs b/crates/mc-core/src/villager/mining.rs
+index 2946725a..1c9a407b 100644
+--- a/crates/mc-core/src/villager/mining.rs
++++ b/crates/mc-core/src/villager/mining.rs
+@@ -635,10 +635,28 @@ fn open_and_dry(state: &TickState, current: BlockPos, height: i32) -> bool {
+ }
+ 
+ /// A hostile mob within its sensor reach of `cell` (plus the cell's own height
+-/// and the miner's dig reach). It never has to reach the miner: residents panic
+-/// at any hostile in range (a zombie in a cave under the quarry), so the miner
+-/// would flee back and forth from a cell it can never dig.
+-fn hostile_near(state: &TickState, cell: BlockPos) -> bool {
++/// and the miner's dig reach) that the miner would meet there: residents panic
++/// at a hostile they can see, so the miner would flee back and forth from a
++/// cell it can never dig. It counts while it is visible from `stand` (where
++/// the miner works) or lies beside the cells being dug, whose removal opens its
++/// pocket. One in a sealed cave nearby (a zombie hunting the miner from below)
++/// can neither see nor reach it: the miner keeps working, as villagers do.
++fn hostile_near(state: &TickState, cell: BlockPos, height: i32, stand: BlockPos) -> bool {
++    let eye = [
++        f64::from(stand.x) + 0.5,
++        f64::from(stand.y) + 1.62,
++        f64::from(stand.z) + 0.5,
++    ];
++    // Gap between the dug column and the mob's body, feet to head.
++    let exposed = |at: [f64; 3], tall: f64| {
++        let gap = |lo: f64, hi: f64, min: i32, max: i32| {
++            (lo - f64::from(max)).max(f64::from(min) - hi).max(0.0)
++        };
++        let dx = gap(at[0], at[0], cell.x, cell.x + 1);
++        let dy = gap(at[1], at[1] + tall, cell.y, cell.y + height);
++        let dz = gap(at[2], at[2], cell.z, cell.z + 1);
++        dx * dx + dy * dy + dz * dz <= 1.5 * 1.5
++    };
+     let centre = [
+         f64::from(cell.x) + 0.5,
+         f64::from(cell.y) + 0.5,
+@@ -672,6 +690,12 @@ fn hostile_near(state: &TickState, cell: BlockPos) -> bool {
+                     + (at[1] - centre[1]).powi(2)
+                     + (at[2] - centre[2]).powi(2)
+                     <= range * range
++                && (exposed(at, body.height)
++                    || crate::projectiles::flight::clear_segment(
++                        state,
++                        eye,
++                        [at[0], at[1] + 1.62, at[2]],
++                    ))
+         })
+ }
+ 
+@@ -689,16 +713,20 @@ fn lane_entrance(bounds: ScriptWorldBounds, entrance: BlockPos, lane: u32) -> Op
+     })
+ }
+ 
+-/// The standing surface of an alternate entrance column: ground with two clear
+-/// cells above it. Terrain slopes, so the original entrance's height would put
+-/// the new branch's origin underground, where the miner seals itself in.
++/// The standing surface of an alternate entrance column (`column.y` is the
++/// entrance's level): ground with two clear cells above it inside the zone.
++/// Terrain slopes, so the original entrance's height would put the new
++/// branch's origin underground, where the miner seals itself in. The
++/// entrance's own level always counts, even at the top of the zone (a built
++/// mine's floor): otherwise every alternate lane skips that floor and settles
++/// in a sealed cave under the quarry.
+ fn surface_origin(
+     state: &TickState,
+     bounds: ScriptWorldBounds,
+     column: BlockPos,
+ ) -> Option<BlockPos> {
+     let open = |y: i32| block_path(state, BlockPos { y, ..column }).is_some_and(clear);
+-    (bounds.min[1] + 2..=bounds.max[1] - 1)
++    (bounds.min[1] + 2..=(bounds.max[1] - 1).max(column.y))
+         .rev()
+         .find(|&y| {
+             !open(y - 1)
+@@ -889,10 +917,10 @@ pub(super) fn work(
+     if state.tick < v.harvest_at {
+         return Some(previous);
+     }
+-    let hostile = hostile_near(state, current);
++    let hostile = hostile_near(state, current, height, previous);
+     let walking = !hostile && !near(state, slot, current, 3.0);
+     if hostile || walking {
+-        // Villagers panic at any hostile in range, so the cell can never be
++        // Villagers panic at a hostile they meet, so the cell can never be
+         // dug while it stays; a route may also be impossible (a pit under a
+         // level's row, a pocket). Give it time, then close the lane.
+         if v.mining_progress.stalled_since == 0 {
