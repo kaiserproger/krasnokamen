@@ -3871,11 +3871,12 @@ title = "A saved map with more than 256 retained frame markers prevents world re
 area = "gameplay"
 repro = "source"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "Contributing factors: maps/runtime.rs appends distinct retained frame markers without a writer-side limit; maps::checkpoint serializes them without validation; maps::recover rejects more than 256. The read boundary fails closed, but the live admission and save boundaries do not prevent that state. Source finding, not a destructive restart test. M00 batches genuine maps to avoid creating this invalid benchmark fixture; that does not fix the gameplay owner."
 regression = ["cargo:mc-core:maps::runtime::top100_h11_tests::retained_frame_markers_stay_recoverable_at_limit"]
 failing_first = "not recorded"
 fix_commit = "51dbaa07"
+promotion = "docs/bugs/promotions/MAP-FRAME-MARKER-RECOVERY-LIMIT.json"
 
 [[bug]]
 id = "NATIVE-BLACK-SKY-GEOMETRY"
