@@ -7,11 +7,14 @@
 use super::formation::{FormationRuntime, Member, Regiment};
 use super::{BattleState, Frame, Output};
 use mc_physics::entity_collision_26_1_2::{EntityPushInput, PushRecipient, vanilla_push_impulse};
+use mc_physics::mth;
+use rayon::prelude::*;
 
 pub(crate) const NEIGHBOURS: usize = 5;
 const CELL_CAP: usize = 8;
 pub(crate) const MIN_SPACING: f64 = 0.65;
 const SENSE: f64 = 1.5;
+const DRIVE_CHUNK: usize = 256;
 
 /// CSR over occupied two-block cells. `member_cell[bi]` and the nine adjacent
 /// cell ranges are prepared once; steering never hashes or searches cell keys.
@@ -153,7 +156,7 @@ impl SeparationGrid {
 }
 
 pub(crate) fn unit(delta: [f64; 2], fallback: [f64; 2]) -> [f64; 2] {
-    let length = delta[0].hypot(delta[1]);
+    let length = mth::length2(delta[0], delta[1]);
     if length < 1e-9 {
         fallback
     } else {
@@ -206,6 +209,7 @@ pub(crate) fn nearest_front(
     (selected, nearest, routing, examined)
 }
 
+#[cfg(test)]
 pub(crate) fn movement(runtime: &mut FormationRuntime, index: usize) -> [f64; 3] {
     if !runtime.members[index].alive {
         return [0.0; 3];
@@ -214,12 +218,33 @@ pub(crate) fn movement(runtime: &mut FormationRuntime, index: usize) -> [f64; 3]
     movement_with_neighbours(runtime, index, near, examined)
 }
 
+#[cfg(test)]
 fn movement_with_neighbours(
     runtime: &mut FormationRuntime,
     index: usize,
     near: [(f64, usize); NEIGHBOURS],
     examined: u64,
 ) -> [f64; 3] {
+    let (drive, pushes) = drive_with_neighbours(runtime, index, near);
+    runtime.work.separation_candidates += examined;
+    runtime.work.push_calls += pushes;
+    drive
+}
+
+fn sample_movement(runtime: &FormationRuntime, index: usize) -> ([f64; 3], u64, u64) {
+    if !runtime.members[index].alive {
+        return ([0.0; 3], 0, 0);
+    }
+    let (near, examined) = runtime.neighbours.nearest(index, &runtime.members);
+    let (drive, pushes) = drive_with_neighbours(runtime, index, near);
+    (drive, examined, pushes)
+}
+
+fn drive_with_neighbours(
+    runtime: &FormationRuntime,
+    index: usize,
+    near: [(f64, usize); NEIGHBOURS],
+) -> ([f64; 3], u64) {
     let m = &runtime.members[index];
     let (mut target, max_step) = runtime.destination(index);
     if let Some((min, max)) = runtime.bounds {
@@ -227,9 +252,9 @@ fn movement_with_neighbours(
         target[2] = target[2].clamp(min[1], max[1]);
     }
     let delta = [target[0] - m.pos[0], target[2] - m.pos[2]];
-    let length = delta[0].hypot(delta[1]);
+    let length = mth::length2(delta[0], delta[1]);
     let mut drive = delta.map(|v| v * (max_step / length.max(max_step)).min(1.0));
-    runtime.work.separation_candidates += examined;
+    let mut pushes = 0;
     for &(distance, other) in &near {
         if other == usize::MAX || distance >= MIN_SPACING * MIN_SPACING {
             continue;
@@ -256,12 +281,12 @@ fn movement_with_neighbours(
             recipient_is_vehicle: false,
         })
         .expect("finite battle snapshot contact");
-        runtime.work.push_calls += 1;
+        pushes += 1;
         drive[0] += impulse.x;
         drive[1] += impulse.z;
     }
     let max_step = max_step.max(0.05);
-    let speed = drive[0].hypot(drive[1]);
+    let speed = mth::length2(drive[0], drive[1]);
     if speed > max_step {
         drive = drive.map(|v| v * max_step / speed);
     }
@@ -285,13 +310,16 @@ fn movement_with_neighbours(
         }
     }
     // Physics drive is blocks/SECOND, whereas all battle tuning is blocks/tick.
-    runtime.constrain_velocity(
-        m.pos,
-        [
-            drive[0] / mc_physics::TICK_SECONDS,
-            0.0,
-            drive[1] / mc_physics::TICK_SECONDS,
-        ],
+    (
+        runtime.constrain_velocity(
+            m.pos,
+            [
+                drive[0] / mc_physics::TICK_SECONDS,
+                0.0,
+                drive[1] / mc_physics::TICK_SECONDS,
+            ],
+        ),
+        pushes,
     )
 }
 
@@ -300,10 +328,35 @@ pub(crate) fn step(_frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Outp
         .formation
         .neighbours
         .rebuild(&battle.formation.members);
-    for i in 0..battle.formation.members.len() {
-        let drive = movement(&mut battle.formation, i);
-        battle.columns.drive[i] = drive;
-    }
+    let formation = &battle.formation;
+    let drives = &mut battle.columns.drive[..formation.members.len()];
+    let sample = |(chunk_index, chunk): (usize, &mut [[f64; 3]])| {
+        let mut work = (0_u64, 0_u64);
+        for (offset, drive) in chunk.iter_mut().enumerate() {
+            let (value, examined, pushes) =
+                sample_movement(formation, chunk_index * DRIVE_CHUNK + offset);
+            *drive = value;
+            work.0 += examined;
+            work.1 += pushes;
+        }
+        work
+    };
+    let merge = |a: (u64, u64), b: (u64, u64)| (a.0 + b.0, a.1 + b.1);
+    let work = if drives.len() >= DRIVE_CHUNK * 2 && rayon::current_num_threads() > 1 {
+        drives
+            .par_chunks_mut(DRIVE_CHUNK)
+            .enumerate()
+            .map(sample)
+            .reduce(|| (0, 0), merge)
+    } else {
+        drives
+            .chunks_mut(DRIVE_CHUNK)
+            .enumerate()
+            .map(sample)
+            .fold((0, 0), merge)
+    };
+    battle.formation.work.separation_candidates += work.0;
+    battle.formation.work.push_calls += work.1;
 }
 
 #[cfg(test)]

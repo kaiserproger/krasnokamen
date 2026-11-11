@@ -130,15 +130,19 @@ both WAL and incremental-checkpoint custody, including a reset to zero.
 `solaris:Faction` (`TAG_Int`, validated as 0–65535) carries the checkpoint
 projection. Recovery and `/summon` use the same setter. Missing allegiance is
 zero; malformed or out-of-range authored/persisted values fail decoding.
-The standard NBT selector/data projection exposes the field; no wire metadata
-slot or protocol change is needed. Transfers carry the body and membership,
-and dense compaction cannot change its allegiance.
+The standard NBT selector/data projection exposes nonzero allegiance and omits
+the field for unaffiliated rows; no wire metadata slot or protocol change is
+needed. Transfers carry the body and membership, and dense compaction cannot
+change its allegiance.
 
 Battle targets, pairings, grid, movement, combat timers and the running/paused
 clock are runtime-only. Restart restores allegiance, not an in-progress fight.
 The native checkpoint/WAL/restart regression is
 `battle_faction_survives_native_checkpoint_wal_and_restart`; persistence
 changes require Main's independent review before commit.
+`battle_restart_reset_removes_checkpoint_roster_and_ticket_durably` additionally
+checks that reset after restart removes the tagged roster and ticket through the
+next native checkpoint and reopen.
 
 
 On genuine first start, `Core::open` writes and fsyncs

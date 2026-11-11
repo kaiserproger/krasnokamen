@@ -223,10 +223,8 @@ fn outside_knockback_recovers_inward_without_teleporting_or_exceeding_speed_budg
                 start[2].clamp(-5.0, 5.0) - start[2],
             ];
             assert!(velocity[0] * back[0] + velocity[2] * back[1] > 0.0);
-            let budget = desired[0]
-                .hypot(desired[2])
-                .max(0.079 / mc_physics::TICK_SECONDS);
-            assert!(velocity[0].hypot(velocity[2]) <= budget + 1e-9);
+            let budget = mth::length2(desired[0], desired[2]).max(0.079 / mc_physics::TICK_SECONDS);
+            assert!(mth::length2(velocity[0], velocity[2]) <= budget + 1e-9);
             assert_eq!(velocity[1], desired[1]);
         }
     }

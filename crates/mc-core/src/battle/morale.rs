@@ -1,8 +1,17 @@
-//! Regiment morale. Constants follow research-combat-behavior.md §4.8;
-//! casualty-rate factor 2 calibrates a steady frontal break at ~10% removed.
+//! Regiment morale. Loss and pressure follow research-combat-behavior.md §4.8;
+//! casualty-rate factor 2 keeps a steady frontal break near 10% removed.
+//! Film nerve thresholds delay cascading rear flight, not human action clocks.
 //! Contact modifiers are levels, not an endlessly accumulating tick penalty.
 
 use super::{BattleState, Frame, Output};
+
+// Film nerve: front 3..18, rear 25..40. The rear top must clear the pulse
+// morale floor, or a worn regiment stops fighting before anyone can flee: in
+// the native 20k film a 23 top never broke within three contact minutes; the
+// 40 top breaks the busiest front after ~70 removals, 77 s into contact.
+const FRONT_NERVE_BASE: f32 = 3.0;
+const NERVE_VARIATIONS: u32 = 16;
+const REAR_NERVE_BONUS: f32 = 22.0;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct Pressure {
@@ -116,8 +125,14 @@ impl Morale {
 /// Rear ranks have the higher flight threshold. Stable per-soldier variation
 /// produces a trickle before the regiment breaks, not one simultaneous switch.
 pub(crate) fn nerve(id: i32, rank: u16, ranks: u16) -> f32 {
-    let variation = (id as u32).wrapping_mul(2_654_435_761) % 21;
-    15.0 + variation as f32 + if rank * 2 >= ranks { 10.0 } else { 0.0 }
+    let variation = (id as u32).wrapping_mul(2_654_435_761) % NERVE_VARIATIONS;
+    FRONT_NERVE_BASE
+        + variation as f32
+        + if rank * 2 >= ranks {
+            REAR_NERVE_BONUS
+        } else {
+            0.0
+        }
 }
 
 pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Output) {
