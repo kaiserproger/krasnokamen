@@ -43,9 +43,11 @@ const TARGET_REMOVALS: f32 = 80.0;
 const PARRY_FRACTION: f32 = 2316.0 / 3873.0;
 const REMOVAL_ROLLS: f32 = 10_000.0 * TARGET_REMOVALS
     / (FRONT_FILES * STRIKES_PER_SECOND * ACTIVE_FIGHT_SECONDS * (1.0 - PARRY_FRACTION));
-const FATAL_SHARE: f32 = 0.4;
+// Film lethality: most removals fall on the spot; the wounded share withdraws
+// through the ranks. Pursuit cuts down nearly everyone it reaches.
+const FATAL_SHARE: f32 = 0.7;
 const PURSUIT_REMOVAL_ROLLS: f32 = 3.0 * REMOVAL_ROLLS;
-const PURSUIT_FATAL_SHARE: f32 = 2.0 / 3.0;
+const PURSUIT_FATAL_SHARE: f32 = 0.9;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Weapon {
@@ -107,6 +109,9 @@ pub(super) struct Fighter {
     reaction_checked: bool,
     pub(super) arrows: u16,
     pub(super) charge: super::cavalry::Charge,
+    /// Frozen-pass tick of a reserved kill: a second attacker must not credit
+    /// the same casualty before native intent merge removes the body.
+    slain: Option<u64>,
 }
 
 impl Default for Fighter {
@@ -120,6 +125,7 @@ impl Default for Fighter {
             reaction_checked: false,
             arrows: 60,
             charge: Default::default(),
+            slain: None,
         }
     }
 }
@@ -148,6 +154,8 @@ pub(crate) struct CombatRuntime {
     remap: FxHashMap<EntityId, Fighter>,
     pub(super) archery: super::archery::Runtime,
     strikes: Vec<(EntityId, EntityId, Weapon, u64)>,
+    /// Reusable per-regiment cavalry sweep plans, rebuilt every tick.
+    pub(super) sweeps: Vec<Option<super::cavalry::Sweep>>,
     pub(crate) work: Work,
 }
 
@@ -337,7 +345,15 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         fighter.action = Action::Guard {
             until: frame.tick + ATTACK_DECISION_TICKS,
         };
-        let probability = if roll(id, 0, 1) < AGGRESSIVE_FIGHTERS {
+        // Anyone may cut at a fleeing back; the cautious majority only parries
+        // and probes a steady front.
+        let fleeing = frame
+            .entities
+            .slot_of(target.id)
+            .and_then(|slot| battle.columns.index(slot))
+            .and_then(|target_bi| context(battle, target_bi))
+            .is_some_and(|c| c.routing);
+        let probability = if fleeing || roll(id, 0, 1) < AGGRESSIVE_FIGHTERS {
             AGGRESSIVE_ATTEMPTS
         } else {
             CAUTIOUS_ATTEMPTS
@@ -479,7 +495,7 @@ fn strike(
             combat.fighters[actor_bi].action,
             Action::Wounded | Action::Stagger { .. }
         )
-        || matches!(combat.fighters[target_bi].action, Action::Wounded)
+        || combat.fighters[target_bi].slain == Some(frame.tick)
     {
         return;
     }
@@ -507,9 +523,17 @@ fn strike(
     if result == Outcome::Glance {
         return;
     }
-    // Reserve this removal once within the frozen pass; later paired attackers
-    // must not credit the same casualty again before native intent merge.
+    // A withdrawing wounded man is not immune: any landed blow finishes him.
+    // Otherwise he stays the nearest target forever and freezes the front.
+    let result = if matches!(combat.fighters[target_bi].action, Action::Wounded) {
+        Outcome::Kill
+    } else {
+        result
+    };
     combat.fighters[target_bi].action = Action::Wounded;
+    if result == Outcome::Kill {
+        combat.fighters[target_bi].slain = Some(frame.tick);
+    }
     let amount = if result == Outcome::Kill {
         combat.work.killed += 1;
         // Bypass armour through the native generic kill damage kind below.

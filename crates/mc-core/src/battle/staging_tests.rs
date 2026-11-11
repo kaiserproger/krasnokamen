@@ -131,7 +131,7 @@ fn scenario_pursues_only_routing_enemies_and_resumes_fighting_afterward() {
     let melee = formation
         .regiments
         .iter()
-        .position(|r| r.spec.order == Order::Advance)
+        .position(|r| r.spec.order == Order::Advance && r.spec.frontage <= 1.0)
         .unwrap();
     let archers = formation
         .regiments

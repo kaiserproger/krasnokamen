@@ -21,10 +21,10 @@ fn film_nerve_keeps_a_rear_trickle_above_the_regiment_break_threshold() {
 }
 
 #[test]
-fn steady_regiment_breaks_near_ten_percent_not_fifty() {
+fn steady_regiment_breaks_near_twenty_percent_not_fifty() {
     let mut morale = Morale::default();
     let mut broke_at = None;
-    for losses in 0..=15 {
+    for losses in 0..=30 {
         morale.update(losses as u64 * 10, 1000, losses * 10, 100.0, false);
         if morale.broken {
             broke_at = Some(losses);
@@ -32,7 +32,7 @@ fn steady_regiment_breaks_near_ten_percent_not_fifty() {
         }
     }
     assert!(
-        (8..=12).contains(&broke_at.expect("regiment must break")),
+        (16..=20).contains(&broke_at.expect("regiment must break")),
         "break={broke_at:?}"
     );
 }
@@ -54,7 +54,7 @@ fn rear_rank_flight_precedes_front_and_then_whole_regiment_breaks() {
             &(1..=100).map(EntityId).collect::<Vec<_>>(),
         )
         .unwrap();
-    for i in 0..8 {
+    for i in 0..16 {
         runtime.mark_wounded(EntityId(i + 1));
     }
     runtime.prepare(0, |id| {
@@ -78,7 +78,7 @@ fn rear_rank_flight_precedes_front_and_then_whole_regiment_breaks() {
         .count();
     assert!(rear > front, "front={front}, rear={rear}");
     assert!(!runtime.regiments[0].morale.broken);
-    for i in 8..10 {
+    for i in 16..18 {
         runtime.mark_wounded(EntityId(i + 1));
     }
     runtime.prepare(10, |id| {
@@ -136,10 +136,10 @@ fn kills_raise_morale_and_panic_and_recent_casualties_reduce_it() {
     morale.update(20, 100, 0, 100.0, false);
     assert_eq!(morale.value, 58.0);
     morale.update(30, 100, 3, 100.0, false);
-    assert_eq!(morale.value, 35.0);
+    assert_eq!(morale.value, 44.0);
     morale.update(240, 100, 3, 100.0, false);
     assert_eq!(
-        morale.value, 40.0,
+        morale.value, 49.0,
         "rate penalty must expire after 200 ticks"
     );
 }
@@ -153,12 +153,12 @@ fn missile_cause_survives_deferred_damage_and_is_not_counted_twice() {
     };
     missile.update(0, 100, 1, 100.0, false);
     melee.update(0, 100, 1, 100.0, false);
-    assert_eq!(missile.value - melee.value, 2.0);
+    assert_eq!(missile.value - melee.value, 1.0);
     missile.update(10, 100, 2, 100.0, false);
     melee.update(10, 100, 2, 100.0, false);
     assert_eq!(
         missile.value - melee.value,
-        2.0,
+        1.0,
         "second melee loss must not become a missile loss"
     );
 }
@@ -181,7 +181,7 @@ fn symmetric_kill_rewards_still_break_a_disciplined_regiment() {
         )
         .unwrap();
     let mut break_percent = None;
-    for percent in 1..=20 {
+    for percent in 1..=40 {
         for id in (percent - 1) * 10 + 1..=percent * 10 {
             runtime.mark_wounded(EntityId(id));
         }
@@ -201,5 +201,28 @@ fn symmetric_kill_rewards_still_break_a_disciplined_regiment() {
             break;
         }
     }
-    assert!((12..=14).contains(&break_percent.expect("panic must break symmetric combat")));
+    let break_percent = break_percent.expect("panic must break symmetric combat");
+    assert!((20..=24).contains(&break_percent), "break={break_percent}");
+}
+
+#[test]
+fn worn_regiment_in_contact_gives_way_while_a_resting_one_holds() {
+    let worn = Morale {
+        value: PULSE_MORALE_FLOOR + 5.0,
+        cohesion: PULSE_MORALE_FLOOR + 5.0,
+        ..Morale::default()
+    };
+    let mut engaged = worn.clone();
+    let mut resting = worn;
+    for decision in 0..40 {
+        engaged.pressure.engaged = true;
+        engaged.update(decision * 10, 100, 0, 100.0, false);
+        resting.update(decision * 10, 100, 0, 100.0, false);
+    }
+    assert!(engaged.broken, "worn front froze at {}", engaged.value);
+    assert!(
+        !resting.broken,
+        "rested regiment broke at {}",
+        resting.value
+    );
 }

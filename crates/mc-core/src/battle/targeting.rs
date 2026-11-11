@@ -212,7 +212,8 @@ fn eligible(
         return true;
     }
     let context = formation.context_at(bi);
-    !context.routing && (columns.ranged[bi] || context.front_rank)
+    // Rear ranks do not pay for search, except loose order: riders and pursuers.
+    !context.routing && (columns.ranged[bi] || context.front_rank || formation.loose_order_at(bi))
 }
 
 fn retained(
