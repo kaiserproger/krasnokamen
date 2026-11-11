@@ -1839,6 +1839,19 @@ impl PoiCtx<'_> {
                 if !uncertified {
                     lose_profession(v);
                 }
+            } else if let Some(PoiKind::Job(p)) = kind
+                && !traded(v)
+                && !matches!(
+                    v.data.profession,
+                    Profession::Builder | Profession::Soldier | Profession::Nitwit
+                )
+                && v.data.profession != p
+            {
+                // Vanilla parity (AssignProfessionFromJobSite): claiming a job
+                // site assigns its profession immediately, not only once the
+                // villager walks into workstation reach.
+                v.data.profession = p;
+                v.offers.clear();
             }
         } else if v.settlement.is_none() {
             // Only unbound jobless villagers reset here. Bound residents

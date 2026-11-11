@@ -649,6 +649,35 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
                      "server log: villager door open/close lines")
     if ctx.windowed:
         native_client.capture(probe.client, artifact, "village-qa-workday")
+    # --- (1b) record each worker's held station during the frozen workday ---
+    # Jobs are assigned by proximity, not summon order, so a role label is only
+    # a fallback: the station the worker actually works at during the day (the
+    # station it is seen at most often) is its real job site for sleep_return.
+    station_sightings: dict[str, dict[tuple[int, int, int], int]] = {}
+    station_deadline = _time.monotonic() + 90.0
+    while _time.monotonic() < station_deadline:
+        for row in _villagers(probe):
+            uuid = str(row.get("entity_uuid"))
+            if uuid not in worker_uuids:
+                continue
+            here = (float(row["x"]), float(row["z"]))
+            near = sorted(
+                (math.dist(here, (cell[0] + 0.5, cell[2] + 0.5)), cell)
+                for cell in stations.values()
+            )
+            if near[0][0] < 6.0:
+                counts = station_sightings.setdefault(uuid, {})
+                counts[near[0][1]] = counts.get(near[0][1], 0) + 1
+        if all(len(station_sightings.get(u, {})) > 0
+               and max(station_sightings[u].values()) >= 3 for u in worker_uuids):
+            break
+        _tick(probe)
+    held_station: dict[str, tuple[int, int, int]] = {
+        uuid: max(counts.items(), key=lambda kv: kv[1])[0]
+        for uuid, counts in station_sightings.items()
+    }
+    detail["held_stations"] = {u[:8]: list(c) for u, c in held_station.items()}
+
 
     # --- (2) night sleep: same entities persist, one in sleep pose by the bed ---
     evening = {str(row["entity_uuid"]): (float(row["x"]), float(row["y"]), float(row["z"]))
@@ -671,6 +700,22 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     # --- morning return at work hours 3000 (not idle 23000), same UUIDs to same jobs ---
     fixture("time set 3000")
     settled("morning_returns")
+    def sleeper_station_of() -> tuple[int, int, int] | None:
+        # The sleeper's own job site: the station it held during the workday,
+        # falling back to the role's default station only if never observed.
+        if sleeper is None:
+            return None
+        if sleeper in held_station:
+            return held_station[sleeper]
+        for role, uuid in role_uuid.items():
+            if uuid == sleeper:
+                return stations[role]
+        return None
+    def sleeper_returned(morning_now: dict[str, tuple[float, float, float]]) -> bool:
+        station = sleeper_station_of()
+        return (sleeper is not None and sleeper in morning_now and station is not None
+                and math.dist((morning_now[sleeper][0], morning_now[sleeper][2]),
+                              (station[0] + 0.5, station[2] + 0.5)) < 2.5)
     morning: dict[str, tuple[float, float, float]] = {}
     morning_deadline = _time.monotonic() + 45.0
     morning_near: dict[str, bool] = {}
@@ -683,21 +728,22 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
                 (stations[role][0] + 0.5, stations[role][2] + 0.5)) < 2.5
             for role in stations
         }
-        returned = any(role_uuid[role] == sleeper and near for role, near in morning_near.items())
-        if set(evening) <= set(morning) and returned:
+        if set(evening) <= set(morning) and sleeper_returned(morning):
             break
         _tick(probe)
     same_entities = set(evening) != set() and set(evening) <= set(morning)
-    returned = any(role_uuid[role] == sleeper and near for role, near in morning_near.items())
+    returned = sleeper_returned(morning)
+    station = sleeper_station_of()
     if same_entities and sleeper is not None and returned:
         _verdict(detail, "sleep_return", "PASS",
                  f"same 4 entities persist; {sleeper[:8]} slept by bed {list(bed_head)}; "
-                 f"same worker returned within 2.5 of its original certified station: {morning_near}")
+                 f"same worker returned within 2.5 of its held station {list(station) if station else None} "
+                 f"(role-default proximity: {morning_near})")
     else:
         _verdict(detail, "sleep_return", "FAIL",
-                 f"same_entities={same_entities} sleeper={sleeper} morning_near={morning_near}",
+                 f"same_entities={same_entities} sleeper={sleeper} held_station={list(station) if station else None} morning_near={morning_near}",
                  "time set 18000; minecraft_list_entities radius 64; time set 3000; "
-                 "re-observe same entity_uuid near same job site")
+                 "re-observe same entity_uuid near the station it held before sleeping")
     if ctx.windowed:
         native_client.capture(probe.client, artifact, "village-qa-morning")
 
