@@ -20,8 +20,10 @@
 # incrementally.
 # The scope gets the harness's own CPU properties (CPUQuota = physical cores x 100%,
 # CPUWeight=50), so harness runs keep their canonical CPU budget. Preemptible builds
-# get CPUWeight=10: under contention tests, servers and real-client gates (which have
-# deadlines) win the CPU five to one; builds only slow down.
+# get CPUWeight=10: under contention tests and servers win the CPU five to one; builds
+# only slow down. A graphical gate holding a scene slot (scene-slot.sh exports
+# SOLARIS_SCENE_SLOT) gets CPUWeight=500: with dozens of test scopes at 50 a gate's
+# client fell to 6-8 TPS and missed its tick deadlines (2026-11-11).
 # Lanes: ordinary commands run on all CPUs, at most 12G each; every cargo under
 # mem-run shares the watchdog's make-style jobserver (one token per logical CPU, via
 # CARGO_MAKEFLAGS), so all builds together run about nproc compilers instead of nproc
@@ -231,6 +233,7 @@ fi
 [ "$perf" = 1 ] && { niceness=0; cpu_pin=(taskset -c "$perf_cpus"); preemptible=0; props=("${props[@]/CPUWeight=50/CPUWeight=10000}"); }
 [ "$exclusive" = 1 ] && { niceness=0; cpu_pin=(); preemptible=0; }
 [ "$preemptible" = 1 ] && props=("${props[@]/CPUWeight=50/CPUWeight=10}")
+[ -n "${SOLARIS_SCENE_SLOT:-}" ] && [ "$perf" = 0 ] && props=("${props[@]/CPUWeight=*/CPUWeight=500}")
 echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf cpus=${cpu_pin[*]:-all} slice=$slice target=$target expect=$((est_kib / 1024))MiB key='$key'" >&2
 # The wrapper registers its scope, expectation, preemptible flag and target dir with
 # the watchdog (the watchdog never freezes a command whose target dir another running

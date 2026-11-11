@@ -140,7 +140,8 @@ into the run's artifact dir.
   see [OPERATING](../OPERATING.md#vanilla-content-cache)); they copy it into the
   private client data root as `servers/content/26.3`.
 - Run each graphical gate through the scene slot so at most six run on the
-  host: `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G
+  host and the gate's scope outranks tests and builds for CPU:
+  `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G
   python3 -m tools.harness run <profile> --client native --windowed`.
 
 ### 4. Which gates need owner-held access

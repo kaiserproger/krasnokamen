@@ -38,8 +38,10 @@ to keep that from happening again without idling the machine.
   `CPUQuota=<physical cores x 100>%`, `CPUWeight=50`, `nice 19`. These are the
   harness's own scope properties, so harness runs keep their canonical CPU
   budget. Preemptible builds (below) get `CPUWeight=10`, so under contention
-  tests, servers and real-client gates, which have deadlines, win the CPU five
-  to one and builds only slow down. The runner exports `SOLARIS_HARNESS_CPU_SCOPE=1`; without it the
+  tests and servers win the CPU five to one and builds only slow down. A
+  command started through `scene-slot.sh` (it exports `SOLARIS_SCENE_SLOT`)
+  gets `CPUWeight=500`: with dozens of test scopes at 50, a gate's native
+  client fell to 6-8 TPS and missed its tick waits (2026-11-11). The runner exports `SOLARIS_HARNESS_CPU_SCOPE=1`; without it the
   harness re-runs itself in its own scope outside the slice and escapes the cap.
 - **`tools/dev/heavy-watchdog.py`** (user unit `solaris-heavy-watchdog`,
   started by the runner) is the only thing that pauses work. On real memory

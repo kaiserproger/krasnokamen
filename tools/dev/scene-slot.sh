@@ -5,6 +5,8 @@
 # lock is held until the command exits (an fd >= 10 is inherited across exec).
 # Six fits the 16-thread owner host: one scene (release server + native client
 # + Xvfb, or a Java oracle) measured about 1.5 cores and 3.5 GB (2026-11-11).
+# The command sees SOLARIS_SCENE_SLOT=<slot>; mem-run.sh then gives its scope a
+# higher CPU weight than tests and builds, so the gate keeps its tick rate.
 exec python3 -c '
 import fcntl, os, sys, threading
 
@@ -22,7 +24,7 @@ def take(slot):
         if chosen:
             os.close(fd)
             return
-        chosen.append(fd)
+        chosen.append((fd, slot))
     won.set()
 
 for slot in "abcdef":
@@ -35,6 +37,7 @@ if ready:
 won.wait()
 # Inheritable copy at fd >= 10: mem-run.sh reopens and closes fds 3-8 (exec 3>, 3>&-),
 # which would release a low lock fd before the gate ends; bash {fd} only allocates.
-fcntl.fcntl(chosen[0], fcntl.F_DUPFD, 10)
+fcntl.fcntl(chosen[0][0], fcntl.F_DUPFD, 10)
+os.environ["SOLARIS_SCENE_SLOT"] = chosen[0][1]
 os.execvp(cmd[0], cmd)
 ' "$@"
