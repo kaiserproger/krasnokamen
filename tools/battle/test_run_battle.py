@@ -106,10 +106,25 @@ class BattleRunnerTests(unittest.TestCase):
             def poll(self):
                 return None
         messages = queue.Queue()
-        messages.put('Battle paused tick=99 side1=0 side2=0 resident=0 active=0')
-        messages.put('Battle paused tick=101 side1=100 side2=100 resident=200 active=199')
-        messages.put('Battle paused tick=102 side1=100 side2=100 resident=200 active=200')
+        messages.put('Battle paused tick=99 side1=0 side2=0 resident=0 active=0 nonzero_velocity=0 horses=0')
+        messages.put('Battle paused tick=101 side1=100 side2=100 resident=200 active=199 nonzero_velocity=0 horses=20')
+        messages.put('Battle paused tick=102 side1=100 side2=100 resident=200 active=200 nonzero_velocity=0 horses=20')
         self.assertEqual(runner.await_population(messages, 100, 100, Recorder()), 102)
+
+    def test_population_barrier_refuses_a_missing_horse_or_inactive_soldier_before_start(self):
+        spec = importlib.util.spec_from_file_location('runner', Path(__file__).with_name('run-battle.py'))
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        class Recorder:
+            def poll(self):
+                return None
+        messages = queue.Queue()
+        messages.put('Battle paused tick=200 side1=100 side2=100 resident=200 active=200 nonzero_velocity=0 horses=19')
+        with self.assertRaisesRegex(RuntimeError, 'horses=19'):
+            runner.await_population(messages, 100, 100, Recorder())
+        messages.put('Battle paused tick=1400 side1=100 side2=100 resident=199 active=199 nonzero_velocity=0 horses=20')
+        with self.assertRaisesRegex(RuntimeError, 'left the active area'):
+            runner.await_population(messages, 100, 1300, Recorder(), wait=False)
 
     def test_telemetry_flush_reaches_last_recorded_tick(self):
         spec = importlib.util.spec_from_file_location('runner', Path(__file__).with_name('run-battle.py'))
