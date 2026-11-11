@@ -1,10 +1,30 @@
 #!/bin/sh
 # Run one graphical scene-shot/gate command in one of three shared host slots.
-# Blocks (flock) instead of polling; the lock is held until the command exits.
-for s in a b c; do
-  exec 9>"/tmp/solaris-scene-slot-$s.lock"
-  if flock -n 9; then exec "$@"; fi
-done
-exec 9>/tmp/solaris-scene-slot-a.lock
-flock 9
-exec "$@"
+# A waiter blocks (flock) on all three slots at once and takes whichever frees
+# first, so a long run in one slot never starves the queue. No polling; the
+# lock is held until the command exits (the fd is inherited across exec).
+exec python3 -c '
+import fcntl, os, sys, threading
+
+cmd = sys.argv[1:]
+if not cmd:
+    sys.exit("usage: scene-slot.sh <command> [args...]")
+guard, won, chosen = threading.Lock(), threading.Event(), []
+
+def take(slot):
+    # Non-inheritable fd (PEP 446): a losing slot is released at exec at the latest.
+    fd = os.open("/tmp/solaris-scene-slot-%s.lock" % slot, os.O_WRONLY | os.O_CREAT, 0o666)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    with guard:
+        if chosen:
+            os.close(fd)
+            return
+        chosen.append(fd)
+    won.set()
+
+for slot in "abc":
+    threading.Thread(target=take, args=(slot,), daemon=True).start()
+won.wait()
+os.set_inheritable(chosen[0], True)
+os.execvp(cmd[0], cmd)
+' "$@"
