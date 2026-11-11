@@ -747,6 +747,7 @@ def start_client(
     platform: str | None = None,
     launch_manifest: Path | None = None,
     client_profile: str | None = None,
+    window_size: tuple[int, int] | None = None,
 ) -> tuple[subprocess.Popen[Any], Any]:
     """Launch a real client and return (process, log_handle) once MCP is ready.
 
@@ -836,6 +837,10 @@ def start_client(
             command = (prepared_fabric_command(launch_manifest, game_dir, username)
                        if launch_manifest is not None else vanilla_command(
                            game_dir=game_dir, username=username, agent_jar=_agent_jar_path()))
+            if window_size is not None:
+                if min(window_size) < 1:
+                    raise ValueError("client window dimensions must be positive")
+                command.extend(["--width", str(window_size[0]), "--height", str(window_size[1])])
             process = subprocess.Popen(
                 command,
                 cwd=REPO_ROOT,

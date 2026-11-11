@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ctypes as c
 from concurrent.futures import ThreadPoolExecutor
+import math
 import time
 from pathlib import Path
 from typing import Any
@@ -16,8 +17,41 @@ from .probe_steps import ProbeSteps
 
 def capture(steps: ProbeSteps, artifact: Path, label: str, java: bool) -> str:
     if java:
-        from . import java_p5
-        return str(java_p5.capture(steps, label))
+        # The retained 26.1.2 Java agent's framebuffer screenshot method is
+        # incompatible; capture this harness-owned Xvfb window itself instead.
+        from PIL import ImageGrab
+        window = steps.client.p4_window
+        pointer = Pointer(window)
+        try:
+            x = pointer.x
+            x.XGetGeometry.argtypes = [c.c_void_p, c.c_ulong, c.POINTER(c.c_ulong),
+                                      c.POINTER(c.c_int), c.POINTER(c.c_int),
+                                      c.POINTER(c.c_uint), c.POINTER(c.c_uint),
+                                      c.POINTER(c.c_uint), c.POINTER(c.c_uint)]
+            x.XTranslateCoordinates.argtypes = [c.c_void_p, c.c_ulong, c.c_ulong, c.c_int, c.c_int,
+                                               c.POINTER(c.c_int), c.POINTER(c.c_int), c.POINTER(c.c_ulong)]
+            root, child = c.c_ulong(), c.c_ulong()
+            left, top, wx, wy = c.c_int(), c.c_int(), c.c_int(), c.c_int()
+            width, height, border, depth = c.c_uint(), c.c_uint(), c.c_uint(), c.c_uint()
+            if not x.XGetGeometry(pointer.display, pointer.window, c.byref(root), c.byref(wx), c.byref(wy),
+                                  c.byref(width), c.byref(height), c.byref(border), c.byref(depth)):
+                raise RuntimeError('cannot read owned Java window geometry')
+            if not x.XTranslateCoordinates(pointer.display, pointer.window, root.value, 0, 0,
+                                           c.byref(left), c.byref(top), c.byref(child)):
+                raise RuntimeError('cannot translate owned Java window coordinates')
+            x.XSync(pointer.display, 0)
+            path = artifact / 'screenshots' / f'{label}.png'
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with ImageGrab.grab(xdisplay=window['display'],
+                                bbox=(left.value, top.value, left.value + width.value,
+                                      top.value + height.value)) as image:
+                image.save(path)
+            steps.report.setdefault('java_xvfb_captures', []).append({
+                'path': str(path), 'window_id': pointer.window,
+                'bounds': [left.value, top.value, width.value, height.value]})
+            return str(path)
+        finally:
+            pointer.close()
     return str(native_client.capture(steps.client, artifact, label))
 
 
@@ -193,6 +227,36 @@ def run_java(client: Any, artifact: Path, timeout: float) -> dict[str, Any]:
     return steps.report
 
 
+def _open_chest(steps: ProbeSteps, point: dict[str, int], window: dict[str, Any],
+                java: bool) -> dict[str, Any]:
+    if not java:
+        return _open(steps, point, 'ChestMenu', 63)
+    # Use actual mouse input rather than the 26.3-specific Java-agent use-item
+    # implementation, which cannot call the 26.1.2 swing signature.
+    steps.call('minecraft_set_hotbar_slot', {'slot': 8})
+    player = steps.observe()['player']
+    dx = point['x'] + 0.5 - player['x']
+    dy = point['y'] + 0.5 - (player['y'] + 1.62)
+    dz = point['z'] + 0.5 - player['z']
+    steps.call('minecraft_look', {
+        'yaw_deg': round(math.degrees(math.atan2(-dx, dz))),
+        'pitch_deg': round(-math.degrees(math.atan2(dy, math.hypot(dx, dz)))),
+    })
+    steps.wait(lambda s: all(s['target'].get(key) == point[key] for key in ('x', 'y', 'z'))
+               and s['target'].get('block_id') == 'minecraft:chest', 'java_chest_target')
+    pointer = Pointer(window)
+    try:
+        pointer.button(True, 3)
+        pointer.button(False, 3)
+    finally:
+        pointer.close()
+    state = steps.wait(lambda s: s['container']['container_id'] != 0
+                       and s['container']['menu_class'] == 'net.minecraft.world.inventory.ChestMenu',
+                       'java_chest_received')
+    steps.check('java_chest_slot_count', state['container']['slot_count'] == 63)
+    return state
+
+
 def run_chest(steps: ProbeSteps, origin: tuple[int, int, int], artifact: Path,
               window: dict[str, Any], *, java: bool = False) -> None:
     if steps.observe()['screen']['open']:
@@ -202,7 +266,7 @@ def run_chest(steps: ProbeSteps, origin: tuple[int, int, int], artifact: Path,
     _set(steps, point, 'minecraft:chest')
     steps.fixture('give @s minecraft:stone 10')
     _echo(steps, 'chest_stone_fixture')
-    state = _open(steps, point, 'ChestMenu', 63)
+    state = _open_chest(steps, point, window, java)
     _click(steps, 54, quick=True)
     steps.fixture('give @s minecraft:stone 20')
     _echo(steps, 'chest_second_seed_ordered')
@@ -214,7 +278,7 @@ def run_chest(steps: ProbeSteps, origin: tuple[int, int, int], artifact: Path,
     steps.call('minecraft_close_screen')
     steps.fixture('give @s minecraft:stone 2304')
     _echo(steps, 'chest_full_fixture_ordered')
-    state = _open(steps, point, 'ChestMenu', 63)
+    state = _open_chest(steps, point, window, java)
     before = observe_menu(steps, 'chest_before', slots=63)
     steps.check('chest_fixture_full', _slot_count(before, 0) == 10 and
                 all(_slot_count(before, i) == 64 for i in range(27, 63)))
@@ -299,12 +363,14 @@ def _menu_close(steps: ProbeSteps, artifact: Path, window: dict[str, Any], java:
     before = observe_menu(steps, 'close_before')
     steps.check('close_fixture', _total(before) == 586 and _slot_count(before, 9) == 10)
     capture(steps, artifact, 'shift-close-before', java)
-    tick = steps.observe().get('client_tick', 0)
+    baseline = steps.observe()
+    tick = baseline.get('client_tick', 0)
     pointer = Pointer(window)
     key = _keys(pointer)
     steps.client.correction_wire.arm_close()
     try:
-        pointer.move(*slot_center(steps, state, 9, artifact, java))
+        click_position = slot_center(steps, state, 9, artifact, java)
+        pointer.move(*click_position)
         _key(pointer, key, True)
         start = time.monotonic_ns()
         pointer.button(True)
@@ -315,9 +381,25 @@ def _menu_close(steps: ProbeSteps, artifact: Path, window: dict[str, Any], java:
             raise RuntimeError('owned Xvfb lacks Escape or inventory key')
         _key(pointer, escape, True)
         _key(pointer, escape, False)
+        if java:
+            steps.client.correction_wire.wait_closed(min(steps.remaining(), 2))
         _key(pointer, inventory, True)
         _key(pointer, inventory, False)
-        pointer.button(True)
+        if java:
+            # Opening the Java screen resets the pointer to the window centre.
+            # Queue a real XTest motion after that keybind tick, followed by the
+            # press; the wire assertion requires the same slot after reopening.
+            left, top, _, _ = steps.report['java_xvfb_captures'][-1]['bounds']
+            pointer.xt.XTestFakeMotionEvent.argtypes = [c.c_void_p, c.c_int, c.c_int, c.c_int, c.c_ulong]
+            if not pointer.xt.XTestFakeMotionEvent(pointer.display, 0, left + click_position[0],
+                                                   top + click_position[1], 140):
+                raise RuntimeError('owned Xvfb refused paced mouse motion')
+            if not pointer.xt.XTestFakeButtonEvent(pointer.display, 1, 1, 20):
+                raise RuntimeError('owned Xvfb refused paced mouse press')
+            pointer.down = 1
+            pointer.x.XSync(pointer.display, 0)
+        else:
+            pointer.button(True)
         elapsed = (time.monotonic_ns() - start) / 1_000_000
         pointer.button(False)
     finally:
@@ -325,7 +407,11 @@ def _menu_close(steps: ProbeSteps, artifact: Path, window: dict[str, Any], java:
         pointer.close()
     steps.report.setdefault('shift_intervals_ms', {})['close_reopen'] = elapsed
     steps.check('close_reopen_interval', elapsed < 250)
-    steps.client.correction_wire.wait_close(min(steps.remaining(), 5))
+    try:
+        steps.client.correction_wire.wait_close(min(steps.remaining(), 5))
+    except Exception:
+        capture(steps, artifact, 'shift-close-failed', java)
+        raise
     _fence_input(steps, tick, 'close', java)
     steps.wait(lambda s: s['screen']['open'] and s['container']['container_id'] == 0,
                'close_reopened')

@@ -36,6 +36,7 @@ class CorrectionWire(LightWireProxy):
         self.sent = threading.Event()
         self.close_events: list[tuple[str, int, int | None]] | None = None
         self.close_seen = threading.Event()
+        self.close_packet_seen = threading.Event()
         self.receipt: list[dict[str, object]] = []
         self.receipt_path = artifact / 'shift-correction-wire.json'
         super().__init__(server_port, artifact, client_packet_observer=self._on_click, decode_light=False)
@@ -52,6 +53,7 @@ class CorrectionWire(LightWireProxy):
         with self.lock:
             self.close_events = []
             self.close_seen.clear()
+            self.close_packet_seen.clear()
 
     def _on_click(self, wire: WireLight, phase: str, packet: int, payload: bytes) -> None:
         if phase == 'play' and self.close_events is not None and packet in (self.click_id, self.close_id):
@@ -65,6 +67,8 @@ class CorrectionWire(LightWireProxy):
             self.close_events.append(event)
             self.receipt.append({'event': 'menu_transition', 'packet': event,
                                  'monotonic_ns': time.monotonic_ns()})
+            if packet == self.close_id:
+                self.close_packet_seen.set()
             if len(self.close_events) == 3:
                 self.close_seen.set()
                 self.close_events = None
@@ -120,6 +124,7 @@ class CorrectionWire(LightWireProxy):
         except Exception as error:
             self.errors.append(f'{type(error).__name__}: {error}')
             self.sent.set()
+            self.close_packet_seen.set()
             self.close_seen.set()
 
     def wait_sent(self, timeout: float) -> None:
@@ -129,6 +134,12 @@ class CorrectionWire(LightWireProxy):
             raise RuntimeError(f'correction wire failed: {self.errors}')
         if not any(event['event'] == 'fixture_command_sent' for event in self.receipt):
             raise RuntimeError('correction fixture was not sent')
+
+    def wait_closed(self, timeout: float) -> None:
+        if not self.close_packet_seen.wait(timeout):
+            raise TimeoutError('did not observe the physical menu close on the wire')
+        if self.errors:
+            raise RuntimeError(f'correction wire failed: {self.errors}')
 
     def wait_close(self, timeout: float) -> None:
         if not self.close_seen.wait(timeout):

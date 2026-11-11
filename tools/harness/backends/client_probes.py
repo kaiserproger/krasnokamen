@@ -366,7 +366,8 @@ seed = 81
             client_process, client_log = runtime.start_client(
                 game_dir=artifact / "game", log_path=artifact / "client.log", token=token,
                 mcp_port=mcp_port, username=username, display=display,
-                client_profile="vanilla" if ctx.scenario_id == "java-v2-p5-shift-double-click" else None)
+                client_profile="vanilla" if ctx.scenario_id == "java-v2-p5-shift-double-click" else None,
+                window_size=(640, 480) if ctx.scenario_id == "java-v2-p5-shift-double-click" else None)
             if ctx.scenario_id == "java-v2-p5-shift-double-click":
                 agent_jar = runtime._agent_jar_path()
                 with agent_jar.open("rb") as source:
