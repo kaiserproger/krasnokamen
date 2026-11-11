@@ -300,6 +300,17 @@ The `entities` profile includes windowed native-client probes:
   block-entity NBT; the actual patterned and plain banners are captured for review.
 - `native-v2-snow-golem-shear`: ordinary shears clear the same golem's received
   pumpkin flag, reveal its face and yield one carved-pumpkin pickup.
+- `native-v2-happy-ghast-harness`: an ordinary survival harness debit admits the
+  graphical player and three independent native peers; a fifth peer is refused.
+  Received passenger packets prove distinct seats and independent dismount.
+  The public NBT view hides `solaris:` keys, so the refusal is fenced by the
+  fourth rider's later dismount in the same ordered passenger stream: no
+  passenger event before it may carry a fifth id. The focused native
+  checkpoint regression separately checks harness/rider custody on disk.
+- `native-v2-mob-metadata-spot`: one frog, strider, camel and sniffer stand in
+  frame on a private pad, a small slime is then eaten by the frog; the client
+  must stay in play and its log must carry no decode failure (sniffer state is
+  accessor 18; frog tongue, strider cold and camel dash are 19).
 - `native-v2-p4-identities`: seven named `/damage` identities must reach the
   actual client's damage stream with health loss, followed by a lever-provoked
   warden's sonic attack through a preplaced wall, death screen and respawn. Command cases prove identity

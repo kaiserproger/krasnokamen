@@ -46,6 +46,7 @@ mob behaviour. These distinctions do not turn unique mechanics into capabilities
 | `hurt_by_water` | `contact_hazards::hurt_by_water` (1 drowning damage per tick in water or rain) | enderman (vanilla also blaze, snow_golem, strider; see below) |
 | `fall_damage_immune` | `mob_fall::after_move` | 18 types of `#minecraft:fall_damage_immune` |
 | `climbs_walls` | `entity_motion::step` (0.2 blocks per tick) | spider, cave_spider |
+| `avoids_armadillos` | native motion decision, `armadillo::flee_target` | spider, cave_spider; only unrolled armadillos deter them |
 | `inverted_healing` | potion payloads (instant health/damage swap) | 14 undead |
 | `aquatic` (`Fish`/`Squid`/`Dolphin`/`Other`) | `entity_motion::step` | cod, salmon, tropical_fish, pufferfish, tadpole; squid, glow_squid; dolphin |
 | `explodes {power, fuse_ticks, griefing}` | `hostile::swell` (the `Swell` goal) | creeper (3.0, 30, true) |
@@ -54,7 +55,7 @@ mob behaviour. These distinctions do not turn unique mechanics into capabilities
 | `follows_adults` | `tick::passive_follow` queries existing chunk membership for nearby same-blueprint adults | built-in breeding animals |
 | `crossbreed {partner, offspring}` | `entity_life::breeding` resolves reciprocal parent pairs; merge revalidates readiness, distance and child type | horse + donkey -> mule |
 | `leashable`, `taming`, `food`, `breeding` | leash/taming/entity life | original leadable, pet and equine families |
-| `riding`, `equine_body_armor` | mounts | pig/strider steering; equine/camel/llama saddling and riding |
+| `riding`, `equine_body_armor` | mounts | pig/strider steering; equine/camel/llama saddling and riding; happy-ghast harness admission |
 | `ageable`, `milkable` | entity life, golden dandelion, capture/replay | original ageable list; cow and goat |
 | `equipment`, `equipment_pickup`, `prefers_gold_equipment`, `prefers_trident` | equipment initialization and pickup | original loadout families, with RNG draw order retained |
 | `poison_melee`, `poison_arrows`, `hurt_by_snowballs`, `ignores_wind_charges` | melee/ranged/projectile payloads | cave spider, bogged, blaze, breeze |
