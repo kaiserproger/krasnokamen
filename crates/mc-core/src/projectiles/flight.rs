@@ -555,6 +555,13 @@ pub(super) fn run(
     if ids.is_empty() {
         return;
     }
+    let mut clock = std::time::Instant::now();
+    let mut lap = || {
+        let now = std::time::Instant::now();
+        let elapsed = now.duration_since(clock).as_micros() as u64;
+        clock = now;
+        elapsed
+    };
     let mut bodies = std::mem::take(&mut state.projectiles.bodies);
     bodies.clear();
     if ids.iter().any(|id| {
@@ -569,6 +576,7 @@ pub(super) fn run(
     }) {
         hittables(state, &mut bodies);
     }
+    let hittables_us = lap();
     let mut grid = std::mem::take(&mut state.projectiles.grid);
     let use_grid = ids.len() >= FineGrid::MIN_SHOTS && grid.build(&bodies);
     let exceptional: Vec<_> = bodies
@@ -604,6 +612,8 @@ pub(super) fn run(
         candidates.truncate(end);
         ranges.push(start..end);
     }
+    let candidates_us = lap();
+    let shots = ids.len() as u32;
     run_shots(
         state,
         intents,
@@ -613,6 +623,11 @@ pub(super) fn run(
         &bodies,
         &mut slots,
     );
+    let post = &mut state.projectiles.post;
+    post.hittables_us = hittables_us;
+    post.candidates_us = candidates_us;
+    post.shots_us = lap();
+    post.shots = shots;
     state.projectiles.bodies = bodies;
     state.projectiles.grid = grid;
 }
@@ -706,6 +721,7 @@ fn run_shots<'a>(
             continue;
         }
         if grounded_arrow(state, id, slot, slots) {
+            state.projectiles.post.grounded += 1;
             continue;
         }
         let Some(mut boxed) = state.entities.row_mut(slot).projectile.take() else {
