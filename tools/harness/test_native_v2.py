@@ -169,6 +169,7 @@ class NativeV2ProbeTests(unittest.TestCase):
             self.assertEqual(entry.profile, "entities")
             self.assertEqual(entry.scenario_id, name)
             expected = ("graphical" if name.startswith("native-v2-map-") or name in (
+                "native-v2-ledger-painting", "native-v2-ledger-axe", "native-v2-ledger-sponge", "native-v2-ledger-setblock-snbt", "native-v2-ledger-crafting-pickup",
                 "native-v2-p5-humanoid-armor", "native-v2-light-seam",
                 "native-v2-radius-full-view", "native-v2-craft-drag", "native-v2-craft-drag-paced",
                 "native-v2-settlement-storage", "native-v2-destroyed-chest",

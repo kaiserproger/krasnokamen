@@ -1035,7 +1035,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PAINTINGS"
-regression = ["cargo:mc-core:interact_parity_tests::interact_parity_painting_places_on_wall"]
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_painting_places_on_wall", "cargo:mc-core:interact_parity_tests::painting_drops_when_shared_command_commit_removes_support"]
 
 [[bug]]
 id = "SPAWN-PEACEFUL-REMOVAL"
@@ -1216,7 +1216,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SETBLOCK-SNBT"
-regression = ["cargo:mc-core:command_world::tests::setblock_snbt_installs_native_chest_contents_and_replaces_same_block"]
+regression = ["cargo:mc-core:command_world::tests::setblock_snbt_installs_native_chest_contents_and_replaces_same_block", "harness:entities:native-v2-ledger-setblock-snbt"]
+fix_commit = "2ccf8cc1a397481928c7ac575cf6df177de66fb2"
 
 [[bug]]
 id = "FORCELOAD-RING"
