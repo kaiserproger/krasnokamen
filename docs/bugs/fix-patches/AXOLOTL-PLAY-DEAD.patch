@@ -1,0 +1,12 @@
+diff --git a/crates/mc-core/src/axolotl.rs b/crates/mc-core/src/axolotl.rs
+--- a/crates/mc-core/src/axolotl.rs
++++ b/crates/mc-core/src/axolotl.rs
+@@ -26,7 +26,7 @@
+         || row.controls.no_ai
+         || playing_dead(row)
+         || piece.amount >= row.health
+-        || has_entity_source(piece.source)
++        || !has_entity_source(piece.source)
+     {
+         return;
+     }

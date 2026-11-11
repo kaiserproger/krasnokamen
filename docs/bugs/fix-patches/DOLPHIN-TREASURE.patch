@@ -1,0 +1,11 @@
+diff --git a/crates/mc-core/src/tick/merge.rs b/crates/mc-core/src/tick/merge.rs
+--- a/crates/mc-core/src/tick/merge.rs
++++ b/crates/mc-core/src/tick/merge.rs
+@@ -569,6 +569,7 @@
+             intent.kind,
+             IntentKind::PlaceBlock { .. }
+                 | IntentKind::FeedAnimal { .. }
++                | IntentKind::DolphinFeed { .. }
+                 | IntentKind::Bucket { .. }
+                 | IntentKind::Cultivate { .. }
+                 | IntentKind::ComposterFill { .. }

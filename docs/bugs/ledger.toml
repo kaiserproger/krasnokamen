@@ -914,8 +914,19 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-3"
 regression = ["cargo:mc-core:falling::tests::restored_due_gravity_tick_starts_the_fall_without_nearby_writes"]
 
 [[bug]]
+id = "DATA-MERGE-ENTITY-ABSENT"
+title = "`/data merge entity <target> <nbt>` is rejected ('Data editing currently supports command blocks only', usage 'Supported writes: data merge block <x> <y> <z> <compound> (command blocks only)'). Vanilla 26.3 DataCommands registers EntityDataAccessor.PROVIDER under merge and modify, and EntityDataAccessor.setData merges the compound into any non-player Entity via Entity.load (a Player target throws commands.data.entity.invalid), so operators and gates can write non-player entity NBT."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "crates/mc-core/src/command_blocks.rs:321 (usage text) and :346 (rejection); vanilla evidence receipts/A1MobsGates/javap-data-entity.txt from javap of net.minecraft.server.commands.data.EntityDataAccessor and DataCommands in the 26.3 client.jar"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
 id = "GOLEM-GOSSIP"
-title = "Five eligible recently slept gossiping villagers cannot summon; owner only admits Panic route."
+title = "Five eligible recently slept gossiping villagers cannot summon; owner only admits Panic route. Graphical gate native-v2-golem-gossip is blocked on DATA-MERGE-ENTITY-ABSENT (it seeds villager state with `data merge entity`)."
 area = "gameplay"
 repro = "manual"
 severity = "major"
@@ -932,6 +943,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-AABB"
 regression = ["cargo:mc-core:villager::brain::tests::golem_detection_uses_axis_aligned_range_and_ignores_dead_golems", "harness:entities:native-v2-golem"]
+fix_commit = "patch:0f67aabd72fd491262c0b0cbf7ba28255212b736f52f8c09767e6d7028e65640"
 
 [[bug]]
 id = "GOLEM-REPAIR"
@@ -942,6 +954,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-REPAIR"
 regression = ["cargo:mc-core:golems::tests::iron_ingot_repairs_golem_from_either_hand_without_overhealing", "harness:entities:native-v2-golem"]
+fix_commit = "patch:3509ac7229e5af42d2ce93b7436ff6a130a6acb86cd8d177a79d844c62fd3cae"
 
 [[bug]]
 id = "GOLEM-DIFFICULTY"
@@ -952,6 +965,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-DIFFICULTY"
 regression = ["cargo:mc-core:golems::tests::natural_golem_player_damage_scales_with_difficulty", "harness:entities:native-v2-golem"]
+fix_commit = "patch:afc7a15a0dc771e60de84d15a8bca8dcf5c2107a6e221ba430f4c2ff5f555f52"
 
 [[bug]]
 id = "P4"
@@ -1066,6 +1080,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-SPAWNER-EGG"
 regression = ["cargo:mc-core:spawn_egg::tests::fix_mobs_spawn_egg_configures_spawner_without_spawning_adjacent_mob", "cargo:mc-core:monster_spawner::tests::fix_mobs_placed_spawner_default_record_does_not_poison_chunk_hydration", "harness:entities:native-v2-spawner-egg"]
+fix_commit = "patch:3b38fe9cf26516c2f1639bd071dd6b861c688d84c797dffe598be04ffd251125"
 
 [[bug]]
 id = "SPAWN-SPAWNER-CATEGORIES"
@@ -1076,6 +1091,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-SPAWNER-CATEGORIES"
 regression = ["cargo:mc-core:monster_spawner::tests::fix_mobs_passive_spawner_hydrates_and_spawns_in_peaceful", "cargo:mc-core:monster_spawner::tests::fix_mobs_spawner_accepts_custom_light_rules", "cargo:mc-core:monster_spawner::tests::fix_mobs_weighted_spawn_potential_replaces_current_data_on_reset", "cargo:mc-core:monster_spawner::tests::fix_mobs_placed_spawner_default_record_does_not_poison_chunk_hydration", "harness:entities:native-v2-spawner-egg"]
+fix_commit = "patch:438f217eadec02dc71b53c1e41d2bd96a2f3049d3d1862528ec743603195f044"
 
 [[bug]]
 id = "TOTEM"
@@ -1831,6 +1847,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DOLPHIN-TREASURE"
 regression = ["cargo:mc-core:dolphin::tests::fed_dolphin_swims_toward_treasure_chest", "harness:entities:native-v2-dolphin-treasure", "cargo:mc-core:dolphin::tests::dolphin_feed_debit_reaches_the_client_inventory"]
+fix_commit = "patch:62d15a1152a7d267aa9bfa414821f539b138548afa11fbc748fc16dfd50c9000"
 
 [[bug]]
 id = "TARGET-PROJECTILE-POWER"
@@ -1993,6 +2010,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AXOLOTL-PLAY-DEAD"
 regression = ["cargo:mc-core:mob_lanes::tests::hurt_axolotl_in_water_plays_dead_and_regenerates", "cargo:mc-core:mob_lanes::tests::playing_dead_axolotl_releases_attackers_and_wakes_after_200_active_ticks", "harness:entities:native-v2-axolotl-play-dead"]
+fix_commit = "patch:2beaec2b1415a96fbf88543b40cdde03424c73a851737452b1954f27f27aac75"
 failing_first = "reported"
 
 [[bug]]
@@ -2087,6 +2105,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOAT-RAM-ABSENT"
 regression = ["cargo:mc-core:mob_lanes::tests::goat_rams_a_nearby_living_target", "cargo:mc-core:mob_lanes::tests::goat_ram_into_stone_drops_one_horn_with_instrument_and_updates_metadata", "harness:entities:native-v2-goat-ram"]
+fix_commit = "patch:9756cac76b295cfe7b1c9cd9e9acfecdd5b9524c57097009d80b07449c307a5c"
 
 [[bug]]
 id = "TURTLE-LAY-EGG-ABSENT"

@@ -1,0 +1,12 @@
+diff --git a/crates/mc-core/src/golems.rs b/crates/mc-core/src/golems.rs
+--- a/crates/mc-core/src/golems.rs
++++ b/crates/mc-core/src/golems.rs
+@@ -51,7 +51,7 @@
+     if row.health <= 0.0 || row.health >= blueprint.params.max_health {
+         return false;
+     }
+-    row.health = blueprint.params.max_health;
++    row.health = (row.health + 25.0).min(blueprint.params.max_health);
+     std::sync::Arc::make_mut(&mut row.appearance).health = row.health;
+     state.appearance_changed.push(target);
+     let player = state.players.get_mut(&actor).expect("interacting player");

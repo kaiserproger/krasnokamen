@@ -1,0 +1,12 @@
+diff --git a/crates/mc-core/src/goat.rs b/crates/mc-core/src/goat.rs
+--- a/crates/mc-core/src/goat.rs
++++ b/crates/mc-core/src/goat.rs
+@@ -105,7 +105,7 @@
+             mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id).is_some_and(
+                 |c| {
+                     c.name != "minecraft:goat"
+-                        && c.behavior.archetype != mc_data::entity_types::EntityArchetype::Living
++                        && c.behavior.archetype == mc_data::entity_types::EntityArchetype::Living
+                 },
+             )
+         }

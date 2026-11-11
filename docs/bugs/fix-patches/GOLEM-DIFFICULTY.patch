@@ -1,0 +1,12 @@
+diff --git a/crates/mc-core/src/survival.rs b/crates/mc-core/src/survival.rs
+--- a/crates/mc-core/src/survival.rs
++++ b/crates/mc-core/src/survival.rs
+@@ -50,7 +50,7 @@
+             Self::Peaceful => 0.0,
+             Self::Easy => (amount / 2.0 + 1.0).min(amount),
+             Self::Normal => amount,
+-            Self::Hard => amount,
++            Self::Hard => amount * 1.5,
+         }
+     }
+ 
