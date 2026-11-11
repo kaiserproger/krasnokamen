@@ -246,6 +246,20 @@ def pick(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _shot(steps, "pick-block-and-entity")
 
 
+# (double) 0.98f: 26.3 FallingBlockEntity.tick scales its motion by Entity.getAirDrag.
+_FALL_DRAG = c.c_float(.98).value
+
+
+def _vanilla_fall(row: dict, ticks: int) -> float:
+    """Open-air 26.3 FallingBlockEntity.tick: 0.04 gravity, move, then air drag."""
+    y, velocity = row["predicted_position"][1], row["velocity"]["y"]
+    for _ in range(ticks):
+        velocity -= .04
+        y += velocity
+        velocity *= _FALL_DRAG
+    return y
+
+
 def sand(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from PIL import Image, ImageChops
     from .native_p1 import _aim
@@ -270,39 +284,56 @@ def sand(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             "radius": 64, "limit": 16, "entity_type": "minecraft:falling_block"})["entities"]
         return next(r for r in rows if r["entity_uuid"] == falling["entity_uuid"])
 
-    first = _shot(steps, "sand-entity")
-    before = sample()
-    current = before
-    samples = []
-    # Tracking is phased by global tick + entity id and re-sent more often as the
-    # block accelerates (every two to three ticks here). Find two consecutive
-    # stepped ticks inside one received-position interval, where only the
-    # client can have moved it.
-    for index in range(16):
-        target_tick = current["presentation_tick"] + 1
-        steps.fixture("tick step 1")
+    def step_two(row: dict, label: str) -> dict:
+        # One command runs both stepped ticks on consecutive server ticks.
+        steps.fixture("tick step 2")
+        current = row
 
         def stepped(_: dict) -> bool:
             nonlocal current
             current = sample()
-            return current["presentation_tick"] >= target_tick
+            return current["presentation_tick"] >= row["presentation_tick"] + 2
 
-        steps.wait(stepped, f"sand_client_step_{index}")
-        samples.append(current)
-        if current["y"] != before["y"]:
-            first = _shot(steps, f"sand-entity-rebase-{index}")
-            before = sample()
-        elif current["presentation_tick"] >= before["presentation_tick"] + 2:
+        steps.wait(stepped, label)
+        return current
+
+    first = _shot(steps, "sand-entity")
+    # 26.3 ServerChunkCache.tick runs ChunkMap.tick -> ServerEntity.sendChanges on
+    # every server tick, frozen or not, so a moved falling block is resent every 20
+    # server ticks of wall clock, not every 20 stepped ticks. At one tick per second
+    # a window that starts on a received update and steps twice in one command ends
+    # long before the next update; one an update still interrupts restarts from it.
+    steps.fixture("tick rate 1")
+    start = sample()
+    received = step_two(start, "sand_client_step_prime")
+
+    def updated(_: dict) -> bool:
+        nonlocal received
+        received = sample()
+        return received["y"] != start["y"]
+
+    steps.wait(updated, "sand_position_update_while_frozen", timeout_seconds=60)
+    before, windows = received, []
+    for index in range(4):
+        after = step_two(before, f"sand_client_step_{index}")
+        windows.append({"before": before, "after": after})
+        if after["y"] == before["y"]:
             break
-    after = current
-    steps.report.update(falling_step_samples=samples, falling_before_step=before,
+        before = after
+    steps.fixture("tick rate 20")
+    steps.report.update(falling_windows=windows, falling_before_step=before,
                         falling_after_step=after)
     steps.check("sand_two_steps_without_position_packet",
-                after["presentation_tick"] >= before["presentation_tick"] + 2)
-    steps.check("sand_predicts_between_received_updates",
                 after["y"] == before["y"]
-                and after["predicted_position"][1] < before["predicted_position"][1] - .2
-                and after["presented_position"][1] < before["presented_position"][1] - .2)
+                and after["presentation_tick"] == before["presentation_tick"] + 2)
+    steps.check("sand_predicts_between_received_updates",
+                abs(after["predicted_position"][1] - _vanilla_fall(before, 2)) < 1e-9)
+    # Vanilla draws a frozen entity at partial tick 1 (its predicted position); any
+    # drawn pose must lie on the predicted path, below what any packet supplied.
+    presented = after["presented_position"][1]
+    steps.check("sand_presents_predicted_descent",
+                after["predicted_position"][1] <= presented
+                < min(before["presented_position"][1], after["y"]))
     second = _shot(steps, "sand-descended")
     for frame in (first, second):
         steps.check("sand_entity_geometry_submitted",

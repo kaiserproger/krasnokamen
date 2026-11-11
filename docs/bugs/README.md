@@ -303,11 +303,15 @@ The `entities` profile includes windowed native-client probes:
   `admin-commands` checks frozen/stepped server game time, not a stopped client
   clock: native input and rendering must keep running while the world is frozen.
 - `native-v2-input-sand`: `/setblock` airborne sand becomes a rendered entity
-  that a frozen world holds until `/tick step` moves it one tick per step (the
-  server must not keep dropping it), predicts gravity between received position
-  updates, then lands and clears its source. Received, predicted and presented
-  positions are distinct observations; only the captured frame and its reviewed
-  pixels prove drawing.
+  that a frozen world holds until `/tick step` moves it (the server must not
+  keep dropping it), predicts gravity between received position updates, then
+  lands and clears its source. Vanilla resends a moved falling block every 20
+  server ticks even while frozen, so the gate runs one tick per second, starts
+  on a received update and steps twice in one command: the predicted position
+  must equal vanilla's two-tick fall and the drawn pose must lie on that path,
+  below the received one. Received, predicted and presented positions are
+  distinct observations; only the captured frame and its reviewed pixels prove
+  drawing.
 - Axolotl play-dead and potion custom-impact probes are unregistered prototypes;
   they cannot be run from the harness, and `AXOLOTL-PLAY-DEAD` and
   `POTION-CUSTOM-PAYLOAD` stay open.
