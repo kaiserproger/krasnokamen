@@ -1,0 +1,46 @@
+{
+  "id": "LOADER-NEGOTIATE-CONFIGURATION-TIMEOUT",
+  "verdict": "promoted",
+  "fix_commit": "patch:573f0b25b4303aecf1bcce423b6565d8cd8472c3782e3bdc4625a06b7fc32af2",
+  "fix_commit_full": "patch:573f0b25b4303aecf1bcce423b6565d8cd8472c3782e3bdc4625a06b7fc32af2",
+  "promoted_at": "2026-11-11T22:54:32+00:00",
+  "tree_head": "e4e9dbbba19255dac33749e1c7106ea38f563c11",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "573f0b25b4303aecf1bcce423b6565d8cd8472c3782e3bdc4625a06b7fc32af2",
+  "reversed_files": [
+    "crates/mc-edge/src/plugin_loader.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:configuration::tests::loader_negotiation_keeps_a_90_second_stall_alive_with_keepalives": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:configuration::tests::required_loader_content_refuses_a_vanilla_client_with_the_loader_message_quickly": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:configuration::tests::loader_negotiation_closes_a_dripping_client_at_the_total_deadline": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:configuration::tests::loader_negotiation_keeps_a_90_second_stall_alive_with_keepalives": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:configuration::tests::required_loader_content_refuses_a_vanilla_client_with_the_loader_message_quickly": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:configuration::tests::loader_negotiation_closes_a_dripping_client_at_the_total_deadline": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/LoaderLivePromote/.analysis/validation/20261111T225312-ledger-promote-0ovgfces"
+}

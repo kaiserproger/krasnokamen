@@ -170,8 +170,12 @@ worker, runs the negative control.
    only when the failed receipt carries an explicitly failing verdict for that
    profile check; a timeout, a client that never reached play (`in_play`), a
    missing prerequisite or any failure without a negative verdict is
-   unrunnable and cannot be a control. Scenario refs have no such verdict, so a
-   row's control needs a cargo ref or a profile verdict ref. Control worktrees
+   unrunnable and cannot be a control. A scenario ref has no verdict map; it is
+   red only when the failed receipt's `details.named_scenario.id` is the ref and
+   its own `error` reads `<id> assertion failed: <name>` (never the argv of the
+   child), with `<name>` not a connection check (`in_play`, `*_entered_play`,
+   join) and the failure not tagged before the scenario body (`join`, start-up
+   phases). Any other failure, a timeout or a join flake never counts. Control worktrees
    are temporary `git worktree`s beside the other worktrees (`<work>/wt/`),
    one promotion at a time (a lock), at fixed paths (`ledger-control-candidate`,
    `ledger-control-fix`). Every cargo build or test for such a tree runs through

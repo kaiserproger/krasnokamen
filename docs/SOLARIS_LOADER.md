@@ -132,6 +132,13 @@ size/hash mismatch or activation failure stops login during Configuration; the
 disconnect reason names the supported platforms and required bundle identities
 where available. Solaris never silently substitutes vanilla content.
 
+Negotiation timing: the server probes every client (required content too). A client
+that sends no Loader hello, request or ack within 10 s of the manifest, such as a
+vanilla client, is disconnected with the Loader message above. A Loader client may
+take up to 120 s in total from manifest to acknowledgement; the server sends a
+Configuration keepalive every 10 s meanwhile so the client's own 30 s read timeout
+does not fire, and closes the connection at the 120 s bound.
+
 Operators find out which packages need Loader from each package's validated
 `[client]` declarations (supported loaders, permissions, artifact identities,
 paths, sizes, hashes) and the actual Configuration negotiation. There is no

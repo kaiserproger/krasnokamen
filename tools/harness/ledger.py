@@ -121,6 +121,29 @@ def _failing_verdict(receipt, profile, verdict):
     return False
 
 
+# Assertion names that report a lost or late connection, not the scenario's own check.
+_CONNECTION_ASSERTION = re.compile(r'(^|_)(in_play|entered_play|join(ed)?)(_|$)')
+_PRE_SCENARIO_PHASES = frozenset({'preflight', 'server_start', 'client_start', 'join'})
+
+
+def _scenario_assertion_failed(receipt, check):
+    """A named-scenario ref is red when its own receipt (`details.named_scenario.id` is the
+    ref) failed on one of the scenario's assertions. Read from the receipt's `error` only,
+    never from the command line that ran it. A connection assertion (`in_play`,
+    `*_entered_play`, join) or a failure tagged before the scenario body is a flake."""
+    if not isinstance(receipt, dict):
+        return False
+    details = receipt.get('details') if isinstance(receipt.get('details'), dict) else {}
+    named = details.get('named_scenario')
+    if not (isinstance(named, dict) and named.get('id') == check):
+        return False
+    failure = details.get('failure') if isinstance(details.get('failure'), dict) else {}
+    if failure.get('phase') in _PRE_SCENARIO_PHASES:
+        return False
+    match = re.search(r'\bassertion failed: (\S+)', str(receipt.get('error') or ''))
+    return bool(match) and not _CONNECTION_ASSERTION.search(match.group(1))
+
+
 def _work_root() -> Path:
     """The `<work>` directory holding the main checkouts (solaris, solaris-loader, ...)."""
     for base in (REPO_ROOT.parent, REPO_ROOT.parent.parent):
@@ -218,7 +241,10 @@ def _run_harness(ctx, refs, tree):
             receipt, path = regressions._client_receipt(ctx, profiles, command, env, profile, check, is_profile, cwd=tree)
         except regressions.ReceiptNotPassed as error:
             for ref, profile, check, is_profile in group:
-                red = error.status == 'failed' and is_profile and _failing_verdict(error.receipt, profile, check)
+                red = error.status == 'failed' and (
+                    (is_profile and _failing_verdict(error.receipt, profile, check))
+                    or (not is_profile and _scenario_assertion_failed(error.receipt, check))
+                )
                 results[ref] = (RED if red else UNRUNNABLE, str(error), None)
             continue
         except Exception as error:
