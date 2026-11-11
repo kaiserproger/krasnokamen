@@ -1,7 +1,9 @@
-#!/bin/sh
+#!/bin/bash
 # RUSTC_WRAPPER for mem-run builds. The file stem must stay "sccache": cc-rs then also uses
 # this wrapper for C/C++ compiles in build scripts (aws-lc-sys, zstd-sys); any other name
 # leaves them uncached.
+# bash, not sh: dash drops environment variables whose names are not shell identifiers, so
+# cargo's CARGO_BIN_EXE_<bin-with-hyphens> never reached rustc and env!() failed.
 # sccache 0.18 hashes every CARGO_* environment variable into Rust cache keys except
 # CARGO_MAKEFLAGS, CARGO_REGISTRIES_*, CARGO_BUILD_JOBS and CARGO_ENCODED_RUSTFLAGS
 # (src/compiler/rust.rs:1576-1588), and refuses to run with CARGO_INCREMENTAL=1 in its
