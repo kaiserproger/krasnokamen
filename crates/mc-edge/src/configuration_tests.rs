@@ -568,7 +568,6 @@ async fn optional_pack_decline_completes_configuration() {
     assert!(task.await.unwrap().is_ok());
 }
 
-
 fn loader_ack(manifest: &mc_loader::LoaderManifest) -> ServerboundCustomPayload {
     let ack = mc_loader::LoaderClientAck {
         protocol: mc_loader::LOADER_PROTOCOL_VERSION,
@@ -634,7 +633,11 @@ async fn loader_negotiation_keeps_a_90_second_stall_alive_with_keepalives() {
     .await
     {
         let frame = frame.unwrap();
-        assert_eq!(frame.id, ConfigurationKeepAlive::ID, "only keepalives while waiting");
+        assert_eq!(
+            frame.id,
+            ConfigurationKeepAlive::ID,
+            "only keepalives while waiting"
+        );
         let mut body = frame.body.clone();
         let keepalive = ConfigurationKeepAlive::decode(&mut body).unwrap();
         longest_silence = longest_silence.max(Instant::now() - last_byte);
@@ -686,7 +689,8 @@ async fn loader_negotiation_closes_a_dripping_client_at_the_total_deadline() {
     let elapsed = Instant::now() - start;
     assert!(
         elapsed >= crate::plugin_loader::LOADER_NEGOTIATION_TOTAL_TIMEOUT
-            && elapsed < crate::plugin_loader::LOADER_NEGOTIATION_TOTAL_TIMEOUT + Duration::from_secs(5),
+            && elapsed
+                < crate::plugin_loader::LOADER_NEGOTIATION_TOTAL_TIMEOUT + Duration::from_secs(5),
         "closed after {elapsed:?}"
     );
     let error = server_task.await.unwrap().unwrap_err().to_string();
@@ -756,6 +760,9 @@ async fn required_loader_content_refuses_a_vanilla_client_with_the_loader_messag
         "refused after {refused_after:?}"
     );
     let reason = String::from_utf8_lossy(&reason).into_owned();
-    assert!(reason.contains("requires the Solaris Loader client mod"), "{reason}");
+    assert!(
+        reason.contains("requires the Solaris Loader client mod"),
+        "{reason}"
+    );
     assert!(server_task.await.unwrap().is_err());
 }

@@ -628,9 +628,11 @@ mod tests {
         assert_eq!(ConfigurationKeepAlive::ID, 0x04);
         assert_eq!(ServerboundConfigurationKeepAlive::ID, 0x04);
         let mut buf = Vec::new();
-        ConfigurationKeepAlive { id: 0x0102_0304_0506_0708 }
-            .encode(&mut buf)
-            .unwrap();
+        ConfigurationKeepAlive {
+            id: 0x0102_0304_0506_0708,
+        }
+        .encode(&mut buf)
+        .unwrap();
         assert_eq!(buf, [1, 2, 3, 4, 5, 6, 7, 8]);
         round_trip(ConfigurationKeepAlive { id: i64::MIN });
         round_trip(ServerboundConfigurationKeepAlive { id: -1 });
