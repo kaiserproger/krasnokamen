@@ -1036,6 +1036,15 @@ pub(crate) fn execute(
             }
             return Success(1);
         }
+        Command::Swing(command) => {
+            return match crate::command_swing::execute(state, executor, command, changes) {
+                Ok(count) => Success(count),
+                Err(failure) => {
+                    error(state, connection, failure.message());
+                    Failed
+                }
+            };
+        }
         Command::World(command) => {
             return crate::command_world::execute(state, connection, executor, command, changes);
         }

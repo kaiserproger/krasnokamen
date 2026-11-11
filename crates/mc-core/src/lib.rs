@@ -80,6 +80,7 @@ pub mod command_rules;
 pub(crate) mod command_snbt;
 mod command_store;
 mod command_summon;
+pub mod command_swing;
 pub(crate) mod command_text;
 pub mod command_tick;
 pub mod command_world;

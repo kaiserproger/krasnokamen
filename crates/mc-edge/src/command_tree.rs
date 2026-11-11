@@ -882,6 +882,16 @@ pub(crate) fn tree(op_level: u8, plugins: &[(String, u8)]) -> ClientboundCommand
     if let Some(root) = t.root("kill", true) {
         t.argument(root, "targets", entities(false), true);
     }
+    if let Some(root) = t.root("swing", false) {
+        let targets = t.argument(root, "targets", entities(false), false);
+        for hand in ["mainhand", "offhand"] {
+            let hand = t.literal(targets, hand, false);
+            for kind in ["none", "whack", "stab"] {
+                let kind = t.literal(hand, kind, false);
+                t.argument(kind, "ticks", integer(Some(1), Some(1200)), true);
+            }
+        }
+    }
     if let Some(root) = t.root("damage", false) {
         let target = t.argument(root, "target", entities(true), false);
         let amount = t.argument(
