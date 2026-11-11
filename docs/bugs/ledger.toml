@@ -4259,9 +4259,7 @@ title = "Loader negotiation reused the 10 s pre-play read deadline; a Loader cli
 area = "gameplay"
 repro = "cargo"
 severity = "major"
-status = "fixed"
+status = "open"
 source = "loader-live run 20261111T154235-loader-fabric-screen-admission-4rd2c0iz: server.log connection=2 stage=configuration error=read timed out in Configuration; client.log disconnect reason 'Loader negotiation failed: read timed out in Configuration' (copied to <work>/receipts/LoaderLivePromote/flake-run-20261111T154235)"
 regression = ["cargo:mc-edge:configuration::tests::loader_negotiation_tolerates_a_client_slower_than_the_pre_play_deadline"]
 failing_first = "not recorded"
-fix_commit = "patch:27309a7c57d81193dfb2cbcfcd1052e156181d4c1faec54732b7ddf0c30358be"
-promotion = "docs/bugs/promotions/LOADER-NEGOTIATE-CONFIGURATION-TIMEOUT.json"
