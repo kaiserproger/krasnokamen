@@ -239,6 +239,29 @@ impl ProjectileState {
     }
 }
 
+/// Diagnostic clock of the entity phase's serial `post` stage (item pickup,
+/// special mobs, projectiles), rewritten every simulated tick. Printed under
+/// `MC_CORE_PHASE_LOG` and read by the in-process battle tick micro; never
+/// gameplay state.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct PostTimes {
+    /// The whole stage; the parts below leave out only clock reads and the
+    /// per-tick clears.
+    pub total_us: u64,
+    pub pickup_us: u64,
+    pub hostile_us: u64,
+    pub weapons_us: u64,
+    /// Frozen hit geometry of every body (`flight::hittables`).
+    pub hittables_us: u64,
+    /// Fine grid build and per-shot broad-phase candidates.
+    pub candidates_us: u64,
+    /// Per-shot flight, collision and impact (`flight::run_shots`).
+    pub shots_us: u64,
+    /// Projectile rows the flight pass visited, and the settled arrows among them.
+    pub shots: u32,
+    pub grounded: u32,
+}
+
 #[derive(Debug, Default)]
 pub struct ProjectileRuntime {
     pub(crate) using: HashMap<EntityId, weapons::WeaponUse>,
@@ -252,6 +275,7 @@ pub struct ProjectileRuntime {
     pub(crate) riptides: HashMap<EntityId, weapons::Riptide>,
     /// Removed projectiles retain launch evidence until same-tick damage admission.
     pub(crate) retired_crossbows: HashMap<EntityId, ProjectileState>,
+    pub(crate) post: PostTimes,
     bodies: Vec<flight::Hittable>,
     grid: flight::FineGrid,
 }
@@ -535,7 +559,9 @@ pub(crate) fn run(
     state.projectiles.after_hit.clear();
     state.projectiles.channeling_hits.clear();
     state.projectiles.embedded_hits.clear();
+    let start = std::time::Instant::now();
     weapons::tick(state, intents);
+    state.projectiles.post.weapons_us = start.elapsed().as_micros() as u64;
     flight::run(
         state,
         intents,
