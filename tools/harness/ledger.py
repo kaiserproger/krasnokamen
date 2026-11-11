@@ -121,6 +121,13 @@ def _failing_verdict(receipt, profile, verdict):
     return False
 
 
+def _work_root() -> Path:
+    """The `<work>` directory holding the main checkouts (solaris, solaris-loader, ...)."""
+    for base in (REPO_ROOT.parent, REPO_ROOT.parent.parent):
+        if (base / 'solaris-loader' / 'gradlew').is_file():
+            return base
+    return REPO_ROOT.parent
+
 def _loader_mc_version(loader_root: Path) -> str | None:
     """The Minecraft version the Loader checkout builds its client against."""
     properties = loader_root / 'gradle.properties'
@@ -136,13 +143,13 @@ def _loader_live_setup(ctx, env, tree) -> str | None:
     loader-live launches the real Loader client through Gradle under a private audio
     graph, so it needs the loader checkout, the Gradle home with the cached client jar,
     an empty plugins dir and the vanilla translation data in `tree` (26.1.2 client)."""
-    from .runtime import AGENT_ROOT
+    work = _work_root()
 
-    loader_root = Path(env.get('SOLARIS_LOADER_ROOT') or AGENT_ROOT)
+    loader_root = Path(env.get('SOLARIS_LOADER_ROOT') or (work / 'solaris-loader'))
     if not (loader_root / 'gradlew').is_file():
         return f'loader-live requires a Loader checkout at {loader_root} (set SOLARIS_LOADER_ROOT)'
     env['SOLARIS_LOADER_ROOT'] = str(loader_root)
-    gradle_home = Path(env.get('GRADLE_USER_HOME') or (REPO_ROOT.parent / 'loader-gradle-home'))
+    gradle_home = Path(env.get('GRADLE_USER_HOME') or (work / 'loader-gradle-home'))
     if not gradle_home.is_dir():
         return f'loader-live requires a Gradle home at {gradle_home} (set GRADLE_USER_HOME)'
     env['GRADLE_USER_HOME'] = str(gradle_home)
@@ -158,7 +165,7 @@ def _loader_live_setup(ctx, env, tree) -> str | None:
     env['SOLARIS_AUDIO_RECEIPT_DIR'] = str(ctx.artifact_dir)
     plugins_dir = ctx.artifact_dir / 'loader-live-plugins'
     plugins_dir.mkdir(parents=True, exist_ok=True)
-    data_source = Path(os.environ.get('SOLARIS_VANILLA_DATA_ROOT') or (REPO_ROOT.parent / 'solaris' / 'data'))
+    data_source = Path(os.environ.get('SOLARIS_VANILLA_DATA_ROOT') or (_work_root() / 'solaris' / 'data'))
     for name in ('vanilla-steps', f'vanilla-{version or ""}'):
         source = data_source / name
         target = Path(tree) / 'data' / name
