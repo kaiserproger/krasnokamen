@@ -186,9 +186,9 @@ class SceneShotTests(unittest.TestCase):
                 self.calls = 0
             def call(self, name, args):
                 if name == "minecraft_wait_ticks":
-                    raise AssertionError("capture should start in the leading half of the phase bracket")
+                    raise AssertionError("capture should start at bracket entry without waiting")
                 self.calls += 1
-                return {"entities": [entity if self.calls == 1 else {**entity, "walk_position": 3.0}]}
+                return {"entities": [entity if self.calls == 1 else {**entity, "walk_position": 1.6}]}
             def check(self, name, value):
                 if not value:
                     raise AssertionError(name)
@@ -205,7 +205,13 @@ class SceneShotTests(unittest.TestCase):
                     write_frame(1.5)
                     self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
                     evidence = json.loads((root / "walk-walk.json").read_text())
-                    self.assertEqual(evidence["after"]["entities"][0]["walk_position"], 3.0)
+                    self.assertEqual(evidence["after"]["entities"][0]["walk_position"], 1.6)
+                    # A frame that lagged one tick step below the bracket still
+                    # matches the triggering observation and is accepted.
+                    write_frame(1.2)
+                    self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
+                    # A frame outside the bracket and more than one tick step from
+                    # the observation is rejected.
                     write_frame(2.5)
                     with self.assertRaisesRegex(AssertionError, "walk_render_phase"):
                         scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client)

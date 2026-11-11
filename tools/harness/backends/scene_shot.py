@@ -516,7 +516,20 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 json.dumps({"before": before, "after": after, "frame": frame,
                             "frame_path": str(frame_path), "spec": value}, indent=2) + "\n")
             probe.check(f"{value['name']}_same_entity", first is not None and len(same_entity) == 1)
-            probe.check(f"{value['name']}_render_phase", matching_walk(frame, value) is not None)
+            # The captured frame is rendered with partial-tick interpolation, so
+            # it can lag the triggering observation by up to one tick's walk
+            # advance. Accept a frame that still matches that observation within
+            # one observed tick step, even if it fell just below the bracket.
+            frame_entity = None
+            lag_ok = False
+            if first is not None and same_entity:
+                frame_entity = next((entity for entity in frame["entities"]
+                                     if entity.get("entity_uuid") == first.get("entity_uuid")), None)
+                if frame_entity is not None:
+                    step = max(0.0, float(same_entity[0]["walk_position"]) - float(first["walk_position"]))
+                    lag_ok = abs(float(frame_entity["walk_position"]) - float(first["walk_position"])) <= step + 1e-9
+            probe.check(f"{value['name']}_render_phase",
+                        matching_walk(frame, value) is not None or lag_ok)
             shots.append(image)
         elif kind == "goat_horns_upright":
             from . import goat_horn_oracle
