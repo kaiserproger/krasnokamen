@@ -235,8 +235,8 @@ fn movement_with_neighbours(
     drive
 }
 
-/// Mounted files (two-block frontage) are turned through their horse in
-/// cavalry: a rider's own feet are a seat, not the ground.
+/// A rider is turned through its horse in cavalry (its own feet are a seat,
+/// not the ground); every body on foot, a dismounted rider too, here.
 fn sample_movement(
     frame: &Frame<'_>,
     runtime: &FormationRuntime,
@@ -249,7 +249,7 @@ fn sample_movement(
     let (near, examined) = runtime.neighbours.nearest(index, &runtime.members);
     let (mut drive, pushes) = drive_with_neighbours(runtime, index, near);
     if let Some(slot) = m.slot
-        && runtime.regiments[m.regiment].spec.frontage <= 1.0
+        && frame.entities.row(slot).entity_life.mount.vehicle.is_none()
     {
         let target = runtime.heading_target(index);
         let heading = [target[0] - m.pos[0], target[2] - m.pos[2]];

@@ -483,3 +483,122 @@ fn a_body_under_a_terrain_roof_walks_out_toward_open_sky() {
     assert_eq!(deflect(world, registry, open, 0.3, east, [20.0, 0.0], 1.0), east);
     assert_eq!(deflect(world, registry, open, 0.3, [0.0, 0.0], [20.0, 0.0], 1.0), [0.0, 0.0]);
 }
+
+/// The overhang where a fugitive stayed at the end of the d0cabbab and
+/// 6d1cf207 site-935 takes: columns x -186..=-180 (left to right), z
+/// 19..=25 (top to bottom), y 83..=95 with the body's feet at 85, `#` solid
+/// (`receipts/BvReliefBattle/rout-falls/probe-d0cabbab.json`). The body
+/// stood at (-182.6, 85, 22.8), under dirt at 88..=91. North of it, (-184,
+/// 23) and (-183, 23) drop past y 83; (-182, 23) is a one-block step up.
+const POCKET: [[&str; 7]; 7] = [
+    ["############.", "############.", ".###########.", "..##########.", "..##########.", ".###########.", "############."],
+    ["############.", "#.##########.", "..##########.", "...#########.", "....########.", "...#########.", "..##########."],
+    ["###########..", "##..#######..", "##..#######..", "#....######..", "......#####..", ".....######..", "....#######.."],
+    ["####.#####...", "####.####....", "###..####....", "##...####....", "##...####....", "#....####....", ".....####...."],
+    ["####.........", "##...........", ".............", ".............", "###..........", "##...........", "##..........."],
+    [".............", ".............", ".............", ".............", ".............", "#............", "##..........."],
+    [".............", ".............", ".............", ".............", "#............", "##...........", "###.........."],
+];
+
+/// A body under an overhang whose nearest open columns are drops walks out
+/// by the step up beside them instead of standing at the drop's edge.
+#[test]
+fn a_body_under_an_overhang_walks_out_by_the_step_not_the_drop() {
+    const FEET: i32 = 70;
+    let mut state = relief_fixture();
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    // (-186, 19) maps to (140, -103); y 83 to FEET - 2. Each column's lowest
+    // cell continues down to a stone floor at FEET - 7.
+    for (dz, row) in POCKET.iter().enumerate() {
+        for (dx, column) in row.iter().enumerate() {
+            let (x, z) = (140 + dx as i32, -103 + dz as i32);
+            for y in FEET - 7..=FEET + 12 {
+                let cell = column.as_bytes().get((y - FEET + 2).max(0) as usize);
+                let solid = y == FEET - 7 || cell == Some(&b'#');
+                state.world.set_block(x, y, z, if solid { stone } else { air });
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let (world, registry) = (&state.world, &state.registry);
+    let mut pos = [143.4, f64::from(FEET), -99.2];
+    let out = exit(world, registry, pos).expect("under the overhang");
+    let target = ((pos[0] + out[0]).floor() as i32, (pos[2] + out[1]).floor() as i32);
+    assert_eq!(target, (144, -99), "the way out is the step, not the drop: {out:?}");
+    // Holding its slot (no drive), the body walks out and up the step.
+    let solid = |p: [f64; 3]| {
+        world
+            .physics_block_at(p[0].floor() as i32, p[1].floor() as i32, p[2].floor() as i32)
+            .is_none_or(|state| registry.materials.classify(state) == BlockMaterial::Solid)
+    };
+    for _ in 0..40 {
+        if exit(world, registry, pos).is_none() {
+            break;
+        }
+        let drive = deflect(world, registry, pos, 0.3, [0.0, 0.0], [0.0, 0.0], 1.0);
+        pos[0] += drive[0];
+        pos[2] += drive[1];
+        if solid(pos) {
+            pos[1] += 1.0;
+        }
+        assert!(solid([pos[0], pos[1] - 1.0, pos[2]]), "walked over the drop at {pos:?}");
+    }
+    assert!(exit(world, registry, pos).is_none(), "still under the overhang at {pos:?}");
+    assert_eq!(pos[1], f64::from(FEET + 1), "out by the step: {pos:?}");
+}
+
+/// A rider whose horse is gone walks under the same drop, cliff and cave
+/// rules as foot, although its regiment keeps the cavalry frontage.
+#[test]
+fn dismounted_riders_run_round_a_cave_opening_in_their_flight() {
+    let mut state = relief_fixture();
+    stage(&mut state, 100);
+    let formation = &state.hostile.battle.formation;
+    let regiment = formation
+        .regiments
+        .iter()
+        .position(|r| r.spec.faction == 2 && r.spec.frontage > 1.0)
+        .expect("a cavalry regiment of the second side");
+    let r = &formation.regiments[regiment];
+    let ids: Vec<_> = formation.members[r.start..r.start + r.len].iter().map(|m| m.id).collect();
+    assert!(ids.len() >= 3, "too few riders: {}", ids.len());
+    // The second side flees +z; three of the riders' files run straight over
+    // the 3x3 opening (x -20..-18, z 20..22).
+    for (k, &id) in ids.iter().enumerate() {
+        crate::mounts::dismount(&mut state, id);
+        let slot = state.entities.slot_of(id).unwrap();
+        assert!(state.entities.row(slot).entity_life.mount.vehicle.is_none(), "still riding");
+        let (x, z) = (-21.5 + k as f64, 12.5);
+        let Some(Ok(y)) = support(&state.world, &state.registry, [x, 0.0, z], 0.3) else {
+            panic!("no ground at {x} {z}");
+        };
+        state.entities.set_pos(slot, [x, y, z]);
+    }
+    let formation = &mut state.hostile.battle.formation;
+    formation.regiments[regiment].morale.broken = true;
+    let r = &formation.regiments[regiment];
+    for m in &mut formation.members[r.start..r.start + r.len] {
+        m.routing = true;
+    }
+    let start: Vec<f64> = ids.iter().map(|&id| state.entities.pos(state.entities.slot_of(id).unwrap())[2]).collect();
+    for tick in 0..200 {
+        run_tick(&mut state, &[]);
+        for &id in &ids {
+            let Some(slot) = state.entities.slot_of(id) else { continue };
+            let p = state.entities.pos(slot);
+            let (x, z) = (p[0].floor() as i32, p[2].floor() as i32);
+            assert!(
+                hole(x, z).is_none_or(|_| p[1] > f64::from(height(x, z)) - 2.0),
+                "a dismounted rider fell into the cave opening at {p:?}, tick {tick}"
+            );
+        }
+    }
+    let mut fled: Vec<f64> = ids
+        .iter()
+        .zip(&start)
+        .filter_map(|(&id, &z)| state.entities.slot_of(id).map(|slot| state.entities.pos(slot)[2] - z))
+        .collect();
+    fled.sort_by(f64::total_cmp);
+    let median = fled[fled.len() / 2];
+    assert!(median >= 8.0, "the riders did not flee: median {median}");
+}
