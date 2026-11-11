@@ -102,7 +102,10 @@ async fn negotiate_inner(
     let mut ignored = 0usize;
     loop {
         let frame = conn
-            .read_frame_in(mc_protocol::State::Configuration)
+            .read_frame_in_with(
+                mc_protocol::State::Configuration,
+                crate::connection::LOADER_NEGOTIATE_READ_TIMEOUT,
+            )
             .await?;
         anyhow::ensure!(
             frame.id != AcknowledgeFinishConfiguration::ID,

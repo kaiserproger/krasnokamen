@@ -562,3 +562,45 @@ async fn optional_pack_decline_completes_configuration() {
         .unwrap();
     assert!(task.await.unwrap().is_ok());
 }
+
+#[tokio::test(start_paused = true)]
+async fn loader_negotiation_tolerates_a_client_slower_than_the_pre_play_deadline() {
+    // 2026-11-11 loader-live flake: after the manifest the client can stall longer
+    // than PRE_PLAY_READ_TIMEOUT (10 s) verifying/fetching bundles on a loaded host;
+    // negotiation must use the longer LOADER_NEGOTIATE_READ_TIMEOUT instead.
+    let (mut client, mut server) = loopback_pair().await;
+    let manifest = items_bundle(false);
+    let ack = mc_loader::LoaderClientAck {
+        protocol: mc_loader::LOADER_PROTOCOL_VERSION,
+        platform: mc_loader::LoaderPlatform::Native,
+        loader_version: "test".to_owned(),
+        accepted_permissions: manifest.bundles[0].permissions.clone(),
+        cached_bundles: vec![manifest.bundles[0].cache_key.clone()],
+        carrier_block_state_ids: Default::default(),
+    };
+    let server_task = tokio::spawn(async move {
+        let mut prefs = super::ClientPrefs::default();
+        crate::plugin_loader::negotiate(&mut server, &manifest, &mut prefs).await
+    });
+    let frame = client
+        .read_frame_in(mc_protocol::State::Configuration)
+        .await
+        .unwrap();
+    assert_eq!(
+        frame.id,
+        mc_protocol::packets::configuration::ClientboundCustomPayload::ID
+    );
+    // Virtual time: 15 s > PRE_PLAY_READ_TIMEOUT (10 s) but < the negotiation deadline.
+    tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+    client
+        .send_packet(&mc_protocol::packets::configuration::ServerboundCustomPayload {
+            payload: mc_protocol::packets::CustomPayload::Unknown {
+                channel: mc_loader::loader_ack_channel().clone(),
+                payload: serde_json::to_vec(&ack).unwrap(),
+            },
+        })
+        .await
+        .unwrap();
+    let session = server_task.await.unwrap().unwrap();
+    assert_eq!(session.platform(), mc_loader::LoaderPlatform::Native);
+}
