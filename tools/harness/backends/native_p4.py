@@ -614,6 +614,9 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
     baseline = steps.observe()["player"]["health"]
     start = len(steps.client.p4_damage_wire())
     steps.fixture("gamemode survival @s")
+    # A creative player takes no reflected damage; the command and the attack packet are not
+    # ordered, so let the server apply the mode before the hit.
+    steps.call("minecraft_wait_ticks", {"ticks": 10})
     steps.call("minecraft_attack_entity_once", {
         **{key: target[key] for key in ("entity_id", "entity_uuid", "entity_type")},
         "timeout_seconds": steps.remaining(),

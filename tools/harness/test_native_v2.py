@@ -301,6 +301,38 @@ class NativeV2ProbeTests(unittest.TestCase):
         self.assertLess(air, events.index("wait:douse_water_drained"))
         self.assertLess(events.index("wait:douse_water_drained"), events.index("tp @s 10.5 70 10.5"))
 
+    def test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit(self) -> None:
+        from .backends import native_p4
+
+        class Stop(Exception):
+            pass
+
+        events: list[str] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = events.append
+
+        def call(tool, args=None):
+            events.append(f"{tool}:{(args or {}).get('ticks')}")
+            if tool == "minecraft_attack_entity_once":
+                raise Stop
+            return {}
+
+        def wait(predicate, label, **_kwargs):
+            if label == "thorns_authored_uuid_received":
+                predicate({})
+            return mock.MagicMock()
+
+        steps.call.side_effect = call
+        steps.wait.side_effect = wait
+        row = {"entity_uuid": "00000000-0000-0000-0000-00000001e240", "entity_id": 7,
+               "entity_type": "minecraft:zombie"}
+        with mock.patch.object(native_p4, "_rows", return_value=[row]), self.assertRaises(Stop):
+            native_p4._damage_environment(steps, (10, 70, 10), 1)
+        attack = events.index("minecraft_attack_entity_once:None")
+        survival = max(i for i, event in enumerate(events) if event == "gamemode survival @s")
+        self.assertEqual(events[survival + 1], "minecraft_wait_ticks:10")
+        self.assertEqual(survival + 2, attack)
+
     def test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack(self) -> None:
         from .backends import native_p4
 
