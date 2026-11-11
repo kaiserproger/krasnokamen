@@ -60,7 +60,8 @@ enum Kind {
     Cavalry,
 }
 
-// Vanilla item identities retain their combat behaviour; components select authored visuals.
+// Vanilla item identities retain their combat behaviour (weapon class, shield
+// blocking, armour points); components select authored visuals.
 fn equipment(kind: Kind) -> &'static [(&'static str, &'static str)] {
     match kind {
         Kind::Infantry => &[
@@ -86,6 +87,149 @@ fn equipment(kind: Kind) -> &'static [(&'static str, &'static str)] {
             ("head", "minecraft:iron_helmet"),
             ("chest", "minecraft:iron_chestplate"),
         ],
+    }
+}
+
+/// Worn leggings are cosmetic: `minecraft:leather` has no armour modifier, so
+/// adding legs never changes the damage a fighter takes.
+const LEGS_CARRIER: &str = "minecraft:leather";
+/// Dyed leather shades of each side colour (`minecraft:dyed_color` RGB).
+const RED_SHADES: [i32; 4] = [0x00B0_2E26, 0x008E_1B1B, 0x00C8_452E, 0x006E_1414];
+const BLUE_SHADES: [i32; 4] = [0x003C_44AA, 0x0024_397F, 0x004F_6BC4, 0x001E_2A66];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Shield {
+    /// Side-coloured red or blue heater.
+    Heater,
+    Kite,
+    Tower,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Torso {
+    Surcoat,
+    /// Vanilla leather dyed in a shade of the side colour.
+    Leather,
+    /// Neutral; only worn behind a side-coloured heater shield.
+    Holy,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Legs {
+    Bare,
+    Leather,
+    Holy,
+}
+
+/// One fighter's appearance. Side colour stays readable on a wide shot: the
+/// torso is a side surcoat or side-dyed leather, or the off hand carries the
+/// side heater shield (holy torso only behind a heater).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Loadout {
+    kind: Kind,
+    weapon: &'static str,
+    shield: Option<Shield>,
+    helmet: &'static str,
+    torso: Torso,
+    legs: Legs,
+    shade: usize,
+}
+
+/// SplitMix64 finaliser: a fixed, platform-independent mix so retakes repeat.
+fn mix(mut z: u64) -> u64 {
+    z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// Pick the variant whose cumulative percentage band contains the next draw.
+fn band<T: Copy>(roll: &mut u64, table: &[(u64, T)]) -> T {
+    let draw = *roll % 100;
+    *roll /= 100;
+    let mut upper = 0;
+    for &(share, value) in table {
+        upper += share;
+        if draw < upper {
+            return value;
+        }
+    }
+    unreachable!("loadout table shares must sum to 100")
+}
+
+/// Deterministic per-fighter loadout from (seed, side, regiment, index).
+fn loadout(seed: u64, side: u16, regiment: u32, index: usize, kind: Kind) -> Loadout {
+    let mut roll =
+        mix(mix(seed) ^ (u64::from(side) << 56) ^ (u64::from(regiment) << 24) ^ index as u64);
+    let weapon = match kind {
+        Kind::Infantry => band(
+            &mut roll,
+            &[
+                (60, "solaris_battle:iron_longsword"),
+                (40, "solaris_battle:iron_flanged_mace"),
+            ],
+        ),
+        Kind::Spear => band(
+            &mut roll,
+            &[
+                (60, "solaris_battle:iron_spear"),
+                (40, "solaris_battle:iron_halberd"),
+            ],
+        ),
+        Kind::Archer => band(
+            &mut roll,
+            &[
+                (60, "solaris_battle:iron_longbow_standby"),
+                (40, "solaris_battle:iron_heavy_crossbow_standby"),
+            ],
+        ),
+        Kind::Cavalry => "solaris_battle:iron_lance",
+    };
+    let shield = match kind {
+        Kind::Archer => None,
+        // A tower shield does not fit a rider.
+        Kind::Cavalry => Some(band(&mut roll, &[(60, Shield::Heater), (40, Shield::Kite)])),
+        Kind::Infantry | Kind::Spear => Some(band(
+            &mut roll,
+            &[
+                (50, Shield::Heater),
+                (30, Shield::Kite),
+                (20, Shield::Tower),
+            ],
+        )),
+    };
+    let helmet = band(
+        &mut roll,
+        &[
+            (45, "solaris_battle:iron_plate"),
+            (30, "solaris_battle:crested_helm"),
+            (25, "solaris_battle:holy"),
+        ],
+    );
+    let torso = if shield == Some(Shield::Heater) {
+        band(
+            &mut roll,
+            &[
+                (45, Torso::Surcoat),
+                (35, Torso::Leather),
+                (20, Torso::Holy),
+            ],
+        )
+    } else {
+        band(&mut roll, &[(55, Torso::Surcoat), (45, Torso::Leather)])
+    };
+    let legs = band(
+        &mut roll,
+        &[(35, Legs::Bare), (35, Legs::Leather), (30, Legs::Holy)],
+    );
+    Loadout {
+        kind,
+        weapon,
+        shield,
+        helmet,
+        torso,
+        legs,
+        shade: (roll % 4) as usize,
     }
 }
 
@@ -215,60 +359,105 @@ fn reset(state: &mut TickState, changes: &mut ChangeSet) -> usize {
     ids.len()
 }
 
-fn summon_tag(kind: Option<Kind>, side: u16) -> Tag {
-    let mut fields = vec![("PersistenceRequired".into(), Tag::Byte(1))];
-    let items = kind.map_or(&[("body", "minecraft:iron_horse_armor")][..], equipment);
-    let slots = items
-        .iter()
-        .map(|&(slot, item)| {
-            let component = match (kind, slot, side) {
-                (Some(Kind::Infantry), "mainhand", _) => {
-                    ("minecraft:item_model", "solaris_battle:iron_longsword")
-                }
-                (Some(Kind::Spear), "mainhand", _) => {
-                    ("minecraft:item_model", "solaris_battle:iron_spear")
-                }
-                (Some(Kind::Archer), "mainhand", _) => (
-                    "minecraft:item_model",
-                    "solaris_battle:iron_longbow_standby",
+fn worn(slot: &str, asset: &str) -> (String, Tag) {
+    (
+        "minecraft:equippable".into(),
+        Tag::Compound(vec![
+            ("slot".into(), Tag::String(slot.into())),
+            ("asset_id".into(), Tag::String(asset.into())),
+        ]),
+    )
+}
+
+fn item_model(model: &str) -> (String, Tag) {
+    ("minecraft:item_model".into(), Tag::String(model.into()))
+}
+
+/// `None` is a horse's caparison; otherwise one fighter's loadout.
+fn summon_tag(unit: Option<&Loadout>, side: u16) -> Tag {
+    let red = side == 1;
+    let coloured = |r: &'static str, b: &'static str| if red { r } else { b };
+    let mut slots: Vec<(&str, &str, Vec<(String, Tag)>)> = Vec::new();
+    match unit {
+        None => slots.push((
+            "body",
+            "minecraft:iron_horse_armor",
+            vec![worn(
+                "body",
+                coloured(
+                    "solaris_battle:red_caparison",
+                    "solaris_battle:blue_caparison",
                 ),
-                (Some(Kind::Cavalry), "mainhand", _) => {
-                    ("minecraft:item_model", "solaris_battle:iron_lance")
-                }
-                (_, "offhand", 1) => ("minecraft:item_model", "solaris_battle:red_heater_shield"),
-                (_, "offhand", _) => ("minecraft:item_model", "solaris_battle:blue_heater_shield"),
-                (Some(Kind::Cavalry), "head", _) => {
-                    ("minecraft:equippable", "solaris_battle:crested_helm")
-                }
-                (_, "head", _) => ("minecraft:equippable", "solaris_battle:iron_plate"),
-                (_, "chest", 1) => ("minecraft:equippable", "solaris_battle:red_surcoat"),
-                (_, "chest", _) => ("minecraft:equippable", "solaris_battle:blue_surcoat"),
-                (_, "body", 1) => ("minecraft:equippable", "solaris_battle:red_caparison"),
-                (_, "body", _) => ("minecraft:equippable", "solaris_battle:blue_caparison"),
-                _ => unreachable!("battle equipment table contains an unknown slot"),
-            };
-            let value = if component.0 == "minecraft:equippable" {
-                Tag::Compound(vec![
-                    ("slot".into(), Tag::String(slot.into())),
-                    ("asset_id".into(), Tag::String(component.1.into())),
-                ])
-            } else {
-                Tag::String(component.1.into())
-            };
+            )],
+        )),
+        Some(unit) => {
+            let dyed = (
+                "minecraft:dyed_color".to_owned(),
+                Tag::Int(coloured_shade(red, unit.shade)),
+            );
+            for &(slot, item) in equipment(unit.kind) {
+                let components = match slot {
+                    "mainhand" => vec![item_model(unit.weapon)],
+                    "offhand" => vec![item_model(match unit.shield {
+                        Some(Shield::Heater) | None => coloured(
+                            "solaris_battle:red_heater_shield",
+                            "solaris_battle:blue_heater_shield",
+                        ),
+                        Some(Shield::Kite) => "solaris_battle:iron_kite_shield",
+                        Some(Shield::Tower) => "solaris_battle:iron_tower_shield",
+                    })],
+                    "head" => vec![worn("head", unit.helmet)],
+                    "chest" => match unit.torso {
+                        Torso::Surcoat => vec![worn(
+                            "chest",
+                            coloured("solaris_battle:red_surcoat", "solaris_battle:blue_surcoat"),
+                        )],
+                        Torso::Leather => vec![worn("chest", "minecraft:leather"), dyed.clone()],
+                        Torso::Holy => vec![worn("chest", "solaris_battle:holy")],
+                    },
+                    _ => unreachable!("battle equipment table contains an unknown slot"),
+                };
+                slots.push((slot, item, components));
+            }
+            match unit.legs {
+                Legs::Bare => {}
+                Legs::Leather => slots.push((
+                    "legs",
+                    LEGS_CARRIER,
+                    vec![worn("legs", "minecraft:leather"), dyed],
+                )),
+                Legs::Holy => slots.push((
+                    "legs",
+                    LEGS_CARRIER,
+                    vec![worn("legs", "solaris_battle:holy")],
+                )),
+            }
+        }
+    }
+    let slots = slots
+        .into_iter()
+        .map(|(slot, item, components)| {
             (
                 slot.into(),
                 Tag::Compound(vec![
                     ("id".into(), Tag::String(item.into())),
-                    (
-                        "components".into(),
-                        Tag::Compound(vec![(component.0.into(), value)]),
-                    ),
+                    ("components".into(), Tag::Compound(components)),
                 ]),
             )
         })
         .collect();
-    fields.push(("equipment".into(), Tag::Compound(slots)));
-    Tag::Compound(fields)
+    Tag::Compound(vec![
+        ("PersistenceRequired".into(), Tag::Byte(1)),
+        ("equipment".into(), Tag::Compound(slots)),
+    ])
+}
+
+fn coloured_shade(red: bool, shade: usize) -> i32 {
+    if red {
+        RED_SHADES[shade]
+    } else {
+        BLUE_SHADES[shade]
+    }
 }
 
 fn spawn(
@@ -336,9 +525,9 @@ fn setup(
         for side in 1..=2_u16 {
             let horse_loadout = summon_tag(None, side);
             for (spec, kind, size) in plan(seed, count, origin, side) {
-                let loadout = summon_tag(Some(kind), side);
                 let mut members = Vec::with_capacity(size);
                 for index in 0..size {
+                    let unit = loadout(seed, side, spec.id, index, kind);
                     let pos = slot_position(&spec, index);
                     let id = spawn(
                         state,
@@ -346,7 +535,7 @@ fn setup(
                         "minecraft:husk",
                         pos,
                         Some(kind),
-                        &loadout,
+                        &summon_tag(Some(&unit), side),
                         &tag,
                     )?;
                     let slot = state.entities.slot_of(id).expect("battle unit");
