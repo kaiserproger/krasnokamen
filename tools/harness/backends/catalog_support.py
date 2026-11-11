@@ -15,6 +15,17 @@ def binary_sha256(path: Path) -> str:
         return hashlib.file_digest(binary, "sha256").hexdigest()
 
 
+def refuse_incremental_pin(binary: Path, kind: str) -> None:
+    """Performance windows never run an incremental release build (pin-release records `incremental`).
+
+    A binary without a pin manifest next to it carries no record and passes here; the callers that
+    require a pin (`profiles.pinned_binary`) check the manifest itself first."""
+    manifest = binary.resolve().parent / "manifest.json"
+    if manifest.is_file() and json.loads(manifest.read_text()).get("incremental"):
+        raise ValueError(f"{kind} pin is an incremental build (more codegen units, less cross-unit inlining): "
+                         "performance windows need pin-release --no-incremental")
+
+
 def dump(path: Path, value: Any) -> None:
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")

@@ -174,16 +174,22 @@ fi
 # shellcheck source=slot-select.sh
 source "$here/slot-select.sh"
 select_slot "$@"
+# Incremental: debug/test builds always; release builds only in the normal lane
+# (re-pins after a small change cost 39% less CPU, measured 2026-11-11; the binary
+# has more codegen units and can run slower, so perf windows use none). -p and -x
+# lanes and custom `--profile` builds are never incremental. This cargo (1.99) does
+# not apply the profile default here, so it is forced by env. Measured once: cold
+# mc-core --tests build 26m48s -> 19m07s.
+if [ "$exclusive" = 1 ] || [ "$perf" = 1 ]; then
+  incremental=0
+else
+  case " $* " in
+    *" --profile"*) incremental=0 ;;
+    *) incremental=1 ;;
+  esac
+fi
 # The harness would otherwise re-run itself in its own scope outside this slice;
 # tell it it is already scoped so cargo/server/client stay under this cap.
-# Incremental for debug/test builds. This cargo (1.99) does not apply the
-# profile default here, so it is forced by env; release builds keep it off.
-# Measured once: cold mc-core --tests build 26m48s -> 19m07s; the
-# edit->rebuild gain is not yet measured.
-case " $* " in
-  *" --release "*|*" --profile"*) incremental=0 ;;
-  *) incremental=1 ;;
-esac
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-$jobs_default}" CARGO_INCREMENTAL="$incremental" SOLARIS_HARNESS_CPU_SCOPE=1
 cores=$(lscpu -p=core,socket | grep -v '^#' | sort -u | wc -l)
 props=(-p MemoryMax="$mem" -p MemorySwapMax=1G -p CPUQuota="${SOLARIS_MEM_RUN_CPU_QUOTA:-$((cores * 100))}%" -p CPUWeight=50)

@@ -105,7 +105,8 @@ other trees reuse, so the harness refuses `SOLARIS_SERVER_BINARY` or
 tree (HEAD plus the hash of uncommitted changes), copies the binary to
 `<work>/pins/<sha12>[-<diff8>]/` with a manifest, prints the
 `SOLARIS_SERVER_BINARY=` (or `SOLARIS_CLIENT_BINARY=`) line and reuses an
-existing pin without building. Pins are immutable. A harness profile that
+existing pin without building. Pins are immutable; the build is incremental by
+default, `--no-incremental` makes the full build performance windows require. A harness profile that
 builds the release server itself (`regressions-client`) hard-links its build
 into the run's artifact dir.
 

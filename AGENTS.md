@@ -134,7 +134,11 @@ python3 -m tools.harness list
   or sibling repo's copy. There are no slots or queue: every command starts at
   once; the heavy-watchdog pauses plain cargo builds under real memory pressure
   and resumes them, never tests, servers or harness runs. `RUSTC_WRAPPER=` keeps
-  the global sccache from compiling outside the cap. `-p` is serialized
+  the global sccache from compiling outside the cap. The runner makes Cargo
+  incremental for debug/test builds and normal-lane `--release` builds, never in
+  `-p`/`-x` or `--profile` builds: a binary for a performance window comes from
+  `pin-release --no-incremental` (or `env CARGO_INCREMENTAL=0`), and bench,
+  coreperf, the perf harness profiles and the battle runner refuse incremental pins. `-p` is serialized
   timing/profiling, never builds; `-x` is a quiet measurement window (pauses
   builds, waits for running tests and servers). Both lanes serialize
   themselves: no GO is needed. Compare only matching lanes on a frozen tree
