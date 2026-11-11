@@ -288,6 +288,11 @@ at or before that acknowledged tick. A quiet broadcast channel is not proof
 of pause: a busy tick can exceed the old idle-gap window. Tests for continued
 simulation await a concrete number of ticks instead.
 
+Raider casting fixtures advance real ticks until the target owner records
+acquisition, bounded by `raiders::SEARCH_INTERVAL` for the fixed fixture.
+Checkpoint/WAL tests journal every intervening tick, not just the casting tick,
+and retain all spell, projectile and recovery assertions.
+
 Concurrency: `RUST_TEST_THREADS` (first priority), else `NEXTEST_TEST_THREADS`
 (default `num-cpus`), selects the gate default; nextest's `--test-threads=N`
 overrides it (place it before any `--`). Unsupported Cargo/libtest and
