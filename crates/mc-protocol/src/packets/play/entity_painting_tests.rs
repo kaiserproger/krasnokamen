@@ -38,7 +38,8 @@ fn chicken_variant_holder_wire_roundtrip() {
 
 #[test]
 fn climate_variant_holders_use_their_own_serializer_and_direct_registry_id() {
-    // Supplied 26.3 EntityDataSerializers registration order and entity accessors.
+    // 26.1.2/26.3 EntityDataSerializers.<clinit> order and defineId indices:
+    // receipts/Q04CoreFix/derived-indices.txt.
     for (value, index, serializer) in [
         (
             EntityDataValue::CowVariant {

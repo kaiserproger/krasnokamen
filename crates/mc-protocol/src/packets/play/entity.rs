@@ -791,7 +791,10 @@ pub enum EntityDataValue {
         index: u8,
         value: u32,
     },
-    /// Climate and zombie-nautilus holders use direct registry VarInts.
+    /// Climate and zombie-nautilus holders use `ByteBufCodecs.holderRegistry`: the
+    /// registry id as a plain VarInt (the painting holder adds 1). Serializer ids
+    /// 23/28/32 come from EntityDataSerializers.<clinit> order
+    /// (receipts/Q04CoreFix/derived-indices.txt).
     CowVariant {
         index: u8,
         value: u32,

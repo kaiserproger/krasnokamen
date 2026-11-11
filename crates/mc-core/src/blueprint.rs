@@ -639,7 +639,12 @@ fn category(name: &str) -> Option<MobCategory> {
 pub const SHEEP_WOOL_DATA_INDEX: u8 = 18;
 /// Chicken variant accessor; checked against the protocol index at the edge.
 pub const CHICKEN_VARIANT_DATA_INDEX: u8 = 18;
-/// Variant accessors from the supplied 26.3 entity metadata facts.
+/// Climate and nautilus variant accessors, derived from `defineId` order in
+/// the 26.1.2 server and 26.1.2/26.2/26.3 client jars (receipts/Q04CoreFix/javap,
+/// summary in derived-indices.txt): AgeableMob owns 16 (baby) and 17 (age
+/// lock); Cow adds 18 (variant) and 19 (sound variant); Pig adds 18 (boost
+/// time) then 19 (variant); TamableAnimal adds 18 and 19 and AbstractNautilus
+/// 20 (dash) before ZombieNautilus adds 21 (variant).
 pub const COW_VARIANT_DATA_INDEX: u8 = 18;
 pub const PIG_VARIANT_DATA_INDEX: u8 = 19;
 pub const ZOMBIE_NAUTILUS_VARIANT_DATA_INDEX: u8 = 21;

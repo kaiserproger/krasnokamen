@@ -71,7 +71,7 @@ fn image(state: &ProjectileState, items: &ItemRegistry) -> mc_data::entity_nbt::
     }
 }
 
-fn projectile_anvil_source(root: &std::path::Path) -> std::path::PathBuf {
+pub(crate) fn projectile_anvil_source(root: &std::path::Path) -> std::path::PathBuf {
     let source = root.join("source");
     std::fs::create_dir(&source).unwrap();
     let mut manifest = mc_core::journal::CheckpointManifest {

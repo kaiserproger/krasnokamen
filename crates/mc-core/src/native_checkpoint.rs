@@ -9,6 +9,15 @@ use mc_world::native::{
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+/// Anvil import keeps vanilla tolerance for `variant`: the game ignores a
+/// malformed or unknown value and keeps the species default, so the importer
+/// drops such a field before the native hydrate, which fails closed on it.
+pub fn drop_ignored_variant(record: &mut mc_data::entity_nbt::VanillaEntity) {
+    if crate::core::variant_from_vanilla_entity(record).is_err() {
+        record.extra_fields.retain(|(key, _)| key != "variant");
+    }
+}
+
 /// Hydrate one native entity compound without filesystem access.
 pub fn hydrate_entity(
     registry: &crate::registry::CoreRegistry,
@@ -92,6 +101,7 @@ pub fn hydrate_entity(
             .any(|goal| goal.kind == crate::blueprint::GoalKind::Breed)
     });
     let mut appearance = appearance_from_vanilla_entity(&record);
+    crate::core::native_variant(&record, &mut appearance).map_err(invalid)?;
     crate::end_fight::native_appearance(&record, &mut appearance).map_err(invalid)?;
     crate::item_frame::native_appearance(&record, &mut appearance)?;
     crate::painting::native_appearance(&record, &mut appearance, registry)?;

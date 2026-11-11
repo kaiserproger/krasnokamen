@@ -94,6 +94,19 @@ admitted hostile evaluation after restart, and a changed appearance is
 journaled as usual. A checkpoint-only restart instead reconstructs the default
 pose and the hostile tick derives it again from live targeting.
 
+Cow, pig, chicken and zombie-nautilus variants (from `/summon ... {variant:...}`)
+are persisted. The checkpoint stores the vanilla string `variant` field of the
+entity record; the WAL stores a typed appearance value at the species' metadata
+index. Both fail closed: a checkpoint `variant` that is not a string, not an
+identifier or not an entry of the species' registry refuses hydration, and a WAL
+image whose variant value has another species' kind, the wrong index or an id
+outside the registry refuses recovery (`validate_entity`). An absent field is the
+vanilla default. Naturally spawned animals carry no variant and use that default
+(egg-hatched chickens keep the egg's variant); Solaris does not yet choose
+biome-dependent variants. Anvil import keeps vanilla
+tolerance instead: an unknown or malformed `variant` is dropped (the game ignores
+it and keeps the default) before the native hydrate.
+
 On genuine first start, `Core::open` writes and fsyncs
 `<world>/.solaris-first-start`, creates `native/state.redb.new` and renames the
 committed store into place. The marker is removed after the initial checkpoint

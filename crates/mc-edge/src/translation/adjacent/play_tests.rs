@@ -20,20 +20,43 @@ fn session() -> Session {
 }
 #[test]
 fn variant_metadata_survives_776_to_775_translation() {
-    let mut s = test_session(Tables {
-        formats: super::super::tables::Formats {
-            upper: 776,
-            lower: 775,
-        },
-        ..Tables::default()
-    });
-    for (index, serializer) in [(18, 23), (19, 28), (21, 32)] {
-        let data = [7, index, serializer, 2, 255];
+    use mc_protocol::Packet;
+    use mc_protocol::packets::play::{ClientboundSetEntityData, EntityDataValue};
+    // Serializer ids 23/28/32 and indices 18/19/21 are identical in 26.1.2 and
+    // 26.3 (receipts/Q04CoreFix/derived-indices.txt), so each adjacent step
+    // forwards the entries unchanged and the result decodes to the same values.
+    for (upper, lower) in [(777, 776), (776, 775)] {
+        let mut s = test_session(Tables {
+            formats: super::super::tables::Formats { upper, lower },
+            ..Tables::default()
+        });
+        let packet = ClientboundSetEntityData {
+            entity_id: 7,
+            values: vec![
+                EntityDataValue::CowVariant {
+                    index: mc_protocol::packets::play::COW_VARIANT_DATA_INDEX,
+                    value: 2,
+                },
+                EntityDataValue::PigVariant {
+                    index: mc_protocol::packets::play::PIG_VARIANT_DATA_INDEX,
+                    value: 1,
+                },
+                EntityDataValue::ZombieNautilusVariant {
+                    index: mc_protocol::packets::play::ZOMBIE_NAUTILUS_VARIANT_DATA_INDEX,
+                    value: 1,
+                },
+            ],
+        };
+        let mut wire = Vec::new();
+        packet.encode(&mut wire).unwrap();
+        let out = clientbound(&mut s, "minecraft:set_entity_data", &wire)
+            .unwrap()
+            .unwrap();
+        assert_eq!(out, wire, "{upper}->{lower}");
         assert_eq!(
-            clientbound(&mut s, "minecraft:set_entity_data", &data)
-                .unwrap()
-                .unwrap(),
-            data
+            ClientboundSetEntityData::decode(&mut out.as_slice()).unwrap(),
+            packet,
+            "{upper}->{lower}"
         );
     }
 }

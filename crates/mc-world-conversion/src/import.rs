@@ -1851,6 +1851,7 @@ pub(super) fn convert(
             .expect("dimension collected");
         for (&(x, z), chunk) in chunks.iter_mut() {
             for (index, entity) in chunk.entities.iter_mut().enumerate() {
+                mc_core::native_checkpoint::drop_ignored_variant(entity);
                 if let Some(raids) = image(&mut manifest, dimension).raids.as_mut() {
                     mc_core::raids::hydrate_native_entity(raids, entity).map_err(|error| {
                         let path = source

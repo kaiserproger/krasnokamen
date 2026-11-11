@@ -3,6 +3,8 @@ use crate::boundary::{ChangeSet, ConnectionId, PlayerChange, PlayerInput};
 
 #[path = "command_summon_variant_disk_tests.rs"]
 mod variant_disk_tests;
+#[path = "command_summon_variant_refusal_tests.rs"]
+mod variant_refusal_tests;
 
 fn summon(kind: &str, nbt: &str) -> (TickState, EntityId) {
     let (mut state, actor, _) = crate::hostile_tests::setup(8.0);
@@ -1068,7 +1070,8 @@ fn climate_variant_summons_publish_and_checkpoint_typed_variants() {
                         .extra_fields
                         .contains(&("variant".into(), Tag::String(name.clone())))
                 );
-                let imported = crate::core::appearance_from_vanilla_entity(native);
+                let mut imported = crate::core::appearance_from_vanilla_entity(native);
+                crate::core::native_variant(native, &mut imported).unwrap();
                 let image: crate::journal::EntityAppearanceImage =
                     serde_json::from_slice(&serde_json::to_vec(&imported).unwrap()).unwrap();
                 assert!(

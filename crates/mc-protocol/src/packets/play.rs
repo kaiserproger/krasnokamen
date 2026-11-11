@@ -242,11 +242,14 @@ pub const SHEEP_ENTITY_DATA_WOOL_INDEX: u8 = 18;
 /// Chicken accessors follow AgeableMob's baby and age-lock booleans.
 pub const CHICKEN_VARIANT_DATA_INDEX: u8 = 18;
 pub const CHICKEN_SOUND_VARIANT_DATA_INDEX: u8 = 19;
-/// Cow and pig variant accessors follow their inherited ageable metadata.
+/// Cow variant follows AgeableMob's baby (16) and age-lock (17) booleans;
+/// Pig defines its boost-time int at 18, so its variant is 19. Derived from
+/// `defineId` order in the 26.1.2 server and 26.1.2/26.2/26.3 client jars
+/// (receipts/Q04CoreFix/javap, derived-indices.txt).
 pub const COW_VARIANT_DATA_INDEX: u8 = 18;
 pub const PIG_VARIANT_DATA_INDEX: u8 = 19;
-/// 26.3 client javap: TamableAnimal defines flags/owner, AbstractNautilus
-/// defines DASH, then ZombieNautilus defines DATA_VARIANT_ID at index 21.
+/// TamableAnimal defines flags (18) and owner (19), AbstractNautilus defines
+/// dash (20), then ZombieNautilus defines its variant at 21 (same receipts).
 pub const ZOMBIE_NAUTILUS_VARIANT_DATA_INDEX: u8 = 21;
 /// `Villager.DATA_VILLAGER_DATA` after the 19 inherited accessors on the
 /// bundled vanilla 26.1.2 server.

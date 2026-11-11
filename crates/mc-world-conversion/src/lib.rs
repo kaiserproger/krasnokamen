@@ -34,6 +34,8 @@ mod test_support;
 mod tests;
 #[cfg(test)]
 mod v263_tests;
+#[cfg(test)]
+mod variant_import_tests;
 
 use mc_core::{CoreConfig, CoreError};
 use mc_nbt::Tag;
