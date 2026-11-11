@@ -432,17 +432,77 @@ class PortLeaseTests(unittest.TestCase):
                 if callable(release):
                     release()
 
-    def test_lock_dir_default_is_portable_without_work_root(self) -> None:
-        import tempfile
-        env = {k: v for k, v in os.environ.items()
-               if k not in ("SOLARIS_PORT_LOCK_DIR", "SOLARIS_WORK_ROOT")}
-        with mock.patch.dict(os.environ, env, clear=True):
-            self.assertEqual(lifecycle._default_lock_dir(),
-                             Path(tempfile.gettempdir()) / "solaris-port-locks")
-        with mock.patch.dict(os.environ, {"SOLARIS_WORK_ROOT": "/w"}, clear=True):
-            self.assertEqual(lifecycle._default_lock_dir(), Path("/w/port-locks"))
-        with mock.patch.dict(os.environ, {"SOLARIS_PORT_LOCK_DIR": "/locks"}, clear=True):
-            self.assertEqual(lifecycle._default_lock_dir(), Path("/locks"))
+    def test_lock_dir_is_one_fixed_path_regardless_of_env(self) -> None:
+        # Main decision: the lock namespace must not depend on ANY env var.
+        # Every process on the host uses the same literal directory, created
+        # sticky 1777 with one lock file per port.
+        import stat
+        import subprocess
+        import sys
+        self.assertEqual(lifecycle.PORT_LOCK_DIR, Path("/tmp/solaris-port-locks"))
+        root = str(Path(__file__).resolve().parents[2])
+        for extra in ({"SOLARIS_WORK_ROOT": "/w", "TMPDIR": "/t",
+                       "SOLARIS_PORT_LOCK_DIR": "/ignored"}, {}):
+            env = {k: v for k, v in os.environ.items()
+                   if k not in ("SOLARIS_WORK_ROOT", "TMPDIR", "SOLARIS_PORT_LOCK_DIR")}
+            env.update(extra)
+            out = subprocess.run(
+                [sys.executable, "-c",
+                 f"import sys; sys.path.insert(0, {root!r});"
+                 "from tools.harness.backends import protocol_lifecycle as lc;"
+                 "print(lc.PORT_LOCK_DIR)"],
+                env=env, capture_output=True, text=True, check=True).stdout.strip()
+            self.assertEqual(out, "/tmp/solaris-port-locks")
+        from . import runtime
+        base = runtime.reserve_port()
+        reservation = lifecycle.reserve_matrix_port(port_range=(base, base))
+        try:
+            mode = stat.S_IMODE(os.stat(lifecycle.PORT_LOCK_DIR).st_mode)
+            self.assertEqual(mode, 0o1777)
+            self.assertTrue((lifecycle.PORT_LOCK_DIR / f"{base}.lock").is_file())
+        finally:
+            reservation.release()
+
+    def test_reservations_coordinate_across_processes_with_different_env(self) -> None:
+        # Regression (red on 207b7097): the lock dir used to be derived from
+        # env, so two OS processes with different SOLARIS_WORK_ROOT/TMPDIR
+        # used different lock dirs and both leased the same port. Separate
+        # processes with deliberately different env holding live leases must
+        # get distinct ports from the one machine-wide namespace.
+        import subprocess
+        import sys
+        from . import runtime
+        base = runtime.reserve_port()
+        root = str(Path(__file__).resolve().parents[2])
+        child = (
+            "import sys, time; sys.path.insert(0, {root!r});"
+            "from tools.harness.backends import protocol_lifecycle as lc;"
+            "r = lc.reserve_matrix_port(port_range=({base}, {base} + 3));"
+            "print(int(r), flush=True); time.sleep(30)"  # hold the live lease
+        ).format(root=root, base=base)
+        envs = [
+            {"SOLARIS_WORK_ROOT": "/tmp/fake-root-a", "TMPDIR": "/tmp/fake-tmp-a"},  # set
+            {},  # unset
+        ]
+        procs = []
+        for extra in envs:
+            env = {k: v for k, v in os.environ.items()
+                   if k not in ("SOLARIS_WORK_ROOT", "TMPDIR", "SOLARIS_PORT_LOCK_DIR")}
+            env.update(extra)
+            procs.append(subprocess.Popen(
+                [sys.executable, "-c", child], env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True))
+        try:
+            ports = [int(procs[i].stdout.readline().strip()) for i in range(2)]
+            for proc in procs:
+                proc.stdout.close()
+                proc.stderr.close()
+        finally:
+            for proc in procs:
+                proc.kill()
+                proc.wait(timeout=10)
+        self.assertEqual(len(set(ports)), 2,
+                         f"cross-process leases collided despite different env: {ports}")
 
 
 if __name__ == "__main__":
