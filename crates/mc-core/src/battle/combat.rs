@@ -2,10 +2,50 @@
 //! Calibration: BattleVideo/research-combat-behavior.md §§4.4–4.7 (Sabin/Ilerda).
 use rustc_hash::FxHashMap;
 
+use super::formation::{DECISION_TICKS, EXHAUSTED_STAMINA, STANDING_RECOVERY, SURGE_FATIGUE};
 use super::{BattleIntent, BattleState, Frame, Output};
 use crate::boundary::{EntityEvent, EntityId, Hand};
 use crate::entities::EntitySlot;
 use crate::intent::{DamageSource, Footprint, IntentKind};
+
+// The 21..25-tick action cycle skips one 20-tick decision after each attack.
+// Count that recovery before deriving odds; do not shorten the action clocks.
+const ATTACK_DECISION_TICKS: u64 = 20;
+const AGGRESSIVE_FIGHTERS: u32 = 2500;
+const AGGRESSIVE_ATTEMPTS: u32 = 8000;
+const CAUTIOUS_ATTEMPTS: u32 = 2000;
+const STRIKES_PER_SECOND: f32 = {
+    let share = AGGRESSIVE_FIGHTERS as f32 / 10_000.0;
+    let aggressive = AGGRESSIVE_ATTEMPTS as f32 / 10_000.0;
+    let cautious = CAUTIOUS_ATTEMPTS as f32 / 10_000.0;
+    (share * aggressive / (1.0 + aggressive) + (1.0 - share) * cautious / (1.0 + cautious))
+        * (20.0 / ATTACK_DECISION_TICKS as f32)
+};
+// Cinematic calibration: 80 removals per 46-file regiment in 120 s of contact.
+// Fatigue permits 65 fighting seconds, but the native three-minute run's
+// busiest infantry front only accumulated 46.03 target-bearing pulse seconds.
+// Bound the budget by that measured exposure, not just the stamina ceiling.
+// The native 20k/6000-tick reference measured 2316 parries / 3873 strikes.
+const FRONT_FILES: f32 = 46.0;
+const OBSERVED_FRONT_FIGHT_SECONDS: f32 = 46.0;
+const ACTIVE_FIGHT_SECONDS: f32 = {
+    let decision_seconds = DECISION_TICKS as f32 / 20.0;
+    let fatigue_ceiling = (100.0 - EXHAUSTED_STAMINA
+        + 120.0 * STANDING_RECOVERY / decision_seconds)
+        / ((SURGE_FATIGUE + STANDING_RECOVERY) / decision_seconds);
+    if fatigue_ceiling < OBSERVED_FRONT_FIGHT_SECONDS {
+        fatigue_ceiling
+    } else {
+        OBSERVED_FRONT_FIGHT_SECONDS
+    }
+};
+const TARGET_REMOVALS: f32 = 80.0;
+const PARRY_FRACTION: f32 = 2316.0 / 3873.0;
+const REMOVAL_ROLLS: f32 = 10_000.0 * TARGET_REMOVALS
+    / (FRONT_FILES * STRIKES_PER_SECOND * ACTIVE_FIGHT_SECONDS * (1.0 - PARRY_FRACTION));
+const FATAL_SHARE: f32 = 0.4;
+const PURSUIT_REMOVAL_ROLLS: f32 = 3.0 * REMOVAL_ROLLS;
+const PURSUIT_FATAL_SHARE: f32 = 2.0 / 3.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Weapon {
@@ -204,7 +244,10 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         let id = battle.columns.ids[bi];
         combat.work.visited += 1;
         let fighter = &mut combat.fighters[bi];
-        classify(frame, slot, fighter, battle.columns.ranged[bi]);
+        if battle.columns.equipment_dirty[bi] || fighter.equipment.is_none() {
+            classify(frame, slot, fighter, battle.columns.ranged[bi]);
+            battle.columns.equipment_dirty[bi] = false;
+        }
         if matches!(fighter.action, Action::Wounded) {
             continue;
         }
@@ -288,14 +331,18 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             continue;
         }
         // Three cautious soldiers in four; decisions once/20t, not per frame.
-        if (frame.tick + id.0 as u64) % 20 != 0 {
+        if !(frame.tick + id.0 as u64).is_multiple_of(ATTACK_DECISION_TICKS) {
             continue;
         }
         fighter.action = Action::Guard {
-            until: frame.tick + 20,
+            until: frame.tick + ATTACK_DECISION_TICKS,
         };
-        let probability = if roll(id, 0, 1) < 2500 { 8000 } else { 2000 };
-        if roll(id, frame.tick / 20, 2) >= probability {
+        let probability = if roll(id, 0, 1) < AGGRESSIVE_FIGHTERS {
+            AGGRESSIVE_ATTEMPTS
+        } else {
+            CAUTIOUS_ATTEMPTS
+        };
+        if roll(id, frame.tick / ATTACK_DECISION_TICKS, 2) >= probability {
             continue;
         }
         fighter.action = Action::Windup {
@@ -384,18 +431,19 @@ pub(super) enum Outcome {
     Kill,
 }
 
-/// 130 removals / 10,000 unblocked contact attacks; 117 wounded, 13 killed.
-/// Pursuit shifts the casualties to the broken side; never speeds up animations.
+/// Frontage/block-adjusted film outcomes; nominal pulse exposure ~26 s.
+/// Pursuit shifts casualties to the broken side; action clocks are unchanged.
 pub(super) fn outcome(roll: u32, routing: bool, charge: f32) -> Outcome {
-    let (removal, fatal) = if routing {
-        (1300.0, 900.0)
+    let (removal, fatal_share) = if routing {
+        (PURSUIT_REMOVAL_ROLLS, PURSUIT_FATAL_SHARE)
     } else {
-        (130.0, 13.0)
+        (REMOVAL_ROLLS, FATAL_SHARE)
     };
-    let multiplier = 1.0 + charge;
-    if (roll as f32) < fatal * multiplier {
+    // Saturate total odds first; overflow must not turn the wounded share fatal.
+    let removal = (removal * (1.0 + charge)).min(10_000.0);
+    if (roll as f32) < removal * fatal_share {
         Outcome::Kill
-    } else if (roll as f32) < removal * multiplier {
+    } else if (roll as f32) < removal {
         Outcome::Wound
     } else {
         Outcome::Glance

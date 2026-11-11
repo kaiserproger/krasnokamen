@@ -306,30 +306,46 @@ fn value_shape(
         }
         ids::EQUIPPABLE => {
             let fields = compound(value)?;
-            if fields.iter().enumerate().any(|(i, (name, _))| fields[..i].iter().any(|(old, _)| old == name)) {
+            if fields
+                .iter()
+                .enumerate()
+                .any(|(i, (name, _))| fields[..i].iter().any(|(old, _)| old == name))
+            {
                 return Err("duplicate equippable field");
             }
-            if !matches!(string(required(fields, "slot")?)?,
-                "mainhand" | "offhand" | "feet" | "legs" | "chest" | "head" | "body" | "saddle")
-            {
+            if !matches!(
+                string(required(fields, "slot")?)?,
+                "mainhand" | "offhand" | "feet" | "legs" | "chest" | "head" | "body" | "saddle"
+            ) {
                 return Err("invalid equipment slot");
             }
             for (name, value) in fields {
                 match name.as_str() {
                     "slot" => {}
-                    "asset_id" | "camera_overlay" => { identifier(value)?; }
+                    "asset_id" | "camera_overlay" => {
+                        identifier(value)?;
+                    }
                     "equip_sound" | "shearing_sound" => {
                         match value {
-                            Tag::String(_) => { registry("sound_event", value)?; }
+                            Tag::String(_) => {
+                                registry("sound_event", value)?;
+                            }
                             Tag::Compound(sound) => {
-                                if sound.iter().enumerate().any(|(i, (name, _))| sound[..i].iter().any(|(old, _)| old == name)) {
+                                if sound.iter().enumerate().any(|(i, (name, _))| {
+                                    sound[..i].iter().any(|(old, _)| old == name)
+                                }) {
                                     return Err("duplicate sound field");
                                 }
                                 identifier(required(sound, "sound_id")?)?;
-                                if let Some(range) = field(sound, "range") {
-                                    if !number(range)?.is_finite() { return Err("invalid sound range"); }
+                                if let Some(range) = field(sound, "range")
+                                    && !number(range)?.is_finite()
+                                {
+                                    return Err("invalid sound range");
                                 }
-                                if sound.iter().any(|(key, _)| !matches!(key.as_str(), "sound_id" | "range")) {
+                                if sound
+                                    .iter()
+                                    .any(|(key, _)| !matches!(key.as_str(), "sound_id" | "range"))
+                                {
                                     return Err("unknown sound field");
                                 }
                             }
@@ -341,10 +357,17 @@ fn value_shape(
                             Identifier::parse(&name[1..]).map_err(|_| "invalid entity tag")?;
                         }
                         Tag::String(_) => registry("entity_type", value)?,
-                        _ => for entity in list(value, 256)? { registry("entity_type", entity)?; },
+                        _ => {
+                            for entity in list(value, 256)? {
+                                registry("entity_type", entity)?;
+                            }
+                        }
                     },
-                    "dispensable" | "swappable" | "damage_on_hurt" | "equip_on_interact" | "can_be_sheared" => {
-                        if !matches!(integer(value)?, 0 | 1) { return Err("invalid equipment boolean"); }
+                    "dispensable" | "swappable" | "damage_on_hurt" | "equip_on_interact"
+                    | "can_be_sheared" => {
+                        if !matches!(integer(value)?, 0 | 1) {
+                            return Err("invalid equipment boolean");
+                        }
                     }
                     _ => return Err("unknown equippable field"),
                 }

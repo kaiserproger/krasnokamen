@@ -1,6 +1,24 @@
 use super::*;
-use crate::battle::formation::{FormationRuntime, Order, RegimentSpec, SoldierSample};
+use crate::battle::formation::{
+    FormationRuntime, Order, PULSE_MORALE_FLOOR, RegimentSpec, SoldierSample,
+};
 use crate::boundary::EntityId;
+
+#[test]
+fn film_nerve_keeps_a_rear_trickle_above_the_regiment_break_threshold() {
+    let mut rear_top = 0.0_f32;
+    for id in 1..=1000 {
+        let front = nerve(id, 0, 20);
+        let rear = nerve(id, 19, 20);
+        assert!((3.0..=18.0).contains(&front), "front={front}");
+        assert!((25.0..=40.0).contains(&rear), "rear={rear}");
+        assert_eq!(rear - front, 22.0);
+        rear_top = rear_top.max(rear);
+    }
+    // Sections stop pulsing below the floor, so losses stall there: a rear
+    // top at or under it would leave a worn regiment unable to start flight.
+    assert!(rear_top > PULSE_MORALE_FLOOR, "rear_top={rear_top}");
+}
 
 #[test]
 fn steady_regiment_breaks_near_ten_percent_not_fifty() {
@@ -105,8 +123,10 @@ fn pressure_levels_do_not_accumulate_and_shields_reduce_missile_effect() {
 
 #[test]
 fn kills_raise_morale_and_panic_and_recent_casualties_reduce_it() {
-    let mut morale = Morale::default();
-    morale.kills = 1;
+    let mut morale = Morale {
+        kills: 1,
+        ..Morale::default()
+    };
     morale.update(0, 100, 0, 100.0, false);
     assert_eq!(morale.value, 78.0);
     morale.pressure.panicking = 100;
@@ -127,8 +147,10 @@ fn kills_raise_morale_and_panic_and_recent_casualties_reduce_it() {
 #[test]
 fn missile_cause_survives_deferred_damage_and_is_not_counted_twice() {
     let mut melee = Morale::default();
-    let mut missile = Morale::default();
-    missile.missile_losses = 1;
+    let mut missile = Morale {
+        missile_losses: 1,
+        ..Morale::default()
+    };
     missile.update(0, 100, 1, 100.0, false);
     melee.update(0, 100, 1, 100.0, false);
     assert_eq!(missile.value - melee.value, 2.0);
@@ -142,7 +164,7 @@ fn missile_cause_survives_deferred_damage_and_is_not_counted_twice() {
 }
 
 #[test]
-fn symmetric_kill_rewards_do_not_prevent_historical_loss_break_with_panic_cascade() {
+fn symmetric_kill_rewards_still_break_a_disciplined_regiment() {
     let mut runtime = FormationRuntime::default();
     runtime
         .add_regiment(
@@ -159,7 +181,7 @@ fn symmetric_kill_rewards_do_not_prevent_historical_loss_break_with_panic_cascad
         )
         .unwrap();
     let mut break_percent = None;
-    for percent in 1..=15 {
+    for percent in 1..=20 {
         for id in (percent - 1) * 10 + 1..=percent * 10 {
             runtime.mark_wounded(EntityId(id));
         }
@@ -179,5 +201,5 @@ fn symmetric_kill_rewards_do_not_prevent_historical_loss_break_with_panic_cascad
             break;
         }
     }
-    assert!((8..=15).contains(&break_percent.expect("panic must break symmetric combat")));
+    assert!((12..=14).contains(&break_percent.expect("panic must break symmetric combat")));
 }

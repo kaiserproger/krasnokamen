@@ -1753,7 +1753,7 @@ fn run_dimension_tick_inner<'a>(
     let chunks = state.world.snapshot();
     let snapshot_time = publish_start.elapsed();
     let views_start = std::time::Instant::now();
-    let views = state.entities.views();
+    let views = crate::battle::drain_entity_views(state);
     let views_time = views_start.elapsed();
     let snapshot = Arc::new(WorldSnapshot {
         tick: state.tick,

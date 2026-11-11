@@ -18,8 +18,13 @@ pub(in crate::battle) fn prepare(state: &TickState, battle: &mut BattleState, ti
         world: &state.world,
         tick,
     };
-    super::super::formation::update(&frame, battle);
-    battle.columns.prepare(&frame, &battle.formation);
+    battle.columns.prepare(
+        &frame,
+        &mut battle.formation,
+        &mut battle.output.counters,
+        &mut battle.population,
+    );
+    battle.formation.finish_preparation();
     battle.combat.prepare(&battle.columns.ids);
 }
 
@@ -180,7 +185,7 @@ fn shield_window_is_inclusive_and_parry_staggers_without_damage() {
 }
 
 #[test]
-fn calibration_has_thirteen_per_thousand_removals_nine_wounded_per_death() {
+fn calibration_matches_wide_front_removals_and_two_fatal_in_five() {
     let mut counts = [0; 3];
     for sample in 0..10_000 {
         counts[match outcome(sample, false, 0.0) {
@@ -189,13 +194,38 @@ fn calibration_has_thirteen_per_thousand_removals_nine_wounded_per_death() {
             Outcome::Kill => 2,
         }] += 1;
     }
-    assert_eq!(counts, [9870, 117, 13]);
+    // A 21..25-tick cycle skips the next 20-tick attack decision.
+    for weapon in [Weapon::Sword, Weapon::Spear, Weapon::Mace] {
+        assert!((21..=40).contains(&weapon.cycle()));
+    }
+    let rate = 0.25 * (0.8 / 1.8) + 0.75 * (0.2 / 1.2);
+    assert_eq!(counts, [6016, 2390, 1594]);
+    let removal_probability = (counts[1] + counts[2]) as f64 / 10_000.0;
+    let expected = 46.0 * rate * 46.0 * (1.0 - 2316.0 / 3873.0) * removal_probability;
+    assert!((expected - 80.0).abs() < 0.1, "{expected}");
+    let fatal_share = counts[2] as f64 / f64::from(counts[1] + counts[2]);
+    assert!((1.0 / 3.0..=0.5).contains(&fatal_share));
+    let lifetime = 1.0 / (rate * (1.0 - 2316.0 / 3873.0) * removal_probability);
+    assert!(lifetime >= 8.0, "{lifetime}");
     assert_eq!(
         (0..10_000)
             .filter(|r| outcome(*r, true, 0.0) == Outcome::Kill)
             .count(),
-        900
+        6667
     );
+}
+
+#[test]
+fn saturated_pursuit_keeps_two_fatal_casualties_in_three() {
+    let mut counts = [0; 3];
+    for sample in 0..10_000 {
+        counts[match outcome(sample, true, 1.0) {
+            Outcome::Glance => 0,
+            Outcome::Wound => 1,
+            Outcome::Kill => 2,
+        }] += 1;
+    }
+    assert_eq!(counts, [0, 3333, 6667]);
 }
 
 #[test]

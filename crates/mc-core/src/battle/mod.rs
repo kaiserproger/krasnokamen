@@ -47,6 +47,9 @@ pub(crate) struct BattleState {
     pub work: Work,
     pub timings: Timings,
     output: Output,
+    population: PopulationCache,
+    #[cfg(test)]
+    trace: Option<trace_tests::FrameTrace>,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -103,29 +106,133 @@ pub struct FactionAlive {
 }
 
 impl UnitCounters {
-    fn sample(&mut self, entities: &EntityStore, tick: u64) {
-        self.tick = tick;
+    fn clear(&mut self) {
         self.units = 0;
         self.alive_per_faction.clear();
-        for slot in entities.battle_slots() {
-            let body = entities.body(slot);
-            self.units += 1;
-            let alive = u64::from(body.alive && entities.row(slot).health > 0.0);
-            if let Some(count) = self
-                .alive_per_faction
-                .iter_mut()
-                .find(|c| c.faction == body.faction)
-            {
-                count.alive += alive;
-            } else {
-                self.alive_per_faction.push(FactionAlive {
-                    faction: body.faction,
-                    alive,
-                });
-            }
+    }
+
+    fn record(&mut self, faction: u16, alive: bool) {
+        if faction == 0 {
+            return;
         }
+        self.units += 1;
+        let alive = u64::from(alive);
+        if let Some(count) = self
+            .alive_per_faction
+            .iter_mut()
+            .find(|c| c.faction == faction)
+        {
+            count.alive += alive;
+        } else {
+            self.alive_per_faction.push(FactionAlive { faction, alive });
+        }
+    }
+
+    fn finish(&mut self) {
         self.alive_per_faction
             .sort_unstable_by_key(|count| count.faction);
+    }
+
+    #[cfg(test)]
+    fn sample(&mut self, entities: &EntityStore, tick: u64) {
+        self.tick = tick;
+        self.clear();
+        for slot in entities.battle_slots() {
+            let body = entities.body(slot);
+            self.record(body.faction, body.alive && entities.row(slot).health > 0.0);
+        }
+        self.finish();
+    }
+}
+
+#[derive(Debug)]
+struct HealthFact {
+    id: EntityId,
+    health: f32,
+    valid: bool,
+}
+
+/// Native-slot health memo, never a population owner. Every sample still folds
+/// current hot membership/alive flags, so removal, repacking and corpses are exact.
+#[derive(Debug, Default)]
+pub(crate) struct PopulationCache {
+    health: Vec<HealthFact>,
+    #[cfg(test)]
+    health_reads: u64,
+}
+
+impl PopulationCache {
+    fn prepare(&mut self, entities: &EntityStore) {
+        self.health.resize_with(entities.len(), || HealthFact {
+            id: EntityId(0),
+            health: 0.0,
+            valid: false,
+        });
+    }
+
+    fn invalidate(&mut self, id: EntityId, slot: crate::entities::EntitySlot) {
+        if let Some(fact) = self.health.get_mut(slot.0 as usize)
+            && fact.id == id
+        {
+            fact.valid = false;
+        }
+    }
+
+    fn remember(&mut self, slot: crate::entities::EntitySlot, id: EntityId, health: f32) {
+        self.health[slot.0 as usize] = HealthFact {
+            id,
+            health,
+            valid: true,
+        };
+    }
+
+    fn health(&mut self, entities: &EntityStore, slot: crate::entities::EntitySlot) -> f32 {
+        let id = entities.body(slot).id;
+        let fact = &mut self.health[slot.0 as usize];
+        if !fact.valid || fact.id != id {
+            fact.id = id;
+            fact.health = entities.row(slot).health;
+            fact.valid = true;
+            #[cfg(test)]
+            {
+                self.health_reads += 1;
+            }
+        }
+        fact.health
+    }
+
+    fn sample(&mut self, entities: &EntityStore, tick: u64, counts: &mut UnitCounters) {
+        counts.tick = tick;
+        counts.clear();
+        if entities.battle_slots().next().is_none() {
+            return;
+        }
+        self.prepare(entities);
+        for (id, slot) in entities.pending_wire_changes() {
+            self.invalidate(id, slot);
+        }
+        for slot in entities.battle_slots() {
+            let body = entities.body(slot);
+            counts.record(
+                body.faction,
+                body.alive && self.health(entities, slot) > 0.0,
+            );
+        }
+        counts.finish();
+    }
+}
+
+fn invalidate_facts(
+    columns: &mut Columns,
+    population: &mut PopulationCache,
+    entities: &EntityStore,
+) {
+    if columns.ids.is_empty() && population.health.is_empty() {
+        return;
+    }
+    for (id, slot) in entities.pending_wire_changes() {
+        columns.invalidate(id, slot);
+        population.invalidate(id, slot);
     }
 }
 
@@ -138,8 +245,11 @@ pub fn unit_counters(hostile: &crate::hostile::HostileState) -> &UnitCounters {
 pub(crate) fn publication_counts(
     state: &mut TickState,
 ) -> Option<std::sync::Arc<crate::boundary::BattleCounts>> {
-    let counts = &mut state.hostile.battle.output.counters;
-    counts.sample(&state.entities, state.tick);
+    let battle = &mut state.hostile.battle;
+    let counts = &mut battle.output.counters;
+    battle
+        .population
+        .sample(&state.entities, state.tick, counts);
     if counts.units == 0 {
         return None;
     }
@@ -157,6 +267,20 @@ pub(crate) fn publication_counts(
             })
             .collect(),
     }))
+}
+/// Every `EntityStore::views()` drain consumes the pending-wire feed: tick
+/// publication and the dimension-travel refresh both drain through here, so
+/// late native writes (including deferred multi-dimension commands) reach the
+/// battle's derived facts first. Native custody is unchanged.
+pub(crate) fn drain_entity_views(state: &mut TickState) -> crate::boundary::EntityViews {
+    invalidate_wire_facts(state);
+    state.entities.views()
+}
+
+/// Only derived facts are invalidated; native custody is unchanged.
+fn invalidate_wire_facts(state: &mut TickState) {
+    let battle = &mut state.hostile.battle;
+    invalidate_facts(&mut battle.columns, &mut battle.population, &state.entities);
 }
 
 #[derive(Debug, Default)]
@@ -176,13 +300,20 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     let mut battle = std::mem::take(&mut state.hostile.battle);
     battle.work = Work::default();
     let mut output = std::mem::take(&mut battle.output);
-    output.counters.sample(&state.entities, state.tick);
+    if !battle.running {
+        battle
+            .population
+            .sample(&state.entities, state.tick, &mut output.counters);
+    } else {
+        output.counters.tick = state.tick;
+    }
     let mut timings = Timings {
         counters_us: phase_us(&mut mark),
         ..Default::default()
     };
     if !battle.running {
-        battle.columns.clear_projection(state.entities.len());
+        battle.columns.drive_by_slot.clear();
+        battle.columns.look_by_slot.clear();
         battle.output = output;
         timings.total_us = start.map_or(0, |start| start.elapsed().as_micros() as u64);
         battle.timings = timings;
@@ -195,10 +326,18 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
         world: &state.world,
         tick: battle.elapsed_ticks,
     };
-    formation::update(&frame, &mut battle);
-    timings.formation_us = phase_us(&mut mark);
-    battle.columns.prepare(&frame, &battle.formation);
+    if state.tickets.contains_key(staging::OWNER) {
+        staging::update_orders(&mut battle.formation);
+    }
+    battle.columns.prepare(
+        &frame,
+        &mut battle.formation,
+        &mut output.counters,
+        &mut battle.population,
+    );
     timings.columns_us = phase_us(&mut mark);
+    battle.formation.finish_preparation();
+    timings.formation_us = phase_us(&mut mark);
     targeting::update(&frame, &mut battle);
     timings.targeting_us = phase_us(&mut mark);
     steering::step(&frame, &mut battle, &mut output);
@@ -209,6 +348,10 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     timings.morale_us = phase_us(&mut mark);
     battle.columns.project();
     timings.projection_us = phase_us(&mut mark);
+    #[cfg(test)]
+    if battle.trace.is_some() {
+        battle.trace = Some(trace_tests::frame_digest(&battle, &output));
+    }
     battle.elapsed_ticks += 1;
     state.hostile.events.append(&mut output.events);
     for arrow in output.arrows.drain(..) {
@@ -234,3 +377,6 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod trace_tests;

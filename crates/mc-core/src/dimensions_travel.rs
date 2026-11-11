@@ -636,7 +636,7 @@ fn refresh(world: &mut TickState, output: &mut TickOutput, mut changes: ChangeSe
     snapshot.chunks = world.world.snapshot();
     let chunks_done = phase_start.map(|start| start.elapsed()).unwrap_or_default();
     if entity_changes {
-        snapshot.entities = world.entities.views();
+        snapshot.entities = crate::battle::drain_entity_views(world);
     }
     let views_done = phase_start.map(|start| start.elapsed()).unwrap_or_default();
     let output_changes =

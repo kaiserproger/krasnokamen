@@ -19,8 +19,8 @@ fn list(elements: Vec<Tag>, element_type: u8) -> Tag {
     })
 }
 fn public_fields(fields: &mut Vec<(String, Tag)>) {
-    fields.retain(|(key, _)| {
-        key == "solaris:Faction"
+    fields.retain(|(key, value)| {
+        (key == "solaris:Faction" && !matches!(value, Tag::Int(0)))
             || (!key.starts_with("solaris") && !key.starts_with("Solaris") && key != "DataVersion")
     });
 }
