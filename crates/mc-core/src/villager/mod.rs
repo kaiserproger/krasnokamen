@@ -10,6 +10,8 @@ mod building_autonomy_tests;
 #[cfg(test)]
 mod building_housing_army_tests;
 #[cfg(test)]
+mod building_preparation_tests;
+#[cfg(test)]
 mod building_tests;
 #[cfg(test)]
 mod building_worksite_tests;

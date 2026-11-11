@@ -3849,14 +3849,14 @@ regression = [
 
 [[bug]]
 id = "CIV-SEED24-STALLED-PROJECT-HOLDS-SLOT"
-title = "Seed-24 autonomous Mason L2 and Lumber camp L1 stop mid-build and hold the only project slot, so the funded House never starts."
+title = "Seed-24 Lumber camp L1 builder parks out of felling reach of a clear cell and holds the only project slot, so the funded House never starts."
 area = "gameplay"
 repro = "client"
 severity = "major"
 status = "open"
-source = "Seed-24 civilization-seed-qa 20261111T214942-gh1mr776 on server pin a64a2dbe (house-bed iron fix): iron smelted at sprint 600, shears and 6 white wool in storage by 6000, birch logs 118 by 27000, yet Mason's workshop L2 stayed 25/72 from sprint 27000 to 39000 and Lumber camp L1 at site [113,72,-226] went 41/239 -> 47/239 between 42000 and 84000; the House left the waiting list at 45000 but never started, and the gate stopped on its one-day stall oracle (60000-84000). Run 90d4lq2w shows the same Lumber camp site at 0-29/239 for 33,000 sprint ticks. Cause not yet established."
+source = "Seed-24 civilization-seed-qa 20261111T214942-gh1mr776 on server pin a64a2dbe (house-bed iron fix): iron smelted at sprint 600, shears and 6 white wool in storage by 6000, birch logs 118 by 27000, yet Lumber camp L1 at site [113,72,-226] went 41/239 -> 47/239 between 42000 and 84000 (Mason L2 at 25/72 from 27000 to 39000 then finished); the House left the waiting list at 45000 (funded) but never started, and the gate stopped on its one-day stall oracle (60000-84000). Final checkpoint 102855 and a read-only world probe: structure settlement-1-411 in its clear stage at work unit 47/56, next cell [121,76,-225] = short grass over the cleared pit (footing [121,73,-225]); borrowed builder 63c408b1 at (121.5,76,-227.5) on the hill. villager/building.rs preparation_target chose the open stand nearest the builder (its own cell), while in_reach needs feet within 4.0 of the footing (here 4.24), so it never moved and never advanced. Run 90d4lq2w shows the same site at 0-29/239 for 33,000 sprint ticks."
 failing_first = "not recorded"
-regression = []
+regression = ["cargo:mc-core:villager::building_preparation_tests::clearing_stand_on_a_hill_edge_is_within_felling_reach_of_the_pit_footing"]
 
 [[bug]]
 id = "TICK-FROZEN-GAME-AGE-WIRE"
