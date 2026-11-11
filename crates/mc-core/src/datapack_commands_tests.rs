@@ -21,10 +21,8 @@ fn pack(root: &Path, name: &str, description: &str, resources: &[(&str, &str)]) 
 
 fn fixture(root: &Path) -> TickState {
     let (mut state, _, _) = crate::hostile_tests::setup(8.0);
-    state.datapacks = Runtime::new(
-        PackSet::load(root, Selection::default()).unwrap(),
-        root.to_path_buf(),
-    );
+    let packs = PackSet::open(root, Selection::default(), &state.registry).unwrap();
+    state.datapacks = Runtime::new(packs, root.to_path_buf());
     state
 }
 
@@ -1185,7 +1183,8 @@ fn a_new_pack_that_cannot_load_is_skipped_at_start_and_the_error_names_pack_and_
     );
     let base = base_registry();
     // The same selection a world that never saw these packs has.
-    let (packs, skipped) = PackSet::open(&root, Selection::default(), &base).unwrap();
+    let packs = PackSet::open(&root, Selection::default(), &base).unwrap();
+    let skipped = packs.skipped.clone();
     assert_eq!(packs.selection.enabled, ["vanilla", "file/good"]);
     assert_eq!(skipped.len(), 2, "{skipped:?}");
     let named = |pack: &str, file: &str| {
@@ -1235,10 +1234,28 @@ fn a_pack_the_live_reload_refused_does_not_stop_the_next_start() {
     console(&core, "datapack enable file/broken", "file/broken");
     core.shutdown();
 
-    let core = crate::core::Core::open(config).unwrap();
+    let core = crate::core::Core::open(config.clone()).unwrap();
     assert!(
         recipe_result(core.registry(), "test:new_gem").is_some(),
         "the same selection as before the refusal"
+    );
+    assert!(recipe_result(core.registry(), "test:cut").is_none());
+    core.shutdown();
+
+    // The operator repairs the named file: the next start enables the pack and saves that.
+    std::fs::write(
+        packs.join("broken/data/test/recipe/cut.json"),
+        GEM_RECIPES[1].1,
+    )
+    .unwrap();
+    let core = crate::core::Core::open(config.clone()).unwrap();
+    assert!(recipe_result(core.registry(), "test:cut").is_some());
+    console(&core, "datapack list enabled", "file/broken");
+    core.shutdown();
+    let core = crate::core::Core::open(config).unwrap();
+    assert!(
+        recipe_result(core.registry(), "test:cut").is_some(),
+        "the repaired pack stays enabled across a further restart"
     );
     core.shutdown();
     std::fs::remove_dir_all(dir).unwrap();
@@ -1392,5 +1409,190 @@ fn a_pack_command_while_another_is_still_compiling_says_so_instead_of_misreporti
             .selection()
             .enabled
             .contains(&"file/gems".to_owned())
+    );
+}
+
+/// Per-entry folder failures: none of these may stop a start, a `/reload` or a list.
+fn messy_folder(root: &Path) {
+    pack(root, "good", "\"Good\"", &GEM_RECIPES);
+    std::fs::write(root.join("README.txt"), "not a pack").unwrap();
+    std::fs::create_dir_all(root.join("nometa")).unwrap();
+    pack(root, "cutmeta", "\"C\"", &[]);
+    std::fs::write(root.join("cutmeta/pack.mcmeta"), r#"{"pack": {"#).unwrap();
+    pack(root, "nopackobject", "\"N\"", &[]);
+    std::fs::write(root.join("nopackobject/pack.mcmeta"), "{}").unwrap();
+    std::fs::write(root.join("corrupt.zip"), b"PK not really a zip").unwrap();
+}
+
+#[test]
+fn unreadable_or_non_pack_folder_entries_are_skipped_at_start_and_named() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    messy_folder(&root);
+    let base = base_registry();
+    let packs = PackSet::open(&root, Selection::default(), &base).unwrap();
+    assert_eq!(packs.selection.enabled, ["vanilla", "file/good"]);
+    let warnings = packs.warnings(None).join("\n");
+    for named in [
+        "file/nometa",
+        "file/cutmeta",
+        "file/nopackobject",
+        "file/corrupt.zip",
+        "non-pack entry 'README.txt'",
+    ] {
+        assert!(warnings.contains(named), "{named} in {warnings}");
+    }
+    assert!(warnings.contains("pack.mcmeta"), "{warnings}");
+
+    // A pack the saved selection holds that became unreadable still stops the start.
+    let saved = Selection {
+        enabled: vec!["vanilla".into(), "file/good".into(), "file/cutmeta".into()],
+        disabled: Vec::new(),
+    };
+    let error = PackSet::open(&root, saved, &base)
+        .err()
+        .expect("fails closed");
+    assert!(
+        error.contains("file/cutmeta") && error.contains("pack.mcmeta"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_reload_skips_a_new_broken_pack_and_applies_the_rest_but_a_broken_saved_pack_refuses_it() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    std::fs::create_dir_all(&root).unwrap();
+    let mut state = fixture(&root);
+    // A new pack that cannot load sits on disk next to a new pack that can.
+    pack(&root, "gems", "\"Gems\"", &GEM_RECIPES);
+    pack(
+        &root,
+        "broken",
+        "\"B\"",
+        &[("test/recipe/cut.json", BAD_RECIPE)],
+    );
+    std::fs::write(root.join("corrupt.zip"), b"PK not really a zip").unwrap();
+    std::fs::write(root.join("README.txt"), "x").unwrap();
+    run(&mut state, "reload");
+    settle(&mut state);
+    let shown = messages(&mut state)
+        .iter()
+        .map(crate::command_debug::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        shown.contains("Skipping new datapack file/broken"),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("Skipping new datapack file/corrupt.zip"),
+        "{shown}"
+    );
+    assert_eq!(
+        recipe_result(&state.registry, "minecraft:bone_meal").as_deref(),
+        Some("minecraft:diamond"),
+        "the rest of the reload applied"
+    );
+    assert!(
+        !state
+            .datapacks
+            .selection()
+            .enabled
+            .contains(&"file/broken".to_owned())
+    );
+
+    assert!(
+        state
+            .datapacks
+            .selection()
+            .enabled
+            .contains(&"file/gems".to_owned())
+    );
+
+    // A saved pack that no longer loads refuses the reload and keeps the old state.
+    std::fs::write(root.join("gems/data/test/recipe/new_gem.json"), BAD_RECIPE).unwrap();
+    run(&mut state, "reload");
+    settle(&mut state);
+    let shown = messages(&mut state)
+        .iter()
+        .map(crate::command_debug::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        shown.contains("file/gems") && shown.contains("test/recipe/new_gem.json"),
+        "{shown}"
+    );
+    assert_eq!(
+        recipe_result(&state.registry, "minecraft:bone_meal").as_deref(),
+        Some("minecraft:diamond")
+    );
+}
+
+#[test]
+fn list_and_activation_work_beside_unreadable_entries() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    messy_folder(&root);
+    let mut state = fixture(&root);
+    run(&mut state, "datapack list");
+    settle(&mut state);
+    let shown = messages(&mut state)
+        .iter()
+        .map(crate::command_debug::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(shown.contains("file/good"), "{shown}");
+    run(&mut state, "datapack enable file/cutmeta");
+    settle(&mut state);
+    let shown = messages(&mut state)
+        .iter()
+        .map(crate::command_debug::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        shown.contains("file/cutmeta") && shown.contains("pack.mcmeta"),
+        "{shown}"
+    );
+}
+
+#[test]
+fn a_filter_the_regex_engine_refuses_is_a_pack_load_error_named_like_any_other() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    // Look-behind is Java regex syntax; Rust's regex refuses it.
+    filter_pack(
+        &root,
+        "lookbehind",
+        r#"{"block":[{"path":"(?<=x)y"}]}"#,
+        &[],
+    );
+    let base = base_registry();
+    let packs = PackSet::open(&root, Selection::default(), &base).unwrap();
+    assert_eq!(packs.selection.enabled, ["vanilla"]);
+    let warnings = packs.warnings(None).join("\n");
+    assert!(
+        warnings.contains("file/lookbehind") && warnings.contains("filter"),
+        "{warnings}"
+    );
+    let saved = Selection {
+        enabled: vec!["vanilla".into(), "file/lookbehind".into()],
+        disabled: Vec::new(),
+    };
+    let error = PackSet::open(&root, saved, &base)
+        .err()
+        .expect("fails closed");
+    assert!(
+        error.contains("file/lookbehind") && error.contains("filter"),
+        "{error}"
+    );
+    // A missing block list is the same kind of error.
+    filter_pack(&root, "nolist", r#"{}"#, &[]);
+    let error = PackSet::load(&root, Selection::default())
+        .err()
+        .expect("refused");
+    assert!(
+        error.contains("file/") && error.contains("filter"),
+        "{error}"
     );
 }

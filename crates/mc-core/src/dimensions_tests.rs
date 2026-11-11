@@ -370,6 +370,20 @@ fn translation(change: &PlayerChange, key: &str) -> bool {
         if fields.iter().any(|(name, value)| name == "translate" && value == &mc_nbt::Tag::String(key.into())))
 }
 
+/// Gamerules are server-wide: a rule set by a player in the Nether reaches the edge's cell too.
+#[test]
+fn send_command_feedback_set_from_the_nether_is_published_for_the_edge() {
+    let (mut state, _, bob) = worlds();
+    let published = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    state.published_command_feedback = Some(std::sync::Arc::clone(&published));
+    let shown = || published.load(std::sync::atomic::Ordering::Relaxed);
+    assert_eq!(travel::locate(&state, bob).unwrap().0, Dimension::Nether);
+    command(&mut state, 2, "gamerule send_command_feedback false");
+    assert!(!shown());
+    command(&mut state, 2, "gamerule send_command_feedback true");
+    assert!(shown());
+}
+
 #[test]
 fn dimensional_teleport_success_obeys_player_feedback_rule() {
     let (mut state, alice, _) = worlds();

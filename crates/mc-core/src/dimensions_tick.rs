@@ -39,6 +39,12 @@ pub(crate) fn swap_globals(root: &mut TickState, world: &mut TickState) {
     std::mem::swap(&mut root.plugin_players, &mut world.plugin_players);
     std::mem::swap(&mut root.gamerules, &mut world.gamerules);
     std::mem::swap(&mut root.gamerules_dirty, &mut world.gamerules_dirty);
+    // The published `send_command_feedback` cell follows the rules: a rule set from a child
+    // world publishes the same flag the edge reads.
+    std::mem::swap(
+        &mut root.published_command_feedback,
+        &mut world.published_command_feedback,
+    );
     std::mem::swap(&mut root.scoreboard, &mut world.scoreboard);
     std::mem::swap(&mut root.command_storage, &mut world.command_storage);
     std::mem::swap(

@@ -1149,8 +1149,8 @@ fn command_parity_sort_limit_options_and_typed_filters() {
         "@e[predicate=minecraft:test]",
         "@e[predicate=!minecraft:test]",
     ] {
-        let error = crate::commands::target_of(selector).unwrap_err();
-        assert!(error.message().contains("unsupported selector option"));
+        // SELECTOR-PREDICATE-UNSUPPORTED: the option parses; the datapack's predicate decides.
+        assert!(crate::commands::target_of(selector).is_ok(), "{selector}");
     }
 }
 

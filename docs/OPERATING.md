@@ -591,11 +591,16 @@ with a recipe the server cannot encode, is refused whole and the old packs, sele
 and registry are kept. The enabled/disabled selection is saved with the world,
 so a restart loads the same packs, recipes and loot. A pack that appears on disk is
 enabled by `/reload` and at startup but never as a side effect of enabling another
-pack. At startup a new pack that cannot load (a bad file, an unsupported resource)
-is skipped with a warning naming the pack and the file, as vanilla skips a bad data
-pack, so a pack that a live `enable` refused cannot stop the next start; a pack the
-saved selection already holds that no longer loads still stops it, with the same
-pack and file in the error. A pack's `pack.mcmeta` `filter` (`block` entries with
+pack. At startup and on `/reload` a new pack that cannot be read or loaded (a corrupt ZIP,
+a missing or truncated `pack.mcmeta`, a bad file, an unsupported resource, a `filter`
+that does not parse) is skipped with a warning naming the pack and the file, and the
+rest applies, so a pack that a live `enable` refused cannot stop the next start or
+block a reload. This deliberately differs from vanilla, which enables a new pack and
+refuses to start when it fails to load (it offers `--safeMode`); Solaris has no safe
+mode. A pack the saved selection already holds that no longer loads still stops the
+start and refuses the reload (old state kept), with the same pack and file in the
+error: fix or remove the named pack and start again. A non-pack entry in the folder
+(a README, a stray file) is ignored with a warning. A pack's `pack.mcmeta` `filter` (`block` entries with
 optional `namespace` and `path` patterns) hides the matching functions, tags,
 recipes, block loot and predicates of every pack below it, the builtin recipes and
 block loot included. A `/datapack enable`, `disable` or

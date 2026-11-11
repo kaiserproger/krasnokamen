@@ -78,6 +78,12 @@ pub(crate) struct PackSet {
     pub(crate) dropped: Vec<String>,
     /// The pack that provided each recipe or loot resource, to name it in errors.
     origins: BTreeMap<String, String>,
+    /// Pack entries of the folder that could not be read (id and why), not selected.
+    failed: BTreeMap<String, String>,
+    /// Entries of the folder that are no pack (a README, a stray file).
+    not_packs: Vec<String>,
+    /// New packs this load left out because they cannot load, with the reason.
+    skipped: Vec<String>,
     /// The `pack.mcmeta` filters of every enabled pack: they hide the files of
     /// the packs below, the builtin `vanilla` pack included.
     filters: Vec<Filter>,
@@ -146,6 +152,9 @@ impl Default for PackSet {
             ignored: BTreeMap::new(),
             dropped: Vec::new(),
             origins: BTreeMap::new(),
+            failed: BTreeMap::new(),
+            not_packs: Vec::new(),
+            skipped: Vec::new(),
             filters: Vec::new(),
         }
     }
@@ -408,11 +417,53 @@ impl Source {
     }
 }
 
-/// Every directory and `.zip` pack in `root` with a valid `pack.mcmeta`.
-fn scan(root: &Path, remaining: &mut usize) -> Result<BTreeMap<String, Scanned>, String> {
-    let mut packs = BTreeMap::new();
+/// What one pass over the pack folder found.
+#[derive(Default)]
+struct Scan {
+    /// Every directory and `.zip` pack with a valid `pack.mcmeta`.
+    packs: BTreeMap<String, Scanned>,
+    /// Entries that look like packs but cannot be read, by pack id, with why.
+    failed: BTreeMap<String, String>,
+    /// Entries that are no pack at all (a README, a stray file): ignored.
+    not_packs: Vec<String>,
+}
+
+/// Read one pack's `pack.mcmeta` and check it names a `pack` object.
+fn scan_pack(
+    path: PathBuf,
+    name: &str,
+    is_dir: bool,
+    remaining: &mut usize,
+) -> Result<Scanned, String> {
+    let (source, raw_meta) = if is_dir {
+        let meta = read_text(&path.join("pack.mcmeta"), remaining)
+            .map_err(|e| format!("pack.mcmeta: {e}"))?;
+        (Source::Dir(path), meta)
+    } else {
+        let mut archive = open_zip(&path)?;
+        let meta = {
+            let file = archive
+                .by_name("pack.mcmeta")
+                .map_err(|e| format!("{name}: pack.mcmeta: {e}"))?;
+            limited(file, remaining)?
+        };
+        (Source::Zip(path), meta)
+    };
+    let metadata: serde_json::Value =
+        serde_json::from_str(&raw_meta).map_err(|e| format!("pack.mcmeta: {e}"))?;
+    if !metadata
+        .get("pack")
+        .is_some_and(serde_json::Value::is_object)
+    {
+        return Err("pack.mcmeta requires a pack object".into());
+    }
+    Ok(Scanned { source, metadata })
+}
+
+fn scan(root: &Path, remaining: &mut usize) -> Result<Scan, String> {
+    let mut found = Scan::default();
     if !root.exists() {
-        return Ok(packs);
+        return Ok(found);
     }
     if std::fs::symlink_metadata(root)
         .map_err(|e| e.to_string())?
@@ -422,45 +473,33 @@ fn scan(root: &Path, remaining: &mut usize) -> Result<BTreeMap<String, Scanned>,
         return Err("Datapack root cannot be a symlink".into());
     }
     for entry in std::fs::read_dir(root).map_err(|e| e.to_string())? {
-        if packs.len() >= MAX_RESOURCES - 1 {
+        if found.packs.len() + found.failed.len() >= MAX_RESOURCES - 1 {
             return Err("Datapack resource limit exceeded".into());
         }
         let pack = entry.map_err(|e| e.to_string())?;
         let kind = pack.file_type().map_err(|e| e.to_string())?;
         let path = pack.path();
-        let name = pack
-            .file_name()
-            .into_string()
-            .map_err(|_| "Non-UTF8 datapack name")?;
-        let (source, raw_meta) = if kind.is_dir() {
-            let meta = read_text(&path.join("pack.mcmeta"), remaining)?;
-            (Source::Dir(path), meta)
-        } else if kind.is_file() && name.ends_with(".zip") {
-            let mut archive = open_zip(&path)?;
-            let meta = {
-                let file = archive
-                    .by_name("pack.mcmeta")
-                    .map_err(|e| format!("{name}: pack.mcmeta: {e}"))?;
-                limited(file, remaining)?
-            };
-            (Source::Zip(path), meta)
-        } else {
-            return Err(format!(
-                "Only directory and .zip datapacks are supported: {}",
-                path.display()
-            ));
+        let Ok(name) = pack.file_name().into_string() else {
+            found
+                .not_packs
+                .push(pack.file_name().to_string_lossy().into_owned());
+            continue;
         };
-        let metadata: serde_json::Value =
-            serde_json::from_str(&raw_meta).map_err(|e| e.to_string())?;
-        if !metadata
-            .get("pack")
-            .is_some_and(serde_json::Value::is_object)
-        {
-            return Err("Datapack pack.mcmeta requires a pack object".into());
+        if !kind.is_dir() && !(kind.is_file() && name.ends_with(".zip")) {
+            found.not_packs.push(name);
+            continue;
         }
-        packs.insert(format!("file/{name}"), Scanned { source, metadata });
+        let id = format!("file/{name}");
+        match scan_pack(path, &name, kind.is_dir(), remaining) {
+            Ok(scanned) => {
+                found.packs.insert(id, scanned);
+            }
+            Err(error) => {
+                found.failed.insert(id, error);
+            }
+        }
     }
-    Ok(packs)
+    Ok(found)
 }
 
 /// A JSON text component as a network component tag.
@@ -529,27 +568,33 @@ impl PackSet {
         Self::load_with(root, selection, false)
     }
     /// The packs a starting server runs. A pack newly found on disk is enabled,
-    /// but one that cannot load (or whose recipes and loot cannot install onto
-    /// `base`) is skipped with a warning naming it, like vanilla skips a bad
-    /// data pack, so a pack that a live `/datapack enable` refused cannot stop
-    /// the next start. The saved selection itself must still load.
+    /// but one that cannot be read, cannot load, or whose recipes and loot cannot
+    /// install onto `base` is skipped with a warning naming it and the file, so a
+    /// pack that a live `/datapack enable` refused cannot stop the next start.
+    /// This deliberately differs from vanilla, which enables a new pack and refuses
+    /// to start when it fails (offering `--safeMode`); Solaris has no safe mode.
+    /// A pack the saved selection holds that no longer loads still stops the start,
+    /// naming pack and file: fix or remove that pack and start again.
     pub(crate) fn open(
         root: &Path,
         selection: Selection,
         base: &crate::registry::CoreRegistry,
-    ) -> Result<(Self, Vec<String>), String> {
+    ) -> Result<Self, String> {
         let usable = |packs: Self| -> Result<Self, String> {
             packs.install_content(&mut base.clone())?;
             Ok(packs)
         };
         let first = match Self::load(root, selection.clone()).and_then(usable) {
-            Ok(packs) => return Ok((packs, Vec::new())),
+            Ok(packs) => return Ok(packs),
             Err(error) => error,
         };
         let mut remaining = MAX_BYTES;
         let found = scan(root, &mut remaining).map_err(|_| first.clone())?;
+        let failed = found.failed;
         let new: Vec<String> = found
+            .packs
             .into_keys()
+            .chain(failed.keys().cloned())
             .filter(|id| !selection.enabled.contains(id) && !selection.disabled.contains(id))
             .collect();
         if new.is_empty() {
@@ -558,6 +603,12 @@ impl PackSet {
         let mut accepted = Self::load_known(root, selection).and_then(usable)?;
         let mut skipped = Vec::new();
         for id in new {
+            if let Some(error) = failed.get(&id) {
+                skipped.push(format!(
+                    "Skipping new datapack {id}, it is not enabled: {id}: {error}"
+                ));
+                continue;
+            }
             let mut candidate = accepted.selection.clone();
             candidate.enabled.push(id.clone());
             match Self::load_known(root, candidate).and_then(usable) {
@@ -567,12 +618,21 @@ impl PackSet {
                 )),
             }
         }
-        Ok((accepted, skipped))
+        accepted.skipped = skipped;
+        Ok(accepted)
     }
     fn load_with(root: &Path, mut selection: Selection, discover: bool) -> Result<Self, String> {
         selection.validate()?;
         let mut remaining = MAX_BYTES;
-        let packs = scan(root, &mut remaining)?;
+        let scanned = scan(root, &mut remaining)?;
+        // A pack the selection holds that cannot be read stops the load, as does one new to
+        // the selection when the load would enable it; a refusal names the pack and the file.
+        for (id, error) in &scanned.failed {
+            if selection.enabled.contains(id) || (discover && !selection.disabled.contains(id)) {
+                return Err(format!("{id}: {error}"));
+            }
+        }
+        let (packs, failed, not_packs) = (scanned.packs, scanned.failed, scanned.not_packs);
         let mut descriptions = BTreeMap::from([("vanilla".to_owned(), vanilla_description())]);
         for (id, pack) in &packs {
             if (discover || selection.enabled.contains(id))
@@ -613,6 +673,8 @@ impl PackSet {
             selection,
             descriptions,
             dropped,
+            failed,
+            not_packs,
             ..Self::default()
         };
         let mut visited = 0;
@@ -821,7 +883,7 @@ impl PackSet {
     /// priority order, then every other compatible pack found in the folder.
     pub(crate) fn listing(root: &Path, selection: &Selection) -> Result<Listing, String> {
         let mut remaining = MAX_BYTES;
-        let packs = scan(root, &mut remaining)?;
+        let packs = scan(root, &mut remaining)?.packs;
         let describe = |id: &String| {
             let description = if id == "vanilla" {
                 vanilla_description()
@@ -873,6 +935,18 @@ impl PackSet {
             if previous.is_none_or(|previous| !previous.dropped.contains(id)) {
                 warnings.push(format!(
                     "Datapack {id} is selected but no longer on disk; it was dropped from the selection"
+                ));
+            }
+        }
+        for line in &self.skipped {
+            if previous.is_none_or(|previous| !previous.skipped.contains(line)) {
+                warnings.push(line.clone());
+            }
+        }
+        for name in &self.not_packs {
+            if previous.is_none_or(|previous| !previous.not_packs.contains(name)) {
+                warnings.push(format!(
+                    "Found non-pack entry '{name}' in the datapack folder, ignoring it"
                 ));
             }
         }
@@ -1070,11 +1144,27 @@ fn create_pack(root: &Path, id: &str, description: &str) -> Result<(), Failure> 
 }
 
 /// The worker body: all filesystem access of a job.
-fn work(root: &Path, selection: Selection, job: &Job) -> Result<Completed, Failure> {
+fn work(
+    root: &Path,
+    selection: Selection,
+    job: &Job,
+    base: Option<&crate::registry::CoreRegistry>,
+) -> Result<Completed, Failure> {
     match job {
-        Job::Reload => Ok(Completed::Packs(Box::new(PackSet::load(root, selection)?))),
+        // Like a start: a new pack that cannot load is skipped with a named warning and the
+        // rest applies; a pack the selection holds that cannot load refuses the reload.
+        Job::Reload => Ok(Completed::Packs(Box::new(PackSet::open(
+            root,
+            selection,
+            base.ok_or("No base registry for the reload")?,
+        )?))),
         Job::Activation { action, id } => {
             let packs = PackSet::load_known(root, selection)?;
+            if *action == Action::Enable
+                && let Some(error) = packs.failed.get(id)
+            {
+                return Err(Failure::Text(format!("{id}: {error}")));
+            }
             // A pack that is not on disk cannot be enabled.
             if *action == Action::Enable && !packs.selection.enabled.contains(id) {
                 return Err(Failure::Translated {
@@ -1128,7 +1218,7 @@ impl Runtime {
         connection: ConnectionId,
     ) -> Result<(), Failure> {
         let selection = self.selection().clone();
-        self.spawn(job, selection, connection)
+        self.spawn(job, selection, connection, None)
     }
     /// Queue an enable/disable activation of `selection`.
     pub(crate) fn request_activation(
@@ -1139,10 +1229,15 @@ impl Runtime {
         id: String,
     ) -> Result<(), Failure> {
         selection.validate()?;
-        self.spawn(Job::Activation { action, id }, selection, connection)
+        self.spawn(Job::Activation { action, id }, selection, connection, None)
     }
-    fn request_reload(&mut self, connection: ConnectionId) -> Result<(), String> {
-        self.request_job(Job::Reload, connection)
+    fn request_reload(
+        &mut self,
+        connection: ConnectionId,
+        base: Arc<crate::registry::CoreRegistry>,
+    ) -> Result<(), String> {
+        let selection = self.selection().clone();
+        self.spawn(Job::Reload, selection, connection, Some(base))
             .map_err(Failure::into_text)
     }
     fn spawn(
@@ -1150,6 +1245,7 @@ impl Runtime {
         job: Job,
         selection: Selection,
         connection: ConnectionId,
+        base: Option<Arc<crate::registry::CoreRegistry>>,
     ) -> Result<(), Failure> {
         if self.reload.is_some() {
             return Err("Datapack reload already in progress".into());
@@ -1163,7 +1259,7 @@ impl Runtime {
         std::thread::Builder::new()
             .name("datapack-worker".into())
             .spawn(move || {
-                let _ = tx.send(work(&root, selection, &running));
+                let _ = tx.send(work(&root, selection, &running, base.as_deref()));
             })
             .map_err(|error| format!("Starting datapack worker: {error}"))?;
         self.reload = Some(Reload {
@@ -1479,7 +1575,15 @@ pub(crate) fn command(
                 Ok(())
             })()
         }
-        ["reload"] => state.datapacks.request_reload(connection),
+        ["reload"] => {
+            // Every reload rebuilds on the registry before any datapack.
+            let base = state
+                .datapacks
+                .base
+                .clone()
+                .unwrap_or_else(|| Arc::clone(&state.registry));
+            state.datapacks.request_reload(connection, base)
+        }
         _ => Err("Supported: function <id|#tag>; schedule function <id> <time> [append|replace]; schedule clear <id>; reload; datapack list".into()),
     };
     let outcome = if let Err(error) = result {
