@@ -293,6 +293,17 @@ def _tail_log(log_path: Path, max_bytes: int = _LOG_TAIL_BYTES) -> str:
         return ""
 
 
+def ensure_loader_gradle_home(loader_root: Path | None = None) -> Path:
+    """The Gradle home Loader gates use. When GRADLE_USER_HOME is unset and the owner host's
+    `<work>/loader-gradle-home` (beside the Loader checkout; the one `ledger probe` uses)
+    exists, export it so the schema compiler and the Gradle client launch share one cache."""
+    if not os.environ.get("GRADLE_USER_HOME"):
+        shared = (loader_root or AGENT_ROOT).parent / "loader-gradle-home"
+        if shared.is_dir():
+            os.environ["GRADLE_USER_HOME"] = str(shared)
+    return Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
+
+
 def reserve_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
