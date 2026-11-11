@@ -137,6 +137,14 @@ and an overrun is visible without reading transcripts (owner, 2026-11-11).
   and running runner commands. Main and the owner read it instead of
   reconstructing state from transcripts. Tests:
   `python3 tools/dev/test_task_claim.py`.
+- **Slices close in hours; nothing claimed waits a day** (owner, 2026-11-12).
+  The owner runs the full allowed fleet (10 agents, 3 build tokens) and must
+  not wait days for one task. Main cuts every task into slices that finish
+  within hours and claims each with its timebox. At the hourly check Main
+  reads `fleet-status` and handles every `OVERRUN` claim: split it, reassign
+  it, or report its exact blocker to the owner. No claimed task goes more than
+  24 hours without a result the owner can look at (a receipt, frames, a
+  commit or a written blocker). The battle video stays first.
 
 ## Messaging
 
