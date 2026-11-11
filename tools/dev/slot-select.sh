@@ -63,7 +63,7 @@ select_slot() {
       [ "$pass" = new ] && [ "${free_gb:-0}" -lt "$min_free" ] && break
       for l in {a..z} {a..z}{a..z}; do  # 26 one-letter slots, then two-letter ones while disk allows
         case $pass in
-          own) [ "$(slot_tree "$slots/slot-$l")" = "$tree" ] || continue ;;
+          own) [ -f "$slots/slot-$l/.solaris-tree" ] && [ "$(slot_tree "$slots/slot-$l")" = "$tree" ] || continue ;;
           existing) [ -d "$slots/slot-$l" ] || continue ;;
           new) [ -d "$slots/slot-$l" ] && continue ;;
         esac
