@@ -210,8 +210,15 @@ class SceneShotTests(unittest.TestCase):
                     # matches the triggering observation and is accepted.
                     write_frame(1.2)
                     self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
-                    # A frame outside the bracket and more than one tick step from
-                    # the observation is rejected.
+                    if client == "java":
+                        # Java render-state frames carry no entity uuid; a single
+                        # typed frame entity is matched by type.
+                        items = [{key: value for key, value in entity.items() if key != "entity_uuid"}
+                                 | {"walk_position": 1.2}]
+                        frame_path.write_text(json.dumps(items))
+                        self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
+                    # A frame outside the bracket and further from the observation
+                    # than one tick of walk advance is rejected.
                     write_frame(2.5)
                     with self.assertRaisesRegex(AssertionError, "walk_render_phase"):
                         scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client)

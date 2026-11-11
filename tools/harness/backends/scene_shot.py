@@ -516,18 +516,28 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 json.dumps({"before": before, "after": after, "frame": frame,
                             "frame_path": str(frame_path), "spec": value}, indent=2) + "\n")
             probe.check(f"{value['name']}_same_entity", first is not None and len(same_entity) == 1)
-            # The captured frame is rendered with partial-tick interpolation, so
-            # it can lag the triggering observation by up to one tick's walk
-            # advance. Accept a frame that still matches that observation within
-            # one observed tick step, even if it fell just below the bracket.
+            # The captured frame is the last presented render: it is sampled
+            # with partial-tick interpolation and can lag the triggering
+            # observation by up to one game tick of walk advance (about the
+            # observed walk speed). Accept a frame that still matches that
+            # observation within that allowance, even if it fell just below
+            # the bracket; a frame further off still fails.
             frame_entity = None
             lag_ok = False
-            if first is not None and same_entity:
-                frame_entity = next((entity for entity in frame["entities"]
-                                     if entity.get("entity_uuid") == first.get("entity_uuid")), None)
-                if frame_entity is not None:
+            if first is not None:
+                typed = [entity for entity in frame["entities"]
+                         if entity.get("entity_type") == value["entity_type"]]
+                if first.get("entity_uuid"):
+                    frame_entity = next((entity for entity in typed
+                                         if entity.get("entity_uuid") == first["entity_uuid"]), None)
+                if frame_entity is None and len(typed) == 1:
+                    # Java render-state frames carry no entity uuid.
+                    frame_entity = typed[0]
+                if frame_entity is not None and same_entity:
                     step = max(0.0, float(same_entity[0]["walk_position"]) - float(first["walk_position"]))
-                    lag_ok = abs(float(frame_entity["walk_position"]) - float(first["walk_position"])) <= step + 1e-9
+                    allowance = max(step, float(first.get("walk_speed") or 0.0),
+                                    float(frame_entity.get("walk_speed") or 0.0))
+                    lag_ok = abs(float(frame_entity["walk_position"]) - float(first["walk_position"])) <= allowance + 1e-9
             probe.check(f"{value['name']}_render_phase",
                         matching_walk(frame, value) is not None or lag_ok)
             shots.append(image)
