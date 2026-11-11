@@ -18,6 +18,9 @@ pub(crate) const SEARCH_RADIUS: i32 = 8;
 const LOOKAHEAD: f64 = 0.45;
 /// Lateral reach, in blocks, of the search for an obstacle's nearer end.
 const AROUND: i32 = 8;
+/// Least drive, in blocks per tick, of a body walking out from under rock:
+/// the formation's walking step (`FormationRuntime::destination`).
+const WALK_OUT: f64 = 0.079;
 /// Deepest drop a body walks into, in blocks; deeper holes are steered around
 /// and never staged in (vanilla mobs avoid falls over about three blocks).
 const MAX_DROP: f64 = 2.0;
@@ -451,18 +454,18 @@ pub(crate) fn deflect(
     heading: [f64; 2],
     side: f64,
 ) -> [f64; 2] {
+    // A body under rock walks out toward open sky, at least at walking pace
+    // (a body holding its slot has almost no drive), whatever its slot,
+    // flight or crowd says; `crossable` never lets it under more rock.
     let speed = mc_physics::mth::length2(drive[0], drive[1]);
-    if speed < 1e-9 {
-        return drive;
-    }
-    // A body under rock walks out toward open sky at its speed, whatever its
-    // slot, flight or crowd says; `crossable` never lets it under more rock.
-    let (drive, heading) = match exit(world, registry, pos) {
+    let (drive, heading, speed) = match exit(world, registry, pos) {
         Some(out) => {
+            let walk = speed.max(WALK_OUT);
             let length = mc_physics::mth::length2(out[0], out[1]);
-            (out.map(|v| v / length * speed), out)
+            (out.map(|v| v / length * walk), out, walk)
         }
-        None => (drive, heading),
+        None if speed < 1e-9 => return drive,
+        None => (drive, heading, speed),
     };
     let length = mc_physics::mth::length2(heading[0], heading[1]);
     let dir = if length < 1e-9 {

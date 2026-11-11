@@ -475,7 +475,11 @@ fn a_body_under_a_terrain_roof_walks_out_toward_open_sky() {
     let east = [0.079, 0.0];
     let out = deflect(world, registry, inside, 0.3, east, [20.0, 0.0], 1.0);
     assert!(out[0] < 0.0, "went deeper under the roof: {out:?}");
-    // Under open sky the same drive is returned exactly.
+    // A body holding its slot under the roof (no drive) walks out too.
+    let held = deflect(world, registry, inside, 0.3, [0.0, 0.0], [0.0, 0.0], 1.0);
+    assert!(held[0] < -0.05, "stayed under the roof: {held:?}");
+    // Under open sky the same drive, or no drive, is returned exactly.
     let open = [107.5, f64::from(height(107, -94)), -93.5];
     assert_eq!(deflect(world, registry, open, 0.3, east, [20.0, 0.0], 1.0), east);
+    assert_eq!(deflect(world, registry, open, 0.3, [0.0, 0.0], [20.0, 0.0], 1.0), [0.0, 0.0]);
 }
