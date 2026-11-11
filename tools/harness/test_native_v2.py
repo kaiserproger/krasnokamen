@@ -280,6 +280,9 @@ class NativeV2ProbeTests(unittest.TestCase):
                 self.assertRaises(RuntimeError):
             native_p4._damage(steps, (10, 70, 10))
         self.assertIn("gamerule advance_weather false", events)
+        self.assertLess(events.index("gamerule spawn_mobs false"),
+                        events.index("kill @e[type=!minecraft:player]"))
+        self.assertLess(events.index("kill @e[type=!minecraft:player]"), events.index("time set 18000"))
         self.assertLess(events.index("weather clear"), events.index("time set 18000"))
 
     def test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world(self) -> None:

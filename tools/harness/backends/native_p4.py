@@ -300,6 +300,9 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # the fire block, so the weather must stay clear however long the earlier rows ran.
     _disable_gamerule(steps, "advance_weather")
     steps.fixture("weather clear")
+    # A zombified piglin that already stands in the world walks up during the 60 s starve row and
+    # kills the survival player (receipt 20261111T223458-native-v2-p4-damage-ey95lu17).
+    steps.fixture("kill @e[type=!minecraft:player]")
     steps.fixture("time set 18000")
     _echo(steps, "damage_night_fixture_ordered_receipt")
     steps.call("minecraft_wait_ticks", {"ticks": 20})
