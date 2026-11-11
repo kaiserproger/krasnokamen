@@ -319,6 +319,14 @@ The `entities` profile includes windowed native-client probes:
   actions saves the holder at one health, consumes one item, clears a preexisting
   slowness effect and applies authored speed without ordinary totem effects. The full P4 damage
   scenario still includes this check and the separate physical-source probes.
+- `native-v2-team-deaths`: two windowed native clients (victim in team `red`,
+  peer in team `blue`) read the chat their own client renders for a player
+  `/kill` ("was killed", generic_kill rather than out_of_world), a zombie kill
+  ("was slain by Zombie", the vanilla translation component rather than plain
+  English text) and one death per `deathMessageVisibility` value (`always`,
+  `never`, `hideForOtherTeams`, `hideForOwnTeam`); the victim's death screen
+  is asserted by class and a retained capture, its message text is not exposed
+  by the client observation.
 - `native-v2-automation-storage`: the sculk latch section tests ordinary and
   calibrated sensors at multiple distances, including a rejected frequency.
   Comparators face their input: east toward the sensor for frequency readout,

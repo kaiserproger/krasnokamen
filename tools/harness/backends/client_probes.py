@@ -78,6 +78,7 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
                        else 600.0 if ctx.scenario_id in (native_light.SCENARIO_ID,
                                                         "native-v2-radius-full-view",
                                                         "native-v2-p4-damage",
+                                                        "native-v2-team-deaths",
                                                         "native-v2-automation-storage",
                                                         "native-v2-lease-navigation")
                        else 1200.0 if ctx.scenario_id == "native-v2-settlement-storage"
