@@ -3880,7 +3880,7 @@ area = "client"
 repro = "client"
 severity = "major"
 status = "open"
-source = "Owner screenshot, independently visible in .analysis/validation/20261108T123904-scene-shot-cgvyf3fv/screenshots/freeze-before.png, frame 148: seed 100, camera (128.5,71.62,0.5), yaw/pitch 0, Low preset, render distance 4. Draw owner and cause remain unproved; clouds and terrain are hypotheses, not established causes. No rendering feature has been disabled."
+source = "Owner screenshot, independently visible in .analysis/validation/20261108T123904-scene-shot-cgvyf3fv/screenshots/freeze-before.png, frame 148: seed 100, camera (128.5,71.62,0.5), yaw/pitch 0, Low preset, render distance 4. Draw owner proven by BlackSkyRepro (receipts/BlackSkyRepro/report.md): the far_terrain pass (client src/render/far.rs prepare/draw, far.wgsl). Pre-fix far.rs top() sampled the top non-air block of received chunks, so no-collision plants (wheat, melon stems near spawn) became far ground averaging to near-black rgba 0xff000300/0xff000400 and drew as opaque prisms above the hill while the column was not yet covered. Fixed by client a778cbd + core b657c5ed (motion-blocking surface). Instrumented A/B on client 895c63f3: only a778cbd reverted gives about 646 dark far samples per run in 12/12 runs; fix present 0 in 8/8; visual rate on old pins 1/62 (only on the owner laptop), new pins 0/31. Open until a registered real-client regression exists; no rendering feature was disabled."
 regression = []
 failing_first = "reported"
 
