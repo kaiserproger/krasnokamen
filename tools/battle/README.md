@@ -19,8 +19,9 @@ battlefield. Its reply ends with the ground census of the standing bodies,
 `ground: bodies=N inside=0 floating=0 wet=0` on a correct staging.
 In battle, soldiers and horses keep the formation's horizontal drive over
 relief: one-block steps are jumped, slopes walked down, and a drive into a
-trunk, a wall of two or more blocks or a drop deeper than two blocks turns 45
-or 90 degrees (on the block grid) toward the obstacle's nearer end. The
+trunk, a wall of two or more blocks, a step with no room to jump (a canopy
+overhead) or a drop deeper than two blocks turns 45 or 90 degrees (on the
+block grid) toward the obstacle's nearer reachable end. The
 formation's virtual leader never waits for its soldiers, so a body that is
 stuck or falls into a hole anyway does not hold its regiment back. `battle
 status` ends with `grounding=` (bodies still awaiting ground) and the last

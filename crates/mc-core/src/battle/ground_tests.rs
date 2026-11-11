@@ -37,8 +37,9 @@ fn wall(x: i32, z: i32) -> bool {
     (-6..=2).contains(&x) && z == -20
 }
 
-/// Cave openings: a 3x3 one six deep in the second side's infantry path and a
-/// 2x2 one eight deep under its front rank (z 44.5, files at x -31 and -30).
+/// Cave openings with a stone floor (the flat fixture is three blocks thick):
+/// a 3x3 one six deep in the second side's infantry path and a 2x2 one eight
+/// deep under its front rank (z 44.5, files at x -31 and -30).
 fn hole(x: i32, z: i32) -> Option<i32> {
     if (-20..=-18).contains(&x) && (20..=22).contains(&z) {
         Some(6)
@@ -74,6 +75,7 @@ fn relief_world(state: &mut TickState, area: std::ops::RangeInclusive<i32>) {
                 for y in top - depth..top {
                     state.world.set_block(x, y, z, state.registry.states.air);
                 }
+                state.world.set_block(x, top - depth - 1, z, stone);
             }
             if wall(x, z) {
                 for y in top..top + 3 {
@@ -229,6 +231,16 @@ fn deflection_keeps_open_ground_and_steps_but_turns_at_trunks_and_walls() {
     // wall's normal, yet the nearer (west) end still wins.
     let oblique = deflect(world, registry, [-3.1307, 65.0, -20.7232], 0.3, [0.0, 1.58], [0.21, 19.62], 1.0);
     assert!(oblique[0] < 0.0, "{oblique:?}");
+    // Horses from the stalled movement test. A horse against the trunk at
+    // (31, -72) with the oak's canopy (y 68) over its back cannot jump the
+    // terrace step to the west (y 67): it goes round the east side.
+    let horse = 0.698_242_187_5;
+    let pocket = deflect(world, registry, [30.698, 66.0, -72.698], horse, [0.0, 4.6], [0.8, 23.4], 1.0);
+    assert!(pocket[0] > 0.0, "{pocket:?}");
+    // A horse grazing the trunk at (40, -72) drops the drift into it, or
+    // physics refuses the jump onto the terrace step ahead.
+    let graze = deflect(world, registry, [39.302, 64.0, -70.698], horse, [0.026, 4.6], [0.2, 21.4], 1.0);
+    assert_eq!(graze, [0.0, 4.6]);
     // A six-deep cave opening ahead is steered around, not walked into.
     assert_ne!(deflect(world, registry, ground(-20, 19), 0.3, south, south, 1.0), south);
 }
@@ -272,11 +284,13 @@ fn armies_advance_over_relief_to_contact_without_stalls_or_teleports() {
             .iter()
             .map(|m| state.entities.slot_of(m.id).map(|slot| state.entities.pos(slot)))
             .collect();
+        // A cavalry charge's knockback throws a body up to ~1.4 blocks in a
+        // tick; a staging relocation moves it farther.
         for (bi, (now, before)) in positions.iter().zip(&previous).enumerate() {
             if let (Some(now), Some(before)) = (now, before) {
                 let horizontal = mth_dist(*now, *before);
                 assert!(
-                    horizontal <= 1.0 && (now[1] - before[1]).abs() <= 1.5,
+                    horizontal <= 2.0 && (now[1] - before[1]).abs() <= 1.5,
                     "member {bi} jumped {before:?} -> {now:?} at tick {tick}"
                 );
                 let (x, z) = (now[0].floor() as i32, now[2].floor() as i32);
@@ -308,4 +322,58 @@ fn armies_advance_over_relief_to_contact_without_stalls_or_teleports() {
     }
     assert!(contact.is_some(), "no melee contact over relief");
     assert!(censused >= 100, "stall census saw only {censused} advancing soldiers");
+}
+
+/// A soldier who falls into a sinkhole anyway cannot climb out, but the
+/// regiment's virtual leader never waits for it: the line keeps advancing.
+#[test]
+fn a_fighter_in_a_sinkhole_does_not_freeze_its_regiment() {
+    let mut state = relief_fixture();
+    stage(&mut state, 100);
+    let formation = &state.hostile.battle.formation;
+    let (fallen, regiment) = formation
+        .members
+        .iter()
+        .find_map(|m| {
+            let r = &formation.regiments[m.regiment];
+            (r.spec.order == crate::battle::formation::Order::Advance
+                && r.spec.frontage <= 1.0
+                && m.rank == 0)
+                .then_some((m.id, m.regiment))
+        })
+        .expect("an advancing infantry regiment");
+    let r = &formation.regiments[regiment];
+    let origin = r.spec.origin;
+    let others: Vec<_> = formation.members[r.start..r.start + r.len]
+        .iter()
+        .map(|m| m.id)
+        .filter(|&id| id != fallen)
+        .collect();
+    let start: Vec<_> = others
+        .iter()
+        .map(|&id| state.entities.pos(state.entities.slot_of(id).unwrap()))
+        .collect();
+    // The opening eight deep under the second side's front rank.
+    let Some(Ok(floor)) = support(&state.world, &state.registry, [-30.0, 0.0, 45.0], 0.3) else {
+        panic!("no floor in the opening");
+    };
+    assert_eq!(floor, f64::from(height(-30, 45) - 8));
+    let slot = state.entities.slot_of(fallen).unwrap();
+    state.entities.set_pos(slot, [-30.0, floor, 45.0]);
+    for _ in 0..200 {
+        run_tick(&mut state, &[]);
+    }
+    let pit = state.entities.pos(state.entities.slot_of(fallen).expect("the fallen soldier lives"));
+    assert!(pit[1] <= floor + 1.0, "the fallen soldier climbed out: {pit:?}");
+    let leader = state.hostile.battle.formation.regiments[regiment].spec.origin;
+    let advanced = mth_dist(leader, origin);
+    assert!(advanced >= 4.0, "the regiment waited for its fallen soldier: leader moved {advanced}");
+    let mut moved: Vec<f64> = others
+        .iter()
+        .zip(&start)
+        .map(|(&id, &before)| mth_dist(state.entities.pos(state.entities.slot_of(id).unwrap()), before))
+        .collect();
+    moved.sort_by(f64::total_cmp);
+    let median = moved[moved.len() / 2];
+    assert!(median >= 4.0, "the regiment froze: median soldier moved {median}");
 }
