@@ -1,7 +1,7 @@
-diff --git b/crates/mc-core/src/commands.rs a/crates/mc-core/src/commands.rs
+diff --git a/crates/mc-core/src/commands.rs b/crates/mc-core/src/commands.rs
 index 695b137f..60ff0dc6 100644
---- b/crates/mc-core/src/commands.rs
-+++ a/crates/mc-core/src/commands.rs
+--- a/crates/mc-core/src/commands.rs
++++ b/crates/mc-core/src/commands.rs
 @@ -826,6 +826,17 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
                  }
                  selector.nbt.push((nbt, negated));

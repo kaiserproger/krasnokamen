@@ -1,7 +1,7 @@
-diff --git b/crates/mc-core/src/datapacks.rs a/crates/mc-core/src/datapacks.rs
+diff --git a/crates/mc-core/src/datapacks.rs b/crates/mc-core/src/datapacks.rs
 index 50d84040..4c36d6ea 100644
---- b/crates/mc-core/src/datapacks.rs
-+++ a/crates/mc-core/src/datapacks.rs
+--- a/crates/mc-core/src/datapacks.rs
++++ b/crates/mc-core/src/datapacks.rs
 @@ -485,7 +485,7 @@ fn scan(root: &Path, remaining: &mut usize) -> Result<Scan, String> {
                  .push(pack.file_name().to_string_lossy().into_owned());
              continue;

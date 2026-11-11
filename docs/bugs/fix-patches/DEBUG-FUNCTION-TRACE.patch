@@ -1,7 +1,7 @@
-diff --git b/crates/mc-core/src/command_execution.rs a/crates/mc-core/src/command_execution.rs
+diff --git a/crates/mc-core/src/command_execution.rs b/crates/mc-core/src/command_execution.rs
 index 5b97b679..690e0b99 100644
---- b/crates/mc-core/src/command_execution.rs
-+++ a/crates/mc-core/src/command_execution.rs
+--- a/crates/mc-core/src/command_execution.rs
++++ b/crates/mc-core/src/command_execution.rs
 @@ -590,8 +590,9 @@ pub(crate) fn execute(
              return crate::command_debug::stop(state, connection);
          }

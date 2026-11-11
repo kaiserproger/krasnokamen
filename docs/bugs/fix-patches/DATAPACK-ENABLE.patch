@@ -1,7 +1,7 @@
-diff --git b/crates/mc-core/src/datapack_management.rs a/crates/mc-core/src/datapack_management.rs
+diff --git a/crates/mc-core/src/datapack_management.rs b/crates/mc-core/src/datapack_management.rs
 index f35604b1..c2dda6cc 100644
---- b/crates/mc-core/src/datapack_management.rs
-+++ a/crates/mc-core/src/datapack_management.rs
+--- a/crates/mc-core/src/datapack_management.rs
++++ b/crates/mc-core/src/datapack_management.rs
 @@ -118,6 +118,13 @@ fn dispatch(
          ["datapack", "list"] => list(state, connection, ListScope::All),
          ["datapack", "list", "available"] => list(state, connection, ListScope::Available),

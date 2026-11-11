@@ -1,7 +1,7 @@
-diff --git b/crates/mc-core/src/command_data.rs a/crates/mc-core/src/command_data.rs
+diff --git a/crates/mc-core/src/command_data.rs b/crates/mc-core/src/command_data.rs
 index 02508936..6493dacf 100644
---- b/crates/mc-core/src/command_data.rs
-+++ a/crates/mc-core/src/command_data.rs
+--- a/crates/mc-core/src/command_data.rs
++++ b/crates/mc-core/src/command_data.rs
 @@ -366,6 +366,15 @@ pub(crate) fn command(
          .current
          .unwrap_or_else(|| Context::source(state, connection, executor, 2));
