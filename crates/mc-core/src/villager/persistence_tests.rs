@@ -856,7 +856,7 @@ fn default_worker_progress_omitted_and_invalid_present_data_fails_closed() {
             .all(|(name, _)| name != "SolarisMiningProgress" && name != "SolarisLumberProgress"),
         "default worker progress must not emit tags"
     );
-    let cases: [(&str, Tag); 8] = [
+    let cases: [(&str, Tag); 10] = [
         ("SolarisMiningProgress", Tag::String("not json".into())),
         ("SolarisMiningProgress", Tag::String("{}".into())),
         (
@@ -877,6 +877,20 @@ fn default_worker_progress_omitted_and_invalid_present_data_fails_closed() {
             ),
         ),
         ("SolarisLumberProgress", Tag::Int(0)),
+        (
+            "SolarisLumberProgress",
+            Tag::String(
+                r#"{"building":1,"revision":1,"cursor":1,"search_origin":"north","base":[0,0,0],"sapling":1,"height":1,"layer":1,"has_target":false,"returning":false}"#
+                    .into(),
+            ),
+        ),
+        (
+            "SolarisLumberProgress",
+            Tag::String(
+                r#"{"building":1,"revision":1,"cursor":1,"search_origin":[1],"base":[0,0,0],"sapling":1,"height":1,"layer":1,"has_target":false,"returning":false}"#
+                    .into(),
+            ),
+        ),
     ];
     for (index, (key, bad)) in cases.into_iter().enumerate() {
         let mut bad_fields = fields.clone();
@@ -894,6 +908,31 @@ fn default_worker_progress_omitted_and_invalid_present_data_fails_closed() {
             "reject present-but-invalid {key} case {index}"
         );
     }
+    // The same lumber shape with a well-typed origin loads.
+    let mut good_fields = fields.clone();
+    let Tag::Compound(runtime) = &mut good_fields
+        .iter_mut()
+        .find(|(name, _)| name == "solaris:VillagerRuntime")
+        .unwrap()
+        .1
+    else {
+        panic!("runtime compound");
+    };
+    replace(
+        runtime,
+        "SolarisLumberProgress",
+        Tag::String(
+            r#"{"building":1,"revision":1,"cursor":1,"search_origin":[1,2],"base":[0,0,0],"sapling":1,"height":1,"layer":1,"has_target":false,"returning":false}"#
+                .into(),
+        ),
+    );
+    assert_eq!(
+        villager_from_fields(&items, &good_fields, 100)
+            .unwrap()
+            .lumber_progress
+            .search_origin,
+        Some([1, 2])
+    );
     // Absent tags still decode to the default cursor.
     let loaded = villager_from_fields(&items, &fields, 100).unwrap();
     assert_eq!(loaded.mining_progress, state.mining_progress);

@@ -30,19 +30,14 @@ const MAX_SLOT: i32 = 99;
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct ScanStats {
     pub(crate) funding_calls: usize,
-    pub(crate) funding_ns: u128,
-    pub(crate) boolean_funding_ns: u128,
-    pub(crate) traced_funding_ns: u128,
     pub(crate) recipes_scanned: usize,
     pub(crate) result_resolutions: usize,
-    pub(crate) items_scanned: usize,
     pub(crate) index_queries: usize,
     pub(crate) index_builds: usize,
     pub(crate) memo_hits: usize,
     pub(crate) memo_misses: usize,
     pub(crate) wood_memo_hits: usize,
     pub(crate) wood_memo_misses: usize,
-    pub(crate) raw_rejections: usize,
     pub(crate) unreachable_rejections: usize,
 }
 
@@ -70,9 +65,10 @@ pub(crate) fn scan_stats() -> ScanStats {
     SCAN_STATS.with(std::cell::Cell::get)
 }
 
-/// Narrow measured optimization: repeated boolean proofs consumed 37.4 s of
-/// 39.3 s funding in the bounded 120 s `-p` adopted-village run. The settlement
-/// Registry owns at most 16 derived results, never persisted or journaled.
+/// Narrow measured optimization: on the adopted-village closure test most
+/// funding time went to repeating identical boolean and wood-reservation
+/// proofs. The settlement Registry owns at most 16 derived results, never
+/// persisted or journaled.
 ///
 /// A hit requires the probe kind, exact ordered bill, every slot/stack component
 /// by value, and the same strongly held immutable recipe index (items, facts,
@@ -80,20 +76,17 @@ pub(crate) fn scan_stats() -> ScanStats {
 /// rows are not read by either pure proof. The wood probe starts after the
 /// wood-specific projection, which still runs every time; other bed colors do
 /// not change that ordered sub-bill. The memo stores only canonical proof results
-/// and cannot schedule or choose work. Registry hydration drops it.
+/// and cannot schedule or choose work.
 ///
 /// Native callers run on the serial tick owner; entity workers receive no
 /// settlement Registry. Locks cover lookup/insert only. Concurrent callers
 /// could change hit/eviction order and compute a miss twice, but both compute
 /// the identical result. Replacement mixes a counter, not gameplay RNG.
 ///
-/// Measured on the adopted-village debug oracle in the same `mem-run -p` lane:
-/// closure at tick 73,017 in 108.391 s; forcing both probe kinds to miss stopped
-/// at tick 66,001 after 120.026 s without housing. This is one fixture, not a
-/// server-capacity claim (receipts/CivSimLanding/negative-funding-memo.json).
-/// Remove the two wrappers and Registry field when a replacement proof passes
-/// the same oracle and its miss-only control no longer shows useful savings;
-/// both canonical uncached proofs remain below.
+/// The closure test's full-proof ceiling fails when every probe misses. Remove
+/// the two wrappers and the Registry field when a replacement proof keeps that
+/// test under its ceiling without them; both canonical uncached proofs remain
+/// below.
 #[derive(Default)]
 pub(super) struct FundingMemo {
     entries: Vec<FundingProof>,
@@ -487,8 +480,6 @@ pub(crate) fn can_fund(
     requirements: &[(u32, u32)],
     images: &[inventory::Image],
 ) -> bool {
-    #[cfg(test)]
-    let started = std::time::Instant::now();
     // A grid recipe cannot create a result absent from its result index.
     // Boolean-only rejection preserves the traced proof's first-failure order.
     let raw_shortage = requirements.iter().any(|&(item, need)| {
@@ -520,8 +511,6 @@ pub(crate) fn can_fund(
             .cloned()
     };
     let funded = if raw_shortage {
-        #[cfg(test)]
-        count_scan(|stats| stats.raw_rejections += 1);
         false
     } else if let Some(MemoResult::Boolean(funded)) = cached {
         #[cfg(test)]
@@ -545,8 +534,6 @@ pub(crate) fn can_fund(
             funded
         }
     };
-    #[cfg(test)]
-    count_scan(|stats| stats.boolean_funding_ns += started.elapsed().as_nanos());
     funded
 }
 
@@ -565,19 +552,10 @@ fn funding(
     images: &[inventory::Image],
     trace: bool,
 ) -> (bool, Option<crate::villager::VillagerProfession>) {
-    #[cfg(test)]
-    let started = std::time::Instant::now();
     let mut post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
     let result = simulate_bill(state, requirements, &mut post, trace, true);
     #[cfg(test)]
-    count_scan(|stats| {
-        stats.funding_calls += 1;
-        let elapsed = started.elapsed().as_nanos();
-        stats.funding_ns += elapsed;
-        if trace {
-            stats.traced_funding_ns += elapsed;
-        }
-    });
+    count_scan(|stats| stats.funding_calls += 1);
     result
 }
 
@@ -1082,11 +1060,10 @@ fn ensure_ingredient(
         }
     }
     if work.trace && work.missing_gatherer.is_none() {
-        work.missing_gatherer = ingredient.items.iter().find_map(|&item| {
-            #[cfg(test)]
-            count_scan(|stats| stats.items_scanned += 1);
-            super::construction::gatherer_for_item(state, item)
-        });
+        work.missing_gatherer = ingredient
+            .items
+            .iter()
+            .find_map(|&item| super::construction::gatherer_for_item(state, item));
     }
     false
 }

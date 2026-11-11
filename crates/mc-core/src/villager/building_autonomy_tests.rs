@@ -720,32 +720,21 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
     let mut published_construction = false;
     let mut residents = Vec::new();
     crate::settlements::construction_crafting::reset_scan_stats();
-    crate::plugin_structures::reset_ledger_stats();
-    let started = std::time::Instant::now();
-    let deadline = std::time::Duration::from_secs(120);
-    let mut phase_us = [0_u64; 11];
-    let mut brain_us = 0_u128;
-    // Preserve the 400,000-tick horizon, but include the real root's renewable
-    // resource growth rather than ticking only settlement and brain systems.
+    // Include the real root's renewable resource growth rather than ticking
+    // only settlement and brain systems. Closure is deterministic at tick
+    // 73,017 on this fixture; the bound leaves room without a wall clock.
     state.day_time = 3000;
-    for _ in 0..400_000 {
-        let (output, _, timing) = crate::tick::run_tick(&mut state, &[]);
-        brain_us += state.villager_pois.brain_us;
-        for (total, elapsed) in phase_us.iter_mut().zip([
-            timing.input_us,
-            timing.chunks_us,
-            timing.entity_us,
-            timing.merge_us,
-            timing.block_us,
-            timing.commit_us,
-            timing.snapshot_us,
-            timing.views_us,
-            timing.publish_us,
-            timing.coordination_us,
-            timing.plugins_us,
-        ]) {
-            *total += elapsed;
-        }
+    for _ in 0..80_000 {
+        let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+        // Deterministic work budget for the whole run (closure uses about
+        // 22,000 full proofs and 940,000 recipe candidates). Disabling the
+        // recipe index, dependency admission or the funding memo exceeds it.
+        let work = crate::settlements::construction_crafting::scan_stats();
+        assert!(
+            work.funding_calls <= 30_000 && work.recipes_scanned <= 1_500_000,
+            "construction funding work exceeded its budget at tick {}: {work:?}",
+            state.tick
+        );
         published_construction |= output
             .changes
             .blocks
@@ -811,38 +800,7 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
                     v.settlement == Some(id) && v.data.profession == VillagerProfession::Builder
                 })
             }));
-            eprintln!(
-                "adopted closure accepted: tick={} elapsed={:?} scans={:?}",
-                state.tick,
-                started.elapsed(),
-                crate::settlements::construction_crafting::scan_stats(),
-            );
-            eprintln!(
-                "adopted structures: {:?}",
-                crate::plugin_structures::ledger_stats()
-            );
             return;
-        }
-        if state.tick.is_multiple_of(1000) || started.elapsed() >= deadline {
-            eprintln!(
-                "adopted closure: tick={} day={} elapsed={:?} sources={observed:?} project={:?} phase_us(input,chunks,entity,merge,block,commit,snapshot,views,publish,coordination,plugins)={phase_us:?}",
-                state.tick,
-                state.day_time,
-                started.elapsed(),
-                crate::settlements::construction::project_status(&state, id),
-            );
-            eprintln!("adopted brain: total_us={brain_us}");
-            eprintln!(
-                "adopted crafting: {:?}",
-                crate::settlements::construction_crafting::scan_stats(),
-            );
-            eprintln!(
-                "adopted structures: {:?}",
-                crate::plugin_structures::ledger_stats()
-            );
-        }
-        if started.elapsed() >= deadline {
-            break;
         }
     }
     let mut stock = std::collections::BTreeMap::<String, i32>::new();
@@ -868,10 +826,9 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
         })
         .collect();
     panic!(
-        "autonomous closure failed: tick={} day={} elapsed={:?} sources={observed:?}; projects={:?}\nstock={stock:?}\nminers={miners:?}\nroles={:?}",
+        "autonomous closure failed: tick={} day={} sources={observed:?}; projects={:?}\nstock={stock:?}\nminers={miners:?}\nroles={:?}",
         state.tick,
         state.day_time,
-        started.elapsed(),
         crate::settlements::construction::project_status(&state, id),
         crate::settlements::construction::residents(&state, id)
             .map(|slot| {

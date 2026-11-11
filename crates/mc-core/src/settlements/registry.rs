@@ -95,7 +95,8 @@ pub struct Registry {
     radius_pending: BTreeSet<SettlementId>,
     /// Immutable generated evidence, populated off-tick and never persisted.
     pub(crate) forest: std::sync::Mutex<super::forestry::Cache>,
-    /// Exact-input boolean construction proofs; derived, bounded and cold on load.
+    /// Exact-input funding and wood-reservation proof results; derived,
+    /// bounded and never persisted (a hit re-checks the whole key).
     pub(super) funding: std::sync::Mutex<super::construction_crafting::FundingMemo>,
 }
 
@@ -621,7 +622,6 @@ impl Registry {
 
     /// The persistence boundary validates the row before applying it.
     pub fn apply_image(&mut self, image: RecordImage) {
-        *self.funding.get_mut().expect("funding memo poisoned") = Default::default();
         self.high_water = self.high_water.max(image.id.0);
         if let Some(mut record) = image.value {
             record.economy.refresh_routes();

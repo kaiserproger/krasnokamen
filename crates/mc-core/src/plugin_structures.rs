@@ -27,8 +27,7 @@ pub(crate) type Catalogs = BTreeMap<String, BlueprintCatalog>;
 /// invalidation at every domain write, including mutable access and WAL replay.
 #[derive(Default)]
 pub(crate) struct LedgerCache {
-    revision: u64,
-    decoded: std::sync::OnceLock<(u64, Result<Arc<Ledger>, Failure>)>,
+    decoded: std::sync::OnceLock<Result<Arc<Ledger>, Failure>>,
 }
 
 impl Clone for LedgerCache {
@@ -40,7 +39,6 @@ impl Clone for LedgerCache {
 impl std::fmt::Debug for LedgerCache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LedgerCache")
-            .field("revision", &self.revision)
             .field("decoded", &self.decoded.get().is_some())
             .finish()
     }
@@ -57,34 +55,31 @@ impl Eq for LedgerCache {}
 impl LedgerCache {
     pub(crate) fn invalidate(&mut self, owner: &str, key: &str) {
         if owner == OWNER && key == KEY {
-            self.revision = self.revision.wrapping_add(1);
             self.decoded.take();
         }
     }
 
     fn read(&self, value: Option<&serde_json::Value>) -> Result<LedgerView, Failure> {
-        #[cfg(test)]
-        count_ledger(|stats| stats.reads += 1);
-        let (revision, decoded) = self.decoded.get_or_init(|| {
-            let decoded = value.map_or_else(
-                || Ok(Arc::new(Ledger::default())),
-                |value| {
-                    #[cfg(test)]
-                    count_ledger(|stats| stats.decodes += 1);
-                    Ledger::deserialize(value)
-                        .map(Arc::new)
-                        .map_err(|_| Failure::RuntimeUnavailable)
-                },
-            );
-            (self.revision, decoded)
-        });
-        debug_assert_eq!(*revision, self.revision);
-        decoded.clone().map(LedgerView)
+        self.decoded
+            .get_or_init(|| {
+                value.map_or_else(
+                    || Ok(Arc::new(Ledger::default())),
+                    |value| {
+                        #[cfg(test)]
+                        count_ledger(|stats| stats.decodes += 1);
+                        Ledger::deserialize(value)
+                            .map(Arc::new)
+                            .map_err(|_| Failure::RuntimeUnavailable)
+                    },
+                )
+            })
+            .clone()
+            .map(LedgerView)
     }
 
     fn install(&mut self, ledger: Arc<Ledger>) {
         assert!(
-            self.decoded.set((self.revision, Ok(ledger))).is_ok(),
+            self.decoded.set(Ok(ledger)).is_ok(),
             "domain write invalidates its decoded ledger"
         );
     }
@@ -113,7 +108,6 @@ impl std::ops::DerefMut for LedgerView {
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct LedgerStats {
-    pub(crate) reads: usize,
     pub(crate) decodes: usize,
     pub(crate) copies: usize,
 }
