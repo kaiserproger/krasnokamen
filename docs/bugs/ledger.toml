@@ -2335,9 +2335,12 @@ title = "Villagers lose job after sleeping"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1; fixed by fa74bb6f+1f613f1d+00be6311 (merge c7eedcfb) and 5316786b+e369141d (merge ba4edd64); fix patch docs/bugs/fix-patches/ISSUE-1-11.patch is their net pre-fix-to-fix diff of the three product files, and reversing it removes exactly that code: brain.rs's stand-up search one block below the rounded sleeping cell (a woken resident stays at its bed) and the Work-period walk to the job site for a worker with no work target (a woken worker stands where it woke); allocator.rs's VillagerData sync when the allocator changes a profession (the client keeps the old job until the next sleep pose); mining.rs's surface_origin scan top back to bounds.max-1 and hostile_near back to counting any hostile in sensor range, seen or not (the woken miner parks outside its mine all day)"
 regression = ["harness:village-qa:sleep_return", "cargo:mc-core:villager::sleep_return_tests::woken_bound_resident_stands_up_and_returns_to_its_job_site", "cargo:mc-core:villager::sleep_return_tests::allocator_job_loss_reaches_the_client_villager_data_at_once", "cargo:mc-core:villager::sleep_return_tests::idle_lumberjack_walks_back_to_its_job_site_at_work_time", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_rock_outside_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_a_cave_under_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::alternate_lane_starts_on_a_floor_at_the_top_of_the_bounds"]
+failing_first = "reported"
+fix_commit = "patch:507ed17d6f5bb12a60a201b1fe8160c4c2d9bec8b4a3941aba16f7905ba8a1ba"
+promotion = "docs/bugs/promotions/ISSUE-1-11.json"
 
 [[bug]]
 id = "ISSUE-1-12"
@@ -2498,9 +2501,12 @@ title = "Surface mine does not start digging"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1; fixed by 5316786b+e369141d (merge ba4edd64); fix patch docs/bugs/fix-patches/ISSUE-1-27.patch is their net pre-fix-to-fix diff of crates/mc-core/src/villager/mining.rs, and reversing it removes exactly that code: surface_origin's scan top goes back to bounds.max-1 (alternate lanes skip a built mine's floor at the top of its bounds and start in a sealed cave below it) and hostile_near goes back to counting any hostile in sensor range, seen or not (a cave mob under the mine parks the miner 2400 ticks per lane), so the miner never starts digging"
 regression = ["harness:village-qa:miner_deposit", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_rock_outside_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_a_cave_under_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::alternate_lane_starts_on_a_floor_at_the_top_of_the_bounds"]
+failing_first = "reported"
+fix_commit = "patch:3a739f505d159bf90b041ce4c066d7517e192000fb1b3b73f3858260aaf4e7e8"
+promotion = "docs/bugs/promotions/ISSUE-1-27.json"
 
 [[bug]]
 id = "ISSUE-1-28"
@@ -4408,7 +4414,7 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "native-v2-p4-damage splash row: receipts 20261111T144354-native-v2-p4-damage-uxdbw87g and 20261111T151955-native-v2-p4-damage-wtrafs5z show only minecraft:on_fire wire events after a water fill in creative. Core splash_harming_thrown_at_own_feet passes, so the potion path was not the owner."
-regression = ["cargo:mc-core:contact_hazards_tests::creative_player_burn_clock_runs_and_water_douses_it"]
+regression = ["cargo:mc-core:tick_tests::contact_hazards_tests::creative_player_burn_clock_runs_and_water_douses_it"]
 fix_commit = "da9bca085da0c0c542cac42f95f38b373849bd99"
 failing_first = "reported"
 
