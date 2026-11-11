@@ -272,7 +272,12 @@ def _axolotl(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         if playing_dead(steps.observe()):
             break
         _strike(steps, aid, ax)
-        steps.call("minecraft_wait_ticks", {"ticks": 25})
+        # Play-dead lasts 200 ticks and a strike with retries can take longer than that:
+        # look right after the hit, before any further delay.
+        steps.call("minecraft_wait_ticks", {"ticks": 6})
+        if playing_dead(steps.observe()):
+            break
+        steps.call("minecraft_wait_ticks", {"ticks": 19})
         row = _same_row(steps, aid)
         if row is not None and row["health"] <= 2:
             # A lethal fist hit never triggers play-dead: top up to <= 6 and keep trying.
