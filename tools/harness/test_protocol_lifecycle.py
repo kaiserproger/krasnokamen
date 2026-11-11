@@ -432,17 +432,54 @@ class PortLeaseTests(unittest.TestCase):
                 if callable(release):
                     release()
 
-    def test_lock_dir_default_is_portable_without_work_root(self) -> None:
-        import tempfile
-        env = {k: v for k, v in os.environ.items()
-               if k not in ("SOLARIS_PORT_LOCK_DIR", "SOLARIS_WORK_ROOT")}
-        with mock.patch.dict(os.environ, env, clear=True):
-            self.assertEqual(lifecycle._default_lock_dir(),
-                             Path(tempfile.gettempdir()) / "solaris-port-locks")
-        with mock.patch.dict(os.environ, {"SOLARIS_WORK_ROOT": "/w"}, clear=True):
-            self.assertEqual(lifecycle._default_lock_dir(), Path("/w/port-locks"))
+    def test_lock_dir_default_is_one_machine_wide_namespace(self) -> None:
+        # The default must NOT depend on SOLARIS_WORK_ROOT/TMPDIR: two harness
+        # processes with different environments on one host must coordinate
+        # through the same lock files.
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(lifecycle._default_lock_dir(), Path("/tmp/solaris-port-locks"))
+        with mock.patch.dict(os.environ, {"SOLARIS_WORK_ROOT": "/w", "TMPDIR": "/t"}, clear=True):
+            self.assertEqual(lifecycle._default_lock_dir(), Path("/tmp/solaris-port-locks"))
         with mock.patch.dict(os.environ, {"SOLARIS_PORT_LOCK_DIR": "/locks"}, clear=True):
             self.assertEqual(lifecycle._default_lock_dir(), Path("/locks"))
+
+    def test_reservations_coordinate_across_processes_with_different_env(self) -> None:
+        # Regression: with an env-derived lock dir, two processes with
+        # different SOLARIS_WORK_ROOT/TMPDIR both got the same port before
+        # bind. Separate processes with different env must still get
+        # distinct ports from one machine-wide lock namespace.
+        import subprocess
+        import sys
+        from . import runtime
+        base = runtime.reserve_port()
+        root = str(Path(__file__).resolve().parents[2])
+        child = (
+            "import sys, time; sys.path.insert(0, {root!r});"
+            "from tools.harness.backends import protocol_lifecycle as lc;"
+            "r = lc.reserve_matrix_port(port_range=({base}, {base} + 3));"
+            "print(int(r), flush=True); time.sleep(30)"
+        ).format(root=root, base=base)
+        envs = [
+            {"SOLARIS_WORK_ROOT": "/tmp/fake-root-a", "TMPDIR": "/tmp/fake-tmp-a"},
+            {"SOLARIS_WORK_ROOT": "/tmp/fake-root-b", "TMPDIR": "/tmp/fake-tmp-b"},
+        ]
+        procs = []
+        for extra in envs:
+            env = {k: v for k, v in os.environ.items() if k != "SOLARIS_PORT_LOCK_DIR"}
+            env.update(extra)
+            procs.append(subprocess.Popen(
+                [sys.executable, "-c", child], env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True))
+        try:
+            ports = [int(procs[i].stdout.readline().strip()) for i in range(2)]
+            for proc in procs:
+                proc.stdout.close()
+        finally:
+            for proc in procs:
+                proc.kill()
+                proc.wait(timeout=10)
+        self.assertEqual(len(set(ports)), 2,
+                         f"cross-process reservations collided despite different env: {ports}")
 
 
 if __name__ == "__main__":

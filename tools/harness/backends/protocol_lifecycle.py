@@ -29,7 +29,6 @@ import os
 import re
 import socket
 import subprocess
-import tempfile
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -62,15 +61,15 @@ def _check_port(port: int, name: str, port_range=(PORT_MIN, PORT_MAX)) -> int:
 
 
 def _default_lock_dir() -> Path:
-    """Portable cross-process lock root: env override, then the shared work
-    root when set, otherwise the system temp dir (works on any Linux/CI)."""
-    override = os.environ.get("SOLARIS_PORT_LOCK_DIR")
-    if override:
-        return Path(override)
-    work_root = os.environ.get("SOLARIS_WORK_ROOT")
-    if work_root:
-        return Path(work_root) / "port-locks"
-    return Path(tempfile.gettempdir()) / "solaris-port-locks"
+    """One machine-wide lock namespace for every harness process.
+
+    The default is a fixed path (not derived from TMPDIR/SOLARIS_WORK_ROOT),
+    so processes with different environments on the same host still
+    coordinate through the same lock files. SOLARIS_PORT_LOCK_DIR overrides
+    it for isolated tests only. The harness already requires Linux
+    (inotify/pidfd), so /tmp is always present.
+    """
+    return Path(os.environ.get("SOLARIS_PORT_LOCK_DIR", "/tmp/solaris-port-locks"))
 
 
 PORT_LOCK_DIR = _default_lock_dir()
@@ -113,7 +112,10 @@ def reserve_matrix_port(exclude: int = -1, port_range=(PORT_MIN, PORT_MAX)) -> P
         if port == exclude:
             continue
         lock_path = PORT_LOCK_DIR / f"{port}.lock"
-        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o666)
+        except OSError:
+            continue
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
