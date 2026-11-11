@@ -176,6 +176,10 @@ class NativeV2ProbeTests(unittest.TestCase):
                 "native-v2-p2-optional-pack", "native-v2-custody-mount-export",
                 "native-v2-cursor-close", "native-v2-banner-placement",
                 "native-v2-snow-golem-shear", "native-v2-peaceful-removal", "native-v2-command-score-store",
+                "native-v2-summon-age", "native-v2-data-query", "native-v2-death-messages",
+                "native-v2-score-food", "native-v2-spawner-egg", "native-v2-golem",
+                "native-v2-axolotl-play-dead", "native-v2-dolphin-treasure",
+                "native-v2-goat-ram", "native-v2-golem-gossip",
                 "native-v2-destroyed-chest-race",
                 "native-v2-duplicate-login", "native-v2-corrupt-block-entities",
                 "native-v2-corrupt-chunk-near-camera", "native-v2-chest-drag-disconnect") else "tcp")
