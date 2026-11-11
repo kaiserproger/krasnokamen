@@ -775,7 +775,19 @@ def wait_client_ready_for_connect(client: Any, timeout_seconds: float) -> dict[s
     import json as _json
 
     deadline = time.monotonic() + timeout_seconds
-    last = current_client_state(client, min(timeout_seconds, 120.0))
+    while True:
+        try:
+            last = current_client_state(client, min(timeout_seconds, 120.0))
+            break
+        except RuntimeError as error:
+            prefix = 'minecraft_observe failed: '
+            try:
+                payload = _json.loads(str(error).removeprefix(prefix)) if str(error).startswith(prefix) else {}
+            except _json.JSONDecodeError:
+                payload = {}
+            if (payload != {'code': 'tool-execution-failed', 'message': 'TimeoutException'}
+                    or time.monotonic() >= deadline):
+                raise
     while True:
         screen_payload = last.get("screen")
         if isinstance(screen_payload, dict):
