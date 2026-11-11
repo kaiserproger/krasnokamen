@@ -462,7 +462,9 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
         ("hot_floor", f"setblock {x} {y - 1} {z} minecraft:magma_block"),
         ("campfire", f"setblock {x} {y} {z} minecraft:campfire[lit=true]"),
         ("cactus", f"setblock {x + 1} {y} {z} minecraft:cactus"),
-        ("sweet_berry_bush", f"setblock {x} {y} {z} minecraft:sweet_berry_bush[age=3]"),
+        # Two bush cells: damage needs displacement inside the bush, and a loaded host can
+        # apply the walk to the server in one step that crosses a single cell.
+        ("sweet_berry_bush", f"fill {x} {y} {z} {x + 1} {y} {z} minecraft:sweet_berry_bush[age=3]"),
         ("fall", f"tp @s {x + .5} {y + 10} {z + .5}"),
         ("stalagmite", f"tp @s {x + .5} {y + 10} {z + .5}"),
         ("falling_anvil", f"setblock {x} {y + 5} {z} minecraft:anvil"),

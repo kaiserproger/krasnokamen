@@ -271,6 +271,26 @@ class NativeV2ProbeTests(unittest.TestCase):
         self.assertIs(seen.get("outside_play"), True)
         self.assertNotIn("wait_for_play", seen)
 
+    def test_damage_berry_row_walks_through_two_bush_cells(self) -> None:
+        from .backends import native_p4
+
+        class Stop(Exception):
+            pass
+
+        events: list[str] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = events.append
+
+        def wait(_predicate, label, **_kwargs):
+            if label == "sweet_berry_bush_physical_identity_received":
+                raise Stop
+            return mock.MagicMock()
+
+        steps.wait.side_effect = wait
+        with self.assertRaises(Stop):
+            native_p4._damage_environment(steps, (10, 70, 10), 1)
+        self.assertIn("fill 10 70 10 11 70 10 minecraft:sweet_berry_bush[age=3]", events)
+
     def test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack(self) -> None:
         from .backends import native_p4
 
