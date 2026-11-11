@@ -638,24 +638,24 @@ fn open_and_dry(state: &TickState, current: BlockPos, height: i32) -> bool {
 /// and the miner's dig reach) that the miner would meet there: residents panic
 /// at a hostile they can see, so the miner would flee back and forth from a
 /// cell it can never dig. It counts while it is visible from `stand` (where
-/// the miner works) or lies in the quarry, where digging opens its cave. One
-/// sealed in rock outside the quarry never meets the miner and must not park it.
-fn hostile_near(
-    state: &TickState,
-    bounds: ScriptWorldBounds,
-    cell: BlockPos,
-    stand: BlockPos,
-) -> bool {
+/// the miner works) or lies beside the cells being dug, whose removal opens its
+/// pocket. One in a sealed cave nearby (a zombie hunting the miner from below)
+/// can neither see nor reach it: the miner keeps working, as villagers do.
+fn hostile_near(state: &TickState, cell: BlockPos, height: i32, stand: BlockPos) -> bool {
     let eye = [
         f64::from(stand.x) + 0.5,
         f64::from(stand.y) + 1.62,
         f64::from(stand.z) + 0.5,
     ];
-    let quarry = |at: [f64; 3]| {
-        (0..3).all(|axis| {
-            let n = at[axis].floor() as i32;
-            n >= bounds.min[axis] - 1 && n <= bounds.max[axis] + 1
-        })
+    // Gap between the dug column and the mob's body, feet to head.
+    let exposed = |at: [f64; 3], tall: f64| {
+        let gap = |lo: f64, hi: f64, min: i32, max: i32| {
+            (lo - f64::from(max)).max(f64::from(min) - hi).max(0.0)
+        };
+        let dx = gap(at[0], at[0], cell.x, cell.x + 1);
+        let dy = gap(at[1], at[1] + tall, cell.y, cell.y + height);
+        let dz = gap(at[2], at[2], cell.z, cell.z + 1);
+        dx * dx + dy * dy + dz * dz <= 1.5 * 1.5
     };
     let centre = [
         f64::from(cell.x) + 0.5,
@@ -690,7 +690,7 @@ fn hostile_near(
                     + (at[1] - centre[1]).powi(2)
                     + (at[2] - centre[2]).powi(2)
                     <= range * range
-                && (quarry(at)
+                && (exposed(at, body.height)
                     || crate::projectiles::flight::clear_segment(
                         state,
                         eye,
@@ -713,16 +713,20 @@ fn lane_entrance(bounds: ScriptWorldBounds, entrance: BlockPos, lane: u32) -> Op
     })
 }
 
-/// The standing surface of an alternate entrance column: ground with two clear
-/// cells above it. Terrain slopes, so the original entrance's height would put
-/// the new branch's origin underground, where the miner seals itself in.
+/// The standing surface of an alternate entrance column (`column.y` is the
+/// entrance's level): ground with two clear cells above it inside the zone.
+/// Terrain slopes, so the original entrance's height would put the new
+/// branch's origin underground, where the miner seals itself in. The
+/// entrance's own level always counts, even at the top of the zone (a built
+/// mine's floor): otherwise every alternate lane skips that floor and settles
+/// in a sealed cave under the quarry.
 fn surface_origin(
     state: &TickState,
     bounds: ScriptWorldBounds,
     column: BlockPos,
 ) -> Option<BlockPos> {
     let open = |y: i32| block_path(state, BlockPos { y, ..column }).is_some_and(clear);
-    (bounds.min[1] + 2..=bounds.max[1] - 1)
+    (bounds.min[1] + 2..=(bounds.max[1] - 1).max(column.y))
         .rev()
         .find(|&y| {
             !open(y - 1)
@@ -913,7 +917,7 @@ pub(super) fn work(
     if state.tick < v.harvest_at {
         return Some(previous);
     }
-    let hostile = hostile_near(state, bounds, current, previous);
+    let hostile = hostile_near(state, current, height, previous);
     let walking = !hostile && !near(state, slot, current, 3.0);
     if hostile || walking {
         // Villagers panic at a hostile they meet, so the cell can never be

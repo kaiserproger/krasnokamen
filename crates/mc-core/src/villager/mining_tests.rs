@@ -1192,6 +1192,88 @@ fn hostile_sealed_in_rock_outside_the_quarry_does_not_stop_the_miner() {
     );
 }
 
+/// village-qa u2wl2u3f and the breaker's dtxik71m, mu5e4ar7 and hbqj9crw: a
+/// zombie villager in a sealed cave under the mine hunts the miner from below,
+/// inside the quarry and within sensor reach of the dig cells. It can neither
+/// see nor reach the miner, so the mine keeps working until digging opens it.
+#[test]
+fn hostile_sealed_in_a_cave_under_the_quarry_does_not_stop_the_miner() {
+    let (mut state, slot, mut v) = fixture(BuildingKind::Mine);
+    let air = state.registry.states.air;
+    for y in 194..=195 {
+        state.world.set_block(4, y, 3, air);
+    }
+    let zombie_villager = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:zombie_villager").unwrap())
+        .unwrap();
+    state.spawn_mob(zombie_villager, [4.5, 194.0, 3.5], 20.0);
+    let mut changes = ChangeSet::default();
+    // Fewer ticks than the stall patience: a parked miner never reaches another lane.
+    for step in 0..100u64 {
+        state.tick = step * 20;
+        if let Some(target) = mining::work(&mut state, slot, &mut v, &mut changes) {
+            state.entities.set_pos(
+                slot,
+                [
+                    f64::from(target.x) + 0.5,
+                    f64::from(target.y),
+                    f64::from(target.z) + 0.5,
+                ],
+            );
+        }
+        if !changes.blocks.is_empty() {
+            break;
+        }
+    }
+    assert!(
+        !changes.blocks.is_empty(),
+        "a sealed hostile under the quarry parked the miner: lane {} stalled_since {}",
+        v.mining_progress.lane,
+        v.mining_progress.stalled_since
+    );
+}
+
+/// village-qa u2wl2u3f: a built mine's floor is the top of its bounds. An
+/// alternate lane starts on that floor, not in the sealed cave below it, where
+/// the miner stood outside the mine all day waiting for a cell it never reached.
+#[test]
+fn alternate_lane_starts_on_a_floor_at_the_top_of_the_bounds() {
+    let (mut state, slot, mut v) = fixture(BuildingKind::Mine);
+    let settlement = v.settlement.unwrap();
+    for building in state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .buildings
+        .values_mut()
+    {
+        building.bounds = ScriptWorldBounds::new([1, 192, 1], [14, 201, 14]).unwrap();
+    }
+    let air = state.registry.states.air;
+    for x in 1..=14 {
+        for z in 1..=14 {
+            for y in 196..=197 {
+                state.world.set_block(x, y, z, air);
+            }
+        }
+    }
+    let mut changes = ChangeSet::default();
+    state.tick = 100;
+    mining::work(&mut state, slot, &mut v, &mut changes);
+    v.mining_progress.lane = 1;
+    v.mining_progress.cell = 0;
+    v.mining_progress.layer = 0;
+    v.mining_progress.last_open = None;
+    let target = mining::work(&mut state, slot, &mut v, &mut changes);
+    assert!(
+        target.is_some_and(|target| target.y >= 200),
+        "lane 1 starts in the sealed cave: {target:?}"
+    );
+    assert_eq!(v.mining_progress.lane, 1);
+}
+
 /// Routing to the solid dig cell lets the pathfinder's closest-point fallback
 /// lead the miner into whatever open pocket lies nearest to it (a lower level's
 /// row directly beneath), where it stands for good. A miner far from the open
