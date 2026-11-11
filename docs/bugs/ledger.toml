@@ -3887,8 +3887,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Native freeze/teleport/local-input scene: the old server advances received game age while daylight holds. The candidate projects TickControl simulated age; actual native repeats and source controls exist, but graphical ledger promotion remains pending."
-regression = ["cargo:mc-core:tick_control::tests::game_time_stands_still_while_frozen_and_counts_stepped_ticks", "cargo:mc-edge:server::admin_tests::clock_queue_tests::queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer", "cargo:mc-edge:play::tests::join_burst_carries_load_start_before_center"]
+regression = ["cargo:mc-core:tick_control::tests::game_time_stands_still_while_frozen_and_counts_stepped_ticks", "cargo:mc-edge:server::admin_tests::clock_queue_tests::queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer", "cargo:mc-edge:play::tests::join_burst_carries_load_start_before_center", "harness:scene-shot:native-frozen-game-age"]
 failing_first = "reported"
+fix_commit = "2a315d20f4d69e82802e1ab1bd9d5a20bf29736d"
 
 [[bug]]
 id = "TICK-FROZEN-GAME-AGE-RESTART"
@@ -3896,10 +3897,12 @@ title = "Restart loses accumulated held ticks and jumps simulated game age to th
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "core/recovery.rs restores the native frame into a new TickState, while TickControl starts with held_ticks=0. The runtime-only held offset is not in checkpoint metadata. Separate from the SET_TIME projection fix; no storage migration was made."
-regression = []
+regression = ["cargo:mc-core:weather::tests::frozen_game_age_survives_checkpoint_and_held_wal_tail", "cargo:mc-core:weather::tests::climate_image_recovers_game_age_in_every_tick_phase"]
 failing_first = "not recorded"
+fix_commit = "c9c13b37505580495a3553eff10e10d1495292d2"
+promotion = "docs/bugs/promotions/TICK-FROZEN-GAME-AGE-RESTART.json"
 
 [[bug]]
 id = "TIME-QUERY-FROZEN-PHASE"
@@ -3907,10 +3910,12 @@ title = "time query gametime is one tick behind the published simulated age duri
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "tick.rs begin_tick increments held_ticks before input commands, but state.tick increments afterwards; command_execution.rs queries game_ticks(state.tick) in between. A held query sees N-(H+1), whereas the post-tick snapshot sees (N+1)-(H+1)."
-regression = []
+regression = ["cargo:mc-core:tick_control::tests::frozen_frame_time_query_matches_published_game_age"]
 failing_first = "not recorded"
+fix_commit = "31ccff063650fbca21bd81b2af181fbdf5b0548d"
+promotion = "docs/bugs/promotions/TIME-QUERY-FROZEN-PHASE.json"
 
 [[bug]]
 id = "MAP-FRAME-MARKER-RECOVERY-LIMIT"
