@@ -344,3 +344,75 @@ fn native_slot_cache_refreshes_and_archers_choose_current_nearest_live_roster() 
         );
     }
 }
+
+#[test]
+fn long_contact_keeps_rotating_pulses_instead_of_an_exhausted_standstill() {
+    let mut runtime = FormationRuntime::default();
+    add(&mut runtime, spec(0, 1, 0.0, 60, Order::Hold), 1, 240);
+    add(&mut runtime, spec(1, 2, 4.0, 60, Order::Hold), 241, 240);
+    let mut exposure = 0;
+    for tick in 0..3600 {
+        simulate(&mut runtime, tick);
+        if tick >= 2400 {
+            let r = &runtime.regiments[0];
+            exposure += r.sections[..3]
+                .iter()
+                .filter(|s| s.pulse_until > tick)
+                .count();
+        }
+    }
+    let r = &runtime.regiments[0];
+    assert!(r.gap <= 6.0, "fronts lost contact: gap={}", r.gap);
+    // Three front sections over the last minute of a three-minute contact.
+    let share = exposure as f64 / (3.0 * 1200.0);
+    assert!(
+        share >= 0.15,
+        "front fighting share {share}, stamina {}",
+        r.stamina
+    );
+    assert!(
+        r.stamina >= EXHAUSTED_STAMINA - 1.0,
+        "stamina {}",
+        r.stamina
+    );
+}
+
+#[test]
+fn riders_and_pursuers_fight_from_any_rank_but_routers_never_do() {
+    let mut runtime = FormationRuntime::default();
+    let mut horse = spec(0, 1, 0.0, 5, Order::Advance);
+    horse.frontage = 2.0;
+    add(&mut runtime, horse, 1, 15);
+    add(&mut runtime, spec(1, 1, -40.0, 5, Order::Advance), 101, 15);
+    simulate(&mut runtime, 0);
+    let rear_rider = runtime.index[&EntityId(11)];
+    let rear_foot = runtime.index[&EntityId(111)];
+    assert!(runtime.can_attack_at(rear_rider));
+    assert!(!runtime.can_attack_at(rear_foot));
+    runtime.regiments[1].spec.order = Order::Pursue;
+    runtime.regiments[1].enemy_routing = true;
+    assert!(runtime.can_attack_at(rear_foot));
+    runtime.members[rear_rider].routing = true;
+    assert!(!runtime.can_attack_at(rear_rider));
+}
+
+#[test]
+fn fugitives_pinned_at_the_bounds_turn_at_bay() {
+    let mut runtime = FormationRuntime::default();
+    add(&mut runtime, spec(0, 1, 0.0, 5, Order::Advance), 1, 10);
+    runtime.set_bounds([-10.0, -10.0], [10.0, 10.0]).unwrap();
+    simulate(&mut runtime, 0);
+    runtime.members[0].routing = true;
+    runtime.members[0].pos = [9.5, 64.0, 0.0];
+    runtime.members[1].routing = true;
+    runtime.members[1].pos = [0.0, 64.0, 0.0];
+    runtime.members[2].pos = [9.5, 64.0, 1.0];
+    assert!(runtime.cornered_at(0));
+    assert!(
+        !runtime.cornered_at(1),
+        "a fugitive with room to run keeps running"
+    );
+    assert!(!runtime.cornered_at(2), "steady men are not fugitives");
+    runtime.members[0].wounded = true;
+    assert!(!runtime.cornered_at(0), "the wounded only withdraw");
+}

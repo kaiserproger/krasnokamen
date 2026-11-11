@@ -103,7 +103,8 @@ fn routers_flee_and_pursuers_follow_the_moving_rout_not_its_old_anchor() {
         );
         previous = runtime.members[1].pos[0];
     }
-    assert!(runtime.members[1].pos[0] > 30.0);
+    // Routers run at 0.2 blocks/tick, slower than 0.28 pursuit.
+    assert!(runtime.members[1].pos[0] > 27.0);
     assert!(runtime.members[0].pos[0] > 20.0);
     assert!(
         runtime.regiments[0].enemy.unwrap()[0] > 25.0,

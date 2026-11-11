@@ -17,9 +17,13 @@ pub(crate) const SURGE_TICKS: u64 = 200;
 pub(crate) const SURGE_FATIGUE: f32 = 0.75;
 pub(crate) const STANDING_RECOVERY: f32 = 0.25;
 pub(crate) const EXHAUSTED_STAMINA: f32 = 30.0;
-/// Below this morale sections neither start nor keep a pulse: losses stall.
-pub(crate) const PULSE_MORALE_FLOOR: f32 = 30.0;
+/// Below this morale sections neither start nor keep a pulse. It sits just
+/// above the break (17) so a worn regiment fights on until it breaks; a wider
+/// gap froze touching fronts with neither losses nor flight.
+pub(crate) const PULSE_MORALE_FLOOR: f32 = 20.0;
 const MAX_REGIMENTS: usize = 128;
+/// A fugitive this close to the battle bounds can flee no further.
+const AT_BAY_BLOCKS: f64 = 2.0;
 const MAX_SOLDIERS: usize = 20_000;
 /// Window of the operator's stall census: ten seconds of advancing.
 pub(crate) const STALL_TICKS: u64 = 200;
@@ -421,11 +425,31 @@ impl FormationRuntime {
         self.can_attack_at(index)
     }
 
+    /// Front-rank pulses, or loose order: mounted files and pursuers fight
+    /// from any rank wherever they meet an enemy.
     pub(crate) fn can_attack_at(&self, index: usize) -> bool {
         let c = self.context_at(index);
+        !c.routing && !c.wavering && ((c.front_rank && c.pulsing) || self.loose_order_at(index))
+    }
+
+    pub(crate) fn loose_order_at(&self, index: usize) -> bool {
         let r = &self.regiments[self.members[index].regiment];
-        let pursuing = r.spec.order == Order::Pursue && r.enemy_routing;
-        c.front_rank && (c.pulsing || pursuing) && !c.routing && !c.wavering
+        r.spec.frontage > 1.0 || (r.spec.order == Order::Pursue && r.enemy_routing)
+    }
+
+    /// A fugitive pinned against the battle bounds turns at bay and fights;
+    /// otherwise both sides' routers pile into one corner and only touch.
+    pub(crate) fn cornered_at(&self, index: usize) -> bool {
+        let m = &self.members[index];
+        m.routing
+            && m.alive
+            && !m.wounded
+            && self.bounds.is_some_and(|(min, max)| {
+                m.pos[0] - min[0] < AT_BAY_BLOCKS
+                    || max[0] - m.pos[0] < AT_BAY_BLOCKS
+                    || m.pos[2] - min[1] < AT_BAY_BLOCKS
+                    || max[1] - m.pos[2] < AT_BAY_BLOCKS
+            })
     }
 
     pub fn mark_wounded(&mut self, id: EntityId) {
@@ -618,7 +642,7 @@ impl FormationRuntime {
                 || section.pulse_until > self.tick
                 || section.cooldown_until > self.tick
                 || r.morale.value < PULSE_MORALE_FLOOR
-                || r.stamina < 20.0
+                || r.stamina < EXHAUSTED_STAMINA
                 || r.morale.broken
                 || s * SECTION_SIZE >= usize::from(r.spec.files)
                 || match r.spec.order {
@@ -650,16 +674,24 @@ impl FormationRuntime {
                 section.starts += 1;
             }
         }
-        let fighting = r.sections.iter().any(|s| s.pulse_until > self.tick);
+        // Fatigue follows the share of the front that is fighting: resting
+        // sections recover while their neighbours surge, so a long contact
+        // settles into rotating pulses instead of an exhausted standstill.
+        let front = usize::from(r.spec.files)
+            .div_ceil(SECTION_SIZE)
+            .min(r.sections.len());
+        let pulsing = r.sections[..front]
+            .iter()
+            .filter(|s| s.pulse_until > self.tick)
+            .count();
         if self.tick % DECISION_TICKS == u64::from(r.spec.id) % DECISION_TICKS {
-            let delta = if fighting {
-                -SURGE_FATIGUE
+            let share = pulsing as f32 / front.max(1) as f32;
+            let delta = if pulsing > 0 {
+                -SURGE_FATIGUE * share + STANDING_RECOVERY * (1.0 - share)
             } else if matches!(r.spec.order, Order::Charge | Order::Pursue) {
                 -0.4
-            } else if r.speed == 0.0 {
-                STANDING_RECOVERY
             } else {
-                -0.025
+                STANDING_RECOVERY
             };
             r.stamina = (r.stamina + delta).clamp(0.0, 100.0);
         }
@@ -744,6 +776,8 @@ impl FormationRuntime {
                     r.morale.pressure.rear |= dot < -0.5;
                 }
             }
+            r.morale.pressure.engaged |= r.gap <= 6.0 && r.enemy.is_some() && !r.enemy_routing;
+            r.morale.pressure.enemy_broken |= r.enemy_routing;
             let (removed, ranged) = self.members[r.start..r.start + r.len].iter().fold(
                 (0, 0),
                 |(removed, ranged), m| {
@@ -811,7 +845,7 @@ impl FormationRuntime {
                     m.pos[1],
                     m.pos[2] + away[1] * 20.0,
                 ],
-                0.25,
+                0.2,
             );
         }
         if r.spec.order == Order::Pursue

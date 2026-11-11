@@ -364,3 +364,79 @@ fn mounted_battle_horse_moves_toward_enemy_during_real_ticks() {
     );
     assert!((target_pos[0] - after[0]).abs() < target_pos[0] - pos[0]);
 }
+
+#[test]
+fn flank_heading_swings_wide_then_behind_then_into_the_rear() {
+    // Enemy front centred at the origin facing +z, 46 files, 11 ranks.
+    let flank = Flank {
+        origin: [0.0, 64.0, 0.0],
+        facing: [0.0, 1.0],
+        side: [-1.0, 0.0],
+        half_width: 22.5,
+        depth: 20.0,
+    };
+    let step = |pos: [f64; 3]| {
+        let h = flank.heading(pos);
+        let len = (h[0] * h[0] + h[1] * h[1]).sqrt();
+        [h[0] / len, h[1] / len]
+    };
+    // In front of the line: mostly outward along the chosen side.
+    let out = step([-10.0, 64.0, 40.0]);
+    assert!(out[0] < -0.5, "{out:?}");
+    // Past the end file: round behind the last rank.
+    let around = step([-40.0, 64.0, 10.0]);
+    assert!(around[1] < -0.5, "{around:?}");
+    // Behind the last rank: turn in towards the rear half, not the front.
+    let rear = step([-35.0, 64.0, -30.0]);
+    assert!(rear[0] > 0.5 && rear[1] > 0.0, "{rear:?}");
+}
+
+#[test]
+fn riders_swing_round_once_their_foot_closes_and_ride_down_a_rout() {
+    use super::super::formation::{Order, RegimentSpec};
+    let mut battle = BattleState::default();
+    let foot = |id, faction, z, facing: f64| RegimentSpec {
+        id,
+        faction,
+        origin: [0.0, 64.0, z],
+        facing: [0.0, facing],
+        files: 10,
+        frontage: 1.0,
+        order: Order::Advance,
+    };
+    let ids = |first: i32, n: i32| (first..first + n).map(EntityId).collect::<Vec<_>>();
+    battle
+        .formation
+        .add_regiment(foot(0, 1, 0.0, 1.0), &ids(1, 30))
+        .unwrap();
+    battle
+        .formation
+        .add_regiment(foot(1, 2, 4.0, -1.0), &ids(101, 30))
+        .unwrap();
+    let mut horse = foot(2, 1, -30.0, 1.0);
+    horse.origin[0] = -8.0;
+    horse.frontage = 2.0;
+    battle.formation.add_regiment(horse, &ids(201, 10)).unwrap();
+    for r in &mut battle.formation.regiments {
+        r.live_count = r.len;
+    }
+    battle.columns.ranged = vec![false; 70];
+    let mut plans = Vec::new();
+    plan_sweeps(&battle, &mut plans);
+    assert!(plans[2].is_none(), "riders left before the foot closed");
+    battle.formation.regiments[0].enemy = Some([0.0, 64.0, 4.0]);
+    battle.formation.regiments[0].gap = 4.0;
+    plan_sweeps(&battle, &mut plans);
+    let Some(Sweep::Flank(plan)) = plans[2] else {
+        panic!("riders swing round once the foot closes: {:?}", plans[2]);
+    };
+    assert_eq!(plan.origin, [0.0, 64.0, 4.0]);
+    // The riders sit on the enemy's -x side: they keep to that flank.
+    assert!(plan.side[0] < 0.0, "{plan:?}");
+    assert!(plans[0].is_none() && plans[1].is_none());
+    // Once that foot breaks, the riders ride down its fugitives instead.
+    battle.formation.regiments[1].morale.broken = true;
+    battle.formation.regiments[1].spec.origin = [3.0, 64.0, 40.0];
+    plan_sweeps(&battle, &mut plans);
+    assert_eq!(plans[2], Some(Sweep::Chase([3.0, 64.0, 40.0])));
+}

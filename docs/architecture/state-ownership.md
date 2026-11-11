@@ -70,20 +70,30 @@ bodies and mount custody, not an in-progress battle. The native projectile
 owner alone moves arrows and resolves hits.
 
 Sword/spear/mace cycles last 21/23/25 ticks, with contact at 10/11/12.
-Unblocked contact attempts remove 1.3% on the authored deterministic roll,
-nine wounded per death; shield parries reduce actual removals. Wounded soldiers
-withdraw via formation membership rather than being killed. Pursuit increases
-fatality; film pacing changes lulls, never swing speed. These are simulation
-choices based on [Sabin](https://gwern.net/doc/history/2000-sabin.pdf), not
-measured historical per-swing probabilities. Volleys use 220 ticks sustained
-and 60 arrows per archer.
+An unparried blow removes about two times in five on the authored
+deterministic roll; seven removals in ten die on the spot and the rest
+withdraw wounded through the ranks. Any landed blow finishes a wounded man, and
+pursuit removes nearly every landed blow, nine in ten fatally. Front ranks
+surge in section pulses whose fatigue follows the share of the front pulsing;
+outside a pulse a front-rank man still trades blows at the cautious rate with
+an enemy already in weapon reach. Riders and pursuers fight from any rank, and
+fugitives pinned against the battle bounds turn at bay. A regiment worn near
+its pulse floor while in contact erodes until it breaks; one whose enemy broke
+steadies. Film pacing changes lulls, never swing speed. These are simulation
+choices based on
+[Sabin](https://gwern.net/doc/history/2000-sabin.pdf), not measured historical
+per-swing probabilities. Volleys use 220 ticks sustained and 60 arrows per
+archer; about one arrow in seventy finds an armour gap and kills, the rest are
+one-HP hurts.
 Each regiment has an absolute staggered phase, including after wavering/rejoin;
 the soldiers within that regiment still draw and release together. The staged
 battle uses sustained cadence; there is no unused opening-burst control.
-Horses refuse steady frontal ranks and run out to a flank; accepted charge
-bonus decays over 260 ticks. The work counters bound visits, target checks,
-reaction checks, strikes, arc iterations and charge decisions; they are not a
-20-TPS performance measurement.
+Horses refuse steady frontal foot ranks and run out to a flank; accepted charge
+bonus decays over 260 ticks. Once their own foot closes, unengaged riders swing
+round the nearest enemy foot regiment into its rear, and ride down the
+fugitives of the nearest broken foot regiment. The work counters bound visits,
+target checks, reaction checks, strikes, arc iterations and charge decisions;
+they are not a 20-TPS performance measurement.
 
 Large projectile batches (at least 16 shots) derive a reusable, counting-sorted
 two-block XZ grid from the frozen native body snapshot. Conservative half-extent
