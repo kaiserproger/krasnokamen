@@ -283,6 +283,37 @@ fn parity_death_announced_to_other_players() {
 }
 
 #[test]
+fn parity_special_mob_melee_death_names_the_mob_for_the_two_argument_template() {
+    let (mut state, player, pos) = flat_player_fixture();
+    let mob = state.spawn_mob(
+        state.registry.zombie_type_id,
+        [pos[0] + 1.0, pos[1], pos[2]],
+        100.0,
+    );
+    // The source `special_mobs::damage` submits for warden/guardian-style attacks.
+    let source = DamageSource::Projectile {
+        projectile: mob,
+        direct_type_id: state.registry.zombie_type_id,
+        owner: mob,
+        velocity: [0.0; 2],
+        punch: 0,
+        flame: false,
+    };
+    state.outbox.clear();
+    hit(&mut state, player, DamageKind::Melee, Some(source));
+    state.commit_merge_effects();
+    let message = state.outbox[&ConnectionId(1)]
+        .iter()
+        .find_map(|change| match change {
+            PlayerChange::Died { message } => Some(format!("{message:?}")),
+            _ => None,
+        })
+        .expect("the player died");
+    assert!(message.contains("death.attack.mob"), "{message}");
+    assert!(message.contains("entity.minecraft.zombie"), "{message}");
+}
+
+#[test]
 fn parity_shield_blocks_front_explosion() {
     let (mut state, player, pos) = flat_player_fixture();
     state.difficulty = Difficulty::Normal;

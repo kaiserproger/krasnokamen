@@ -11,7 +11,17 @@ pub(super) fn component(
     kind: DamageKind,
     source: Option<DamageSource>,
 ) -> Tag {
-    let attacker = crate::statistics::attacker(source);
+    // `special_mobs::damage` submits mob attacks as a projectile the mob owns
+    // itself, which `statistics::attacker` treats as no attacker. The death
+    // message still names that mob; without it "death.attack.mob" reaches the
+    // client with one argument for a two-argument template and the client
+    // drops the session.
+    let attacker = crate::statistics::attacker(source).or(match source {
+        Some(DamageSource::Projectile {
+            projectile, owner, ..
+        }) if projectile == owner => Some(owner),
+        _ => None,
+    });
     let type_name = kind.type_name(
         source,
         attacker.is_some_and(|id| state.players.contains_key(&id)),
