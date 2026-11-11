@@ -435,6 +435,17 @@ SCENARIOS: dict[str, Scenario] = {
         proves="Loader connection, core-owned C binding opens the native settlement dialog, and native settlement create/list/info",
         limits="minimal native settlement smoke, not plugin production/war coverage; visual review required",
     ),
+    "loader-fabric-screen-admission": _entry(
+        id="loader-fabric-screen-admission",
+        summary="Release server starts the solaris:screen service for a real Fabric Loader session",
+        owner="core:harness", evidence="graphical", profile="loader-live",
+        scenario_id="loader-fabric-screen-admission",
+        requires=("sibling:solaris-loader", "client-token", "xvfb"),
+        sources=("tools/harness/loader.py", "tools/harness/loader_screen_admission.py"),
+        fixture="explicit --server-bin and --plugins-dir; real Solaris Loader Fabric client joins; assertion reads the server log",
+        proves="the server log records 'screen service started for admitted loader session' with platform=Fabric for the joined session",
+        limits="admission of the screen service only; no H264 frame flow or viewer-side rendering is asserted",
+    ),
     "native-composter-chance": _entry(
         id="native-composter-chance",
         summary="Graphical hopper-fed wheat seed compost probability",
