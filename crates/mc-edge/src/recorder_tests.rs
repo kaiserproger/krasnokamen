@@ -187,6 +187,14 @@ fn recorder_mode_is_loopback_only_unless_allow_remote() {
         false
     ));
     assert!(!local.grants("Camera", remote, false));
+    // A dual-stack `::` listener sees an IPv4 loopback client as mapped.
+    let mapped = |ip: [u8; 4]| {
+        Some(std::net::IpAddr::V6(
+            std::net::Ipv4Addr::from(ip).to_ipv6_mapped(),
+        ))
+    };
+    assert!(local.grants("Camera", mapped([127, 0, 0, 1]), false));
+    assert!(!local.grants("Camera", mapped([203, 0, 113, 7]), false));
     assert!(!local.grants("Camera", loopback, true));
     assert!(!local.grants("Camera", None, false));
     assert!(!local.grants("Alex", loopback, false));

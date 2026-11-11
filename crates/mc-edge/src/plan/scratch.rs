@@ -5,6 +5,9 @@ use super::*;
 pub(super) struct PlanScratch {
     pub visible: Vec<EntityId>,
     pub spawns: Vec<(EntityId, f64)>,
+    /// Visible entities the client does not hold yet, counted even when no
+    /// spawn credit is left and `spawns` stays empty.
+    pub pending_spawns: usize,
     pub bosses: Vec<EntityId>,
     pub removed: Vec<i32>,
     pub tracking_ranges: HashSet<i32>,

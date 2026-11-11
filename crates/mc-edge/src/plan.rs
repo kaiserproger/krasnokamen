@@ -462,8 +462,8 @@ pub struct ViewerState {
     /// A recorder connection ([`crate::recorder`]): every entity type is
     /// tracked to the full view distance and each publish is marked.
     pub recorder: bool,
-    /// Entity spawns and updates the last plan left without world credit
-    /// ([`crate::recorder::RecorderTick`]); reset before every publish.
+    /// Entity removals, spawns and updates the last plan left without world
+    /// credit ([`crate::recorder::RecorderTick`]); reset before every publish.
     pub deferred_updates: usize,
     /// Entity plans so far: the clock of [`TrackedEntity::updated`].
     entity_round: u64,
@@ -1551,11 +1551,13 @@ fn plan_entities(
         .boss_baseline
         .sync_raids(conn, viewer.position, &snapshot.raid_bars, out);
 
+    let mut removals_deferred = scratch.removed.len();
     if !scratch.removed.is_empty() && !credit.spent() {
         let packet = RemoveEntities {
             entity_ids: std::mem::take(&mut scratch.removed),
         };
         if try_push(out, credit, |out| push_best_effort(out, conn, &packet)) {
+            removals_deferred = 0;
             for &id in &packet.entity_ids {
                 let id = EntityId(id);
                 viewer.tracked_entities.remove(&id);
@@ -1595,7 +1597,7 @@ fn plan_entities(
 
     // Spawns, nearest first, as many as the credit carries.
     let nearest = |a: &(EntityId, f64), b: &(EntityId, f64)| a.1.total_cmp(&b.1);
-    let spawn_candidates = scratch.spawns.len();
+    let spawn_candidates = scratch.pending_spawns;
     let mut spawns_sent = 0;
     if credit.spent() {
         scratch.spawns.clear();
@@ -1735,7 +1737,8 @@ fn plan_entities(
         interest.completed(entity, tracked, snapshot.tick, update.due);
         updates_sent += 1;
     }
-    viewer.deferred_updates = (spawn_candidates - spawns_sent) + (pending_updates - updates_sent);
+    viewer.deferred_updates =
+        removals_deferred + (spawn_candidates - spawns_sent) + (pending_updates - updates_sent);
     viewer.entity_interest = interest;
 }
 
