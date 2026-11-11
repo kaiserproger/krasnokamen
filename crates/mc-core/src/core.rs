@@ -343,6 +343,8 @@ struct CoreInner {
     registry: Arc<CoreRegistry>,
     /// The registry the tick runs on now: a datapack reload replaces it.
     live_registry: Arc<std::sync::RwLock<Arc<CoreRegistry>>>,
+    /// `send_command_feedback`, published by the tick for the edge's own replies.
+    command_feedback: Arc<std::sync::atomic::AtomicBool>,
     plugin_commands: Arc<[(String, u8)]>,
     plugin_packages: Vec<mc_script::PluginPackage>,
     plugin_stats: Arc<crate::plugin::PluginStats>,
@@ -703,6 +705,9 @@ impl Core {
         tick_state.datapacks.install(datapacks, datapack_root, base);
         let live_registry = Arc::new(std::sync::RwLock::new(Arc::clone(&registry)));
         tick_state.published_registry = Some(Arc::clone(&live_registry));
+        let command_feedback = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        tick_state.published_command_feedback = Some(Arc::clone(&command_feedback));
+        crate::command_rules::publish_command_feedback(&tick_state);
         let world_spawn = tick_state.world.world_spawn();
         let terrain_epoch = crate::terrain::epoch_for_open(&tick_state)?;
         // Fresh epoch (minted when the stored record had none): stage it in
@@ -909,6 +914,7 @@ impl Core {
                 world_spawn,
                 registry,
                 live_registry,
+                command_feedback,
                 plugin_commands,
                 plugin_packages,
                 plugin_stats,
@@ -942,6 +948,14 @@ impl Core {
                 .read()
                 .unwrap_or_else(std::sync::PoisonError::into_inner),
         )
+    }
+
+    /// Whether player command success replies are shown (`send_command_feedback`).
+    #[must_use]
+    pub fn command_feedback_enabled(&self) -> bool {
+        self.inner
+            .command_feedback
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Manifest-owned command roots and required permission (0 player, 2 operator).

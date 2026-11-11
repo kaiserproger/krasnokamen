@@ -356,6 +356,9 @@ pub struct TickState {
     /// Where the core publishes the registry the tick runs on, so the edge
     /// sees a datapack reload even when no one was online to be told.
     pub(crate) published_registry: Option<Arc<std::sync::RwLock<Arc<CoreRegistry>>>>,
+    /// Where the core publishes `send_command_feedback`, so the edge's own command
+    /// replies (`/list`) obey the rule without reading tick state.
+    pub(crate) published_command_feedback: Option<Arc<std::sync::atomic::AtomicBool>>,
     pub(crate) datapacks: crate::datapacks::Runtime,
     pub(crate) command_context: crate::command_context::Runtime,
     pub(crate) debug_profiler: crate::DebugProfiler,
@@ -658,6 +661,7 @@ impl TickState {
             active_sim_radius: -1,
             registry,
             published_registry: None,
+            published_command_feedback: None,
             world,
             dimension: crate::dimensions::Dimension::Overworld,
             other_dimensions: Default::default(),

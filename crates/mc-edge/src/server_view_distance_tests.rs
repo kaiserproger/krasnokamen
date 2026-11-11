@@ -413,6 +413,56 @@ async fn edge_sent_feedback_follows_the_clients_chat_setting() {
     server.hub.shutdown();
 }
 
+/// `/list` is answered by the connection layer, but its success reply obeys
+/// `send_command_feedback` like every other command's (vanilla `sendSuccess`).
+#[tokio::test]
+async fn list_obeys_the_send_command_feedback_rule() {
+    use mc_core::boundary::ChatVisibility as Setting;
+    let root = tempfile::tempdir().unwrap();
+    let server = server(root.path());
+    let id = server.connections.joining_id();
+    server
+        .connections
+        .stash_join(id, (EntityId(1), [8.0, 64.0, 8.0], 0, Default::default()));
+    wait_for_join(&server, id, "Lister", 4, "en_us", Setting::Full)
+        .await
+        .unwrap();
+    let (reliable_tx, mut reliable_rx) = mpsc::channel(16);
+    let (world_tx, _world_rx) = mpsc::channel(16);
+    server
+        .connections
+        .register(
+            id,
+            ConnectionHandles {
+                reliable_tx,
+                world_tx,
+            },
+        )
+        .unwrap();
+    for (rule, lines) in [("false", 0), ("true", 1)] {
+        let (command, completed) = mc_core::command_console::ConsoleCommand::new(format!(
+            "gamerule send_command_feedback {rule}"
+        ));
+        assert!(
+            server
+                .hub
+                .submit(mc_core::boundary::PlayerInput::ConsoleCommand(command))
+        );
+        completed.await.unwrap();
+        drain(&mut reliable_rx);
+        for command in ["list", "list uuids"] {
+            assert!(server.handle_admin_command(id, command).await.unwrap());
+            let shown = drain(&mut reliable_rx)
+                .iter()
+                .filter(|frame| frame.id == ClientboundSystemChat::ID)
+                .count();
+            assert_eq!(shown, lines, "{command} with send_command_feedback {rule}");
+        }
+    }
+    server.connections.remove(id);
+    server.hub.shutdown();
+}
+
 #[test]
 fn the_wire_chat_setting_maps_to_the_core_setting() {
     use mc_core::boundary::ChatVisibility as Setting;

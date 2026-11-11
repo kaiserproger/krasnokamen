@@ -826,6 +826,7 @@ pub(crate) fn execute(
             {
                 state.gamerules.insert(name.clone(), value.clone());
                 state.gamerules_dirty = true;
+                crate::command_rules::publish_command_feedback(state);
             }
             let value = state
                 .gamerules

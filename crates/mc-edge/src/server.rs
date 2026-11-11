@@ -500,6 +500,15 @@ impl EdgeServer {
         Ok(())
     }
 
+    /// A command's success reply: shown to the console always, to a player only
+    /// while `send_command_feedback` is on (vanilla `sendSuccess`/`acceptsSuccess`).
+    fn success_feedback(&self, id: ConnectionId, text: &str) -> anyhow::Result<()> {
+        if id != mc_core::command_console::CONNECTION && !self.hub.command_feedback_enabled() {
+            return Ok(());
+        }
+        self.feedback(id, text)
+    }
+
     fn feedback(&self, id: ConnectionId, text: &str) -> anyhow::Result<()> {
         if id == mc_core::command_console::CONNECTION {
             self.console_state.feedback(text);
@@ -832,7 +841,7 @@ impl EdgeServer {
                 self.feedback(id, "Incorrect argument for command")?;
             } else {
                 let names = self.admin.roster(option.is_some());
-                self.feedback(
+                self.success_feedback(
                     id,
                     &format!(
                         "There are {} of a max of {} players online: {}",
