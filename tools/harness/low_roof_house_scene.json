@@ -1,0 +1,102 @@
+{
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "tp": [
+        1000.5,
+        205,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 100
+    },
+    {
+      "cmd": "fill 996 199 996 1004 199 1004 minecraft:stone"
+    },
+    {
+      "cmd": "fill 996 200 996 1004 207 1004 minecraft:air"
+    },
+    {
+      "cmd": "fill 998 200 998 1002 200 1002 minecraft:oak_planks"
+    },
+    {
+      "cmd": "fill 998 203 998 1002 203 1002 minecraft:oak_planks"
+    },
+    {
+      "cmd": "fill 998 201 998 1002 202 998 minecraft:cobblestone"
+    },
+    {
+      "cmd": "fill 998 201 1002 1002 202 1002 minecraft:cobblestone"
+    },
+    {
+      "cmd": "fill 998 201 998 998 202 1002 minecraft:cobblestone"
+    },
+    {
+      "cmd": "fill 1002 201 998 1002 202 1002 minecraft:cobblestone"
+    },
+    {
+      "cmd": "setblock 1002 201 1000 minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]"
+    },
+    {
+      "cmd": "setblock 1002 202 1000 minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]"
+    },
+    {
+      "cmd": "setblock 999 201 999 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+    },
+    {
+      "cmd": "setblock 1000 201 999 minecraft:red_bed[facing=east,part=head,occupied=false]"
+    },
+    {
+      "tp": [
+        1004.5,
+        201,
+        1000.5,
+        90,
+        0
+      ]
+    },
+    {
+      "cmd": "settlement create LowRoof 32"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "cmd": "execute if block 1000 203 999 minecraft:oak_planks if block 999 203 999 minecraft:oak_planks if block 1000 202 999 minecraft:air if block 999 202 999 minecraft:air run say low_roof_ceiling_ok"
+    },
+    {
+      "cmd": "execute if block 1000 201 999 minecraft:red_bed[facing=east,part=head] if block 999 201 999 minecraft:red_bed[facing=east,part=foot] run say low_roof_bed_ok"
+    },
+    {
+      "cmd": "settlement building certify house 998 200 998 1002 203 1002"
+    },
+    {
+      "cmd": "say low_roof_fence"
+    },
+    {
+      "wait_chat": "low_roof_fence"
+    },
+    {
+      "assert_chat": {
+        "name": "house-certification",
+        "contains": [
+          "Certified house",
+          "low_roof_ceiling_ok",
+          "low_roof_bed_ok"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "shot": "low-roof-house"
+    }
+  ]
+}

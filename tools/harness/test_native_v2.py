@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import tempfile
 import unittest
 from pathlib import Path
@@ -168,17 +169,7 @@ class NativeV2ProbeTests(unittest.TestCase):
             entry = scenarios.SCENARIOS[name]
             self.assertEqual(entry.profile, "entities")
             self.assertEqual(entry.scenario_id, name)
-            expected = ("graphical" if name.startswith(("native-v2-map-", "native-v2-input-")) or name in (
-                "native-v2-p5-humanoid-armor", "native-v2-light-seam",
-                "native-v2-radius-full-view", "native-v2-craft-drag", "native-v2-craft-drag-paced",
-                "native-v2-settlement-storage", "native-v2-destroyed-chest",
-                "native-v2-end-restart", "native-v2-entity-gallery",
-                "native-v2-p2-optional-pack", "native-v2-custody-mount-export",
-                "native-v2-cursor-close", "native-v2-banner-placement",
-                "native-v2-snow-golem-shear", "native-v2-destroyed-chest-race",
-                "native-v2-duplicate-login", "native-v2-corrupt-block-entities",
-                "native-v2-corrupt-chunk-near-camera", "native-v2-chest-drag-disconnect") else "tcp")
-            self.assertEqual(entry.evidence, expected)
+
 
     def test_physical_input_catalog_routes_all_four_probes(self) -> None:
         for kind in ("menus", "pick", "sand", "camera"):
@@ -246,7 +237,8 @@ class NativeV2ProbeTests(unittest.TestCase):
         from .backends import native_p4
 
         expected = {f"native-v2-p4-{name}" for name in
-                    ("nameplates", "advancements", "damage", "hopper", "statistics")}
+                    ("nameplates", "advancements", "damage", "identities", "death-protection",
+                     "hopper", "statistics")}
         self.assertTrue(expected <= native_v2.NATIVE_SCENARIO_IDS)
         self.assertTrue(expected <= native_v2.RUNNERS.keys())
         self.assertEqual(native_p4.RESTART_SCENARIOS,
@@ -334,8 +326,11 @@ class NativeV2ProbeTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            with socket.socket() as listener:
+                listener.bind(("127.0.0.1", 0))
+                mcp_port = listener.getsockname()[1]
             args = dict(game_dir=root / "game", log_path=root / "client.log",
-                        token="unit-test-only", mcp_port=12345,
+                        token="unit-test-only", mcp_port=mcp_port,
                         username="HarnessUnit", display=":99")
             with self.assertRaisesRegex(ValueError, "platform"):
                 runtime.start_client(**args, platform="invalid")

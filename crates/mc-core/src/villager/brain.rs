@@ -938,19 +938,29 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             state.entities.set_half_width(slot, width);
             state.entities.body_mut(slot).height = height;
             let cell = at(pos);
-            for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-                if let Some(p) = standing(
-                    &state.world,
-                    &state.registry,
-                    BlockPos {
-                        x: cell.x + dx,
-                        y: cell.y,
-                        z: cell.z + dz,
-                    },
-                    width,
-                    height,
-                ) {
-                    state.entities.set_pos(slot, p);
+            // A sleeping body rests at bed.y + 0.6875, which `at` rounds up to
+            // bed.y + 1; the stand-up cells beside the bed sit at bed level, so
+            // search one block down first, then the rounded cell itself.
+            for dy in [-1, 0] {
+                let mut placed = false;
+                for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    if let Some(p) = standing(
+                        &state.world,
+                        &state.registry,
+                        BlockPos {
+                            x: cell.x + dx,
+                            y: cell.y + dy,
+                            z: cell.z + dz,
+                        },
+                        width,
+                        height,
+                    ) {
+                        state.entities.set_pos(slot, p);
+                        placed = true;
+                        break;
+                    }
+                }
+                if placed {
                     break;
                 }
             }
@@ -1145,7 +1155,11 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 // A one-cell arrival tolerance can leave a builder inside the
                 // future footprint despite its selected perimeter goal.
                 exact_target = worker_exact;
+                // Nothing to work on yet (e.g. just woken, or between tree
+                // sweeps): walk to the job site like any vanilla worker in its
+                // work period instead of standing wherever the villager is.
                 worker_target
+                    .or(job_site.filter(|job| distance(pos, centre(*job)) > JOB_SITE_REACH_SQUARED))
             } else {
                 match v.activity {
                     Activity::Work

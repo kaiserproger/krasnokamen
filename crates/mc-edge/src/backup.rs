@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{Read, Seek, Write};
 use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -179,6 +179,10 @@ fn require_empty(path: &Path) -> Result<()> {
 
 fn digest_file(path: &Path) -> Result<String> {
     let mut source = File::open(path).with_context(|| format!("reading {}", path.display()))?;
+    digest_reader(&mut source)
+}
+
+fn digest_reader(source: &mut impl Read) -> Result<String> {
     let mut hasher = Sha256::new();
     let mut buffer = [0; 65536];
     loop {
@@ -194,10 +198,13 @@ fn digest_file(path: &Path) -> Result<String> {
 /// Copy without replacing any existing file. Hash the bytes actually copied,
 /// not a separately opened view of a potentially different source file.
 fn copy_file_durable(source: &Path, destination: &Path) -> Result<String> {
+    copy_reader_durable(&mut File::open(source)?, destination)
+}
+
+fn copy_reader_durable(input: &mut impl Read, destination: &Path) -> Result<String> {
     if let Some(parent) = destination.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let mut input = File::open(source)?;
     let mut output = File::options()
         .write(true)
         .create_new(true)
@@ -232,15 +239,21 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<()> {
     if !files.contains_key(NATIVE_DATABASE) {
         bail!("backup requires a native-v2 world with {NATIVE_DATABASE}");
     }
-    let _database_lease = ExclusiveLease::acquire(&world.join(NATIVE_DATABASE))?;
+    let mut database_lease = ExclusiveLease::acquire(&world.join(NATIVE_DATABASE))?;
     require_empty(&out)?;
     std::fs::create_dir_all(&out)?;
     let _output_lease = ExclusiveLease::acquire(&out)?;
     require_empty(&out)?;
     let mut manifest = BackupManifest::current();
     for (name, source) in files {
-        let digest = copy_file_durable(&source, &out.join(&name))
-            .with_context(|| format!("backing up {name}"))?;
+        // Windows byte-range locks also deny reads through a second handle in
+        // this process. Read the database through the handle holding its lease.
+        let digest = if name == NATIVE_DATABASE {
+            copy_reader_durable(&mut database_lease.0, &out.join(&name))
+        } else {
+            copy_file_durable(&source, &out.join(&name))
+        }
+        .with_context(|| format!("backing up {name}"))?;
         manifest.files.insert(name, digest);
     }
     write_manifest(&out, &manifest)?;
@@ -369,7 +382,7 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
     if !files.keys().eq(manifest.files.keys()) {
         bail!("backup files do not match manifest; restore refused");
     }
-    let _database_lease = ExclusiveLease::acquire(&from.join(NATIVE_DATABASE))?;
+    let mut database_lease = ExclusiveLease::acquire(&from.join(NATIVE_DATABASE))?;
     // Lease an existing target before inspecting it; a live core must fail on
     // its actual lock even when it has not yet published any files.
     let target_lease = if target.try_exists()? {
@@ -379,7 +392,11 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
     };
     require_empty(&target)?;
     for (name, source) in &files {
-        let actual = digest_file(source)?;
+        let actual = if name == NATIVE_DATABASE {
+            digest_reader(&mut database_lease.0)?
+        } else {
+            digest_file(source)?
+        };
         let expected = &manifest.files[name];
         if &actual != expected {
             bail!(
@@ -393,9 +410,14 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
         None => ExclusiveLease::acquire(&target)?,
     };
     require_empty(&target)?;
+    database_lease.0.rewind()?;
     for (name, source) in &files {
-        let actual = copy_file_durable(source, &target.join(name))
-            .with_context(|| format!("restoring {name}"))?;
+        let actual = if name == NATIVE_DATABASE {
+            copy_reader_durable(&mut database_lease.0, &target.join(name))
+        } else {
+            copy_file_durable(source, &target.join(name))
+        }
+        .with_context(|| format!("restoring {name}"))?;
         if actual != manifest.files[name] {
             bail!("backup file {name} changed while restoring; restore is incomplete");
         }
