@@ -741,7 +741,21 @@ def _promotion_custody(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     run(steps, origin, steps.report["id"])
 
 
+def _player_input(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from . import native_player_input
+
+    if not getattr(steps.client, "p4_window", None):
+        raise RuntimeError("player-input probes require the owned native window")
+    kind = steps.report["id"].removeprefix("native-v2-input-")
+    {"menus": native_player_input.menus, "camera": native_player_input.camera,
+     "pick": native_player_input.pick, "sand": native_player_input.sand}[kind](steps, origin)
+
+
 RUNNERS = {
+    "native-v2-input-menus": _player_input,
+    "native-v2-input-camera": _player_input,
+    "native-v2-input-pick": _player_input,
+    "native-v2-input-sand": _player_input,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,

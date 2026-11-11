@@ -168,7 +168,7 @@ class NativeV2ProbeTests(unittest.TestCase):
             entry = scenarios.SCENARIOS[name]
             self.assertEqual(entry.profile, "entities")
             self.assertEqual(entry.scenario_id, name)
-            expected = ("graphical" if name.startswith("native-v2-map-") or name in (
+            expected = ("graphical" if name.startswith(("native-v2-map-", "native-v2-input-")) or name in (
                 "native-v2-p5-humanoid-armor", "native-v2-light-seam",
                 "native-v2-radius-full-view", "native-v2-craft-drag", "native-v2-craft-drag-paced",
                 "native-v2-settlement-storage", "native-v2-destroyed-chest",
@@ -179,6 +179,41 @@ class NativeV2ProbeTests(unittest.TestCase):
                 "native-v2-duplicate-login", "native-v2-corrupt-block-entities",
                 "native-v2-corrupt-chunk-near-camera", "native-v2-chest-drag-disconnect") else "tcp")
             self.assertEqual(entry.evidence, expected)
+
+    def test_physical_input_catalog_routes_all_four_probes(self) -> None:
+        for kind in ("menus", "pick", "sand", "camera"):
+            name = f"native-v2-input-{kind}"
+            with self.subTest(name=name):
+                self.assertIn(name, native_v2.NATIVE_SCENARIO_IDS)
+                self.assertIs(native_v2.RUNNERS[name], native_v2._player_input)
+                self.assertEqual(scenarios.SCENARIOS[name].evidence, "graphical")
+
+    def test_physical_click_queues_both_edges_before_x_server_sync(self) -> None:
+        from .backends import native_player_input
+        steps = mock.Mock(report={})
+        steps.observe.return_value = {"client_tick": 10}
+        with mock.patch.object(native_player_input, "Pointer") as pointer_type:
+            pointer = pointer_type.return_value
+            pointer.xt.XTestFakeButtonEvent.return_value = 1
+            native_player_input._input(steps, button=2)
+        self.assertEqual(pointer.mock_calls, [
+            mock.call.xt.XTestFakeButtonEvent(pointer.display, 2, 1, 0),
+            mock.call.xt.XTestFakeButtonEvent(pointer.display, 2, 0, 0),
+            mock.call.x.XSync(pointer.display, 0),
+            mock.call.close(),
+        ])
+        self.assertEqual(pointer.down, None)
+
+    def test_input_fixture_uses_hotbar_only_debug_slots_and_removes_filler(self) -> None:
+        from .backends import native_player_input
+        steps = mock.Mock()
+        native_player_input._seed_main(steps, "minecraft:emerald", 3, 10)
+        self.assertEqual(steps.fixture.call_args_list, [
+            *(mock.call(f"debug give minecraft:stone 64 {i}") for i in range(9)),
+            mock.call("give @s minecraft:stone 64"),
+            mock.call("give @s minecraft:emerald 3"),
+            mock.call("clear @s minecraft:stone"),
+        ])
 
     def test_p1_catalog_covers_all_five_surfaces(self) -> None:
         expected = {f"native-v2-p1-{name}" for name in ("armor-stand", "signs", "piglin", "trader", "leaves")}

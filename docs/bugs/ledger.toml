@@ -1255,8 +1255,8 @@ area = "client"
 repro = "source"
 severity = "major"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P1"
-regression = []
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P1; fixed in client branch wt/LedgerInputB03Client (13f1f28b), gate run with that client; the frozen-world falling hold is a core fix on wt/LedgerInputB03"
+regression = ["cargo:mc-core:command_world::tests::frozen_world_holds_a_setblock_falling_block_until_stepped", "harness:entities:native-v2-input-sand"]
 
 [[bug]]
 id = "HC-1"
@@ -1276,7 +1276,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-2"
-regression = []
+regression = ["harness:entities:native-v2-input-menus"]
 
 [[bug]]
 id = "HC-3"
@@ -1286,7 +1286,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-3"
-regression = []
+regression = ["harness:entities:native-v2-input-pick"]
 
 [[bug]]
 id = "P2"
@@ -1316,7 +1316,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PICK-SERVER"
-regression = []
+regression = ["cargo:mc-core:tick::input::inventory::pick_item_tests::survival_pick_moves_an_existing_stack_into_the_hotbar_without_creating_items", "cargo:mc-core:tick::input::inventory::pick_item_tests::survival_pick_without_a_match_changes_nothing", "cargo:mc-core:tick::input::inventory::pick_item_tests::creative_pick_adds_one_item_and_keeps_the_displaced_stack", "cargo:mc-core:tick::input::inventory::pick_item_tests::creative_entity_pick_gives_the_spawn_egg_and_survival_does_not", "harness:entities:native-v2-input-pick"]
+fix_commit = "fe46150b"
 
 [[bug]]
 id = "QA5-CREATIVE"
@@ -1325,8 +1326,8 @@ area = "client"
 repro = "source"
 severity = "major"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-CREATIVE"
-regression = []
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-CREATIVE; fixed in client branch wt/LedgerInputB03Client (13f1f28b), gate run with that client"
+regression = ["harness:entities:native-v2-input-menus"]
 
 [[bug]]
 id = "QA5-SETBLOCK-SAND"
@@ -1335,8 +1336,8 @@ area = "client"
 repro = "source"
 severity = "major"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-SETBLOCK-SAND"
-regression = []
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-SETBLOCK-SAND; fixed in client branch wt/LedgerInputB03Client (13f1f28b), gate run with that client; the frozen-world falling hold is a core fix on wt/LedgerInputB03"
+regression = ["cargo:mc-core:command_world::tests::frozen_world_holds_a_setblock_falling_block_until_stepped", "harness:entities:native-v2-input-sand"]
 
 [[bug]]
 id = "QA5-FAST-CLICK"
@@ -1346,7 +1347,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-FAST-CLICK"
-regression = []
+regression = ["harness:entities:native-v2-input-menus"]
 
 [[bug]]
 id = "QA5-STARTUP-GREY"
@@ -1610,7 +1611,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#NATIVE-FREEZE-CAMERA"
-regression = []
+regression = ["harness:entities:native-v2-input-camera", "harness:admin-commands:all"]
 
 [[bug]]
 id = "SUMMON-AGE"
@@ -2735,7 +2736,7 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-F1"
-regression = []
+regression = ["harness:entities:native-v2-input-camera"]
 
 [[bug]]
 id = "TEST-DIMENSION-BIOME"

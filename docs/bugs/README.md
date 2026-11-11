@@ -291,6 +291,23 @@ The `entities` profile includes windowed native-client probes:
   toggle, inventory clone tracking, pumpkin hiding, terrain shading and Nether
   terrain repros. Read-only receipts reconstruct the graphical viewer's exact
   map packets; screenshots still require review, especially marker visibility.
+- `native-v2-input-menus`: physical number/F/Q/Ctrl-Q keys and sub-tick pointer
+  edges in survival and creative inventory. Server snapshots check the source,
+  reopened destination and survival carried stack. Creative cursors are local:
+  captures must show the held stack, then its exact count must survive placement
+  and reopening.
+- `native-v2-input-pick`: physical middle-click and gameplay F in both modes;
+  block/entity picking must not create free items in survival.
+- `native-v2-input-camera`: frozen-world teleport and F1 hide/restore, checking
+  captured camera and HUD pixels while the local client loop continues.
+  `admin-commands` checks frozen/stepped server game time, not a stopped client
+  clock: native input and rendering must keep running while the world is frozen.
+- `native-v2-input-sand`: `/setblock` airborne sand becomes a rendered entity
+  that a frozen world holds until `/tick step` moves it one tick per step (the
+  server must not keep dropping it), predicts gravity between received position
+  updates, then lands and clears its source. Received, predicted and presented
+  positions are distinct observations; only the captured frame and its reviewed
+  pixels prove drawing.
 - Axolotl play-dead and potion custom-impact probes are unregistered prototypes;
   they cannot be run from the harness, and `AXOLOTL-PLAY-DEAD` and
   `POTION-CUSTOM-PAYLOAD` stay open.
