@@ -159,6 +159,7 @@ impl EntityInterest {
                 .visible
                 .extend(self.order.iter().map(|key| EntityId(key.2)));
             scratch.spawns.clear();
+            scratch.pending_spawns = self.spawns.len();
             if credit > 0 {
                 self.order.clear();
                 self.order

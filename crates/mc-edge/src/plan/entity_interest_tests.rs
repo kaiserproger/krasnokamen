@@ -375,6 +375,39 @@ fn spawns_left_without_credit_count_as_deferred() {
     assert_eq!((sent, viewer.deferred_updates), (1, 0));
 }
 
+/// With no credit at all, the spawn the plan holds back and the removal it
+/// cannot send still count as deferred, on a rebuilt interest window and on
+/// an incremental one; both clear once credit returns.
+#[test]
+fn zero_credit_counts_held_back_spawns_and_removals() {
+    let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
+    viewer.loaded_chunks.insert((0, 0), 0);
+    // Tracked by the client, gone from the snapshot: a pending removal.
+    viewer.tracked_entities.insert(
+        EntityId(20),
+        TrackedEntity::new(&entity(20, [10.0, 64.0, 8.0]), 0, 0),
+    );
+    let out = output(
+        vec![],
+        vec![entity(10, [9.0, 64.0, 8.0])],
+        ChangeSet::default(),
+    );
+    for window in ["rebuilt", "incremental"] {
+        assert!(
+            plan_entities_for(&out, &mut viewer, 0).is_empty(),
+            "{window}"
+        );
+        assert_eq!(
+            viewer.deferred_updates, 2,
+            "{window}: one spawn, one removal"
+        );
+    }
+    let packets = plan_entities_for(&out, &mut viewer, usize::MAX);
+    assert!(packets.iter().any(|packet| packet.id == AddEntity::ID));
+    assert!(packets.iter().any(|packet| packet.id == RemoveEntities::ID));
+    assert_eq!(viewer.deferred_updates, 0);
+}
+
 /// A near unit that moves every publish cannot starve a far one: waiting
 /// raises the far update's priority until it wins a publish, while the
 /// near unit keeps most of the credit.

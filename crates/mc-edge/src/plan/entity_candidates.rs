@@ -5,7 +5,8 @@ use super::*;
 
 /// Collect trackable candidates for one viewer tick.
 ///
-/// Clears and reuses `scratch.visible/spawns/bosses` (no per-row
+/// Clears and reuses `scratch.visible/spawns/bosses` and counts
+/// `pending_spawns`, also without spawn credit (no per-row
 /// allocation). Marks `tracked.seen` for known same-type rows. A tracked
 /// row with a mismatched type stays unmarked but IS a spawn candidate:
 /// the root removes the stale type before spawning. Health policy stays in
@@ -19,6 +20,7 @@ pub(super) fn collect(
 ) {
     scratch.visible.clear();
     scratch.spawns.clear();
+    scratch.pending_spawns = 0;
     scratch.bosses.clear();
     scratch.tracking_ranges.clear();
     if viewer.plan_stamp == u64::MAX {
@@ -62,11 +64,14 @@ pub(super) fn collect(
                     }
                     _ => false,
                 };
-                if want_spawn && entity.id != own && !known_same {
-                    let dist = (entity.position[0] - vx).powi(2)
-                        + (entity.position[1] - vy).powi(2)
-                        + (entity.position[2] - vz).powi(2);
-                    scratch.spawns.push((entity.id, dist));
+                if entity.id != own && !known_same {
+                    scratch.pending_spawns += 1;
+                    if want_spawn {
+                        let dist = (entity.position[0] - vx).powi(2)
+                            + (entity.position[1] - vy).powi(2)
+                            + (entity.position[2] - vz).powi(2);
+                        scratch.spawns.push((entity.id, dist));
+                    }
                 }
                 if entity_type_flags::is_boss(entity.type_id) {
                     scratch.bosses.push(entity.id);

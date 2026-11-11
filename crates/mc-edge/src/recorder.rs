@@ -68,11 +68,13 @@ impl RecorderSection {
 
     /// Whether a connection named `name` from TCP peer `peer` joins in
     /// recorder mode: a listed name, and a direct loopback peer (not
-    /// `proxied`) unless `allow_remote`.
+    /// `proxied`; IPv4-mapped `::ffff:127.0.0.1` from a dual-stack listener
+    /// counts as loopback) unless `allow_remote`.
     #[must_use]
     pub fn grants(&self, name: &str, peer: Option<std::net::IpAddr>, proxied: bool) -> bool {
         self.is_recorder(name)
-            && (self.allow_remote || (!proxied && peer.is_some_and(|ip| ip.is_loopback())))
+            && (self.allow_remote
+                || (!proxied && peer.is_some_and(|ip| ip.to_canonical().is_loopback())))
     }
 }
 
@@ -92,8 +94,8 @@ pub(crate) fn tick_marker_frame(tick: u64, wall_unix_ns: u64) -> bytes::Bytes {
 pub struct RecorderTick {
     /// Recorder connections planned this publish.
     pub connections: usize,
-    /// Entity spawns and updates left without world credit, over all
-    /// recorders; they go out in a later publish.
+    /// Entity removals, spawns and updates left without world credit, over
+    /// all recorders; they go out in a later publish.
     pub deferred_updates_sum: usize,
     /// The largest single recorder's count.
     pub deferred_updates_max: usize,

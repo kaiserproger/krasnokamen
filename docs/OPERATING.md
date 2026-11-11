@@ -893,13 +893,17 @@ last=; while :; do
 done
 ```
 
-Ticks with a recorder connection also carry `recorders`:
+Ticks fanned out with a recorder connection also carry `recorders`:
 `{"connections":n,"deferred_updates_sum":n,"deferred_updates_max":n}`, the
-entity spawns and updates the fanout of that tick left without world-queue
-credit, summed over recorders and the largest single recorder's count. A
-complete recording keeps both at 0. `/telemetry.jsonl` serves a tick only
-after the edge has fanned it out, so a served line never lacks `recorders`
-for a tick that had a recorder.
+entity removals, spawns and updates that the tick's fanout left without
+world-queue credit, summed over recorders, plus the largest single recorder's
+count. They go out on a later tick. Each counted tick of a complete recording
+shows 0 in both fields. `/telemetry.jsonl` serves a tick only after the edge
+has fanned it out. A tick the edge skipped under lag is served without
+`recorders`, which looks the same as having no recorder. The recording's
+`solaris:tick` markers decide: a tick whose marker is missing never reached
+that recorder (skipped, or its queue had no free frame slot), whatever
+`recorders` shows.
 
 A tick missing from the stream was skipped or overwritten, never filled in.
 
