@@ -4,11 +4,31 @@ The operator command is `battle setup <seed> <field-100|field-1k|field-10k>
 [count]`, followed by `battle start`, `battle pause`, `battle status`, or
 `battle reset`. The optional count is per side and must be 1–10,000. Presets
 are compiled in; scenario files are not read by the tick. Run setup on the
-desired flat battlefield: its centre is the command origin (the world spawn
-for console). Formation runtime is in memory; after a restart reset the
-persisted battle before staging it again.
+chosen battlefield, flat or natural relief: its centre is the command origin
+(the world spawn for console). Formation runtime is in memory; after a restart
+reset the persisted battle before staging it again.
+Every foot soldier and horse stands on the collision top of its own footprint
+as soon as its chunk is resident (before its first physics tick); a slot on a
+trunk, a wall, water, a cave opening or a sinkhole (a drop of more than two
+blocks beside the footprint) moves to the nearest dry, clear footprint within 8
+blocks. Trees, logs and leaves are never ground; soldiers stand under canopies.
 `battle start` refuses until all live staged entities occupy loaded,
-entity-simulated chunks; the staging ticket covers the bounded battlefield.
+entity-simulated chunks and every body is grounded (it counts bodies with no
+dry ground within 8 blocks: stage elsewhere); the staging ticket covers the bounded
+battlefield. Its reply ends with the ground census of the standing bodies,
+`ground: bodies=N inside=0 floating=0 wet=0` on a correct staging.
+In battle, soldiers and horses keep the formation's horizontal drive over
+relief: one-block steps are jumped, slopes walked down, and a drive into a
+trunk, a wall of two or more blocks, a step with no room to jump (a canopy
+overhead) or a drop deeper than two blocks turns 45 or 90 degrees (on the
+block grid) toward the obstacle's nearer reachable end. The
+formation's virtual leader never waits for its soldiers, so a body that is
+stuck or falls into a hole anyway does not hold its regiment back. `battle
+status` ends with `grounding=` (bodies still awaiting ground) and the last
+ten-second stall census: `advancing=` live steady soldiers of regiments whose
+leader advanced at least four blocks and are not within six blocks of their
+enemy front, `stalled=` those of them that moved less than one block;
+`engaged=` counts melee regiments within six blocks of their enemy front.
 Battle setup rejects Peaceful: its hostile-mob policy removes even persistent
 husks. Switching to Peaceful during a battle therefore ends its armies; ordinary
 distance-based natural despawn is disabled. Successful setup sets world rules

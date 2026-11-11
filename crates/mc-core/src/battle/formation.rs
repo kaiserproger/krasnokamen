@@ -21,6 +21,8 @@ pub(crate) const EXHAUSTED_STAMINA: f32 = 30.0;
 pub(crate) const PULSE_MORALE_FLOOR: f32 = 30.0;
 const MAX_REGIMENTS: usize = 128;
 const MAX_SOLDIERS: usize = 20_000;
+/// Window of the operator's stall census: ten seconds of advancing.
+pub(crate) const STALL_TICKS: u64 = 200;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Order {
@@ -100,6 +102,8 @@ pub(crate) struct Member {
     pub routing: bool,
     pub wavering: bool,
     pub nerve: f32,
+    /// Position at the start of the current stall window, (x, z).
+    pub anchor: [f64; 2],
 }
 
 #[derive(Debug)]
@@ -133,6 +137,8 @@ pub(crate) struct Regiment {
     pub broke_now: bool,
     pub evacuating: Vec<bool>,
     pub live_members: Vec<usize>,
+    /// Virtual leader at the start of the current stall window, (x, z).
+    pub anchor: [f64; 2],
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -158,6 +164,12 @@ pub(crate) struct FormationRuntime {
     pub tick: u64,
     pub neighbours: super::steering::SeparationGrid,
     pub bounds: Option<([f64; 2], [f64; 2])>,
+    /// Last stall census: live, steady members of regiments whose leader
+    /// advanced at least four blocks in the window and is not in melee reach
+    /// (gap > 6), and those of them that moved less than one block (blocked
+    /// by terrain or crowd).
+    pub advancing: usize,
+    pub stalled: usize,
 }
 
 impl FormationRuntime {
@@ -258,6 +270,7 @@ impl FormationRuntime {
         let ranks = ids.len().div_ceil(files) as u16;
         for (slot, &id) in ids.iter().enumerate() {
             let rank = (slot / files) as u16;
+            let pos = slot_position(&spec, slot);
             self.index.insert(id, self.members.len());
             self.members.push(Member {
                 id,
@@ -265,7 +278,7 @@ impl FormationRuntime {
                 file: slot % files,
                 original_rank: rank,
                 rank,
-                pos: slot_position(&spec, slot),
+                pos,
                 slot: None,
                 alive: true,
                 wounded: false,
@@ -273,6 +286,7 @@ impl FormationRuntime {
                 routing: false,
                 wavering: false,
                 nerve: nerve(id.0, rank, ranks),
+                anchor: [pos[0], pos[2]],
             });
         }
         self.regiments.push(Regiment {
@@ -304,6 +318,7 @@ impl FormationRuntime {
             broke_now: false,
             evacuating: vec![false; files],
             live_members: Vec::with_capacity(ids.len()),
+            anchor: [spec.origin[0], spec.origin[2]],
         });
         Ok(())
     }
@@ -522,6 +537,35 @@ impl FormationRuntime {
             }
             self.update_sections(i);
             self.move_leader(i);
+        }
+        if self.tick % STALL_TICKS == 0 {
+            self.census_stalls();
+        }
+    }
+
+    /// Ten-second stall census for operators and relief takes. O(N) once
+    /// per window; motion never reads it.
+    fn census_stalls(&mut self) {
+        self.advancing = 0;
+        self.stalled = 0;
+        for r in &mut self.regiments {
+            // A line in melee reach stops by design: it is not advancing.
+            let advanced = mth::length2(
+                r.spec.origin[0] - r.anchor[0],
+                r.spec.origin[2] - r.anchor[1],
+            ) >= 4.0
+                && !r.morale.broken
+                && r.gap > 6.0;
+            r.anchor = [r.spec.origin[0], r.spec.origin[2]];
+            for m in &mut self.members[r.start..r.start + r.len] {
+                if advanced && m.alive && !m.wounded && !m.routing {
+                    self.advancing += 1;
+                    self.stalled += usize::from(
+                        mth::length2(m.pos[0] - m.anchor[0], m.pos[2] - m.anchor[1]) < 1.0,
+                    );
+                }
+                m.anchor = [m.pos[0], m.pos[2]];
+            }
         }
     }
 
@@ -780,6 +824,9 @@ impl FormationRuntime {
         let engaged = r.gap <= 6.0;
         let interval = if engaged { r.interval } else { r.spec.frontage };
         let mut target = position(&r.spec, m.file, m.rank, interval);
+        // The leader's height is meaningless on relief; a slot is on the
+        // ground the soldier walks on.
+        target[1] = m.pos[1];
         if m.wounded {
             // Opposite .35-block lanes give .7 passing distance within a
             // one-block file. Dress sideways FIRST; aiming at a far rear slot
@@ -798,6 +845,19 @@ impl FormationRuntime {
             target[2] -= r.spec.facing[1];
         }
         (target, if context.pulsing { 0.10 } else { 0.079 })
+    }
+
+    /// Where terrain detours aim: the formation slot without lanes, pulses or
+    /// wavering, so a body dressing sideways is still steered past a wall;
+    /// routing, wounded and pursuing members aim at their destination.
+    pub fn heading_target(&self, index: usize) -> [f64; 3] {
+        let m = &self.members[index];
+        let r = &self.regiments[m.regiment];
+        if m.routing || m.wounded || (r.spec.order == Order::Pursue && r.enemy_routing) {
+            return self.destination(index).0;
+        }
+        let interval = if r.gap <= 6.0 { r.interval } else { r.spec.frontage };
+        position(&r.spec, m.file, m.rank, interval)
     }
 }
 

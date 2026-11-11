@@ -819,7 +819,7 @@ fn status_counts_a_corpse_as_dead_until_its_body_leaves() {
     };
     let status = execute(&mut state, &mut changes, [0.0; 3], &BattleCommand::Status).unwrap();
     assert!(
-        status.contains(sides) && status.ends_with("dead=1"),
+        status.contains(sides) && status.contains(" dead=1 grounding="),
         "{status}"
     );
     let counts = crate::battle::publication_counts(&mut state).unwrap();
@@ -848,7 +848,7 @@ fn status_counts_a_corpse_as_dead_until_its_body_leaves() {
     assert!(state.entities.slot_of_any(victim).is_none());
     let status = execute(&mut state, &mut changes, [0.0; 3], &BattleCommand::Status).unwrap();
     assert!(
-        status.contains(sides) && status.ends_with("dead=0"),
+        status.contains(sides) && status.contains(" dead=0 grounding="),
         "{status}"
     );
 }
@@ -924,4 +924,38 @@ fn failed_setup_rolls_back_owned_rows_changes_ticket_rules_and_journal() {
             );
         }
     }
+}
+
+#[test]
+fn staged_fighters_and_horses_face_the_enemy_line_at_spawn() {
+    let mut state = fixture();
+    let mut changes = ChangeSet::default();
+    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 42, 100).unwrap();
+    let mut centroid_z = [0.0; 2];
+    let mut counts = [0_usize; 2];
+    for id in &changes.entities_spawned {
+        let slot = state.entities.slot_of(*id).unwrap();
+        let side = usize::from(state.entities.body(slot).faction - 1);
+        centroid_z[side] += state.entities.pos(slot)[2];
+        counts[side] += 1;
+    }
+    let centroid_z = [0, 1].map(|side| centroid_z[side] / counts[side] as f64);
+    let mut horses = 0;
+    for id in &changes.entities_spawned {
+        let slot = state.entities.slot_of(*id).unwrap();
+        let side = usize::from(state.entities.body(slot).faction - 1);
+        let rotation = state.entities.rot(slot);
+        assert_eq!((rotation[1], rotation[2]), (0.0, rotation[0]), "level gaze, head on body");
+        // Vanilla look vector: x = -sin(yaw), z = cos(yaw).
+        let yaw = f64::from(rotation[0]).to_radians();
+        let enemy = (centroid_z[1 - side] - state.entities.pos(slot)[2]).signum();
+        assert!(
+            (-yaw.sin()).abs() < 1e-6 && yaw.cos() * enemy > 0.999,
+            "side {} body faces yaw {} away from the enemy",
+            side + 1,
+            yaw.to_degrees()
+        );
+        horses += usize::from(state.entities.row(slot).entity_life.mount.rider.is_some());
+    }
+    assert_eq!(horses, 20, "horses are checked too");
 }

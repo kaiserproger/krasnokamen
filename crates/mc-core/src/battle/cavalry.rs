@@ -132,9 +132,18 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
                 velocity[0] *= mounted_speed / speed;
                 velocity[2] *= mounted_speed / speed;
             }
-            let velocity = battle
-                .formation
-                .constrain_velocity(frame.entities.pos(horse), velocity);
+            let position = frame.entities.pos(horse);
+            let velocity = battle.formation.constrain_velocity(position, velocity);
+            // A rider in the formation heads for its slot; another keeps its drive.
+            let formation = &battle.formation;
+            let heading = if bi < formation.members.len() {
+                let slot = formation.heading_target(bi);
+                [slot[0] - position[0], slot[2] - position[2]]
+            } else {
+                [velocity[0], velocity[2]]
+            };
+            let velocity =
+                super::steering::around_obstacles(frame, formation, horse, velocity, heading);
             battle.columns.drive[horse_bi] = velocity;
             battle.columns.drive[bi] = [0.0; 3];
             continue;
@@ -197,6 +206,13 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             [toward[0] * speed, 0.0, toward[1] * speed]
         };
         let velocity = battle.formation.constrain_velocity(position, velocity);
+        let velocity = super::steering::around_obstacles(
+            frame,
+            &battle.formation,
+            horse,
+            velocity,
+            [velocity[0], velocity[2]],
+        );
         battle.columns.drive[horse_bi] = velocity;
         battle.columns.drive[bi] = [0.0; 3];
     }

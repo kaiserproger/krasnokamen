@@ -1,11 +1,15 @@
 //! Sparse per-team regiment distance samples plus bounded local steering.
-//! The filmed battlefield is flat: no per-soldier path search is needed.
+//! The battlefield is natural relief: soldiers keep the formation's
+//! horizontal drive, physics jumps one-block steps and gravity takes them down
+//! slopes; a drive into a trunk or a wall of two or more blocks turns aside
+//! ([`super::ground::deflect`]). There is no per-soldier path search.
 //! Nearest front points are shared for ten ticks (AoE4 virtual-leader pattern).
 //! Separation: PSCrowd's five nearest neighbours, capped cell inspection;
 //! impulses use the existing mc-physics contact kernel, never mutate neighbours.
 
 use super::formation::{FormationRuntime, Member, Regiment};
 use super::{BattleState, Frame, Output};
+use crate::entities::EntitySlot;
 use mc_physics::entity_collision_26_1_2::{EntityPushInput, PushRecipient, vanilla_push_impulse};
 use mc_physics::mth;
 use rayon::prelude::*;
@@ -231,13 +235,54 @@ fn movement_with_neighbours(
     drive
 }
 
-fn sample_movement(runtime: &FormationRuntime, index: usize) -> ([f64; 3], u64, u64) {
-    if !runtime.members[index].alive {
+/// Mounted files (two-block frontage) are turned through their horse in
+/// cavalry: a rider's own feet are a seat, not the ground.
+fn sample_movement(
+    frame: &Frame<'_>,
+    runtime: &FormationRuntime,
+    index: usize,
+) -> ([f64; 3], u64, u64) {
+    let m = &runtime.members[index];
+    if !m.alive {
         return ([0.0; 3], 0, 0);
     }
     let (near, examined) = runtime.neighbours.nearest(index, &runtime.members);
-    let (drive, pushes) = drive_with_neighbours(runtime, index, near);
+    let (mut drive, pushes) = drive_with_neighbours(runtime, index, near);
+    if let Some(slot) = m.slot
+        && runtime.regiments[m.regiment].spec.frontage <= 1.0
+    {
+        let target = runtime.heading_target(index);
+        let heading = [target[0] - m.pos[0], target[2] - m.pos[2]];
+        drive = around_obstacles(frame, runtime, slot, drive, heading);
+    }
     (drive, examined, pushes)
+}
+
+/// Terrain turn for a final physics velocity; `heading` is where the body is
+/// going without crowd pushes or lateral dressing. Bounds are re-applied only
+/// when the drive turned, so an unobstructed drive stays bit-identical.
+pub(crate) fn around_obstacles(
+    frame: &Frame<'_>,
+    runtime: &FormationRuntime,
+    slot: EntitySlot,
+    velocity: [f64; 3],
+    heading: [f64; 2],
+) -> [f64; 3] {
+    let pos = frame.entities.pos(slot);
+    let drive = [velocity[0], velocity[2]];
+    let turned = super::ground::deflect(
+        frame.world,
+        frame.registry,
+        pos,
+        frame.entities.body(slot).half_width,
+        drive,
+        heading,
+        1.0,
+    );
+    if turned == drive {
+        return velocity;
+    }
+    runtime.constrain_velocity(pos, [turned[0], velocity[1], turned[1]])
 }
 
 fn drive_with_neighbours(
@@ -323,7 +368,7 @@ fn drive_with_neighbours(
     )
 }
 
-pub(crate) fn step(_frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Output) {
+pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Output) {
     battle
         .formation
         .neighbours
@@ -334,7 +379,7 @@ pub(crate) fn step(_frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Outp
         let mut work = (0_u64, 0_u64);
         for (offset, drive) in chunk.iter_mut().enumerate() {
             let (value, examined, pushes) =
-                sample_movement(formation, chunk_index * DRIVE_CHUNK + offset);
+                sample_movement(frame, formation, chunk_index * DRIVE_CHUNK + offset);
             *drive = value;
             work.0 += examined;
             work.1 += pushes;

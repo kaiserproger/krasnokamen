@@ -8,6 +8,7 @@ pub(crate) use columns::Columns;
 pub(crate) mod combat;
 mod faction;
 pub(crate) mod formation;
+mod ground;
 pub(crate) mod morale;
 pub mod staging;
 pub(crate) mod steering;
@@ -48,6 +49,10 @@ pub(crate) struct BattleState {
     pub timings: Timings,
     output: Output,
     population: PopulationCache,
+    /// Staged bodies (foot soldiers and horses) not yet stood on their ground.
+    pub ground_pending: Vec<EntityId>,
+    /// Staged bodies with no dry, clear ground near their slot: start refuses.
+    pub ground_refused: Vec<EntityId>,
     #[cfg(test)]
     trace: Option<trace_tests::FrameTrace>,
 }
@@ -295,6 +300,10 @@ pub(crate) struct Output {
 /// and write only battle runtime + private output; native effects apply after
 /// the frozen borrow ends. Spawned arrows enter ordinary projectile simulation.
 pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
+    // Chunks admitted this tick are settled before their first physics step.
+    if !state.hostile.battle.ground_pending.is_empty() {
+        staging::settle(state);
+    }
     let start = std::env::var_os("MC_CORE_PHASE_LOG").map(|_| std::time::Instant::now());
     let mut mark = start;
     let mut battle = std::mem::take(&mut state.hostile.battle);
