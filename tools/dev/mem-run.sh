@@ -55,9 +55,16 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 mkdir -p "$dir/run"
 slice=solaris-heavy.slice
 # Capacity is derived from the host (owner host since 2026-11-10: Aeza, 16 CPUs, 90 GiB):
-# the slice gets all RAM but 16 GiB kept for agents and the system, and every CPU.
+# the slice gets all RAM but 16 GiB kept for agents and the system, and every CPU, but
+# stays 2 GiB under the parent solaris.slice MemoryHigh when the owner set one (Aeza
+# 2026-11-11: 72G high / 80G max, 1400% CPU), so its own cap OOM-kills inside the slice
+# before the parent throttles every heavy command at once.
 ncpu=$(nproc --all)
 slice_gib=$(( $(awk '/MemTotal/{print int($2/1048576)}' /proc/meminfo) - 16 ))
+parent_high=$(systemctl --user show solaris.slice -p MemoryHigh --value 2>/dev/null || true)
+if [[ "$parent_high" =~ ^[0-9]+$ ]] && [ $(( parent_high / 1073741824 - 2 )) -lt "$slice_gib" ]; then
+  slice_gib=$(( parent_high / 1073741824 - 2 ))
+fi
 perf_cpus="$((ncpu - 4))-$((ncpu - 1))"
 # The slice is bounded by memory. Its CPUQuota is cleared on every call unless the
 # owner pins one in $dir/cpu-quota (e.g. "600%"): a stray CPUQuota once held every
