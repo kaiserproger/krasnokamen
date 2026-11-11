@@ -371,6 +371,9 @@ pub struct TickState {
     pub(crate) plugin_block_writes: Vec<(BlockPos, u32)>,
     pub(crate) plugin_players: crate::plugin_player::PlayerAuthority,
     pub(crate) plugin_damage: Vec<(EntitySlot, DamagePiece)>,
+    /// Rows retired this tick (dead already); drained into `remove_entity` at
+    /// the commit tail, re-resolving each id to its slot there.
+    pub(crate) pending_removals: Vec<EntityId>,
     pub(crate) plugin_interactions: HashMap<(EntityId, u32), mc_script::ScriptEvent>,
     /// Per-connection reliable outbox (bounded; overflow disconnects).
     pub outbox: HashMap<ConnectionId, Vec<PlayerChange>>,
@@ -663,6 +666,7 @@ impl TickState {
             plugin_block_writes: Vec::new(),
             plugin_players: Default::default(),
             plugin_damage: Vec::new(),
+            pending_removals: Vec::new(),
             plugin_interactions: HashMap::default(),
             outbox: HashMap::default(),
             outbox_cap,

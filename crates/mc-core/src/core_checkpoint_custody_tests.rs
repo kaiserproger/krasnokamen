@@ -452,12 +452,10 @@ fn pavises(state: &TickState) -> usize {
         .sum()
 }
 
-/// A scripted NPC's deployed item returns to it on retraction, which leaves
-/// the stand an inert dead row that is not a corpse. A checkpoint after the
-/// retraction must rewrite the stand without the item, or the stored
-/// deploy-time stand brings a second copy back on restart.
-#[test]
-fn retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart() {
+/// One scripted NPC deploys its sole deployable `example:pavise` stack (damage
+/// 17 of 360) as an armor stand. Returns the stand's UUID, the deployment
+/// revision and the NPC handle.
+fn deploy_pavise(world: &mut World) -> (uuid::Uuid, u64, String) {
     use mc_data::item_components::{CustomItemDefinition, ItemFacts};
     use mc_data::item_profiles::{PhysicalItemProfile, ShieldProfile};
     use mc_data::{Identifier, ItemStack};
@@ -466,9 +464,6 @@ fn retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart() {
         ScriptNpcResult, ScriptOperation, ScriptOperationPayload, ScriptPosition,
     };
 
-    let directory = tempfile::tempdir().unwrap();
-    let mut world = World::new(directory.path());
-    world.tick(|_| {});
     let id = |name: &str| Identifier::parse(name).unwrap();
     let mut registry = (*world.state.registry).clone();
     registry.item_facts = registry
@@ -573,6 +568,45 @@ fn retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart() {
         deployed_revision = *revision;
         handle = npc.handle.clone();
     });
+    (entity_uuid, deployed_revision, handle)
+}
+
+/// Retract the deployed stand of `handle`; the retirement must leave no row.
+fn retract_pavise(world: &mut World, entity_uuid: uuid::Uuid, revision: u64, handle: String) {
+    use mc_script::{ScriptNpcOrderOperation, ScriptOperation};
+
+    world.tick(|state| {
+        let retracted = npc_request(
+            state,
+            ScriptOperation::NpcOrder {
+                operation: ScriptNpcOrderOperation::RetractItem {
+                    operation_id: "retract-pavise".into(),
+                    handle,
+                    expected_revision: revision,
+                    execution_permit: None,
+                    entity_uuid: entity_uuid.to_string(),
+                    equipment_slot: 0,
+                },
+            },
+        );
+        assert!(retracted.failure().is_none(), "retraction: {retracted:?}");
+    });
+    assert!(
+        world.state.entities.slot_of_uuid_any(entity_uuid).is_none(),
+        "retirement removes the stand row through the removal path"
+    );
+}
+
+/// A scripted NPC's deployed item returns to it on retraction, which removes
+/// the stand through the ordinary removal path. A checkpoint after the
+/// retraction tombstones the stand, so the restart brings back neither the
+/// empty stand nor a second copy of the item.
+#[test]
+fn retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let (entity_uuid, deployed_revision, handle) = deploy_pavise(&mut world);
     let stand = world
         .state
         .entities
@@ -585,47 +619,327 @@ fn retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart() {
         "the deployed item moved to the stand"
     );
     world.checkpoint();
-    world.tick(|state| {
-        let retracted = npc_request(
-            state,
-            ScriptOperation::NpcOrder {
-                operation: ScriptNpcOrderOperation::RetractItem {
-                    operation_id: "retract-pavise".into(),
-                    handle,
-                    expected_revision: deployed_revision,
-                    execution_permit: None,
-                    entity_uuid: entity_uuid.to_string(),
-                    equipment_slot: 0,
-                },
-            },
-        );
-        assert!(retracted.failure().is_none(), "retraction: {retracted:?}");
-    });
-    let stand = world.state.entities.slot_of_uuid_any(entity_uuid).unwrap();
-    assert!(
-        !world.state.entities.body(stand).alive,
-        "the stand is retired"
-    );
-    assert!(
-        !world
-            .state
-            .entities
-            .is_dying(world.state.entities.body(stand).id)
-    );
+    retract_pavise(&mut world, entity_uuid, deployed_revision, handle);
     assert_eq!(pavises(&world.state), 1, "the item returned to its carrier");
     // Commit without the fence oracle so the restart shows the custody result.
     let (job, done) = world.capture();
+    assert!(
+        job.tombstones.contains(&entity_uuid),
+        "the capture tombstones the retired stand's UUID"
+    );
     let ack = world.commit(job, &done);
     assert!(ack.is_some());
     acknowledge_checkpoint(&mut world.state, ack);
     let config = world.config.clone();
     drop(world);
     let world = World::open(config);
+    assert!(
+        world.state.entities.slot_of_uuid_any(entity_uuid).is_none(),
+        "restart resurrected the retired stand"
+    );
     assert_eq!(
         pavises(&world.state),
         1,
         "restart restored the deploy-time stand with a second copy"
     );
+}
+
+/// The checkpoint-restart variant with the fence oracle: the durable fence's
+/// stored identities equal the live store, which no longer contains the stand.
+#[test]
+fn retired_stand_checkpoint_restart_removes_the_row_and_keeps_one_item() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let (entity_uuid, deployed_revision, handle) = deploy_pavise(&mut world);
+    world.checkpoint();
+    retract_pavise(&mut world, entity_uuid, deployed_revision, handle);
+    let tick = world.checkpoint();
+    assert!(
+        !store_uuids(&world.state).contains(&entity_uuid),
+        "the live store dropped the retired stand"
+    );
+    let config = world.config.clone();
+    drop(world);
+    let world = World::open(config);
+    assert_eq!(world.manifest.tick, tick);
+    assert!(
+        world.state.entities.slot_of_uuid_any(entity_uuid).is_none(),
+        "checkpoint restart restored the retired stand"
+    );
+    assert_eq!(pavises(&world.state), 1);
+}
+
+/// The crash-before-checkpoint variant: the retirement tick's WAL batch carries
+/// the `RemoveEntity`, so replay drops the deploy-time record exactly like the
+/// checkpoint tombstone does.
+#[test]
+fn retired_stand_crash_before_checkpoint_matches_the_checkpoint_outcome() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let (entity_uuid, deployed_revision, handle) = deploy_pavise(&mut world);
+    world.checkpoint();
+    retract_pavise(&mut world, entity_uuid, deployed_revision, handle);
+    let world = world.crash();
+    assert!(
+        world.state.entities.slot_of_uuid_any(entity_uuid).is_none(),
+        "WAL replay kept the retired stand"
+    );
+    assert_eq!(pavises(&world.state), 1);
+    let config = world.config.clone();
+    drop(world);
+    let world = World::open(config);
+    assert!(
+        world.state.entities.slot_of_uuid_any(entity_uuid).is_none(),
+        "reopen after the crash restored the retired stand"
+    );
+    assert_eq!(pavises(&world.state), 1);
+}
+
+/// Broken wear retires the deployed stand through the same removal path: both
+/// the checkpoint restart and the crash-before-checkpoint replay restore no
+/// stand row and no item.
+#[test]
+fn broken_deployed_wear_removes_the_stand_across_checkpoint_and_crash() {
+    use mc_data::item_profiles::DamageKind;
+
+    let break_stand = |world: &mut World, entity_uuid: uuid::Uuid| {
+        world.tick(|state| {
+            let slot = state
+                .entities
+                .slot_of_uuid(entity_uuid)
+                .expect("deployed stand");
+            let impact = crate::physical_defense::PhysicalImpact {
+                damage_hp: 500.0,
+                kind: DamageKind::Hook,
+                source: None,
+                origin: [4.5, 200.0, 2.5],
+                point: [4.5, 200.5, 2.5],
+                impulse: 0.0,
+                collision_radius: 0.0,
+            };
+            assert!(crate::plugin_npcs::absorb_deployed_impact(
+                state, slot, impact
+            ));
+        });
+        assert!(
+            world.state.entities.slot_of_uuid_any(entity_uuid).is_none(),
+            "broken wear removes the stand row through the removal path"
+        );
+        assert_eq!(pavises(&world.state), 0, "the worn-out item broke");
+    };
+
+    // Checkpoint variant.
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let (entity_uuid, _, _) = deploy_pavise(&mut world);
+    world.checkpoint();
+    break_stand(&mut world, entity_uuid);
+    world.checkpoint();
+    let config = world.config.clone();
+    drop(world);
+    let world = World::open(config);
+    assert!(
+        world.state.entities.slot_of_uuid_any(entity_uuid).is_none(),
+        "checkpoint restart restored the broken stand"
+    );
+    assert_eq!(pavises(&world.state), 0);
+
+    // Crash-before-checkpoint variant.
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let (entity_uuid, _, _) = deploy_pavise(&mut world);
+    world.checkpoint();
+    break_stand(&mut world, entity_uuid);
+    let world = world.crash();
+    assert!(
+        world.state.entities.slot_of_uuid_any(entity_uuid).is_none(),
+        "WAL replay kept the broken stand"
+    );
+    assert_eq!(pavises(&world.state), 0);
+}
+
+/// A melee piece through `commit_damage` that breaks the deployed wear must
+/// remove the stand at the commit tail — with the stand as the LAST row and a
+/// second piece on another entity in the same tick, which must land on that
+/// entity (no panic on the removed slot, no wrong target, no lost piece).
+#[test]
+fn breaking_wear_through_commit_damage_with_last_row_stand_keeps_other_piece_target() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let cow = world.spawn("minecraft:cow", [0.5, 80.0, 0.5]);
+    let (entity_uuid, _, _) = deploy_pavise(&mut world);
+    let stand = world
+        .state
+        .entities
+        .slot_of_uuid(entity_uuid)
+        .expect("deployed stand");
+    assert_eq!(
+        stand.0 as usize,
+        world.state.entities.len() - 1,
+        "the deployed stand is the last row"
+    );
+    let cow_slot = world.state.entities.slot_of(cow).unwrap();
+    let cow_health = world.state.entities.row(cow_slot).health;
+    world.tick(|state| {
+        state.merge_damage.push((
+            stand,
+            crate::tick::DamagePiece {
+                amount: 500.0,
+                kind: crate::survival::DamageKind::Melee,
+                source: None,
+                physical: Some(crate::physical_defense::PhysicalImpact {
+                    damage_hp: 500.0,
+                    kind: mc_data::item_profiles::DamageKind::Hook,
+                    source: None,
+                    origin: [4.5, 200.0, 2.5],
+                    point: [4.5, 200.5, 2.5],
+                    impulse: 0.0,
+                    collision_radius: 0.0,
+                }),
+                custom_armor: false,
+            },
+        ));
+        state.merge_damage.push((
+            cow_slot,
+            crate::tick::DamagePiece {
+                amount: 5.0,
+                kind: crate::survival::DamageKind::Melee,
+                source: None,
+                physical: None,
+                custom_armor: false,
+            },
+        ));
+    });
+    assert!(
+        world.state.entities.slot_of_uuid_any(entity_uuid).is_none(),
+        "the broken stand left the store through the commit-tail removal"
+    );
+    let cow_slot = world.state.entities.slot_of(cow).unwrap();
+    assert_eq!(
+        world.state.entities.row(cow_slot).health,
+        cow_health - 5.0,
+        "the second piece landed on the cow, not on a swapped row"
+    );
+    assert_eq!(pavises(&world.state), 0, "the worn-out item broke");
+}
+
+/// An arrow whose unblocked wear-break retires the deployed stand mid flight
+/// step — with the arrow spawned last, so a mid-step swap-remove would
+/// invalidate the arrow's own slot. The stand must still leave the store at
+/// the commit tail and the arrow must keep a valid slot.
+#[test]
+fn unblocked_arrow_wear_break_removes_the_stand_without_stale_arrow_slot() {
+    use crate::projectiles::{ProjectileKind, ProjectileState};
+
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let (entity_uuid, _, handle) = deploy_pavise(&mut world);
+    // Let the shield activate (activation_ticks = 8) and wear the pavise to
+    // one point of durability, so a single arrow breaks it. No natural spawns,
+    // so the arrow below stays the last row.
+    world
+        .state
+        .gamerules
+        .insert("spawn_mobs".into(), "false".into());
+    for _ in 0..10 {
+        world.tick(|_| {});
+    }
+    world.tick(|state| {
+        state.tickets.insert(
+            "retired-stand-arrow".into(),
+            (crate::boundary::ChunkPos { x: 0, z: 0 }, 2),
+        );
+        state.refresh_active_chunks(state.tick);
+    });
+    let mut arrow = EntityId(0);
+    world.tick(|state| {
+        let slot = state
+            .entities
+            .slot_of_uuid(entity_uuid)
+            .expect("deployed stand");
+        std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).equipment[0]
+            .as_mut()
+            .unwrap()
+            .damage = Some(359);
+        let mut record =
+            ProjectileState::new(ProjectileKind::Arrow, None, mc_data::ItemStack::EMPTY);
+        record.punch = 2; // impulse above the shield's impulse limit: unblocked
+        arrow = crate::projectiles::launch(state, record, [4.5, 200.8, 5.5], [0.0, 0.0, -3.0])
+            .expect("arrow launched");
+        let slot = state.entities.slot_of(arrow).unwrap();
+        assert_eq!(
+            slot.0 as usize,
+            state.entities.len() - 1,
+            "the arrow is the last row"
+        );
+        // A shot-style projectile record: hit radius (profile) smaller than the
+        // impact sweep radius, so the plane-clamped hit point lands strictly
+        // inside the shield sweep and the wear plan runs unblocked (impulse
+        // above the shield's impulse limit).
+        let uuid = state.entities.row(slot).uuid;
+        let npc = crate::plugin_npcs::owned_slot(state, "owner", &handle).unwrap();
+        let npc_uuid = state.entities.row(npc).uuid;
+        state.plugins.set_domain(
+            "__native_physical",
+            &format!("projectile/{uuid}"),
+            serde_json::json!({
+                "definition": "minecraft:arrow",
+                "profile": {
+                    "mode": "projectile",
+                    "damage_kind": "pierce",
+                    "base_damage_hp": 2.0,
+                    "windup_ticks": 0,
+                    "active_ticks": 1,
+                    "recovery_ticks": 0,
+                    "min_range_blocks": 0.0,
+                    "reach_blocks": 10.0,
+                    "stamina_cost": 0.0,
+                    "shape": { "kind": "thrust", "radius_blocks": 0.5 },
+                    "projectile": {
+                        "carrier": "minecraft:arrow",
+                        "speed_blocks_per_tick": 3.0,
+                        "gravity_blocks_per_tick_squared": 0.05,
+                        "collision_radius_blocks": 0.1,
+                        "lifetime_ticks": 1200,
+                        "recoverable": true,
+                        "impulse": 1.6
+                    },
+                    "consumption": null,
+                    "brace": null,
+                    "charge": null,
+                    "two_handed": false,
+                    "wear": 0
+                },
+                "impact": {
+                    "damage_hp": 6.0,
+                    "kind": "pierce",
+                    "source": npc_uuid,
+                    "origin": [4.5, 200.8, 5.5],
+                    "point": [4.5, 200.8, 3.15],
+                    "impulse": 1.6,
+                    "collision_radius": 0.6
+                },
+                "target": null,
+                "order": null
+            }),
+        );
+    });
+    world.run(&[]);
+    assert!(
+        world.state.entities.slot_of_uuid_any(entity_uuid).is_none(),
+        "the arrow-broken stand left the store through the commit-tail removal"
+    );
+    assert!(
+        world.state.entities.slot_of(arrow).is_some(),
+        "the arrow kept a valid slot after the stand's removal"
+    );
+    assert_eq!(pavises(&world.state), 0, "the worn-out item broke");
 }
 
 /// UUIDs of every row a capture presents.
