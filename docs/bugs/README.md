@@ -293,6 +293,25 @@ The `entities` profile includes windowed native-client probes:
   block-entity NBT; the actual patterned and plain banners are captured for review.
 - `native-v2-snow-golem-shear`: ordinary shears clear the same golem's received
   pumpkin flag, reveal its face and yield one carved-pumpkin pickup.
+- `native-v2-p4-identities`: seven named `/damage` identities must reach the
+  actual client's damage stream with health loss, followed by a lever-provoked
+  warden's sonic attack through a preplaced wall, death screen and respawn. Command cases prove identity
+  admission/emission, not freeze, wall-collision or cramming mechanics.
+- `native-v2-p4-death-protection`: a held stick with nonempty custom consume
+  actions saves the holder at one health, consumes one item, clears a preexisting
+  slowness effect and applies authored speed without ordinary totem effects. The full P4 damage
+  scenario still includes this check and the separate physical-source probes.
+- `native-v2-automation-storage`: the sculk latch section tests ordinary and
+  calibrated sensors at multiple distances, including a rejected frequency.
+  Comparators face their input: east toward the sensor for frequency readout,
+  south toward the cake for calibration. Downward bulbs retain each pulse;
+  the perpendicular bulb is a negative geometry control. The fixture supplies
+  solid support beneath every component, removes ambient mobs and disables
+  natural spawning so unrelated footsteps cannot toggle the latches. First
+  bulbs must be unlit before the note is powered. The latch fixture runs
+  unfrozen so scheduled comparator updates keep their ordinary timing; the
+  preceding sensor probe observes active, then inactive (the ten-tick
+  cooldown is asserted by the Rust sculk tests, not sampled by the client).
 - `native-v2-map-*`: separate frame waypoint, banner removal/locked
   toggle, inventory clone tracking, pumpkin hiding, terrain shading and Nether
   terrain repros. Read-only receipts reconstruct the graphical viewer's exact
