@@ -574,7 +574,10 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
         target.update(row)
         return True
     steps.wait(thorns_target_received, "thorns_authored_uuid_received")
-    steps.wait(lambda state: state["player"]["health"] >= 18, "thorns_fixture_healed")
+    steps.fixture(f"tp @s {x + .5} {y} {z + .5}")
+    steps.wait(lambda state: state["player"]["health"] >= 18 and
+               abs(state["player"]["x"] - x - .5) < .3 and abs(state["player"]["z"] - z - .5) < .3,
+               "thorns_fixture_ready")
     steps.call("minecraft_wait_ticks", {"ticks": 25})
     baseline = steps.observe()["player"]["health"]
     start = len(steps.client.p4_damage_wire())
