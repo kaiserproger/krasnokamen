@@ -390,11 +390,15 @@ def scenario(probe: ProbeSteps, proxy: RewritingProxy, address: str) -> None:
         probe.call("minecraft_wait_for_inventory", {"item_id": "minecraft:dirt", "count": dirt,
                                                     "timeout_seconds": probe.remaining()})
 
+    # The connection layer answers /list at once while the core runs `gamerule` on its next
+    # tick, so each rule change is fenced before the next command.
     probe.fixture("gamerule send_command_feedback false")
+    fence()
     probe.fixture("list")
     fence()
     probe.check("list_silent_with_command_feedback_off", not listed())
     probe.fixture("gamerule send_command_feedback true")
+    fence()
     probe.fixture("list")
     fence()
     probe.check("list_answers_with_command_feedback_on", listed())
