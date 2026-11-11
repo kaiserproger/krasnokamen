@@ -947,6 +947,23 @@ fn step(
         record.stuck = true;
         record.critical = false;
         record.age = 0;
+        // Vanilla AbstractArrow.onHitBlock retracts the stuck position by
+        // signum(deltaMovement) * 0.05 per axis (26.3 javap:
+        // setPos(position().subtract(signum.scale(0.05)))), so the entity sits in
+        // the cell in front of the block face. The raw impact stays the source
+        // for the land vibration and target charging above.
+        let retracted = std::array::from_fn(|axis| {
+            // Java Math.signum maps zero to zero.
+            let signum = if velocity[axis] > 0.0 {
+                1.0
+            } else if velocity[axis] < 0.0 {
+                -1.0
+            } else {
+                0.0
+            };
+            impact[axis] - signum * 0.05
+        });
+        state.entities.set_pos(slot, retracted);
         state.entities.set_vel(slot, [0.0; 3]);
         state.entities.set_ground(slot, true);
         let extra = &mut Arc::make_mut(&mut state.entities.row_mut(slot).appearance).extra;

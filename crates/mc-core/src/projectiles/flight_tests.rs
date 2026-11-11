@@ -945,3 +945,65 @@ fn target_block_emits_power_when_shot() {
         "shot target block must emit redstone power"
     );
 }
+
+/// Vanilla AbstractArrow.onHitBlock retracts a stuck arrow/trident by
+/// signum(deltaMovement)*0.05 per axis (26.3 javap), so the stored position is
+/// in the air cell in front of the block face, not on the face itself.
+#[test]
+fn stuck_arrow_and_trident_retract_from_the_block_face_like_vanilla() {
+    for kind in [ProjectileKind::Arrow, ProjectileKind::Trident] {
+        let (mut state, _player, centre) = setup();
+        let wall_z = centre[2] as i32 + 5;
+        for y in 200..=205 {
+            for x in -2..=2 {
+                state.world.set_block(
+                    centre[0] as i32 + x,
+                    y,
+                    wall_z,
+                    state.registry.states.stone,
+                );
+            }
+        }
+        state.world.fold_overlay();
+        let origin = [centre[0], 202.0, centre[2] + 1.0];
+        let item = if kind == ProjectileKind::Trident {
+            "minecraft:trident"
+        } else {
+            "minecraft:arrow"
+        };
+        let stack = ItemStack::new(
+            state
+                .registry
+                .items
+                .id_of(&Identifier::parse(item).unwrap())
+                .unwrap(),
+            1,
+        );
+        let record = ProjectileState::new(kind, None, stack);
+        let id = launch(&mut state, record, origin, [0.0, 0.0, 3.0]).unwrap();
+        for _ in 0..10 {
+            run_tick(&mut state, &[]);
+        }
+        let slot = state.entities.slot_of(id).expect("projectile still there");
+        assert!(
+            state.entities.row(slot).projectile.as_ref().unwrap().stuck,
+            "{kind:?} stuck"
+        );
+        assert_eq!(state.entities.vel(slot), [0.0; 3], "{kind:?} stopped");
+        let pos = state.entities.pos(slot);
+        let face = f64::from(wall_z);
+        assert!(
+            (pos[2] - (face - 0.05)).abs() < 1e-9,
+            "{kind:?} stuck z must be the face minus 0.05: pos={pos:?} face={face}"
+        );
+        assert!(
+            pos[2] < face,
+            "{kind:?} stuck position is in the air cell in front of the wall: {pos:?}"
+        );
+        // Java Math.signum(0) == 0: the zero-velocity x axis is not retracted.
+        assert!(
+            (pos[0] - origin[0]).abs() < 1e-9,
+            "{kind:?} stuck x unchanged: pos={pos:?} origin={origin:?}"
+        );
+    }
+}
