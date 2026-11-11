@@ -50,8 +50,10 @@ pub struct Replay {
     pub settlements: BTreeMap<u64, crate::settlements::SettlementRecord>,
     pub settlement_removed: BTreeSet<u64>,
     pub settlement_high_water: u64,
-    /// Block-log table rows followed by WAL-tail deltas, in order.
+    /// Block-log checkpoint table rows.
     pub block_log: Vec<crate::block_log::Delta>,
+    /// Recovered WAL tail, which must be persisted before the WAL is pruned.
+    pub(crate) block_log_tail: Vec<crate::block_log::Delta>,
     /// Highest tick seen.
     pub tick: u64,
 }
@@ -676,7 +678,7 @@ pub(crate) fn apply_batch_images(
                     replay.blocks.insert((pos[0], pos[1], pos[2]), *state);
                 }
                 JournalEntry::BlockLog { value } => {
-                    replay.block_log.push((**value).clone());
+                    replay.block_log_tail.push((**value).clone());
                 }
                 JournalEntry::Statistics {
                     uuid,

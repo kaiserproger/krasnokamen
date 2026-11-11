@@ -1552,12 +1552,9 @@ fn run_dimension_tick_inner<'a>(
     }
     crate::shulker::commit_placements(state);
     crate::block_entity_defaults::after_blocks(state, &block_writes);
-    crate::block_entity_defaults::commit_item_components(state);
     crate::trial_spawner::after_blocks(state, &block_writes);
-    crate::monster_spawner::after_blocks(state, &block_writes);
     crate::vault::after_blocks(state, &block_writes);
-    crate::item_frame::blocks_changed(state, &block_writes, &mut popped_drops);
-    crate::painting::blocks_changed(state, &block_writes, &mut popped_drops);
+    post_write_consequences(state, &block_writes, &mut popped_drops);
     crate::block_log::after_blocks(state);
     if sim {
         crate::trial_spawner::run(state, &mut block_writes, &mut changes);

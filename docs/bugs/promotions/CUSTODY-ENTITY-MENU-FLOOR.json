@@ -1,0 +1,31 @@
+{
+  "id": "CUSTODY-ENTITY-MENU-FLOOR",
+  "verdict": "promoted",
+  "fix_commit": "patch:93d96cba20ed65cefc6fc3c23b12b8db2bc5d78b241d191458df30bf8f3cc92a",
+  "fix_commit_full": "patch:93d96cba20ed65cefc6fc3c23b12b8db2bc5d78b241d191458df30bf8f3cc92a",
+  "promoted_at": "2026-11-11T15:15:19+00:00",
+  "tree_head": "be8e547d046047b0cee0d3be0c6a28d1da7c6290",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "93d96cba20ed65cefc6fc3c23b12b8db2bc5d78b241d191458df30bf8f3cc92a",
+  "reversed_files": [
+    "crates/mc-core/src/mounts/menus.rs",
+    "crates/mc-core/src/vehicles/containers.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:plugin_inventories::tests::entity_menu_clicks_preserve_reserved_player_inventory_and_resync": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:plugin_inventories::tests::entity_menu_clicks_preserve_reserved_player_inventory_and_resync": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteJoinInventory/.analysis/validation/20261111T144409-ledger-promote-k5yetbd0"
+}

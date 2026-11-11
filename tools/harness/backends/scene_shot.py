@@ -180,6 +180,22 @@ def png_size(path: str) -> tuple[int, int]:
         header = image.read(24)
     return int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
 
+def tool_wall_pixels(image: Path) -> tuple[int, int]:
+    """Count diamond-tool and dark wall pixels in the fixed close-wall scene."""
+    from PIL import Image
+
+    with Image.open(image) as source:
+        frame = source.convert("RGB")
+        if frame.size != WINDOW:
+            raise ValueError("tool-wall check requires a 1280x720 frame")
+        pixels = frame.crop((1000, 390, 1154, 535)).getdata()
+        tool = wall = 0
+        for r, g, b in pixels:
+            tool += g > 30 and b > 30 and g > r * 1.5 and b > r * 1.5 and abs(g - b) < 50
+            wall += max(r, g, b) < 45
+        return tool, wall
+
+
 
 def capture_java(probe: ProbeSteps, artifact: Path, name: str) -> str:
     path = java_p5.capture(probe, name)
@@ -244,6 +260,9 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
         elif kind == "walk_capture":
             yield "minecraft_list_entities", {"radius": 32, "limit": 128}
             yield "minecraft_wait_ticks", {"ticks": 1}
+        elif kind == "falling_block_capture":
+            yield "minecraft_wait_for_visible_entity", {"entity_type": "minecraft:falling_block", "radius": 32, "timeout_seconds": 30}
+            yield "minecraft_wait_ticks", {"ticks": 1}
         elif kind == "cmd":
             yield "minecraft_send_chat", {"message": value, "command": True}
         elif kind == "tp":
@@ -266,8 +285,15 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
         if not isinstance(step, dict) or len(step) != 1:
             raise ValueError(f"invalid scene step: {step!r}")
         kind, value = next(iter(step.items()))
-        if kind in ("shot", "observe", "goat_horns_upright", "goat_side_horn"):
+        if kind in ("shot", "observe", "goat_horns_upright", "goat_side_horn", "tool_wall_visible"):
             valid = isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value)
+        elif kind == "assert_same_game_time":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"before", "after", "day_delta"}
+                     and all(isinstance(value[key], str)
+                             and re.fullmatch(r"[A-Za-z0-9_-]+", value[key])
+                             for key in ("before", "after"))
+                     and type(value["day_delta"]) is int and value["day_delta"] > 0)
         elif kind == "assert_chat":
             valid = (client == "native" and isinstance(value, dict)
                      and set(value) == {"name", "contains", "excludes"}
@@ -330,6 +356,8 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and 0 <= value["phase"] < math.tau and 0 < value["tolerance"] < math.pi
                      and 0 < value["min_speed"] <= 1
                      and type(value["max_ticks"]) is int and 1 <= value["max_ticks"] <= 300)
+        elif kind == "falling_block_capture":
+            valid = client == "native" and isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value)
         elif kind == "mob_motion":
             valid = (isinstance(value, dict) and set(value) == {"samples", "name"}
                      and isinstance(value["name"], str) and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
@@ -399,6 +427,19 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 shots.append(capture(probe, artifact, value))
             else:
                 (artifact / f"{value}.json").write_text(json.dumps(probe.observe(), indent=2) + "\n")
+        elif kind == "assert_same_game_time":
+            before = json.loads((artifact / f"{value['before']}.json").read_text())
+            after = json.loads((artifact / f"{value['after']}.json").read_text())
+            before_age = (before.get("time") or {}).get("game_time")
+            after_age = (after.get("time") or {}).get("game_time")
+            if type(before_age) is not int or type(after_age) is not int:
+                raise RuntimeError("client observation omitted game_time")
+            probe.check("frozen_game_time_holds_across_teleport", before_age == after_age)
+            before_day = (before.get("time") or {}).get("clock_time")
+            after_day = (after.get("time") or {}).get("clock_time")
+            if type(before_day) is not int or type(after_day) is not int:
+                raise RuntimeError("client observation omitted clock_time")
+            probe.check("received_fresh_day_time", after_day == before_day + value["day_delta"])
         elif kind == "wait_chat":
             probe.wait(
                 lambda state: any(value in line for line in state["recent_chat"]),
@@ -479,9 +520,9 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             for _ in range(value["max_ticks"]):
                 before = probe.call("minecraft_list_entities", args)
                 candidate = matching_walk(before, value)
-                # The observation samples the end of the tick; rendering
-                # interpolates from the previous tick's smaller walk position.
-                if candidate and candidate["walk_position"] >= value["phase"]:
+                # Start as soon as the observation enters the bracket. Capture
+                # is asynchronous and can cross several client ticks.
+                if candidate:
                     break
                 probe.call("minecraft_wait_ticks", {"ticks": 1})
             else:
@@ -500,8 +541,63 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 json.dumps({"before": before, "after": after, "frame": frame,
                             "frame_path": str(frame_path), "spec": value}, indent=2) + "\n")
             probe.check(f"{value['name']}_same_entity", first is not None and len(same_entity) == 1)
-            probe.check(f"{value['name']}_render_phase", matching_walk(frame, value) is not None)
+            # The captured frame is the last presented render: it is sampled
+            # with partial-tick interpolation and can lag the triggering
+            # observation by up to one game tick of walk advance (about the
+            # observed walk speed). Accept a frame that still matches that
+            # observation within that allowance, even if it fell just below
+            # the bracket; a frame further off still fails.
+            frame_entity = None
+            lag_ok = False
+            if first is not None:
+                typed = [entity for entity in frame["entities"]
+                         if entity.get("entity_type") == value["entity_type"]]
+                if first.get("entity_uuid"):
+                    frame_entity = next((entity for entity in typed
+                                         if entity.get("entity_uuid") == first["entity_uuid"]), None)
+                if frame_entity is None and len(typed) == 1:
+                    # Java render-state frames carry no entity uuid.
+                    frame_entity = typed[0]
+                if frame_entity is not None and same_entity:
+                    step = max(0.0, float(same_entity[0]["walk_position"]) - float(first["walk_position"]))
+                    allowance = max(step, float(first.get("walk_speed") or 0.0),
+                                    float(frame_entity.get("walk_speed") or 0.0))
+                    lag_ok = abs(float(frame_entity["walk_position"]) - float(first["walk_position"])) <= allowance + 1e-9
+            probe.check(f"{value['name']}_render_phase",
+                        matching_walk(frame, value) is not None or lag_ok)
             shots.append(image)
+        elif kind == "falling_block_capture":
+            from . import falling_block_oracle
+
+            visible = probe.call("minecraft_wait_for_visible_entity", {
+                "entity_type": "minecraft:falling_block", "radius": 32,
+                "timeout_seconds": min(30, probe.remaining()),
+            })
+            identity = visible.get("entity_uuid")
+            probe.check("falling_entity_received", visible.get("matched") is True and bool(identity))
+            samples = []
+            for index in range(12):
+                image = capture(probe, artifact, f"{value}-{index}")
+                shots.append(image)
+                frame = json.loads(Path(image).with_suffix(".json").read_text())
+                rows = [row for row in frame.get("gait_frame", [])
+                        if row.get("entity_uuid") == identity and row.get("entity_type") == "minecraft:falling_block"]
+                probe.check("falling_frame_identity", len(rows) == 1)
+                samples.append({"frame": rows[0], "image": image})
+                if len(samples) >= 2 and falling_block_oracle.same_packet(samples[-2]["frame"], samples[-1]["frame"]):
+                    break
+                probe.call("minecraft_wait_ticks", {"ticks": 1})
+            else:
+                probe.check("falling_between_packets_sampled", False)
+            before, after = samples[-2:]
+            probe.check("falling_between_packets_sampled", True)
+            probe.check("falling_moves_down", after["frame"]["position"][1] < before["frame"]["position"][1] - 0.01)
+            boxes = [falling_block_oracle.sand_bounds(Path(sample["image"])) for sample in (before, after)]
+            probe.check("falling_sand_visible", all(box is not None for box in boxes))
+            probe.check("falling_pixels_move_down", boxes[1][1] > boxes[0][1])
+            (artifact / f"{value}-evidence.json").write_text(json.dumps({
+                "entity_uuid": identity, "samples": samples, "sand_bounds": boxes,
+            }, indent=2) + "\n")
         elif kind == "goat_horns_upright":
             from . import goat_horn_oracle
 
@@ -520,6 +616,20 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             edges = goat_horn_oracle.side_horn_left_edges(artifact / "screenshots" / f"{value}.png")
             probe.report["goat_side_horn_left_edges"] = edges
             probe.check("goat_side_horn_aligned", goat_horn_oracle.side_horn_aligned(edges))
+        elif kind == "tool_wall_visible":
+            state = probe.observe()
+            target = state.get("target") or {}
+            item = state.get("selected_item") or {}
+            player = state.get("player") or {}
+            eye = player.get("camera_position") or []
+            hit = target.get("location") or {}
+            distance = math.dist(eye, [hit.get(axis, math.inf) for axis in ("x", "y", "z")]) if len(eye) == 3 else math.inf
+            tool, wall = tool_wall_pixels(artifact / "screenshots" / f"{value}.png")
+            probe.report["tool_wall_pixels"] = {"tool": tool, "wall": wall, "distance": distance}
+            probe.check("tool_wall_fixture", target.get("block_id") == "minecraft:obsidian"
+                        and item.get("item_id") == "minecraft:diamond_pickaxe" and distance <= 0.6)
+            probe.check("tool_wall_close_background", wall >= 10000)
+            probe.check("tool_wall_visible", tool >= 500)
         elif kind == "cmd":
             wait_play(probe)
             probe.call("minecraft_send_chat", {"message": value, "command": True})
@@ -645,10 +755,16 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     """Load and validate exactly the inputs used by the scene runner."""
     if ctx.client not in ("native", "java") or not ctx.windowed or ctx.platform is not None:
         raise ValueError("scene-shot requires --client native|java --windowed")
-    if ctx.scenario_id == "native-command-feedback":
+    named_fixtures = {
+        "native-command-feedback": "command_feedback_scene.json",
+        "native-low-roof-house": "low_roof_house_scene.json",
+        "native-falling-block-prediction": "falling_block_scene.json",
+        "native-frozen-game-age": "frozen_game_age_scene.json",
+    }
+    if ctx.scenario_id in named_fixtures:
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
-            raise ValueError("native-command-feedback requires its registered native fixture without overrides")
-        scenario = json.loads((runtime.REPO_ROOT / "tools/harness/command_feedback_scene.json").read_text())
+            raise ValueError(f"{ctx.scenario_id} requires its registered native fixture without overrides")
+        scenario = json.loads((runtime.REPO_ROOT / "tools/harness" / named_fixtures[ctx.scenario_id]).read_text())
     elif scenario is None:
         args = ctx.extra_args
         if args and args[0] == "--":
@@ -681,6 +797,11 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     operator = scenario.get("operator", True)
     if type(operator) is not bool:
         raise ValueError("operator must be true or false")
+    if "lod_enabled" in scenario and type(scenario["lod_enabled"]) is not bool:
+        raise ValueError("lod_enabled must be true or false")
+    if "lod_share_terrain_keys" in scenario:
+        if type(scenario["lod_share_terrain_keys"]) is not bool or scenario.get("lod_enabled") is not True:
+            raise ValueError("lod_share_terrain_keys requires lod_enabled=true and a boolean value")
     username = scene_username(scenario)
     client_latency_ms = scenario.get("client_latency_ms", 0)
     if type(client_latency_ms) is not int or not 0 <= client_latency_ms <= 5000:
@@ -734,6 +855,12 @@ def run(
         if source.count(old) != 1:
             raise RuntimeError(f"expected one config token: {old}")
         source = source.replace(old, new, 1)
+    if "lod_enabled" in scenario:
+        if "[lod]" in source:
+            raise RuntimeError("playable.toml already contains a lod section")
+        source += f'\n[lod]\nenabled = {str(scenario["lod_enabled"]).lower()}\n'
+        if "lod_share_terrain_keys" in scenario:
+            source += f'share_terrain_keys = {str(scenario["lod_share_terrain_keys"]).lower()}\n'
     config.write_text(source)
     if scenario.get("world"):
         shutil.copytree(Path(scenario["world"]).expanduser().resolve(), artifact / "world")

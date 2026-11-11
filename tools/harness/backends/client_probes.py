@@ -78,7 +78,8 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
                        else 600.0 if ctx.scenario_id in (native_light.SCENARIO_ID,
                                                         "native-v2-radius-full-view",
                                                         "native-v2-p4-damage",
-                                                        "native-v2-automation-storage")
+                                                        "native-v2-automation-storage",
+                                                        "native-v2-lease-navigation")
                        else 1200.0 if ctx.scenario_id == "native-v2-settlement-storage"
                        else 900.0 if ctx.scenario_id in ("native-v2-destroyed-chest-race",
                                                          "native-v2-corrupt-block-entities",
@@ -100,6 +101,9 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     promotion_maps = (ctx.scenario_id or "").startswith("native-v2-map-")
     promotion_actor = ctx.scenario_id in (
         "native-v2-map-inventory-player-markers", "native-v2-map-pumpkin-hiding")
+    if ctx.scenario_id in ("native-v2-ledger-painting", "native-v2-ledger-axe", "native-v2-ledger-sponge",
+                           "native-v2-ledger-setblock-snbt", "native-v2-ledger-crafting-pickup"):
+        required = required | {"client_capture", "minecraft_look_at_block"}
     if ctx.scenario_id == "native-v2-cursor-close":
         required = required | {"minecraft_open_inventory", "client_capture"}
     if ctx.scenario_id in ("native-v2-craft-drag", "native-v2-craft-drag-paced",
@@ -112,6 +116,8 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         required = required | {"client_capture"}
     if ctx.scenario_id == "native-v2-custody-mount-export":
         required = required | {"minecraft_approach_entity", "minecraft_interact_entity", "client_capture"}
+    if ctx.scenario_id == "native-v2-lease-navigation":
+        required = required | {"minecraft_approach_entity", "minecraft_navigate_to_block", "client_capture"}
     if ctx.scenario_id == "native-v2-duplicate-login":
         required = required | {"minecraft_connect"}
     if p5_scenario:
@@ -194,9 +200,13 @@ seed = 81
     try:
         server_log_path = artifact / "server.log"
         server_log = server_log_path.open("wb")
-        server = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],
-                                  cwd=runtime.REPO_ROOT, stdout=server_log,
-                                  stderr=subprocess.STDOUT, start_new_session=True)
+        console_shutdown = ctx.scenario_id == "native-v2-console-shutdown"
+        command = [str(binary), "--config", str(config)]
+        if not console_shutdown:
+            command.append("--no-console")
+        server = subprocess.Popen(command, cwd=runtime.REPO_ROOT, stdout=server_log,
+                                  stderr=subprocess.STDOUT, start_new_session=True,
+                                  stdin=subprocess.PIPE if console_shutdown else None)
         ctx.logs.append(str(server_log_path))
         runtime.wait_port(port, startup_timeout, server, log_path=server_log_path)
         if ctx.scenario_id in ("native-v2-shift-double-click", "native-v2-shift-chest-correction",
@@ -232,7 +242,8 @@ seed = 81
                     port, artifact, pack_receipt.server_packet, pack_receipt.client_packet)
                 client_address = wire_trace.address
                 evidence["native_wire_trace"] = str(pack_receipt.path)
-            elif ctx.scenario_id == "native-v2-p4-damage":
+            elif ctx.scenario_id in ("native-v2-p4-damage", "native-v2-p4-identities",
+                                     "native-v2-p4-death-protection"):
                 from .native_p4 import DamageWireReceipt
 
                 report_path = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
@@ -290,7 +301,8 @@ seed = 81
                     return wire_trace.query(promotion_receipt.snapshot)
 
                 mcp.promotion_wire_receipt = promotion_snapshot
-            if ctx.scenario_id == "native-v2-p4-damage":
+            if ctx.scenario_id in ("native-v2-p4-damage", "native-v2-p4-identities",
+                                   "native-v2-p4-death-protection"):
                 def damage_snapshot() -> list[dict[str, Any]]:
                     if wire_trace.errors:
                         raise RuntimeError(f"damage wire errors: {wire_trace.errors}")
@@ -502,13 +514,25 @@ seed = 81
             mcp.server_log_path = server_log_path
             if (ctx.scenario_id in native_p4.RESTART_SCENARIOS
                     or ctx.scenario_id in (native_light.SCENARIO_ID, "native-v2-end-restart",
+                                           "native-v2-console-shutdown",
                                            "native-v2-custody-mount-export",
                                            "native-v2-corrupt-block-entities",
                                            "native-v2-corrupt-chunk-near-camera")):
                 def restart_server(remaining: float) -> str:
                     nonlocal server, server_log
                     old_pid = server.pid
-                    runtime.stop_process(server)
+                    if console_shutdown:
+                        start = server_log_path.stat().st_size
+                        assert server.stdin is not None
+                        server.stdin.write(b"stop\n")
+                        server.stdin.flush()
+                        server.wait(timeout=remaining)
+                        server_log.flush()
+                        with server_log_path.open("rb") as log:
+                            log.seek(start)
+                            mcp.console_shutdown_log = log.read().decode("utf-8", errors="replace")
+                    else:
+                        runtime.stop_process(server)
                     if server.returncode != 0:
                         raise RuntimeError(f"P4 server did not stop cleanly: {server.returncode}")
                     server_log.close()

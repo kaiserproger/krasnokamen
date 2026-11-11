@@ -244,6 +244,7 @@ pub fn import_tags(
     }
     let mut climate = ClimateImage {
         day_time: 0,
+        game_clock: Default::default(),
         weather_kind: 0,
         remaining_ticks: 12000,
         thunder_remaining_ticks: 12000,
@@ -869,6 +870,7 @@ mod tests {
             world_spawn_rotation: [90.0, 15.0],
             climate: Some(ClimateImage {
                 day_time: 18000,
+                game_clock: Default::default(),
                 weather_kind: 2,
                 remaining_ticks: 1234,
                 thunder_remaining_ticks: 4321,

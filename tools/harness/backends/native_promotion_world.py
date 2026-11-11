@@ -13,6 +13,24 @@ def _identity(row: dict) -> dict:
     return {key: row[key] for key in ("entity_id", "entity_uuid", "entity_type")}
 
 
+def _console_shutdown(steps: ProbeSteps) -> None:
+    if not callable(getattr(steps.client, "p4_restart_server", None)):
+        raise RuntimeError("console shutdown requires the console restart hook")
+    _echo(steps, "console_shutdown_initial_chat")
+    _restart(steps)
+    log = steps.client.console_shutdown_log
+    steps.report["console_shutdown_log"] = log
+    for label, message in (
+        ("tick_owner_stopped", "core tick owner stopping"),
+        ("journal_owner_stopped", "core journal owner stopped"),
+        ("checkpoint_writer_stopped", "native checkpoint writer stopped"),
+        ("server_loop_stopped", "server stopping"),
+        ("shutdown_checkpoint_committed", "checkpoint committed"),
+    ):
+        steps.check(label, message in log)
+    steps.check("shutdown_has_no_error", "ERROR" not in log)
+
+
 def _end_restart(steps: ProbeSteps) -> None:
     if not callable(getattr(steps.client, "p4_restart_server", None)):
         raise RuntimeError("End restart requires the clean p4_restart_server hook")
@@ -117,11 +135,13 @@ def _gallery(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
 
 
 def run(steps: ProbeSteps, origin: tuple[int, int, int], kind: str) -> None:
-    if kind not in ("end-restart", "entity-gallery"):
+    if kind not in ("end-restart", "entity-gallery", "console-shutdown"):
         raise ValueError(f"unknown world promotion probe: {kind}")
     if not getattr(steps.client, "p4_window", None):
         raise RuntimeError("world promotion probe requires the harness-owned windowed Xvfb client")
-    if kind == "end-restart":
+    if kind == "console-shutdown":
+        _console_shutdown(steps)
+    elif kind == "end-restart":
         _end_restart(steps)
     else:
         _gallery(steps, origin)

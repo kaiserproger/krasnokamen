@@ -56,7 +56,7 @@ class Steps:
 
 class PromotionWorldTests(unittest.TestCase):
     def test_both_kinds_reject_missing_graphical_hook_before_actions(self):
-        for kind in ("end-restart", "entity-gallery"):
+        for kind in ("end-restart", "entity-gallery", "console-shutdown"):
             with self.subTest(kind=kind):
                 steps = Steps()
                 steps.client.p4_window = None
@@ -147,6 +147,18 @@ class PromotionWorldTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "gallery_same_live_player"):
                 world.run(steps, (0, 64, 0), "entity-gallery")
 
+
+    def test_console_shutdown_checks_the_actual_stop_log(self):
+        steps = Steps()
+        steps.client.console_shutdown_log = "\n".join((
+            "core tick owner stopping", "core journal owner stopped",
+            "native checkpoint writer stopped", "server stopping", "checkpoint committed",
+        ))
+        with mock.patch.object(world, "_echo"), mock.patch.object(world, "_restart"):
+            world.run(steps, (0, 64, 0), "console-shutdown")
+            steps.client.console_shutdown_log += "\nERROR core tick broadcast closed"
+            with self.assertRaisesRegex(RuntimeError, "shutdown_has_no_error"):
+                world.run(steps, (0, 64, 0), "console-shutdown")
 
     def test_unknown_kind_rejected(self):
         with self.assertRaisesRegex(ValueError, "unknown world promotion"):

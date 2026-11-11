@@ -59,7 +59,14 @@ an exact test; `harness:<profile>:<scenario>` names an existing runnable
 scenario. A profile verdict runs that profile once for all rows citing it:
 the child receipt must pass and the named behaviour must be true in its
 boolean verdict map, or `PASS` in its legacy behaviour map. Unknown profiles
-and verdicts fail validation.
+and verdicts fail validation. `harness:loader-live:<scenario>` is valid for
+graphical `loader-live` scenarios: the runner executes them exactly as the
+loader-live gate does (Fabric platform, the tree's own built release server
+via `--server-bin`, an empty `--plugins-dir`, the private audio wrapper, and
+the Loader checkout/Gradle home/client jar from `SOLARIS_LOADER_ROOT`,
+`GRADLE_USER_HOME` and `SOLARIS_CLIENT_JAR`), records the harness Xvfb
+display in the receipt, and fails closed (unrunnable, never green) when any
+of those are missing or the scenario is not a registered loader-live entry.
 `regressions-client` builds its own release server (a known exception to the
 `pin-release` rule, listed in [open transitions](../STATUS.md#open-transitions))
 in the enclosing runner's pooled target, then hard-links it (copies if it
@@ -237,6 +244,12 @@ establish exhaustive coverage of every nested value or every real-client path.
 
 The `entities` profile includes windowed native-client probes:
 
+- `native-v2-lease-navigation`: in a private operator-built fixture, a 120-second
+  native action retains its controller, a cancelled writer is replaced without
+  losing the replacement's held input, and navigation starts at a supported edge
+  and traverses an open door from an offset pose. Cancellation scheduling is
+  nondeterministic; deterministic owner-fence ordering remains a client unit test.
+
 - `native-v2-end-restart`: enter the End on hard difficulty, identify the live
   dragon, switch to peaceful, save and restart, then require the same player,
   End world and dragon UUID. This covers live peaceful-fight persistence, not
@@ -298,6 +311,25 @@ The `entities` profile includes windowed native-client probes:
   frame on a private pad, a small slime is then eaten by the frog; the client
   must stay in play and its log must carry no decode failure (sniffer state is
   accessor 18; frog tongue, strider cold and camel dash are 19).
+- `native-v2-p4-identities`: seven named `/damage` identities must reach the
+  actual client's damage stream with health loss, followed by a lever-provoked
+  warden's sonic attack through a preplaced wall, death screen and respawn. Command cases prove identity
+  admission/emission, not freeze, wall-collision or cramming mechanics.
+- `native-v2-p4-death-protection`: a held stick with nonempty custom consume
+  actions saves the holder at one health, consumes one item, clears a preexisting
+  slowness effect and applies authored speed without ordinary totem effects. The full P4 damage
+  scenario still includes this check and the separate physical-source probes.
+- `native-v2-automation-storage`: the sculk latch section tests ordinary and
+  calibrated sensors at multiple distances, including a rejected frequency.
+  Comparators face their input: east toward the sensor for frequency readout,
+  south toward the cake for calibration. Downward bulbs retain each pulse;
+  the perpendicular bulb is a negative geometry control. The fixture supplies
+  solid support beneath every component, removes ambient mobs and disables
+  natural spawning so unrelated footsteps cannot toggle the latches. First
+  bulbs must be unlit before the note is powered. The latch fixture runs
+  unfrozen so scheduled comparator updates keep their ordinary timing; the
+  preceding sensor probe observes active, then inactive (the ten-tick
+  cooldown is asserted by the Rust sculk tests, not sampled by the client).
 - `native-v2-map-*`: separate frame waypoint, banner removal/locked
   toggle, inventory clone tracking, pumpkin hiding, terrain shading and Nether
   terrain repros. Read-only receipts reconstruct the graphical viewer's exact

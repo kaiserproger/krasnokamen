@@ -1,0 +1,55 @@
+{
+  "id": "RAIDER-TARGET-SCAN-EVERY-TICK-COLLAPSE",
+  "verdict": "promoted",
+  "fix_commit": "patch:7142a8be1da970d315bdfa38456fe72df6b67115ca4ddbf285cb6aad6a4367ca",
+  "fix_commit_full": "patch:7142a8be1da970d315bdfa38456fe72df6b67115ca4ddbf285cb6aad6a4367ca",
+  "promoted_at": "2026-11-11T16:24:09+00:00",
+  "tree_head": "8f74d4430e6b91554c877f2f65bdf33bc67d895c",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "7142a8be1da970d315bdfa38456fe72df6b67115ca4ddbf285cb6aad6a4367ca",
+  "reversed_files": [
+    "crates/mc-core/src/special_mobs/raiders.rs",
+    "crates/mc-data/src/entity_types.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:raids::tests::raider_ignores_candidates_beyond_its_follow_range": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:raids::tests::raider_does_not_hit_a_held_target_behind_a_wall_in_reach": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:raids::tests::raiders_hold_targets_and_do_not_scan_every_candidate_every_tick": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:raids::tests::raider_drops_a_dead_target_and_a_target_unseen_for_sixty_ticks": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:raids::tests::raider_ignores_candidates_beyond_its_follow_range": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:raids::tests::raider_does_not_hit_a_held_target_behind_a_wall_in_reach": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:raids::tests::raiders_hold_targets_and_do_not_scan_every_candidate_every_tick": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:raids::tests::raider_drops_a_dead_target_and_a_target_unseen_for_sixty_ticks": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/RaiderPromote/.analysis/validation/20261111T162026-ledger-promote-89j9reqp"
+}

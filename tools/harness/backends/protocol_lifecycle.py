@@ -29,7 +29,6 @@ import os
 import re
 import socket
 import subprocess
-import tempfile
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -61,24 +60,18 @@ def _check_port(port: int, name: str, port_range=(PORT_MIN, PORT_MAX)) -> int:
     return port
 
 
-def _default_lock_dir() -> Path:
-    """Portable cross-process lock root: env override, then the shared work
-    root when set, otherwise the system temp dir (works on any Linux/CI)."""
-    override = os.environ.get("SOLARIS_PORT_LOCK_DIR")
-    if override:
-        return Path(override)
-    work_root = os.environ.get("SOLARIS_WORK_ROOT")
-    if work_root:
-        return Path(work_root) / "port-locks"
-    return Path(tempfile.gettempdir()) / "solaris-port-locks"
-
-
-PORT_LOCK_DIR = _default_lock_dir()
+# One fixed, machine-wide lock namespace for EVERY harness process on this
+# host. It must never be derived from any env var (SOLARIS_WORK_ROOT, TMPDIR,
+# ...): two processes with different environments would otherwise use
+# different lock dirs and both be handed the same port. The harness already
+# requires Linux, so /tmp always exists; the dir is created sticky 1777 and
+# each port gets its own lock file.
+PORT_LOCK_DIR = Path("/tmp/solaris-port-locks")
 
 
 class PortReservation(int):
     """Cross-process lease on one port: an exclusive flock on a per-port lock
-    file under the shared work root, held for the instance lifetime.
+    file under the fixed machine-wide PORT_LOCK_DIR, held for the instance lifetime.
 
     It is an int (the port) so existing callers keep working; `release()`
     closes the lock fd, which drops the flock.
@@ -108,12 +101,19 @@ def reserve_matrix_port(exclude: int = -1, port_range=(PORT_MIN, PORT_MAX)) -> P
     same port. A bind probe after locking still rejects ports held by
     processes outside the harness.
     """
-    PORT_LOCK_DIR.mkdir(parents=True, exist_ok=True)
+    PORT_LOCK_DIR.mkdir(mode=0o1777, parents=True, exist_ok=True)
+    try:
+        os.chmod(PORT_LOCK_DIR, 0o1777)
+    except OSError:
+        pass
     for port in range(port_range[0], port_range[1] + 1):
         if port == exclude:
             continue
         lock_path = PORT_LOCK_DIR / f"{port}.lock"
-        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o666)
+        except OSError:
+            continue
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:

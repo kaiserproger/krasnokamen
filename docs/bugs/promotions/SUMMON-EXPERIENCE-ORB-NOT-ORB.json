@@ -1,0 +1,35 @@
+{
+  "id": "SUMMON-EXPERIENCE-ORB-NOT-ORB",
+  "verdict": "promoted",
+  "fix_commit": "1bf193720f99740448be7fc290f33b1b97e312b5",
+  "fix_commit_full": "1bf193720f99740448be7fc290f33b1b97e312b5",
+  "promoted_at": "2026-11-11T16:01:36+00:00",
+  "tree_head": "cd7a534d0c0a10349f8213e31d132b585f4f913f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/command_execution.rs",
+    "crates/mc-core/src/command_summon.rs",
+    "crates/mc-core/src/experience_orbs.rs",
+    "crates/mc-data/src/entity_nbt.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/command_summon_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:command_summon::tests::experience_orb_summon_preserves_native_value_count_kind_and_checkpoint": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_summon::tests::experience_orb_summon_preserves_native_value_count_kind_and_checkpoint": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteSmallRows/.analysis/validation/20261111T152139-ledger-promote-rxqgah8p"
+}

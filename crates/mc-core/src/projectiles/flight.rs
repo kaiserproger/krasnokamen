@@ -914,6 +914,7 @@ fn step(
             crate::vibration::GameEvent::ProjectileLand,
             owner,
         );
+        super::block_impact::destroy(state, slot, record, block_position, velocity);
         if record.kind == ProjectileKind::FishingHook {
             super::fishing::impact(state, id, record, None, impact);
             return false;
@@ -931,9 +932,11 @@ fn step(
         }
         if record.kind != ProjectileKind::Trident
             && (record.flame || state.entities.body(slot).burn_ticks != 0)
+            && super::block_impact::may_interact(state, record, block_position)
         {
             // Burning arrows ignite TNT, and relight a dry extinguished
-            // campfire (vanilla projectile ignition).
+            // campfire, where the projectile may interact (vanilla
+            // TntBlock/CampfireBlock onProjectileHit).
             if crate::tnt::prime_block(state, block_position, 80).is_some() {
                 return true;
             }
