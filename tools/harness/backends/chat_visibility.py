@@ -379,6 +379,26 @@ def scenario(probe: ProbeSteps, proxy: RewritingProxy, address: str) -> None:
     probe.check("full_hears_chat", full["chat"])
     probe.check("full_hears_system_text", full["system"])
 
+    # `/list` is answered by the connection layer, not the core: it must still obey send_command_feedback.
+    def listed() -> bool:
+        return any("players online" in str(line) for line in probe.observe().get("recent_chat", []))
+
+    def fence() -> None:
+        nonlocal dirt
+        probe.fixture("give @s minecraft:dirt 1")
+        dirt += 1
+        probe.call("minecraft_wait_for_inventory", {"item_id": "minecraft:dirt", "count": dirt,
+                                                    "timeout_seconds": probe.remaining()})
+
+    probe.fixture("gamerule send_command_feedback false")
+    probe.fixture("list")
+    fence()
+    probe.check("list_silent_with_command_feedback_off", not listed())
+    probe.fixture("gamerule send_command_feedback true")
+    probe.fixture("list")
+    fence()
+    probe.check("list_answers_with_command_feedback_on", listed())
+
     probe.call("minecraft_disconnect", {})
     join(1)
     commands_only = speak(1, "commands_only")

@@ -432,7 +432,7 @@ SCENARIOS: dict[str, Scenario] = {
         requires=("xvfb",),
         sources=("tools/harness/backends/chat_visibility.py",),
         fixture="seed 83 isolated world; a TCP proxy rewrites the chat-mode byte of the native client's own ClientInformation packets; operator /say, /tellraw and give fences",
-        proves="the client shows chat and system text in full mode, only system text in commands-only mode and neither in hidden mode, including after a hidden player leaves and rejoins in the Nether",
+        proves="the client shows chat and system text in full mode, only system text in commands-only mode and neither in hidden mode, including after a hidden player leaves and rejoins in the Nether; a hidden client gets no text line at all (join tip, /help, unknown command); /list obeys send_command_feedback",
         limits="the native client has no chat setting, so the proxy stands in for it; a vanilla Java client also filters locally and cannot prove server filtering",
     ),
     "native-datapack-reload": _entry(
