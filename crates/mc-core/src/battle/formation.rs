@@ -165,8 +165,9 @@ pub(crate) struct FormationRuntime {
     pub neighbours: super::steering::SeparationGrid,
     pub bounds: Option<([f64; 2], [f64; 2])>,
     /// Last stall census: live, steady members of regiments whose leader
-    /// advanced at least four blocks in the window, and those of them that
-    /// moved less than one block (blocked by terrain or crowd).
+    /// advanced at least four blocks in the window and is not in melee reach
+    /// (gap > 6), and those of them that moved less than one block (blocked
+    /// by terrain or crowd).
     pub advancing: usize,
     pub stalled: usize,
 }
@@ -548,11 +549,13 @@ impl FormationRuntime {
         self.advancing = 0;
         self.stalled = 0;
         for r in &mut self.regiments {
+            // A line in melee reach stops by design: it is not advancing.
             let advanced = mth::length2(
                 r.spec.origin[0] - r.anchor[0],
                 r.spec.origin[2] - r.anchor[1],
             ) >= 4.0
-                && !r.morale.broken;
+                && !r.morale.broken
+                && r.gap > 6.0;
             r.anchor = [r.spec.origin[0], r.spec.origin[2]];
             for m in &mut self.members[r.start..r.start + r.len] {
                 if advanced && m.alive && !m.wounded && !m.routing {

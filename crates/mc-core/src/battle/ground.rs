@@ -353,14 +353,24 @@ pub(crate) fn deflect(
         // Crowd pushes into an obstacle: go the clear way instead.
         return dir.map(|v| v * speed);
     }
-    // A positive turn rotates `dir` toward `left`.
-    let left = [-dir[1], dir[0]];
+    // A positive turn rotates toward the left of the heading. Blocks are
+    // axis-aligned, so the search and the turns run on the grid axis nearest
+    // the heading: probes along an oblique heading's normal drift across the
+    // obstacle's row, and a turn of an oblique heading runs into the wall it
+    // should follow; either flipped bodies toward its far end, into their
+    // neighbours.
+    let axis = if dir[0].abs() > dir[1].abs() {
+        [dir[0].signum(), 0.0]
+    } else {
+        [0.0, dir[1].signum()]
+    };
+    let left = [-axis[1], axis[0]];
     let side = (1..=AROUND)
         .find_map(|offset| {
             [side, -side].into_iter().find(|turn| {
                 let shift = f64::from(offset) * turn;
                 let probe = [pos[0] + left[0] * shift, pos[1], pos[2] + left[1] * shift];
-                crossable(world, registry, probe, half_width, dir)
+                crossable(world, registry, probe, half_width, axis)
             })
         })
         .unwrap_or(side);
@@ -370,7 +380,7 @@ pub(crate) fn deflect(
     ] {
         for turn in [side, -side] {
             let s = sin * turn;
-            let turned = [dir[0] * cos - dir[1] * s, dir[0] * s + dir[1] * cos];
+            let turned = [axis[0] * cos - axis[1] * s, axis[0] * s + axis[1] * cos];
             if crossable(world, registry, pos, half_width, turned) {
                 return turned.map(|v| v * speed);
             }

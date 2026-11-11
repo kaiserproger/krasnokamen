@@ -224,6 +224,11 @@ fn deflection_keeps_open_ground_and_steps_but_turns_at_trunks_and_walls() {
     let held = deflect(world, registry, ground(-5, -21), 0.3, dressing, south, 1.0);
     assert!(held[0] < 0.0, "{held:?}");
     assert!(east_half[0] > 0.0, "{east_half:?}");
+    // A body 0.42 short of the wall with a slightly oblique heading (the pose
+    // that jammed the movement test): the lateral probes drift along the
+    // wall's normal, yet the nearer (west) end still wins.
+    let oblique = deflect(world, registry, [-3.1307, 65.0, -20.7232], 0.3, [0.0, 1.58], [0.21, 19.62], 1.0);
+    assert!(oblique[0] < 0.0, "{oblique:?}");
     // A six-deep cave opening ahead is steered around, not walked into.
     assert_ne!(deflect(world, registry, ground(-20, 19), 0.3, south, south, 1.0), south);
 }
@@ -285,23 +290,6 @@ fn armies_advance_over_relief_to_contact_without_stalls_or_teleports() {
         if battle.elapsed_ticks % crate::battle::formation::STALL_TICKS == 1 {
             let (stalled, advancing) = (battle.formation.stalled, battle.formation.advancing);
             censused = censused.max(advancing);
-            if stalled * 50 >= advancing.max(1) {
-                for (bi, m) in battle.formation.members.iter().enumerate() {
-                    let r = &battle.formation.regiments[m.regiment];
-                    let Some(slot) = state.entities.slot_of(m.id) else { continue };
-                    let p = state.entities.pos(slot);
-                    let (target, _) = battle.formation.destination(bi);
-                    let cols: Vec<_> = (-1..=1).flat_map(|dz| (-1..=1).map(move |dx| (dx, dz))).map(|(dx, dz)| {
-                        let x = p[0].floor() as i32 + dx; let z = p[2].floor() as i32 + dz;
-                        surface(&state.world, &state.registry, x, z).map(|s| s.map(|y| y - p[1].floor()))
-                    }).collect();
-                    let h = battle.formation.heading_target(bi);
-                    let heading = [h[0] - m.pos[0], h[2] - m.pos[2]];
-                    let probe = deflect(&state.world, &state.registry, p, 0.3, [0.0, 1.58], heading, 1.0);
-                    eprintln!("STALL? reg={} order={:?} file={} rank={} pos={:.2?} target={:.2?} drive={:.3?} vel={:.3?} routing={} wounded={} mpos={:.2?} heading={:.2?} probe={:.3?} cols={:?} speed={:.3}",
-                        r.spec.id, r.spec.order, m.file, m.rank, p, target, battle.columns.drive.get(bi), state.entities.vel(slot), m.routing, m.wounded, m.pos, heading, probe, cols, r.speed);
-                }
-            }
             assert!(
                 stalled * 50 < advancing.max(1),
                 "{stalled} of {advancing} advancing soldiers stalled at tick {tick}"
