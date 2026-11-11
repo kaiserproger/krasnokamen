@@ -233,6 +233,16 @@ def _advancements(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.report["visual_review_required"] = ["Minecraft story root", "Stone Age and Getting an Upgrade completion", "same completions after server restart", "completion chat; no join toast flood"]
 
 
+def _wait_damage_identity(steps: ProbeSteps, predicate: Any, label: str, start: int,
+                          **kwargs: Any) -> dict[str, Any]:
+    """Wait for a received damage identity; a timeout reports the wire events it saw."""
+    try:
+        return steps.wait(predicate, label, **kwargs)
+    except TimeoutError:
+        steps.report.setdefault("damage_wire_on_timeout", {})[label] = steps.client.p4_damage_wire()[start:]
+        raise
+
+
 def _disable_gamerule(steps: ProbeSteps, rule: str) -> None:
     """Set a boolean rule false and wait for the server's acknowledgement."""
     steps.fixture(f"gamerule {rule} false")
@@ -505,8 +515,8 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
             return (state["player"]["health"] < baseline and any(
                 event["entity_id"] == player_id and event["type"] == f"minecraft:{identity}"
                 for event in steps.client.p4_damage_wire()[start:]))
-        hit_state = steps.wait(hit_received, f"{kind}_physical_identity_received",
-                               timeout_seconds=60 if kind == "starve" else 30)
+        hit_state = _wait_damage_identity(steps, hit_received, f"{kind}_physical_identity_received", start,
+                                          timeout_seconds=60 if kind == "starve" else 30)
         results.append({"type": kind, "health": hit_state["player"]["health"],
                         "events": steps.client.p4_damage_wire()[start:]})
         if kind == "outside_border":
@@ -542,9 +552,9 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
     steps.fixture("gamemode survival @s")
     steps.call("minecraft_look", {"yaw_deg": 0, "pitch_deg": 90})
     steps.call("minecraft_press_inputs", {"keys": ["use"], "ticks": 1})
-    splash = steps.wait(lambda state: state["player"]["health"] < baseline and any(
+    splash = _wait_damage_identity(steps, lambda state: state["player"]["health"] < baseline and any(
         event["entity_id"] == player_id and event["type"] == "minecraft:indirect_magic"
-        for event in steps.client.p4_damage_wire()[start:]), "splash_potion_indirect_magic_received",
+        for event in steps.client.p4_damage_wire()[start:]), "splash_potion_indirect_magic_received", start,
         timeout_seconds=30)
     results.append({"type": "indirect_magic", "health": splash["player"]["health"],
                     "events": steps.client.p4_damage_wire()[start:]})

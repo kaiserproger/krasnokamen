@@ -234,6 +234,17 @@ class NativeV2ProbeTests(unittest.TestCase):
             native_p4._damage(steps, (10, 70, 10))
         self.assertLess(events.index("gamerule spawn_mobs false"), events.index("time set 18000"))
 
+    def test_damage_identity_timeout_reports_the_wire_events_it_saw(self) -> None:
+        from .backends.native_p4 import _wait_damage_identity
+
+        steps = mock.MagicMock()
+        steps.report = {}
+        steps.wait.side_effect = TimeoutError("late")
+        steps.client.p4_damage_wire.return_value = [{"type": "minecraft:magic"}, {"type": "minecraft:on_fire"}]
+        with self.assertRaises(TimeoutError):
+            _wait_damage_identity(steps, lambda state: False, "splash", 1, timeout_seconds=3)
+        self.assertEqual(steps.report["damage_wire_on_timeout"]["splash"], [{"type": "minecraft:on_fire"}])
+
     def test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed(self) -> None:
         from .backends import native_p4
 
