@@ -234,6 +234,18 @@ class NativeV2ProbeTests(unittest.TestCase):
             native_p4._damage(steps, (10, 70, 10))
         self.assertLess(events.index("gamerule spawn_mobs false"), events.index("time set 18000"))
 
+    def test_damage_scenario_pins_clear_weather_before_its_rows(self) -> None:
+        from .backends import native_p4
+
+        events: list[str] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = events.append
+        with mock.patch.object(native_p4, "_capture", side_effect=RuntimeError("stop")), \
+                self.assertRaises(RuntimeError):
+            native_p4._damage(steps, (10, 70, 10))
+        self.assertIn("gamerule advance_weather false", events)
+        self.assertLess(events.index("weather clear"), events.index("time set 18000"))
+
     def test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world(self) -> None:
         from .backends import native_p4
 

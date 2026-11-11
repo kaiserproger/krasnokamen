@@ -266,6 +266,10 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # The night below would otherwise spawn zombies that kill the survival player
     # during the long environment rows; authored mobs are summoned by command.
     _disable_gamerule(steps, "spawn_mobs")
+    # Rain douses a burning player in the open; the on_fire row waits for the burn to outlast
+    # the fire block, so the weather must stay clear however long the earlier rows ran.
+    _disable_gamerule(steps, "advance_weather")
+    steps.fixture("weather clear")
     steps.fixture("time set 18000")
     _echo(steps, "damage_night_fixture_ordered_receipt")
     steps.call("minecraft_wait_ticks", {"ticks": 20})
