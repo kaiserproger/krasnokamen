@@ -181,13 +181,11 @@ pub(super) fn configured_viewer(
 ) -> crate::plan::ViewerState {
     let mut viewer = crate::plan::ViewerState::new(connection, entity, position);
     viewer.dimension = dimension;
-    viewer.view_distance = server
-        .connections
-        .inner
-        .lock()
-        .view_distances
-        .get(&connection)
-        .copied();
+    {
+        let registry = server.connections.inner.lock();
+        viewer.view_distance = registry.view_distances.get(&connection).copied();
+        viewer.recorder = registry.recorders.contains(&connection);
+    }
     viewer.dimension_type_ids = server.wire.dimension_type_ids;
     viewer.advancements = Arc::clone(&server.recipes.advancements);
     viewer
@@ -337,15 +335,16 @@ pub(super) async fn publish_and_route(
     connections: &mut HashMap<ConnectionId, ConnectionHandles>,
 ) {
     viewers.retain(|id, _| connections.contains_key(id));
-    // Only the pump sends world packets; available slots can only grow
-    // between this credit read and routing.
+    // Only the pump sends planned world packets; free slots and bytes can
+    // only grow between this credit read and routing.
     {
         let registry = server.connections.inner.lock();
         for (id, viewer) in viewers.iter_mut() {
             viewer.view_distance = registry.view_distances.get(id).copied();
-            viewer.world_credit = connections
-                .get(id)
-                .map_or(0, |handles| handles.world_tx.capacity());
+            (viewer.world_credit, viewer.world_bytes) =
+                connections.get(id).map_or((0, 0), |handles| {
+                    (handles.world_tx.capacity(), handles.world_tx.free_bytes())
+                });
         }
     }
 
@@ -367,6 +366,7 @@ pub(super) async fn publish_and_route(
             chunk_cache,
         )
     });
+    let recorders = crate::recorder::RecorderTick::of(viewers.values());
     // Reliable overflow takes precedence: disconnect victims first.
     for victim in crate::fanout::reliable_overflow(&packets) {
         server.connections.remove(victim);
@@ -408,6 +408,8 @@ pub(super) async fn publish_and_route(
         }
     }
     flush_setup_world_fences(server, viewers, connections, out, view_distance);
+    // Last: `/telemetry.jsonl` serves a tick only once its fanout is done.
+    server.dashboard.record_fanout_tick(out.tick, recorders);
 }
 
 pub(super) fn flush_setup_world_fences(
@@ -461,7 +463,10 @@ pub(super) fn flush_setup_world_fences(
     }
 }
 
-pub(super) fn effective_view_distance(client: i8, server: u8) -> i32 {
+/// A connection's view radius: its request within the server limit, or the
+/// whole limit for a recorder ([`crate::recorder`]).
+pub(super) fn effective_view_distance(client: i8, server: u8, recorder: bool) -> i32 {
+    let client = if recorder { i8::MAX } else { client };
     i32::from(client).max(2).min(i32::from(server))
 }
 
@@ -470,18 +475,26 @@ pub(super) fn effective_view_distance(client: i8, server: u8) -> i32 {
 /// have stashed our Joined already. Otherwise register a one-shot waiter
 /// (fired by the pump's [`stash_join`][ConnectionRegistry::stash_join])
 /// and await it — no polling, no draining, no other connection's changes.
+/// A `recorder` joins in recorder mode ([`crate::recorder`]).
 pub(super) async fn wait_for_join(
     server: &Arc<EdgeServer>,
     id: ConnectionId,
-    _name: &str,
+    recorder: bool,
     client_view_distance: i8,
     client_language: &str,
 ) -> anyhow::Result<JoinedSpawn> {
     {
         let mut inner = server.connections.inner.lock();
+        if recorder {
+            inner.recorders.insert(id);
+        }
         inner.view_distances.insert(
             id,
-            effective_view_distance(client_view_distance, server.cfg.server.view_distance),
+            effective_view_distance(
+                client_view_distance,
+                server.cfg.server.view_distance,
+                recorder,
+            ),
         );
         // Already submitted before Join: remember it so the first Play
         // ClientInformation does not repeat the same locale.

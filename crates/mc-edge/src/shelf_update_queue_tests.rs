@@ -170,7 +170,7 @@ struct Wire {
     dir: std::path::PathBuf,
     id: ConnectionId,
     reliable_rx: mpsc::Receiver<bytes::Bytes>,
-    world_rx: mpsc::Receiver<bytes::Bytes>,
+    world_rx: WorldReceiver,
     viewers: HashMap<ConnectionId, crate::plan::ViewerState>,
     connections: HashMap<ConnectionId, ConnectionHandles>,
     pool: rayon::ThreadPool,
@@ -187,7 +187,7 @@ impl Wire {
         let server = Arc::new(server);
         let id = server.connections.joining_id();
         let (reliable_tx, reliable_rx) = mpsc::channel(64);
-        let (world_tx, world_rx) = mpsc::channel(64);
+        let (world_tx, world_rx) = world_queue(64, WORLD_QUEUE_BYTES);
         server
             .connections
             .register(
@@ -287,7 +287,7 @@ async fn shelf_update_cannot_be_lost_to_a_chunk_still_queued_for_the_client() {
         uuid::Uuid::nil(),
         PlayReceivers {
             reliable: std::mem::replace(&mut wire.reliable_rx, mpsc::channel(1).1),
-            world: std::mem::replace(&mut wire.world_rx, mpsc::channel(1).1),
+            world: std::mem::replace(&mut wire.world_rx, world_queue(1, 1).1),
             dh: mpsc::channel(1).1,
             keepalive: mpsc::channel(1).1,
         },
@@ -601,7 +601,7 @@ async fn full_world_queue_does_not_disconnect_or_starve_shelf_updates() {
         uuid::Uuid::nil(),
         PlayReceivers {
             reliable: std::mem::replace(&mut wire.reliable_rx, mpsc::channel(1).1),
-            world: std::mem::replace(&mut wire.world_rx, mpsc::channel(1).1),
+            world: std::mem::replace(&mut wire.world_rx, world_queue(1, 1).1),
             dh: mpsc::channel(1).1,
             keepalive: mpsc::channel(1).1,
         },

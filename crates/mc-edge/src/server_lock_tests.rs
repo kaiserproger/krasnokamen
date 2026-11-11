@@ -5,7 +5,7 @@ fn routing_snapshot_only_rebuilds_changed_rosters() {
     let registry = ConnectionRegistry::new();
     let id = registry.joining_id();
     let (reliable_tx, _reliable_rx) = mpsc::channel(2);
-    let (world_tx, _world_rx) = mpsc::channel(2);
+    let (world_tx, _world_rx) = world_queue(2, WORLD_QUEUE_BYTES);
     registry
         .register(
             id,
@@ -38,7 +38,7 @@ async fn registry_removal_clears_all_connection_state() {
     let registry = ConnectionRegistry::new();
     let id = registry.joining_id();
     let (reliable_tx, mut reliable_rx) = mpsc::channel(2);
-    let (world_tx, mut world_rx) = mpsc::channel(2);
+    let (world_tx, mut world_rx) = world_queue(2, WORLD_QUEUE_BYTES);
     registry
         .register(
             id,

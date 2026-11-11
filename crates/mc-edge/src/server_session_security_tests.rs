@@ -48,7 +48,7 @@ async fn writer_pair() -> (
     tokio::task::JoinHandle<(&'static str, Option<String>)>,
     mpsc::Sender<i64>,
     mpsc::Sender<bytes::Bytes>,
-    mpsc::Sender<bytes::Bytes>,
+    WorldSender,
 ) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let client = TcpStream::connect(listener.local_addr().unwrap())
@@ -58,7 +58,7 @@ async fn writer_pair() -> (
     let (reader, writer) = crate::connection::Connection::new(socket).into_play_halves();
     let (reply_tx, reply_rx) = mpsc::channel(1);
     let (reliable_tx, reliable_rx) = mpsc::channel(1);
-    let (world_tx, world_rx) = mpsc::channel(1);
+    let (world_tx, world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
     let task = tokio::spawn(play_writer(
         writer,
         Arc::new(NetCounters::new()),
@@ -119,13 +119,13 @@ async fn measured_latency_is_broadcast_to_other_players() {
             other,
             ConnectionHandles {
                 reliable_tx: other_tx,
-                world_tx: mpsc::channel(1).0,
+                world_tx: world_queue(1, WORLD_QUEUE_BYTES).0,
             },
         )
         .unwrap();
     let (replies, reply_rx) = mpsc::channel(1);
     let (_reliable, reliable_rx) = mpsc::channel(1);
-    let (_world, world_rx) = mpsc::channel(1);
+    let (_world, world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
     let profile = uuid::Uuid::from_u128(42);
     let _task = tokio::spawn(play_writer(
         writer,
@@ -347,7 +347,7 @@ async fn edge_kick_flushes_terminal_packet_after_an_earlier_reliable_batch() {
         client.set_compression(Compression::Threshold(256));
         let id = server.connections.joining_id();
         let (reliable, reliable_rx) = mpsc::channel(4);
-        let (world, world_rx) = mpsc::channel(1);
+        let (world, world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
         server
             .connections
             .register(
