@@ -243,12 +243,12 @@ def _wait_damage_identity(steps: ProbeSteps, predicate: Any, label: str, start: 
         raise
 
 
-def _note_region(steps: ProbeSteps, label: str, origin: tuple[int, int, int]) -> None:
+def _note_region(steps: ProbeSteps, label: str, origin: tuple[int, int, int], reach: int = 1) -> None:
     """Record the non-air cells (blocks and fluids) around the player's cell as the client sees them."""
     x, y, z = origin
     scan = steps.call("minecraft_scan_blocks", {
         "min_x": x - 1, "max_x": x + 1, "min_y": y - 1, "max_y": y + 3,
-        "min_z": z - 1, "max_z": z + 1, "max_blocks": 64})
+        "min_z": z - 1, "max_z": z + reach, "max_blocks": 128})
     steps.report.setdefault("region_cells", {})[label] = [
         row for row in scan.get("blocks", [])
         if row.get("block_id") != "minecraft:air" or not (row.get("fluid") or {}).get("empty", True)]
@@ -621,10 +621,14 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
         **{key: target[key] for key in ("entity_id", "entity_uuid", "entity_type")},
         "timeout_seconds": steps.remaining(),
     })
-    thorn_state = _wait_damage_identity(steps, lambda state: state["player"]["health"] < baseline and any(
-        event["entity_id"] == player_id and event["type"] == "minecraft:thorns"
-        for event in steps.client.p4_damage_wire()[start:]), "thorns_physical_identity_received", start,
-        timeout_seconds=30)
+    try:
+        thorn_state = _wait_damage_identity(steps, lambda state: state["player"]["health"] < baseline and any(
+            event["entity_id"] == player_id and event["type"] == "minecraft:thorns"
+            for event in steps.client.p4_damage_wire()[start:]), "thorns_physical_identity_received", start,
+            timeout_seconds=30)
+    except TimeoutError:
+        _note_region(steps, "thorns_timeout", origin, reach=3)
+        raise
     steps.check("player_attack_physical_identity_received", any(
         event["entity_id"] == target["entity_id"] and event["type"] == "minecraft:player_attack"
         and event["cause_entity_id"] == player_id
