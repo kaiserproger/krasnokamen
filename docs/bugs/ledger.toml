@@ -914,19 +914,8 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-3"
 regression = ["cargo:mc-core:falling::tests::restored_due_gravity_tick_starts_the_fall_without_nearby_writes"]
 
 [[bug]]
-id = "DATA-MERGE-ENTITY-ABSENT"
-title = "`/data merge entity <target> <nbt>` is rejected ('Data editing currently supports command blocks only', usage 'Supported writes: data merge block <x> <y> <z> <compound> (command blocks only)'). Vanilla 26.3 DataCommands registers EntityDataAccessor.PROVIDER under merge and modify, and EntityDataAccessor.setData merges the compound into any non-player Entity via Entity.load (a Player target throws commands.data.entity.invalid), so operators and gates can write non-player entity NBT."
-area = "gameplay"
-repro = "source"
-severity = "minor"
-status = "open"
-source = "crates/mc-core/src/command_blocks.rs:321 (usage text) and :346 (rejection); vanilla evidence receipts/A1MobsGates/javap-data-entity.txt from javap of net.minecraft.server.commands.data.EntityDataAccessor and DataCommands in the 26.3 client.jar"
-regression = []
-failing_first = "not recorded"
-
-[[bug]]
 id = "GOLEM-GOSSIP"
-title = "Five eligible recently slept gossiping villagers cannot summon; owner only admits Panic route. Graphical gate native-v2-golem-gossip is blocked on DATA-MERGE-ENTITY-ABSENT (it seeds villager state with `data merge entity`)."
+title = "Five eligible recently slept gossiping villagers cannot summon; owner only admits Panic route. Graphical gate native-v2-golem-gossip is blocked until branch wt/LedgerCommandsB10 (row DATA-MUTATION-STORAGE, commits 32069cbb and 0900f85f) lands `/data merge entity` in main; the gate seeds villager state with it."
 area = "gameplay"
 repro = "manual"
 severity = "major"
