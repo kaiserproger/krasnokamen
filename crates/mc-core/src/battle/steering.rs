@@ -253,32 +253,40 @@ fn sample_movement(
     {
         let target = runtime.heading_target(index);
         let heading = [target[0] - m.pos[0], target[2] - m.pos[2]];
-        drive = around_obstacles(frame, runtime, slot, drive, heading);
+        drive = around_obstacles(frame, runtime, slot, drive, heading, None);
     }
     (drive, examined, pushes)
 }
 
 /// Terrain turn for a final physics velocity; `heading` is where the body is
-/// going without crowd pushes or lateral dressing. Bounds are re-applied only
-/// when the drive turned, so an unobstructed drive stays bit-identical.
+/// going without crowd pushes or lateral dressing. A horse passes its
+/// `escape` (see [`super::ground::deflect_mounted`]). Bounds are re-applied
+/// only when the drive turned, so an unobstructed drive stays bit-identical.
 pub(crate) fn around_obstacles(
     frame: &Frame<'_>,
     runtime: &FormationRuntime,
     slot: EntitySlot,
     velocity: [f64; 3],
     heading: [f64; 2],
+    escape: Option<&mut Option<super::ground::Escape>>,
 ) -> [f64; 3] {
     let pos = frame.entities.pos(slot);
     let drive = [velocity[0], velocity[2]];
-    let turned = super::ground::deflect(
-        frame.world,
-        frame.registry,
-        pos,
-        frame.entities.body(slot).half_width,
-        drive,
-        heading,
-        1.0,
-    );
+    let half_width = frame.entities.body(slot).half_width;
+    let turned = match escape {
+        Some(escape) => super::ground::deflect_mounted(
+            frame.world,
+            frame.registry,
+            pos,
+            half_width,
+            drive,
+            heading,
+            1.0,
+            escape,
+            frame.tick,
+        ),
+        None => super::ground::deflect(frame.world, frame.registry, pos, half_width, drive, heading, 1.0),
+    };
     if turned == drive {
         return velocity;
     }

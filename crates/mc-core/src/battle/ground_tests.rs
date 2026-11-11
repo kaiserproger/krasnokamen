@@ -602,3 +602,86 @@ fn dismounted_riders_run_round_a_cave_opening_in_their_flight() {
     let median = fled[fled.len() / 2];
     assert!(median >= 8.0, "the riders did not flee: median {median}");
 }
+
+/// Ground heights (first air above the ground) of the G1 site's gully end,
+/// where 20-40 fleeing blue riders stood pressed together from t 90 to the
+/// end of rehearsals r2-r5: columns x 8..=21 (left to right), rows z
+/// 233..=250 (top to bottom), from `receipts/BvReliefBattle/gully/probe.json`
+/// (no overhangs in this patch). The gully floor (x 19-20, 89-91) runs up
+/// to a shelf at (19, 93, 245), shut in by two-block terraces to the west,
+/// walls to the east and south and a three-block drop beside the shelf.
+const GULLY: [[i32; 14]; 18] = [
+    [99, 98, 98, 97, 96, 95, 94, 93, 92, 92, 91, 90, 89, 97],
+    [99, 98, 98, 97, 96, 95, 94, 93, 92, 92, 91, 90, 89, 97],
+    [99, 98, 98, 97, 96, 95, 94, 93, 92, 92, 91, 90, 89, 97],
+    [99, 98, 98, 97, 96, 95, 94, 93, 93, 92, 91, 90, 89, 88],
+    [99, 98, 98, 97, 96, 95, 94, 94, 93, 92, 91, 90, 89, 90],
+    [99, 98, 98, 97, 96, 96, 95, 94, 93, 92, 91, 90, 89, 92],
+    [99, 98, 98, 97, 97, 96, 95, 94, 93, 92, 91, 90, 89, 93],
+    [99, 98, 98, 97, 97, 96, 95, 94, 93, 93, 92, 91, 89, 93],
+    [99, 99, 98, 97, 97, 97, 96, 95, 94, 93, 92, 91, 90, 97],
+    [99, 99, 98, 97, 97, 97, 97, 96, 95, 94, 92, 91, 90, 97],
+    [100, 99, 98, 98, 97, 97, 97, 96, 95, 94, 93, 92, 90, 97],
+    [101, 99, 98, 98, 97, 97, 97, 97, 96, 95, 94, 92, 90, 97],
+    [101, 100, 99, 98, 97, 97, 97, 97, 97, 97, 95, 93, 91, 97],
+    [102, 100, 99, 98, 97, 97, 97, 97, 97, 97, 97, 96, 93, 97],
+    [103, 101, 99, 98, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97],
+    [103, 101, 99, 98, 98, 97, 97, 97, 97, 97, 97, 97, 97, 98],
+    [103, 102, 100, 99, 98, 98, 98, 98, 97, 97, 97, 97, 97, 98],
+    [103, 102, 101, 99, 99, 98, 98, 98, 98, 97, 97, 97, 97, 98],
+];
+
+/// Fleeing riders that ran up a gully into its dead end climb back out
+/// instead of standing pressed into it for the rest of the battle.
+#[test]
+fn fleeing_riders_climb_out_of_a_gully_end() {
+    // Real (x, y, z) to fixture: the shelf (19, 93, 245) lands at (7, 70,
+    // 102), straight behind the second side, which flees +z.
+    const SHIFT: [i32; 3] = [-12, -23, -143];
+    let mut state = relief_fixture();
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    for (dz, row) in GULLY.iter().enumerate() {
+        for (dx, &top) in row.iter().enumerate() {
+            let (x, z) = (8 + dx as i32 + SHIFT[0], 233 + dz as i32 + SHIFT[2]);
+            let top = top + SHIFT[1];
+            for y in 60..top + 10 {
+                state.world.set_block(x, y, z, if y < top { stone } else { air });
+            }
+        }
+    }
+    state.world.fold_overlay();
+    stage(&mut state, 100);
+    let formation = &state.hostile.battle.formation;
+    let regiment = formation
+        .regiments
+        .iter()
+        .position(|r| r.spec.faction == 2 && r.spec.frontage > 1.0)
+        .expect("a cavalry regiment of the second side");
+    let r = &formation.regiments[regiment];
+    let ids: Vec<_> = formation.members[r.start..r.start + r.len].iter().map(|m| m.id).collect();
+    let pocket = [8.0, 102.3];
+    let mut horses = Vec::new();
+    for (k, &id) in ids.iter().enumerate() {
+        let horse = crate::mounts::vehicle(&state, id).expect("a mounted rider");
+        let horse_id = state.entities.body(horse).id;
+        // Where the r5 horses stood: pressed into the shelf's south-east corner.
+        state.entities.set_pos(horse, [pocket[0] + 0.1 * (k % 4) as f64, 70.0, pocket[1]]);
+        crate::mounts::sync_rider(&mut state, horse);
+        horses.push(horse_id);
+    }
+    let formation = &mut state.hostile.battle.formation;
+    formation.regiments[regiment].morale.broken = true;
+    let r = &formation.regiments[regiment];
+    for m in &mut formation.members[r.start..r.start + r.len] {
+        m.routing = true;
+    }
+    for _ in 0..200 {
+        run_tick(&mut state, &[]);
+    }
+    let inside: Vec<_> = horses
+        .iter()
+        .filter_map(|&id| state.entities.slot_of(id).map(|slot| state.entities.pos(slot)))
+        .filter(|p| p[1] < 72.0 && mc_physics::mth::length2(p[0] - pocket[0], p[2] - pocket[1]) < 3.0)
+        .collect();
+    assert!(inside.is_empty(), "riders still boxed in the gully end: {inside:?}");
+}
