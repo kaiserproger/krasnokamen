@@ -22,6 +22,8 @@ pub(crate) const EXHAUSTED_STAMINA: f32 = 30.0;
 /// gap froze touching fronts with neither losses nor flight.
 pub(crate) const PULSE_MORALE_FLOOR: f32 = 20.0;
 const MAX_REGIMENTS: usize = 128;
+/// A fugitive this close to the battle bounds can flee no further.
+const AT_BAY_BLOCKS: f64 = 2.0;
 const MAX_SOLDIERS: usize = 20_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -418,6 +420,21 @@ impl FormationRuntime {
     pub(crate) fn loose_order_at(&self, index: usize) -> bool {
         let r = &self.regiments[self.members[index].regiment];
         r.spec.frontage > 1.0 || (r.spec.order == Order::Pursue && r.enemy_routing)
+    }
+
+    /// A fugitive pinned against the battle bounds turns at bay and fights;
+    /// otherwise both sides' routers pile into one corner and only touch.
+    pub(crate) fn cornered_at(&self, index: usize) -> bool {
+        let m = &self.members[index];
+        m.routing
+            && m.alive
+            && !m.wounded
+            && self.bounds.is_some_and(|(min, max)| {
+                m.pos[0] - min[0] < AT_BAY_BLOCKS
+                    || max[0] - m.pos[0] < AT_BAY_BLOCKS
+                    || m.pos[2] - min[1] < AT_BAY_BLOCKS
+                    || max[1] - m.pos[2] < AT_BAY_BLOCKS
+            })
     }
 
     pub fn mark_wounded(&mut self, id: EntityId) {

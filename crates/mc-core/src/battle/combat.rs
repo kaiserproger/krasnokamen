@@ -259,7 +259,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         if matches!(fighter.action, Action::Wounded) {
             continue;
         }
-        if context(battle, bi).is_some_and(|c| c.routing) {
+        if context(battle, bi).is_some_and(|c| c.routing) && !battle.formation.cornered_at(bi) {
             fighter.action = Action::Guard {
                 until: frame.tick + 20,
             };
@@ -314,7 +314,14 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         }
         let slot = battle.columns.slots[bi].expect("active column");
         let id = battle.columns.ids[bi];
-        if bi < battle.formation.members.len() && !battle.formation.can_attack_at(bi) {
+        // Outside a pulse a steady front-rank man still trades blows with an
+        // enemy already in weapon reach, at the cautious rate, as does a
+        // fugitive at bay: pulses add the surge, they are not the only contact.
+        let in_order = bi >= battle.formation.members.len() || battle.formation.can_attack_at(bi);
+        if !in_order
+            && !context(battle, bi)
+                .is_some_and(|c| !c.wavering && (!c.routing || battle.formation.cornered_at(bi)))
+        {
             continue;
         }
         let fighter = &mut combat.fighters[bi];
@@ -353,7 +360,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             .and_then(|slot| battle.columns.index(slot))
             .and_then(|target_bi| context(battle, target_bi))
             .is_some_and(|c| c.routing);
-        let probability = if fleeing || roll(id, 0, 1) < AGGRESSIVE_FIGHTERS {
+        let probability = if fleeing || (in_order && roll(id, 0, 1) < AGGRESSIVE_FIGHTERS) {
             AGGRESSIVE_ATTEMPTS
         } else {
             CAUTIOUS_ATTEMPTS

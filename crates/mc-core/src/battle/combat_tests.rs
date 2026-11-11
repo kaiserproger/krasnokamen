@@ -372,3 +372,47 @@ fn dense_fighter_layout_changes_preserve_action_and_ammunition_by_identity() {
         "removed identity cannot retain combat custody"
     );
 }
+
+#[test]
+fn front_rank_outside_a_pulse_still_strikes_an_enemy_in_reach() {
+    use super::super::formation::{Order, RegimentSpec};
+    let (state, mut battle, actor, victim) = pair();
+    let origin = state.entities.pos(slot(&state, actor));
+    battle
+        .formation
+        .add_regiment(
+            RegimentSpec {
+                id: 0,
+                faction: 1,
+                origin,
+                facing: [1.0, 0.0],
+                files: 1,
+                frontage: 1.0,
+                order: Order::Hold,
+            },
+            &[actor],
+        )
+        .unwrap();
+    prepare(&state, &mut battle, 0);
+    let a = index(&state, &battle, actor);
+    assert!(
+        !battle.formation.can_attack_at(a),
+        "no regiment in contact, so no pulse"
+    );
+    let target = super::super::EnemyTarget {
+        id: victim,
+        pos: state.entities.pos(slot(&state, victim)),
+        distance: 2.0,
+    };
+    let swings = (0..1000)
+        .filter(|&tick| {
+            battle.columns.targets[a] = Some(target);
+            let out = step_at(&state, &mut battle, tick);
+            out.events.iter().any(|event| {
+                matches!(event, EntityEvent::Swing { entity, hand: Hand::Main, .. } if *entity == actor)
+            })
+        })
+        .count();
+    // Fifty cautious decisions: about one in six swings, never an aggressive surge.
+    assert!((1..=20).contains(&swings), "swings={swings}");
+}

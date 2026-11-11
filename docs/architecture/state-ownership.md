@@ -74,10 +74,13 @@ An unparried blow removes about two times in five on the authored
 deterministic roll; seven removals in ten die on the spot and the rest
 withdraw wounded through the ranks. Any landed blow finishes a wounded man, and
 pursuit removes nearly every landed blow, nine in ten fatally. Front ranks
-strike in section pulses whose fatigue follows the share of the front pulsing;
-riders and pursuers fight from any rank. A regiment worn near its pulse floor
-while in contact erodes until it breaks; one whose enemy broke steadies. Film
-pacing changes lulls, never swing speed. These are simulation choices based on
+surge in section pulses whose fatigue follows the share of the front pulsing;
+outside a pulse a front-rank man still trades blows at the cautious rate with
+an enemy already in weapon reach. Riders and pursuers fight from any rank, and
+fugitives pinned against the battle bounds turn at bay. A regiment worn near
+its pulse floor while in contact erodes until it breaks; one whose enemy broke
+steadies. Film pacing changes lulls, never swing speed. These are simulation
+choices based on
 [Sabin](https://gwern.net/doc/history/2000-sabin.pdf), not measured historical
 per-swing probabilities. Volleys use 220 ticks sustained and 60 arrows per
 archer; about one arrow in seventy finds an armour gap and kills, the rest are

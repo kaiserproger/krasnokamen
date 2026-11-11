@@ -395,3 +395,24 @@ fn riders_and_pursuers_fight_from_any_rank_but_routers_never_do() {
     runtime.members[rear_rider].routing = true;
     assert!(!runtime.can_attack_at(rear_rider));
 }
+
+#[test]
+fn fugitives_pinned_at_the_bounds_turn_at_bay() {
+    let mut runtime = FormationRuntime::default();
+    add(&mut runtime, spec(0, 1, 0.0, 5, Order::Advance), 1, 10);
+    runtime.set_bounds([-10.0, -10.0], [10.0, 10.0]).unwrap();
+    simulate(&mut runtime, 0);
+    runtime.members[0].routing = true;
+    runtime.members[0].pos = [9.5, 64.0, 0.0];
+    runtime.members[1].routing = true;
+    runtime.members[1].pos = [0.0, 64.0, 0.0];
+    runtime.members[2].pos = [9.5, 64.0, 1.0];
+    assert!(runtime.cornered_at(0));
+    assert!(
+        !runtime.cornered_at(1),
+        "a fugitive with room to run keeps running"
+    );
+    assert!(!runtime.cornered_at(2), "steady men are not fugitives");
+    runtime.members[0].wounded = true;
+    assert!(!runtime.cornered_at(0), "the wounded only withdraw");
+}
