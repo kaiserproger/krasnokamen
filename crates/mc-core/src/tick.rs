@@ -602,6 +602,8 @@ pub struct MergeSpawn {
     pub type_id: u32,
     pub health: f32,
     pub wool: Option<u8>,
+    /// Climate variant inherited from one parent (cow, pig, chicken).
+    pub variant: Option<(u8, crate::boundary::EntityDataValue)>,
     pub taming: Option<crate::taming::TamingState>,
     pub advancement_breeding: Option<(EntityId, serde_json::Value)>,
 }

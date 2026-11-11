@@ -41,6 +41,7 @@ pub(crate) fn validate_entity(
     if name == "minecraft:painting" {
         crate::painting::validate_image(record, &state.registry)?;
     }
+    crate::core::validate_variant_images(name, &record.appearance.extra).map_err(invalid)?;
     if record.state.bee.is_some() && name != "minecraft:bee" {
         return Err(invalid(
             "Bee: retained state incompatible with entity type".into(),

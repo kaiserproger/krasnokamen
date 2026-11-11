@@ -1,6 +1,11 @@
 use super::*;
 use crate::boundary::{ChangeSet, ConnectionId, PlayerChange, PlayerInput};
 
+#[path = "command_summon_variant_disk_tests.rs"]
+mod variant_disk_tests;
+#[path = "command_summon_variant_refusal_tests.rs"]
+mod variant_refusal_tests;
+
 fn summon(kind: &str, nbt: &str) -> (TickState, EntityId) {
     let (mut state, actor, _) = crate::hostile_tests::setup(8.0);
     let parsed = crate::commands::parse(&format!("summon {kind} ~ ~ ~ {nbt}"), true).unwrap();
@@ -1006,4 +1011,86 @@ fn villager_summon_keeps_its_authored_profession_and_rejects_bad_data() {
     assert_eq!(data.level, 2);
     rejected_tag_reaches_sender("villager", "VillagerData", "{profession:'minecraft:bogus'}");
     rejected_tag_reaches_sender("cow", "VillagerData", "{profession:'minecraft:farmer'}");
+}
+
+#[test]
+fn climate_variant_summons_publish_and_checkpoint_typed_variants() {
+    for (kind, registry, index, variants) in [
+        (
+            "chicken",
+            "chicken_variant",
+            18,
+            &["temperate", "cold", "warm"][..],
+        ),
+        ("cow", "cow_variant", 18, &["temperate", "cold", "warm"][..]),
+        ("pig", "pig_variant", 19, &["temperate", "cold", "warm"][..]),
+        (
+            "zombie_nautilus",
+            "zombie_nautilus_variant",
+            21,
+            &["temperate", "warm"][..],
+        ),
+    ] {
+        for variant in variants {
+            let name = format!("minecraft:{variant}");
+            let variant_id = mc_data::required_registry_entry_id(
+                registry,
+                &mc_data::Identifier::parse(name.as_str()).unwrap(),
+            )
+            .unwrap();
+            let expected = match kind {
+                "chicken" => EntityDataValue::ChickenVariant(variant_id),
+                "cow" => EntityDataValue::CowVariant(variant_id),
+                "pig" => EntityDataValue::PigVariant(variant_id),
+                _ => EntityDataValue::ZombieNautilusVariant(variant_id),
+            };
+            let ages: &[i32] = if kind == "zombie_nautilus" {
+                &[0]
+            } else {
+                &[0, -24000]
+            };
+            for age in ages {
+                let (state, id) = summon(kind, &format!("{{variant:'{name}',Age:{age}}}"));
+                let slot = state.entities.slot_of(id).unwrap();
+                let row = state.entities.row(slot);
+                assert!(
+                    row.appearance.extra.contains(&(index, expected.clone())),
+                    "{kind}/{variant}"
+                );
+                assert_eq!(row.appearance.baby, *age < 0, "{kind}/{variant}");
+                assert!(state.appearance_changed.contains(&id));
+                let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+                let native = chunks
+                    .values()
+                    .flat_map(|chunk| &chunk.entities)
+                    .find(|record| record.uuid == row.uuid)
+                    .unwrap();
+                assert!(
+                    native
+                        .extra_fields
+                        .contains(&("variant".into(), Tag::String(name.clone())))
+                );
+                let mut imported = crate::core::appearance_from_vanilla_entity(native);
+                crate::core::native_variant(native, &mut imported).unwrap();
+                let image: crate::journal::EntityAppearanceImage =
+                    serde_json::from_slice(&serde_json::to_vec(&imported).unwrap()).unwrap();
+                assert!(
+                    image.extra.contains(&(index, (&expected).into())),
+                    "{kind}/{variant}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn climate_variant_summons_reject_wrong_registry_and_type_before_allocation() {
+    let mut state = rejected_tag_fixture();
+    for kind in ["cow", "pig", "chicken", "zombie_nautilus"] {
+        for value in ["1", "'minecraft:not_a_variant'", "'bad:UPPERCASE'"] {
+            rejected_tag_in_state(&mut state, kind, "variant", value);
+        }
+    }
+    rejected_tag_in_state(&mut state, "zombie_nautilus", "variant", "'minecraft:cold'");
+    rejected_tag_in_state(&mut state, "sheep", "variant", "'minecraft:warm'");
 }

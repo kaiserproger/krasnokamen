@@ -2271,6 +2271,18 @@ const _: () = assert!(
     mc_core::blueprint::CHICKEN_VARIANT_DATA_INDEX
         == mc_protocol::packets::play::CHICKEN_VARIANT_DATA_INDEX
 );
+const _: () = assert!(
+    mc_core::blueprint::COW_VARIANT_DATA_INDEX
+        == mc_protocol::packets::play::COW_VARIANT_DATA_INDEX
+);
+const _: () = assert!(
+    mc_core::blueprint::PIG_VARIANT_DATA_INDEX
+        == mc_protocol::packets::play::PIG_VARIANT_DATA_INDEX
+);
+const _: () = assert!(
+    mc_core::blueprint::ZOMBIE_NAUTILUS_VARIANT_DATA_INDEX
+        == mc_protocol::packets::play::ZOMBIE_NAUTILUS_VARIANT_DATA_INDEX
+);
 
 // The core writes the sleeping position at the protocol's own index.
 const _: () = assert!(
@@ -2297,6 +2309,15 @@ fn map_extra(index: u8, value: &mc_core::boundary::EntityDataValue) -> WireEntit
         }
         mc_core::boundary::EntityDataValue::ChickenVariant(value) => {
             WireEntityDataValue::ChickenVariant { index, value }
+        }
+        mc_core::boundary::EntityDataValue::CowVariant(value) => {
+            WireEntityDataValue::CowVariant { index, value }
+        }
+        mc_core::boundary::EntityDataValue::PigVariant(value) => {
+            WireEntityDataValue::PigVariant { index, value }
+        }
+        mc_core::boundary::EntityDataValue::ZombieNautilusVariant(value) => {
+            WireEntityDataValue::ZombieNautilusVariant { index, value }
         }
         mc_core::boundary::EntityDataValue::WeatheringCopper(value) => {
             WireEntityDataValue::WeatheringCopper { index, value }
