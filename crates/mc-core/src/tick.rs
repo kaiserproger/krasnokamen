@@ -353,6 +353,9 @@ pub struct TickState {
     active_ticket_ranges: Vec<(ChunkPos, i32, i32)>,
     active_sim_radius: i32,
     pub registry: Arc<CoreRegistry>,
+    /// Where the core publishes the registry the tick runs on, so the edge
+    /// sees a datapack reload even when no one was online to be told.
+    pub(crate) published_registry: Option<Arc<std::sync::RwLock<Arc<CoreRegistry>>>>,
     pub(crate) datapacks: crate::datapacks::Runtime,
     pub(crate) command_context: crate::command_context::Runtime,
     pub(crate) debug_profiler: crate::DebugProfiler,
@@ -654,6 +657,7 @@ impl TickState {
             active_ticket_ranges: Vec::new(),
             active_sim_radius: -1,
             registry,
+            published_registry: None,
             world,
             dimension: crate::dimensions::Dimension::Overworld,
             other_dimensions: Default::default(),
@@ -851,6 +855,13 @@ impl TickState {
             });
             return;
         }
+        self.push_to_recipient(connection, change);
+    }
+
+    /// Text a command delivers to a player as a target (`/tellraw`, `/say`,
+    /// `/msg`), not as its source's reply: a `/debug function` trace records
+    /// only what its source is sent, so this never lands in a trace.
+    pub(crate) fn push_to_recipient(&mut self, connection: ConnectionId, change: PlayerChange) {
         // Vanilla `ServerPlayer.acceptsSystemMessages`: a client whose chat
         // setting is hidden gets no text at all, neither chat nor command
         // feedback. Titles and the action bar are not text lines here.

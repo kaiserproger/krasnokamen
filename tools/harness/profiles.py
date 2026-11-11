@@ -434,6 +434,20 @@ def run_composter_chance(ctx: ProfileContext) -> dict[str, Any]:
     return composter_chance.run(ctx)
 
 
+def run_chat_visibility(ctx: ProfileContext) -> dict[str, Any]:
+    """Graphical chat-visibility gate: a proxy sets the real client's chat mode, the client shows what the server sent."""
+    from .backends import chat_visibility
+
+    return chat_visibility.run(ctx)
+
+
+def run_datapack_reload(ctx: ProfileContext) -> dict[str, Any]:
+    """Graphical datapack hot-reload recipe gate (enable and disable without a restart)."""
+    from .backends import datapack_reload
+
+    return datapack_reload.run(ctx)
+
+
 def run_block_log(ctx: ProfileContext) -> dict[str, Any]:
     """Block-log gate: grief, /co rollback, restart and /co restore on the native client."""
     from .backends import block_log
@@ -1012,6 +1026,16 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Native player loads wheat seeds into a hopper; observe individual debits and composter levels",
         "run": run_composter_chance,
     },
+    "chat-visibility": {
+        "scope": "real-client",
+        "description": "Native player behind a proxy that sets its chat mode: full, commands-only and hidden clients, and a hidden client joining into the Nether, hear only what the server sends them",
+        "run": run_chat_visibility,
+    },
+    "datapack-reload": {
+        "scope": "real-client",
+        "description": "Native player crafts before, during and after a live /datapack enable and disable; the output slot follows the reloaded recipe without a restart",
+        "run": run_datapack_reload,
+    },
     "block-log": {
         "scope": "real-client",
         "description": "Block-log gate: grief (break/place/steal/break chest), /co lookup + rollback restores blocks and chest contents exactly, restart keeps history, /co restore re-applies (native --client, windowed for screenshots)",
@@ -1199,6 +1223,8 @@ PROFILE_PREREQUISITES = {
     "admin-commands": _NATIVE,
     "anti-xray": _NATIVE,
     "composter-chance": _NATIVE,
+    "chat-visibility": _NATIVE,
+    "datapack-reload": _NATIVE,
     "block-log": _NATIVE,
     "chisel": _NATIVE,
     "core-client": _SHARED_BUILD,

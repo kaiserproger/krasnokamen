@@ -19,6 +19,8 @@ pub(crate) struct Image {
     uuid_authored: bool,
     /// Painting direction (`add_entity` data 2..=5) and variant registry index.
     painting: Option<(u8, u32)>,
+    /// An edit that touched no villager field keeps the entity's live villager state.
+    keep_villager: bool,
 }
 fn error(text: impl Into<String>) -> CommandError {
     CommandError::Message(text.into())
@@ -231,16 +233,13 @@ pub(crate) fn supports(state: &TickState, type_id: u32, name: &str, key: &str) -
         _ => return None,
     })
 }
-pub(crate) fn prepare(
+/// Validate `authored` against the summon field set and normalise each value.
+fn authored_fields(
     state: &TickState,
     type_id: u32,
     name: &str,
-    pos: [f64; 3],
-    nbt: &Tag,
-) -> Result<Image, CommandError> {
-    let Tag::Compound(authored) = nbt else {
-        return Err(error("Summon NBT must be a compound"));
-    };
+    authored: &[(String, Tag)],
+) -> Result<Vec<(String, Tag)>, CommandError> {
     let horse = crate::taming::horse(name);
     let mut fields = Vec::with_capacity(authored.len());
     for (key, value) in authored {
@@ -516,6 +515,20 @@ pub(crate) fn prepare(
         };
         fields.push((key.clone(), value));
     }
+    Ok(fields)
+}
+
+pub(crate) fn prepare(
+    state: &TickState,
+    type_id: u32,
+    name: &str,
+    pos: [f64; 3],
+    nbt: &Tag,
+) -> Result<Image, CommandError> {
+    let Tag::Compound(authored) = nbt else {
+        return Err(error("Summon NBT must be a compound"));
+    };
+    let mut fields = authored_fields(state, type_id, name, authored)?;
     if name == "minecraft:painting" {
         // Vanilla Painting defaults: facing south, the default variant.
         if !fields.iter().any(|(key, _)| key == "facing") {
@@ -528,6 +541,72 @@ pub(crate) fn prepare(
             ));
         }
     }
+    let equipment_authored = authored.iter().any(|(key, _)| key == "equipment");
+    decode(
+        state,
+        type_id,
+        name,
+        pos,
+        fields,
+        equipment_authored,
+        Summoned::Fresh,
+    )
+}
+
+/// The image of an existing entity after a `data` edit. `image` is the whole
+/// edited native NBT, private fields included, so everything a checkpoint keeps
+/// (a villager's trades and gossip, mount cargo, leash, loot) decodes exactly as
+/// recovery decodes it; only the `changed` fields are admitted through the
+/// summon field set and normalised like a summon's.
+pub(crate) fn prepare_edit(
+    state: &TickState,
+    type_id: u32,
+    name: &str,
+    pos: [f64; 3],
+    mut image: Vec<(String, Tag)>,
+    changed: &[(String, Tag)],
+    keep_villager: bool,
+) -> Result<Image, CommandError> {
+    for (key, value) in authored_fields(state, type_id, name, changed)? {
+        match image.iter_mut().find(|(seen, _)| *seen == key) {
+            Some((_, old)) => *old = value,
+            None => image.push((key, value)),
+        }
+    }
+    // Identity and place are the entity's own, not data to load back.
+    image.retain(|(key, _)| !matches!(key.as_str(), "id" | "Pos" | "UUID"));
+    let equipment_authored = changed.iter().any(|(key, _)| key == "equipment");
+    let mut edited = decode(
+        state,
+        type_id,
+        name,
+        pos,
+        image,
+        equipment_authored,
+        Summoned::Existing,
+    )?;
+    // An edit that leaves every villager field alone leaves the live villager
+    // (and the transient brain state a reload would drop) alone too.
+    edited.keep_villager = keep_villager;
+    Ok(edited)
+}
+
+/// Whether an image is for a new entity or one already living.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Summoned {
+    Fresh,
+    Existing,
+}
+
+fn decode(
+    state: &TickState,
+    type_id: u32,
+    name: &str,
+    pos: [f64; 3],
+    fields: Vec<(String, Tag)>,
+    equipment_authored: bool,
+    origin: Summoned,
+) -> Result<Image, CommandError> {
     let uuid_authored = fields.iter().any(|(key, _)| key == "UUID");
     let base = VanillaEntity {
         id: name.into(),
@@ -551,7 +630,7 @@ pub(crate) fn prepare(
     };
     let image = EntityStateImage::from_record(&state.registry, &native)
         .map_err(|e| error(e.to_string()))?;
-    let equipment = if authored.iter().any(|(key, _)| key == "equipment") {
+    let equipment = if equipment_authored {
         Some(
             crate::entity_loot::equipment_from_fields(&state.registry.items, &native.extra_fields)
                 .map_err(|e| error(e.to_string()))?,
@@ -570,7 +649,7 @@ pub(crate) fn prepare(
         )
         .map_err(|e| error(e.to_string()))?;
         villager.wandering = name == "minecraft:wandering_trader";
-        if name == "minecraft:zombie_villager" {
+        if origin == Summoned::Fresh && name == "minecraft:zombie_villager" {
             villager.conversion_time = Some(-1);
         }
         Some(villager)
@@ -584,6 +663,7 @@ pub(crate) fn prepare(
         equipment,
         uuid_authored,
         painting,
+        keep_villager: false,
     })
 }
 /// Allocate the canonical kind before indexing or publishing a summoned entity.
@@ -605,6 +685,7 @@ pub(crate) fn spawn(
 
 pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
     let slot = state.entities.slot_of(id).expect("new summon");
+    let was_baby = state.entities.row(slot).appearance.baby;
     let native = image.native;
     let baby =
         native.extra_fields.iter().any(
@@ -671,7 +752,9 @@ pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
     let (body, row) = state.entities.parts_mut(slot);
     row.health = native.health;
     row.age = image.state.age;
-    row.villager = image.villager.map(Box::new);
+    if !image.keep_villager {
+        row.villager = image.villager.map(Box::new);
+    }
     row.controls = image.state.controls;
     body.burn_ticks = image.state.burn_ticks;
     row.love = image.state.love;
@@ -681,18 +764,25 @@ pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
     if native.id == "minecraft:armor_stand" {
         row.opaque_entity_fields = image.state.opaque_entity_fields;
     }
-    if baby {
-        body.height *= 0.5;
+    // A size changes only when the baby state does: an already small hitbox is
+    // not halved again, and growing up restores the full one.
+    if baby != was_baby {
+        body.height *= if baby { 0.5 } else { 2.0 };
     }
     let appearance = Arc::make_mut(&mut row.appearance);
     if let Some(equipment) = image.equipment {
         appearance.equipment = equipment;
     }
     appearance.health = native.health;
+    if let Some(orb) = native.experience_orb {
+        appearance.experience_orb = Some(orb);
+    }
     appearance.baby = baby;
     crate::entity_controls::sync_no_gravity(appearance, row.controls.no_gravity);
     if body.burn_ticks > 0 {
         appearance.shared_flags |= 1;
+    } else {
+        appearance.shared_flags &= !1;
     }
     if let Some(wool) = native.sheep_wool {
         appearance
@@ -709,19 +799,19 @@ pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
     {
         crate::entity_life::set_snow_golem_pumpkin(appearance, *pumpkin != 0);
     }
-    if let Some((_, Tag::String(name))) = native
+    appearance.custom_name = native
         .extra_fields
         .iter()
-        .find(|(key, _)| key == "CustomName")
-    {
-        appearance.custom_name = Some(name.clone());
-    }
+        .find_map(|(key, value)| match value {
+            Tag::String(name) if key == "CustomName" => Some(name.clone()),
+            _ => None,
+        });
     appearance.custom_name_visible = native.extra_fields.iter().any(
         |(key, value)| matches!((key.as_str(), value), ("CustomNameVisible", Tag::Byte(v)) if *v != 0),
     );
     crate::entity_life::restore_appearance(body, row);
-    if baby {
-        let half_width = body.half_width * 0.5;
+    if baby != was_baby {
+        let half_width = body.half_width * if baby { 0.5 } else { 2.0 };
         state.entities.set_half_width(slot, half_width);
     }
     crate::entity_loot::restore(state, slot);
@@ -731,6 +821,34 @@ pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
     }
     crate::taming::sync(state, slot);
     crate::villager::sync_appearance(state, slot);
+    state.appearance_changed.push(id);
+}
+
+/// Install a prepared item payload on the existing item entity `id`: its stack,
+/// gravity, invulnerability, pickup delay, age and motion. Summon and
+/// `data merge entity` share this, so both author the same fields.
+pub(crate) fn apply_item(state: &mut TickState, id: EntityId, item: ItemSummon) {
+    let Some(slot) = state.entities.slot_of(id) else {
+        return;
+    };
+    crate::entity_controls::set_no_gravity(state, slot, item.no_gravity);
+    let row = state.entities.row_mut(slot);
+    row.controls.invulnerable = item.invulnerable;
+    row.item = Some(Box::new(crate::entities::StackRow {
+        item_id: item.stack.item_id,
+        count: item.stack.count,
+        stack: Some(item.stack.clone()),
+    }));
+    Arc::make_mut(&mut row.appearance).item = Some(item.stack);
+    if let Some(age) = item.age {
+        row.age = age;
+    }
+    if let Some(delay) = item.pickup_delay {
+        state.entities.body_mut(slot).pickup_delay = delay;
+    }
+    if let Some(motion) = item.motion {
+        state.entities.set_vel(slot, motion.map(|v| v * 20.0));
+    }
     state.appearance_changed.push(id);
 }
 

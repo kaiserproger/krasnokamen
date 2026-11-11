@@ -544,9 +544,15 @@ authenticated reverse proxy; `allow_remote` is required for non-loopback binds.
 Solaris loads **directory and ZIP** packs from `<world_dir>/datapacks/` at
 startup. Each needs `pack.mcmeta` with a `pack` object. Packs are ordered by
 directory name and the lexically later resource wins. Symlinks, ZIP entries
-that escape the archive, worldgen or custom-dimension resources and
-unimplemented resource kinds fail startup with an explicit error rather than
-falling back to built-in content.
+that escape the archive and unimplemented resource kinds fail startup with an
+explicit error rather than falling back to built-in content. Worldgen,
+`dimension` and `dimension_type` resources (and `tags/worldgen`) cannot be
+applied, because the generators are native code: the rest of the pack loads and
+the server logs one warning per pack naming the ignored resource paths (an
+operator who enables such a pack also sees it in chat). A pack the saved
+selection names that is gone from disk at startup is dropped from the selection
+with a warning, like vanilla; a corrupt or unknown saved selection refuses to open
+the world rather than guessing.
 
 Supported resources (singular 26.1.2 directory names):
 
@@ -589,18 +595,24 @@ keep the source dimension they were invoked from.
 `/debug start|stop|function <id|#tag>` (level 3) follow vanilla: `start` and `stop`
 report the elapsed seconds, ticks and ticks per second; `function` runs the
 function (or every function of a tag) on the calling tick and writes the trace
-`debug/debug-trace-<time>.txt` in the world folder (`[C]` command, `[R]` result,
-`[F]` function, `[E]` error, `[M]` message). `/debug give`/`menu` keep their
-Solaris fixture grammar.
+`debug/debug-trace-<yyyy-MM-dd_HH.mm.ss>.txt` (UTC; vanilla uses the host's zone) in the
+server directory, beside the world folder (`[C]` command, `[R]` result,
+`[F]` function, `[E]` error, `[M]` message); `[M]` lines are what the command
+source is sent, not text that commands deliver to players (`/tellraw`, `/say`,
+`/msg`). `/debug give`/`menu` keep their Solaris fixture grammar.
 
 `@e[predicate=<id>]` selects by a datapack loot predicate
 (`data/<ns>/predicate/<path>.json`) evaluated with the candidate as `this`;
 `entity_properties`, `inverted`, `all_of`, `any_of`, `random_chance`,
-`time_check`, `weather_check` and `entity_scores` are supported, and a pack
-carrying any other condition is refused at load. ZIP packs
-(`<pack>.zip` with `pack.mcmeta` at its root) load like directory packs. Packs with
-worldgen or custom-dimension resources are refused: the generators are native
-code, not data.
+`time_check`, `weather_check`, `entity_scores`, `location_check` and
+`block_state_property` (both read the candidate's location) are evaluated.
+`match_tool` is accepted at load, but a selector has no tool to test, so it
+sees nothing. A pack carrying any other condition, or a field these do not
+read, is refused at load. ZIP packs
+(`<pack>.zip` with `pack.mcmeta` at its root, at most 16 MiB and 16384 entries) load like
+directory packs. Datapack
+worldgen overrides are not applied (see above; tracked as
+`DATAPACK-WORLDGEN-OVERRIDES`).
 
 Execution is bounded: each root command or function invocation gets its own
 `minecraft:max_command_sequence_length` budget shared by nested functions and
@@ -636,15 +648,23 @@ Map-making command surface (full status in [COMPATIBILITY.md](COMPATIBILITY.md))
 
 - `/data get entity|block` (level 2) reads native owners, including live
   inventory and timers, without editing state; paths accept dotted keys, indices
-  and compound filters and must select one value. `/data merge block` writes only
-  command-block `Command` and `auto`. Namespaced storage supports `get`, `merge`,
-  `remove` and `modify` (world-global, journaled), and `from` accepts storage,
-  entity or block sources. `/data merge|modify|remove entity <one entity>` edits a
-  mob or experience orb in the sender's dimension by loading the edited NBT back
-  through the summon field set: a changed field `/summon` cannot author, `Pos`,
-  item entities and players are refused with a message and nothing changes; a
-  removed field reverts to its default and the entity keeps its UUID and place.
-  Block `/data modify` and `/data remove` are not supported.
+  and compound filters and must select one value. Namespaced storage supports `get`,
+  `merge`, `remove` and `modify` (world-global, journaled), and `from` accepts
+  storage, entity or block sources. `/data merge|modify|remove` also edits:
+  - **block entities** at a loaded position of the command's dimension: the edited
+    native NBT image is validated and installed through the same path `setblock`
+    NBT uses, so a container's slots, a furnace's clock, a sign, a brewing stand,
+    a spawner and every other kind with a native image keep their own owner
+    state, and viewers receive the new data. `id`, `x`, `y` and `z` stay the
+    block's own. Command blocks accept only `Command` and `auto`; any other
+    changed field refuses the whole edit.
+  - **one entity** in any loaded dimension (a selector or UUID from another
+    dimension edits the entity where it lives), by loading the edited NBT back
+    through the summon field set. Item entities take `Item`, `Age`,
+    `PickupDelay`, `Motion`, `NoGravity` and `Invulnerable`. A changed field
+    `/summon` cannot author, `Pos`, and players are refused with a message and
+    nothing changes; a removed field reverts to its default and the entity keeps
+    its UUID and place.
 - `/clone <begin> <end> <dest> [replace|masked|filtered <block|#tag>]
   [normal|force|move]` copies loaded regions within the `max_block_modifications`
   gamerule limit. Block-entity copies use the command-data snapshot; live state

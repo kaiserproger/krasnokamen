@@ -321,7 +321,13 @@ async fn run_connection(
     } else {
         server.admin.session_level(id)
     };
-    let recipes = server.recipes.current();
+    let recipes = match crate::recipes::for_join(&server.hub.current_registry()) {
+        Ok(recipes) => recipes,
+        Err(error) => {
+            warn!(%peer, connection = id.0, stage = "join-burst", name = %outcome.name, %error, "connection closed");
+            return Err(error);
+        }
+    };
     if let Err(error) = crate::play::send_join_burst(crate::play::JoinBurst {
         conn: &mut conn,
         data: &server.data,

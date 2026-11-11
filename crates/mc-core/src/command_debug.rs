@@ -9,7 +9,8 @@
 //! for real while a [`Tracer`] records every command, its result, the nested
 //! function calls, the messages the commands send and their errors in the
 //! pinned `DebugCommand$Tracer` format. The trace is written to
-//! `debug/debug-trace-<date>.txt` beside the world folder by a worker thread
+//! `debug/debug-trace-<UTC date>.txt` beside the world folder (the server
+//! directory, as vanilla's `getFile("debug")`) by a worker thread
 //! (never the tick), the result is the number of commands of the traced
 //! functions, and tracing from inside a trace refuses with `noRecursion`.
 use super::command_execution::CommandResult;
@@ -200,34 +201,12 @@ pub(crate) fn stop(state: &mut TickState, connection: ConnectionId) -> CommandRe
     CommandResult::Success(per_second as i32)
 }
 
-/// `yyyy-MM-dd_HH.mm.ss` (UTC) of the system clock: `Util.getFilenameFormattedDateTime`.
-fn file_stamp() -> String {
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_secs());
-    let days = (seconds / 86_400) as i64;
-    let rest = seconds % 86_400;
-    // Civil date from days since 1970-01-01 (proleptic Gregorian).
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let day_of_era = z.rem_euclid(146_097);
-    let year_of_era =
-        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_index = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
-    let month = if month_index < 10 {
-        month_index + 3
-    } else {
-        month_index - 9
-    };
-    let year = year_of_era + era * 400 + i64::from(month <= 2);
-    format!(
-        "{year:04}-{month:02}-{day:02}_{:02}.{:02}.{:02}",
-        rest / 3_600,
-        rest % 3_600 / 60,
-        rest % 60
-    )
+/// `yyyy-MM-dd_HH.mm.ss` of the tick's wall clock, in UTC (vanilla's
+/// `Util.getFilenameFormattedDateTime` uses the host's zone; the core carries
+/// no zone database).
+fn file_stamp(unix_seconds: i64) -> String {
+    let stamp = crate::advancements::timestamp_from_unix(unix_seconds);
+    format!("{}_{}", &stamp[..10], stamp[11..19].replace(':', "."))
 }
 
 /// `/debug function <id|#tag>`: resolve like `FunctionArgument`, run the
@@ -305,7 +284,7 @@ pub(crate) fn trace_function(
     state.debug_trace = Some(Tracer::new(connection));
     crate::datapacks::run_functions(state, connection, executor, name, changes);
     let tracer = state.debug_trace.take().expect("trace installed above");
-    let file = format!("debug-trace-{}.txt", file_stamp());
+    let file = format!("debug-trace-{}.txt", file_stamp((state.wall_clock)()));
     state.datapacks.write_trace(connection, &file, tracer.out);
     let arguments = if functions.len() == 1 {
         vec![text(commands), text(&functions[0]), text(&file)]

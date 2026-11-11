@@ -922,20 +922,8 @@ pub(crate) fn execute(
                         return Failed;
                     }
                 };
-                let id = crate::tick::spawn_item_entity(state, at, item.stack);
-                if let Some(slot) = state.entities.slot_of(id) {
-                    crate::entity_controls::set_no_gravity(state, slot, item.no_gravity);
-                    state.entities.row_mut(slot).controls.invulnerable = item.invulnerable;
-                    if let Some(delay) = item.pickup_delay {
-                        state.entities.body_mut(slot).pickup_delay = delay;
-                    }
-                    if let Some(age) = item.age {
-                        state.entities.row_mut(slot).age = age;
-                    }
-                    if let Some(motion) = item.motion {
-                        state.entities.set_vel(slot, motion.map(|v| v * 20.0));
-                    }
-                }
+                let id = crate::tick::spawn_item_entity(state, at, item.stack.clone());
+                crate::command_summon::apply_item(state, id, item);
                 changes.entities_spawned.push(id);
                 success_feedback(
                     state,
@@ -1069,7 +1057,7 @@ pub(crate) fn execute(
             };
             let content = translated(key, vec![name, message]);
             if connection == crate::command_console::CONNECTION {
-                state.push_player(
+                state.push_to_recipient(
                     connection,
                     PlayerChange::StyledChat {
                         content: content.clone(),
@@ -1082,7 +1070,7 @@ pub(crate) fn execute(
                 .filter(|recipient| state.accepts_chat(*recipient))
                 .collect();
             for connection in connections {
-                state.push_player(
+                state.push_to_recipient(
                     connection,
                     PlayerChange::StyledChat {
                         content: content.clone(),
@@ -1194,11 +1182,14 @@ pub(crate) fn execute(
                     .entity_connection(target)
                     .filter(|recipient| state.accepts_chat(*recipient))
                 {
-                    feedback(
-                        state,
+                    state.push_to_recipient(
                         recipient,
-                        "commands.message.display.incoming",
-                        vec![entity_name(state, executor), message.clone()],
+                        PlayerChange::StyledChat {
+                            content: translated(
+                                "commands.message.display.incoming",
+                                vec![entity_name(state, executor), message.clone()],
+                            ),
+                        },
                     );
                 }
                 feedback(

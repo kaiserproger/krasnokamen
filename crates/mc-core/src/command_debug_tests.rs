@@ -23,11 +23,16 @@ fn pack(root: &Path, resources: &[(&str, &str)]) {
 }
 
 fn fixture(world: &Path) -> TickState {
-    let root = world.join("datapacks");
+    // The world folder sits in the server directory, which gets `debug/`.
+    let root = world.join("world").join("datapacks");
     pack(
         &root,
         &[
             ("test/function/inner.mcfunction", "time add 3"),
+            (
+                "test/function/chatty.mcfunction",
+                "tellraw @s {\"text\":\"to the player\"}\nsay to everyone\nmsg @s to me\ntime add 2",
+            ),
             (
                 "test/function/outer.mcfunction",
                 "time add 10\nfunction test:inner\nbogus nonsense\ntime add 1",
@@ -115,7 +120,7 @@ fn profiler_reports_seconds_ticks_and_rate_and_refuses_double_start_and_stop() {
 
 fn trace_file(world: &Path) -> (String, String) {
     let mut files = std::fs::read_dir(world.join("debug"))
-        .expect("debug folder beside the datapacks")
+        .expect("debug folder in the server directory")
         .map(|entry| entry.unwrap().path())
         .collect::<Vec<_>>();
     assert_eq!(files.len(), 1, "{files:?}");
@@ -131,6 +136,7 @@ fn function_trace_records_commands_results_messages_errors_and_nested_calls() {
     let world = tempfile::tempdir().unwrap();
     let mut state = fixture(world.path());
     state.day_time = 0;
+    state.wall_clock = || 1_767_225_600 + 86_461;
 
     assert_eq!(
         execute(&mut state, "debug function test:outer", 3),
@@ -140,10 +146,7 @@ fn function_trace_records_commands_results_messages_errors_and_nested_calls() {
     assert_eq!(state.day_time, 14);
     settle(&mut state);
     let (name, trace) = trace_file(world.path());
-    assert!(
-        name.starts_with("debug-trace-") && name.ends_with(".txt"),
-        "{name}"
-    );
+    assert_eq!(name, "debug-trace-2026-01-02_00.01.01.txt");
 
     // Only the summary reaches the player; the commands' own feedback is in the file.
     let shown = said(&mut state);
@@ -241,7 +244,11 @@ fn function_trace_write_failure_is_reported_not_hidden() {
     let mut state = fixture(world.path());
     // A runtime with no world folder has nowhere to write the trace.
     state.datapacks = Runtime::new(
-        PackSet::load(&world.path().join("datapacks"), Selection::default()).unwrap(),
+        PackSet::load(
+            &world.path().join("world").join("datapacks"),
+            Selection::default(),
+        )
+        .unwrap(),
         std::path::PathBuf::new(),
     );
     assert_eq!(
@@ -251,4 +258,58 @@ fn function_trace_write_failure_is_reported_not_hidden() {
     said(&mut state);
     settle(&mut state);
     assert_eq!(said(&mut state), ["commands.debug.function.traceFailed"]);
+}
+
+#[test]
+fn function_trace_records_only_what_the_source_is_sent() {
+    let world = tempfile::tempdir().unwrap();
+    let mut state = fixture(world.path());
+    let player = crate::boundary::ConnectionId(1);
+    let entity = state.connections.entity_of(player).expect("joined");
+    state.outbox.clear();
+    state.command_context.current = None;
+    let context = crate::command_context::Context::source(&state, player, entity, 3);
+    crate::command_context::begin_sequence(&mut state);
+    state.command_context.current = Some(context);
+    let result = crate::command_context::native(
+        &mut state,
+        "debug function test:chatty",
+        context,
+        &mut ChangeSet::default(),
+        false,
+    );
+    assert_eq!(result, Ok(Success(4)));
+    settle(&mut state);
+    let (_, trace) = trace_file(world.path());
+    // The player still gets what the commands deliver to them as a target...
+    let delivered: Vec<String> = state
+        .outbox
+        .get(&player)
+        .map(|changes| {
+            changes
+                .iter()
+                .filter_map(|change| match change {
+                    PlayerChange::StyledChat { content } => Some(text_of(content)),
+                    PlayerChange::Chat { message } => Some(message.clone()),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    for expected in ["to the player", "to everyone", "to me"] {
+        assert!(
+            delivered.iter().any(|line| line.contains(expected)),
+            "{expected} reaches the player: {delivered:?}"
+        );
+    }
+    // ... and the trace, which records only what the source is sent, has
+    // neither: its messages are the sender's copy of the private message and
+    // the time feedback (the command lines themselves are always traced).
+    let messages: Vec<&str> = trace.lines().filter(|line| line.contains("[M]")).collect();
+    assert_eq!(messages.len(), 2, "{trace}");
+    assert!(
+        messages[0].contains("commands.message.display.outgoing"),
+        "{trace}"
+    );
+    assert!(messages[1].contains("commands.time.set"), "{trace}");
 }

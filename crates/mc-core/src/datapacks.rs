@@ -40,7 +40,16 @@ impl Selection {
         }
         let mut seen = BTreeSet::new();
         for id in self.enabled.iter().chain(&self.disabled) {
-            if id.is_empty() || id.len() > 1024 || !seen.insert(id) {
+            // A pack is the builtin `vanilla` or a `file/<name>` entry of the
+            // datapack folder; anything else is not a value this server writes.
+            let known = id == "vanilla"
+                || id.strip_prefix("file/").is_some_and(|name| {
+                    !name.is_empty()
+                        && name != "."
+                        && name != ".."
+                        && !name.contains(['/', '\\', '\0'])
+                });
+            if !known || id.len() > 1024 || !seen.insert(id) {
                 return Err(format!("Invalid or duplicate datapack selection id: {id}"));
             }
         }
@@ -62,6 +71,11 @@ pub(crate) struct PackSet {
     /// conditions the selector `predicate=` option can evaluate.
     pub(crate) predicates: BTreeMap<String, serde_json::Value>,
     resources: BTreeMap<String, String>,
+    /// Worldgen and dimension resources by pack id: the native generators are
+    /// Rust, so these are not applied. The rest of such a pack still loads.
+    pub(crate) ignored: BTreeMap<String, Vec<String>>,
+    /// Selected packs this load found gone from disk and dropped from the selection.
+    pub(crate) dropped: Vec<String>,
 }
 impl Default for PackSet {
     fn default() -> Self {
@@ -72,6 +86,8 @@ impl Default for PackSet {
             tags: BTreeMap::new(),
             predicates: BTreeMap::new(),
             resources: BTreeMap::new(),
+            ignored: BTreeMap::new(),
+            dropped: Vec::new(),
         }
     }
 }
@@ -240,18 +256,27 @@ fn read_text(path: &Path, remaining: &mut usize) -> Result<String, String> {
 }
 
 fn open_zip(path: &Path) -> Result<zip::ZipArchive<std::fs::File>, String> {
-    if !std::fs::symlink_metadata(path)
-        .map_err(|e| e.to_string())?
-        .file_type()
-        .is_file()
-    {
+    let metadata = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    if !metadata.file_type().is_file() {
         return Err(format!(
             "Datapack archive must be a regular file: {}",
             path.display()
         ));
     }
-    zip::ZipArchive::new(std::fs::File::open(path).map_err(|e| e.to_string())?)
-        .map_err(|e| format!("{}: {e}", path.display()))
+    // Opening reads the whole central directory into memory, whatever
+    // the entries are: bound it by the file, then by the entry count.
+    if metadata.len() > MAX_BYTES as u64 {
+        return Err(format!("Datapack archive too large: {}", path.display()));
+    }
+    let archive = zip::ZipArchive::new(std::fs::File::open(path).map_err(|e| e.to_string())?)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    if archive.len() > MAX_RESOURCES {
+        return Err(format!(
+            "Datapack archive has too many entries: {}",
+            path.display()
+        ));
+    }
+    Ok(archive)
 }
 
 /// Where a pack's files live.
@@ -469,6 +494,12 @@ impl PackSet {
             }
             descriptions.insert(id.clone(), description(&pack.metadata));
         }
+        let dropped: Vec<String> = selection
+            .enabled
+            .iter()
+            .filter(|id| *id != "vanilla" && !packs.contains_key(*id))
+            .cloned()
+            .collect();
         selection
             .enabled
             .retain(|id| id == "vanilla" || packs.contains_key(id));
@@ -481,6 +512,7 @@ impl PackSet {
         let mut result = Self {
             selection,
             descriptions,
+            dropped,
             ..Self::default()
         };
         let mut visited = 0;
@@ -494,8 +526,13 @@ impl PackSet {
                     .split_once('/')
                     .ok_or("Resource must be namespaced")?;
                 let (kind, resource) = tail.split_once('/').ok_or("Resource must have a type")?;
-                if matches!(kind, "worldgen" | "dimension" | "dimension_type") {
-                    return Err(format!("Worldgen datapacks are not supported: {relative}"));
+                if matches!(kind, "worldgen" | "dimension" | "dimension_type")
+                    || (kind == "tags" && resource.starts_with("worldgen/"))
+                {
+                    // The native generators are Rust: these resources cannot be
+                    // applied, so the rest of the pack loads and the operator is told.
+                    result.ignored.entry(id.clone()).or_default().push(relative);
+                    continue;
                 }
                 if kind == "function" && resource.ends_with(".mcfunction") {
                     let id = identifier(&format!(
@@ -672,6 +709,39 @@ impl PackSet {
         !self.resources.is_empty() || !self.predicates.is_empty()
     }
 
+    /// One operator-facing warning per condition this load found that `previous`
+    /// did not already have: a selected pack gone from disk, and a pack whose
+    /// worldgen or dimension resources cannot be applied. Each is reported once.
+    pub(crate) fn warnings(&self, previous: Option<&Self>) -> Vec<String> {
+        const SHOWN: usize = 5;
+        let mut warnings = Vec::new();
+        for id in &self.dropped {
+            if previous.is_none_or(|previous| !previous.dropped.contains(id)) {
+                warnings.push(format!(
+                    "Datapack {id} is selected but no longer on disk; it was dropped from the selection"
+                ));
+            }
+        }
+        for (id, paths) in &self.ignored {
+            if previous.is_some_and(|previous| previous.ignored.get(id) == Some(paths)) {
+                continue;
+            }
+            let shown = paths.iter().take(SHOWN).cloned().collect::<Vec<_>>();
+            let more = paths.len().saturating_sub(SHOWN);
+            warnings.push(format!(
+                "Datapack {id}: {} worldgen or dimension resource(s) are not supported by the native generators and were ignored: {}{}",
+                paths.len(),
+                shown.join(", "),
+                if more > 0 {
+                    format!(" and {more} more")
+                } else {
+                    String::new()
+                }
+            ));
+        }
+        warnings
+    }
+
     pub(crate) fn install_content(
         &self,
         registry: &mut crate::registry::CoreRegistry,
@@ -713,31 +783,12 @@ impl PackSet {
     }
 }
 
-/// The registry's recipes and loot as the world started, before any datapack
-/// changed them: what a reload rebuilds the enabled packs' content on.
-pub(crate) struct ContentBase {
-    recipes: Vec<mc_data::recipes::Recipe>,
-    loot: mc_data::loot::LootTables,
-}
-impl ContentBase {
-    pub(crate) fn of(registry: &crate::registry::CoreRegistry) -> Self {
-        Self {
-            recipes: registry.recipes.clone(),
-            loot: registry.loot.clone(),
-        }
-    }
-    fn restore(&self, registry: &mut crate::registry::CoreRegistry) {
-        registry.recipes.clone_from(&self.recipes);
-        registry.loot.clone_from(&self.loot);
-    }
-}
-
 #[derive(Default)]
 pub(crate) struct Runtime {
     packs: Arc<PackSet>,
-    /// Recipes and loot before any datapack; `None` until the first reload
-    /// that changes them (the registry then still holds exactly that).
-    base: Option<Arc<ContentBase>>,
+    /// The registry before any datapack, which every reload rebuilds on;
+    /// `None` until the first reload (the registry then still is that).
+    base: Option<Arc<crate::registry::CoreRegistry>>,
     root: Option<PathBuf>,
     reload: Option<Reload>,
     load_pending: bool,
@@ -867,11 +918,16 @@ impl Runtime {
             ..Self::default()
         }
     }
-    pub(crate) fn install(&mut self, packs: PackSet, root: PathBuf, base: ContentBase) {
+    pub(crate) fn install(
+        &mut self,
+        packs: PackSet,
+        root: PathBuf,
+        base: Arc<crate::registry::CoreRegistry>,
+    ) {
         self.selection_dirty |= self.packs.selection != packs.selection;
         self.packs = Arc::new(packs);
         self.root = Some(root);
-        self.base = Some(Arc::new(base));
+        self.base = Some(base);
         self.load_pending = true;
     }
     pub(crate) fn selection(&self) -> &Selection {
@@ -934,15 +990,17 @@ impl Runtime {
         });
         Ok(())
     }
-    /// Write a finished `/debug function` trace to `<world>/debug/<file>` on a
-    /// worker thread; [`tick`] reports a failure to `connection`.
+    /// Write a finished `/debug function` trace to `debug/<file>` in the
+    /// server directory (the folder holding the world) on a worker thread;
+    /// [`tick`] reports a failure to `connection`.
     pub(crate) fn write_trace(&mut self, connection: ConnectionId, file: &str, trace: String) {
         let (tx, receiver) = std::sync::mpsc::sync_channel(1);
         let directory = self
             .root
             .as_deref()
             .and_then(Path::parent)
-            .map(|world| world.join("debug"));
+            .and_then(Path::parent)
+            .map(|server| server.join("debug"));
         match directory {
             Some(directory) => {
                 let file = directory.join(file);
@@ -1251,18 +1309,17 @@ pub(crate) fn command(
     outcome
 }
 
-/// Rebuild the registry's recipes, loot and predicates for `packs` from the
-/// content the world started with, and replace the registry in every world.
+/// Rebuild the registry for `packs` from the registry the world started with,
+/// before any datapack, and replace the registry in every world.
 /// The clients get the new recipes and their recipe books again.
 fn install_registry(state: &mut TickState, packs: &PackSet) -> Result<(), String> {
     let base = Arc::clone(
         state
             .datapacks
             .base
-            .get_or_insert_with(|| Arc::new(ContentBase::of(&state.registry))),
+            .get_or_insert_with(|| Arc::clone(&state.registry)),
     );
-    let mut registry = (*state.registry).clone();
-    base.restore(&mut registry);
+    let mut registry = (*base).clone();
     packs.install_content(&mut registry)?;
     let registry = Arc::new(registry);
     if state.dimension_globals.active {
@@ -1283,6 +1340,11 @@ fn install_registry(state: &mut TickState, packs: &PackSet) -> Result<(), String
 /// Use a reloaded registry in this world and tell its clients.
 pub(crate) fn adopt_registry(state: &mut TickState, registry: Arc<crate::registry::CoreRegistry>) {
     state.registry = Arc::clone(&registry);
+    if let Some(published) = &state.published_registry {
+        *published
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Arc::clone(&registry);
+    }
     let reload = crate::boundary::RegistryReload::new(registry);
     let connections: Vec<ConnectionId> = state.connections.all_connections().collect();
     for connection in connections {
@@ -1321,6 +1383,7 @@ fn finish(state: &mut TickState, reload: Reload, result: Result<Completed, Failu
                 return;
             }
             state.datapacks.selection_dirty |= state.datapacks.packs.selection != packs.selection;
+            let warnings = packs.warnings(Some(&state.datapacks.packs));
             state.datapacks.packs = Arc::new(packs);
             state.datapacks.load_pending = true;
             match &reload.job {
@@ -1333,6 +1396,10 @@ fn finish(state: &mut TickState, reload: Reload, result: Result<Completed, Failu
                     "commands.reload.success",
                     Vec::new(),
                 ),
+            }
+            for warning in warnings {
+                tracing::warn!("{warning}");
+                feedback(state, connection, warning);
             }
         }
         (Job::List(scope), Completed::Listing(listing)) => {

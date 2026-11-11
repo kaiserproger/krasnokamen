@@ -48,6 +48,7 @@ pub mod chunk_loader;
 pub(crate) mod chunk_tickets;
 pub mod combat;
 pub mod command_attribute;
+mod command_block_data;
 mod command_block_entity;
 mod command_blocks;
 pub mod command_border;

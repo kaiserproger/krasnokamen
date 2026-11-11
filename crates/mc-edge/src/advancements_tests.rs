@@ -222,9 +222,10 @@ fn reloaded_recipes_are_announced_once_and_feed_the_next_book() {
         config
     })
     .unwrap();
-    let before = crate::recipes::RecipePackets::new(core.registry()).unwrap();
+    let started = Arc::clone(core.registry());
+    let before = crate::recipes::packets_for(&started).unwrap();
     // A reload that dropped every stonecutter recipe.
-    let mut reloaded = (**core.registry()).clone();
+    let mut reloaded = (*started).clone();
     reloaded
         .recipes
         .retain(|recipe| !matches!(recipe.kind, mc_data::recipes::RecipeKind::Stonecutting(_)));
@@ -233,8 +234,7 @@ fn reloaded_recipes_are_announced_once_and_feed_the_next_book() {
     assert!(!before.update.stonecutter_recipes.is_empty());
 
     let reload = mc_core::boundary::RegistryReload::new(Arc::new(reloaded));
-    let shared = crate::recipes::SharedRecipes::new(before);
-    let old = shared.current();
+    let old = before;
     let mut viewer = crate::plan::ViewerState::new(ConnectionId(7), EntityId(1), [0.0; 3]);
     viewer.advancements = Arc::clone(&old.advancements);
     let name = old.advancements.recipes.keys().next().unwrap().clone();
@@ -260,15 +260,15 @@ fn reloaded_recipes_are_announced_once_and_feed_the_next_book() {
     ClientboundRecipeBookAdd::decode(&mut &body(&packets[1])[..]).unwrap();
 
     // Every connection's copy of the announcement shares one build, which
-    // later joiners also get.
-    let built = crate::recipes::reloaded(&reload).unwrap();
+    // a player joining after the reload also gets: the recipes follow the
+    // registry the core runs on, not who was online to be told.
+    let built = crate::recipes::packets_for(&reload.registry).unwrap();
     assert!(Arc::ptr_eq(&built.advancements, &viewer.advancements));
-    shared.adopt(&built);
-    assert!(Arc::ptr_eq(&shared.current(), &built));
     assert!(Arc::ptr_eq(
-        &crate::recipes::reloaded(&reload.clone()).unwrap(),
+        &crate::recipes::for_join(&reload.registry).unwrap(),
         &built
     ));
+    assert!(built.update.stonecutter_recipes.is_empty());
 }
 #[test]
 fn displayed_tree_layout_uses_depth_and_distinct_leaf_rows() {

@@ -1,5 +1,6 @@
 use super::*;
 use crate::boundary::ChangeSet;
+use crate::entities::EntityKind;
 use mc_data::{Identifier, ItemStack};
 
 fn fixture() -> (TickState, EntityId, Context) {
@@ -48,11 +49,8 @@ fn data_paths_cover_filters_quoted_keys_arrays_and_result_types() {
     assert_eq!(result(&get(&root, "Pos[0]").unwrap()), -2);
     assert_eq!(result(&get(&root, "Inventory").unwrap()), 2);
     assert_eq!(result(&get(&root, "foo.\"a.b\".text").unwrap()), 3);
-    assert!(
-        get(&root, "Inventory[].count")
-            .unwrap_err()
-            .contains("single NBT")
-    );
+    // A path that selects several values has no single result.
+    assert!(get(&root, "Inventory[].count").is_err());
     assert!(get(&root, "Inventory[{Slot:9b}]").is_err());
     assert!(get(&root, "Pos[100]").is_err());
     let mut input = " Inventory[{id: 'minecraft:stone'}].count 2";
@@ -761,6 +759,14 @@ fn said(state: &mut TickState) -> String {
             .unwrap_or_default()
     )
 }
+/// Whether the command told the player anything: a refusal is never silent.
+/// The wording is the command's own and not pinned here.
+fn reported(state: &mut TickState) -> bool {
+    state
+        .outbox
+        .remove(&crate::command_console::CONNECTION)
+        .is_some_and(|changes| !changes.is_empty())
+}
 /// The result of one `data` command; -1 when it failed.
 fn data(state: &mut TickState, context: Context, line: &str) -> i32 {
     state.command_context.current = Some(context);
@@ -887,7 +893,7 @@ fn data_merge_modify_and_remove_edit_a_mobs_data_and_keep_its_identity() {
         ),
         -1
     );
-    assert!(said(&mut state).contains("Nothing changed"));
+    assert!(reported(&mut state));
 }
 
 #[test]
@@ -905,7 +911,7 @@ fn data_entity_edits_refuse_players_unsupported_fields_and_position_without_chan
         data(&mut state, context, "data merge entity @s {Health:1f}"),
         -1
     );
-    assert!(said(&mut state).contains("Unable to modify player data"));
+    assert!(reported(&mut state));
     assert_eq!(
         data(
             &mut state,
@@ -914,7 +920,7 @@ fn data_entity_edits_refuse_players_unsupported_fields_and_position_without_chan
         ),
         -1
     );
-    assert!(said(&mut state).contains("Editing Air of minecraft:cow is not supported"));
+    assert!(reported(&mut state));
     assert_eq!(
         data(
             &mut state,
@@ -923,7 +929,7 @@ fn data_entity_edits_refuse_players_unsupported_fields_and_position_without_chan
         ),
         -1
     );
-    assert!(said(&mut state).contains("Editing Pos is not supported"));
+    assert!(reported(&mut state));
     assert_eq!(
         data(
             &mut state,
@@ -932,7 +938,7 @@ fn data_entity_edits_refuse_players_unsupported_fields_and_position_without_chan
         ),
         9
     );
-    // A command that is not an edit of an entity target keeps its old answer.
+    // A block target that is not a block entity is refused, not edited.
     assert_eq!(
         data(
             &mut state,
@@ -941,7 +947,7 @@ fn data_entity_edits_refuse_players_unsupported_fields_and_position_without_chan
         ),
         -1
     );
-    assert!(said(&mut state).contains("storage and entity"));
+    assert!(reported(&mut state));
 }
 
 #[test]
@@ -976,5 +982,481 @@ fn data_entity_edit_of_a_villager_keeps_its_profession_level_and_age() {
             &format!("data get entity {villager} Age")
         ),
         -123
+    );
+}
+
+fn item_entity(state: &TickState) -> crate::entities::EntitySlot {
+    state
+        .entities
+        .slots()
+        .find(|slot| matches!(state.entities.body(*slot).kind, EntityKind::Item { .. }))
+        .unwrap()
+}
+
+#[test]
+fn data_edits_an_item_entitys_stack_delay_age_and_gravity() {
+    let (mut state, _, context) = fixture();
+    run(
+        &mut state,
+        context,
+        "summon minecraft:item 4 60 4 {Item:{id:'minecraft:stone',count:3},PickupDelay:20s,Age:100s}",
+    );
+    let slot = item_entity(&state);
+    let id = state.entities.body(slot).id;
+    let dirt = item(&state, "minecraft:dirt", 5);
+    state.appearance_changed.clear();
+    let drops = "@e[type=minecraft:item,limit=1]";
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!(
+                "data merge entity {drops} {{Item:{{id:'minecraft:dirt',count:5}},PickupDelay:7s,NoGravity:1b}}"
+            )
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    let row = state.entities.row(slot);
+    assert_eq!(row.item.as_ref().unwrap().item_id, dirt.item_id);
+    assert_eq!(row.item.as_ref().unwrap().count, 5);
+    assert_eq!(row.appearance.item.as_ref().unwrap().item_id, dirt.item_id);
+    assert_eq!(state.entities.body(slot).pickup_delay, 7);
+    assert!(state.entities.row(slot).controls.no_gravity);
+    assert_eq!(
+        state.entities.row(slot).age,
+        100,
+        "untouched fields keep their value"
+    );
+    assert!(
+        state.appearance_changed.contains(&id),
+        "the edited stack must reach the WAL"
+    );
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data modify entity {drops} Item.count set value 9")
+        ),
+        1
+    );
+    assert_eq!(state.entities.row(slot).item.as_ref().unwrap().count, 9);
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data get entity {drops} Item.count")
+        ),
+        9
+    );
+    // A removed field loads as its default, like a compound without it does.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data remove entity {drops} NoGravity")
+        ),
+        1
+    );
+    assert!(!state.entities.row(slot).controls.no_gravity);
+    // An unknown item is refused before anything changes.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data modify entity {drops} Item.id set value 'minecraft:nope'")
+        ),
+        -1
+    );
+    assert_eq!(
+        state.entities.row(slot).item.as_ref().unwrap().item_id,
+        dirt.item_id
+    );
+    // Removing the stack is refused: an item entity always carries one.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data remove entity {drops} Item")
+        ),
+        -1
+    );
+    assert_eq!(state.entities.row(slot).item.as_ref().unwrap().count, 9);
+}
+
+fn place(state: &mut TickState, context: Context, block: &str) {
+    run(
+        state,
+        context,
+        &format!("setblock 4 60 4 minecraft:{block}"),
+    );
+}
+
+#[test]
+fn data_modify_and_merge_edit_any_block_entity_through_its_native_owner() {
+    let (mut state, _, context) = fixture();
+    // A container: the live slots follow the edited image.
+    place(&mut state, context, "chest");
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            "data modify block 4 60 4 Items set value [{Slot:3b,id:'minecraft:stone',count:5}]"
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    assert_eq!(state.block_entities[&(4, 60, 4)].slots[3].count, 5);
+    assert_eq!(
+        data(&mut state, context, "data get block 4 60 4 Items[0].count"),
+        5
+    );
+    assert_eq!(
+        data(&mut state, context, "data remove block 4 60 4 Items[0]"),
+        1
+    );
+    assert!(
+        state.block_entities[&(4, 60, 4)]
+            .slots
+            .iter()
+            .all(ItemStack::is_empty)
+    );
+    // A furnace: the clock lives in its own owner state.
+    place(&mut state, context, "furnace");
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            "data merge block 4 60 4 {cooking_time_spent:11s,lit_time_remaining:40s}"
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    let furnace = state.block_entities[&(4, 60, 4)].furnace.as_ref().unwrap();
+    assert_eq!((furnace.cook_progress, furnace.lit_remaining), (11, 40));
+    // A sign: a plain native image with no live owner.
+    place(&mut state, context, "oak_sign");
+    assert_eq!(
+        data(&mut state, context, "data merge block 4 60 4 {is_waxed:1b}"),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    assert_eq!(
+        data(&mut state, context, "data get block 4 60 4 is_waxed"),
+        1
+    );
+    // A brewing stand: the timer is rebuilt from the installed image.
+    place(&mut state, context, "brewing_stand");
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            "data modify block 4 60 4 BrewTime set value 50s"
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    assert_eq!(
+        data(&mut state, context, "data get block 4 60 4 BrewTime"),
+        50
+    );
+}
+
+#[test]
+fn data_block_edits_are_refused_without_changing_anything() {
+    let (mut state, _, context) = fixture();
+    place(&mut state, context, "chest");
+    data(
+        &mut state,
+        context,
+        "data modify block 4 60 4 Items set value [{Slot:0b,id:'minecraft:stone',count:2}]",
+    );
+    let before = block(&state, BlockPos { x: 4, y: 60, z: 4 }).unwrap();
+    for line in [
+        "data merge block 4 60 4 {Items:[{Slot:0b,id:'minecraft:nope',count:1}]}",
+        "data merge block 4 60 4 {Items:[{Slot:99b,id:'minecraft:stone',count:1}]}",
+        "data modify block 4 60 4 Items[0].count set value 2",
+        "data merge block 4 61 4 {a:1b}",
+        "data merge block 10000 60 10000 {a:1b}",
+        "data remove block 4 60 4 Missing",
+    ] {
+        assert_eq!(data(&mut state, context, line), -1, "{line}");
+        assert!(reported(&mut state), "{line}");
+        assert_eq!(
+            block(&state, BlockPos { x: 4, y: 60, z: 4 }).unwrap(),
+            before,
+            "{line}"
+        );
+    }
+    // Identity and position are the block's own: an edit cannot move or retype it.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            "data merge block 4 60 4 {x:99,y:1,z:1,id:'minecraft:furnace',Lock:'k'}"
+        ),
+        1
+    );
+    assert_eq!(data(&mut state, context, "data get block 4 60 4 x"), 4);
+    assert_eq!(
+        *get(
+            &block(&state, BlockPos { x: 4, y: 60, z: 4 }).unwrap(),
+            "id"
+        )
+        .unwrap(),
+        Tag::String("minecraft:chest".into())
+    );
+    // Level 1 may not edit data at all.
+    let weak = Context::source(
+        &state,
+        crate::command_console::CONNECTION,
+        context.executor,
+        1,
+    );
+    assert_eq!(
+        data(&mut state, weak, "data merge block 4 60 4 {Lock:'z'}"),
+        -1
+    );
+}
+
+#[test]
+fn data_edits_a_command_block_through_the_same_command_path() {
+    let (mut state, _, context) = fixture();
+    place(&mut state, context, "command_block");
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            "data modify block 4 60 4 Command set value 'say hi'"
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    assert_eq!(
+        data(&mut state, context, "data get block 4 60 4 Command"),
+        6
+    );
+    // Fields the command block owner does not author are refused whole.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            "data merge block 4 60 4 {Command:'say no',SuccessCount:9}"
+        ),
+        -1
+    );
+    assert!(reported(&mut state));
+    assert_eq!(
+        data(&mut state, context, "data get block 4 60 4 Command"),
+        6
+    );
+    assert_eq!(
+        data(&mut state, context, "data remove block 4 60 4 Command"),
+        1
+    );
+}
+
+fn only_slot(state: &TickState, name: &str) -> crate::entities::EntitySlot {
+    let mut found = state.entities.slots().filter(|slot| {
+        crate::command_execution::entity_type_name(state, state.entities.body(*slot).id)
+            == Some(name)
+    });
+    let slot = found.next().unwrap_or_else(|| panic!("no {name}"));
+    assert!(found.next().is_none(), "more than one {name}");
+    slot
+}
+
+#[test]
+fn data_edit_of_a_baby_keeps_its_hitbox_and_growing_up_restores_it() {
+    let (mut state, _, context) = fixture();
+    run(
+        &mut state,
+        context,
+        "summon minecraft:cow 4 60 4 {Age:-24000}",
+    );
+    let slot = only_slot(&state, "minecraft:cow");
+    let type_id = match state.entities.body(slot).kind {
+        EntityKind::Mob { type_id } => type_id,
+        _ => unreachable!(),
+    };
+    let blueprint = state.registry.blueprint(type_id).unwrap();
+    let (half_width, height) = (blueprint.half_width, blueprint.height);
+    let cow = "@e[type=minecraft:cow,limit=1]";
+    assert!(state.entities.row(slot).appearance.baby);
+    assert_eq!(state.entities.body(slot).height, height * 0.5);
+    assert_eq!(state.entities.body(slot).half_width, half_width * 0.5);
+    // An edit that leaves the age alone does not halve the hitbox a second time.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {cow} {{CustomName:'\"Calf\"'}}")
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    assert_eq!(state.entities.body(slot).height, height * 0.5);
+    assert_eq!(state.entities.body(slot).half_width, half_width * 0.5);
+    // Growing up through an edit restores the adult hitbox.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {cow} {{Age:0}}")
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    assert!(!state.entities.row(slot).appearance.baby);
+    assert_eq!(state.entities.body(slot).height, height);
+    assert_eq!(state.entities.body(slot).half_width, half_width);
+}
+
+#[test]
+fn data_edit_of_an_experience_orb_changes_its_value_and_count() {
+    let (mut state, _, context) = fixture();
+    run(
+        &mut state,
+        context,
+        "summon minecraft:experience_orb 4 60 4 {Value:3s}",
+    );
+    let slot = only_slot(&state, "minecraft:experience_orb");
+    let orb = "@e[type=minecraft:experience_orb,limit=1]";
+    let before = state.entities.row(slot).appearance.experience_orb.unwrap();
+    assert_eq!(before.0, 3);
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {orb} {{Value:9s,Count:2}}")
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    assert_eq!(
+        state.entities.row(slot).appearance.experience_orb,
+        Some((9, 2)),
+        "the reported success is real"
+    );
+}
+
+#[test]
+fn data_edit_keeps_a_zombie_villagers_cure_and_a_name_removal_clears_it() {
+    let (mut state, _, context) = fixture();
+    run(
+        &mut state,
+        context,
+        "summon minecraft:zombie_villager 4 60 4",
+    );
+    let slot = only_slot(&state, "minecraft:zombie_villager");
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = Some(120);
+    let target = "@e[type=minecraft:zombie_villager,limit=1]";
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {target} {{CustomName:'\"Z\"'}}")
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .conversion_time,
+        Some(120),
+        "an unrelated edit does not cancel the cure"
+    );
+    assert_eq!(
+        state.entities.row(slot).appearance.custom_name.as_deref(),
+        Some("\"Z\"")
+    );
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data remove entity {target} CustomName")
+        ),
+        1
+    );
+    assert_eq!(state.entities.row(slot).appearance.custom_name, None);
+}
+
+#[test]
+fn data_edit_of_one_field_keeps_love_and_persistence_the_entity_already_had() {
+    let (mut state, _, context) = fixture();
+    run(
+        &mut state,
+        context,
+        "summon minecraft:cow 4 60 4 {Health:9f,InLove:300,PersistenceRequired:1b}",
+    );
+    let cow = "@e[type=minecraft:cow,limit=1]";
+    for field in ["InLove", "PersistenceRequired"] {
+        assert_ne!(
+            data(
+                &mut state,
+                context,
+                &format!("data get entity {cow} {field}")
+            ),
+            0,
+            "{field} is set before the edit"
+        );
+    }
+    let love = data(
+        &mut state,
+        context,
+        &format!("data get entity {cow} InLove"),
+    );
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data modify entity {cow} Health set value 4f")
+        ),
+        1
+    );
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data get entity {cow} InLove")
+        ),
+        love
+    );
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data get entity {cow} PersistenceRequired")
+        ),
+        1
+    );
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data get entity {cow} Health")
+        ),
+        4
     );
 }

@@ -187,6 +187,7 @@ pub(crate) fn run_tick(
             {
                 let view = state.connections.view_distance_of(*connection);
                 let locale = state.connections.locale_of(*connection).map(str::to_owned);
+                let chat = state.connections.chat_visibility_of(*connection);
                 state.connections.remove_by_connection(*connection);
                 if let Some(view) = view {
                     world.connections.set_view_distance(*connection, view);
@@ -194,6 +195,7 @@ pub(crate) fn run_tick(
                 if let Some(locale) = locale {
                     world.connections.set_locale(*connection, locale);
                 }
+                world.connections.set_chat_visibility(*connection, chat);
             }
         }
         let (child_output, mut child_drains, child_times) = crate::tick::run_dimension_tick(

@@ -262,7 +262,6 @@ pub struct EdgeServer {
     pub net_counters: Arc<NetCounters>,
     /// Join-burst recipe packets: built from the core's recipe list at start
     /// and replaced when a datapack reload changes it.
-    pub recipes: crate::recipes::SharedRecipes,
     pub(crate) admin: crate::admin::Admin,
     pub(crate) console_state: crate::console::ConsoleState,
     stop: tokio::sync::watch::Sender<bool>,
@@ -376,8 +375,7 @@ impl EdgeServer {
             items: mc_data::items::solaris_required_items(),
             block_entity_types: mc_data::block_entity_types::solaris_required_block_entity_types(),
         };
-        let recipes =
-            crate::recipes::SharedRecipes::new(crate::recipes::RecipePackets::new(hub.registry())?);
+        crate::recipes::for_join(&hub.current_registry())?;
         let admin = crate::admin::Admin::open(&cfg.server_dir)?;
         anyhow::ensure!(
             hub.submit(PlayerInput::SpawnProtectionOperators {
@@ -455,7 +453,6 @@ impl EdgeServer {
             computer_processes,
             screens: Default::default(),
             voice,
-            recipes,
             hub,
             data,
             tags,

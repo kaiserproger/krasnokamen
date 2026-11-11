@@ -910,7 +910,7 @@ pub(crate) fn system_unix_seconds() -> i64 {
 }
 
 /// Vanilla-format criterion stamp for unix `seconds`.
-fn timestamp_from_unix(seconds: i64) -> String {
+pub(crate) fn timestamp_from_unix(seconds: i64) -> String {
     let days = seconds.div_euclid(86400) + 719468;
     let era = days.div_euclid(146097);
     let doe = days - era * 146097;

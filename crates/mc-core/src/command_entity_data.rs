@@ -1,10 +1,11 @@
-//! `data merge|modify|remove entity`: edit one non-player entity's NBT and load
-//! it back through the summon NBT path, so only fields a summon can author are
-//! editable.
+//! `data merge|modify|remove entity`: edit one non-player entity's NBT, in any
+//! loaded dimension, and load it back through the summon NBT path, so only
+//! fields a summon can author are editable.
 use crate::boundary::PlayerChange;
 use crate::command_context::Context;
 use crate::command_execution::CommandResult;
 use crate::command_nbt_path::argument;
+use crate::command_summon::{Image, ItemSummon};
 use crate::entities::EntityKind;
 use crate::tick::TickState;
 use mc_nbt::Tag;
@@ -27,6 +28,22 @@ pub(crate) fn command(state: &mut TickState, context: Context, input: &str) -> C
     }
 }
 
+/// The loaded form of an edit, ready to install without further failure.
+enum Prepared {
+    Mob(Box<Image>),
+    Item(ItemSummon),
+}
+
+/// The item-entity fields a `data` edit can author: the ones `summon` takes.
+const ITEM_FIELDS: [&str; 6] = [
+    "Item",
+    "Age",
+    "PickupDelay",
+    "Motion",
+    "NoGravity",
+    "Invulnerable",
+];
+
 fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, String> {
     if context.permission < 2 {
         return Err(crate::commands::CommandError::Unknown.message());
@@ -35,22 +52,21 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
     let action = argument(&mut input)?;
     argument(&mut input)?; // entity
     let id = crate::command_data::single_entity(state, context, argument(&mut input)?)?;
-    let (dimension, _) =
+    let (dimension, slot) =
         crate::dimensions::travel::locate(state, id).ok_or("No entity was found")?;
-    if dimension != state.dimension {
-        return Err("Editing the data of an entity in another dimension is not supported".into());
-    }
-    let slot = state.entities.slot_of(id).ok_or("No entity was found")?;
-    let type_id = match state.entities.body(slot).kind {
+    let world =
+        crate::dimensions::travel::world(state, dimension).ok_or("Entity dimension unavailable")?;
+    let type_id = match world.entities.body(slot).kind {
         EntityKind::Player { .. } => return Err("Unable to modify player data".into()),
-        EntityKind::Item { .. } => {
-            return Err("Editing the data of an item entity is not supported".into());
-        }
-        EntityKind::Mob { type_id } | EntityKind::ExperienceOrb { type_id } => type_id,
+        EntityKind::Item { type_id }
+        | EntityKind::Mob { type_id }
+        | EntityKind::ExperienceOrb { type_id } => type_id,
     };
-    let name = crate::command_execution::entity_type_name(state, id)
+    let item = matches!(world.entities.body(slot).kind, EntityKind::Item { .. });
+    let name = crate::command_execution::entity_type_name(world, id)
         .ok_or("Entity has no vanilla data")?;
-    let previous = crate::command_data::entity(state, id)?;
+    let mut image = crate::command_data::entity_image(world, id)?;
+    let previous = crate::command_data::entity(world, id)?;
     let mut edited = previous.clone();
     crate::command_storage::mutate(state, context, action, &mut edited, &mut input)?;
     if edited == previous {
@@ -59,30 +75,84 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
     let (Tag::Compound(old), Tag::Compound(new)) = (&previous, edited) else {
         return Err("Entity data must be a compound".into());
     };
-    let mut fields = Vec::with_capacity(new.len());
-    for (key, value) in new {
-        let unchanged = old
-            .iter()
-            .any(|(old_key, old_value)| *old_key == key && *old_value == value);
-        // The entity keeps its identity and place: those are not data to load back.
-        if matches!(key.as_str(), "UUID" | "Pos" | "id") {
-            if !unchanged && key != "UUID" {
-                return Err(format!("Editing {key} is not supported; use /tp"));
-            }
+    // What the edit changed or removed. The entity keeps its identity and place:
+    // those are not data to load back.
+    let mut changed = Vec::new();
+    let mut touched = Vec::new();
+    for (key, value) in &new {
+        if old.iter().any(|(k, v)| k == key && v == value) {
             continue;
         }
-        match crate::command_summon::supports(state, type_id, name, &key) {
-            Some(true) => fields.push((key, value)),
-            // A field summon cannot author keeps the value it has.
-            _ if unchanged => {}
-            _ => return Err(format!("Editing {key} of {name} is not supported")),
+        if matches!(key.as_str(), "Pos" | "id") {
+            return Err(format!("Editing {key} is not supported; use /tp"));
+        }
+        if key != "UUID" {
+            changed.push((key.clone(), value.clone()));
+            touched.push(key.clone());
         }
     }
-    // A removed field loads as its default, like a compound without it does.
-    let position = state.entities.pos(slot);
-    let image =
-        crate::command_summon::prepare(state, type_id, name, position, &Tag::Compound(fields))
+    for (key, _) in old {
+        if !new.iter().any(|(k, _)| k == key) {
+            if matches!(key.as_str(), "Pos" | "id" | "UUID") {
+                return Err(format!("Removing {key} is not supported"));
+            }
+            image.retain(|(k, _)| k != key);
+            touched.push(key.clone());
+        }
+    }
+    for key in &touched {
+        let authored = if item {
+            ITEM_FIELDS.contains(&key.as_str())
+        } else {
+            crate::command_summon::supports(world, type_id, name, key) == Some(true)
+        };
+        if !authored {
+            // Only what a summon can author is editable; everything else keeps its value.
+            return Err(format!("Editing {key} of {name} is not supported"));
+        }
+    }
+    let prepared = if item {
+        // A removed field loads as its default, like a compound without it does.
+        let fields = new
+            .into_iter()
+            .filter(|(key, _)| ITEM_FIELDS.contains(&key.as_str()))
+            .collect();
+        let mut payload = crate::command_summon::prepare_item(world, &Tag::Compound(fields))
             .map_err(|error| error.message())?;
-    crate::command_summon::apply(state, id, image);
-    Ok(crate::command_execution::entity_name(state, id))
+        payload.age.get_or_insert(0);
+        payload.pickup_delay.get_or_insert(0);
+        payload.motion.get_or_insert([0.0; 3]);
+        Prepared::Item(payload)
+    } else {
+        let position = world.entities.pos(slot);
+        let keep_villager = !touched
+            .iter()
+            .any(|key| crate::villager::persistence::owns_field(key));
+        Prepared::Mob(Box::new(
+            crate::command_summon::prepare_edit(
+                world,
+                type_id,
+                name,
+                position,
+                image,
+                &changed,
+                keep_villager,
+            )
+            .map_err(|error| error.message())?,
+        ))
+    };
+    let world = if dimension == state.dimension {
+        state
+    } else {
+        state
+            .other_dimensions
+            .get_mut(&dimension)
+            .map(Box::as_mut)
+            .ok_or("Entity dimension unavailable")?
+    };
+    match prepared {
+        Prepared::Mob(image) => crate::command_summon::apply(world, id, *image),
+        Prepared::Item(payload) => crate::command_summon::apply_item(world, id, payload),
+    }
+    Ok(crate::command_execution::entity_name(world, id))
 }

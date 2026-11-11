@@ -38,44 +38,61 @@ impl RecipePackets {
     }
 }
 
-/// The recipe packets new joiners get: the startup recipes until a datapack
-/// reload replaces them.
-pub struct SharedRecipes(parking_lot::RwLock<std::sync::Arc<RecipePackets>>);
+/// Packets built per registry still alive (the core's current one and, until
+/// the last connection lets go, the one before it), and the newest build that
+/// succeeded.
+#[derive(Default)]
+struct Built {
+    by_registry: Vec<(
+        std::sync::Weak<mc_core::registry::CoreRegistry>,
+        Option<std::sync::Arc<RecipePackets>>,
+    )>,
+    last_ok: Option<std::sync::Arc<RecipePackets>>,
+}
+static BUILT: parking_lot::Mutex<Built> = parking_lot::Mutex::new(Built {
+    by_registry: Vec::new(),
+    last_ok: None,
+});
 
-impl SharedRecipes {
-    pub fn new(packets: RecipePackets) -> Self {
-        Self(parking_lot::RwLock::new(std::sync::Arc::new(packets)))
+/// The packets for `registry`, built by the first caller that asks and shared
+/// by every connection after it: the joiners and the announcement of a
+/// datapack reload both go through here, so they cannot disagree. `None` when
+/// the recipes cannot be encoded; clients then keep the recipes they have.
+pub(crate) fn packets_for(
+    registry: &std::sync::Arc<mc_core::registry::CoreRegistry>,
+) -> Option<std::sync::Arc<RecipePackets>> {
+    let mut built = BUILT.lock();
+    built
+        .by_registry
+        .retain(|(known, _)| known.strong_count() > 0);
+    if let Some((_, packets)) = built
+        .by_registry
+        .iter()
+        .find(|(known, _)| std::ptr::eq(known.as_ptr(), std::sync::Arc::as_ptr(registry)))
+    {
+        return packets.clone();
     }
-    pub fn current(&self) -> std::sync::Arc<RecipePackets> {
-        std::sync::Arc::clone(&self.0.read())
+    let packets = RecipePackets::new(registry)
+        .inspect_err(|error| tracing::warn!(%error, "recipe packets after datapack reload"))
+        .ok()
+        .map(std::sync::Arc::new);
+    if packets.is_some() {
+        built.last_ok.clone_from(&packets);
     }
-    /// Adopt the recipes of a reload the core announced, unless they are the
-    /// ones already in use.
-    pub(crate) fn adopt(&self, packets: &std::sync::Arc<RecipePackets>) {
-        let mut current = self.0.write();
-        if !std::sync::Arc::ptr_eq(&current, packets) {
-            *current = std::sync::Arc::clone(packets);
-        }
-    }
+    built
+        .by_registry
+        .push((std::sync::Arc::downgrade(registry), packets.clone()));
+    packets
 }
 
-/// The packets for a reload's registry, built by the first connection that
-/// plans it and shared with every other. `None` when the new recipes cannot
-/// be encoded; clients then keep the recipes they have.
-pub(crate) fn reloaded(
-    reload: &mc_core::boundary::RegistryReload,
-) -> Option<std::sync::Arc<RecipePackets>> {
-    let built = reload.shared.get_or_init(|| {
-        let packets = RecipePackets::new(&reload.registry)
-            .inspect_err(|error| tracing::warn!(%error, "recipe packets after datapack reload"))
-            .ok()
-            .map(std::sync::Arc::new);
-        std::sync::Arc::new(packets)
-    });
-    std::sync::Arc::clone(built)
-        .downcast::<Option<std::sync::Arc<RecipePackets>>>()
-        .ok()
-        .and_then(|packets| (*packets).clone())
+/// What a joining player gets: the packets for the registry the world runs on
+/// now, or the newest ones that could be built.
+pub(crate) fn for_join(
+    registry: &std::sync::Arc<mc_core::registry::CoreRegistry>,
+) -> anyhow::Result<std::sync::Arc<RecipePackets>> {
+    packets_for(registry)
+        .or_else(|| BUILT.lock().last_ok.clone())
+        .ok_or_else(|| anyhow::anyhow!("the recipes cannot be encoded for a joining player"))
 }
 
 fn item_max_stack(item_facts: &ItemFactsTable, items: &ItemRegistry, stack: &ItemStack) -> i32 {

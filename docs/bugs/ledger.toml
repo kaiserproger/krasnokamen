@@ -1422,7 +1422,6 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-OPTION-COVERAGE"
 regression = ["cargo:mc-core:datapacks::command_tests::selector_predicate_selects_and_negates_datapack_predicates", "cargo:mc-core:datapacks::command_tests::predicates_with_conditions_the_selector_cannot_evaluate_are_refused_at_load", "cargo:mc-data:advancements::tests::selector_predicates_evaluate_scores_time_weather_and_chance_from_facts", "cargo:mc-data:advancements::tests::predicate_support_reports_conditions_that_cannot_be_evaluated"]
-fix_commit = "32069cbb"
 
 [[bug]]
 id = "SELECTOR-DEAD-PLAYERS"
@@ -1531,8 +1530,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-ENABLE"
-regression = ["cargo:mc-core:datapacks::command_tests::enable_and_disable_follow_vanilla_ordering_errors_and_results", "cargo:mc-core:datapacks::command_tests::the_saved_pack_selection_decides_which_recipes_load_after_a_restart"]
-fix_commit = "32069cbb"
+regression = ["cargo:mc-core:datapacks::command_tests::enable_and_disable_follow_vanilla_ordering_errors_and_results", "cargo:mc-core:datapacks::command_tests::the_saved_pack_selection_decides_which_recipes_load_after_a_restart", "cargo:mc-core:datapacks::command_tests::a_selected_pack_gone_from_disk_is_dropped_with_a_warning", "cargo:mc-core:datapacks::command_tests::a_pack_removed_while_the_server_is_down_opens_the_world_without_it", "cargo:mc-core:datapacks::command_tests::a_corrupt_saved_selection_fails_closed"]
 
 [[bug]]
 id = "DEBUG-PROFILER"
@@ -1543,7 +1541,6 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-PROFILER"
 regression = ["cargo:mc-core:command_debug::tests::profiler_reports_seconds_ticks_and_rate_and_refuses_double_start_and_stop"]
-fix_commit = "32069cbb"
 
 [[bug]]
 id = "DEBUG-FUNCTION-TRACE"
@@ -1553,8 +1550,7 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-FUNCTION-TRACE"
-regression = ["cargo:mc-core:command_debug::tests::function_trace_records_commands_results_messages_errors_and_nested_calls", "cargo:mc-core:command_debug::tests::function_tag_trace_counts_every_function_and_reports_the_multiple_key", "cargo:mc-core:command_debug::tests::function_trace_refuses_unknown_functions_low_permission_and_recursion", "cargo:mc-core:command_debug::tests::function_trace_write_failure_is_reported_not_hidden"]
-fix_commit = "32069cbb"
+regression = ["cargo:mc-core:command_debug::tests::function_trace_records_commands_results_messages_errors_and_nested_calls", "cargo:mc-core:command_debug::tests::function_tag_trace_counts_every_function_and_reports_the_multiple_key", "cargo:mc-core:command_debug::tests::function_trace_refuses_unknown_functions_low_permission_and_recursion", "cargo:mc-core:command_debug::tests::function_trace_write_failure_is_reported_not_hidden", "cargo:mc-core:command_debug::tests::function_trace_records_only_what_the_source_is_sent"]
 
 [[bug]]
 id = "DATAPACK-LIST-LIVE-DISCOVERY"
@@ -1565,7 +1561,6 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-LIVE-DISCOVERY"
 regression = ["cargo:mc-core:datapacks::command_tests::list_sees_packs_added_and_removed_on_disk_without_a_reload"]
-fix_commit = "32069cbb"
 
 [[bug]]
 id = "DAMAGE-COMMAND"
@@ -1676,7 +1671,6 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-HOT-RELOAD-RECIPES-LOOT"
 regression = ["cargo:mc-core:datapacks::command_tests::enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clients", "cargo:mc-core:datapacks::command_tests::a_reload_with_an_unusable_recipe_keeps_the_old_registry_and_selection", "cargo:mc-edge:advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book"]
-fix_commit = "32069cbb"
 
 [[bug]]
 id = "DATAPACK-WORLDGEN-ZIP"
@@ -1686,8 +1680,17 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-WORLDGEN-ZIP"
-regression = ["cargo:mc-core:datapacks::command_tests::zip_packs_load_functions_tags_recipes_and_refuse_unsafe_entries"]
-fix_commit = "32069cbb"
+regression = ["cargo:mc-core:datapacks::command_tests::zip_packs_load_functions_tags_recipes_and_refuse_unsafe_entries", "cargo:mc-core:datapacks::command_tests::an_archive_with_more_entries_than_the_resource_limit_is_refused", "cargo:mc-core:datapacks::command_tests::a_pack_with_worldgen_resources_loads_its_other_content_and_warns_once", "cargo:mc-core:datapacks::tests::worldgen_resources_are_ignored_and_unknown_resources_fail_with_explicit_error"]
+
+[[bug]]
+id = "DATAPACK-WORLDGEN-OVERRIDES"
+title = "A datapack's worldgen and dimension resources (biomes, dimension types, noise settings, structures, features) are ignored with a warning instead of changing world generation, so a pack that customizes terrain does nothing. Split from DATAPACK-WORLDGEN-ZIP, whose ZIP loading is implemented."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "Split from DATAPACK-WORLDGEN-ZIP: ZIP packs load; worldgen/dimension overrides stay an explicit gap (docs/OPERATING.md, docs/COMPATIBILITY.md)."
+regression = []
 
 [[bug]]
 id = "DATAPACK-CREATE"
@@ -1698,7 +1701,6 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-CREATE"
 regression = ["cargo:mc-core:datapacks::command_tests::create_writes_an_empty_directory_pack_with_a_description"]
-fix_commit = "32069cbb"
 
 [[bug]]
 id = "DATAPACK-FEATURE-ADMISSION"
@@ -1720,7 +1722,6 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-HOVER"
 regression = ["cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover"]
-fix_commit = "32069cbb"
 
 [[bug]]
 id = "BEE-FLOWER-TABLE"
@@ -2131,8 +2132,7 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-MUTATION-STORAGE"
-regression = ["cargo:mc-core:command_data::tests::data_storage_modify_reports_results_and_survives_reads", "cargo:mc-core:command_data::tests::data_merge_modify_and_remove_edit_a_mobs_data_and_keep_its_identity", "cargo:mc-core:command_data::tests::data_entity_edits_refuse_players_unsupported_fields_and_position_without_changing_anything", "cargo:mc-core:command_data::tests::data_entity_edit_of_a_villager_keeps_its_profession_level_and_age"]
-fix_commit = "32069cbb"
+regression = ["cargo:mc-core:command_data::tests::data_storage_modify_reports_results_and_survives_reads", "cargo:mc-core:command_data::tests::data_merge_modify_and_remove_edit_a_mobs_data_and_keep_its_identity", "cargo:mc-core:command_data::tests::data_entity_edits_refuse_players_unsupported_fields_and_position_without_changing_anything", "cargo:mc-core:command_data::tests::data_entity_edit_of_a_villager_keeps_its_profession_level_and_age", "cargo:mc-core:command_data::tests::data_edits_an_item_entitys_stack_delay_age_and_gravity", "cargo:mc-core:command_data::tests::data_modify_and_merge_edit_any_block_entity_through_its_native_owner", "cargo:mc-core:command_data::tests::data_block_edits_are_refused_without_changing_anything", "cargo:mc-core:command_data::tests::data_edits_a_command_block_through_the_same_command_path", "cargo:mc-core:command_data::tests::data_edit_of_a_baby_keeps_its_hitbox_and_growing_up_restores_it", "cargo:mc-core:command_data::tests::data_edit_of_an_experience_orb_changes_its_value_and_count", "cargo:mc-core:command_data::tests::data_edit_keeps_a_zombie_villagers_cure_and_a_name_removal_clears_it", "cargo:mc-core:dimensions::tests::data_merge_entity_edits_an_entity_in_another_loaded_dimension", "cargo:mc-core:dimensions::tests::data_edits_a_block_entity_in_another_loaded_dimension", "cargo:mc-core:dimensions::tests::data_edits_an_entity_for_senders_in_the_nether_and_the_end", "cargo:mc-core:dimensions::tests::data_edit_of_a_villager_keeps_trades_gossip_inventory_and_replays_from_the_wal", "cargo:mc-core:command_data::tests::data_edit_of_one_field_keeps_love_and_persistence_the_entity_already_had"]
 
 [[bug]]
 id = "HAPPY-GHAST-HARNESS"
@@ -2685,8 +2685,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUDIT-CHAT-VISIBILITY"
-regression = ["cargo:mc-core:chat_visibility_tests::public_chat_reaches_only_full_clients", "cargo:mc-core:chat_visibility_tests::a_hidden_client_cannot_chat_and_is_told_so_in_red", "cargo:mc-core:chat_visibility_tests::system_text_reaches_commands_only_clients_but_not_hidden_ones", "cargo:mc-core:chat_visibility_tests::say_and_private_messages_are_chat_not_system_text", "cargo:mc-core:chat_visibility_tests::the_setting_changes_in_place_and_resets_when_the_player_leaves", "cargo:mc-edge:server::view_distance_tests::client_chat_setting_is_admitted_at_join_and_on_play_changes"]
-fix_commit = "32069cbb"
+regression = ["cargo:mc-core:chat_visibility_tests::public_chat_reaches_only_full_clients", "cargo:mc-core:chat_visibility_tests::a_hidden_client_cannot_chat_and_is_told_so_in_red", "cargo:mc-core:chat_visibility_tests::system_text_reaches_commands_only_clients_but_not_hidden_ones", "cargo:mc-core:chat_visibility_tests::say_and_private_messages_are_chat_not_system_text", "cargo:mc-core:chat_visibility_tests::the_setting_changes_in_place_and_resets_when_the_player_leaves", "cargo:mc-edge:server::view_distance_tests::client_chat_setting_is_admitted_at_join_and_on_play_changes", "cargo:mc-core:dimensions::tests::rejoin_child_dimension_keeps_the_clients_chat_setting"]
 
 [[bug]]
 id = "AUDIT-SCULK"

@@ -338,8 +338,11 @@ struct CoreInner {
     worker_count: usize,
     /// World spawn fixed at open (manifest or spawn finder).
     world_spawn: [i32; 3],
-    /// Immutable game data the tick runs on (recipes, items, blocks).
+    /// Immutable game data the tick runs on (recipes, items, blocks), as the
+    /// world opened with it.
     registry: Arc<CoreRegistry>,
+    /// The registry the tick runs on now: a datapack reload replaces it.
+    live_registry: Arc<std::sync::RwLock<Arc<CoreRegistry>>>,
     plugin_commands: Arc<[(String, u8)]>,
     plugin_packages: Vec<mc_script::PluginPackage>,
     plugin_stats: Arc<crate::plugin::PluginStats>,
@@ -608,7 +611,6 @@ impl Core {
         }
         let datapack_root = config.world_dir.join("datapacks");
         let registry = Arc::new(registry);
-        let content_base = crate::datapacks::ContentBase::of(&registry);
         let plugin_commands = plugin_runtime
             .as_ref()
             .map(crate::plugin::PluginRuntime::commands)
@@ -678,6 +680,11 @@ impl Core {
             tick_state.datapacks.selection().clone(),
         )
         .map_err(CoreError::Registry)?;
+        for warning in datapacks.warnings(None) {
+            tracing::warn!("{warning}");
+        }
+        // The registry before any datapack: what every reload rebuilds on.
+        let base = Arc::clone(&registry);
         let registry = if datapacks.has_registry_content() {
             let mut content = (*registry).clone();
             datapacks
@@ -692,9 +699,9 @@ impl Core {
         } else {
             registry
         };
-        tick_state
-            .datapacks
-            .install(datapacks, datapack_root, content_base);
+        tick_state.datapacks.install(datapacks, datapack_root, base);
+        let live_registry = Arc::new(std::sync::RwLock::new(Arc::clone(&registry)));
+        tick_state.published_registry = Some(Arc::clone(&live_registry));
         let world_spawn = tick_state.world.world_spawn();
         let terrain_epoch = crate::terrain::epoch_for_open(&tick_state)?;
         // Fresh epoch (minted when the stored record had none): stage it in
@@ -900,6 +907,7 @@ impl Core {
                 worker_count,
                 world_spawn,
                 registry,
+                live_registry,
                 plugin_commands,
                 plugin_packages,
                 plugin_stats,
@@ -919,6 +927,20 @@ impl Core {
     #[must_use]
     pub fn registry(&self) -> &Arc<CoreRegistry> {
         &self.inner.registry
+    }
+
+    /// The registry the tick runs on now. Unlike [`Self::registry`], which is
+    /// the registry the world opened with, this follows datapack reloads, so a
+    /// player joining after one gets the recipes the world actually has.
+    #[must_use]
+    pub fn current_registry(&self) -> Arc<CoreRegistry> {
+        Arc::clone(
+            &self
+                .inner
+                .live_registry
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
     }
 
     /// Manifest-owned command roots and required permission (0 player, 2 operator).

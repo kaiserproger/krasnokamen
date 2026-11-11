@@ -158,7 +158,7 @@ pub(super) fn options_match(
 
 /// `predicate=<id>` / `predicate=!<id>`: evaluate each named datapack loot
 /// predicate with the candidate as `this`. A predicate no datapack defines
-/// never matches (vanilla refuses the whole command with "Unknown predicate").
+/// never matches the candidate (the command itself still runs).
 fn predicates_match(
     state: &TickState,
     entity: EntityId,

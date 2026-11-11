@@ -573,11 +573,29 @@ fn zip_packs_load_functions_tags_recipes_and_refuse_unsafe_entries() {
             ("data/test/worldgen/biome/x.json", "{}"),
         ],
     );
-    let error = PackSet::load(&root, Selection::default()).err().unwrap();
-    assert!(
-        error.contains("Worldgen datapacks are not supported"),
-        "{error}"
+    let loaded = PackSet::load(&root, Selection::default()).unwrap();
+    assert_eq!(
+        loaded.ignored["file/bundle.zip"],
+        ["test/worldgen/biome/x.json"],
+        "a ZIP pack's worldgen resources are ignored like a directory pack's"
     );
+}
+
+#[test]
+fn an_archive_with_more_entries_than_the_resource_limit_is_refused() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    std::fs::create_dir_all(&root).unwrap();
+    // Entries outside data/ are ignored by the loader but still cost memory
+    // when the archive opens.
+    let names: Vec<String> = (0..=MAX_RESOURCES)
+        .map(|index| format!("outside/{index}.txt"))
+        .collect();
+    let mut files = vec![("pack.mcmeta", r#"{"pack":{"description":"Zip"}}"#)];
+    files.extend(names.iter().map(|name| (name.as_str(), "")));
+    write_zip(&root.join("bundle.zip"), &files);
+    let error = PackSet::load(&root, Selection::default()).err().unwrap();
+    assert!(error.contains("too many entries"), "{error}");
 }
 
 fn summon(state: &mut TickState, kind: &str) {
@@ -782,9 +800,17 @@ fn enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clien
     assert_ne!(vanilla_bone_meal.as_deref(), Some("minecraft:diamond"));
     assert_ne!(vanilla_drops, ["minecraft:diamond"]);
     state.outbox.clear();
+    // The cell a joining player's recipes are read from (a core with nobody
+    // online still follows the reload).
+    let published = Arc::new(std::sync::RwLock::new(Arc::clone(&state.registry)));
+    state.published_registry = Some(Arc::clone(&published));
 
     run(&mut state, "datapack enable file/gems");
     settle(&mut state);
+    assert!(
+        Arc::ptr_eq(&published.read().unwrap(), &state.registry),
+        "the registry joiners see is the reloaded one"
+    );
     assert_eq!(
         recipe_result(&state.registry, "test:new_gem").as_deref(),
         Some("minecraft:emerald"),
@@ -814,6 +840,7 @@ fn enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clien
     run(&mut state, "datapack disable file/gems");
     settle(&mut state);
     assert_eq!(recipe_result(&state.registry, "test:new_gem"), None);
+    assert!(Arc::ptr_eq(&published.read().unwrap(), &state.registry));
     assert_eq!(
         recipe_result(&state.registry, "minecraft:bone_meal"),
         vanilla_bone_meal,
@@ -821,6 +848,29 @@ fn enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clien
     );
     assert_eq!(stone_drops(&state.registry), vanilla_drops);
     assert_eq!(state.registry.recipes.len(), recipes_before);
+}
+
+/// What a reload costs the tick thread: the registry clone and the packs'
+/// recipes and loot, with the default registry.
+#[test]
+#[ignore = "microbenchmark; prints the median reload install time"]
+fn datapack_reload_install_microbench() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    pack(&root, "gems", "\"Gems\"", &GEM_RECIPES);
+    let mut state = fixture(&root);
+    let packs = PackSet::load(&root, Selection::default()).unwrap();
+    let mut samples = Vec::new();
+    for _ in 0..7 {
+        let start = std::time::Instant::now();
+        install_registry(&mut state, &packs).unwrap();
+        samples.push(start.elapsed().as_micros());
+    }
+    samples.sort_unstable();
+    eprintln!(
+        "reload install us: median={} samples={samples:?}",
+        samples[3]
+    );
 }
 
 #[test]
@@ -929,4 +979,182 @@ fn the_saved_pack_selection_decides_which_recipes_load_after_a_restart() {
     );
     core.shutdown();
     std::fs::remove_dir_all(dir).unwrap();
+}
+
+const WORLDGEN_PACK: [(&str, &str); 5] = [
+    ("test/function/hello.mcfunction", "say hello"),
+    ("test/worldgen/biome/odd.json", "{}"),
+    ("minecraft/dimension/the_nether.json", "{}"),
+    ("minecraft/dimension_type/overworld.json", "{}"),
+    ("minecraft/tags/worldgen/biome/odd.json", r#"{"values":[]}"#),
+];
+
+#[test]
+fn a_pack_with_worldgen_resources_loads_its_other_content_and_warns_once() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    pack(&root, "wg", "\"WG\"", &WORLDGEN_PACK);
+    let loaded = PackSet::load(&root, Selection::default()).unwrap();
+    assert!(
+        loaded.functions.contains_key("test:hello"),
+        "the pack's other content loads"
+    );
+    assert_eq!(
+        loaded.ignored["file/wg"],
+        [
+            "minecraft/dimension/the_nether.json",
+            "minecraft/dimension_type/overworld.json",
+            "minecraft/tags/worldgen/biome/odd.json",
+            "test/worldgen/biome/odd.json",
+        ],
+        "every ignored resource path is named"
+    );
+    let warnings = loaded.warnings(None);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(
+        warnings[0].contains("file/wg")
+            && warnings[0].contains("test/worldgen/biome/odd.json")
+            && warnings[0].contains("ignored"),
+        "{warnings:?}"
+    );
+    assert!(
+        loaded.warnings(Some(&loaded)).is_empty(),
+        "an unchanged pack is not warned about again"
+    );
+
+    // Enabling it from the console tells the operator once, then reloads stay quiet.
+    let mut state = fixture(&root);
+    state.datapacks = Runtime::new(
+        PackSet::load(
+            &root,
+            Selection {
+                enabled: vec!["vanilla".into()],
+                disabled: vec!["file/wg".into()],
+            },
+        )
+        .unwrap(),
+        root.clone(),
+    );
+    messages(&mut state);
+    run(&mut state, "datapack enable file/wg");
+    settle(&mut state);
+    let shown: Vec<String> = messages(&mut state)
+        .iter()
+        .map(crate::command_debug::plain)
+        .collect();
+    assert!(
+        shown
+            .iter()
+            .any(|line| line.contains("commands.datapack.modify.enable")),
+        "the enable still succeeds: {shown:?}"
+    );
+    assert_eq!(
+        shown
+            .iter()
+            .filter(|line| line.contains("test/worldgen/biome/odd.json"))
+            .count(),
+        1,
+        "{shown:?}"
+    );
+    assert!(state.datapacks.packs().functions.contains_key("test:hello"));
+    run(&mut state, "reload");
+    settle(&mut state);
+    let shown: Vec<String> = messages(&mut state)
+        .iter()
+        .map(crate::command_debug::plain)
+        .collect();
+    assert!(
+        !shown.iter().any(|line| line.contains("worldgen")),
+        "a reload of the same pack does not warn again: {shown:?}"
+    );
+}
+
+#[test]
+fn a_selected_pack_gone_from_disk_is_dropped_with_a_warning() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    pack(&root, "kept", "\"K\"", &[]);
+    let loaded = PackSet::load(
+        &root,
+        Selection {
+            enabled: vec!["vanilla".into(), "file/gone".into(), "file/kept".into()],
+            disabled: Vec::new(),
+        },
+    )
+    .unwrap();
+    assert_eq!(loaded.selection.enabled, ["vanilla", "file/kept"]);
+    assert_eq!(loaded.dropped, ["file/gone"]);
+    let warnings = loaded.warnings(None);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("file/gone") && warnings[0].contains("dropped"));
+    assert!(loaded.warnings(Some(&loaded)).is_empty());
+}
+
+#[test]
+fn a_pack_removed_while_the_server_is_down_opens_the_world_without_it() {
+    let dir = std::env::temp_dir().join(format!("mc-core-datapack-gone-{}", uuid::Uuid::new_v4()));
+    pack(&dir.join("datapacks"), "p", "\"P\"", &GEM_RECIPES);
+    let config = crate::config::CoreConfig::new(dir.clone(), 42);
+    let core = crate::core::Core::open(config.clone()).unwrap();
+    assert!(recipe_result(core.registry(), "test:new_gem").is_some());
+    core.shutdown();
+
+    std::fs::remove_dir_all(dir.join("datapacks").join("p")).unwrap();
+    let core = crate::core::Core::open(config.clone()).unwrap();
+    assert!(
+        recipe_result(core.registry(), "test:new_gem").is_none(),
+        "the missing pack's content is gone, and the world still opens"
+    );
+    core.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn a_corrupt_saved_selection_fails_closed() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    let bad = |enabled: &[&str], disabled: &[&str]| Selection {
+        enabled: enabled.iter().map(|id| (*id).to_owned()).collect(),
+        disabled: disabled.iter().map(|id| (*id).to_owned()).collect(),
+    };
+    for selection in [
+        bad(&[], &[]),
+        bad(&["file/a"], &[]),
+        bad(&["vanilla", "vanilla"], &[]),
+        bad(&["vanilla", "file/a"], &["file/a"]),
+        bad(&["vanilla", ""], &[]),
+        bad(&["vanilla", "file/"], &[]),
+        bad(&["vanilla", "file/.."], &[]),
+        bad(&["vanilla", "file/a/b"], &[]),
+        bad(&["vanilla", "file/a\\b"], &[]),
+        bad(&["vanilla", "../escape"], &[]),
+        bad(&["vanilla", "datapack/a"], &[]),
+        bad(&["vanilla"], &["bogus"]),
+    ] {
+        let mut runtime = Runtime::new(PackSet::default(), root.clone());
+        assert!(
+            runtime.restore_selection(selection.clone()).is_err(),
+            "{selection:?}"
+        );
+        assert_eq!(
+            runtime.selection(),
+            &Selection::default(),
+            "a refused selection changes nothing: {selection:?}"
+        );
+        assert!(
+            PackSet::load(&root, selection.clone()).is_err(),
+            "{selection:?}"
+        );
+    }
+    // An absent saved selection is the default one; a good one restores.
+    let mut runtime = Runtime::new(PackSet::default(), root.clone());
+    runtime
+        .restore_selection(bad(&["vanilla", "file/a"], &["file/b"]))
+        .unwrap();
+    assert_eq!(runtime.selection().enabled, ["vanilla", "file/a"]);
+    assert_eq!(
+        Selection::default(),
+        bad(&["vanilla"], &[]),
+        "a manifest without the field opens with the default selection"
+    );
 }

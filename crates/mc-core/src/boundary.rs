@@ -870,20 +870,15 @@ pub enum BossBarChange {
 }
 
 /// The registry a datapack reload installed, shared by every connection's
-/// [`PlayerChange::RecipesReloaded`]. `shared` lets the edge build its packets
-/// once for all of them.
+/// [`PlayerChange::RecipesReloaded`].
 #[derive(Clone)]
 pub struct RegistryReload {
     pub registry: Arc<crate::registry::CoreRegistry>,
-    pub shared: Arc<std::sync::OnceLock<Arc<dyn std::any::Any + Send + Sync>>>,
 }
 impl RegistryReload {
     #[must_use]
     pub fn new(registry: Arc<crate::registry::CoreRegistry>) -> Self {
-        Self {
-            registry,
-            shared: Arc::default(),
-        }
+        Self { registry }
     }
 }
 impl std::fmt::Debug for RegistryReload {

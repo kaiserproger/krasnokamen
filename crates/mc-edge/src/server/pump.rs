@@ -189,7 +189,9 @@ pub(super) fn configured_viewer(
         .get(&connection)
         .copied();
     viewer.dimension_type_ids = server.wire.dimension_type_ids;
-    viewer.advancements = Arc::clone(&server.recipes.current().advancements);
+    if let Some(packets) = crate::recipes::packets_for(&server.hub.current_registry()) {
+        viewer.advancements = Arc::clone(&packets.advancements);
+    }
     viewer
 }
 
@@ -313,15 +315,6 @@ pub(super) fn route_changes(
     handles: &ConnectionHandles,
     server: &Arc<EdgeServer>,
 ) -> bool {
-    for change in changes {
-        if let mc_core::boundary::PlayerChange::RecipesReloaded { reload } = change
-            && let Some(packets) = crate::recipes::reloaded(reload)
-        {
-            // Every connection's announcement shares one build; later
-            // joiners get these recipes too.
-            server.recipes.adopt(&packets);
-        }
-    }
     for planned in crate::plan::plan_routed_player_changes(changes, viewer) {
         if handles.reliable_tx.try_send(planned.data).is_err() {
             server.connections.remove(viewer.connection);

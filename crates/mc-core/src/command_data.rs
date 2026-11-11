@@ -19,18 +19,18 @@ fn list(elements: Vec<Tag>, element_type: u8) -> Tag {
     })
 }
 fn public_fields(fields: &mut Vec<(String, Tag)>) {
-    fields.retain(|(key, _)| {
-        !key.starts_with("solaris") && !key.starts_with("Solaris") && key != "DataVersion"
-    });
+    fields.retain(|(key, _)| !private_field(key));
 }
 
-pub(crate) fn entity(state: &TickState, id: EntityId) -> Result<Tag, String> {
+/// An entity's full native image: the public NBT plus the private native
+/// fields, exactly what a checkpoint stores.
+pub(crate) fn entity_image(state: &TickState, id: EntityId) -> Result<Vec<(String, Tag)>, String> {
     let slot = state
         .entities
         .slot_of_any(id)
         .ok_or("No entity was found")?;
     let row = state.entities.row(slot);
-    let mut fields = if let Some(player) = state.players.get(&id) {
+    Ok(if let Some(player) = state.players.get(&id) {
         let Tag::Compound(mut fields) =
             crate::core::player_data_tag(state, id).map_err(|e| e.to_string())?
         else {
@@ -83,14 +83,30 @@ pub(crate) fn entity(state: &TickState, id: EntityId) -> Result<Tag, String> {
             crate::core::entity_data_record(state, slot).ok_or("Entity has no vanilla data")?;
         mc_data::entity_nbt::entity_to_fields(&state.registry.items, &record)
             .map_err(|e| e.to_string())?
-    };
+    })
+}
+
+/// An entity's public NBT, as `data get entity` shows it.
+pub(crate) fn entity(state: &TickState, id: EntityId) -> Result<Tag, String> {
+    let mut fields = entity_image(state, id)?;
     public_fields(&mut fields);
     // EntityDataAccessor uses NbtPredicate -> saveWithoutId, not a disk entity root.
     fields.retain(|(key, _)| key != "id");
     Ok(Tag::Compound(fields))
 }
 
-pub(crate) fn block(state: &TickState, pos: BlockPos) -> Result<Tag, String> {
+/// A block entity's full native image: public NBT plus the private native
+/// fields, with live owner state (inventory, furnace, brewing, jukebox) folded in.
+pub(crate) fn block_image(
+    state: &TickState,
+    pos: BlockPos,
+) -> Result<
+    (
+        mc_data::block_entity_kinds::BlockEntityKind,
+        Vec<(String, Tag)>,
+    ),
+    String,
+> {
     use mc_data::block_entity_kinds::BlockEntityKind;
     let chunk = state
         .world
@@ -181,11 +197,22 @@ pub(crate) fn block(state: &TickState, pos: BlockPos) -> Result<Tag, String> {
         fields.retain(|(key, _)| key != "RecordItem" && key != "ticks_since_song_started");
         fields.extend(jukebox.data_fields(&state.registry.items));
     }
+    Ok((kind, fields))
+}
+
+/// A block entity's public NBT, as `data get block` shows it.
+pub(crate) fn block(state: &TickState, pos: BlockPos) -> Result<Tag, String> {
+    let (_, mut fields) = block_image(state, pos)?;
     public_fields(&mut fields);
     Ok(Tag::Compound(fields))
 }
 
-fn text(value: impl ToString) -> Tag {
+/// Whether `key` is a native field no `data` command shows or edits.
+pub(crate) fn private_field(key: &str) -> bool {
+    key.starts_with("solaris") || key.starts_with("Solaris") || key == "DataVersion"
+}
+
+pub(crate) fn text(value: impl ToString) -> Tag {
     Tag::Compound(vec![("text".into(), Tag::String(value.to_string()))])
 }
 
@@ -333,40 +360,32 @@ pub(crate) fn command(
     input: &str,
 ) -> crate::command_execution::CommandResult {
     use crate::command_execution::CommandResult::{Failed, Success};
-    if input.split_whitespace().nth(2) == Some("storage") {
-        let context = state
-            .command_context
-            .current
-            .unwrap_or_else(|| Context::source(state, connection, executor, 2));
-        return crate::command_storage::command(state, context, input);
-    }
     let words: Vec<&str> = input.split_whitespace().collect();
-    if matches!(words.get(1), Some(&("merge" | "modify" | "remove")))
-        && words.get(2) == Some(&"entity")
-    {
-        let context = state
-            .command_context
-            .current
-            .unwrap_or_else(|| Context::source(state, connection, executor, 2));
-        return crate::command_entity_data::command(state, context, input);
-    }
-    if matches!(words.get(1), Some(&("modify" | "remove"))) {
-        state.push_player(
-            connection,
-            crate::boundary::PlayerChange::Chat {
-                message: "Data modify and remove support storage and entity targets, and merge also command blocks"
-                    .into(),
-            },
-        );
-        return Failed;
-    }
-    if input.split_whitespace().nth(1) != Some("get") {
-        return crate::command_blocks::data(state, connection, executor, input);
-    }
     let context = state
         .command_context
         .current
         .unwrap_or_else(|| Context::source(state, connection, executor, 2));
+    match (words.get(1).copied(), words.get(2).copied()) {
+        (Some("get" | "merge" | "modify" | "remove"), Some("storage")) => {
+            return crate::command_storage::command(state, context, input);
+        }
+        (Some("merge" | "modify" | "remove"), Some("entity")) => {
+            return crate::command_entity_data::command(state, context, input);
+        }
+        (Some("merge" | "modify" | "remove"), Some("block")) => {
+            return crate::command_block_data::command(state, context, input);
+        }
+        (Some("get"), _) => {}
+        _ => {
+            state.push_player(
+                connection,
+                crate::boundary::PlayerChange::Chat {
+                    message: "Expected data get|merge|modify|remove entity|block|storage".into(),
+                },
+            );
+            return Failed;
+        }
+    }
     match query(state, context, input) {
         Ok(value) => Success(value),
         Err(message) => {
