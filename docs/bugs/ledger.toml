@@ -2156,10 +2156,11 @@ title = "Cats never bring morning gifts: no `morning_gift/MorningGift` logic exi
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAT-GIFT-ABSENT"
 regression = ["cargo:mc-core:vanilla_mob_behavior_tests::tamed_cat_gives_one_morning_gift_not_an_arbitrary_wake_gift"]
 fix_commit = "patch:7bba9a462bce17ac86f6ed568d778aff0eeafa453b0c9990cb99b17e8488b19e"
+promotion = "docs/bugs/promotions/CAT-GIFT-ABSENT.json"
 
 [[bug]]
 id = "STRIDER-COLD-ABSENT"
@@ -2167,13 +2168,14 @@ title = "Striders never shiver outside lava: no `shiver/cold` strider logic exis
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#STRIDER-COLD-ABSENT"
 regression = [
   "cargo:mc-core:vanilla_mob_behavior_tests::strider_cold_state_slows_and_lava_restores_it",
   "cargo:mc-core:vanilla_mob_behavior_tests::cold_strider_rain_damage_obeys_roof_and_clear_weather",
 ]
 fix_commit = "patch:c7a40b6afebf99b151ec6ad8effe1fa16c867b7b30f2cc52741323c739eb502a"
+promotion = "docs/bugs/promotions/STRIDER-COLD-ABSENT.json"
 
 [[bug]]
 id = "PARROT-DANCE-ABSENT"
@@ -2181,10 +2183,11 @@ title = "Parrots never dance to music: no `dance/Dance` logic exists in core. Va
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PARROT-DANCE-ABSENT"
 regression = ["cargo:mc-core:vanilla_mob_behavior_tests::parrot_record_events_and_nearby_hostile_imitation"]
 fix_commit = "patch:9a0887f770f42d564833bdc7dd038433ee7f4803e16c4dee3051eb49cb17bbe7"
+promotion = "docs/bugs/promotions/PARROT-DANCE-ABSENT.json"
 
 [[bug]]
 id = "DATA-MUTATION-STORAGE"
