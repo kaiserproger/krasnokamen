@@ -14,6 +14,8 @@ from .probe_steps import ProbeSteps, item_count
 def _strike(steps: ProbeSteps, ident: dict, row: dict) -> None:
     """Approach, aim and attack once, retrying when a moving mob slipped out of reach or view."""
     for _ in range(30):
+        if steps.observe()["player"]["health"] <= 0:
+            raise RuntimeError("player_died_before_attack")
         steps.call("minecraft_approach_entity", {"entity_id": ident["entity_id"], "timeout_seconds": steps.remaining()})
         _aim(steps, _same_row(steps, ident) or row)
         try:
@@ -198,12 +200,17 @@ def _golem(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
     steps.fixture("gamerule spawn_mobs false")
     steps.fixture("gamemode survival @s")
-    # GOLEM-AABB: villager at origin, live golem 14 blocks away on each axis
-    # (spherical distance ~19.8 > 16, AABB within 16) must still be detected.
-    steps.fixture(f"summon minecraft:villager {x + .5} {y} {z + .5}")
-    villager = _wanderer_at(steps, "minecraft:villager", x + .5, z + .5)
+    # GOLEM-AABB: a penned villager (2x2 cell, walls 3 high, so it cannot wander toward the
+    # golem and change the geometry) with a live golem 14 blocks away on each axis
+    # (spherical distance ~19.8 > 16, AABB within 16) must still detect it.
+    steps.fixture(f"fill {x - 1} {y} {z - 5} {x + 2} {y + 2} {z - 5} minecraft:obsidian")
+    steps.fixture(f"fill {x - 1} {y} {z - 2} {x + 2} {y + 2} {z - 2} minecraft:obsidian")
+    steps.fixture(f"fill {x - 1} {y} {z - 4} {x - 1} {y + 2} {z - 3} minecraft:obsidian")
+    steps.fixture(f"fill {x + 2} {y} {z - 4} {x + 2} {y + 2} {z - 3} minecraft:obsidian")
+    steps.fixture(f"summon minecraft:villager {x + 1.0} {y} {z - 3.0}")
+    villager = _wanderer_at(steps, "minecraft:villager", x + 1.0, z - 3.0)
     vid = _identity(villager)
-    steps.fixture(f"summon minecraft:iron_golem {x + 14.5} {y} {z + 14.5} {{NoAI:1b}}")
+    steps.fixture(f"summon minecraft:iron_golem {x + 15.0} {y} {z + 11.0} {{NoAI:1b}}")
     far = _echo(steps, "far_golem_summon_ordered")
     steps.check("far_golem_summoned", any("Summoned new Iron Golem" in line for line in far["recent_chat"]))
     far_golem: dict = {}
@@ -211,7 +218,7 @@ def _golem(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     def far_received(_state: dict) -> bool:
         # 20 blocks from the player: beyond _entity_at's 16-block search radius.
         row = next((r for r in _rows(steps, 32) if r["entity_type"] == "minecraft:iron_golem"
-                    and abs(r["x"] - (x + 14.5)) < .6 and abs(r["z"] - (z + 14.5)) < .6), None)
+                    and abs(r["x"] - (x + 15.0)) < .6 and abs(r["z"] - (z + 11.0)) < .6), None)
         if row is not None:
             far_golem.update(row)
         return row is not None
@@ -262,18 +269,42 @@ def _golem(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture(f"summon minecraft:iron_golem {x + 2.5} {y} {z + 2.5}")
     fighter = _wanderer_at(steps, "minecraft:iron_golem", x + 2.5, z + 2.5, exclude=(golem["entity_uuid"],))
     fid = _identity(fighter)
+    # Regeneration between the golem hits would blur the per-hit damage readings.
+    steps.fixture("gamerule natural_health_regeneration false")
     drops: dict[str, float] = {}
-    for diff in ("easy", "normal", "hard"):
+    def measure(diff: str) -> float:
         steps.fixture(f"difficulty {diff}")
         steps.fixture("effect give @s minecraft:instant_health 1 5 true")
         steps.wait(lambda s: s["player"]["health"] == 20, f"{diff}_player_healthy", timeout_seconds=20)
-        _strike(steps, fid, fighter)
-        hit = steps.wait(lambda s: s["player"]["health"] < 20, f"{diff}_golem_melee_landed",
-                         timeout_seconds=40)
-        drops[diff] = 20 - hit["player"]["health"]
+        # The (provoked) golem may land its hit while we approach, and a Hard hit can
+        # kill: a hit before our own swing is the measurement, not a failure. A golem
+        # that has calmed down is provoked again.
+        hit = None
+        for _ in range(6):
+            if steps.observe()["player"]["health"] >= 20:
+                try:
+                    _strike(steps, fid, fighter)
+                except RuntimeError:
+                    if steps.observe()["player"]["health"] >= 20:
+                        raise
+            try:
+                hit = steps.wait(lambda s: s["player"]["health"] < 20, f"{diff}_golem_melee_landed",
+                                 timeout_seconds=8)
+                break
+            except (RuntimeError, TimeoutError):
+                continue
+        if hit is None:
+            raise RuntimeError(f"{diff}_golem_melee_landed")
+        return 20 - hit["player"]["health"]
+    # A reading that lags behind two golem hits only over-counts, so the smallest of three
+    # readings is the per-hit damage. Hard hits can kill the player, so Hard is read once.
+    samples = {diff: [measure(diff) for _ in range(3)] for diff in ("easy", "normal")}
+    samples["hard"] = [measure("hard")]
+    steps.report["golem_melee_damage_samples"] = samples
+    drops = {diff: min(values) for diff, values in samples.items()}
+    steps.report["golem_melee_damage_by_difficulty"] = drops
     steps.check("golem_melee_scales_easy_lt_normal_lt_hard",
                 0 < drops["easy"] < drops["normal"] < drops["hard"])
-    steps.report["golem_melee_damage_by_difficulty"] = drops
 
 
 def _axolotl(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
