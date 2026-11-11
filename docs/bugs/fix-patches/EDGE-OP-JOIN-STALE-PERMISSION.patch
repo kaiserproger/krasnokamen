@@ -1,0 +1,31 @@
+diff --git a/crates/mc-edge/src/server/connection.rs b/crates/mc-edge/src/server/connection.rs
+index 1782fa31..a779631d 100644
+--- a/crates/mc-edge/src/server/connection.rs
++++ b/crates/mc-edge/src/server/connection.rs
+@@ -14,6 +14,7 @@ pub(super) async fn admit_native_session(
+     view_distance: u8,
+     locale: String,
+ ) -> Result<mc_core::core::PlayerSession, mc_core::CoreError> {
++    let _guard = server.operator_updates.lock().await;
+     server.admin.register(id, uuid, name.clone(), ip);
+     let session = server.hub.join_session(
+         id,
+@@ -34,7 +35,17 @@ pub(super) fn refresh_join_permission_tree(
+     id: ConnectionId,
+     burst_level: u8,
+ ) -> anyhow::Result<()> {
+-    let _ = (server, id, burst_level);
++    let current = if server.hub.session_locked(id) {
++        0
++    } else {
++        server.admin.session_level(id)
++    };
++    if current != burst_level {
++        server.send(
++            id,
++            &crate::command_tree::tree(current, server.hub.plugin_commands()),
++        )?;
++    }
+     Ok(())
+ }
+ 

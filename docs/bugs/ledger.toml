@@ -3593,7 +3593,8 @@ source = "External critique of 4d32f28, crates/mc-edge/src/server.rs op/deop adm
 repro = "source"
 regression = ["cargo:mc-edge:server::admin_tests::operator_updates_wait_for_capacity_before_mutating", "cargo:mc-edge:server::admin_tests::queued_op_is_rejected_after_initiator_is_deopped"]
 failing_first = "not recorded"
-fix_commit = "d330c4a707a59e93d6d8dc28e1aecad94ddfd9b7"
+# fix commit d330c4a7 bundles unrelated API changes its tests need; the control reverses only the reserve-before-mutate admission (docs/bugs/fix-patches/EDGE-OP-QUEUE-POLL.patch)
+fix_commit = "patch:a87aecbd97cc31ed39fa8088d00999e6b07d8c728a36386ebc4df654550a5bb5"
 
 [[bug]]
 id = "EDGE-OP-JOIN-STALE-PERMISSION"
@@ -3605,7 +3606,8 @@ source = "Code review of server/connection.rs Join permission snapshot preceding
 repro = "source"
 regression = ["cargo:mc-edge:server::admin_tests::joining_session_and_deop_keep_native_permission_order", "cargo:mc-edge:server::admin_tests::deop_between_snapshot_and_registration_reaches_native_join", "cargo:mc-edge:server::admin_tests::join_burst_permission_change_refreshes_command_tree", "cargo:mc-edge:server::admin_tests::deop_reaches_rejoining_native_session"]
 failing_first = "not recorded"
-fix_commit = "0504a2800c3b43fc06a8959f8bd809b5be116478"
+# fix commit 0504a280 bundles unrelated API changes its tests need; the control reverses only the join fence and burst refresh (docs/bugs/fix-patches/EDGE-OP-JOIN-STALE-PERMISSION.patch)
+fix_commit = "patch:c03b25b06e2db9d7c1598c8d26c2eb1ee466aaac1110e590ae92032042f6c9c1"
 
 [[bug]]
 id = "CORE-PICKUP-HIDDEN-MENU-IMAGE"
@@ -3628,7 +3630,8 @@ source = "Independent review of 0504a280 operator admission"
 repro = "source"
 regression = ["cargo:mc-edge:server::admin_tests::queued_op_is_rejected_after_initiator_is_deopped"]
 failing_first = "not recorded"
-fix_commit = "878f1535bbde9838775b755060fe6e8ca6f69278"
+# fix commit 878f1535 bundles unrelated API changes its tests need; the control reverses only the post-wait permission re-check (docs/bugs/fix-patches/EDGE-QUEUED-OP-AFTER-DEOP.patch)
+fix_commit = "patch:c7e1e5ec2536a40e6dad44b9403d08a5cd71eb2d3414d1a32b44f46552f27b04"
 
 [[bug]]
 id = "EDGE-REJOIN-OP-SESSION"
@@ -3640,7 +3643,8 @@ source = "Independent review of 0504a280 operator admission"
 repro = "source"
 regression = ["cargo:mc-edge:server::admin_tests::deop_reaches_rejoining_native_session"]
 failing_first = "not recorded"
-fix_commit = "878f1535bbde9838775b755060fe6e8ca6f69278"
+# fix commit 878f1535 bundles unrelated API changes its tests need; the control reverses only the all-session update (docs/bugs/fix-patches/EDGE-REJOIN-OP-SESSION.patch)
+fix_commit = "patch:8ca661a4bb117790f5fa7305fb7754be42619b7a726034b1a9fc03d3cfd2551b"
 
 [[bug]]
 id = "EDGE-COMPUTER-PROCESS-UNCAPPED"
@@ -3650,9 +3654,10 @@ severity = "major"
 status = "open"
 source = "External critique of 4d32f28, crates/mc-edge/src/computer.rs bridge launch"
 repro = "source"
-regression = ["cargo:mc-edge:computer::tests::computer_worker_reopen_and_close_reopen_at_capacity"]
+regression = ["cargo:mc-edge:computer::tests::computer_worker_reopen_and_close_reopen_at_capacity", "cargo:mc-edge:computer::tests::computer_process_limit_is_shared_and_released"]
 failing_first = "not recorded"
-fix_commit = "d330c4a707a59e93d6d8dc28e1aecad94ddfd9b7"
+# fix commit d330c4a7 bundles unrelated API changes its tests need; the control reverses only the cap (docs/bugs/fix-patches/EDGE-COMPUTER-PROCESS-UNCAPPED.patch)
+fix_commit = "patch:cb87be35214c87253a2edc08f233f958c9ec3b88560fdd8d611364f1310faad6"
 
 [[bug]]
 id = "OUTBOX-TEXT-FLOOD-KICK"

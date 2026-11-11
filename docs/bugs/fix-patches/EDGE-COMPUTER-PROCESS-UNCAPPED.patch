@@ -1,0 +1,14 @@
+diff --git a/crates/mc-edge/src/computer.rs b/crates/mc-edge/src/computer.rs
+index 32085bbb..ff5467df 100644
+--- a/crates/mc-edge/src/computer.rs
++++ b/crates/mc-edge/src/computer.rs
+@@ -236,8 +236,7 @@ fn spawn(cfg: &ComputerConfig, permits: &Arc<Semaphore>) -> Result<Option<Proces
+     let Some(program) = cfg.command.first() else {
+         return Ok(None);
+     };
+-    let _ = permits;
+-    let permit = Arc::new(Semaphore::new(1))
++    let permit = Arc::clone(permits)
+         .try_acquire_owned()
+         .map_err(|_| SpawnError::Limit)?;
+     let mut child = tokio::process::Command::new(program)

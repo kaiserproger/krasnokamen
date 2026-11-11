@@ -302,6 +302,11 @@ async fn join_burst_permission_change_refreshes_command_tree() {
     let uuid = crate::crypto::offline_uuid("Alex");
     server.admin.set_op(uuid, "Alex", false).unwrap();
     connection::refresh_join_permission_tree(&server, alex, 4).unwrap();
+    assert_eq!(
+        rx.len(),
+        1,
+        "a changed permission must queue one command tree"
+    );
     let frame = receive(&mut rx).await;
     let tree = ClientboundCommands::decode(&mut &frame.body[..]).unwrap();
     assert!(
