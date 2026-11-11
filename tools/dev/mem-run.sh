@@ -175,8 +175,9 @@ fi
 source "$here/slot-select.sh"
 select_slot "$@"
 # Incremental: debug/test builds always; release builds only in the normal lane
-# (re-pins after a small change cost 39% less CPU, measured 2026-11-11; the binary
-# has more codegen units and can run slower, so perf windows use none). -p and -x
+# (a re-pin after a small change should cost less CPU: one uncontrolled 2026-11-11
+# measurement, size unproven; the binary has more codegen units and can run slower,
+# so perf windows use none). -p and -x
 # lanes and custom `--profile` builds are never incremental. This cargo (1.99) does
 # not apply the profile default here, so it is forced by env. Measured once: cold
 # mc-core --tests build 26m48s -> 19m07s.
