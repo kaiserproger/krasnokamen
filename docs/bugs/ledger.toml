@@ -4102,3 +4102,14 @@ status = "open"
 source = "JavaAuthAck acceptance: 8/8 runs authenticated, then the adapter TypeError (receipts/JavaAuthAck/report.md)."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "NATIVE-TOASTS-MISSING"
+title = "Native client renders no toasts: advancement-made, recipe-unlocked and other toasts that the vanilla Java client shows in the top-right corner never appear"
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "solaris-client 2edbb590 src/ui/packets.rs read_advancements reads the show-toast flag as `let _show` and discards it; no toast renderer exists anywhere in solaris-client/src (Main, 2026-11-11, from VisualIssuesM's Java/native comparison)."
+regression = []
+failing_first = "reported"
