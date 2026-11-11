@@ -1561,13 +1561,15 @@ fn plan_entities(
     for &(id, _) in &scratch.spawns {
         let entity = snapshot.entities.get(id).expect("live spawn");
         let position = entity_spawn_position(entity);
-        // A passenger's pairing ends with its vehicle's passengers (vanilla
-        // `ServerEntity.sendPairingData`, the `isPassenger` branch): the client
-        // skips passenger ids it does not know yet, so a rider that comes into
-        // view after its vehicle is mounted only by this packet.
-        let vehicle = viewer.vehicles.get(&id).map(|vehicle| {
-            let tracked = &viewer.tracked_entities[vehicle];
-            mc_protocol::packets::play::ClientboundSetPassengers {
+        // A passenger's pairing also carries its vehicle's passengers (vanilla
+        // `ServerEntity.sendPairingData`, the `isPassenger` branch, sends it
+        // before the leash; the two packets are independent): the client skips
+        // passenger ids it does not know yet, so a rider that comes into view
+        // after its vehicle is mounted only by this packet. A vehicle that is
+        // no longer tracked has no passengers to announce.
+        let vehicle = viewer.vehicles.get(&id).and_then(|vehicle| {
+            let tracked = viewer.tracked_entities.get(vehicle)?;
+            Some(mc_protocol::packets::play::ClientboundSetPassengers {
                 vehicle_id: vehicle.0,
                 passenger_ids: tracked
                     .appearance
@@ -1575,7 +1577,7 @@ fn plan_entities(
                     .iter()
                     .map(|id| id.0)
                     .collect(),
-            }
+            })
         });
         let spawned = try_push(out, credit, |out| {
             push_best_effort(
