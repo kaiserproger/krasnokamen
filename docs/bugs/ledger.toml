@@ -4127,3 +4127,14 @@ status = "open"
 source = "VisualWorldM scene runs 2026-11-11 (receipts/VisualWorldClient/rows.yaml, batch-fx2 scene uojfjhnq/wh9f5dcu): the server refused the fields identically for native and Java clients."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "KELP-ITEMS-SPAWN-ON-OCEAN-FLOOR"
+title = "Kelp item entities keep appearing on the ocean floor (y 52-62) without any player action: in java-matrix worlds new item entities spawn in one column after kill @e[type=item], most likely kelp breaking for lack of support every tick or chunk load"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "BlockLogTickO java-matrix run 1, 2026-11-11 (receipts/BlockLogTickO/real-client-runs.txt): new item entity ids 274-278 in one column at x=9.5 z=3.5 about 120 blocks below the arena."
+regression = []
+failing_first = "reported"
