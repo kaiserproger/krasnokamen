@@ -39,7 +39,12 @@ pub(crate) fn parse(args: &[&str]) -> Result<SwingCommand, CommandError> {
         .ok()
         .filter(|ticks| (1..=MAX_TICKS).contains(ticks))
         .ok_or(CommandError::Usage(USAGE))?;
-    Ok(SwingCommand { target: target_of(target)?, hand, animation, duration_ticks })
+    Ok(SwingCommand {
+        target: target_of(target)?,
+        hand,
+        animation,
+        duration_ticks,
+    })
 }
 
 /// Emits one swing per living target; returns how many swung.
@@ -49,10 +54,16 @@ pub(crate) fn execute(
     command: &SwingCommand,
     changes: &mut ChangeSet,
 ) -> Result<i32, CommandError> {
-    let living: Vec<EntityId> = crate::command_execution::resolve_target(state, executor, &command.target)
-        .into_iter()
-        .filter(|&id| state.entities.slot_of_any(id).is_some_and(|slot| state.entities.body(slot).alive))
-        .collect();
+    let living: Vec<EntityId> =
+        crate::command_execution::resolve_target(state, executor, &command.target)
+            .into_iter()
+            .filter(|&id| {
+                state
+                    .entities
+                    .slot_of_any(id)
+                    .is_some_and(|slot| state.entities.body(slot).alive)
+            })
+            .collect();
     if living.is_empty() {
         return Err(CommandError::Message("No entity was found".into()));
     }
