@@ -151,6 +151,24 @@ class BuildTokenTests(unittest.TestCase):
                 os.close(fd)
         return held
 
+    def wait_tokens_free(self) -> None:
+        """The scope guardian returns a token when the scope empties, just after the runner exits:
+        block on each token lock (an alarm bounds a failure) instead of sampling it."""
+        def expired(*_):
+            raise AssertionError(f'a build token stayed held {BOUND} s after its runner exited')
+        previous = signal.signal(signal.SIGALRM, expired)
+        signal.alarm(BOUND)
+        try:
+            for token in '123':
+                fd = os.open(self.state_dir / 'tokens' / f'token-{token}.lock', os.O_RDONLY)
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX)
+                finally:
+                    os.close(fd)
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, previous)
+
     def hold_three(self, extra: int = 0) -> tuple[list[Command], list[Command]]:
         cmds = [self.start('cargo', 'test', '-p', f'crate{n}') for n in range(3 + extra)]
         self.settle(cmds)
@@ -189,7 +207,7 @@ class BuildTokenTests(unittest.TestCase):
         self.assertEqual(fifth.token, victim.token)
         for cmd in running + [fifth]:
             self.finish(cmd)
-        self.assertEqual(self.held_tokens(), [])
+        self.wait_tokens_free()
 
     def test_nested_compile_and_gate_run_while_all_tokens_are_held(self):
         running, _ = self.hold_three()
