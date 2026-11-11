@@ -53,6 +53,8 @@ pub struct Body {
     pub burn_ticks: u32,
     pub alive: bool,
     pub movement: MovementClass,
+    /// Native allegiance: zero is unaffiliated. Change through `set_faction`.
+    pub faction: u16,
     pub air_supply: i32,
     pub pickup_delay: u32,
     /// Ticks until this mob may melee again (vanilla `MeleeAttackGoal`).
@@ -175,6 +177,8 @@ pub struct EntityStore {
     orbs: std::collections::BTreeSet<EntityId>,
     /// Module-owned primed TNT; empty worlds skip population scans.
     tnt: std::collections::BTreeSet<EntityId>,
+    /// Sparse native slots: ordinary worlds do no battle population scan.
+    battle_members: std::collections::BTreeSet<EntitySlot>,
     /// Sparse, sorted native warden IDs; vibration delivery never scans other bodies.
     wardens: Vec<EntityId>,
     /// Journal custody (see [`Self::row_mut`]): per-slot flag deduplicating the
@@ -611,6 +615,7 @@ impl EntityStore {
             id,
             kind,
             alive: true,
+            faction: 0,
             half_width: cold.half_width,
             height: cold.height,
             burn_ticks: 0,
@@ -1033,6 +1038,24 @@ impl EntityStore {
 
     pub fn body(&self, slot: EntitySlot) -> &Body {
         &self.bodies[slot.0 as usize]
+    }
+
+    /// Set native allegiance with WAL and incremental-checkpoint custody.
+    pub fn set_faction(&mut self, slot: EntitySlot, faction: u16) {
+        let body = self.body(slot);
+        if body.faction == faction {
+            return;
+        }
+        if faction == 0 {
+            self.battle_members.remove(&slot);
+        } else {
+            self.battle_members.insert(slot);
+        }
+        self.body_mut(slot).faction = faction;
+    }
+
+    pub(crate) fn battle_slots(&self) -> impl Iterator<Item = EntitySlot> + '_ {
+        self.battle_members.iter().copied()
     }
 
     /// Mutable body custody: same marks as [`Self::row_mut`] (motion-dirty,
@@ -1587,6 +1610,9 @@ impl EntityStore {
 
     fn index_tick_members(&mut self, slot: EntitySlot) {
         let body = &self.bodies[slot.0 as usize];
+        if body.faction != 0 {
+            self.battle_members.insert(slot);
+        }
         match body.kind {
             EntityKind::Mob { type_id } => {
                 self.mob_members.entry(type_id).or_default().insert(slot);
@@ -1608,6 +1634,7 @@ impl EntityStore {
     }
 
     fn unindex_tick_members(&mut self, slot: EntitySlot, kind: EntityKind) {
+        self.battle_members.remove(&slot);
         match kind {
             EntityKind::Mob { type_id } => {
                 if let Some(slots) = self.mob_members.get_mut(&type_id) {

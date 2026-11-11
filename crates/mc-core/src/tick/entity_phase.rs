@@ -20,6 +20,7 @@ mod entity_prephase_tests;
 pub(super) struct ReadRow {
     pub(super) slot: EntitySlot,
     pub(super) id: EntityId,
+    pub(super) battle: bool,
     /// Current column's ID-staggered activation decision.
     pub(super) think: bool,
     pub(super) pos: [f64; 3],
@@ -424,7 +425,16 @@ pub(super) fn early_entity_rest(
     targets_empty: bool,
 ) -> bool {
     let flags = view.entities.motion_flags(slot);
-    if flags & MOTION_REST == 0
+    let battle = view.bodies[slot.0 as usize].faction != 0;
+    let battle_thrust = view
+        .hostile
+        .battle
+        .columns
+        .drive_by_slot
+        .get(slot.0 as usize)
+        .is_some_and(|drive| *drive != [0.0; 3]);
+    if battle && battle_thrust
+        || flags & MOTION_REST == 0
         || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::goat::is_goat(type_id))
             && crate::goat::drive(view.entities.row(slot)).is_some()
         || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::turtle::is_turtle(type_id))
@@ -432,7 +442,8 @@ pub(super) fn early_entity_rest(
         || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::frog::is_frog(type_id))
             && crate::frog::drive(view.entities.row(slot)).is_some()
         || !special_idle
-        || (motion_thinks(view.tick, flags, period)
+        || (!battle
+            && motion_thinks(view.tick, flags, period)
             && flags & crate::entities::MOTION_WANDER_REST == 0
             && !(targets_empty && flags & crate::entities::MOTION_TARGETLESS_WANDER_REST != 0))
         || (flags & MOTION_EFFECTS != 0
@@ -454,7 +465,8 @@ pub(super) fn early_entity_rest(
     {
         return false;
     }
-    if motion_thinks(view.tick, flags, period)
+    if !battle
+        && motion_thinks(view.tick, flags, period)
         && let EntityKind::Mob { type_id } = body.kind
         && view.registry.blueprint(type_id).is_some_and(|blueprint| {
             (blueprint.capabilities.temptable && view.has_tempting_items)
@@ -466,7 +478,7 @@ pub(super) fn early_entity_rest(
         // Decision ticks must observe them even when geometry is unchanged.
         return false;
     }
-    if motion_thinks(view.tick, flags, period) {
+    if !battle && motion_thinks(view.tick, flags, period) {
         // The proof samples current geometry, so unrelated edits anywhere in
         // the footprint's chunk need not reject an otherwise exact no-op.
         return idle_wander_motion_unchanged(view, slot);
@@ -842,7 +854,7 @@ pub(super) fn admit_slot(
     let mut special_idle = true;
     if flags & MOTION_SPECIAL != 0 {
         let hint = view.entities.motion_hint(slot);
-        if let Some(special) = hint.special {
+        if let Some(special) = crate::battle::special(view.bodies[index].faction, hint.special) {
             let id = view.bodies[slot.0 as usize].id;
             special_idle = targets_empty
                 && !view.hostile.targets.contains_key(&id)
@@ -909,8 +921,9 @@ pub(super) fn read_row(
     period: u8,
     rare: &RarePrep,
 ) -> (ReadRow, bool) {
-    let think = motion_thinks(view.tick, flags, period);
     let body = &view.bodies[slot.0 as usize];
+    let battle = body.faction != 0 && matches!(body.kind, EntityKind::Mob { .. });
+    let think = battle || motion_thinks(view.tick, flags, period);
     let row = view.entities.row(slot);
     let observed = rare.observed;
     // Snapshot predicates share one immutable blueprint lookup per mob.
@@ -958,17 +971,19 @@ pub(super) fn read_row(
         && blueprint
             .is_some_and(|bp| bp.capabilities.size_profile == crate::blueprint::SizeProfile::Slime);
     let has_effects = flags & MOTION_EFFECTS != 0;
-    let chaser = chaser
+    let chaser = !battle
+        && chaser
         && !row.controls.no_ai
         && (!matches!(body.kind, EntityKind::Mob { type_id } if crate::piglin::is_piglin_type(type_id))
             || crate::entity_life::adult(row))
-        && (!is_enderman || rare.enderman_target.is_some());
-    let breeder = breeder && !row.controls.no_ai;
-    let special = special.filter(|_| !row.controls.no_ai);
-    let panic_multiplier = if (body.burn_ticks > 0
-        || body
-            .hurt_at
-            .is_some_and(|at| view.tick.saturating_sub(at) < 100))
+        && (battle || !is_enderman || rare.enderman_target.is_some());
+    let breeder = !battle && breeder && !row.controls.no_ai;
+    let special = crate::battle::special(body.faction, special).filter(|_| !row.controls.no_ai);
+    let panic_multiplier = if !battle
+        && (body.burn_ticks > 0
+            || body
+                .hurt_at
+                .is_some_and(|at| view.tick.saturating_sub(at) < 100))
         && blueprint
             .is_some_and(|blueprint| blueprint.has_goal(crate::blueprint::GoalKind::FleeFire))
     {
@@ -993,8 +1008,9 @@ pub(super) fn read_row(
     // Panic source stays a rare-branch worker read (see `step_entity`).
     let read = ReadRow {
         think,
+        battle,
         has_retained_target: view.hostile.targets.contains_key(&body.id),
-        retain_target: blueprint.is_some_and(crate::hostile::retains_target),
+        retain_target: !battle && blueprint.is_some_and(crate::hostile::retains_target),
         enderman_target: rare.enderman_target,
         plugin_target: rare.plugin_target,
         gold_target: rare.gold_target,
@@ -1042,7 +1058,7 @@ pub(super) fn read_row(
         slow_falling,
         no_gravity: row.controls.no_gravity,
         special,
-        dark_aggro,
+        dark_aggro: !battle && dark_aggro,
         standing: (special == Some(crate::hostile::Special::Swell)
             && view.hostile.fuse(body.id) > 0)
             || matches!(row.special_mob.as_deref(), Some(crate::special_mobs::Retained::Wither { invulnerable }) if *invulnerable > 0)
@@ -1061,7 +1077,7 @@ pub(super) fn read_row(
             || crate::axolotl::playing_dead(row)
             || observed
             || blueprint.is_some_and(|blueprint| blueprint.goals.is_empty())
-            || crate::taming::suppress_ai(row)
+            || (!battle && crate::taming::suppress_ai(row))
             || crate::warden::suppress_ai(row)
             || crate::piglin::admiring(row),
         leash_follow: row.entity_life.leash.is_some()
@@ -1083,6 +1099,11 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         crate::contact_hazards::hurt_by_water(state);
         crate::enderman::tick(state);
     }
+    let battle_intents = if sim {
+        crate::battle::step(state)
+    } else {
+        Vec::new()
+    };
     let prep_start = std::time::Instant::now();
     state.entities.prepare_motion_hints(&state.registry);
     let unchanged_since = state.entity_phase_revision;
@@ -1371,6 +1392,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     let mut zoglin_grid = grid(&zoglin_targets, consumers[4]);
     let searches = rows.iter().filter(|row| {
         row.alive
+            && !row.battle
             && row.chaser
             && row.think
             && !row.breed_ready
@@ -1416,6 +1438,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     let ctx = StepCtx {
         rows: rows_ref,
         entities: &state.entities,
+        battle: &state.hostile.battle,
         retained_targets: &state.hostile.targets,
         players: player_grid,
         passive: passive_follow::Context {
@@ -1462,12 +1485,14 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     let commit_start = std::time::Instant::now();
     let resting_count = resting.len();
     let mut seq = std::mem::take(&mut state.seq_counter);
-    let mut intents = Vec::new();
+    let mut intents = battle_intents;
     let physical_profiles = state.registry.item_facts.has_physical_profiles();
     for slot in resting.drain(..) {
-        let id = state.entities.body(slot).id;
-        let aggressive = state.hostile.targets.contains_key(&id);
-        crate::hostile::set_zombie_aggressive(state, slot, aggressive);
+        let body = state.entities.body(slot);
+        if body.faction == 0 {
+            let aggressive = state.hostile.targets.contains_key(&body.id);
+            crate::hostile::set_zombie_aggressive(state, slot, aggressive);
+        }
         // A quiet row's writeback is a no-op; the hot flag spares the cold
         // row (a cache miss per resting body).
         if state.entities.motion_flags(slot) & crate::entities::MOTION_QUIET_TIMERS != 0 {
@@ -1483,16 +1508,18 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         );
     }
     for (write, mut raw) in ordered.drain(..).flatten() {
-        if let Some(target) = write.chase_target {
-            state
-                .hostile
-                .targets
-                .insert(state.entities.body(write.slot).id, target);
-            crate::hostile::set_zombie_aggressive(state, write.slot, true);
-        } else {
-            let id = state.entities.body(write.slot).id;
-            let aggressive = state.hostile.targets.contains_key(&id);
-            crate::hostile::set_zombie_aggressive(state, write.slot, aggressive);
+        if state.entities.body(write.slot).faction == 0 {
+            if let Some(target) = write.chase_target {
+                state
+                    .hostile
+                    .targets
+                    .insert(state.entities.body(write.slot).id, target);
+                crate::hostile::set_zombie_aggressive(state, write.slot, true);
+            } else {
+                let id = state.entities.body(write.slot).id;
+                let aggressive = state.hostile.targets.contains_key(&id);
+                crate::hostile::set_zombie_aggressive(state, write.slot, aggressive);
+            }
         }
         let attack_cooldown = raw
             .iter()
@@ -1607,6 +1634,20 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             post_start.elapsed().as_secs_f64() * 1000.0,
             resting_count,
         );
+        let battle = state.hostile.battle.timings;
+        eprintln!(
+            "  battle detail us: total={} counters={} formation={} columns={} targets={} steering={} combat={} morale={} projection={} emit={}",
+            battle.total_us,
+            battle.counters_us,
+            battle.formation_us,
+            battle.columns_us,
+            battle.targeting_us,
+            battle.steering_us,
+            battle.combat_us,
+            battle.morale_us,
+            battle.projection_us,
+            battle.emit_us,
+        );
     }
     rows.clear();
     specials.clear();
@@ -1643,6 +1684,7 @@ pub(super) struct StepCtx<'a> {
     pub(super) rows: &'a [ReadRow],
     /// Immutable through the indexed worker join; writes/compaction follow it.
     pub(super) entities: &'a crate::entities::EntityStore,
+    pub(super) battle: &'a crate::battle::BattleState,
     pub(super) retained_targets:
         &'a rustc_hash::FxHashMap<EntityId, (crate::target_grid::Target, f64)>,
     pub(super) players: crate::target_grid::TargetGrid<'a>,
@@ -1746,7 +1788,25 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
     let think = row.think;
     let mut look_target = None;
     let mut vel = [0.0; 3];
-    if let Some(target) = row.plugin_target {
+    if row.battle {
+        if !row.standing {
+            let index = row.slot.0 as usize;
+            vel = ctx
+                .battle
+                .columns
+                .drive_by_slot
+                .get(index)
+                .copied()
+                .unwrap_or([0.0; 3]);
+            look_target = ctx
+                .battle
+                .columns
+                .look_by_slot
+                .get(index)
+                .copied()
+                .flatten();
+        }
+    } else if let Some(target) = row.plugin_target {
         vel = crate::entity_motion::steer(row.movement, row.pos, target, f64::from(row.speed));
         look_target = Some(target);
     } else if row.standing {
@@ -1859,7 +1919,7 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
         };
         // Chain order (players, villagers, golem targets, zoglin targets)
         // and table order break distance ties, as one linear scan did.
-        if nearest.is_none() {
+        if nearest.is_none() && !row.battle {
             if !golem {
                 players.consider(&mut nearest, row.pos, sight, |(id, _)| {
                     row.enderman_target.is_none_or(|target| target == *id)

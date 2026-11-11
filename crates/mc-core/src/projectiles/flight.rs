@@ -1,14 +1,15 @@
 //! Shared swept collision, ballistic motion, pickup and loyalty return.
-//! One post-move body snapshot owns exact hit geometry. Per-shot membership is
-//! frozen from EntityStore's chunk index before payload mutations; pickup and
-//! riptide query that same live index and preserve dense-slot priority.
+//! One post-move body snapshot owns exact hit geometry. Large volleys use a
+//! two-block XZ counting grid with Y rejection; small/sparse scenes use native
+//! chunks. Membership freezes before payload mutations. Pickup/riptide keep
+//! live native chunk queries and dense-slot priority.
 
 use std::sync::Arc;
 
 use mc_physics::BlockMaterial;
 use uuid::Uuid;
 
-use super::{ARROW_IN_GROUND_INDEX, ARROW_STUCK_TICKS, ProjectileKind, ProjectileState};
+use super::{ARROW_IN_GROUND_INDEX, ProjectileKind, ProjectileState};
 use crate::boundary::{EntityDataValue, EntityId};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::intent::{DamageSource, Footprint, Intent, IntentKind};
@@ -91,6 +92,151 @@ fn hittables(state: &TickState, bodies: &mut Vec<Hittable>) {
     }
 }
 
+/// Derived, reusable scratch over the frozen geometry, never a second entity
+/// authority. One center entry per body; maximum half extent makes queries a
+/// conservative superset even for giants and boundary-straddling bodies.
+#[derive(Debug, Default)]
+pub(super) struct FineGrid {
+    origin: [i32; 2],
+    size: [usize; 2],
+    half_extent: f64,
+    offsets: Vec<usize>,
+    cursors: Vec<usize>,
+    items: Vec<usize>,
+}
+
+impl FineGrid {
+    const CELL: i32 = 2;
+    const MIN_SHOTS: usize = 16;
+    const MAX_CELLS: usize = 1 << 20;
+
+    fn cell(value: f64) -> i32 {
+        mc_physics::mth::floor_i32(value).div_euclid(Self::CELL)
+    }
+
+    fn center(body: &Hittable) -> [f64; 2] {
+        [
+            body.min[0] * 0.5 + body.max[0] * 0.5,
+            body.min[2] * 0.5 + body.max[2] * 0.5,
+        ]
+    }
+
+    fn index(&self, center: [f64; 2]) -> usize {
+        let x = (i64::from(Self::cell(center[0])) - i64::from(self.origin[0])) as usize;
+        let z = (i64::from(Self::cell(center[1])) - i64::from(self.origin[1])) as usize;
+        z * self.size[0] + x
+    }
+
+    fn build(&mut self, bodies: &[Hittable]) -> bool {
+        self.size = [0; 2];
+        if bodies.is_empty() {
+            return false;
+        }
+        let mut min = [i32::MAX; 2];
+        let mut max = [i32::MIN; 2];
+        self.half_extent = 0.0;
+        for body in bodies {
+            if body.min.iter().chain(&body.max).any(|v| !v.is_finite())
+                || (0..3).any(|axis| body.min[axis] > body.max[axis])
+            {
+                return false;
+            }
+            for (axis, value) in Self::center(body).into_iter().enumerate() {
+                min[axis] = min[axis].min(Self::cell(value));
+                max[axis] = max[axis].max(Self::cell(value));
+            }
+            self.half_extent = self
+                .half_extent
+                .max((body.max[0] - body.min[0]) * 0.5)
+                .max((body.max[2] - body.min[2]) * 0.5);
+        }
+        if !self.half_extent.is_finite() {
+            return false;
+        }
+        let width = (i64::from(max[0]) - i64::from(min[0]) + 1) as usize;
+        let height = (i64::from(max[1]) - i64::from(min[1]) + 1) as usize;
+        let Some(cells) = width.checked_mul(height) else {
+            return false;
+        };
+        // Widely separated worlds must not allocate/enumerate empty continents.
+        // The ordinary chunk path is still conservative for these sparse scenes.
+        if cells > Self::MAX_CELLS || cells > bodies.len().saturating_mul(16).max(4096) {
+            return false;
+        }
+        self.origin = min;
+        self.size = [width, height];
+        self.cursors.clear();
+        self.cursors.resize(cells, 0);
+        for body in bodies {
+            let cell = self.index(Self::center(body));
+            self.cursors[cell] += 1;
+        }
+        self.offsets.clear();
+        self.offsets.push(0);
+        for count in &mut self.cursors {
+            let start = *self.offsets.last().unwrap();
+            self.offsets.push(start + *count);
+            *count = start;
+        }
+        self.items.resize(bodies.len(), 0);
+        for (index, body) in bodies.iter().enumerate() {
+            let cell = self.index(Self::center(body));
+            self.items[self.cursors[cell]] = index;
+            self.cursors[cell] += 1;
+        }
+        true
+    }
+
+    /// Return test-only work, without adding hot-path counters to release builds.
+    fn query(
+        &self,
+        bodies: &[Hittable],
+        start: [f64; 3],
+        end: [f64; 3],
+        radius: f64,
+        out: &mut Vec<usize>,
+    ) -> usize {
+        let low = std::array::from_fn::<_, 3, _>(|axis| start[axis].min(end[axis]) - radius);
+        let high = std::array::from_fn::<_, 3, _>(|axis| start[axis].max(end[axis]) + radius);
+        let mut cells = [[0_i64; 2]; 2];
+        for (axis, world_axis) in [0, 2].into_iter().enumerate() {
+            cells[axis][0] = (i64::from(Self::cell(low[world_axis] - self.half_extent))
+                - i64::from(self.origin[axis]))
+            .max(0);
+            cells[axis][1] = (i64::from(Self::cell(high[world_axis] + self.half_extent))
+                - i64::from(self.origin[axis]))
+            .min(self.size[axis] as i64 - 1);
+        }
+        #[cfg(test)]
+        let mut examined = 0;
+        for z in cells[1][0]..=cells[1][1] {
+            for x in cells[0][0]..=cells[0][1] {
+                let cell = z as usize * self.size[0] + x as usize;
+                for &index in &self.items[self.offsets[cell]..self.offsets[cell + 1]] {
+                    #[cfg(test)]
+                    {
+                        examined += 1;
+                    }
+                    let body = &bodies[index];
+                    if (0..3)
+                        .all(|axis| body.max[axis] >= low[axis] && body.min[axis] <= high[axis])
+                    {
+                        out.push(index);
+                    }
+                }
+            }
+        }
+        #[cfg(test)]
+        {
+            examined
+        }
+        #[cfg(not(test))]
+        {
+            0
+        }
+    }
+}
+
 /// The entity store indexes feet, not bounds. Expand by its retained maximum
 /// body width before visiting chunks; callers retain their exact narrow phase.
 /// Slot order preserves the exhaustive pickup/riptide order, including swaps.
@@ -150,6 +296,7 @@ fn shot_candidates(
     id: EntityId,
     bodies: &[Hittable],
     exceptional: &[usize],
+    grid: Option<&FineGrid>,
     slots: &mut Vec<EntitySlot>,
     candidates: &mut Vec<usize>,
 ) {
@@ -180,12 +327,16 @@ fn shot_candidates(
         }
         (pos, std::array::from_fn(|axis| pos[axis] + velocity[axis]))
     };
-    swept_slots(state, start, end, radius, slots);
-    candidates.extend(slots.iter().filter_map(|slot| {
-        bodies
-            .binary_search_by_key(&slot.0, |body| body.slot.map_or(u32::MAX, |slot| slot.0))
-            .ok()
-    }));
+    if let Some(grid) = grid {
+        grid.query(bodies, start, end, radius, candidates);
+    } else {
+        swept_slots(state, start, end, radius, slots);
+        candidates.extend(slots.iter().filter_map(|slot| {
+            bodies
+                .binary_search_by_key(&slot.0, |body| body.slot.map_or(u32::MAX, |slot| slot.0))
+                .ok()
+        }));
+    }
     // Dragon parts and deployed planes need not fit the ordinary body bounds.
     candidates.extend_from_slice(exceptional);
 }
@@ -418,6 +569,8 @@ pub(super) fn run(
     }) {
         hittables(state, &mut bodies);
     }
+    let mut grid = std::mem::take(&mut state.projectiles.grid);
+    let use_grid = ids.len() >= FineGrid::MIN_SHOTS && grid.build(&bodies);
     let exceptional: Vec<_> = bodies
         .iter()
         .enumerate()
@@ -435,6 +588,7 @@ pub(super) fn run(
             id,
             &bodies,
             &exceptional,
+            use_grid.then_some(&grid),
             &mut slots,
             &mut candidates,
         );
@@ -460,6 +614,66 @@ pub(super) fn run(
         &mut slots,
     );
     state.projectiles.bodies = bodies;
+    state.projectiles.grid = grid;
+}
+
+/// Settled arrows need neither a projectile write nor appearance/WAL touch just
+/// to advance time. Native admitted entity age already handles active-chunk
+/// pauses and restart; pickup and expiry remain ordinary native operations.
+fn grounded_arrow(
+    state: &mut TickState,
+    id: EntityId,
+    slot: EntitySlot,
+    slots: &mut Vec<EntitySlot>,
+) -> bool {
+    let row = state.entities.row(slot);
+    let Some(record) = row.projectile.as_deref().filter(|record| {
+        record.stuck
+            && record.grounded_at_age.is_some()
+            && matches!(
+                record.kind,
+                ProjectileKind::Arrow | ProjectileKind::SpectralArrow
+            )
+    }) else {
+        return false;
+    };
+    let authored = crate::physical_attacks::projectile_profile(state, slot);
+    if matches!(record.data, super::ProjectileData::Physical { .. }) && authored.is_none() {
+        crate::plugin::fail_native(state);
+        return true;
+    }
+    if record.ground_age(row.age) >= record.ground_lifetime {
+        super::remove(state, id);
+        return true;
+    }
+    if authored.is_some_and(|profile| !profile.recoverable) && record.pickup {
+        state
+            .entities
+            .row_mut(slot)
+            .projectile
+            .as_mut()
+            .unwrap()
+            .pickup = false;
+        super::touch(state, id);
+    }
+    let record = state.entities.row(slot).projectile.as_deref().unwrap();
+    if !record.pickup || record.stack.is_empty() {
+        return true;
+    }
+    let pos = state.entities.pos(slot);
+    swept_slots(state, pos, pos, 1.5, slots);
+    if slots
+        .iter()
+        .any(|&candidate| pickup_candidate(state, record, pos, candidate))
+    {
+        // Only a real nearby pickup transaction needs owned custody. Idle arrows
+        // allocate nothing; reuse the query instead of scanning the cells twice.
+        let record = record.clone();
+        if pickup_from_slots(state, &record, pos, slots) {
+            super::remove(state, id);
+        }
+    }
+    true
 }
 
 fn run_shots<'a>(
@@ -489,6 +703,9 @@ fn run_shots<'a>(
             (ppos[0].floor() as i32).div_euclid(16),
             (ppos[2].floor() as i32).div_euclid(16),
         ) {
+            continue;
+        }
+        if grounded_arrow(state, id, slot, slots) {
             continue;
         }
         let Some(mut boxed) = state.entities.row_mut(slot).projectile.take() else {
@@ -649,7 +866,15 @@ fn step(
         return state.entities.slot_of(id).is_none();
     }
     if record.stuck {
-        if record.age > ARROW_STUCK_TICKS {
+        if matches!(
+            record.kind,
+            ProjectileKind::Arrow | ProjectileKind::SpectralArrow
+        ) {
+            record
+                .grounded_at_age
+                .get_or_insert(state.entities.row(slot).age);
+        }
+        if record.ground_age(state.entities.row(slot).age) >= record.ground_lifetime {
             return true;
         }
         return pickup(state, record, pos, slots);
@@ -947,6 +1172,12 @@ fn step(
         record.stuck = true;
         record.critical = false;
         record.age = 0;
+        if matches!(
+            record.kind,
+            ProjectileKind::Arrow | ProjectileKind::SpectralArrow
+        ) {
+            record.grounded_at_age = Some(state.entities.row(slot).age);
+        }
         state.entities.set_vel(slot, [0.0; 3]);
         state.entities.set_ground(slot, true);
         let extra = &mut Arc::make_mut(&mut state.entities.row_mut(slot).appearance).extra;
@@ -1030,32 +1261,43 @@ fn pickup(
         return false;
     }
     swept_slots(state, pos, pos, 1.5, slots);
-    for &slot in slots.iter() {
-        let body = state.entities.body(slot);
-        let player = body.id;
-        if !body.alive
-            || state
-                .players
-                .get(&player)
-                .is_none_or(|player| player.spectator())
-        {
-            continue;
-        }
-        let at = state.entities.pos(slot);
-        if at
+    pickup_from_slots(state, record, pos, slots)
+}
+
+fn pickup_candidate(
+    state: &TickState,
+    record: &ProjectileState,
+    pos: [f64; 3],
+    slot: EntitySlot,
+) -> bool {
+    let body = state.entities.body(slot);
+    body.alive
+        && state
+            .players
+            .get(&body.id)
+            .is_some_and(|player| !player.spectator())
+        && state
+            .entities
+            .pos(slot)
             .iter()
             .zip(pos)
             .map(|(a, b)| (a - b).powi(2))
             .sum::<f64>()
-            >= 2.25
+            < 2.25
+        && (record.kind != ProjectileKind::Trident
+            || super::owner_id(state, record) == Some(body.id))
+}
+
+fn pickup_from_slots(
+    state: &mut TickState,
+    record: &ProjectileState,
+    pos: [f64; 3],
+    slots: &[EntitySlot],
+) -> bool {
+    for &slot in slots {
+        if pickup_candidate(state, record, pos, slot)
+            && give(state, state.entities.body(slot).id, record.stack.clone())
         {
-            continue;
-        }
-        if record.kind == ProjectileKind::Trident && super::owner_id(state, record) != Some(player)
-        {
-            continue;
-        }
-        if give(state, player, record.stack.clone()) {
             return true;
         }
     }

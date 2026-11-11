@@ -904,6 +904,7 @@ fn full_step_with_period(
         rows: std::slice::from_ref(&row),
         entities: &state.entities,
         retained_targets: &state.hostile.targets,
+        battle: &state.hostile.battle,
         players: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
         passive: passive_follow::Context {
             players: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
@@ -1774,4 +1775,80 @@ fn sensors_mob_revenge_does_not_rest_without_player_targets() {
     assert!(!can_early_rest(&mut state, mob));
     let _ = run_entity_phase(&mut state, true);
     assert_eq!(state.hostile.targets[&actor].0.0, attacker);
+}
+
+#[test]
+fn battle_rows_bypass_vanilla_player_sensors_melee_and_bow() {
+    let (mut state, player, centre) = crate::hostile_tests::setup(1.0);
+    let zombie = state.registry.entity_type_id("minecraft:zombie").unwrap();
+    let skeleton = state.registry.entity_type_id("minecraft:skeleton").unwrap();
+    let melee = state.spawn_mob(zombie, centre, 20.0);
+    let archer = state.spawn_mob(skeleton, [centre[0], centre[1], centre[2] + 2.0], 20.0);
+    for id in [melee, archer] {
+        let slot = state.entities.slot_of(id).unwrap();
+        state.entities.set_faction(slot, 1);
+        state.entities.set_ground(slot, true);
+    }
+    state.hostile.battle.running = true;
+    // A normal zombie would acquire the nearby player even in bright light
+    // (retaliation); battle units must not enter either vanilla sensor pass.
+    let slot = state.entities.slot_of(melee).unwrap();
+    state.entities.row_mut(slot).last_player_hit = Some((player, state.tick));
+    for _ in 0..40 {
+        state.tick += 1;
+        let intents = run_entity_phase(&mut state, true);
+        assert!(intents.iter().all(|intent| !matches!(
+            intent.kind,
+            IntentKind::DamageEntity { target, .. } if target == player
+        )));
+        assert!(
+            state
+                .hostile
+                .battle
+                .columns
+                .targets
+                .iter()
+                .all(Option::is_none)
+        );
+        assert!(!state.hostile.targets.contains_key(&melee));
+        assert!(!state.hostile.targets.contains_key(&archer));
+        #[cfg(debug_assertions)]
+        assert_eq!(sensor_bench_tests::COUNTS.get(), (0, 0));
+    }
+    assert!(
+        state
+            .entities
+            .slots()
+            .all(|slot| state.entities.row(slot).projectile.is_none())
+    );
+}
+
+#[test]
+fn battle_zero_thrust_rests_but_thrust_impulse_and_world_edits_wake_it() {
+    let (mut state, slot) = resting_cow();
+    state.entities.set_faction(slot, 1);
+    state
+        .hostile
+        .battle
+        .columns
+        .clear_projection(state.entities.len());
+    assert!(can_early_rest(&mut state, slot));
+    let pos = state.entities.pos(slot);
+    assert!(run_entity_phase(&mut state, true).is_empty());
+    assert_eq!(state.entities.pos(slot), pos);
+    assert!(state.entity_phase_scratch.rows.is_empty());
+    state.hostile.battle.columns.drive_by_slot[slot.0 as usize] = [1.0, 0.0, 0.0];
+    assert!(!can_early_rest(&mut state, slot));
+    state.hostile.battle.columns.drive_by_slot[slot.0 as usize] = [0.0; 3];
+    state.entities.set_horizontal_impulse(slot, [1.0, 0.0]);
+    assert!(!can_early_rest(&mut state, slot));
+    state.entities.set_horizontal_impulse(slot, [0.0; 2]);
+    let stone = state.registry.states.stone;
+    state.world.set_block(
+        pos[0].floor() as i32,
+        pos[1].floor() as i32,
+        pos[2].floor() as i32,
+        stone,
+    );
+    assert!(!can_early_rest(&mut state, slot));
 }

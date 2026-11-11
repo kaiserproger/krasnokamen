@@ -624,7 +624,7 @@ fn exposed_rain_accelerates_bites_but_a_roof_does_not() {
 fn rain_adjusted_wait_survives_retained_entity_nbt() {
     let (_, record) = bite_wait(crate::commands::Weather::Rain, false);
     let registry = crate::registry::CoreRegistry::load(None).unwrap();
-    let fields = super::super::persistence::to_fields(&record, &registry.items);
+    let fields = super::super::persistence::to_fields(&record, &registry.items, 0);
     let entity = mc_data::entity_nbt::VanillaEntity {
         id: "minecraft:fishing_bobber".into(),
         uuid: Uuid::from_u128(42),
