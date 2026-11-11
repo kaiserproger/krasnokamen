@@ -79,9 +79,9 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     plugins = artifact / "plugins"
     plugins.mkdir()
     config = artifact / "datapack-reload.toml"
-    vanilla = os.environ.get("SOLARIS_CLIENT_DATA_DIR")
-    if not vanilla or not Path(vanilla).is_absolute() or not Path(vanilla).is_dir():
-        raise RuntimeError("datapack-reload requires an absolute existing SOLARIS_CLIENT_DATA_DIR")
+    # The server's own content cache, as client_probes uses it; the client's
+    # SOLARIS_CLIENT_DATA_DIR is not a server content cache.
+    vanilla = os.environ.get("SOLARIS_SERVER_VANILLA_DATA_DIR", "data/vanilla")
     source = (runtime.REPO_ROOT / "playable.toml").read_text()
     token = 'vanilla_data_dir = "data/vanilla"'
     if source.count(token) != 1:
