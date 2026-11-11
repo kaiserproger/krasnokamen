@@ -300,9 +300,6 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # the fire block, so the weather must stay clear however long the earlier rows ran.
     _disable_gamerule(steps, "advance_weather")
     steps.fixture("weather clear")
-    # The night must outlast the whole scenario: at dawn the authored thorns zombie burns, and the
-    # burn invulnerability swallows the player's weaker hit so no thorns reflect.
-    _disable_gamerule(steps, "advance_time")
     steps.fixture("time set 18000")
     _echo(steps, "damage_night_fixture_ordered_receipt")
     steps.call("minecraft_wait_ticks", {"ticks": 20})
