@@ -77,6 +77,10 @@ fn typical_village(state: &mut TickState) {
 }
 
 fn stored_food_village(beds: usize) -> (TickState, [EntitySlot; 2], u32) {
+    stored_food_village_roofed(beds, true)
+}
+
+fn stored_food_village_roofed(beds: usize, roofed: bool) -> (TickState, [EntitySlot; 2], u32) {
     let mut state = test_state();
     state.day_time = 3000;
     let settlement = state
@@ -94,7 +98,9 @@ fn stored_food_village(beds: usize) -> (TickState, [EntitySlot; 2], u32) {
     let stone = state.registry.states.stone;
     for (x, z) in [(3, 3), (7, 3), (11, 3)].into_iter().take(beds) {
         bed(&mut state, x, z);
-        state.world.set_block(x, 205, z, stone);
+        if roofed {
+            state.world.set_block(x, 205, z, stone);
+        }
     }
     let chest = block(&state, "minecraft:chest", &[]);
     state.world.set_block(8, 201, 8, chest);
@@ -121,6 +127,27 @@ fn stored_food_village(beds: usize) -> (TickState, [EntitySlot; 2], u32) {
         slot
     });
     (state, parents, bread)
+}
+
+/// Settlement policy: a resident's home is a roofed bed (it shelters instead of
+/// sleeping in the open), and rations follow the home. A settlement whose only
+/// beds stand in the open gives its residents no home, so no stored rations
+/// and no births, while the same village with roofed beds breeds.
+#[test]
+fn open_air_only_settlement_gives_residents_no_home_rations_or_births() {
+    let (mut state, parents, bread) = stored_food_village_roofed(3, false);
+    for _ in 0..6_000 {
+        step(&mut state);
+    }
+    assert_eq!(population(&state), 2, "no birth without a roofed bed");
+    for slot in parents {
+        assert_eq!(
+            state.entities.row(slot).villager.as_ref().unwrap().home,
+            None
+        );
+        assert_eq!(food_count(&state, slot, bread), 0, "no ration drawn");
+    }
+    assert_eq!(state.block_entities[&(8, 201, 8)].slots[0].count, 6);
 }
 
 #[test]

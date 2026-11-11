@@ -280,14 +280,8 @@ pub(super) fn bodies_near(
     })
 }
 
-pub(crate) fn roofed(state: &TickState, pos: BlockPos) -> bool {
-    (pos.y + 1..state.world.geometry().max_y()).any(|y| {
-        state
-            .world
-            .block_at(pos.x, y, pos.z)
-            .and_then(|id| state.registry.collision_boxes.get(id as usize))
-            .is_some_and(|shapes| !shapes.is_empty())
-    })
+fn roofed(state: &TickState, pos: BlockPos) -> bool {
+    allocator::roofed(&state.world, &state.registry, pos)
 }
 
 /// Vanilla `stopSleeping`: the woken body takes its standing size on a free
