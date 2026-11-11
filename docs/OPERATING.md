@@ -596,7 +596,11 @@ saved selection already holds that no longer loads still stops it, with the same
 pack and file in the error. A pack's `pack.mcmeta` `filter` (`block` entries with
 optional `namespace` and `path` patterns) hides the matching functions, tags,
 recipes, block loot and predicates of every pack below it, the builtin recipes and
-block loot included. Schedules and load/tick tags run from the overworld source; functions
+block loot included. A `/datapack enable`, `disable` or
+`reload` issued while another pack job is still compiling is refused with
+"Datapack reload already in progress" (vanilla would apply it at once; the
+selection changes only when the compile finishes, and a rare back-to-back
+command is not worth a queue). Schedules and load/tick tags run from the overworld source; functions
 keep the source dimension they were invoked from.
 
 `/debug start|stop|function <id|#tag>` (level 3) follow vanilla: `start` and `stop`
@@ -643,7 +647,9 @@ packets, comparator result output and command minecarts are not implemented.
 Map-making command surface (full status in [COMPATIBILITY.md](COMPATIBILITY.md)):
 
 - `send_command_feedback false` suppresses player-source success replies for
-  the native command paths that honor it; failures remain visible and console
+  the native command paths that honor it and for the replies the connection layer
+  writes itself (`/list`, `/help`, `/stop`, `/save-all`, `/transfer`, `/whitelist`,
+  `/banlist`, kick, ban and pardon results); failures remain visible and console
   success remains enabled. Command execution and ordinary chat are unchanged.
 - A client's chat setting (`ClientInformation.chat_visibility`, admitted before
   Join and on every change) filters what it is sent, as in vanilla: **Full**

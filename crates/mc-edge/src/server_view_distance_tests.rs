@@ -440,6 +440,7 @@ async fn list_obeys_the_send_command_feedback_rule() {
         )
         .unwrap();
     for (rule, lines) in [("false", 0), ("true", 1)] {
+        let mut ticks = server.hub.subscribe();
         let (command, completed) = mc_core::command_console::ConsoleCommand::new(format!(
             "gamerule send_command_feedback {rule}"
         ));
@@ -448,9 +449,22 @@ async fn list_obeys_the_send_command_feedback_rule() {
                 .hub
                 .submit(mc_core::boundary::PlayerInput::ConsoleCommand(command))
         );
-        completed.await.unwrap();
+        // The console acknowledges the submission; the command runs by the end of the next tick.
+        let submitted = completed.await.unwrap();
+        loop {
+            match ticks.recv().await {
+                Ok(output) if output.tick >= submitted => break,
+                Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                Err(error) => panic!("the tick thread stopped: {error}"),
+            }
+        }
+        assert_eq!(
+            server.hub.command_feedback_enabled(),
+            rule == "true",
+            "the core published the rule after the console command"
+        );
         drain(&mut reliable_rx);
-        for command in ["list", "list uuids"] {
+        for command in ["list", "list uuids", "help"] {
             assert!(server.handle_admin_command(id, command).await.unwrap());
             let shown = drain(&mut reliable_rx)
                 .iter()

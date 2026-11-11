@@ -82,6 +82,18 @@ fn chat_contains(state: &TickState, text: &str) -> bool {
 }
 
 #[test]
+fn the_gamerule_command_publishes_send_command_feedback_for_the_edge() {
+    let (mut state, alice, _) = fixture();
+    let published = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    state.published_command_feedback = Some(std::sync::Arc::clone(&published));
+    let shown = || published.load(std::sync::atomic::Ordering::Relaxed);
+    command(&mut state, alice, "gamerule send_command_feedback false");
+    assert!(!shown());
+    command(&mut state, alice, "gamerule send_command_feedback true");
+    assert!(shown());
+}
+
+#[test]
 fn gamerule_suppresses_player_scene_success_but_not_failure_or_console() {
     let (mut state, alice, _) = fixture();
     command(&mut state, alice, "gamerule send_command_feedback false");
