@@ -458,7 +458,20 @@ pub(crate) enum Flow {
     Wash(u32),
 }
 
+/// Bucket placement: a non-colliding block is replaced (vanilla
+/// `canBeReplaced(fluid)`).
 pub(crate) fn flow_into(state: &TickState, pos: BlockPos, fluid: Fluid) -> Option<Flow> {
+    enter(state, pos, fluid, false)
+}
+
+/// Spreading flow: vanilla `FlowingFluid.canHoldFluid`. Kelp and seagrass
+/// already hold a water source and refuse spreading fluid (`LiquidBlockContainer`
+/// with `canPlaceLiquid` false), so flow neither enters nor washes them.
+fn spread_into(state: &TickState, pos: BlockPos, fluid: Fluid) -> Option<Flow> {
+    enter(state, pos, fluid, true)
+}
+
+fn enter(state: &TickState, pos: BlockPos, fluid: Fluid, spreading: bool) -> Option<Flow> {
     let block = state.world.block_at(pos.x, pos.y, pos.z)?;
     let states = &state.registry.states;
     if block == states.air {
@@ -468,6 +481,14 @@ pub(crate) fn flow_into(state: &TickState, pos: BlockPos, fluid: Fluid) -> Optio
         return (other == fluid && level != 0).then_some(Flow::Open);
     }
     let entry = state.registry.blocks.by_id(mc_world::BlockStateId(block))?;
+    if spreading
+        && matches!(
+            entry.block.id.path(),
+            "kelp" | "kelp_plant" | "seagrass" | "tall_seagrass"
+        )
+    {
+        return None;
+    }
     // A bubble column is a full water source, not a washable decoration.
     if entry.block.id.path() == "bubble_column" {
         return None;
@@ -517,7 +538,7 @@ fn slope_distance(
     limit: u8,
 ) -> u8 {
     let below = offset(pos, [0, -1, 0]);
-    if passage(state, pos, below) && flow_into(state, below, fluid).is_some() {
+    if passage(state, pos, below) && spread_into(state, below, fluid).is_some() {
         return depth;
     }
     if depth == limit {
@@ -526,7 +547,7 @@ fn slope_distance(
     let mut best = u8::MAX;
     for step in SIDES {
         let side = offset(pos, step);
-        if side != from && passage(state, pos, side) && flow_into(state, side, fluid).is_some() {
+        if side != from && passage(state, pos, side) && spread_into(state, side, fluid).is_some() {
             best = best.min(slope_distance(state, side, pos, fluid, depth + 1, limit));
         }
     }
@@ -558,7 +579,7 @@ fn spread(
         return;
     }
     if passage(state, pos, below)
-        && let Some(into) = flow_into(state, below, fluid)
+        && let Some(into) = spread_into(state, below, fluid)
     {
         let falling = fluid.falling(&states);
         if below_block != Some(falling) {
@@ -582,7 +603,7 @@ fn spread(
     };
     let costs = SIDES.map(|step| {
         let side = offset(pos, step);
-        if passage(state, pos, side) && flow_into(state, side, fluid).is_some() {
+        if passage(state, pos, side) && spread_into(state, side, fluid).is_some() {
             slope_distance(state, side, pos, fluid, 0, limit)
         } else {
             u8::MAX
@@ -594,7 +615,7 @@ fn spread(
         if costs[index] != best || !passage(state, pos, side) {
             continue;
         }
-        let Some(into) = flow_into(state, side, fluid) else {
+        let Some(into) = spread_into(state, side, fluid) else {
             continue;
         };
         let current = state.world.block_at(side.x, side.y, side.z);

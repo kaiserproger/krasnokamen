@@ -331,6 +331,95 @@ fn flowing_water_preserves_stone_doors_and_waterloggable_blocks() {
     }
 }
 
+/// KELP-ITEMS-SPAWN-ON-OCEAN-FLOOR: kelp and seagrass already hold a water
+/// source, so flow beside or above them neither replaces them nor drops loot.
+#[test]
+fn flowing_water_keeps_kelp_and_seagrass_without_loot() {
+    for (name, props) in [
+        ("kelp", &[("age", "0")][..]),
+        ("kelp_plant", &[][..]),
+        ("seagrass", &[][..]),
+        ("tall_seagrass", &[("half", "lower")][..]),
+    ] {
+        let (mut state, _, centre) = setup();
+        let plant = block(&state, name, props);
+        let source = state.registry.states.water_levels[0];
+        let target = BlockPos {
+            x: centre.x + 1,
+            ..centre
+        };
+        place(&mut state, target, plant);
+        place(&mut state, centre, source);
+        place(
+            &mut state,
+            BlockPos {
+                y: target.y + 1,
+                ..target
+            },
+            source,
+        );
+        let mut writes = Vec::new();
+        let mut spawned = Vec::new();
+        state.tick += 5;
+        crate::fluids::run(&mut state, &mut writes, &mut spawned);
+        assert_eq!(at(&state, centre, 1), plant, "{name} is not washed");
+        assert!(spawned.is_empty(), "{name} drops nothing");
+    }
+}
+
+/// The ocean-floor repro through the tick loop: a kelp column grows in still
+/// water, and its growth writes schedule every source around it. The column
+/// stands and no item entity appears.
+#[test]
+fn kelp_growing_in_still_water_drops_no_items() {
+    let (mut state, _, centre) = setup();
+    let states = state.registry.states;
+    // A 3x3 pool four deep, walled in stone, away from the player.
+    let pool = BlockPos {
+        x: centre.x + 5,
+        y: centre.y,
+        z: centre.z + 5,
+    };
+    for dx in -2..=2_i32 {
+        for dz in -2..=2_i32 {
+            for dy in 0..4 {
+                let wall = dx.abs() == 2 || dz.abs() == 2;
+                state.world.set_block(
+                    pool.x + dx,
+                    pool.y + dy,
+                    pool.z + dz,
+                    if wall {
+                        states.stone
+                    } else {
+                        states.water_levels[0]
+                    },
+                );
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let body = block(&state, "kelp_plant", &[]);
+    // Age 25 never grows again, so random ticks cannot move the tip.
+    let tip = block(&state, "kelp", &[("age", "25")]);
+    let column = |dy| BlockPos {
+        y: pool.y + dy,
+        ..pool
+    };
+    // The two writes of one growth step.
+    place(&mut state, column(0), body);
+    place(&mut state, column(1), tip);
+    run(&mut state, 40);
+    let block_at = |pos: BlockPos| state.world.block_at(pos.x, pos.y, pos.z);
+    assert_eq!(block_at(column(0)), Some(body), "kelp body stands");
+    assert_eq!(block_at(column(1)), Some(tip), "kelp tip stands");
+    let items = state
+        .entities
+        .slots()
+        .filter(|slot| state.entities.row(*slot).item.is_some())
+        .count();
+    assert_eq!(items, 0, "no item entity appears");
+}
+
 #[test]
 fn two_water_sources_do_not_form_a_source_on_a_noncolliding_block() {
     let (mut state, _, centre) = setup();
