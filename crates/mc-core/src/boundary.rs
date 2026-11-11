@@ -43,6 +43,14 @@ pub enum ChatVisibility {
     Hidden,
 }
 
+/// The client settings admitted together with a player's Join.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientSettings {
+    pub view_distance: u8,
+    pub locale: String,
+    pub chat_visibility: ChatVisibility,
+}
+
 /// One player action decoded by the edge.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum PlayerInput {

@@ -974,9 +974,7 @@ impl Core {
         uuid: uuid::Uuid,
         name: String,
         permission_level: u8,
-        view_distance: u8,
-        locale: String,
-        chat_visibility: crate::boundary::ChatVisibility,
+        settings: crate::boundary::ClientSettings,
     ) -> Result<PlayerSession, CoreError> {
         PlayerSession::admit(
             &self.inner.input_tx,
@@ -984,9 +982,7 @@ impl Core {
             uuid,
             name,
             permission_level,
-            view_distance,
-            locale,
-            chat_visibility,
+            settings,
         )
     }
 

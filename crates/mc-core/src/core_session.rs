@@ -1,7 +1,7 @@
 //! Cancellation-safe native admission: one FIFO queue, including reserved Leave.
 use tokio::sync::mpsc::{OwnedPermit, Sender, error::TrySendError};
 
-use crate::boundary::{ChatVisibility, ConnectionId, PlayerInput};
+use crate::boundary::{ClientSettings, ConnectionId, PlayerInput};
 use crate::config::CoreError;
 
 /// An admitted edge session. Dropping it queues its native Leave exactly once.
@@ -19,10 +19,13 @@ impl PlayerSession {
         uuid: uuid::Uuid,
         name: String,
         permission_level: u8,
-        view_distance: u8,
-        locale: String,
-        chat_visibility: ChatVisibility,
+        settings: ClientSettings,
     ) -> Result<Self, CoreError> {
+        let ClientSettings {
+            view_distance,
+            locale,
+            chat_visibility,
+        } = settings;
         let leave = sender
             .clone()
             .try_reserve_owned()

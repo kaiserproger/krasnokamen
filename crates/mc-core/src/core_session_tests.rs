@@ -1,5 +1,5 @@
 use super::*;
-use crate::boundary::ChatVisibility;
+use crate::boundary::{ChatVisibility, ClientSettings};
 
 #[test]
 fn session_cleanup_has_reserved_capacity_and_preserves_fifo() {
@@ -11,9 +11,11 @@ fn session_cleanup_has_reserved_capacity_and_preserves_fifo() {
         uuid::Uuid::from_u128(101),
         "Session".to_owned(),
         0,
-        4,
-        "ru_ru".into(),
-        ChatVisibility::Hidden,
+        ClientSettings {
+            view_distance: 4,
+            locale: "ru_ru".into(),
+            chat_visibility: ChatVisibility::Hidden,
+        },
     )
     .unwrap();
     assert!(
@@ -73,9 +75,11 @@ fn failed_session_admission_emits_no_partial_join() {
             uuid::Uuid::nil(),
             "Full".into(),
             0,
-            2,
-            "en_us".into(),
-            ChatVisibility::Full
+            ClientSettings {
+                view_distance: 2,
+                locale: "en_us".into(),
+                chat_visibility: ChatVisibility::Full
+            }
         ),
         Err(CoreError::InputFull)
     ));
@@ -92,9 +96,11 @@ fn failed_session_admission_emits_no_partial_join() {
             uuid::Uuid::nil(),
             "Stopped".into(),
             0,
-            2,
-            "en_us".into(),
-            ChatVisibility::Full
+            ClientSettings {
+                view_distance: 2,
+                locale: "en_us".into(),
+                chat_visibility: ChatVisibility::Full
+            }
         ),
         Err(CoreError::TickStopped)
     ));
@@ -118,9 +124,11 @@ fn session_drop_preserves_new_same_uuid_owner() {
         uuid,
         "Saved".into(),
         0,
-        2,
-        "en_us".into(),
-        ChatVisibility::Full,
+        ClientSettings {
+            view_distance: 2,
+            locale: "en_us".into(),
+            chat_visibility: ChatVisibility::Full,
+        },
     )
     .unwrap();
     let inputs: Vec<_> = std::iter::from_fn(|| receiver.try_recv().ok()).collect();
@@ -133,9 +141,11 @@ fn session_drop_preserves_new_same_uuid_owner() {
         uuid,
         "Saved".into(),
         0,
-        4,
-        "ru_ru".into(),
-        ChatVisibility::Full,
+        ClientSettings {
+            view_distance: 4,
+            locale: "ru_ru".into(),
+            chat_visibility: ChatVisibility::Full,
+        },
     )
     .unwrap();
     // The new Join is already queued when the old owner finally drops.
@@ -214,9 +224,11 @@ fn session_drop_allows_immediate_rejoin_with_saved_inventory() {
             uuid,
             "Saved".into(),
             4,
-            2,
-            "en_us".into(),
-            ChatVisibility::Full,
+            ClientSettings {
+                view_distance: 2,
+                locale: "en_us".into(),
+                chat_visibility: ChatVisibility::Full,
+            },
         )
         .unwrap();
     let mut joined = false;
@@ -300,9 +312,11 @@ fn session_drop_allows_immediate_rejoin_with_saved_inventory() {
             uuid,
             "Saved".into(),
             4,
-            2,
-            "en_us".into(),
-            ChatVisibility::Full,
+            ClientSettings {
+                view_distance: 2,
+                locale: "en_us".into(),
+                chat_visibility: ChatVisibility::Full,
+            },
         )
         .unwrap();
     let mut restored = false;
