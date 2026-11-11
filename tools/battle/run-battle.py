@@ -160,22 +160,33 @@ def expect(messages, phrase, timeout=600):
             raise RuntimeError(line.strip())
 
 
-def await_population(messages, per_side, roster_tick, recorder):
-    pattern = re.compile(r"Battle paused tick=(\d+) side1=(\d+) side2=(\d+) resident=(\d+) active=(\d+)")
+def expected_horses(per_side):
+    """staging.rs plan(): each side gets count / 10 cavalry, one horse each."""
+    return 2 * (per_side // 10)
+
+
+def await_population(messages, per_side, roster_tick, recorder, wait=True):
+    """First status newer than roster_tick with the exact staged roster fully resident
+    and active. wait=False demands it from that one status (the check right before
+    start) instead of waiting for chunks to activate."""
+    pattern = re.compile(r"Battle paused tick=(\d+) side1=(\d+) side2=(\d+) resident=(\d+) active=(\d+)"
+                         r"(?: nonzero_velocity=\d+)? horses=(\d+)")
     while True:
         line = expect(messages, 'Battle paused tick=')
         match = pattern.search(line)
         if match is None:
             continue
-        tick, side1, side2, resident, active = map(int, match.groups())
+        tick, side1, side2, resident, active, horses = map(int, match.groups())
         if tick <= roster_tick:
             continue
         if recorder.poll() is not None:
             raise RuntimeError('recorder exited while waiting for active population')
-        if side1 != per_side or side2 != per_side:
-            raise RuntimeError(f'battle population changed before start: {side1}+{side2}')
+        if side1 != per_side or side2 != per_side or horses != expected_horses(per_side):
+            raise RuntimeError(f'battle population changed before start: {side1}+{side2}, horses={horses}')
         if resident == 2 * per_side and active == 2 * per_side:
             return tick
+        if not wait:
+            raise RuntimeError(f'battle population left the active area before start: resident={resident} active={active}')
 
 
 def stop_child(process, timeout):
@@ -300,8 +311,8 @@ def run(a):
             names = roster_line.split('Battle roster:', 1)[1].strip().split(',')
             ids = [str(uuid.UUID(name)) for name in names]
             per_side = a.count or {'field-100': 100, 'field-1k': 1000, 'field-10k': 10000}[a.scenario]
-            if len(ids) < 2 * per_side or len(ids) != len(set(ids)):
-                raise RuntimeError('battle roster is incomplete or contains duplicate UUIDs')
+            if len(ids) != 2 * per_side + expected_horses(per_side) or len(ids) != len(set(ids)):
+                raise RuntimeError('battle roster is not the exact staged soldiers and horses, or contains duplicate UUIDs')
             temporary = root / 'roster.tmp'
             temporary.write_text('\n'.join(ids) + '\n')
             temporary.replace(root / 'roster.txt')
@@ -318,6 +329,9 @@ def run(a):
             send('battle status')
             population_tick = await_population(messages, per_side, ready['tick'], recorder)
             paused_start, paused_end = wait_paused_ticks(ticks, failures, recorder, a.paused_ticks, population_tick)
+            # The paused window can be long; census again right before start.
+            send('battle status')
+            await_population(messages, per_side, paused_end or population_tick, recorder, wait=False)
             send(commands[1])
             start_line = expect(messages, 'Battle started tick=')
             battle_start = int(start_line.split('Battle started tick=', 1)[1].strip().split()[0])
