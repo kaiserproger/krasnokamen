@@ -47,7 +47,11 @@ to keep that from happening again without idling the machine.
   `tools/dev/slot-lock.py` (the same helper as `scene-slot.sh`), which blocks
   on all three locks `/tmp/solaris-mem-slots/tokens/token-{1,2,3}.lock` at once
   and takes whichever frees first: no polling, no CPU while waiting, and the
-  runner prints `mem-run: all 3 build tokens are in use; waiting`. The lock
+  runner prints `mem-run: build tokens 1,2,3 are in use; waiting`. With
+  `SOLARIS_BUILD_LANE=background` in the runner's environment a compile waits
+  only for tokens 1-2, so token 3 stays free for priority work (owner,
+  2026-11-12: the battle video gets resources first); Main exports it for
+  every agent outside the priority task. The lock
   stays at fd 9 of the runner and its scope guardian, never the command, so
   the token returns once the scope is empty: on any exit, kill or OOM. The
   `mem-run: scope` line shows `token=<n>`, `token=<n>(reused)` or

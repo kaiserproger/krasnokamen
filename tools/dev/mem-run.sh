@@ -98,7 +98,11 @@ fi
 # holders never wait on their own nested builds. The token is taken before the -x
 # lock: a queued compile never delays a -x window, and a -x window never waits for a
 # token while it holds that lock. Holders and waiters: tools/dev/fleet-status.
+# SOLARIS_BUILD_LANE=background (owner 2026-11-12: the battle video gets resources first):
+# such compiles wait only for tokens 1-2, so token 3 stays free for priority work.
 build_tokens=3
+token_slots=$(seq -s, "$build_tokens")
+[ "${SOLARIS_BUILD_LANE:-}" = background ] && token_slots=$(seq -s, $((build_tokens - 1)))
 tool=("${cmd[@]}")
 while :; do
   case "${tool[0]:-}" in nice|ionice|timeout|env) ;; *) break ;; esac
@@ -148,9 +152,9 @@ if [ "$compile" = 1 ]; then
   elif token_ancestor; then
     token="${SOLARIS_BUILD_TOKEN:-?}(reused)"
   else
-    exec python3 "$here/slot-lock.py" --dir "$dir/tokens" --name 'token-%s.lock' --slots "$(seq -s, "$build_tokens")" \
+    exec python3 "$here/slot-lock.py" --dir "$dir/tokens" --name 'token-%s.lock' --slots "$token_slots" \
       --env SOLARIS_BUILD_TOKEN --fd 9 --wait-dir "$dir/tokens/wait" \
-      --wait-message "mem-run: all $build_tokens build tokens are in use; waiting for one (holders: $here/fleet-status)" \
+      --wait-message "mem-run: build tokens $token_slots are in use; waiting for one (holders: $here/fleet-status)" \
       -- bash "$here/${BASH_SOURCE[0]##*/}" "${args[@]}"
   fi
 fi

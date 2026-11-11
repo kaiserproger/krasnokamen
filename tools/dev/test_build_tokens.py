@@ -229,6 +229,45 @@ class BuildTokenTests(unittest.TestCase):
         for cmd in running:
             self.finish(cmd)
 
+    def test_background_lane_leaves_token_three_for_priority_compiles(self):
+        background = self.env | {'SOLARIS_BUILD_LANE': 'background'}
+        saved, self.env = self.env, background
+        try:
+            cmds = [self.start('cargo', 'build', '-p', f'bg{n}') for n in range(3)]
+        finally:
+            self.env = saved
+        self.settle(cmds)
+        running = [cmd for cmd in cmds if cmd.state == 'run']
+        queued = [cmd for cmd in cmds if cmd.state == 'queued']
+        self.assertEqual(sorted(cmd.token for cmd in running), ['1', '2'])
+        self.assertEqual(len(queued), 1)
+        # A priority compile (no lane) still gets token 3 while background work waits.
+        priority = self.start('cargo', 'build', '-p', 'video')
+        self.settle([priority])
+        self.assertEqual((priority.state, priority.token), ('run', '3'))
+        self.finish(priority)
+        # Token 3 comes back free and the background waiter does not take it.
+        def expired(*_):
+            raise AssertionError('token 3 stayed held after the priority compile exited')
+        previous = signal.signal(signal.SIGALRM, expired)
+        signal.alarm(BOUND)
+        fd = os.open(self.state_dir / 'tokens' / 'token-3.lock', os.O_RDONLY)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            signal.alarm(0)
+            readable, _, _ = select.select([queued[0].proc.stdout], [], [], 0)
+            self.assertFalse(readable, 'a background compile started on token 3')
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, previous)
+            os.close(fd)
+        self.finish(running[0])
+        self.wait_run(queued[0])
+        self.assertEqual(queued[0].token, running[0].token)
+        for cmd in (running[1], queued[0]):
+            self.finish(cmd)
+        self.wait_tokens_free()
+
 
 if __name__ == '__main__':
     unittest.main()
