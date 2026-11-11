@@ -95,6 +95,9 @@ The shared Java client launcher sets both `HOME` and JVM `user.home` to `.home`
 inside that client's game directory. Forge's home-derived Minecraft assets
 therefore use that private directory; provision assets there when needed.
 Gradle's separately configured cache is not isolated by this setting.
+Before connecting, the launcher retries an explicit render-thread observation
+timeout only within the bootstrap deadline; it still requires the actual title
+screen and propagates other MCP errors.
 
 ## Matrix runner status
 
@@ -105,6 +108,9 @@ Adapter guidance: [matrix domains](../tools/harness/matrix_domains/README.md),
 
 The true-vanilla Java lane requires Loader's vanilla premain event transformer
 and a direct, non-symlink `SOLARIS_LEGACY_CONTENT_CACHE` for protocol 775.
+The adapter uses the premain agent's applied system-chat packet journal for
+ordered input fences; missing journals or reported loss fail as missing
+capabilities. The bounded GUI `recent_chat` is not a receipt journal.
 The real client reached Play in
 `/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T173128-java-matrix-hymtay_4/`;
 that run blocked later on missing player eye-height observation and is not a

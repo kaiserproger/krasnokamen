@@ -88,6 +88,25 @@ class MatrixRuntimeTests(unittest.TestCase):
         self.assertEqual(client.snapshot()['registries']['minecraft:enchantment']['0'],
                          'minecraft:mending')
 
+    def test_closed_menu_does_not_override_newer_player_inventory(self):
+        client = object.__new__(ProtocolMatrixClient)
+        client.items = {1: 'minecraft:arrow', 2: 'minecraft:bow'}
+        arrow4 = {'item_id': 1, 'count': 4, 'components': {}, 'removed': []}
+        arrow3 = {'item_id': 1, 'count': 3, 'components': {}, 'removed': []}
+        bow = {'item_id': 2, 'count': 1, 'components': {'minecraft:damage': 1}, 'removed': []}
+        player, stale_menu = [None] * 46, [None] * 63
+        player[36], player[37], stale_menu[-9] = arrow3, bow, arrow4
+        client.observer = SimpleNamespace(
+            condition=threading.RLock(), position=None, events=[], health=None, food=None,
+            revision=10, chunks=set(), menu_errors={}, current_window=0, chat_components=[],
+            chat_errors=[], merchant_offers={}, merchant_errors={}, menu_types={}, menu_properties={},
+            menus={0: {'slots': player, 'cursor': None, 'state_id': 2},
+                   1: {'slots': stale_menu, 'cursor': None, 'state_id': 1}})
+        inventory = client.snapshot()['inventory']
+        self.assertEqual([(stack['item_id'], stack['count']) for stack in inventory],
+                         [('minecraft:arrow', 3), ('minecraft:bow', 1)])
+        self.assertEqual(inventory[1]['components']['minecraft:damage'], 1)
+
     def test_entity_snapshot_names_actual_packets_and_never_masks_lost_state(self):
         from .protocol_entities import ProtocolEntities
         from .protocol_observations import decode_stack

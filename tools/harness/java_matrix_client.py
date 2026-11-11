@@ -81,11 +81,21 @@ class JavaMatrixClient:
                     "slot_count": container.get("slot_count"),
                     "state_id": container.get("container_state_id")}
             cursor = container.get("carried")
+        events = None
+        if "received_system_chat" in observed:
+            messages = observed["received_system_chat"]
+            dropped = observed.get("dropped_system_chat")
+            if not isinstance(messages, list) or not all(isinstance(message, str) for message in messages):
+                raise MissingCapability("snapshot:system_chat:invalid_receipts")
+            if type(dropped) is not int or dropped < 0:
+                raise MissingCapability("snapshot:system_chat:missing_loss_counter")
+            if dropped:
+                raise MissingCapability(f"snapshot:system_chat:lost_receipts:{dropped}")
+            events = messages
         return {"position": position, "inventory": JavaMatrixClient.inventory_slots(observed.get("inventory")),
                 "cursor": cursor, "menu": menu, "health": player.get("health"),
-                # recent_chat is a bounded newest-first GUI diagnostic, not
-                # the cumulative actual-receipt journal required by events.
-                "food": player.get("food"), "events": None,
+                # GUI chat history is not the cumulative applied-packet journal.
+                "food": player.get("food"), "events": events,
                 "in_play": observed.get("in_play"), "raw": observed,
                 "connected": observed.get("connected"),
                 "uuid": player.get("entity_uuid"), "dimension": observed.get("dimension"),

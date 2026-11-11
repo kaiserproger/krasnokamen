@@ -94,6 +94,20 @@ class ProtocolEntitiesTests(unittest.TestCase):
         self.assertEqual(snapshot["entities"], [])
         self.assertIsNone(snapshot["unavailable"])
 
+    def test_end_restart_spawn_then_removal_is_not_missing_spawn(self):
+        # Retained Proto0-2 wire frames 48 and 808 from the causal End replay.
+        spawn = bytes.fromhex(
+            "2ab5fc4b5f3d3741e0b7cd250b4c3e2a422b401e04fa11d6411f"
+            "405fcc4c00fef1e8401016dd374609c6291983acfe9a00555500"
+        )
+        self.assertTrue(self.tracked.consume(0x01, spawn), self.tracked.snapshot())
+        received = self.tracked.snapshot()['entities']
+        self.assertEqual(len(received), 1)
+        self.assertEqual((received[0]['id'], received[0]['uuid']),
+                         (42, 'b5fc4b5f-3d37-41e0-b7cd-250b4c3e2a42'))
+        self.assertTrue(self.tracked.consume(0x4d, bytes.fromhex('012a')))
+        self.assertEqual(self.tracked.snapshot()['entities'], [])
+
     def test_absolute_sync_applies_without_inventing_entities(self):
         self.assertTrue(self.tracked.consume(0x35, relative_body(dx=8)))
         self.assertEqual(self.tracked.snapshot()["entities"], [])

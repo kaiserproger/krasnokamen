@@ -222,9 +222,10 @@ class ProtocolInputVerbs:
     def use_item(self, hand='main', ticks=1) -> None:
         """Hold ``ServerboundUseItem`` until the observed tick boundary.
 
-        Sends the packet once, then waits ``ticks`` observed ``game_time``
-        advances (``SetTime``-driven, no sleeps) before returning so the
-        hold spans real server ticks.
+        Fences the submitted sequence with its received admission ACK, then
+        waits for a fresh SetTime after that ACK before counting the hold.
+        SetTime is periodic: its previous value can predate admission by
+        almost an entire publication interval.
         """
         hand_id = _parse_hand(hand)
         if isinstance(ticks, bool) or not isinstance(ticks, int) or ticks < 1:
@@ -234,6 +235,12 @@ class ProtocolInputVerbs:
                            + wire.write_varint(self.observer.sequence)
                            + struct.pack('>ff', *getattr(self, 'rotation', (0.0, 0.0))))
         self.observer.send(CLIENT_TICK_END_ID)
+        sequence = self.observer.sequence
+        self.wait_until(lambda: self.observer.block_ack_sequence is not None
+                        and self.observer.block_ack_sequence >= sequence,
+                        description=f'use item admission sequence {sequence}',
+                        timeout_seconds=self.timeout_seconds)
+        self.wait_ticks(1)
         self.wait_ticks(ticks)
 
     def release_use_item(self) -> None:

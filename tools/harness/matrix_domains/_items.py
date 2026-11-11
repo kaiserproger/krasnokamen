@@ -54,7 +54,7 @@ def acknowledge(ctx):
         ctx.state['items_ack_sequence'] = sequence
         marker = f'DomItemsInputFence{sequence:08d}'
         client(ctx).command(f'tell {client(ctx).name} {marker}')
-        ctx.wait_until(lambda: any(marker in str(event) for event in client(ctx).snapshot().get('events', [])),
+        ctx.wait_until(lambda: any(marker in str(event) for event in observe(ctx, 'events')),
                        description='received ordered client input fence ' + marker)
 
 

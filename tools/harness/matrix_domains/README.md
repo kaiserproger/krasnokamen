@@ -48,10 +48,15 @@ Optional domain verbs must use `getattr` with a callable check and raise
 raise `MissingCapability("snapshot:<field>")`. Never swallow those errors or
 manufacture a passing fallback. Packet writes do not claim action completion;
 the domain waits for its received-state oracle.
+The protocol driver's held-item use waits for its submitted admission ACK and
+then for a fresh `SetTime` before counting the requested hold ticks. The
+periodic clock observed before admission may be stale; neither the ACK nor
+elapsed time proves the item action succeeded.
 
-`server.command(text)` / `query(text)` return exact fresh console feedback.
-The server facade scopes world commands to the scenario dimension. Fixture
-commands use console authority; **the tested action must use client authority**
+`server.command(text)` / `query(text)` return exact fresh console feedback,
+fenced by a read-only scoreboard query whose unique holder name stays out of
+player chat. The server facade scopes world commands to the scenario dimension.
+Fixture commands use console authority; **the tested action must use client authority**
 except a scenario whose permission context explicitly is console.
 `execute if block ... run say <unique marker>` can prove a block condition;
 a bare condition or the harness's echo cannot. On the original frozen binary,
@@ -101,6 +106,21 @@ lines only from finished receipts, with full server SHA, exact stable matrix ID,
 absolute run directory and real pass/fail/blocked status. Use the shared
 `scenarios/gen_matrix.py --record-file` validator/locked append, never rewrite
 ledger lines. Missing capabilities are blocked, not skipped/pass.
+Native matrix client startup that reports a missing content file is recorded as
+blocked, not as an executed scenario failure. Other client exits remain failures.
+An unoverridden native-matrix run uses the checked-in frozen matrix and writes
+its ledger and run root under its own receipt directory. Set
+`SOLARIS_SERVER_BINARY` and `SOLARIS_MATRIX_PLUGINS_DIR` for this mode.
+Each exercised row publishes `details.verdicts["26.3.<scenario id>"]`, while
+`blocked_rows` and `failed_rows` distinguish declared transport blockers from
+other incomplete outcomes. A false or absent verdict is not a pass.
+Native action intervals require a live server, a clean server log and contiguous
+raw `/load-metrics` samples with every owner tick below 50 ms. Missing, skipped
+or overwritten samples are blocked, not passed; the receipt retains the ticks.
+At an intentional restart the oracle checks immediately before shutdown and
+again after restart; `result.json` records the unobserved interval between the
+last metrics read and server stop. Such cells remain blocked, not passed.
+Health evidence never replaces the row's gameplay oracle.
 
 ## Readiness, JSON state and plugin lanes
 
@@ -154,9 +174,12 @@ Input submission is not completion. There is no general click/trade/button ACK.
 Wait on the exact expected inventory/cursor/menu/block/feedback state before
 `ctx.boundary()`. `snapshot.revision` is a received-packet revision, not a success
 counter; unrelated updates cannot stand in for the expected effect. While a
-menu is open, protocol inventory uses its fresh 36-slot player suffix instead
-of the stale window-0 cache. Supported received stack component patches are
-preserved; unknown patches and unreceived block states remain unavailable.
+menu is open, the received 36-slot player suffix and window-0 player slots
+are reconciled in packet order. A later window-0 update supersedes an older
+menu suffix; a single-slot update changes only its corresponding player slot.
+Updates from an inactive menu cannot overwrite current inventory. Supported
+received stack component patches are preserved; unknown patches and
+unreceived block states remain unavailable.
 
 `client.set_auto_auth(False)` disables only the protocol driver's automatic
 register/login commands for subsequent reconnects. It does not disable the

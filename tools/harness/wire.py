@@ -520,7 +520,7 @@ class PlayObserver:
                             if window in self.menus and 0 <= slot < len(self.menus[window]["slots"]):
                                 self.menus[window]["slots"][slot] = stack
                                 self.menus[window]["state_id"] = state_id
-                                self._cache_player_suffix(window)
+                                self._cache_player_suffix(window, slot)
                         except UnsupportedObservation as error:
                             self.menu_errors[window] = str(error)
                     elif packet_id == 0x20:  # PlayDisconnect, login_flow.rs
@@ -565,13 +565,26 @@ class PlayObserver:
                                    force_cursor_sync=getattr(self, 'force_cursor_sync', False)))
         self.send(0x0D)
 
-    def _cache_player_suffix(self, window: int) -> None:
-        """Received container suffix remains authoritative after menu closure."""
-        player, menu = self.menus.get(0), self.menus.get(window)
-        if (window != 0 and player is not None and menu is not None
-                and len(player["slots"]) >= 45 and len(menu["slots"]) >= 36):
-            player["slots"][9:36] = menu["slots"][-36:-9]
-            player["slots"][36:45] = menu["slots"][-9:]
+    def _cache_player_suffix(self, window: int, slot: int | None = None) -> None:
+        """Keep the current menu and window-0 player slots in receive order."""
+        active = self.current_window
+        if active == 0 or window not in (0, active):
+            return
+        player, menu = self.menus.get(0), self.menus.get(active)
+        if (player is None or menu is None or len(player["slots"]) < 45
+                or len(menu["slots"]) < 36):
+            return
+        base = len(menu["slots"]) - 36
+        if window == 0:
+            indices = range(9, 45) if slot is None else (slot,)
+            for index in indices:
+                if 9 <= index < 45:
+                    menu["slots"][base + index - 9] = player["slots"][index]
+        else:
+            indices = range(base, base + 36) if slot is None else (slot,)
+            for index in indices:
+                if base <= index < base + 36:
+                    player["slots"][9 + index - base] = menu["slots"][index]
 
     def close_menu(self, window: int) -> None:
         self.send(0x13, write_varint(window))

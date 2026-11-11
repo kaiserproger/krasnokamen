@@ -20,7 +20,8 @@ from .protocol_lifecycle import Blocked, ProtocolServer
 
 CAPABILITIES = ('server_kill9_wal_replay', 'duplicate_login_same_account', 'server_hot_backup',
                 'server_pause_empty', 'malformed_packet_injection', 'reconnect_mid_action',
-                'slow_reader_backpressure', 'select_trade', 'container_button', 'click_advanced_modes')
+                'slow_reader_backpressure', 'select_trade', 'container_button', 'click_advanced_modes',
+                'peaceful_end_restart')
 
 
 def stone_count(client):
@@ -29,6 +30,10 @@ def stone_count(client):
 
 
 def capability_probe(name, server, clients, report):
+    if name == 'peaceful_end_restart':
+        from .protocol_end_restart import run
+        run(server, clients, report)
+        return
     if name == 'server_pause_empty':
         report['pause'] = server.pause_empty_probe()
         return
@@ -195,6 +200,8 @@ def run(ctx, *, random_mode=False):
             except MissingCapability as error:
                 adapter_error = error
         players = int(row['context']['player_count'].removeprefix('N')) if row else 1
+        if args.capability == 'peaceful_end_restart':
+            players = 8
         names = [f'Proto{i}' for i in range(players)]
         plugins = None
         enabled_plugins = []

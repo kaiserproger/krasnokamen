@@ -39,8 +39,13 @@ failing_first = "not recorded"
   maps: `village-qa` has `door_walk`, `sleep_return`, `farmer_harvest`,
   `miner_deposit`, and `lumberjack`; autonomy, claim and army expose their
   named behaviours. `buildings-qa` uses `<blueprint>.<behaviour>`, for
-  example `wall.L1_built`. Partial or resumed profile overrides are rejected.
-  A passing profile is evidence only for symptoms its assertions actually cover.
+  example `wall.L1_built`. `native-matrix` keys are `26.3.<frozen scenario id>`.
+  Partial or resumed profile overrides are rejected. A passing profile is
+  evidence only for symptoms its assertions actually cover.
+
+  Native-matrix reports declared blockers and other failed rows separately.
+  A true individual verdict in a failed or incomplete profile is not a
+  passing regression receipt; blocked rows remain blocked.
 - `repro_check` is optional: a nonempty string or list of nonempty strings for
   known-red reproducers, kept out of the green regression gate.
 - `ingress_proof` is optional: a nonempty string or list of strings (`file:line` write paths with what each
