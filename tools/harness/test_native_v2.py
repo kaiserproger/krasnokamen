@@ -337,6 +337,27 @@ class NativeV2ProbeTests(unittest.TestCase):
         self.assertLess(air, events.index("wait:douse_water_drained"))
         self.assertLess(events.index("wait:douse_water_drained"), events.index("tp @s 10.5 70 10.5"))
 
+    def test_damage_thorns_row_resets_the_night_before_summoning_its_zombie(self) -> None:
+        from .backends import native_p4
+
+        class Stop(Exception):
+            pass
+
+        events: list[str] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = events.append
+
+        def wait(_predicate, label, **_kwargs):
+            if label == "thorns_authored_uuid_received":
+                raise Stop
+            return mock.MagicMock()
+
+        steps.wait.side_effect = wait
+        with self.assertRaises(Stop):
+            native_p4._damage_environment(steps, (10, 70, 10), 1)
+        summon = next(i for i, event in enumerate(events) if event.startswith("summon minecraft:zombie"))
+        self.assertEqual("time set 18000", events[summon - 1])
+
     def test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit(self) -> None:
         from .backends import native_p4
 

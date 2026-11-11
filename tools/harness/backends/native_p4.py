@@ -592,6 +592,9 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
                     "events": steps.client.p4_damage_wire()[start:]})
     steps.fixture("gamemode creative @s")
     steps.fixture("effect give @s minecraft:instant_health 1 5 true")
+    # The earlier rows run into dawn on a slow host; the sun would set the thorns zombie on fire
+    # and its burn invulnerability swallows the player's hit.
+    steps.fixture("time set 18000")
     steps.fixture(
         f'summon minecraft:zombie {x + .5} {y} {z + 2.5} '
         '{UUID:[I;0,0,0,123456],NoAI:1b,equipment:{chest:{id:"minecraft:diamond_chestplate",count:1,'
