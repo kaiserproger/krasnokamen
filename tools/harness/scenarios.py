@@ -629,7 +629,7 @@ SCENARIOS: dict[str, Scenario] = {
         owner="core:harness", evidence="tcp", profile="entities", scenario_id="native-v2-automation-storage",
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/client_probes.py"),
         fixture="native v2 only; explicit crafter/log, shelf/one diamond/one emerald, lever/sensor fixtures",
-        proves="one ordinary pulse yields four planks without held-power duplicate; shelf swap/withdraw conserves both items; sensor active/cooldown/inactive follows ordinary use",
+        proves="one ordinary pulse yields four planks without held-power duplicate; shelf swap/withdraw conserves both items; sensor active then inactive follows ordinary use",
         limits="no powered shelf chains, disabled crafter slots, calibrated filtering, shrieker/warden or visual model parity",
     ),
     "native-v2-storage-adversarial": _entry(
@@ -719,6 +719,22 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="native v2; nighttime zombie beside healthy survival player",
         proves="received health loss and live client/input after the hit",
         limits="hurt tilt/direction requires hit-frame visual review; health loss alone is not presentation",
+    ),
+    "native-v2-p4-identities": _entry(
+        id="native-v2-p4-identities", summary="Named damage identities and an angered warden sonic attack",
+        owner="core:harness", evidence="tcp", profile="entities", scenario_id="native-v2-p4-identities",
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_p4.py"),
+        fixture="seven explicit damage types on a healthy survival player, then lever-provoked warden behind a wall",
+        proves="received command damage identities and health loss; real warden sonic cause, death screen and respawn",
+        limits="command cases prove identities, not freeze/cramming/wall collision mechanics; no complete damage or rendering parity",
+    ),
+    "native-v2-p4-death-protection": _entry(
+        id="native-v2-p4-death-protection", summary="Custom held death protection consumes authored effects",
+        owner="core:harness", evidence="tcp", profile="entities", scenario_id="native-v2-p4-death-protection",
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_p4.py"),
+        fixture="held stick with clear-all and speed actions, followed by lethal generic damage",
+        proves="survival at one health, one item consumed, authored speed without default totem effects",
+        limits="clear/apply actions only; remove, probability, sound and codec variants have separate Cargo regressions",
     ),
     "native-v2-p4-hopper": _entry(
         id="native-v2-p4-hopper", summary="Native Q drop enters nearby hopper, exact withdrawal and no duplicate",

@@ -214,7 +214,8 @@ class NativeV2ProbeTests(unittest.TestCase):
         from .backends import native_p4
 
         expected = {f"native-v2-p4-{name}" for name in
-                    ("nameplates", "advancements", "damage", "hopper", "statistics")}
+                    ("nameplates", "advancements", "damage", "identities", "death-protection",
+                     "hopper", "statistics")}
         self.assertTrue(expected <= native_v2.NATIVE_SCENARIO_IDS)
         self.assertTrue(expected <= native_v2.RUNNERS.keys())
         self.assertEqual(native_p4.RESTART_SCENARIOS,

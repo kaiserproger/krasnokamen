@@ -231,7 +231,8 @@ seed = 81
                     port, artifact, pack_receipt.server_packet, pack_receipt.client_packet)
                 client_address = wire_trace.address
                 evidence["native_wire_trace"] = str(pack_receipt.path)
-            elif ctx.scenario_id == "native-v2-p4-damage":
+            elif ctx.scenario_id in ("native-v2-p4-damage", "native-v2-p4-identities",
+                                     "native-v2-p4-death-protection"):
                 from .native_p4 import DamageWireReceipt
 
                 report_path = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
@@ -260,7 +261,8 @@ seed = 81
                     return wire_trace.query(promotion_receipt.snapshot)
 
                 mcp.promotion_wire_receipt = promotion_snapshot
-            if ctx.scenario_id == "native-v2-p4-damage":
+            if ctx.scenario_id in ("native-v2-p4-damage", "native-v2-p4-identities",
+                                   "native-v2-p4-death-protection"):
                 def damage_snapshot() -> list[dict[str, Any]]:
                     if wire_trace.errors:
                         raise RuntimeError(f"damage wire errors: {wire_trace.errors}")
