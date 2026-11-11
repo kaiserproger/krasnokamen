@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import subprocess
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +40,11 @@ PACK_FILES = {
         "ingredients": [BONE],
         "result": {"id": PACK_RESULT[0], "count": PACK_RESULT[1]},
     }),
+    "data/test/predicate/dry.json": json.dumps({"condition": "minecraft:weather_check", "raining": False}),
+    "data/test/function/hello.mcfunction": "say hello from the pack\n",
 }
+ZIP_PACK = "zipgems"
+ZIP_ID = f"file/{ZIP_PACK}.zip"
 TOOLS = frozenset({"minecraft_observe", "minecraft_wait_for_play", "minecraft_wait_for_state_change",
                    "minecraft_send_chat", "minecraft_wait_for_inventory", "minecraft_open_inventory",
                    "minecraft_click_container_slot", "minecraft_close_screen",
@@ -163,10 +168,27 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
         probe.fixture(command)
         probe.wait(lambda s: reported(s) > before, label)
 
+    def says(label: str, *markers: str) -> None:
+        """Wait for a chat line the client received that holds every marker."""
+        try:
+            probe.wait(lambda s: any(all(m in str(line) for m in markers) for line in s.get("recent_chat", [])),
+                       label, timeout_seconds=30)
+        except TimeoutError:
+            probe.report.setdefault("chat_at_timeout", {})[label] = probe.observe().get("recent_chat", [])
+            raise
+
+    def pack_barrier(label: str, command: str, pack: str) -> None:
+        before = sum(pack in str(line) for line in probe.observe().get("recent_chat", []))
+        probe.fixture(command)
+        probe.wait(lambda s: sum(pack in str(line) for line in s.get("recent_chat", [])) > before, label)
+
     probe.report["recipe_book"] = {"before": probe.call("minecraft_read_recipe_book", {"limit": 8192})}
     probe.check("vanilla_recipe_before_reload", craft("vanilla") == VANILLA_RESULT)
 
     write_pack(world)
+    # A pack dropped into the running server's folder is listed at once, without a reload.
+    probe.fixture("datapack list available")
+    says("list_discovers_new_pack", "available", PACK_ID)
     barrier("enable_reported", f"datapack enable {PACK_ID}")
     probe.report["recipe_book"]["enabled"] = probe.call("minecraft_read_recipe_book", {"limit": 8192})
     # The native MCP exposes only the book's display ids and counts, and a replaced recipe keeps its
@@ -174,6 +196,36 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     # the recipe itself; the book reads are recorded for the report.
     probe.check("pack_recipe_after_hot_enable", craft("enabled") == PACK_RESULT)
 
+    # The enabled pack's predicate and function work through the real command path.
+    probe.fixture('tellraw @s[predicate=test:dry] {"text":"PredicateHit"}')
+    says("selector_predicate_selects", "PredicateHit")
+    probe.fixture("debug function test:hello")
+    says("debug_function_writes_a_trace", "debug-trace")
+
     barrier("disable_reported", f"datapack disable {PACK_ID}")
     probe.report["recipe_book"]["disabled"] = probe.call("minecraft_read_recipe_book", {"limit": 8192})
     probe.check("vanilla_recipe_after_hot_disable", craft("disabled") == VANILLA_RESULT)
+
+    # Vanilla pack, debug and data commands answer a real client.
+    probe.fixture("datapack create madeit gate")
+    says("create_reported", "Created new empty pack")  # pack jobs compile off-thread: one at a time
+    probe.fixture("datapack list available")
+    says("create_makes_a_listed_pack", "available", "file/madeit")
+    probe.fixture("debug start")
+    probe.fixture("debug stop")
+    says("debug_profiler_reports", "tick profiling after")
+    probe.fixture("data modify storage test:gate x set value 5")
+    probe.fixture("data get storage test:gate x")
+    says("data_storage_modified", "Storage data updated")
+    probe.wait(lambda st: any(str(line) == "5" for line in st.get("recent_chat", [])), "data_storage_get_answers",
+               timeout_seconds=30)
+
+    # A ZIP pack enables live like a directory pack and changes the craft.
+    zipped = world / "datapacks" / f"{ZIP_PACK}.zip"
+    with zipfile.ZipFile(zipped, "w") as archive:
+        for relative, text in PACK_FILES.items():
+            archive.writestr(relative, text + "\n")
+    pack_barrier("zip_enable_reported", f"datapack enable {ZIP_ID}", ZIP_ID)
+    probe.check("zip_pack_recipe_after_hot_enable", craft("zip_enabled") == PACK_RESULT)
+    pack_barrier("zip_disable_reported", f"datapack disable {ZIP_ID}", ZIP_ID)
+    probe.check("vanilla_recipe_after_zip_disable", craft("zip_disabled") == VANILLA_RESULT)

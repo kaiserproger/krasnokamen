@@ -1,0 +1,38 @@
+diff --git b/crates/mc-core/src/datapacks.rs a/crates/mc-core/src/datapacks.rs
+index 31bd41f1..609669b0 100644
+--- b/crates/mc-core/src/datapacks.rs
++++ a/crates/mc-core/src/datapacks.rs
+@@ -435,6 +435,15 @@ fn scan(root: &Path, remaining: &mut usize) -> Result<BTreeMap<String, Scanned>,
+         let (source, raw_meta) = if kind.is_dir() {
+             let meta = read_text(&path.join("pack.mcmeta"), remaining)?;
+             (Source::Dir(path), meta)
++        } else if kind.is_file() && name.ends_with(".zip") {
++            let mut archive = open_zip(&path)?;
++            let meta = {
++                let file = archive
++                    .by_name("pack.mcmeta")
++                    .map_err(|e| format!("{name}: pack.mcmeta: {e}"))?;
++                limited(file, remaining)?
++            };
++            (Source::Zip(path), meta)
+         } else {
+             return Err(format!(
+                 "Only directory and .zip datapacks are supported: {}",
+@@ -719,6 +728,17 @@ impl PackSet {
+             .split_once('/')
+             .ok_or("Resource must be namespaced")?;
+         let (kind, resource) = tail.split_once('/').ok_or("Resource must have a type")?;
++        if matches!(kind, "worldgen" | "dimension" | "dimension_type")
++            || (kind == "tags" && resource.starts_with("worldgen/"))
++        {
++            // The native generators are Rust: these resources cannot be
++            // applied, so the rest of the pack loads and the operator is told.
++            self.ignored
++                .entry(pack.to_owned())
++                .or_default()
++                .push(relative.to_owned());
++            return Ok(());
++        }
+         if kind == "function" && resource.ends_with(".mcfunction") {
+             let id = identifier(&format!(
+                 "{namespace}:{}",

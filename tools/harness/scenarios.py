@@ -594,8 +594,8 @@ SCENARIOS: dict[str, Scenario] = {
         requires=("xvfb",),
         sources=("tools/harness/backends/datapack_reload.py",),
         fixture="seed 82 isolated world; a pack replacing the bone meal recipe is written into the running server's world",
-        proves="the client's own crafting output slot shows the vanilla recipe, the pack's recipe after /datapack enable, and the vanilla recipe again after /datapack disable",
-        limits="recipe replacement only; the recipe book MCP read exposes display ids, not recipe contents; loot tables are covered by Rust tests",
+        proves="the client's own crafting output slot shows the vanilla recipe, the pack's recipe after /datapack enable, and the vanilla recipe again after /datapack disable; a ZIP pack enables the same way; /datapack list shows a pack dropped into the folder without a reload and a pack made by /datapack create; the client is answered by a selector predicate=, /debug function, /debug start+stop and /data modify+get storage",
+        limits="recipe replacement only; the recipe book MCP read exposes display ids, not recipe contents; chat hover text is not readable through the MCP; block loot tables are covered by Rust tests",
     ),
     "dh-baseline": _entry(
         id="dh-baseline", summary="Real Java DH baseline: MC 26.1.2 + DH 3.3.3 protocol 16",

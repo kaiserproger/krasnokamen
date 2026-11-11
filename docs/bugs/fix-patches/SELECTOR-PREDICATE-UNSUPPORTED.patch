@@ -1,0 +1,22 @@
+diff --git b/crates/mc-core/src/commands.rs a/crates/mc-core/src/commands.rs
+index 695b137f..60ff0dc6 100644
+--- b/crates/mc-core/src/commands.rs
++++ a/crates/mc-core/src/commands.rs
+@@ -826,6 +826,17 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
+                 }
+                 selector.nbt.push((nbt, negated));
+             }
++            "predicate" => {
++                let negated = value.starts_with('!');
++                let id = value.strip_prefix('!').unwrap_or(value);
++                let id = if id.contains(':') {
++                    id.to_owned()
++                } else {
++                    format!("minecraft:{id}")
++                };
++                let id = Identifier::parse(id).map_err(|_| invalid())?;
++                selector.predicates.push((id.as_str().to_owned(), negated));
++            }
+             "advancements" => {
+                 let body = value
+                     .strip_prefix('{')
