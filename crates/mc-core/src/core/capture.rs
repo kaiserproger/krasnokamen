@@ -9,13 +9,20 @@ pub(crate) fn velocity_from_vanilla_motion(motion: [f64; 3]) -> [f64; 3] {
     motion.map(|component| component * 20.0)
 }
 
+/// Why a native checkpoint entity's `variant` field is not a usable value.
+pub(crate) enum VariantError {
+    /// Not a string, or not a syntactically valid identifier: corrupt data.
+    Malformed(String),
+    /// A well-formed identifier naming no entry of the species' registry (a
+    /// datapack variant this build does not know): vanilla keeps the default.
+    Unknown(String),
+}
+
 /// Decode the climate/nautilus `variant` field of a native checkpoint entity.
-/// An absent field is the vanilla default; a present field that is not a
-/// string naming an entry of the species' registry is corrupt data and an
-/// error (the checkpoint fails closed, it never falls back to the default).
+/// An absent field is the vanilla default.
 pub(crate) fn variant_from_vanilla_entity(
     record: &mc_data::entity_nbt::VanillaEntity,
-) -> Result<Option<(u8, crate::boundary::EntityDataValue)>, String> {
+) -> Result<Option<(u8, crate::boundary::EntityDataValue)>, VariantError> {
     let Some(registry) = crate::blueprint::variant_registry(&record.id) else {
         return Ok(None);
     };
@@ -23,22 +30,34 @@ pub(crate) fn variant_from_vanilla_entity(
         return Ok(None);
     };
     let mc_nbt::Tag::String(name) = tag else {
-        return Err("variant: expected string".into());
+        return Err(VariantError::Malformed("variant: expected string".into()));
     };
     let id = mc_data::Identifier::parse(name.as_str())
-        .map_err(|_| format!("variant: invalid identifier {name}"))?;
+        .map_err(|_| VariantError::Malformed(format!("variant: invalid identifier {name}")))?;
     let value = mc_data::required_registry_entry_id(registry, &id)
-        .ok_or_else(|| format!("variant: unknown {registry} entry {name}"))?;
+        .ok_or_else(|| VariantError::Unknown(name.to_string()))?;
     Ok(crate::blueprint::variant_data(&record.id, value))
 }
 
-/// Add the checkpoint entity's variant to its restored appearance.
+/// Add the checkpoint entity's variant to its restored appearance. A corrupt
+/// field (not a string, or not an identifier) is an error: the checkpoint
+/// fails closed. An unknown entry is dropped with a warning and the species
+/// default is kept, as vanilla does; records imported before the importer
+/// dropped such values still hold them.
 pub(crate) fn native_variant(
     record: &mc_data::entity_nbt::VanillaEntity,
     image: &mut crate::journal::EntityAppearanceImage,
 ) -> Result<(), String> {
-    if let Some((index, value)) = variant_from_vanilla_entity(record)? {
-        image.extra.push((index, (&value).into()));
+    match variant_from_vanilla_entity(record) {
+        Ok(Some((index, value))) => image.extra.push((index, (&value).into())),
+        Ok(None) => {}
+        Err(VariantError::Unknown(variant)) => tracing::warn!(
+            entity = %record.uuid,
+            species = %record.id,
+            %variant,
+            "unknown variant ignored; the species default is kept"
+        ),
+        Err(VariantError::Malformed(error)) => return Err(error),
     }
     Ok(())
 }

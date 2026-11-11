@@ -107,15 +107,20 @@ pose and the hostile tick derives it again from live targeting.
 Cow, pig, chicken and zombie-nautilus variants (from `/summon ... {variant:...}`)
 are persisted. The checkpoint stores the vanilla string `variant` field of the
 entity record; the WAL stores a typed appearance value at the species' metadata
-index. Both fail closed: a checkpoint `variant` that is not a string, not an
-identifier or not an entry of the species' registry refuses hydration, and a WAL
-image whose variant value has another species' kind, the wrong index or an id
-outside the registry refuses recovery (`validate_entity`). An absent field is the
+index. A corrupt checkpoint `variant` (not a string, or not an identifier)
+refuses hydration, and a WAL image whose variant value has another species' kind,
+the wrong index or an id outside the registry refuses recovery
+(`validate_entity`): only Solaris writes WAL images. A well-formed identifier
+that names no entry of the species' registry (a datapack variant) is ignored with
+a `unknown variant ignored` warning naming the entity, species and id, and the
+default is kept, as vanilla does; records imported by an older Solaris, which did
+not drop such values, still hold them and must open. An absent field is the
 vanilla default. Naturally spawned animals carry no variant and use that default
 (egg-hatched chickens keep the egg's variant); Solaris does not yet choose
-biome-dependent variants. Anvil import keeps vanilla
-tolerance instead: an unknown or malformed `variant` is dropped (the game ignores
-it and keeps the default) before the native hydrate.
+biome-dependent variants. Bred cow, pig and chicken calves take this parent's or
+the partner's variant by a fair coin, as `getBreedOffspring` does (javap,
+receipts/Q04CoreFix/javap). Anvil import also drops an unknown or malformed
+`variant` before the native hydrate (the game ignores it and keeps the default).
 
 On genuine first start, `Core::open` writes and fsyncs
 `<world>/.solaris-first-start`, creates `native/state.redb.new` and renames the

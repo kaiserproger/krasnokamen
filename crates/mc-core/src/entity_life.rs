@@ -299,6 +299,40 @@ pub fn restore_appearance(body: &crate::entities::Body, row: &mut ColdRow) {
     }
 }
 
+/// The variant a calf of `type_id` inherits from `actor` or `partner`, if the
+/// parent the coin picks has one; a parent on the species default passes none.
+fn inherited_variant(
+    state: &TickState,
+    actor: EntityId,
+    partner: EntityId,
+    type_id: u32,
+) -> Option<(u8, crate::boundary::EntityDataValue)> {
+    let name = &state.registry.blueprint(type_id)?.name;
+    let (index, _) = crate::blueprint::variant_data(name, 0)?;
+    let (low, high) = if actor < partner {
+        (actor, partner)
+    } else {
+        (partner, actor)
+    };
+    let seed = (low.0 as i64 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ (high.0 as i64 as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
+        ^ state.tick.wrapping_mul(0x1656_67B1_9E37_79F9);
+    let from = if seed.rotate_left(41) & 1 == 0 {
+        low
+    } else {
+        high
+    };
+    let slot = state.entities.slot_of(from)?;
+    state
+        .entities
+        .row(slot)
+        .appearance
+        .extra
+        .iter()
+        .find(|(at, _)| *at == index)
+        .cloned()
+}
+
 pub fn breed(
     state: &mut TickState,
     actor: EntityId,
@@ -352,6 +386,9 @@ pub fn breed(
                 }
             })
         });
+    // Vanilla getBreedOffspring: the calf takes this parent's or the partner's
+    // variant, chosen by a fair coin (cow, pig and chicken alike).
+    let variant = inherited_variant(state, actor, partner, type_id);
     // Only a retained love cause credits the player; the breeding actors are mobs.
     let advancement_breeding = [actor, partner].into_iter().find_map(|parent| {
         let slot = state.entities.slot_of(parent)?;
@@ -406,6 +443,7 @@ pub fn breed(
         health,
         taming: crate::taming::inherit(state, actor, partner, type_id),
         wool,
+        variant,
         advancement_breeding,
     });
     if let Some(player) = breeder.and_then(|id| state.players.get_mut(&id)) {

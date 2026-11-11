@@ -11,7 +11,9 @@ use std::sync::Arc;
 
 /// Anvil import keeps vanilla tolerance for `variant`: the game ignores a
 /// malformed or unknown value and keeps the species default, so the importer
-/// drops such a field before the native hydrate, which fails closed on it.
+/// drops such a field and never stores it. (The native hydrate also tolerates
+/// an unknown entry, for records an older importer stored; it fails closed on
+/// a malformed one.)
 pub fn drop_ignored_variant(record: &mut mc_data::entity_nbt::VanillaEntity) {
     if crate::core::variant_from_vanilla_entity(record).is_err() {
         record.extra_fields.retain(|(key, _)| key != "variant");
