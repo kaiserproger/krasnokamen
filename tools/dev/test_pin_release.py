@@ -280,6 +280,18 @@ class InputKeyTests(unittest.TestCase):
         with patch.object(pin.subprocess, "check_output", return_value=self.rustc):
             self.assertNotEqual(pin.inputs_sha256(nested, tree, "server", LINUX, True), self.key())
 
+    def test_same_config_content_at_different_paths_is_not_one_key(self):
+        keys = []
+        for side in ("x", "y"):
+            root = Path(self.temp.name) / side
+            shutil.copytree(self.top, root / "tree")
+            (root / ".cargo").mkdir()
+            (root / ".cargo" / "config.toml").write_text('[env]\nCC = { value = "bin/cc", relative = true }\n')
+            tree, _ = pin.w.working_state(root / "tree")
+            with patch.object(pin.subprocess, "check_output", return_value=self.rustc):
+                keys.append(pin.inputs_sha256(root / "tree", tree, "server", LINUX, True))
+        self.assertNotEqual(keys[0], keys[1], "relative config values resolve from the config's own directory")
+
 
 class ReuseTests(unittest.TestCase):
     def setUp(self):

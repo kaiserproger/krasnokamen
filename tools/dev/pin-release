@@ -76,9 +76,9 @@ def provenance(top: Path) -> dict:
 def cargo_config_files(top: Path) -> list[Path]:
     """Existing Cargo config files outside the tree that Cargo merges into this build, in Cargo's
     precedence order: `.cargo/config[.toml]` in each parent directory (nearest first), then CARGO_HOME.
-    The tree's own `.cargo/` is in INPUT_PATHS. Only existing files count and the key uses their
-    contents, not their paths, so identical trees at different depths (main and wt/<name>) share a key
-    while a config appearing anywhere above either changes it."""
+    The tree's own `.cargo/` is in INPUT_PATHS. Only existing files count, by path and content (Cargo
+    resolves `relative = true` values from the config's location), so identical trees at different depths
+    (main and wt/<name>) share a key while a config appearing above either changes it."""
     home = Path(os.environ.get("CARGO_HOME") or Path.home() / ".cargo")
     found: list[Path] = []
     for directory in [parent / ".cargo" for parent in top.resolve().parents] + [home]:
@@ -100,7 +100,7 @@ def inputs_sha256(top: Path, tree: str, kind: str, rust_target: str, incremental
     parts.append("rustc=" + str(subprocess.check_output(["rustc", "-vV"], cwd=top, text=True)).strip())
     parts += [f"env.{name}={value}" for name, value in sorted(os.environ.items())
               if BUILD_ENV.match(name) and name not in BUILD_ENV_IGNORED]
-    parts += [f"cargo_config={w.sha256_file(path)}" for path in cargo_config_files(top)]
+    parts += [f"cargo_config.{path}={w.sha256_file(path)}" for path in cargo_config_files(top)]
     parts += [f"target={rust_target}", f"kind={kind}", f"incremental={int(incremental)}"]
     return w.sha256_bytes("\n".join(parts).encode())
 
