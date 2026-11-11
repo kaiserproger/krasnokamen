@@ -46,6 +46,13 @@ pub struct EntityLifeState {
     pub frog_pregnant: bool,
     #[serde(skip)]
     pub frog_spawn_target: Option<[i32; 3]>,
+    pub sniffer: Option<Box<crate::sniffer::Sniffer>>,
+    #[serde(skip)]
+    pub frog_prey: Option<(EntityId, [f64; 3])>,
+    #[serde(skip)]
+    pub frog_tongue_ticks: u8,
+    #[serde(skip)]
+    pub cat_bed_ticks: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -261,7 +268,7 @@ pub fn make_child(state: &mut TickState, id: EntityId) {
 
 /// Rebuild retained species appearance when a checkpoint/replay row is restored.
 pub fn restore_appearance(body: &crate::entities::Body, row: &mut ColdRow) {
-    row.entity_life.mounted = row.entity_life.mount.rider.is_some();
+    row.entity_life.mounted = !row.entity_life.mount.riders.is_empty();
     let EntityKind::Mob { type_id } = body.kind else {
         return;
     };
@@ -1046,6 +1053,9 @@ pub fn to_fields(life: &EntityLifeState, love: u32) -> Vec<(String, mc_nbt::Tag)
             "stew_effects".into(),
             mc_data::item_stack::encode_stew_effects(&life.stew_effects),
         ));
+    }
+    if let Some(sniffer) = &life.sniffer {
+        fields.extend(crate::sniffer::to_fields(sniffer));
     }
     fields.extend(crate::mounts::persistence::to_fields(life));
     fields.extend(crate::portals::fields(life.portal));

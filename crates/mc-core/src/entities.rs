@@ -1599,7 +1599,12 @@ impl EntityStore {
             }
             EntityKind::ExperienceOrb { .. } => {}
         }
-        if self.cold[slot.0 as usize].entity_life.mount.rider.is_some() {
+        if !self.cold[slot.0 as usize]
+            .entity_life
+            .mount
+            .riders
+            .is_empty()
+        {
             self.rider_members.insert(slot);
         }
         if self.cold[slot.0 as usize].entity_life.leash.is_some() {
@@ -1643,9 +1648,10 @@ impl EntityStore {
         self.leash_members.iter().copied()
     }
 
-    pub(crate) fn set_rider(&mut self, slot: EntitySlot, rider: Option<Uuid>) {
-        self.row_mut(slot).entity_life.mount.rider = rider;
-        if rider.is_some() {
+    pub(crate) fn set_riders(&mut self, slot: EntitySlot, riders: Vec<Uuid>) {
+        let occupied = !riders.is_empty();
+        self.row_mut(slot).entity_life.mount.riders = riders;
+        if occupied {
             self.rider_members.insert(slot);
         } else {
             self.rider_members.remove(&slot);
@@ -1668,7 +1674,7 @@ impl EntityStore {
     ) {
         self.rider_members.remove(&slot);
         self.leash_members.remove(&slot);
-        if life.mount.rider.is_some() {
+        if !life.mount.riders.is_empty() {
             self.rider_members.insert(slot);
         }
         if life.leash.is_some() {

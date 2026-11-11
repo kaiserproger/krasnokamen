@@ -2220,6 +2220,9 @@ fn map_extra(index: u8, value: &mc_core::boundary::EntityDataValue) -> WireEntit
         mc_core::boundary::EntityDataValue::CopperGolemState(value) => {
             WireEntityDataValue::CopperGolemState { index, value }
         }
+        mc_core::boundary::EntityDataValue::SnifferState(value) => {
+            WireEntityDataValue::SnifferState { index, value }
+        }
         mc_core::boundary::EntityDataValue::VillagerData {
             kind,
             profession,

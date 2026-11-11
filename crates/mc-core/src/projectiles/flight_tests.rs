@@ -956,12 +956,9 @@ fn stuck_arrow_and_trident_retract_from_the_block_face_like_vanilla() {
         let wall_z = centre[2] as i32 + 5;
         for y in 200..=205 {
             for x in -2..=2 {
-                state.world.set_block(
-                    centre[0] as i32 + x,
-                    y,
-                    wall_z,
-                    state.registry.states.stone,
-                );
+                state
+                    .world
+                    .set_block(centre[0] as i32 + x, y, wall_z, state.registry.states.stone);
             }
         }
         state.world.fold_overlay();

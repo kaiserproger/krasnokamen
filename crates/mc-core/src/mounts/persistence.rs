@@ -47,7 +47,7 @@ pub(crate) fn from_fields(
     fields: &[(String, Tag)],
 ) -> Result<(), CoreError> {
     let mut result = life.clone();
-    for key in ["Owner", "LoveCause", "solaris:Rider"] {
+    for key in ["Owner", "LoveCause"] {
         if let Some(tag) = field(fields, key)? {
             let value = uuid(tag, key)?;
             match key {
@@ -55,13 +55,29 @@ pub(crate) fn from_fields(
                     result.taming.owner = Some(value);
                     result.tamed = true;
                 }
-                "LoveCause" => result.taming.love_cause = Some(value),
-                _ => {
-                    result.mount.rider = Some(value);
-                    result.mounted = true;
-                }
+                _ => result.taming.love_cause = Some(value),
             }
         }
+    }
+    if let Some(tag) = field(fields, "solaris:Riders")? {
+        let Tag::List(list) = tag else {
+            return Err(invalid("solaris:Riders"));
+        };
+        if list.elements.len() > 4
+            || (!list.elements.is_empty() && list.element_type != tag_type::INT_ARRAY)
+        {
+            return Err(invalid("solaris:Riders"));
+        }
+        result.mount.riders = list
+            .elements
+            .iter()
+            .map(|tag| uuid(tag, "solaris:Riders"))
+            .collect::<Result<_, _>>()?;
+        let unique: std::collections::HashSet<_> = result.mount.riders.iter().collect();
+        if unique.len() != result.mount.riders.len() {
+            return Err(invalid("solaris:Riders duplicate UUID"));
+        }
+        result.mounted = !result.mount.riders.is_empty();
     }
     for key in ["Tame", "Sitting", "Trusting", "Temper", "CollarColor"] {
         if let Some(tag) = field(fields, key)? {
@@ -120,6 +136,13 @@ pub(crate) fn from_fields(
             return Err(invalid("solaris:TameRolls"));
         };
         result.taming.rolls = *rolls as u64;
+    }
+    if let Some(tag) = field(fields, "solaris:CamelDashCooldown")? {
+        let value = integer(tag, "solaris:CamelDashCooldown")?;
+        if !(0..=55).contains(&value) {
+            return Err(invalid("solaris:CamelDashCooldown"));
+        }
+        result.mount.dash_cooldown = value as u8;
     }
     *life = result;
     Ok(())
@@ -210,6 +233,12 @@ pub(crate) fn cargo_to_fields(
 pub(crate) fn to_fields(life: &EntityLifeState) -> Vec<(String, Tag)> {
     let pet = &life.taming;
     let mut fields = Vec::new();
+    if life.mount.dash_cooldown != 0 {
+        fields.push((
+            "solaris:CamelDashCooldown".into(),
+            Tag::Int(i32::from(life.mount.dash_cooldown)),
+        ));
+    }
     if pet.temper != 0 {
         fields.push(("Temper".into(), Tag::Int(i32::from(pet.temper))));
     }
@@ -222,14 +251,19 @@ pub(crate) fn to_fields(life: &EntityLifeState) -> Vec<(String, Tag)> {
     if pet.rolls != 0 {
         fields.push(("solaris:TameRolls".into(), Tag::Long(pet.rolls as i64)));
     }
-    for (key, uuid) in [
-        ("Owner", pet.owner),
-        ("LoveCause", pet.love_cause),
-        ("solaris:Rider", life.mount.rider),
-    ] {
+    for (key, uuid) in [("Owner", pet.owner), ("LoveCause", pet.love_cause)] {
         if let Some(uuid) = uuid {
             fields.push((key.into(), uuid_tag(uuid)));
         }
+    }
+    if !life.mount.riders.is_empty() {
+        fields.push((
+            "solaris:Riders".into(),
+            Tag::List(ListTag {
+                element_type: tag_type::INT_ARRAY,
+                elements: life.mount.riders.iter().copied().map(uuid_tag).collect(),
+            }),
+        ));
     }
     if !pet.trusted.is_empty() {
         fields.push((
@@ -258,7 +292,7 @@ pub(crate) fn validate_replay(replay: &crate::journal::Replay) -> Result<(), Cor
     if !replay
         .entities
         .values()
-        .any(|entity| entity.state.entity_life.mount.rider.is_some())
+        .any(|entity| !entity.state.entity_life.mount.riders.is_empty())
     {
         return Ok(());
     }
@@ -269,18 +303,27 @@ pub(crate) fn validate_replay(replay: &crate::journal::Replay) -> Result<(), Cor
         .collect::<Result<std::collections::HashSet<_>, _>>()?;
     let mut riders = std::collections::BTreeMap::new();
     for (id, entity) in &replay.entities {
-        let Some(rider) = entity.state.entity_life.mount.rider else {
-            continue;
-        };
-        if let Some(previous) = riders.insert(rider, *id) {
+        let maximum =
+            mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(entity.type_id)
+                .map_or(1, |kind| {
+                    usize::from(kind.behavior.vehicle_passenger.max_passengers)
+                });
+        if entity.state.entity_life.mount.riders.len() > maximum.min(4) {
             return Err(CoreError::Storage(format!(
-                "invalid mounted passenger {rider}: vehicles {previous} and {id}"
+                "invalid mounted passengers on {id}: capacity {maximum}"
             )));
         }
-        if entity_uuids.contains(&rider) {
-            return Err(CoreError::Storage(format!(
-                "invalid mounted passenger {rider}: expected player UUID"
-            )));
+        for rider in entity.state.entity_life.mount.riders.iter().copied() {
+            if let Some(previous) = riders.insert(rider, *id) {
+                return Err(CoreError::Storage(format!(
+                    "invalid mounted passenger {rider}: vehicles {previous} and {id}"
+                )));
+            }
+            if entity_uuids.contains(&rider) {
+                return Err(CoreError::Storage(format!(
+                    "invalid mounted passenger {rider}: expected player UUID"
+                )));
+            }
         }
     }
     Ok(())

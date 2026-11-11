@@ -136,6 +136,8 @@ pub struct Capabilities {
     pub fall_damage_immune: bool,
     /// Climbs a horizontal obstacle at 0.2 blocks per tick (vanilla spiders).
     pub climbs_walls: bool,
+    /// Avoids unrolled armadillos within six blocks (Spider.registerGoals).
+    pub avoids_armadillos: bool,
     /// Instant health harms and instant damage heals (vanilla undead).
     pub inverted_healing: bool,
     /// Swimmer steering family.
@@ -253,6 +255,7 @@ pub enum RidingProfile {
     Unsaddlable,
     CarrotStick,
     FungusStick,
+    Harness,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
@@ -1300,6 +1303,7 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
         hurt_by_water: matches!(name, "minecraft:enderman" | "minecraft:strider"),
         fall_damage_immune: FALL_DAMAGE_IMMUNE.contains(&name),
         climbs_walls: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
+        avoids_armadillos: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
         inverted_healing: ZOMBIE_FAMILY.contains(&name)
             || matches!(
                 name,
@@ -1484,6 +1488,7 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
             "minecraft:strider" => RidingProfile::FungusStick,
             "minecraft:camel" | "minecraft:skeleton_horse" => RidingProfile::Saddle,
             "minecraft:zombie_horse" => RidingProfile::Unsaddlable,
+            "minecraft:happy_ghast" => RidingProfile::Harness,
             _ => RidingProfile::None,
         },
         food: match name {

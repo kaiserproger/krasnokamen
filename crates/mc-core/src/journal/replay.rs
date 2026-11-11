@@ -390,6 +390,7 @@ impl EntityStateImage {
         image.entity_life.portal = crate::portals::from_fields(&record.extra_fields)?;
         image.entity_life.vehicle = crate::vehicles::from_record(registry, record)?.map(Box::new);
         image.entity_life.dolphin = crate::dolphin::from_record(record)?;
+        image.entity_life.sniffer = crate::sniffer::from_record(record)?;
         crate::entity_loot::extra_equipment_from_fields(
             &registry.items,
             &record.extra_fields,

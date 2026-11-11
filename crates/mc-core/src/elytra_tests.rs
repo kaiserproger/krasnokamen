@@ -113,7 +113,7 @@ fn elytra_start_checks_airborne_equipment_fluid_riding_and_levitation() {
             "riding" => {
                 let uuid = state.entities.row(slot).uuid;
                 state.entities.row_mut(slot).entity_life.mount.vehicle = Some(player);
-                state.entities.row_mut(slot).entity_life.mount.rider = Some(uuid);
+                state.entities.row_mut(slot).entity_life.mount.riders = vec![uuid];
             }
             "levitation" => {
                 state
@@ -348,7 +348,7 @@ fn elytra_stops_on_equipment_removal_or_entering_fluid() {
             "riding" => {
                 let uuid = state.entities.row(slot).uuid;
                 state.entities.row_mut(slot).entity_life.mount.vehicle = Some(player);
-                state.entities.row_mut(slot).entity_life.mount.rider = Some(uuid);
+                state.entities.row_mut(slot).entity_life.mount.riders = vec![uuid];
             }
             _ => {
                 let id = state

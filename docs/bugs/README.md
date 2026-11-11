@@ -287,6 +287,12 @@ The `entities` profile includes windowed native-client probes:
   block-entity NBT; the actual patterned and plain banners are captured for review.
 - `native-v2-snow-golem-shear`: ordinary shears clear the same golem's received
   pumpkin flag, reveal its face and yield one carved-pumpkin pickup.
+- `native-v2-happy-ghast-harness`: an ordinary survival harness debit admits the
+  graphical player and three independent native peers; a fifth peer is refused.
+  Received passenger packets prove distinct seats and independent dismount.
+  An input-ordered read of the vehicle's rider NBT fences the refusal check;
+  ordered chat alone cannot fence the world publication queue. The focused
+  native checkpoint regression separately checks harness/rider custody on disk.
 - `native-v2-map-*`: separate frame waypoint, banner removal/locked
   toggle, inventory clone tracking, pumpkin hiding, terrain shading and Nether
   terrain repros. Read-only receipts reconstruct the graphical viewer's exact

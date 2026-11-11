@@ -211,6 +211,16 @@ SCENARIOS: dict[str, Scenario] = {
         proves="before any repair click, reopened inventory and crafting cursor is empty and exactly three apples remain",
         limits="original three-apple repro only; no full-inventory overflow or disconnect branch",
     ),
+    "native-v2-happy-ghast-harness": _entry(
+        id="native-v2-happy-ghast-harness", summary="Harness custody and four distinct native happy-ghast riders",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-happy-ghast-harness",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_happy_ghast.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="private ghast, one survival harness, graphical rider and four independent headless peers",
+        proves="bare-ghast refusal, harness debit, four distinct passenger ids, fifth refusal and independent dismount",
+        limits="restart custody is covered by the focused core regression; screenshots require recorded review",
+    ),
     "native-v2-custody-mount-export": _entry(
         id="native-v2-custody-mount-export", summary="Imported chested donkey withdrawal and deposit survive native export and reimport",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-custody-mount-export",

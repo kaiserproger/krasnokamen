@@ -441,7 +441,7 @@ fn trusted_image<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Ve
 }
 pub(crate) fn suppress_ai(row: &ColdRow) -> bool {
     row.entity_life.sitting
-        || row.entity_life.mount.rider.is_some()
+        || !row.entity_life.mount.riders.is_empty()
         || row.entity_life.leash.is_some()
 }
 pub(crate) fn excluded_sweep(row: &ColdRow) -> bool {

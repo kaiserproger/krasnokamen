@@ -431,6 +431,13 @@ pub(super) fn early_entity_rest(
             && crate::turtle::drive(view.entities.row(slot)).is_some()
         || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::frog::is_frog(type_id))
             && crate::frog::drive(view.entities.row(slot)).is_some()
+        || view
+            .entities
+            .row(slot)
+            .entity_life
+            .sniffer
+            .as_ref()
+            .is_some_and(|s| s.target.is_some())
         || !special_idle
         || (motion_thinks(view.tick, flags, period)
             && flags & crate::entities::MOTION_WANDER_REST == 0
@@ -1067,7 +1074,7 @@ pub(super) fn read_row(
         leash_follow: row.entity_life.leash.is_some()
             && !row.controls.no_ai
             && !row.entity_life.sitting
-            && row.entity_life.mount.rider.is_none(),
+            && row.entity_life.mount.riders.is_empty(),
     };
     (read, needs_rare)
 }
@@ -1787,6 +1794,9 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
     {
         vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
         look_target = Some(target);
+    } else if let Some((target, speed)) = crate::sniffer::drive(ctx.entities.row(row.slot)) {
+        vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
+        look_target = Some(target);
     } else if !think {
         // A mob standing on the ground with no standing decision has nothing
         // to integrate while every chunk under its footprint is unchanged
@@ -1837,6 +1847,13 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
             row.pos[2] * 2.0 - target[2],
         ];
         vel = crate::entity_motion::steer(row.movement, row.pos, away, f64::from(row.speed));
+    } else if registry
+        .blueprint(row.type_id)
+        .is_some_and(|bp| bp.capabilities.avoids_armadillos)
+        && let Some(target) = crate::armadillo::flee_target(ctx.entities, row.pos)
+    {
+        vel =
+            crate::entity_motion::steer(row.movement, row.pos, target, f64::from(row.speed) * 1.2);
     } else if row.chaser && !row.breed_ready {
         // Goals by priority: MeleeAttack, MeleeChase, Wander. Only chasers
         // need the nearest live player (compact table, no full-row scan).

@@ -261,6 +261,20 @@ const INCORRECT_FOR_STONE_OR_COPPER_TOOL: &[&str] = &[
 
 const REQUIRED_BLOCK_TAGS: &[(&str, &[&str])] = &[
     (
+        "minecraft:sniffer_diggable_block",
+        &[
+            "minecraft:dirt",
+            "minecraft:coarse_dirt",
+            "minecraft:rooted_dirt",
+            "minecraft:mud",
+            "minecraft:muddy_mangrove_roots",
+            "minecraft:moss_block",
+            "minecraft:pale_moss_block",
+            "minecraft:grass_block",
+            "minecraft:podzol",
+        ],
+    ),
+    (
         "minecraft:snaps_goat_horn",
         &[
             "minecraft:acacia_log",

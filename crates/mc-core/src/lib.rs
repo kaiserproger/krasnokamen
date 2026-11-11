@@ -161,6 +161,7 @@ pub mod mounts;
 pub mod native_checkpoint;
 pub mod natural_spawn;
 mod omens;
+mod parrot;
 mod physical_attacks;
 mod physical_defense;
 mod piglin;
@@ -197,10 +198,12 @@ mod shulker;
 mod signs;
 mod singleplayer_pause;
 pub mod sleep;
+mod sniffer;
 mod spawn_egg;
 pub mod special_mobs;
 pub mod species;
 mod statistics;
+mod strider;
 pub mod survival;
 pub mod taming;
 mod target_grid;
@@ -261,6 +264,8 @@ mod species_tests;
 mod target_grid_tests;
 #[cfg(test)]
 mod tick_tests;
+#[cfg(test)]
+mod vanilla_mob_behavior_tests;
 #[cfg(test)]
 mod view_negotiation_tests;
 

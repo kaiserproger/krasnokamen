@@ -48,6 +48,13 @@ Client game age follows simulated ticks, not journal frame identifiers.
 freeze/step projection and its current restart limitation; daylight time remains
 independent.
 
+Mount custody belongs to the vehicle's ordered, bounded rider UUID list. The
+first live rider alone controls motion; a passenger's reverse link and the
+published passenger entity IDs are derived, never separate authorities.
+Removing one passenger preserves the other seats. Native images retain the
+list; offline animal NBT uses `solaris:Riders`, validated for duplicates and
+capacity before recovery.
+
 ## Threads and backpressure
 
 Long-lived core workers perform parallel gameplay work; edge socket and fanout

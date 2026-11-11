@@ -720,6 +720,9 @@ pub(super) fn restore_data_value(
         crate::journal::EntityDataValueImage::CopperGolemState(v) => {
             crate::boundary::EntityDataValue::CopperGolemState(*v)
         }
+        crate::journal::EntityDataValueImage::SnifferState(v) => {
+            crate::boundary::EntityDataValue::SnifferState(*v)
+        }
         crate::journal::EntityDataValueImage::Direction(v) => {
             crate::boundary::EntityDataValue::Direction(*v)
         }

@@ -741,7 +741,13 @@ def _promotion_custody(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     run(steps, origin, steps.report["id"])
 
 
+def _happy_ghast(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_happy_ghast import run
+    run(steps, origin)
+
+
 RUNNERS = {
+    "native-v2-happy-ghast-harness": _happy_ghast,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,

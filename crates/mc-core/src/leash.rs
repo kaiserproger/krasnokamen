@@ -271,7 +271,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             std::sync::Arc::make_mut(&mut row.appearance).leash_holder = Some(holder_id);
             state.appearance_changed.push(body.id);
         }
-        if distance > 4.0 && !row.entity_life.sitting && row.entity_life.mount.rider.is_none() {
+        if distance > 4.0 && !row.entity_life.sitting && row.entity_life.mount.riders.is_empty() {
             let speed = f64::from(row.speed);
             let norm = mth::length2(to[0] - at[0], to[2] - at[2]).max(0.001);
             state.entities.set_vel(
