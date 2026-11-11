@@ -42,14 +42,66 @@ class VillageQaHelpersTests(unittest.TestCase):
         commands = [f"fill 0 0 0 1 1 1 stone", *phases]
         self.assertEqual(village_qa.count_time_sets(commands), 5)
 
-    def test_all_behaviours_pass_requires_five_passes(self) -> None:
+    def test_all_behaviours_pass_requires_six_passes(self) -> None:
         good = {name: "PASS" for name in
-                ("door_walk", "sleep_return", "farmer_harvest", "miner_deposit", "lumberjack")}
+                ("door_walk", "night_doors", "sleep_return", "farmer_harvest", "miner_deposit", "lumberjack")}
         self.assertTrue(village_qa.all_behaviours_pass(good))
         bad = dict(good, miner_deposit="FAIL")
         self.assertFalse(village_qa.all_behaviours_pass(bad))
+        self.assertFalse(village_qa.all_behaviours_pass(dict(good, night_doors="FAIL")))
         inconclusive = dict(good, lumberjack="INCONCLUSIVE")
         self.assertFalse(village_qa.all_behaviours_pass(inconclusive))
+
+    def _house_door_walk(self, watch: village_qa.NightDoorWatch, door: tuple[int, int, int],
+                         final_open: bool) -> None:
+        y, z = float(door[1]), door[2] + 0.5
+        watch.observe({"v": (door[0] - 2.0, y, z)}, set(), 0.0)
+        watch.observe({"v": (door[0] - 0.8, y, z)}, {door}, 1.0)
+        watch.observe({"v": (door[0] + 0.8, y, z)}, {door}, 2.0)
+        # The villager walks away to its bed; the door either closed behind it or not.
+        watch.observe({"v": (door[0] + 6.0, y, z)}, {door} if final_open else set(), 3.0)
+
+    def test_night_door_closed_behind_the_villager_passes(self) -> None:
+        door = (10, 80, 5)
+        watch = village_qa.NightDoorWatch([door])
+        self._house_door_walk(watch, door, final_open=False)
+        self.assertEqual(watch.verdict(door, set())[0], "PASS")
+
+    def test_night_door_left_open_with_nobody_near_fails(self) -> None:
+        door = (10, 80, 5)
+        watch = village_qa.NightDoorWatch([door])
+        self._house_door_walk(watch, door, final_open=True)
+        # Still open well past the allowance with the villager far away.
+        watch.observe({"v": (door[0] + 6.0, 80.0, door[2] + 0.5)}, {door},
+                      3.0 + village_qa.DOOR_LEFT_OPEN_SECONDS + 1.0)
+        verdict, evidence = watch.verdict(door, {door})
+        self.assertEqual(verdict, "FAIL")
+        self.assertIn("left open", evidence)
+
+    def test_night_door_open_beside_its_villager_is_not_left_open(self) -> None:
+        door = (10, 80, 5)
+        watch = village_qa.NightDoorWatch([door])
+        self._house_door_walk(watch, door, final_open=False)
+        beside = {"v": (door[0] + 1.0, 80.0, door[2] + 0.5)}
+        watch.observe(beside, {door}, 4.0)
+        watch.observe(beside, {door}, 4.0 + village_qa.DOOR_LEFT_OPEN_SECONDS * 2)
+        self.assertEqual(watch.verdict(door, set())[0], "PASS")
+
+    def test_night_door_crossing_between_polls_still_counts(self) -> None:
+        door = (10, 80, 5)
+        watch = village_qa.NightDoorWatch([door])
+        y, z = 80.0, door[2] + 0.5
+        # The open and the close both fall between two polls: the door is never read open.
+        watch.observe({"v": (door[0] - 0.8, y, z)}, set(), 0.0)
+        watch.observe({"v": (door[0] + 0.8, y, z)}, set(), 1.0)
+        self.assertEqual(watch.opened, set())
+        self.assertEqual(watch.verdict(door, set())[0], "PASS")
+
+    def test_night_door_without_a_crossing_is_not_a_pass(self) -> None:
+        door = (10, 80, 5)
+        watch = village_qa.NightDoorWatch([door])
+        watch.observe({"v": (door[0] - 5.0, 80.0, door[2] + 0.5)}, set(), 0.0)
+        self.assertEqual(watch.verdict(door, set())[0], "FAIL")
 
     def test_trees_need_five_column_separation(self) -> None:
         self.assertTrue(village_qa.trees_separated([(0, 0, 0), (5, 0, 0)]))

@@ -1,0 +1,36 @@
+{
+  "id": "random:4",
+  "subject": "random.seeded",
+  "origin": "seeded_network",
+  "seed": 4,
+  "actions": [
+    {
+      "verb": "break",
+      "actor": 0,
+      "count": 2,
+      "target": 0
+    }
+  ],
+  "context": {
+    "client_kind": "protocol_bot",
+    "game_mode": "survival",
+    "dimension": "overworld",
+    "difficulty": "peaceful",
+    "player_count": "2",
+    "network_condition": "normal",
+    "server_lifecycle": "steady",
+    "permission": "non_op_0"
+  },
+  "driver": {
+    "kind": "protocol_bot"
+  },
+  "exclusions": [
+    "random loot",
+    "AI",
+    "random ticks",
+    "despawn",
+    "creative stock",
+    "untracked give",
+    "lava"
+  ]
+}

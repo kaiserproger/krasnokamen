@@ -9,17 +9,20 @@ and a lumber camp (fletching table) near mature persistent=false oaks;
 `/settlement create` with a computed radius covering the fixtures, certify
 buildings via chat commands, `/summon` plain villagers (no profession NBT:
 the allocator assigns certified slots), sequential nearest-bind per role.
-Frozen daylight (`gamerule advance_time false`, no natural clock advance) and frozen
+Frozen daylight (`gamerule advance_time false`, no natural clock advance; only the night phase runs the clock) and frozen
 random growth (`gamerule random_tick_speed 0`, mature saplings/leaves persist) + real
 event ticks, single `time set` per phase (3000 work, 18000 night, 3000 morning, 9000):
 
 1. a worker physically crosses a certified door (open seen + plane flip by a
    worker UUID, close awaited on a bounded exact predicate);
-2. the same 4 entities persist through the night, one in sleep pose by the
+2. night with the day clock running (`advance_time true` from 18000): villagers go
+   home through their doors and every door is closed behind them, none left open
+   with nobody near (issue #1 "villagers leave doors open at night");
+3. the same 4 entities persist through the night, one in sleep pose by the
    bed, and each worker returns within 6 blocks of its station at 3000;
-3. farmer harvests mature wheat (age 7 -> replanted);
-4. miner digs inside the zone and the chest holds mining products;
-5. lumberjack cuts a mature oak AND replants AND the chest holds oak logs
+4. farmer harvests mature wheat (age 7 -> replanted);
+5. miner digs inside the zone and the chest holds mining products;
+6. lumberjack cuts a mature oak AND replants AND the chest holds oak logs
    (deposit trips run at day-end 9000, polled with a bounded chest wait).
 
 Every check is a strict PASS/FAIL verdict in
@@ -103,7 +106,7 @@ def count_time_sets(commands: list[str]) -> int:
 
 
 def all_behaviours_pass(behaviour: dict[str, str]) -> bool:
-    required = ("door_walk", "sleep_return", "farmer_harvest", "miner_deposit", "lumberjack")
+    required = ("door_walk", "night_doors", "sleep_return", "farmer_harvest", "miner_deposit", "lumberjack")
     return all(behaviour.get(name) == "PASS" for name in required)
 
 
@@ -137,6 +140,92 @@ def sleeping_at_bed(row: dict[str, Any], bed: tuple[int, int, int]) -> bool:
             and is_sleep_pose(float(row["y"]), bed[1], 0.5)
             and math.dist((float(row["x"]), float(row["z"])),
                           (bed[0] + 0.5, bed[2] + 0.5)) < 0.75)
+
+
+# Issue #1: "some villagers leave house doors open at night". The night phase runs
+# the day clock (so the observed night is a real one, not a frozen timestamp) and
+# watches every door for a bounded settle window after the villagers go home.
+DOOR_ATTENDED_RADIUS = 3.0
+DOOR_LEFT_OPEN_SECONDS = 20.0
+NIGHT_DOOR_SETTLE_SECONDS = 60.0
+
+
+def crossed_door_plane(door: tuple[int, int, int], before: tuple[float, float, float],
+                       after: tuple[float, float, float]) -> bool:
+    """A track step that flips sides of the east-west door plane inside the door cell row."""
+    return (abs(after[1] - door[1]) < 3.5 and abs(after[2] - (door[2] + 0.5)) < 0.9
+            and door_crossed(before[0], after[0], door[0]))
+
+
+class NightDoorWatch:
+    """Per-door record of villager crossings, open observations and unattended-open time.
+
+    A door is *left open* when it reads open while no villager is within
+    `DOOR_ATTENDED_RADIUS` of its centre; a villager standing in or beside its own
+    open door is not the symptom. Time is the caller's monotonic clock, polled
+    at the same cadence as the villager list.
+    """
+
+    def __init__(self, doors: list[tuple[int, int, int]]) -> None:
+        self.doors = tuple(doors)
+        self.last_pos: dict[str, tuple[float, float, float]] = {}
+        self.crossings: dict[tuple[int, int, int], set[str]] = {cell: set() for cell in self.doors}
+        self.opened: set[tuple[int, int, int]] = set()
+        self.unattended_since: dict[tuple[int, int, int], float | None] = {cell: None for cell in self.doors}
+        self.longest_unattended: dict[tuple[int, int, int], float] = {cell: 0.0 for cell in self.doors}
+        self.left_open: set[tuple[int, int, int]] = set()
+
+    def attended(self, cell: tuple[int, int, int], villagers: dict[str, tuple[float, float, float]]) -> bool:
+        return any(abs(pos[1] - cell[1]) < 3.5
+                   and math.dist((pos[0], pos[2]), (cell[0] + 0.5, cell[2] + 0.5)) <= DOOR_ATTENDED_RADIUS
+                   for pos in villagers.values())
+
+    def observe(self, villagers: dict[str, tuple[float, float, float]],
+                open_cells: set[tuple[int, int, int]], now: float) -> None:
+        for uuid, pos in villagers.items():
+            before = self.last_pos.get(uuid)
+            if before is not None:
+                for cell in self.doors:
+                    if crossed_door_plane(cell, before, pos):
+                        self.crossings[cell].add(uuid)
+            self.last_pos[uuid] = pos
+        for cell in self.doors:
+            if cell not in open_cells:
+                self.unattended_since[cell] = None
+                continue
+            self.opened.add(cell)
+            if self.attended(cell, villagers):
+                self.unattended_since[cell] = None
+                continue
+            since = self.unattended_since[cell]
+            if since is None:
+                self.unattended_since[cell] = since = now
+            self.longest_unattended[cell] = max(self.longest_unattended[cell], now - since)
+            if now - since > DOOR_LEFT_OPEN_SECONDS:
+                self.left_open.add(cell)
+
+    def settled(self, villagers: dict[str, tuple[float, float, float]],
+                open_cells: set[tuple[int, int, int]]) -> bool:
+        """Every door reads closed and nobody is mid-door."""
+        return not open_cells and not any(
+            abs(pos[1] - cell[1]) < 3.5
+            and math.dist((pos[0], pos[2]), (cell[0] + 0.5, cell[2] + 0.5)) < 1.5
+            for pos in villagers.values() for cell in self.doors)
+
+    def verdict(self, house_door: tuple[int, int, int],
+                final_unattended: set[tuple[int, int, int]]) -> tuple[str, str]:
+        left = self.left_open | final_unattended
+        facts = (f"house door {list(house_door)} crossed_by={sorted(u[:8] for u in self.crossings[house_door])}; "
+                 f"opened_seen={sorted(list(c) for c in self.opened)}; "
+                 f"left_open={sorted(list(c) for c in left)}; "
+                 f"longest_unattended_s={[round(self.longest_unattended[c], 1) for c in self.doors]}")
+        if left:
+            return "FAIL", "door left open at night with no villager near: " + facts
+        # The door starts closed and a closed door blocks the body, so a crossing proves the
+        # villager opened it; a poll can miss that short open, so `opened_seen` is only evidence.
+        if not self.crossings[house_door]:
+            return "FAIL", "no villager crossed the house door at night, so no close was exercised: " + facts
+        return "PASS", "every night door crossing closed behind the villager: " + facts
 
 
 def _block_id(block: dict[str, Any]) -> str:
@@ -650,16 +739,30 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     if ctx.windowed:
         native_client.capture(probe.client, artifact, "village-qa-workday")
 
-    # --- (2) night sleep: same entities persist, one in sleep pose by the bed ---
+    # --- (2) night with the day clock running: doors closed behind villagers (issue #1),
+    # same entities persist, one in sleep pose by the bed ---
     evening = {str(row["entity_uuid"]): (float(row["x"]), float(row["y"]), float(row["z"]))
                for row in _villagers(probe)}
     fixture("time set 18000")
+    fixture("gamerule advance_time true")
     settled("night_falls")
     night_tracks: dict[str, tuple[float, float, float]] = {}
     sleeper: str | None = None
+    night_doors = NightDoorWatch(doors)
+
+    def watch_night_doors(rows: list[dict[str, Any]]) -> tuple[dict[str, tuple[float, float, float]],
+                                                               set[tuple[int, int, int]]]:
+        positions = {str(row["entity_uuid"]): (float(row["x"]), float(row["y"]), float(row["z"]))
+                     for row in rows}
+        open_cells = {cell for cell in doors if _props(_read(probe, cell)).get("open") == "true"}
+        night_doors.observe(positions, open_cells, _time.monotonic())
+        return positions, open_cells
+
     night_deadline = _time.monotonic() + 50.0
     while _time.monotonic() < night_deadline:
-        for row in _villagers(probe):
+        rows = _villagers(probe)
+        watch_night_doors(rows)
+        for row in rows:
             uuid = str(row.get("entity_uuid"))
             pos = (float(row["x"]), float(row["y"]), float(row["z"]))
             night_tracks[uuid] = pos
@@ -668,6 +771,26 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
         if sleeper is not None and set(evening) <= set(night_tracks):
             break
         _tick(probe)
+    # Bounded settle: every villager has gone home (inside the house footprint) and every
+    # door reads closed, or the window ends and the doors are judged as they stand.
+    def house_inside(pos: tuple[float, float, float]) -> bool:
+        return hx0 < pos[0] < hx1 and hz0 < pos[2] < hz1 and abs(pos[1] - hy0) < 3.5
+
+    settle_deadline = _time.monotonic() + NIGHT_DOOR_SETTLE_SECONDS
+    positions, open_cells = watch_night_doors(_villagers(probe))
+    while _time.monotonic() < settle_deadline and not (
+            night_doors.settled(positions, open_cells) and all(map(house_inside, positions.values()))):
+        _tick(probe)
+        positions, open_cells = watch_night_doors(_villagers(probe))
+    final_unattended = {cell for cell in open_cells if not night_doors.attended(cell, positions)}
+    night_verdict, night_evidence = night_doors.verdict(door, final_unattended)
+    _verdict(detail, "night_doors", night_verdict,
+             f"{night_evidence}; villagers_inside_house={sum(map(house_inside, positions.values()))}/{len(positions)}",
+             "gamerule advance_time true; time set 18000; minecraft_list_entities radius 64; "
+             f"minecraft_read_block at the four doors {[list(cell) for cell in doors]}")
+    if ctx.windowed:
+        native_client.capture(probe.client, artifact, "village-qa-night-doors")
+    fixture("gamerule advance_time false")
     # --- morning return at work hours 3000 (not idle 23000), same UUIDs to same jobs ---
     fixture("time set 3000")
     settled("morning_returns")

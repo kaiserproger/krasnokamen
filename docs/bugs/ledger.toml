@@ -2222,7 +2222,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+regression = ["harness:village-qa:night_doors"]
 
 [[bug]]
 id = "ISSUE-1-09"
@@ -3751,7 +3751,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T170731-matrix-random-4x_c80x4/result.json; regression: tools/harness/test_protocol_input_verbs.py EncodingTests.test_break_block_sends_start_then_stop_with_sequence"
-regression = []
+regression = ["harness:matrix-random:protocol-random-break-seed-4"]
+fix_commit = "5cbed1e33e4184fe8858bbdd93383a8e35d515cf"
 failing_first = "reported"
 
 [[bug]]
@@ -3762,7 +3763,7 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T163619-protocol-matrix-3xalnot6/result.json"
-regression = []
+regression = ["harness:protocol-matrix:protocol-mob-attack-cow"]
 failing_first = "reported"
 
 [[bug]]
