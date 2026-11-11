@@ -229,3 +229,16 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     probe.check("zip_pack_recipe_after_hot_enable", craft("zip_enabled") == PACK_RESULT)
     pack_barrier("zip_disable_reported", f"datapack disable {ZIP_ID}", ZIP_ID)
     probe.check("vanilla_recipe_after_zip_disable", craft("zip_disabled") == VANILLA_RESULT)
+
+    # Entries the server cannot read as packs never block a live /reload or /datapack list: a corrupt
+    # ZIP and a pack without pack.mcmeta are skipped with a named error, a README is ignored.
+    packs_dir = world / "datapacks"
+    (packs_dir / "brokenzip.zip").write_bytes(b"PK not really a zip")
+    (packs_dir / "nometa").mkdir()
+    (packs_dir / "README.txt").write_text("not a pack\n")
+    probe.fixture("datapack list available")
+    says("list_survives_unreadable_entries", "available")
+    probe.fixture("reload")
+    says("reload_skips_unreadable_new_packs", "Skipping new datapack file/brokenzip.zip")
+    says("reload_names_the_pack_without_mcmeta", "Skipping new datapack file/nometa")
+    says("reload_still_completes", "Reloaded")
