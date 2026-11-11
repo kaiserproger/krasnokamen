@@ -12,6 +12,44 @@ from tools.harness.backends import scene_shot
 
 
 class SceneShotTests(unittest.TestCase):
+    def test_scene_plugins_are_private_copies(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "shared"
+            source.mkdir()
+            (source / "plugin.toml").write_text('loaders = ["native"]')
+            target = root / "scene" / "plugins"
+            target.parent.mkdir()
+            scene_shot.stage_plugins(source, target)
+            (target / "plugin.toml").write_text("changed")
+            self.assertEqual((source / "plugin.toml").read_text(), 'loaders = ["native"]')
+            empty = root / "empty"
+            scene_shot.stage_plugins(None, empty)
+            self.assertEqual(list(empty.iterdir()), [])
+
+    def test_wait_loader_block_requires_acknowledged_native_content(self):
+        scene_shot.validate_steps([{"wait_loader_block": "computer:monitor"}], "native")
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([{"wait_loader_block": "computer:monitor"}], "java")
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([{"wait_loader_block": "bad id"}], "native")
+
+        class Probe:
+            def __init__(self):
+                self.report = {}
+            def wait(self, predicate, label):
+                self_test.assertFalse(predicate({"loader": {"acknowledged": False,
+                    "registered_blocks": ["computer:monitor"]}}))
+                state = {"loader": {"acknowledged": True, "registered_blocks": ["computer:monitor"]}}
+                self_test.assertTrue(predicate(state))
+                return state
+        self_test = self
+        with tempfile.TemporaryDirectory() as directory:
+            probe = Probe()
+            scene_shot.execute(probe, Path(directory), [{"wait_loader_block": "computer:monitor"}], "native")
+            self.assertIn("computer:monitor", probe.report["loader_blocks"])
+
+
     def test_server_identity_is_recorded_at_launch(self):
         import hashlib
         with tempfile.TemporaryDirectory() as directory:

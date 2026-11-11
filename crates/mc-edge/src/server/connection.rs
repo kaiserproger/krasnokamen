@@ -442,8 +442,11 @@ async fn run_connection(
     });
 
     let voice = native_client.then(|| {
-        crate::voice_service::Connection::start(Arc::clone(&server), id, entity, outcome.uuid)
+        crate::voice_service::Connection::start(Arc::clone(&server), id, entity, outcome.uuid, outcome.name.clone())
     });
+    let svc = crate::svc_service::Connection::start(
+        Arc::clone(&server), id, entity, outcome.uuid, outcome.name.clone(),
+    );
 
     // --- Play: reads and writes progress independently. A writer task owns
     // --- the write half (keepalive, then reliable before world); this task
@@ -537,6 +540,13 @@ async fn run_connection(
                             break 'play_loop "voice-decode";
                         }
                     }
+                }
+                if let Some(svc) = &svc
+                    && frame.id == mc_protocol::packets::play::ServerboundCustomPayload::ID
+                    && let Some((channel, payload)) = crate::svc_service::payload(&frame.body)
+                {
+                    svc.receive(&channel, &payload);
+                    continue;
                 }
                 if let Some(screen) = &screen
                     && frame.id == mc_protocol::packets::play::ServerboundCustomPayload::ID

@@ -68,6 +68,16 @@ class ProfileTaskTests(unittest.TestCase):
         self.preflight = patcher.start()
         self.addCleanup(patcher.stop)
 
+    def test_svc_selects_only_the_requested_minecraft_release(self) -> None:
+        with mock.patch.dict(os.environ, {"SOLARIS_SVC_MINECRAFT_VERSION": "26.3"}):
+            entry = runtime._select_mod_entry("svc", "fabric")
+            self.assertEqual(entry["filename"], "voicechat-fabric-2.6.27+26.3.jar")
+            with self.assertRaisesRegex(RuntimeError, "26.3"):
+                runtime._select_mod_entry("svc", "forge")
+        with mock.patch.dict(os.environ, {"SOLARIS_SVC_MINECRAFT_VERSION": "26.1.2"}):
+            entry = runtime._select_mod_entry("svc", "fabric")
+            self.assertEqual(entry["filename"], "voicechat-fabric-2.6.25+26.1.2.jar")
+
     def test_every_lane_fails_closed_before_launch_when_audio_is_unsafe(self) -> None:
         self.preflight.side_effect = RuntimeError("unsafe hardware audio graph")
         with tempfile.TemporaryDirectory() as directory, \

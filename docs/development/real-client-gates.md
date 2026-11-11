@@ -267,6 +267,14 @@ each one of `cmd`, `tp` (five coordinates), `look`, `hotbar`, `wait_ticks`, `wai
 defaults to 4, and `client_settings` accepts `graphics_preset`, `render_distance`
 and `fov` (default 70: the owner's saved fov is never inherited). PNG paths are
 recorded in `result.json`; settings and world are isolated per run.
+An optional `--plugins-dir PATH` is copied into the isolated scene for either
+client; the harness never edits the source pack.
+For native scenes, `{"wait_loader_block":"namespace:id"}` waits for a
+hash-verified, acknowledged Loader block and records the full Loader receipt.
+For an SVC 26.3 lane, set `SOLARIS_SVC_MINECRAFT_VERSION=26.3` and
+`SOLARIS_SVC_JAR` to the pinned publisher jar; the Loader checkout and Minecraft
+client must also be 26.3. The default SVC artifact remains 26.1.2. Both size and
+publisher SHA-1/SHA-512 are checked before staging.
 
 `use_phases` (native only) takes `name` and `ticks` (1–100), holds use across
 start and hold captures, releases it even on failure, and requires the client's

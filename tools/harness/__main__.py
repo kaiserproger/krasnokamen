@@ -500,8 +500,8 @@ def cmd_run(argv: list[str]) -> int:
         if ctx.server_bin is not None and profile not in {"loader-live", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}:
             raise ValueError("--server-bin is supported only by loader-live or matrix profiles")
         if (ctx.plugins_dir is not None and client != "native"
-                and ctx.scenario_id != "java-v2-p5-towns" and profile not in {"loader-live", "graves", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}):
-            raise ValueError("--plugins-dir requires native gameplay, java-v2-p5-towns, loader-live, graves or matrix profiles")
+                and ctx.scenario_id != "java-v2-p5-towns" and profile not in {"scene-shot", "loader-live", "graves", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}):
+            raise ValueError("--plugins-dir requires native gameplay, scene-shot, java-v2-p5-towns, loader-live, graves or matrix profiles")
         if (ctx.windowed and client != "native"
                 and not (client == "java" and (profile in {"scene-shot", "settlement-map-qa"}
                                                or ctx.scenario_id == "java-v2-p5-shift-double-click"))):

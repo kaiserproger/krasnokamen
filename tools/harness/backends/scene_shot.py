@@ -38,6 +38,14 @@ def scene_username(scenario: dict[str, Any]) -> str:
         raise ValueError("username must be 1..16 ASCII letters, digits or underscores")
     return name
 
+def stage_plugins(source: Path | None, target: Path) -> None:
+    """Each scene owns its plugin files; never edit the shared source pack."""
+    if source is None:
+        target.mkdir()
+    else:
+        shutil.copytree(source, target)
+
+
 
 class LatencyProxy:
     """Delay traffic in each direction without changing host networking."""
@@ -298,6 +306,8 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and type(value["eof"]) is bool)
         elif kind == "wait_chat":
             valid = client == "native" and isinstance(value, str) and bool(value)
+        elif kind == "wait_loader_block":
+            valid = client == "native" and isinstance(value, str) and bool(re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", value))
         elif kind == "wait_screen":
             valid = isinstance(value, str) and bool(value)
         elif kind == "key":
@@ -556,6 +566,13 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                        and (value in str(state["screen"].get("class", ""))
                             or value in str(state["screen"].get("title", ""))),
                        "screen_open")
+        elif kind == "wait_loader_block":
+            state = probe.wait(
+                lambda state: (state.get("loader") or {}).get("acknowledged") is True
+                and value in (state.get("loader") or {}).get("registered_blocks", []),
+                "loader_block_registered",
+            )
+            probe.report.setdefault("loader_blocks", {})[value] = state["loader"]
         elif kind in ("key", "look", "hotbar", "use_item_on", "click_screen_button"):
             probe.call(SCENE_TOOLS[kind], value)
         elif kind == "wait_terrain":
@@ -737,7 +754,7 @@ def run(
     config.write_text(source)
     if scenario.get("world"):
         shutil.copytree(Path(scenario["world"]).expanduser().resolve(), artifact / "world")
-    (artifact / "plugins").mkdir()
+    stage_plugins(ctx.plugins_dir, artifact / "plugins")
     if operator:
         prepare_operator_fixture(ctx, [username])
     xdg = artifact / "xdg"

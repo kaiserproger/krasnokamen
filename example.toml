@@ -161,6 +161,11 @@ seed = 0
 # only forwards Opus packets; it never decodes audio.
 enabled = true
 range_blocks = 48
+# Opt in to Simple Voice Chat mod compatibility (open UDP svc_port in the firewall).
+svc = false
+svc_port = 24454
+svc_bind_address = "0.0.0.0"
+# svc_voice_host = "voice.example.com:24454"
 
 [computer]
 # Right-click iron blocks with the explicitly enabled Fabric computer client.

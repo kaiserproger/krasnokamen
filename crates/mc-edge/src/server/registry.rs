@@ -73,7 +73,7 @@ impl ConnectionRegistry {
     }
 
     #[cfg(test)]
-    pub(super) fn joining_id(&self) -> ConnectionId {
+    pub(crate) fn joining_id(&self) -> ConnectionId {
         let id = self.alloc_id();
         assert!(self.admit(id, usize::MAX, |_| None).is_none());
         id

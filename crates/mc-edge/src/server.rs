@@ -1415,6 +1415,7 @@ pub async fn serve_with_console(
     server.console_state.running.store(true, Ordering::Relaxed);
     let screen_ticks = crate::screen_service::spawn_tick_task(Arc::clone(&server));
     let voice_ticks = crate::voice_service::spawn_tick_task(Arc::clone(&server));
+    let svc_udp = crate::svc_service::spawn(Arc::clone(&server)).await;
     let load_metrics = spawn_load_metrics(&server);
     let mut stop = server.stop.subscribe();
     let addresses = std::sync::Arc::new(crate::conn_limit::AddressLimiter::new(
@@ -1470,6 +1471,9 @@ pub async fn serve_with_console(
                 pump.abort();
                 screen_ticks.abort();
                 voice_ticks.abort();
+                if let Some(svc_udp) = &svc_udp {
+                    svc_udp.abort();
+                }
                 load_metrics.abort();
                 if let Some(msmp) = &msmp {
                     msmp.abort();
@@ -1533,6 +1537,7 @@ pub async fn serve_with_console(
         }
     }
 }
+
 
 /// Bytes of queued frames joined into one socket write.
 const WRITE_BATCH_BYTES: usize = 64 * 1024;

@@ -63,19 +63,20 @@ def _hash_file(path: Path, algorithm: str) -> str:
 
 
 def _select_mod_entry(profile: str, platform: str) -> dict[str, Any]:
-    """Return the pinned publisher artifact for this MC 26.1.2 profile/platform cell."""
+    """Return the publisher-pinned artifact for the requested profile/platform."""
     payload = json.loads(_mod_artifact_path(profile).read_text())
+    minecraft = os.environ.get("SOLARIS_SVC_MINECRAFT_VERSION", "26.1.2") if profile == "svc" else "26.1.2"
     if profile == "dh":
         entries = [item for item in payload["artifacts"] if item["minecraft"] == "26.1.2"]
     else:
         entries = [
             item for item in payload["artifacts"]
-            if "26.1.2" in item["game_versions"] and platform in item["loaders"]
+            if minecraft in item["game_versions"] and platform in item["loaders"]
         ]
     compatible = [item for item in entries if platform in item["loaders"]]
     if not compatible:
         raise MissingCapability(
-            f"no published {profile} artifact covers MC 26.1.2 on {platform}; "
+            f"no published {profile} artifact covers MC {minecraft} on {platform}; "
             "the profile is blocked until the publisher ships one"
         )
     if profile == "dh":
