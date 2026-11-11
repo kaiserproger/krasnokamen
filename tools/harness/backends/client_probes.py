@@ -333,6 +333,19 @@ seed = 81
                 from . import native_focus
 
                 native_focus.acquire(display, client_process.pid, startup_timeout)
+            if ctx.scenario_id == "native-v2-team-deaths":
+                # A second windowed client on the same display: each client renders its own chat.
+                peer_ctx = replace(ctx, artifact_dir=artifact / "death-peer", client_evidence=peer_evidence)
+                evidence["death_peer_client"] = peer_evidence
+                peer_process, peer_log, peer_mcp = native_client.start(
+                    peer_ctx, native_client.resolve_binary(peer_ctx), client_address, "DeathPeer",
+                    startup_timeout, display=display)
+                peer_mcp.request_timeout_seconds = 130.0
+                peer_mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
+                mcp.death_peer = (peer_mcp, display, client_process.pid, peer_process.pid)
+                from . import native_focus
+
+                native_focus.acquire(display, client_process.pid, startup_timeout)
             if ctx.scenario_id == "native-v2-p5-humanoid-armor" or promotion_actor:
                 peer_ctx = replace(ctx, artifact_dir=artifact / "headless-actor",
                                    client_evidence=peer_evidence, windowed=False)
