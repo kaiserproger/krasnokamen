@@ -284,10 +284,11 @@ pub(crate) fn audit(
 /// (a jump first lifts the body where it stands: a canopy over a terrace
 /// edge stops it), ground lies within [`MAX_DROP`] blocks below the feet
 /// (a cave opening or sinkhole is an obstacle; water is no ground), and the
-/// cell lies under open sky when the body does (a cave mouth or overhang is
-/// an obstacle: fugitives walked down a ravine ramp into a cave and vanished
-/// underground). Slots sit on block boundaries, so one body often straddles
-/// two columns. Unknown blocks are obstacles.
+/// cell has no more rock overhead than the body's own column (from open sky
+/// a cave mouth or overhang is an obstacle: fugitives walked down a ravine
+/// ramp into a cave and vanished underground; a body already under rock
+/// never goes deeper). Slots sit on block boundaries, so one body often
+/// straddles two columns. Unknown blocks are obstacles.
 fn crossable(
     world: &ChunkWorld,
     registry: &CoreRegistry,
@@ -302,7 +303,7 @@ fn crossable(
     let feet = (pos[1] + CONTACT).floor() as i32;
     let mut probed = [(i32::MIN, i32::MIN); 3];
     let mut rise = None;
-    let mut sheltered = None;
+    let mut here = None;
     for (i, lateral) in [0.0, edge, -edge].into_iter().enumerate() {
         let x = (ahead[0] + right[0] * lateral).floor() as i32;
         let z = (ahead[1] + right[1] * lateral).floor() as i32;
@@ -326,10 +327,12 @@ fn crossable(
         if !solid(feet - 1) && (2..=MAX_DROP as i32 + 1).all(|depth| !solid(feet - depth)) {
             return false;
         }
-        if roofed(world, registry, x, z, feet + 2)
-            && !*sheltered.get_or_insert_with(|| {
-                roofed(world, registry, pos[0].floor() as i32, pos[2].floor() as i32, feet + 2)
-            })
+        let above = cover(world, registry, x, z, feet + 2);
+        if above > 0
+            && above
+                > *here.get_or_insert_with(|| {
+                    cover(world, registry, pos[0].floor() as i32, pos[2].floor() as i32, feet + 2)
+                })
         {
             return false;
         }
@@ -337,17 +340,18 @@ fn crossable(
     true
 }
 
-/// Whether terrain (not a tree) covers column (x, z) at or above `y`: a cave
-/// or an overhang, not open ground. The column's motion-blocking heightmap
-/// bounds the scan on generated terrain; block edits do not refresh
-/// heightmaps (`fold_overlay` writes `Chunk::set_block`), so the
-/// [`ROOF_BAND`] cells from `y` up are always read.
-fn roofed(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32, y: i32) -> bool {
+/// Terrain blocks (not trees) over column (x, z) at or above `y`: 0 under
+/// open sky, more in a cave or under an overhang. The column's
+/// motion-blocking heightmap bounds the scan on generated terrain; block
+/// edits do not refresh heightmaps (`fold_overlay` writes
+/// `Chunk::set_block`), so the [`ROOF_BAND`] cells from `y` up are always
+/// read.
+fn cover(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32, y: i32) -> usize {
     let Some(chunk) = world.chunk(mc_world::ChunkPos {
         x: x.div_euclid(16),
         z: z.div_euclid(16),
     }) else {
-        return false;
+        return 0;
     };
     let (lx, lz) = (x.rem_euclid(16) as u8, z.rem_euclid(16) as u8);
     let top = chunk
@@ -355,10 +359,35 @@ fn roofed(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32, y: i32) -
         .get("MOTION_BLOCKING")
         .map_or(y, |map| chunk.geometry().min_y() + map.get(lx, lz) as i32)
         .max(y + ROOF_BAND);
-    (y..top).any(|y| {
-        chunk.get_block(lx, y, lz).is_some_and(|state| {
-            !tree(registry, state.0) && registry.materials.classify(state.0) == BlockMaterial::Solid
+    (y..top)
+        .filter(|&y| {
+            chunk.get_block(lx, y, lz).is_some_and(|state| {
+                !tree(registry, state.0) && registry.materials.classify(state.0) == BlockMaterial::Solid
+            })
         })
+        .count()
+}
+
+/// From a body under rock (pushed or knocked into a cave mouth), the way to
+/// the first open-sky column on the nearest ring within [`AROUND`] blocks;
+/// `None` under open sky or with no opening near.
+fn exit(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3]) -> Option<[f64; 2]> {
+    let y = (pos[1] + CONTACT).floor() as i32 + 2;
+    let (x, z) = (pos[0].floor() as i32, pos[2].floor() as i32);
+    if cover(world, registry, x, z, y) == 0 {
+        return None;
+    }
+    (1..=AROUND).find_map(|radius| {
+        (-radius..=radius)
+            .flat_map(|dz| (-radius..=radius).map(move |dx| (dx, dz)))
+            .filter(|(dx, dz)| dx.abs().max(dz.abs()) == radius)
+            .find(|&(dx, dz)| cover(world, registry, x + dx, z + dz, y) == 0)
+            .map(|(dx, dz)| {
+                [
+                    f64::from(x + dx) + 0.5 - pos[0],
+                    f64::from(z + dz) + 0.5 - pos[2],
+                ]
+            })
     })
 }
 
@@ -426,6 +455,15 @@ pub(crate) fn deflect(
     if speed < 1e-9 {
         return drive;
     }
+    // A body under rock walks out toward open sky at its speed, whatever its
+    // slot, flight or crowd says; `crossable` never lets it under more rock.
+    let (drive, heading) = match exit(world, registry, pos) {
+        Some(out) => {
+            let length = mc_physics::mth::length2(out[0], out[1]);
+            (out.map(|v| v / length * speed), out)
+        }
+        None => (drive, heading),
+    };
     let length = mc_physics::mth::length2(heading[0], heading[1]);
     let dir = if length < 1e-9 {
         drive.map(|v| v / speed)

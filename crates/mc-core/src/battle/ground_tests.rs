@@ -456,3 +456,26 @@ fn bodies_never_walk_from_open_ground_under_a_terrain_roof() {
     assert!(crossable(world, registry, ground(105, -97), 0.3, east), "open ground beside it");
     assert!(crossable(world, registry, ground(108, -99), 0.3, east), "a body under it walks out");
 }
+
+/// A body under rock (pushed or knocked into a cave mouth) walks out toward
+/// the nearest open sky instead of following its heading deeper in.
+#[test]
+fn a_body_under_a_terrain_roof_walks_out_toward_open_sky() {
+    let mut state = relief_fixture();
+    let stone = state.registry.states.stone;
+    for x in 106..=112 {
+        for z in -102..=-96 {
+            state.world.set_block(x, height(x, z) + 3, z, stone);
+        }
+    }
+    state.world.fold_overlay();
+    let (world, registry) = (&state.world, &state.registry);
+    // Two blocks in from the roof's west edge, five from its east edge.
+    let inside = [107.5, f64::from(height(107, -99)), -98.5];
+    let east = [0.079, 0.0];
+    let out = deflect(world, registry, inside, 0.3, east, [20.0, 0.0], 1.0);
+    assert!(out[0] < 0.0, "went deeper under the roof: {out:?}");
+    // Under open sky the same drive is returned exactly.
+    let open = [107.5, f64::from(height(107, -94)), -93.5];
+    assert_eq!(deflect(world, registry, open, 0.3, east, [20.0, 0.0], 1.0), east);
+}
