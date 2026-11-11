@@ -929,10 +929,11 @@ title = "Live golem at diagonal15.5/15.5 is rejected by spherical detection desp
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-AABB"
 regression = ["cargo:mc-core:villager::brain::tests::golem_detection_uses_axis_aligned_range_and_ignores_dead_golems", "harness:entities:native-v2-golem"]
 fix_commit = "patch:0f67aabd72fd491262c0b0cbf7ba28255212b736f52f8c09767e6d7028e65640"
+promotion = "docs/bugs/promotions/GOLEM-AABB.json"
 
 [[bug]]
 id = "GOLEM-REPAIR"
@@ -940,10 +941,11 @@ title = "Original interaction with a60-health iron golem using an iron ingot lef
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-REPAIR"
 regression = ["cargo:mc-core:golems::tests::iron_ingot_repairs_golem_from_either_hand_without_overhealing", "harness:entities:native-v2-golem"]
 fix_commit = "patch:451207291bdb4b360460fba745bb0e51bf416587a08df4355c939bbf3fff4efe"
+promotion = "docs/bugs/promotions/GOLEM-REPAIR.json"
 
 [[bug]]
 id = "GOLEM-DIFFICULTY"
@@ -951,10 +953,11 @@ title = "Original natural iron golem player hit remained15 on Easy/Normal/Hard a
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-DIFFICULTY (promotion control: docs/bugs/fix-patches/GOLEM-DIFFICULTY.patch removes Difficulty::scale_mob_damage for every mob, reproducing the original symptom that golem hits were not scaled by difficulty)"
 regression = ["cargo:mc-core:golems::tests::natural_golem_player_damage_scales_with_difficulty", "harness:entities:native-v2-golem"]
 fix_commit = "patch:e9af51b7d2043033adccaf5836671ef6457321e693510a5f2788fef1673a29e9"
+promotion = "docs/bugs/promotions/GOLEM-DIFFICULTY.json"
 
 [[bug]]
 id = "P4"

@@ -1,0 +1,44 @@
+{
+  "id": "GOLEM-AABB",
+  "verdict": "promoted",
+  "fix_commit": "patch:0f67aabd72fd491262c0b0cbf7ba28255212b736f52f8c09767e6d7028e65640",
+  "fix_commit_full": "patch:0f67aabd72fd491262c0b0cbf7ba28255212b736f52f8c09767e6d7028e65640",
+  "promoted_at": "2026-11-11T23:03:19+00:00",
+  "tree_head": "e9b9df93d591e61c04de7d1b4f75b7519ba02d68",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "0f67aabd72fd491262c0b0cbf7ba28255212b736f52f8c09767e6d7028e65640",
+  "reversed_files": [
+    "crates/mc-core/src/villager/brain/social.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:villager::brain::tests::golem_detection_uses_axis_aligned_range_and_ignores_dead_golems": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-golem": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-golem --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/A1MobsCommandsGate/.analysis/validation/20261111T225743-ledger-promote-h7nx1bw7/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:villager::brain::tests::golem_detection_uses_axis_aligned_range_and_ignores_dead_golems": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/A1MobsCommandsGate/.analysis/validation/20261111T224252-native-v2-golem-bbl_gzfd/result.json",
+    "tree_head": "e9b9df93d591e61c04de7d1b4f75b7519ba02d68",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "4b5069bc16e9099f1a5378bf96f8a096aedfcfac27cc2cb4d4ac5ea498ac7f45",
+    "covers": [
+      "harness:entities:native-v2-golem"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/A1MobsCommandsGate/.analysis/validation/20261111T225743-ledger-promote-h7nx1bw7"
+}
