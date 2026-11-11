@@ -1103,10 +1103,12 @@ title = "Freeze/wall/cramming/sonic/stalagmite/dragon cloud identities could not
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DAMAGE-IDENTITIES"
 regression = ["cargo:mc-core:command_damage::tests::named_damage_identities_reach_committed_events", "cargo:mc-core:warden::tests::angered_warden_sonic_attack_retains_damage_identity", "harness:entities:native-v2-p4-identities"]
-fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
+# Fix 7fe49052 introduced DamageSource::Command, which later code uses, so its reversal does not build; the control reverts the warden sonic_boom identity hunk (special_mobs/mod.rs) only. Patch: docs/bugs/fix-patches/DAMAGE-IDENTITIES.patch.
+fix_commit = "patch:183e48e731519935714fca91fb2a3e6dd04d79c5322dc47402de905db4530296"
+promotion = "docs/bugs/promotions/DAMAGE-IDENTITIES.json"
 
 [[bug]]
 id = "DEATH-COMPONENT"
@@ -1443,11 +1445,13 @@ title = "/summon rejects NoGravity:1b; simply admitting the tag would leave grav
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "crates/mc-core/src/command_summon.rs"
 regression = ["cargo:mc-core:command_summon::tests::summon_no_gravity_and_invulnerable_are_effective_and_persistent", "cargo:mc-core:command_summon::tests::summon_no_gravity_floats_in_multiple_mob_motion_lanes", "cargo:mc-core:command_summon::tests::item_summon_no_gravity_and_invulnerability_survive_checkpoint", "cargo:mc-core:core::entity_state_persistence_tests::native_no_gravity_restore_rehydrates_wire_metadata_and_motion", "cargo:mc-core:tick_tests::no_gravity_experience_orb_hovers_without_suppressing_normal_gravity", "cargo:mc-edge:plan::plan_tests::no_gravity_metadata_reaches_viewer_on_spawn_and_change"]
 repro_check = "cargo:mc-core:command_summon::tests::summon_no_gravity_and_invulnerable_are_effective_and_persistent"
-fix_commit = "b7020b427b33ca547d0e152fecdb70527b3072dd"
+# Fix b7020b42 is an 80-file integration commit whose reversal does not build; the control reverts the NoGravity admission in command_summon.rs prepare() only. Patch: docs/bugs/fix-patches/SUMMON-NOGRAVITY-INVULNERABLE.patch.
+fix_commit = "patch:ca0dea7eda13b35e8b4a7a5de3c656a3680345be7e01efe7f95f48b97896dd9e"
+promotion = "docs/bugs/promotions/SUMMON-NOGRAVITY-INVULNERABLE.json"
 
 [[bug]]
 id = "SELECTOR-OPTION-COVERAGE"
@@ -1712,10 +1716,12 @@ title = "Valid nonempty custom death_protection consume actions are rejected at 
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-PROTECTION-ACTIONS"
 regression = ["cargo:mc-core:tick_tests::combat_parity_tests::custom_death_protection_applies_actions_in_order_and_broadcasts_sound", "cargo:mc-core:command_items::tests::give_death_protection_admits_actions_and_rejects_invalid_data", "cargo:mc-protocol:packets::play::copied_components::tests::copied_death_protection_clear_action_roundtrips", "cargo:mc-protocol:packets::play::copied_components::death::tests::direct_and_registered_sound_and_effect_set_holders_roundtrip", "cargo:mc-protocol:packets::play::copied_components::death::tests::malformed_negative_holders_are_errors_without_overflow", "cargo:mc-protocol:packets::play::copied_components::death::tests::hidden_effect_depth_limits_and_truncated_wire_fail_closed", "cargo:mc-edge:translation::adjacent::items::tests::death_protection_remaps_action_effect_and_sound_holders_both_ways", "cargo:mc-edge:translation::adjacent::items::tests::death_protection_hidden_effect_limit_matches_canonical_codec_in_both_directions", "harness:entities:native-v2-p4-death-protection"]
-fix_commit = "b7020b427b33ca547d0e152fecdb70527b3072dd"
+# Fix b7020b42 is an 80-file integration commit whose reversal does not build; the control restores the old nonempty-death_effects rejection in mc-data item_stack.rs validate_death_protection only. Patch: docs/bugs/fix-patches/DEATH-PROTECTION-ACTIONS.patch.
+fix_commit = "patch:06d980e4549394cb73205178c53da6d52440f5133cdb6c9a31d9fcd6be0fd0ad"
+promotion = "docs/bugs/promotions/DEATH-PROTECTION-ACTIONS.json"
 
 [[bug]]
 id = "DATAPACK-HOT-RELOAD-RECIPES-LOOT"
@@ -3835,10 +3841,12 @@ title = "command_block_entity::prepare (crates/mc-core/src/command_block_entity.
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Independent review of the CoreBlockers wave, 2026-11-07 (read from code, not reproduced)."
 regression = ["cargo:mc-core:sculk::tests::setblock_rejects_malformed_sculk_records_without_world_mutation", "cargo:mc-core:sculk::tests::setblock_valid_sculk_records_hydrate_after_restart"]
-fix_commit = "b7020b427b33ca547d0e152fecdb70527b3072dd"
+# Fix b7020b42 is an 80-file integration commit whose reversal does not build; the control removes the sculk/shrieker record validation arms in command_block_entity.rs prepare() only. Patch: docs/bugs/fix-patches/COMMAND-SCULK-RECORD-UNVALIDATED.patch.
+fix_commit = "patch:ea086ba9a0acd58fd8426a932d9169c7006a4b97d190b6c935790c3d65bb1c6a"
+promotion = "docs/bugs/promotions/COMMAND-SCULK-RECORD-UNVALIDATED.json"
 
 [[bug]]
 id = "SCENARIO-RANDOM-BREAK-NO-PROGRESS"
