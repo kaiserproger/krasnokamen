@@ -148,7 +148,9 @@ fn retained_frame_markers_stay_recoverable_at_limit() {
     let stack = crate::maps::filled_map(&state, id).unwrap();
     state.players.get_mut(&player).unwrap().inventory.slots[0] = stack.clone();
     for x in [7, 9] {
-        state.world.set_block(x + 1, 65, 8, state.registry.states.stone);
+        state
+            .world
+            .set_block(x + 1, 65, 8, state.registry.states.stone);
         state.world.set_block(x, 65, 8, state.registry.states.air);
     }
     state.world.fold_overlay();
