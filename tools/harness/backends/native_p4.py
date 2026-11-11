@@ -233,12 +233,12 @@ def _advancements(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.report["visual_review_required"] = ["Minecraft story root", "Stone Age and Getting an Upgrade completion", "same completions after server restart", "completion chat; no join toast flood"]
 
 
-def _disable_natural_regeneration(steps: ProbeSteps) -> None:
-    steps.fixture("gamerule natural_health_regeneration false")
+def _disable_gamerule(steps: ProbeSteps, rule: str) -> None:
+    """Set a boolean rule false and wait for the server's acknowledgement."""
+    steps.fixture(f"gamerule {rule} false")
     steps.wait(
-        lambda state: "Game rule natural_health_regeneration is now set to false"
-        in state.get("recent_chat", []),
-        "natural_regeneration_disabled",
+        lambda state: f"Game rule {rule} is now set to false" in state.get("recent_chat", []),
+        f"{rule}_disabled",
     )
 
 
@@ -253,6 +253,9 @@ _DAMAGE_ZOMBIE_UUID = "00000000-0000-0000-0000-00000001e242"  # UUID:[I;0,0,0,12
 
 def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
+    # The night below would otherwise spawn zombies that kill the survival player
+    # during the long environment rows; authored mobs are summoned by command.
+    _disable_gamerule(steps, "spawn_mobs")
     steps.fixture("time set 18000")
     _echo(steps, "damage_night_fixture_ordered_receipt")
     steps.call("minecraft_wait_ticks", {"ticks": 20})
@@ -358,7 +361,7 @@ def _warden_damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # Provoke a real warden with ordinary lever vibrations, then observe its
     # sonic attack on the native connection (not a /damage identity alias).
     steps.fixture("gamemode creative @s")
-    _disable_natural_regeneration(steps)
+    _disable_gamerule(steps, "natural_health_regeneration")
     steps.fixture("effect clear @s")
     steps.fixture("effect give @s minecraft:instant_health 1 5 true")
     steps.fixture(f"tp @s {x + .5} {y} {z + .5}")

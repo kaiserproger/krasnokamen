@@ -209,17 +209,30 @@ class NativeV2ProbeTests(unittest.TestCase):
                          {"native-v2-p4-nameplates", "native-v2-p4-advancements",
                           "native-v2-p4-statistics"})
 
-    def test_damage_regeneration_fixture_requires_supported_rule_and_ack(self) -> None:
-        from .backends.native_p4 import _disable_natural_regeneration
+    def test_damage_gamerule_fixture_requires_supported_rule_and_ack(self) -> None:
+        from .backends.native_p4 import _disable_gamerule
 
-        steps = mock.Mock()
-        _disable_natural_regeneration(steps)
-        steps.fixture.assert_called_once_with("gamerule natural_health_regeneration false")
-        predicate, label = steps.wait.call_args.args
-        self.assertEqual(label, "natural_regeneration_disabled")
-        self.assertFalse(predicate({"recent_chat": ["Unknown game rule"]}))
-        self.assertFalse(predicate({"recent_chat": ["Game rule natural_health_regeneration is now set to true"]}))
-        self.assertTrue(predicate({"recent_chat": ["Game rule natural_health_regeneration is now set to false"]}))
+        for rule in ("natural_health_regeneration", "spawn_mobs"):
+            with self.subTest(rule=rule):
+                steps = mock.Mock()
+                _disable_gamerule(steps, rule)
+                steps.fixture.assert_called_once_with(f"gamerule {rule} false")
+                predicate, label = steps.wait.call_args.args
+                self.assertEqual(label, f"{rule}_disabled")
+                self.assertFalse(predicate({"recent_chat": ["Unknown game rule"]}))
+                self.assertFalse(predicate({"recent_chat": [f"Game rule {rule} is now set to true"]}))
+                self.assertTrue(predicate({"recent_chat": [f"Game rule {rule} is now set to false"]}))
+
+    def test_damage_scenario_disables_mob_spawning_before_the_night(self) -> None:
+        from .backends import native_p4
+
+        events: list[str] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = events.append
+        with mock.patch.object(native_p4, "_capture", side_effect=RuntimeError("stop")), \
+                self.assertRaises(RuntimeError):
+            native_p4._damage(steps, (10, 70, 10))
+        self.assertLess(events.index("gamerule spawn_mobs false"), events.index("time set 18000"))
 
     def test_damage_scenario_stops_the_zombie_before_slow_capture(self) -> None:
         from .backends import native_p4
