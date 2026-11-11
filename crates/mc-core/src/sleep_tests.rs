@@ -630,6 +630,67 @@ fn a_bed_holds_one_sleeper() {
     assert_eq!(rig.state.sleepers.len(), 1);
 }
 
+/// Vanilla `BedBlock.useWithoutItem` on a bed a villager sleeps in: the
+/// click only kicks the villager out; the next click puts the player to bed.
+#[test]
+fn using_a_bed_a_villager_sleeps_in_only_wakes_the_villager() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    let head = rig.head;
+    let slot = crate::settlements::allocator::tests::villager(
+        &mut rig.state,
+        [
+            f64::from(head.x) + 0.5,
+            f64::from(head.y) + 0.6875,
+            f64::from(head.z) + 0.5,
+        ],
+    );
+    let villager = rig.state.entities.body(slot).id;
+    let dimension = rig.state.dimension.name().to_owned();
+    let v = rig
+        .state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .expect("villager");
+    v.home = Some(head);
+    v.home_dimension = dimension;
+    v.activity = crate::villager::Activity::Rest;
+    v.sleeping = true;
+    crate::villager::sync_appearance(&mut rig.state, slot);
+    assert_eq!(rig.pose(villager), SLEEPING_POSE);
+
+    let drains = rig.use_bed(1);
+    assert!(
+        !rig.state.sleepers.contains_key(&rig.player),
+        "the click that wakes the villager does not put the player to bed"
+    );
+    assert!(!said(&drains, "This bed is occupied"));
+    assert!(
+        !rig.state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .expect("villager")
+            .sleeping
+    );
+    assert_eq!(rig.pose(villager), 0);
+    assert_eq!(rig.state.entities.body(slot).height, 1.95);
+    assert_eq!(rig.state.entities.pos(slot)[1], f64::from(head.y));
+
+    // The woken villager stays up for a while, so the next click sleeps.
+    rig.use_bed(1);
+    assert_eq!(
+        rig.state
+            .sleepers
+            .get(&rig.player)
+            .map(|sleeper| sleeper.bed),
+        Some(head)
+    );
+}
+
 #[test]
 fn leaving_the_bed_wakes_the_player() {
     let mut rig = Rig::new();

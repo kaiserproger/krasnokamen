@@ -1106,6 +1106,9 @@ fn acquire(
         // Only certified slots are settlement jobs. Work-point lists are
         // bounded at certification; never rescan the settlement radius here.
         cache.candidates.clear();
+        if let Some(settlement) = v.settlement {
+            super::buildings::follow_moved_stations(state, settlement, &cache.chunks);
+        }
         if let Some(record) = v.settlement.and_then(|id| state.settlements.get(id)) {
             // Storage is a destination, not a replacement for extraction.
             // Keep staffing the certified resource slots after it is built.
@@ -1665,6 +1668,10 @@ pub(crate) mod tests;
 #[cfg(test)]
 #[path = "allocator_event_tests.rs"]
 mod event_tests;
+
+#[cfg(test)]
+#[path = "allocator_claim_tests.rs"]
+mod claim_tests;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ValidatedPoi {
     pos: BlockPos,

@@ -1,5 +1,6 @@
 //! Player-built certification. Scans happen only on explicit certify/upgrade;
 //! allocator reads the persisted, bounded work-point list, never building volumes.
+//! A moved station keeps its slot through the allocator's POI index.
 use std::collections::BTreeSet;
 use std::fmt;
 
@@ -7,7 +8,7 @@ use mc_script::ScriptWorldBounds;
 use serde::{Deserialize, Serialize};
 
 use super::{Registry, SettlementId, SettlementRecord};
-use crate::boundary::BlockPos;
+use crate::boundary::{BlockPos, ChunkPos};
 use crate::registry::CoreRegistry;
 use crate::tick::TickState;
 use crate::villager::{VillagerProfession as Profession, VillagerState};
@@ -654,6 +655,76 @@ fn wake_residents(state: &mut TickState, settlement: SettlementId) {
             state.villager_pois.search_at.remove(&id);
             state.villager_pois.dirty_claim(id);
         }
+    }
+}
+/// Vanilla villagers take any unclaimed workstation in range, so a station
+/// moved inside its certified building keeps that building's slot: the
+/// certificate fixes the slot count, not the cell. A loaded point that no
+/// longer holds its station moves to an unlisted station of the same kind in
+/// the bounds, read from the allocator's POI index (never a volume scan).
+pub(crate) fn follow_moved_stations(
+    state: &mut TickState,
+    settlement: SettlementId,
+    pois: &rustc_hash::FxHashMap<ChunkPos, super::allocator::ChunkPois>,
+) {
+    let Some(record) = state.settlements.get(settlement) else {
+        return;
+    };
+    let station = |[x, y, z]: [i32; 3], kind| {
+        state
+            .world
+            .block_at(x, y, z)
+            .map(|id| workstation_matches(&state.registry, kind, id))
+    };
+    let mut moved = Vec::new();
+    for b in record.buildings.values() {
+        if b.natural_zone
+            || b.kind.profession().is_none()
+            || !b
+                .work_points
+                .iter()
+                .any(|&point| station(point, b.kind) == Some(false))
+        {
+            continue;
+        }
+        let (min, max) = (b.bounds.min, b.bounds.max);
+        let mut free = (min[0].div_euclid(16)..=max[0].div_euclid(16))
+            .flat_map(|x| {
+                (min[2].div_euclid(16)..=max[2].div_euclid(16)).map(move |z| ChunkPos { x, z })
+            })
+            .filter_map(|chunk| pois.get(&chunk))
+            .flat_map(|chunk| &chunk.pois)
+            .map(|poi| [poi.pos.x, poi.pos.y, poi.pos.z])
+            .filter(|&point| {
+                inside(b.bounds, point)
+                    && !b.work_points.contains(&point)
+                    && station(point, b.kind) == Some(true)
+            });
+        let mut points = b.work_points.clone();
+        for point in &mut points {
+            if station(*point, b.kind) == Some(false)
+                && let Some(next) = free.next()
+            {
+                *point = next;
+            }
+        }
+        if points != b.work_points {
+            points.sort_unstable();
+            moved.push((b.id, points));
+        }
+    }
+    if moved.is_empty() {
+        return;
+    }
+    let record = state
+        .settlements
+        .get_mut(settlement)
+        .expect("read above");
+    record.revision = record.revision.saturating_add(1);
+    for (id, points) in moved {
+        let building = record.buildings.get_mut(&id).expect("read above");
+        building.work_points = points;
+        building.revision = building.revision.saturating_add(1);
     }
 }
 /// Certification is the job authority; the allocator separately validates the live workstation.

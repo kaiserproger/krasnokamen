@@ -4198,3 +4198,36 @@ status = "open"
 source = "Rule-5 review of the recorder fix c731c550 (ReviewRecorderOverflow, 2026-11-12, finding F2): pump.rs:398-406 repairs only geometry after a failed world try_send; LOD tiles are a second producer on world_tx (lod.rs:317, LOD on by default config.rs:383), so pump.rs:341-342 'Only the pump sends world packets' is false. Example: a dismount SetPassengers(horse,[]) is lost and the client keeps the rider mounted until the next link change or re-pairing. Fix direction: take LOD tiles off world_tx, or treat a lost entity frame as a re-pair."
 regression = []
 failing_first = "not recorded"
+
+[[bug]]
+id = "VILLAGER-MOVED-WORKSTATION-LOSES-JOB"
+title = "A workstation moved inside its certified workshop loses the job for good: the jobless resident never claims the re-placed composter during its work period"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "BreakIssue1x11 break-it pass on ISSUE-1-11, finding F2 (receipts/BreakIssue1x11/report.md, attacks G1 2/2 and J1 1/1): setblock the farmer's composter to air and re-place it 2 blocks over in the same workshop; the farmer stays jobless the whole next work period. Cause: buildings::job_profession and allocator::acquire matched only the work points captured at certify/upgrade; a moved station was not a slot and the stale point was air."
+regression = ["cargo:mc-core:settlements::allocator::claim_tests::workstation_moved_inside_its_certified_workshop_keeps_the_job"]
+failing_first = "reported"
+
+[[bug]]
+id = "VILLAGER-BED-USE-SLEEPS-PLAYER-OVER-VILLAGER"
+title = "Using a bed a villager sleeps in puts the player to bed on the same click (vanilla only kicks the villager out)"
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakIssue1x11 break-it pass on ISSUE-1-11, finding F3 (receipts/BreakIssue1x11/report.md, attack C2 2/2). Vanilla 26.x javap: BedBlock.useWithoutItem calls kickVillagerOutOfBed on an occupied bed and returns before Player.startSleepInBed; SleepInBed.COOLDOWN_AFTER_BEING_WOKEN = 100. Cause: sleep::use_bed checked only player sleepers. The bed block's occupied property is still not mirrored for any sleeper (Solaris derives occupancy from sleepers)."
+regression = ["cargo:mc-core:sleep::tests::using_a_bed_a_villager_sleeps_in_only_wakes_the_villager"]
+failing_first = "reported"
+
+[[bug]]
+id = "VILLAGER-RESIDENT-HOLDS-OPEN-AIR-BED"
+title = "A settlement resident claims an open-air bed it never sleeps in, so an unbound villager next to that free bed never gets a home and never sleeps"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "BreakIssue1x11 break-it pass on ISSUE-1-11, finding F4 (receipts/BreakIssue1x11/report.md, sets F/K, 3 of 7 runs with an extra homeless resident): the unbound librarian stands 2.5-5 blocks from its outdoor bed all night with no minecraft:home; the breaker queried only 2 of 5 Brains. Cause (code read, villager/brain.rs shelter_night): a bound resident may claim any bed in the settlement radius, but slept only in a roofed home bed and sheltered otherwise, so a homeless resident that claimed the open-air bed first kept it empty and barred to the vanilla villager. Vanilla villagers sleep in whatever bed they claim; residents now do too."
+regression = ["cargo:mc-core:settlements::allocator::claim_tests::bound_resident_sleeps_in_its_open_air_home_bed"]
+failing_first = "reported"
