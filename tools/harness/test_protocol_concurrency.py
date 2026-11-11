@@ -56,26 +56,25 @@ class ConcurrentAdmissionTests(unittest.TestCase):
         click = {'connection': 7, 'window': 2, 'state_id': 3, 'slot': 0,
                  'button': 0, 'mode': 'Pickup'}
         start = {'connection': 7, 'position': {'x': 1, 'y': 2, 'z': 3}, 'action': 'Start'}
-        finish = dict(start, action='Finish')
-        records = [{'tick': 25, 'inputs': [
-            {'Input': {'ContainerClick': click}}, {'Input': {'Dig': start}},
-            {'Input': {'Dig': finish}},
-        ]}]
-        found = match_click_and_break(records, connection=7, window=2, state_id=3,
-                                      slot=0, position=(1, 2, 3))
-        self.assertEqual(verify_destroy_tick_fence(found, 25, 25, finish_deferred=False), 25)
-        for removal, container, deferred in ((26, 25, False), (25, 26, False),
-                                             (None, 25, False), (25, 25, True),
-                                             (25, 25, None)):
-            with self.subTest(removal=removal, container=container, deferred=deferred):
+        match = lambda inputs: match_click_and_break(
+            [{'tick': 25, 'inputs': inputs}], connection=7, window=2, state_id=3, slot=0, position=(1, 2, 3))
+        found = match([{'Input': {'ContainerClick': click}}, {'Input': {'Dig': start}}])
+        self.assertEqual(verify_destroy_tick_fence(found, 25, 25), 25)
+        # A deferred break commits its removal after the start tick; an unknown
+        # (pre-tick) record cannot prove anything.
+        for removal, container in ((26, 25), (25, 26), (None, 25), (25, None)):
+            with self.subTest(removal=removal, container=container):
                 with self.assertRaises(MissingCapability):
-                    verify_destroy_tick_fence(found, removal, container, finish_deferred=deferred)
-        split = dict(found, finish=(26, found['finish'][1], found['finish'][2]))
+                    verify_destroy_tick_fence(found, removal, container)
+        split = dict(found, start=(26, found['start'][1], found['start'][2]))
         with self.assertRaisesRegex(MissingCapability, 'different_ticks'):
-            verify_destroy_tick_fence(split, 25, 25, finish_deferred=False)
-        with self.assertRaises(MissingCapability):
-            match_click_and_break([{'tick': 25, 'inputs': records[0]['inputs'][:2]}],
-                                  connection=7, window=2, state_id=3, slot=0, position=(1, 2, 3))
+            verify_destroy_tick_fence(split, 25, 25)
+        with self.assertRaisesRegex(MissingCapability, 'missing_destroy_inputs'):
+            match([{'Input': {'ContainerClick': click}}])
+        with self.assertRaisesRegex(MissingCapability, 'ambiguous_destroy_inputs'):
+            match([{'Input': {'ContainerClick': click}}, {'Input': {'Dig': start}}, {'Input': {'Dig': start}}])
+        with self.assertRaisesRegex(MissingCapability, 'destroy_input_order'):
+            match([{'Input': {'Dig': start}}, {'Input': {'ContainerClick': click}}])
 
     def test_destroy_census_fixture_negative_control(self):
         ids = {'minecraft:diamond', 'minecraft:iron_ingot'}
@@ -129,15 +128,14 @@ class ConcurrentAdmissionTests(unittest.TestCase):
                 self.assertEqual([action['kind'] for action in actions], ['click_slot', 'break_block'])
                 append(25, [{'Input': {'ContainerClick': {'connection': 7, 'window': 2,
                     'state_id': 3, 'slot': 0, 'button': 0, 'mode': 'Pickup'}}},
-                    *[{'Input': {'Dig': {'connection': 7, 'position': {'x': 1, 'y': 2, 'z': 3},
-                                           'action': phase}}} for phase in ('Start', 'Finish')]])
+                    {'Input': {'Dig': {'connection': 7, 'position': {'x': 1, 'y': 2, 'z': 3},
+                                       'action': 'Start'}}}])
                 return {'sent': [receipt, {'kind': 'break_block'}]}
             client = SimpleNamespace(name='A', submit_input_batch=submit)
             server = SimpleNamespace(world_dir=Path(tmp), command=lambda value: append(
                 2, [{'Input': {'ConsoleCommand': value}}]))
             result = submit_click_and_break(SimpleNamespace(server=server, state={}), client, 0, (1, 2, 3))
-            self.assertEqual([result['inputs'][part][0] for part in ('click', 'start', 'finish')],
-                             [25, 25, 25])
+            self.assertEqual([result['inputs'][part][0] for part in ('click', 'start')], [25, 25])
             # Without the ids the click packet carried, the click cannot be identified.
             del receipt['state_id']
             with self.assertRaisesRegex(MissingCapability, 'client_batch:click_receipt'):

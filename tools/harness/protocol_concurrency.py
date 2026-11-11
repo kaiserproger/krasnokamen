@@ -31,9 +31,12 @@ def _records(directory):
 
 
 def match_click_and_break(records, *, connection, window, state_id, slot, position):
-    """Match one actor's exact ordered click and dig inputs in the consumed log."""
+    """Match one actor's exact click and dig-start inputs in the consumed log.
+
+    A vanilla client breaks an instantly mined block with the start input alone.
+    """
     expected_pos = dict(zip(('x', 'y', 'z'), position))
-    clicks, starts, finishes = [], [], []
+    clicks, starts = [], []
     for tick in records:
         for index, logged in enumerate(tick.get('inputs', [])):
             event = logged.get('Input', {})
@@ -44,26 +47,26 @@ def match_click_and_break(records, *, connection, window, state_id, slot, positi
             }.items()):
                 clicks.append((tick['tick'], index, click))
             dig = event.get('Dig')
-            if dig is not None and dig.get('connection') == connection and dig.get('position') == expected_pos:
-                if dig.get('action') == 'Start':
-                    starts.append((tick['tick'], index, dig))
-                elif dig.get('action') == 'Finish':
-                    finishes.append((tick['tick'], index, dig))
-    if any(len(items) > 1 for items in (clicks, starts, finishes)):
+            if (dig is not None and dig.get('connection') == connection
+                    and dig.get('position') == expected_pos and dig.get('action') == 'Start'):
+                starts.append((tick['tick'], index, dig))
+    if len(clicks) > 1 or len(starts) > 1:
         raise MissingCapability('input_log:ambiguous_destroy_inputs')
-    if any(not items for items in (clicks, starts, finishes)):
+    if not clicks or not starts:
         raise MissingCapability('input_log:missing_destroy_inputs')
-    click, start, finish = clicks[0], starts[0], finishes[0]
-    if not (click[:2] < start[:2] < finish[:2]):
+    click, start = clicks[0], starts[0]
+    if not click[:2] < start[:2]:
         raise MissingCapability('input_log:destroy_input_order')
-    return {'click': click, 'start': start, 'finish': finish}
+    return {'click': click, 'start': start}
 
 
-def verify_destroy_tick_fence(inputs, removal_tick, container_tick, *, finish_deferred):
-    """Fail closed unless both committed records and all consumed inputs agree."""
-    ticks = [inputs[name][0] for name in ('click', 'start', 'finish')]
-    ticks.extend((removal_tick, container_tick))
-    if finish_deferred is not False or any(type(tick) is not int for tick in ticks):
+def verify_destroy_tick_fence(inputs, removal_tick, container_tick):
+    """Fail closed unless both committed records and the consumed inputs share one tick.
+
+    The removal record in the start input's tick proves the break was not deferred.
+    """
+    ticks = [inputs['click'][0], inputs['start'][0], removal_tick, container_tick]
+    if any(type(tick) is not int for tick in ticks):
         raise MissingCapability('destroy:same_tick_unprovable')
     if len(set(ticks)) != 1:
         raise MissingCapability('destroy:different_ticks')

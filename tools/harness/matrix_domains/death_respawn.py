@@ -234,8 +234,7 @@ def destroy_grave_during_interaction(ctx):
     receipt = submit_click_and_break(ctx, actor, slot, grave)
     inputs = receipt['inputs']
     records = committed_destroy_records(ctx, inputs['click'][0], actor.name, grave)
-    fence = verify_destroy_tick_fence(inputs, records['block'].get('tick'),
-                                      records['container'].get('tick'), finish_deferred=False)
+    fence = verify_destroy_tick_fence(inputs, records['block'].get('tick'), records['container'].get('tick'))
     block_change = records['block']['change']['Block']
     barrel_states = {state['id'] for state in blocks['minecraft:barrel']['states']}
     air_states = {state['id'] for state in blocks['minecraft:air']['states']}
@@ -274,8 +273,7 @@ def destroy_grave_during_interaction(ctx):
               {'tick': fence, 'inputs': inputs, 'block_log': records, 'client_batch': receipt['client_batch'],
                'mining_rate': rate, 'hardness': hardness, 'tool_speed': speeds[0],
                'haste_amplifier': player['haste_amplifier'], 'player_mode': player['game_mode'],
-               'on_ground': player['on_ground'], 'under_water': player['under_water'],
-               'finish_deferred': False},
+               'on_ground': player['on_ground'], 'under_water': player['under_water']},
               source='local:crates/mc-core/src/tick/mining.rs')
     check(ctx, 'destroy_grave_census', dict(observed), dict(baseline), source=GRAVES)
     ctx.state['composite_origin_verified'] = ctx.row['origin']

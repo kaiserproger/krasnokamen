@@ -205,9 +205,11 @@ oracle and `state["composite_origin_verified"] = row["origin"]`; concurrency
 alone is not proof of item conservation, world success, or observer agreement.
 
 The Java live-grave `destroy_during_interaction` lane submits a container click
-and block break in one client-thread batch. The consumed click/start/finish and
-the two attributed block-log WAL records must agree on one server tick; unknown
-record ticks do not qualify. Its survival instant-mining fixture derives the
+and an instant block break (vanilla's start-destroy input alone) in one
+client-thread batch. The consumed click and dig start, matched by the ids the
+click packet carried, and the two attributed block-log WAL records must agree
+on one server tick, so the break was not deferred; unknown record ticks do not
+qualify. Its survival instant-mining fixture derives the
 barrel hardness and axe speed from local vanilla reports and checks received
 haste and player state. No fixture-type item may be on the ground before the
 batch. After the menu closes, its component-sensitive census compares
