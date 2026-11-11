@@ -67,13 +67,31 @@ fn late_configuration_finisher_is_refused_and_the_player_in_play_keeps_custody()
     let mut state = fixture();
     // Connection 7 logged in first and is still in configuration; connection 8 logs in
     // later, finishes configuration and joins.
-    tick(&mut state, &[login(7), login(8), join(8)]);
+    tick(
+        &mut state,
+        &[
+            login(7),
+            login(8),
+            // Pre-Join metadata the edge records for the held connection.
+            PlayerInput::SetViewDistance {
+                connection: ConnectionId(7),
+                view_distance: 6,
+            },
+            PlayerInput::SetLocale {
+                connection: ConnectionId(7),
+                locale: "ru_ru".into(),
+            },
+            join(8),
+        ],
+    );
     hold_diamond(&mut state, 8);
     let entity = state.connections.entity_of(ConnectionId(8)).unwrap();
     // The first connection now finishes configuration.
     let drains = tick(&mut state, &[join(7)]);
     assert!(kicked(&drains, 7), "the late finisher gets the duplicate-login refusal");
     assert!(!in_play(&state, 7));
+    assert!(state.connections.view_distance_of(ConnectionId(7)).is_none());
+    assert!(state.connections.locale_of(ConnectionId(7)).is_none());
     assert!(!kicked(&drains, 8), "the player in Play is not kicked");
     assert_eq!(state.connections.entity_of(ConnectionId(8)), Some(entity));
     assert_eq!(first_slot_count(&state, 8), 3, "custody stays with the player in Play");

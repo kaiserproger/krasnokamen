@@ -1724,6 +1724,10 @@ mod transfer_tests;
 mod leave_tests;
 
 #[cfg(test)]
+#[path = "server_duplicate_login_tests.rs"]
+mod duplicate_login_tests;
+
+#[cfg(test)]
 #[path = "server_protocol_admission_tests.rs"]
 mod protocol_admission_tests;
 

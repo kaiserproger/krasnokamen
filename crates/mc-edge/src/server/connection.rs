@@ -215,6 +215,23 @@ async fn run_connection(
         return Ok(());
     };
 
+    // Vanilla `verifyLoginAndFinishConnectionSetup` runs `canPlayerLogin` (server full) before
+    // `disconnectAllPlayersWithProfile`: a full server refuses a same-profile login and the
+    // session in Play is not kicked.
+    if server.connections.is_full(server.cfg.server.max_players as usize)
+        && !server.admin.sessions_for_uuid(outcome.uuid).is_empty()
+        && server
+            .admin
+            .admission(outcome.uuid, outcome.remote_address.or(stream_peer_ip(&peer)), true)
+            .is_some()
+    {
+        warn!(%peer, connection = id.0, name = %outcome.name, "login refused: server full, same profile in Play");
+        conn.send_packet(&mc_protocol::packets::configuration::ConfigurationDisconnect {
+            reason_nbt: crate::connection::text_component_nbt("The server is full!")?,
+        })
+        .await?;
+        return Ok(());
+    }
     // Vanilla kicks a session of the profile already in Play when the newer login finishes,
     // not when its configuration ends (that late finisher is refused in the core's Join).
     anyhow::ensure!(
@@ -303,6 +320,15 @@ async fn run_connection(
         Ok(joined) => joined,
         Err(error) => {
             warn!(%peer, connection = id.0, stage = "join-wait", name = %outcome.name, %error, "connection closed");
+            // Vanilla `handleConfigurationFinished` has already switched its outbound
+            // protocol to Play when it refuses a duplicate login, so the refusal is a Play
+            // disconnect carrying the reason (26.3 javap ServerConfigurationPacketListenerImpl).
+            if let Some(reason) = server.connections.take_disconnect_reason(id) {
+                conn.send_packet(&mc_protocol::packets::play::PlayDisconnect {
+                    reason_nbt: crate::connection::text_component_nbt(&reason)?,
+                })
+                .await?;
+            }
             return Err(error);
         }
     };

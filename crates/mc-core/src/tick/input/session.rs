@@ -120,6 +120,20 @@ pub(in crate::tick) fn profile_login(
     }
 }
 
+/// Refuse a connection that never joined: send the reason and drop the view-distance and
+/// locale rows the edge recorded for it before `Join` (routing moved them into this world),
+/// so a refused connection leaves nothing behind.
+fn refuse_join(state: &mut TickState, connection: &ConnectionId, reason: &str) {
+    state.connections.remove_by_connection(*connection);
+    state.push_player(
+        *connection,
+        PlayerChange::Disconnect {
+            reason: reason.to_owned(),
+        },
+    );
+    state.disconnects.push((*connection, state.tick));
+}
+
 pub(in crate::tick) fn join(
     state: &mut TickState,
     (connection, uuid, name, permission_level): (&ConnectionId, &uuid::Uuid, &String, &u8),
@@ -132,13 +146,7 @@ pub(in crate::tick) fn join(
     // the profile is already in Play is refused; the player in Play and its custody stay
     // untouched. A newer login already kicked its incumbent in `profile_login`.
     if session_in_play(state, uuid).is_some() {
-        state.push_player(
-            *connection,
-            PlayerChange::Disconnect {
-                reason: DUPLICATE_LOGIN.to_owned(),
-            },
-        );
-        state.disconnects.push((*connection, state.tick));
+        refuse_join(state, connection, DUPLICATE_LOGIN);
         return;
     }
     if state.entities.slot_of_uuid(*uuid).is_some()
@@ -148,13 +156,7 @@ pub(in crate::tick) fn join(
             .iter()
             .any(|(incumbent, joined)| joined == uuid && !state.session_locked(*incumbent))
     {
-        state.push_player(
-            *connection,
-            PlayerChange::Disconnect {
-                reason: "UUID is already joined".to_owned(),
-            },
-        );
-        state.disconnects.push((*connection, state.tick));
+        refuse_join(state, connection, "UUID is already joined");
         return;
     }
     let id = state.entities.alloc_id();
