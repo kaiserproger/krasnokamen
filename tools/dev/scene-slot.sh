@@ -1,8 +1,10 @@
 #!/bin/sh
-# Run one graphical scene-shot/gate command in one of three shared host slots.
-# A waiter blocks (flock) on all three slots at once and takes whichever frees
+# Run one graphical scene-shot/gate command in one of six shared host slots.
+# A waiter blocks (flock) on all six slots at once and takes whichever frees
 # first, so a long run in one slot never starves the queue. No polling; the
 # lock is held until the command exits (an fd >= 10 is inherited across exec).
+# Six fits the 16-thread owner host: one scene (release server + native client
+# + Xvfb, or a Java oracle) measured about 1.5 cores and 3.5 GB (2026-11-11).
 exec python3 -c '
 import fcntl, os, sys, threading
 
@@ -23,7 +25,7 @@ def take(slot):
         chosen.append(fd)
     won.set()
 
-for slot in "abc":
+for slot in "abcdef":
     threading.Thread(target=take, args=(slot,), daemon=True).start()
 # Tests pass a pipe fd and wait on it instead of polling for the queued waiter.
 ready = os.environ.pop("SOLARIS_SCENE_SLOT_READY_FD", None)
