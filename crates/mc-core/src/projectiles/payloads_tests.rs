@@ -2424,7 +2424,14 @@ fn splash_harming_thrown_at_own_feet_hurts_its_thrower_as_indirect_magic() {
     );
     let (id, mut record) = launch_record(&mut state, record, feet);
     let mut intents = Vec::new();
-    assert!(impact(&mut state, &mut intents, id, &mut record, None, feet));
+    assert!(impact(
+        &mut state,
+        &mut intents,
+        id,
+        &mut record,
+        None,
+        feet
+    ));
     let damage = damage_to(&intents, player);
     assert_eq!(damage.len(), 1, "{damage:?}");
     assert_eq!(damage[0].1, DamageKind::IndirectMagic);
