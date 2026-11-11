@@ -100,6 +100,13 @@ pub struct ColdRow {
     pub protected_until: u64,
     /// Named NBT compound of retained entity fields; typed checkpoint fields win.
     pub opaque_entity_fields: Vec<u8>,
+    /// Runtime only, never journaled or checkpointed: the frog's current prey
+    /// and its last seen position.
+    pub frog_prey: Option<(EntityId, [f64; 3])>,
+    /// Runtime only: ticks of the running tongue attack.
+    pub frog_tongue_ticks: u8,
+    /// Runtime only: ticks a tamed cat has rested beside a sleeping owner.
+    pub cat_bed_ticks: u32,
 }
 
 /// Store `value` in a boxed rare component, overwriting an existing box
@@ -651,6 +658,9 @@ impl EntityStore {
             protected_until: 0,
             opaque_entity_fields: Vec::new(),
             last_player_hit: None,
+            frog_prey: None,
+            frog_tongue_ticks: 0,
+            cat_bed_ticks: 0,
         });
         self.touched_flag.push(true);
         self.changed_tick.push(self.captured_tick + 1);
@@ -1599,7 +1609,12 @@ impl EntityStore {
             }
             EntityKind::ExperienceOrb { .. } => {}
         }
-        if self.cold[slot.0 as usize].entity_life.mount.rider.is_some() {
+        if !self.cold[slot.0 as usize]
+            .entity_life
+            .mount
+            .riders
+            .is_empty()
+        {
             self.rider_members.insert(slot);
         }
         if self.cold[slot.0 as usize].entity_life.leash.is_some() {
@@ -1643,9 +1658,10 @@ impl EntityStore {
         self.leash_members.iter().copied()
     }
 
-    pub(crate) fn set_rider(&mut self, slot: EntitySlot, rider: Option<Uuid>) {
-        self.row_mut(slot).entity_life.mount.rider = rider;
-        if rider.is_some() {
+    pub(crate) fn set_riders(&mut self, slot: EntitySlot, riders: Vec<Uuid>) {
+        let occupied = !riders.is_empty();
+        self.row_mut(slot).entity_life.mount.riders = riders;
+        if occupied {
             self.rider_members.insert(slot);
         } else {
             self.rider_members.remove(&slot);
@@ -1668,7 +1684,7 @@ impl EntityStore {
     ) {
         self.rider_members.remove(&slot);
         self.leash_members.remove(&slot);
-        if life.mount.rider.is_some() {
+        if !life.mount.riders.is_empty() {
             self.rider_members.insert(slot);
         }
         if life.leash.is_some() {

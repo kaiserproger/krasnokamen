@@ -1416,6 +1416,9 @@ fn run_dimension_tick_inner<'a>(
         crate::axolotl::run(state);
         crate::turtle::run(state);
         crate::frog::run(state);
+        crate::sniffer::run(state);
+        crate::strider::run(state);
+        crate::parrot::run(state);
         crate::goat::run(state, &mut intents, &mut changes);
         crate::piglin::run(state, &mut changes);
         crate::llama::run(state);

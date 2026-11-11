@@ -817,6 +817,11 @@ pub enum EntityDataValue {
         index: u8,
         value: u8,
     },
+    /// Local 26.2 EntityDataSerializers registration: Sniffer.State ordinal, id 35.
+    SnifferState {
+        index: u8,
+        value: u8,
+    },
     Byte {
         index: u8,
         value: i8,
@@ -937,6 +942,9 @@ impl PartialEq for EntityDataValue {
                 Self::ZombieNautilusVariant { value: right, .. },
             ) => left == right,
             (Self::Byte { value: left, .. }, Self::Byte { value: right, .. }) => left == right,
+            (Self::SnifferState { value: left, .. }, Self::SnifferState { value: right, .. }) => {
+                left == right
+            }
             (
                 Self::CopperGolemState { value: left, .. },
                 Self::CopperGolemState { value: right, .. },
@@ -1045,6 +1053,7 @@ impl EntityDataValue {
             | Self::ZombieNautilusVariant { index, .. }
             | Self::CopperGolemState { index, .. }
             | Self::WeatheringCopper { index, .. }
+            | Self::SnifferState { index, .. }
             | Self::Int { index, .. }
             | Self::Long { index, .. }
             | Self::Float { index, .. }
@@ -1080,6 +1089,7 @@ impl EntityDataValue {
             Self::Byte { .. } => ENTITY_DATA_BYTE_SERIALIZER_ID,
             Self::CopperGolemState { .. } => 37,
             Self::WeatheringCopper { .. } => 38,
+            Self::SnifferState { .. } => 35,
             Self::Int { .. } => ENTITY_DATA_INT_SERIALIZER_ID,
             Self::Long { .. } => ENTITY_DATA_LONG_SERIALIZER_ID,
             Self::Float { .. } => ENTITY_DATA_FLOAT_SERIALIZER_ID,
@@ -1127,9 +1137,9 @@ impl EntityDataValue {
                 buf.write_varint(wire);
             }
             Self::Byte { value, .. } => buf.write_i8(*value),
-            Self::CopperGolemState { value, .. } | Self::WeatheringCopper { value, .. } => {
-                buf.write_varint(i32::from(*value))
-            }
+            Self::SnifferState { value, .. }
+            | Self::CopperGolemState { value, .. }
+            | Self::WeatheringCopper { value, .. } => buf.write_varint(i32::from(*value)),
             Self::Int { value, .. } => buf.write_varint(*value),
             Self::Long { value, .. } => buf.write_varlong(*value),
             Self::Float { value, .. } => buf.write_f32(*value),
@@ -1382,6 +1392,16 @@ impl EntityDataValue {
                 Self::PaintingVariant {
                     index,
                     value: (wire - 1) as u32,
+                }
+            }
+            35 => {
+                let value = buf.read_varint()?;
+                if !(0..=6).contains(&value) {
+                    return Err(CodecError::NotSupported("invalid sniffer state ordinal"));
+                }
+                Self::SnifferState {
+                    index,
+                    value: value as u8,
                 }
             }
             37 | 38 => {
@@ -1655,3 +1675,7 @@ mod copper_tests;
 #[cfg(test)]
 #[path = "entity_painting_tests.rs"]
 mod painting_tests;
+
+#[cfg(test)]
+#[path = "entity_sniffer_tests.rs"]
+mod sniffer_tests;
