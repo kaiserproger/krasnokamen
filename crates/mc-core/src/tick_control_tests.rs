@@ -380,3 +380,33 @@ fn game_time_stands_still_while_frozen_and_counts_stepped_ticks() {
         "the daylight clock stays paused"
     );
 }
+
+#[test]
+fn frozen_frame_time_query_matches_published_game_age() {
+    let mut state = fixture();
+    join(&mut state);
+    state.tick_control.set_frozen(true);
+    for _ in 0..3 {
+        let (output, drains, _) = run_tick(
+            &mut state,
+            &[PlayerInput::Command {
+                connection: ConnectionId(1),
+                command: "time query gametime".into(),
+                permission_level: 4,
+            }],
+        );
+        let expected = crate::command_feedback::translated(
+            "commands.time.query",
+            vec![crate::command_feedback::text(output.snapshot.game_time)],
+        );
+        assert!(
+            drains.iter().any(|(connection, changes)| {
+                *connection == ConnectionId(1)
+                    && changes.iter().any(|change| {
+                        matches!(change, PlayerChange::StyledChat { content } if *content == expected)
+                    })
+            }),
+            "query must report the age published by the same held frame"
+        );
+    }
+}

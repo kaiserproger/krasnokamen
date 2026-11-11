@@ -1,0 +1,55 @@
+diff --git a/crates/mc-core/src/special_mobs/raiders.rs b/crates/mc-core/src/special_mobs/raiders.rs
+index 2ea59b48..029e2bc6 100644
+--- a/crates/mc-core/src/special_mobs/raiders.rs
++++ b/crates/mc-core/src/special_mobs/raiders.rs
+@@ -227,8 +227,14 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
+         };
+         let raider = classify(type_id).unwrap();
+         let pos = state.entities.pos(slot);
+-        let target = target_in(state, slot, &grid, 64.0);
+-        let held = target.map(|(target, _)| HeldTarget { target, unseen: 0 });
++        let (target, held) = choose_target(
++            state,
++            id,
++            slot,
++            state.hostile.native.raider_targets.get(&id).copied(),
++            &grid,
++            f64::from(row.sight_range),
++        );
+         // A held target is chased from memory, but attacked only in sight
+         // (vanilla `MeleeAttackGoal.canPerformAttack` -> `Sensing.hasLineOfSight`).
+         let seen = held.is_some_and(|held| held.unseen == 0);
+diff --git a/crates/mc-data/src/entity_types.rs b/crates/mc-data/src/entity_types.rs
+index 9ea6031f..8b02446b 100644
+--- a/crates/mc-data/src/entity_types.rs
++++ b/crates/mc-data/src/entity_types.rs
+@@ -450,6 +450,29 @@ fn independently_sourced_attributes_and_loot(
+             },
+             static_id(&format!("minecraft:entities/{}", id.path())),
+         ),
++        // 26.1.2 `createAttributes` FOLLOW_RANGE (javap): the raiders' target
++        // search radius; every other raider keeps the generic 16.
++        "minecraft:vindicator" | "minecraft:evoker" => (
++            EntityAttributeFacts {
++                follow_range: Some(12.0),
++                ..EntityAttributeFacts::default()
++            },
++            None,
++        ),
++        "minecraft:illusioner" => (
++            EntityAttributeFacts {
++                follow_range: Some(18.0),
++                ..EntityAttributeFacts::default()
++            },
++            None,
++        ),
++        "minecraft:pillager" => (
++            EntityAttributeFacts {
++                follow_range: Some(32.0),
++                ..EntityAttributeFacts::default()
++            },
++            None,
++        ),
+         _ => (EntityAttributeFacts::default(), None),
+     }
+ }

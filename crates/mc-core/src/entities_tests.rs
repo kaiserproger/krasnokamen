@@ -1036,7 +1036,7 @@ fn assert_tick_membership_oracle(store: &EntityStore) {
     assert_eq!(store.mob_slots_matching(|id| id == 7 || id == 30), expected);
     let riders: Vec<_> = store
         .slots()
-        .filter(|&slot| store.row(slot).entity_life.mount.rider.is_some())
+        .filter(|&slot| !store.row(slot).entity_life.mount.riders.is_empty())
         .collect();
     let leashed: Vec<_> = store
         .slots()
@@ -1060,7 +1060,7 @@ fn tick_memberships_match_full_scans_through_compaction_kind_changes_and_transfe
             wire_fields([0.0, 64.0, 0.0]),
         );
         if index % 2 == 0 {
-            source.set_rider(slot, Some(Uuid::from_u128(9000 + index as u128)));
+            source.set_riders(slot, vec![Uuid::from_u128(9000 + index as u128)]);
         }
         if index % 3 == 0 {
             source.set_leash(
@@ -1073,11 +1073,11 @@ fn tick_memberships_match_full_scans_through_compaction_kind_changes_and_transfe
     source.remove(EntitySlot(1)); // Last row swaps into the middle.
     assert_tick_membership_oracle(&source);
     source.set_kind(EntitySlot(0), EntityKind::Mob { type_id: 30 });
-    source.set_rider(EntitySlot(0), None);
+    source.set_riders(EntitySlot(0), Vec::new());
     source.set_leash(EntitySlot(0), None);
     assert_tick_membership_oracle(&source);
     let mut life = crate::entity_life::EntityLifeState::default();
-    life.mount.rider = Some(Uuid::from_u128(42));
+    life.mount.riders = vec![Uuid::from_u128(42)];
     life.leash = Some(crate::leash::Holder::Entity(Uuid::from_u128(43)));
     source.set_entity_life(EntitySlot(1), life);
     assert_tick_membership_oracle(&source);
@@ -1114,7 +1114,7 @@ fn tick_membership_release_micro() {
             wire_fields([index as f64, 64.0, 0.0]),
         );
         if index.is_multiple_of(8192) {
-            store.set_rider(slot, Some(Uuid::from_u128(index as u128 + 1)));
+            store.set_riders(slot, vec![Uuid::from_u128(index as u128 + 1)]);
         }
         if index.is_multiple_of(4096) {
             store.set_leash(
@@ -1135,7 +1135,7 @@ fn tick_membership_release_micro() {
         }
         for slot in store
             .slots()
-            .filter(|&slot| store.row(slot).entity_life.mount.rider.is_some())
+            .filter(|&slot| !store.row(slot).entity_life.mount.riders.is_empty())
         {
             checksum = checksum.wrapping_add(u64::from(slot.0));
         }

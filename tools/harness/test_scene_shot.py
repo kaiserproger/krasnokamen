@@ -386,6 +386,44 @@ class SceneShotTests(unittest.TestCase):
             image.save(path)
             self.assertEqual(falling_block_oracle.sand_bounds(path), (600, 300, 630, 330))
 
+    def test_named_frozen_age_scene_rejects_overrides(self):
+        class Context:
+            client = "native"
+            windowed = True
+            platform = None
+            scenario_id = "native-frozen-game-age"
+            extra_args = []
+            timeout_seconds = 180
+        with patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": ""}):
+            scenario = scene_shot.validate_scenario(Context())[0]
+            self.assertTrue(any("assert_same_game_time" in step for step in scenario["steps"]))
+            with self.assertRaisesRegex(ValueError, "without overrides"):
+                scene_shot.validate_scenario(Context(), {"steps": []})
+
+    def test_frozen_age_assertion_rejects_advance_and_missing_clock(self):
+        class Probe:
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+        step = {"assert_same_game_time": {"before": "a", "after": "b", "day_delta": 1000}}
+        scene_shot.validate_steps([step], "native")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.json").write_text(json.dumps({"time": {"game_time": 42, "clock_time": 5}}))
+            (root / "b.json").write_text(json.dumps({"time": {"game_time": 42, "clock_time": 1005}}))
+            scene_shot.execute(Probe(), root, [step])
+            (root / "b.json").write_text(json.dumps({"time": {"game_time": 43, "clock_time": 1005}}))
+            with self.assertRaisesRegex(AssertionError, "frozen_game_time"):
+                scene_shot.execute(Probe(), root, [step])
+            (root / "b.json").write_text(json.dumps({"time": {"game_time": 42, "clock_time": 5}}))
+            with self.assertRaisesRegex(AssertionError, "received_fresh_day_time"):
+                scene_shot.execute(Probe(), root, [step])
+            (root / "b.json").write_text("{}")
+            with self.assertRaisesRegex(RuntimeError, "omitted game_time"):
+                scene_shot.execute(Probe(), root, [step])
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([step], "java")
+
     def test_wait_respawn_rejects_dead_or_open_screen(self):
         class Probe:
             def wait(self, predicate, label, *, wait_for_play=False):

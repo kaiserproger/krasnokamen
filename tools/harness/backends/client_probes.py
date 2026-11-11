@@ -101,6 +101,9 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     promotion_maps = (ctx.scenario_id or "").startswith("native-v2-map-")
     promotion_actor = ctx.scenario_id in (
         "native-v2-map-inventory-player-markers", "native-v2-map-pumpkin-hiding")
+    if ctx.scenario_id in ("native-v2-ledger-painting", "native-v2-ledger-axe", "native-v2-ledger-sponge",
+                           "native-v2-ledger-setblock-snbt", "native-v2-ledger-crafting-pickup"):
+        required = required | {"client_capture", "minecraft_look_at_block"}
     if ctx.scenario_id == "native-v2-cursor-close":
         required = required | {"minecraft_open_inventory", "client_capture"}
     if ctx.scenario_id in ("native-v2-craft-drag", "native-v2-craft-drag-paced",
@@ -193,6 +196,7 @@ seed = 81
     peer_process = peer_mcp = peer_log = None
     peer_evidence: dict[str, Any] = {}
     server_log = client_log = display_log = None
+    ghast_peers: list[tuple[Any, Any, Any, dict[str, Any]]] = []
     try:
         server_log_path = artifact / "server.log"
         server_log = server_log_path.open("wb")
@@ -255,12 +259,41 @@ seed = 81
                 wire_trace = light_wire.LightWireProxy(port, artifact, promotion_receipt.server_packet)
                 client_address = wire_trace.address
                 evidence["native_wire_trace"] = str(wire_trace.path)
+            if ctx.scenario_id == "native-v2-happy-ghast-harness":
+                from .native_happy_ghast import PassengerReceipt
+                report_path = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
+                ghast_receipt = PassengerReceipt(report_path, artifact)
+                wire_trace = light_wire.LightWireProxy(port, artifact, ghast_receipt.server_packet)
+                client_address = wire_trace.address
             if ctx.windowed:
                 xvfb, display, display_log = runtime.start_xvfb(artifact)
                 ctx.logs.append(str(artifact / "xvfb.log"))
             client_process, client_log, mcp = native_client.start(
                 ctx, native_client.resolve_binary(ctx), client_address, username, startup_timeout,
                 display=display)
+            if ctx.scenario_id == "native-v2-happy-ghast-harness":
+                def ghast_snapshot():
+                    if wire_trace.errors:
+                        raise RuntimeError(f"happy ghast wire errors: {wire_trace.errors}")
+                    return wire_trace.query(ghast_receipt.snapshot)
+
+                def start_ghast_riders():
+                    clients = []
+                    for index in range(2, 6):
+                        peer_data: dict[str, Any] = {}
+                        peer_ctx = replace(ctx, artifact_dir=artifact / f"ghast-rider-{index}",
+                                           client_evidence=peer_data, windowed=False)
+                        process, log, client = native_client.start(
+                            peer_ctx, native_client.resolve_binary(peer_ctx), address,
+                            f"GhastRider{index}", startup_timeout)
+                        ghast_peers.append((process, log, client, peer_data))
+                        client.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
+                        clients.append(client)
+                    evidence["ghast_rider_clients"] = [data for _, _, _, data in ghast_peers]
+                    return clients
+
+                mcp.happy_ghast_passengers = ghast_snapshot
+                mcp.start_ghast_riders = start_ghast_riders
             if promotion_maps or ctx.scenario_id == "native-v2-banner-placement":
                 def promotion_snapshot() -> dict[str, Any]:
                     if wire_trace.errors:
@@ -566,6 +599,15 @@ seed = 81
                 evidence["peak_client_rss_kib"] = rss
             if cpu is not None:
                 evidence["client_cpu"] = cpu
+        for process, log, client, data in ghast_peers:
+            try:
+                client.close()
+            except Exception:
+                pass
+            finally:
+                runtime.stop_process(process)
+                ctx.exits[data["command_index"]] = process.returncode
+                log.close()
         if peer_mcp is not None:
             try:
                 peer_mcp.close()

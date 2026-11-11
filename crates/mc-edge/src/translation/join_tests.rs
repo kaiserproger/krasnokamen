@@ -19,6 +19,8 @@ const DEADLINE: Duration = Duration::from_secs(240);
 
 #[path = "join_interactions.rs"]
 mod interactions;
+#[path = "join_visibility.rs"]
+mod visibility;
 const MIN_Y: i32 = -64;
 
 fn server(root: &std::path::Path) -> EdgeServer {
@@ -448,9 +450,7 @@ async fn protocol_777_login_configuration_play() {
     join_version(777).await;
 }
 
-async fn join_version(protocol: i32) {
-    let dir = tempfile::tempdir().unwrap();
-    let server = server(dir.path());
+fn peer_root(server: &EdgeServer, protocol: i32) -> std::path::PathBuf {
     let version = mc_data::protocol_versions::by_protocol(protocol).unwrap();
     if protocol != mc_protocol::PROTOCOL_VERSION {
         assert!(
@@ -459,14 +459,20 @@ async fn join_version(protocol: i32) {
             version.release
         );
     }
-    let canonical_root = server.data.sidecar_root().unwrap();
-    let peer_root = mc_data::protocol_versions::cache_root(
-        canonical_root,
+    mc_data::protocol_versions::cache_root(
+        server.data.sidecar_root().unwrap(),
         mc_protocol::TARGET_RELEASE,
         version,
-    );
+    )
+}
+
+/// The endpoint profile for `protocol` with an independent name-paired table
+/// oracle, not the session's composed mapping.
+fn peer_profile(server: &EdgeServer, protocol: i32) -> Arc<Profile> {
+    let version = mc_data::protocol_versions::by_protocol(protocol).unwrap();
+    let canonical_root = server.data.sidecar_root().unwrap();
+    let peer_root = peer_root(server, protocol);
     let mut profile = Profile::load(&peer_root, version, Vec::new()).unwrap();
-    // Independent name-paired oracle, not the session's composed mapping.
     profile.tables = tables::Tables::new(
         &tables::Reports::load(canonical_root).unwrap(),
         &tables::Reports::load(&peer_root).unwrap(),
@@ -479,7 +485,13 @@ async fn join_version(protocol: i32) {
         upper: 777,
         lower: protocol,
     };
-    let profile = Arc::new(profile);
+    Arc::new(profile)
+}
+
+async fn join_version(protocol: i32) {
+    let dir = tempfile::tempdir().unwrap();
+    let server = server(dir.path());
+    let profile = peer_profile(&server, protocol);
     let hub = Arc::clone(&server.hub);
     let tables = &profile.tables;
     let cinnabar = server

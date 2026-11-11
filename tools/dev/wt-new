@@ -130,6 +130,8 @@ def main() -> None:
     print("heavy commands (one at a time, from the worktree):")
     print(f"  cd {wt} && {w.MEM_RUN} -m 6G <command>")
     print(f"finish:    {w.TOOLS / 'wt-done'} {name}")
+    print(f"claim:     {w.TOOLS / 'task-claim'} {name} --agent {name} --timebox <minutes>   (Main, at launch)")
+    print(f"release:   {w.TOOLS / 'task-release'} {name}   (Main, on the agent's final result)")
 
 
 if __name__ == "__main__":

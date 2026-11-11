@@ -839,10 +839,12 @@ title = "Destroy an open single chest, then click before ordinary commit: extrac
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-1"
 regression = ["cargo:mc-core:dimensions::tests::destroyed_open_chest_rejects_extract_and_insert_clicks", "cargo:mc-core:dimensions::tests::shared_destroy_command_settles_open_chest_before_the_next_click", "cargo:mc-core:dimensions::tests::destroying_command_and_stale_click_in_one_input_batch_never_duplicate_or_discard", "harness:entities:native-v2-destroyed-chest-race"]
+fix_commit = "6da185e3"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/HS-1.json"
 
 [[bug]]
 id = "END-RESTART"
@@ -872,10 +874,12 @@ title = "Native join/load retires solaris-auth after wall-clock epoch deadline; 
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUTH-BUDGET"
 regression = ["cargo:mc-plugin-host:ordinary_callback_survives_host_scheduling_jitter", "cargo:mc-plugin-host:generous_epoch_hang_guard_still_retires_a_callback", "harness:entities:native-v2-auth-budget"]
+fix_commit = "94aaa6d6"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/AUTH-BUDGET.json"
 
 [[bug]]
 id = "DUPLICATE-LOGIN"
@@ -883,10 +887,12 @@ title = "Second same-account connection times out in Join instead of replacing i
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DUPLICATE-LOGIN"
 regression = ["cargo:mc-core:dimensions::tests::duplicate_login_kicks_the_old_session_and_hands_over_inventory_without_duplicating", "harness:entities:native-v2-duplicate-login"]
+fix_commit = "e767ee11"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/DUPLICATE-LOGIN.json"
 
 [[bug]]
 id = "HS-2"
@@ -957,6 +963,7 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P4"
 regression = ["cargo:mc-edge:screen::tests::leave_cancels_an_unanswered_request"]
+fix_commit = "68c0df4cef91a64a62fb1c646ff6ca791cc9f0ee"
 
 [[bug]]
 id = "INTERACT-001"
@@ -1034,9 +1041,12 @@ title = "Painting no lifecycle."
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PAINTINGS"
-regression = ["cargo:mc-core:interact_parity_tests::interact_parity_painting_places_on_wall"]
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PAINTINGS; failing first: receipts/A1BlocksGate/gates/20261111T125116-native-v2-ledger-painting-bd1_5pec (display :3), the painting stays after its only support became air"
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_painting_places_on_wall", "cargo:mc-core:interact_parity_tests::painting_drops_when_shared_command_commit_removes_support", "harness:entities:native-v2-ledger-painting"]
+failing_first = "reported"
+fix_commit = "patch:aad4ce47c9e3a4bef534f95592faba14a3935ef638f0fd486d52fb804b18551c"
+promotion = "docs/bugs/promotions/PAINTINGS.json"
 
 [[bug]]
 id = "SPAWN-PEACEFUL-REMOVAL"
@@ -1193,11 +1203,14 @@ regression = ["cargo:mc-core:tick_tests::predicted_table_use_waits_for_accepted_
 id = "CUSTODY-ENTITY-MENU-FLOOR"
 title = "A player stack reserved by a plugin can be moved into entity cargo below its reservation floor: mount and vehicle handlers directly mutate player/container, bypassing generic planned-transition floor refusal. Same contract gap, not two bugs."
 area = "gameplay"
-repro = "manual"
+repro = "source"
 severity = "major"
-status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CUSTODY-ENTITY-MENU-FLOOR"
+status = "fixed"
+source = "BUGS.md#CUSTODY-ENTITY-MENU-FLOOR: \"original source-only finding, no demonstrated live duplication/loss\" (Main ruling 2026-11-11: repro is source, not manual)"
 regression = ["cargo:mc-core:plugin_inventories::tests::entity_menu_clicks_preserve_reserved_player_inventory_and_resync"]
+# Fix 2ccf8cc1 (floor check in mounts/menus.rs, vehicles/containers.rs) is spread over a 32-file commit whose reversal does not build; the control neutralises the two floor checks only.
+fix_commit = "patch:93d96cba20ed65cefc6fc3c23b12b8db2bc5d78b241d191458df30bf8f3cc92a"
+promotion = "docs/bugs/promotions/CUSTODY-ENTITY-MENU-FLOOR.json"
 
 [[bug]]
 id = "CUSTODY-MOUNT-EXPORT"
@@ -1218,7 +1231,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SETBLOCK-SNBT"
-regression = ["cargo:mc-core:command_world::tests::setblock_snbt_installs_native_chest_contents_and_replaces_same_block"]
+regression = ["cargo:mc-core:command_world::tests::setblock_snbt_installs_native_chest_contents_and_replaces_same_block", "harness:entities:native-v2-ledger-setblock-snbt"]
+fix_commit = "2ccf8cc1a397481928c7ac575cf6df177de66fb2"
 
 [[bug]]
 id = "FORCELOAD-RING"
@@ -1256,9 +1270,12 @@ title = "Falling entity had no render path or local gravity prediction; sparse v
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P1"
-regression = ["harness:scene-shot:native-falling-block-prediction"]
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P1; fixed in client branch wt/LedgerInputB03Client (13f1f28b), gate run with that client; the frozen-world falling hold is a core fix on wt/LedgerInputB03 (fe28852b, crates/mc-core/src/falling.rs; fix patch docs/bugs/fix-patches/P1.patch is that hunk)"
+regression = ["cargo:mc-core:command_world::tests::frozen_world_holds_a_setblock_falling_block_until_stepped", "harness:entities:native-v2-input-sand", "harness:scene-shot:native-falling-block-prediction"]
+fix_commit = "patch:e293275c93a859e503ade5346229103777f1f670a68f366a4a1ea06135b30682"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/P1.json"
 
 [[bug]]
 id = "HC-1"
@@ -1278,7 +1295,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-2"
-regression = []
+regression = ["harness:entities:native-v2-input-menus"]
 
 [[bug]]
 id = "HC-3"
@@ -1288,7 +1305,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-3"
-regression = []
+regression = ["harness:entities:native-v2-input-pick"]
 
 [[bug]]
 id = "P2"
@@ -1316,9 +1333,12 @@ title = "Native middle-click sends play36/37 but original server lacked the auth
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PICK-SERVER"
-regression = []
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PICK-SERVER; handler added in fe46150b; fix patch docs/bugs/fix-patches/PICK-SERVER.patch reverses the current dispatch of PickItemFromBlock/PickItemFromEntity to the pre-fix no-op"
+regression = ["cargo:mc-core:tick::input::inventory::pick_item_tests::survival_pick_moves_an_existing_stack_into_the_hotbar_without_creating_items", "cargo:mc-core:tick::input::inventory::pick_item_tests::survival_pick_without_a_match_changes_nothing", "cargo:mc-core:tick::input::inventory::pick_item_tests::creative_pick_adds_one_item_and_keeps_the_displaced_stack", "cargo:mc-core:tick::input::inventory::pick_item_tests::creative_entity_pick_gives_the_spawn_egg_and_survival_does_not", "harness:entities:native-v2-input-pick"]
+fix_commit = "patch:4d079b11edaa01017ab0ead0bade1861b132f8e6ad01951946542cfe4aa4ef69"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/PICK-SERVER.json"
 
 [[bug]]
 id = "QA5-CREATIVE"
@@ -1327,8 +1347,8 @@ area = "client"
 repro = "source"
 severity = "major"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-CREATIVE"
-regression = []
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-CREATIVE; fixed in client branch wt/LedgerInputB03Client (13f1f28b), gate run with that client"
+regression = ["harness:entities:native-v2-input-menus"]
 
 [[bug]]
 id = "QA5-SETBLOCK-SAND"
@@ -1336,9 +1356,34 @@ title = "QAWin5 setblock sand over air remained visually floating on winfix3; au
 area = "client"
 repro = "source"
 severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-SETBLOCK-SAND; fixed in client branch wt/LedgerInputB03Client (13f1f28b), gate run with that client; the frozen-world falling hold is a core fix on wt/LedgerInputB03 (fe28852b, crates/mc-core/src/falling.rs; fix patch docs/bugs/fix-patches/QA5-SETBLOCK-SAND.patch is that hunk)"
+regression = ["cargo:mc-core:command_world::tests::frozen_world_holds_a_setblock_falling_block_until_stepped", "harness:entities:native-v2-input-sand"]
+fix_commit = "patch:e293275c93a859e503ade5346229103777f1f670a68f366a4a1ea06135b30682"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/QA5-SETBLOCK-SAND.json"
+
+[[bug]]
+id = "NATIVE-FROZEN-FALLING-DRAWN-LATE"
+title = "Under /tick freeze the native client draws a locally predicted falling block at its previous tick: presented y lags predicted y by one stepped tick; vanilla draws a frozen entity at partial tick 1 (its current position)."
+area = "client"
+repro = "source"
+severity = "minor"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-SETBLOCK-SAND"
+source = "solaris-client src/session.rs:1165 sets presentation_partial to 0 while server_frozen and src/entities/physical.rs:818-828 (fall_step) leaves the stepped tick as previous->transform at lerp_progress 0. Vanilla 26.3 LevelExtractor.extractVisibleEntities passes !TickRateManager.isEntityFrozen(entity) to DeltaTracker.getGameTimeDeltaPartialTick, which returns 1.0f while frozen (DeltaTracker$Timer). Evidence: native-v2-input-sand receipts on client 13f1f28b, e.g. .analysis/validation/20261111T163719-native-v2-input-sand-2gazssgv falling_after_step presented 106.76314 = previous predicted, predicted 106.60788; receipts/LedgerInputSand/REPORT.md. Received-interpolated mobs are unaffected (their lerp starts on packet receipt)."
 regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "HARNESS-SAND-GATE-NO-HOLD-CHECK"
+title = "native-v2-input-sand stays green when the server keeps dropping a falling block in a frozen world: since 760ca0b5 it slows the server to 1 tick/s after the spawn and never compares the server position with the stepped tick count."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Negative controls of P1 and QA5-SETBLOCK-SAND (docs/bugs/promotions/P1.json, QA5-SETBLOCK-SAND.json): with the crates/mc-core/src/falling.rs frozen hold reversed, the cargo ref went red and harness:entities:native-v2-input-sand stayed green. tools/harness/backends/native_player_input.py sand() checks client prediction only."
+regression = ["harness:entities:native-v2-input-sand"]
+failing_first = "reported"
 
 [[bug]]
 id = "QA5-FAST-CLICK"
@@ -1348,7 +1393,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-FAST-CLICK"
-regression = []
+regression = ["harness:entities:native-v2-input-menus"]
 
 [[bug]]
 id = "QA5-STARTUP-GREY"
@@ -1613,7 +1658,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#NATIVE-FREEZE-CAMERA"
-regression = []
+regression = ["harness:entities:native-v2-input-camera", "harness:admin-commands:all"]
 
 [[bug]]
 id = "SUMMON-AGE"
@@ -1751,9 +1796,11 @@ title = "Spiders and cave spiders avoid unrolled armadillos, not scared/rolled a
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMADILLO-THREAT-ROLL,ARMADILLO-ROLL-ABSENT"
-regression = []
+regression = ["cargo:mc-core:vanilla_mob_behavior_tests::spiders_avoid_only_unrolled_armadillos"]
+fix_commit = "patch:f466510fd50481c9932101bf17c150c3e08990d2f48850cc4c23a65f3e7f1081"
+promotion = "docs/bugs/promotions/ARMADILLO-SPIDER-DETERRENCE.json"
 
 [[bug]]
 id = "ARMADILLO-SCUTE-SHED"
@@ -2060,9 +2107,14 @@ title = "Sniffers never dig up seeds: no sniffer dig/sniff/explore logic exists 
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SNIFFER-DIG-ABSENT"
-regression = []
+regression = [
+  "cargo:mc-core:vanilla_mob_behavior_tests::adult_sniffer_digs_one_seed_on_suitable_ground_then_cools_down",
+  "cargo:mc-core:vanilla_mob_behavior_tests::sniffer_requires_adulthood_ai_and_diggable_ground",
+]
+fix_commit = "patch:9237f03d9ed6d7d6438252fd4b6de93bb2e0bb6b29ec302ae03657143f02f91a"
+promotion = "docs/bugs/promotions/SNIFFER-DIG-ABSENT.json"
 
 [[bug]]
 id = "CAMEL-DASH-ABSENT"
@@ -2070,9 +2122,11 @@ title = "Camels never dash: no `dash/Dash` logic exists in core; camel appears o
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAMEL-DASH-ABSENT"
-regression = []
+regression = ["cargo:mc-core:vanilla_mob_behavior_tests::saddled_camel_admits_two_riders_and_dash_has_cooldown"]
+fix_commit = "patch:94f32f3b264bcb85d8511780a7c0cce3b911095441e8387265a18fd8d29577ea"
+promotion = "docs/bugs/promotions/CAMEL-DASH-ABSENT.json"
 
 [[bug]]
 id = "FROG-TONGUE-ABSENT"
@@ -2080,9 +2134,11 @@ title = "Frogs never eat with their tongue: no `tongue/croak` logic exists in co
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FROG-TONGUE-ABSENT"
-regression = []
+regression = ["cargo:mc-core:vanilla_mob_behavior_tests::frog_tongue_consumes_only_small_prey_and_drops_vanilla_loot"]
+fix_commit = "patch:5a40bebc829c62b81020f603368e0758b0da222ee79768b5afab3c4e6491c306"
+promotion = "docs/bugs/promotions/FROG-TONGUE-ABSENT.json"
 
 [[bug]]
 id = "LLAMA-SPIT-ABSENT"
@@ -2103,7 +2159,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAT-GIFT-ABSENT"
-regression = []
+regression = ["cargo:mc-core:vanilla_mob_behavior_tests::tamed_cat_gives_one_morning_gift_not_an_arbitrary_wake_gift"]
+fix_commit = "patch:7bba9a462bce17ac86f6ed568d778aff0eeafa453b0c9990cb99b17e8488b19e"
 
 [[bug]]
 id = "STRIDER-COLD-ABSENT"
@@ -2113,7 +2170,11 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#STRIDER-COLD-ABSENT"
-regression = []
+regression = [
+  "cargo:mc-core:vanilla_mob_behavior_tests::strider_cold_state_slows_and_lava_restores_it",
+  "cargo:mc-core:vanilla_mob_behavior_tests::cold_strider_rain_damage_obeys_roof_and_clear_weather",
+]
+fix_commit = "patch:c7a40b6afebf99b151ec6ad8effe1fa16c867b7b30f2cc52741323c739eb502a"
 
 [[bug]]
 id = "PARROT-DANCE-ABSENT"
@@ -2123,7 +2184,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PARROT-DANCE-ABSENT"
-regression = []
+regression = ["cargo:mc-core:vanilla_mob_behavior_tests::parrot_record_events_and_nearby_hostile_imitation"]
+fix_commit = "patch:9a0887f770f42d564833bdc7dd038433ee7f4803e16c4dee3051eb49cb17bbe7"
 
 [[bug]]
 id = "DATA-MUTATION-STORAGE"
@@ -2143,7 +2205,11 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HAPPY-GHAST-HARNESS"
-regression = []
+regression = [
+  "cargo:mc-core:vanilla_mob_behavior_tests::happy_ghast_harness_admits_four_riders_and_survives_rider_codec",
+  "harness:entities:native-v2-happy-ghast-harness",
+]
+fix_commit = "patch:94f32f3b264bcb85d8511780a7c0cce3b911095441e8387265a18fd8d29577ea"
 
 [[bug]]
 id = "P5"
@@ -2263,7 +2329,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = ["harness:village-qa:sleep_return"]
+regression = ["harness:village-qa:sleep_return", "cargo:mc-core:villager::sleep_return_tests::woken_bound_resident_stands_up_and_returns_to_its_job_site", "cargo:mc-core:villager::sleep_return_tests::allocator_job_loss_reaches_the_client_villager_data_at_once", "cargo:mc-core:villager::sleep_return_tests::idle_lumberjack_walks_back_to_its_job_site_at_work_time"]
 
 [[bug]]
 id = "ISSUE-1-12"
@@ -2749,7 +2815,7 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-F1"
-regression = []
+regression = ["harness:entities:native-v2-input-camera"]
 
 [[bug]]
 id = "TEST-DIMENSION-BIOME"
@@ -3535,10 +3601,12 @@ title = "A new world whose first start is stopped before the initial checkpoint 
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Windows 11 VM, RC5 release build: world 'rc5 world' timed out at 180 s under host load, then 'Server exited during startup' (receipts/WinLease, winvm/shared/rc5-server.log)"
 regression = ["cargo:mc-core:core::native_checkpoint_crash_tests::first_start_stopped_before_its_initial_checkpoint_reopens_as_a_new_world", "harness:singleplayer-regressions:native-world-first-start-interrupted"]
+fix_commit = "patch:f04c88996f254f5477db049b6bbbaa06e428ac9d4aa95772a0919dd3a5abd7c5"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/WORLD-FIRST-START-INTERRUPTED.json"
 
 [[bug]]
 id = "WINDOWS-BACKUP-CONVERSION"
@@ -3599,11 +3667,13 @@ id = "CORE-PICKUP-FULL-INVENTORY"
 title = "Every successful pickup republishes the full player inventory instead of the changed active-menu slots"
 area = "gameplay"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "External critique of 4d32f28, crates/mc-core/src/tick/merge.rs pickup commit"
 repro = "source"
 regression = ["cargo:mc-core:tick_tests::statistics_tests::pickup_publishes_only_changed_slots_for_active_menu", "cargo:mc-core:tick_tests::statistics_tests::pickup_into_offhand_syncs_inventory_with_or_without_open_chest", "cargo:mc-core:tick_tests::statistics_tests::pickup_with_lectern_open_updates_hidden_player_inventory"]
+fix_commit = "d330c4a7"
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/CORE-PICKUP-FULL-INVENTORY.json"
 
 [[bug]]
 id = "EDGE-OP-QUEUE-POLL"
@@ -3632,11 +3702,14 @@ id = "CORE-PICKUP-HIDDEN-MENU-IMAGE"
 title = "Hidden pickup slots republish an inactive inventory menu and cursor"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Independent review of 0504a280 pickup fallback; vanilla 775/776/777 client handler javap"
 repro = "source"
 regression = ["cargo:mc-core:tick_tests::statistics_tests::pickup_into_offhand_syncs_inventory_with_or_without_open_chest", "cargo:mc-core:tick_tests::statistics_tests::pickup_with_lectern_open_updates_hidden_player_inventory", "cargo:mc-edge:plan::plan_tests::hidden_pickup_plans_player_inventory_packet"]
+# Fix 878f1535 adds PlayerChange::PlayerInventorySlot, which its tests need; the control restores only the old full-inventory republish in pickup_changes.
+fix_commit = "patch:7928a945df0a58d4d75703e74f3aa8537d186ce42e8646251b5be39ec2f4d7c1"
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/CORE-PICKUP-HIDDEN-MENU-IMAGE.json"
 
 [[bug]]
 id = "EDGE-QUEUED-OP-AFTER-DEOP"
@@ -3677,10 +3750,13 @@ title = "More than the per-connection outbox cap (512) of chat or system lines i
 area = "gameplay"
 repro = "cargo"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "CoreBlockers (wave/core-blockers): reproduced by datapacks::tests::function_chat_flood_in_one_tick_reaches_every_recipient before the TextBurst compaction; found while checking the HS-1 batch path."
 regression = ["cargo:mc-core:datapacks::tests::function_chat_flood_in_one_tick_reaches_every_recipient", "cargo:mc-edge:server::lifecycle_tests::text_burst_live_updates_fit_reliable_queue"]
+# Fix 82434561 also refuses undecodable block-entity records, and its reversal does not build; the control disables only the TextBurst compaction (tick.rs) and the edge frame merge.
+fix_commit = "patch:8f5c5749fbc27e368a7c4f0e833783794c6fb803f7bf10ca0241c3a30213f1fd"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/OUTBOX-TEXT-FLOOD-KICK.json"
 
 [[bug]]
 id = "CHUNK-REFUSAL-BLOCKS-CHECKPOINTS"
@@ -3850,10 +3926,12 @@ title = "Player command success replies ignore send_command_feedback"
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Native gait scene retained summon and effect success messages after send_command_feedback false"
 regression = ["cargo:mc-core:command_execution::tests::gamerule_suppresses_player_scene_success_but_not_failure_or_console", "cargo:mc-core:dimensions::tests::dimensional_teleport_success_obeys_player_feedback_rule", "harness:scene-shot:native-command-feedback"]
+fix_commit = "3fe868f1"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/COMMAND-SUCCESS-FEEDBACK-GAMERULE.json"
 
 [[bug]]
 id = "TICK-FROZEN-GAME-AGE-WIRE"
@@ -3863,8 +3941,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Native freeze/teleport/local-input scene: the old server advances received game age while daylight holds. The candidate projects TickControl simulated age; actual native repeats and source controls exist, but graphical ledger promotion remains pending."
-regression = ["cargo:mc-core:tick_control::tests::game_time_stands_still_while_frozen_and_counts_stepped_ticks", "cargo:mc-edge:server::admin_tests::clock_queue_tests::queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer", "cargo:mc-edge:play::tests::join_burst_carries_load_start_before_center"]
+regression = ["cargo:mc-core:tick_control::tests::game_time_stands_still_while_frozen_and_counts_stepped_ticks", "cargo:mc-edge:server::admin_tests::clock_queue_tests::queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer", "cargo:mc-edge:play::tests::join_burst_carries_load_start_before_center", "harness:scene-shot:native-frozen-game-age"]
 failing_first = "reported"
+fix_commit = "2a315d20f4d69e82802e1ab1bd9d5a20bf29736d"
 
 [[bug]]
 id = "TICK-FROZEN-GAME-AGE-RESTART"
@@ -3872,10 +3951,12 @@ title = "Restart loses accumulated held ticks and jumps simulated game age to th
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "core/recovery.rs restores the native frame into a new TickState, while TickControl starts with held_ticks=0. The runtime-only held offset is not in checkpoint metadata. Separate from the SET_TIME projection fix; no storage migration was made."
-regression = []
+regression = ["cargo:mc-core:weather::tests::frozen_game_age_survives_checkpoint_and_held_wal_tail", "cargo:mc-core:weather::tests::climate_image_recovers_game_age_in_every_tick_phase"]
 failing_first = "not recorded"
+fix_commit = "c9c13b37505580495a3553eff10e10d1495292d2"
+promotion = "docs/bugs/promotions/TICK-FROZEN-GAME-AGE-RESTART.json"
 
 [[bug]]
 id = "TIME-QUERY-FROZEN-PHASE"
@@ -3883,10 +3964,12 @@ title = "time query gametime is one tick behind the published simulated age duri
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "tick.rs begin_tick increments held_ticks before input commands, but state.tick increments afterwards; command_execution.rs queries game_ticks(state.tick) in between. A held query sees N-(H+1), whereas the post-tick snapshot sees (N+1)-(H+1)."
-regression = []
+regression = ["cargo:mc-core:tick_control::tests::frozen_frame_time_query_matches_published_game_age"]
 failing_first = "not recorded"
+fix_commit = "31ccff063650fbca21bd81b2af181fbdf5b0548d"
+promotion = "docs/bugs/promotions/TIME-QUERY-FROZEN-PHASE.json"
 
 [[bug]]
 id = "MAP-FRAME-MARKER-RECOVERY-LIMIT"
@@ -4070,10 +4153,12 @@ title = "A thousand melee mobs collapse the server tick: every vindicator rescan
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "BattleBaseline report (core b5a225b6, 500 iron golems + 500 vindicators: 4.65 TPS, 5000: 0.10 TPS, perf self: TargetGrid::nearest<special_mobs::target_in closure> 27%, Chunk::get_block 27%, ChunkWorld::block_at 19%, floor 17%). MobTargetPerf frame-pointer profile of base 6efe8db0 (1k, same harness): 98.4% of tick-thread samples under special_mobs::raiders::run, 71.7% under hostile::sight_clear called from target_in via TargetGrid::nearest; the cause is raiders::run calling target_in(range 64) for every raider every tick with no target memory (420 sight checks/tick for 20 raiders x 21 candidates). Vanilla (javap 26.1.2): NearestAttackableTargetGoal searches 1 tick in 10 (randomInterval 10) within FOLLOW_RANGE (vindicator 12), TargetGoal keeps the target while valid and drops it after 60 unseen ticks. Fix: raiders keep a held target, search on the 1-in-10 roll within follow range, and the raider follow ranges come from the 26.1.2 attributes. Same harness, same lane, host load 44-82 (before 1k/5k under load 44-53, after under 73-82): 1k melee 3.07 TPS (MSPT p50 308 ms) -> 20.00 TPS (p50 3.4 ms, p99 9.4 ms); 5k melee 0.10 TPS (p50 9450 ms) -> 19.27 TPS (p50 24.1 ms, p99 113.6 ms, first 100 ticks mean 55.7 ms); combat continued (entities 1106 -> 745 and 5097 -> 3793 over the 60 s window). Real-client and vanilla-timing acceptance of raider fights is not claimed. Residual: ranged raiders' goal attacks (shooters::run) still scan their candidates every tick at their short goal ranges (8-16); HurtByTargetGoal retaliation and player-before-villager priority are not modelled."
 regression = ["cargo:mc-core:raids::tests::raiders_hold_targets_and_do_not_scan_every_candidate_every_tick", "cargo:mc-core:raids::tests::raider_ignores_candidates_beyond_its_follow_range", "cargo:mc-core:raids::tests::raider_drops_a_dead_target_and_a_target_unseen_for_sixty_ticks", "cargo:mc-core:raids::tests::raider_does_not_hit_a_held_target_behind_a_wall_in_reach"]
 failing_first = "reported"
+fix_commit = "patch:7142a8be1da970d315bdfa38456fe72df6b67115ca4ddbf285cb6aad6a4367ca"
+promotion = "docs/bugs/promotions/RAIDER-TARGET-SCAN-EVERY-TICK-COLLAPSE.json"
 
 [[bug]]
 id = "SUMMON-EXPERIENCE-ORB-NOT-ORB"
@@ -4081,10 +4166,12 @@ title = "Summoning an experience orb does not create an XP orb"
 area = "gameplay"
 repro = "cargo"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "The summon command rejected Value or created a mob row instead of an experience orb; vanilla loads Value as a signed short defaulting to zero."
 regression = ["cargo:mc-core:command_summon::tests::experience_orb_summon_preserves_native_value_count_kind_and_checkpoint"]
+fix_commit = "1bf193720f99740448be7fc290f33b1b97e312b5"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/SUMMON-EXPERIENCE-ORB-NOT-ORB.json"
 
 [[bug]]
 id = "HARNESS-JAVA-MATRIX-FOREIGN-PORT-AUTH-ACK"
@@ -4153,3 +4240,14 @@ regression = ["cargo:mc-core:projectiles::flight_tests::projectile_breaks_pot_on
 repro_check = "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run protocol-matrix --server-bin /run/media/kaiserroman/games/solaris-work/pins/e4304662b8f4-server-x86_64-unknown-linux-gnu-incr/solaris-v2 --vanilla-data /run/media/kaiserroman/games/solaris-work/receipts/H08Orbs/protocol-content/26.3 --subject gamerules.projectiles_can_break_blocks --port 26741 --dashboard-port 26742"
 failing_first = "reported"
 fix_commit = "70e5c6d6"
+
+[[bug]]
+id = "EDGE-WORLD-QUEUE-LOST-ENTITY-FRAMES"
+title = "A world-queue send that fails after planning loses entity frames (AddEntity, data, passengers, leash) while the viewer records them as delivered; only geometry is repaired"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Rule-5 review of the recorder fix c731c550 (ReviewRecorderOverflow, 2026-11-12, finding F2): pump.rs:398-406 repairs only geometry after a failed world try_send; LOD tiles are a second producer on world_tx (lod.rs:317, LOD on by default config.rs:383), so pump.rs:341-342 'Only the pump sends world packets' is false. Example: a dismount SetPassengers(horse,[]) is lost and the client keeps the rider mounted until the next link change or re-pairing. Fix direction: take LOD tiles off world_tx, or treat a lost entity frame as a re-pair."
+regression = []
+failing_first = "not recorded"
