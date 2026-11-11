@@ -4272,11 +4272,12 @@ title = "A player killed by a special mob (warden-style attack submitted as a se
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "native-v2-p4-damage rerun 20261111T131605-native-v2-p4-damage-9ys_sijn: `session failed: Play packet 0x7c sequence 14847: missing translation argument`; the same scenario with `gamerule show_death_messages false` (20261111T132303-native-v2-p4-damage-wdwexu3s) passes that point. Cause: statistics::attacker returns None for a projectile the mob owns itself, so death_message built the component without the attacker."
-regression = ["cargo:mc-core:tick_tests::combat_parity_tests::parity_special_mob_melee_death_names_the_mob_for_the_two_argument_template"]
-fix_commit = "cfac52dd669b3070289f839d08da1abce24ca033"
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::parity_special_mob_melee_death_names_the_mob_for_the_two_argument_template", "harness:entities:native-v2-p4-damage"]
+fix_commit = "4efb3ef2b116bfea021f9989dc96292c32ab20b3"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/DEATH-MESSAGE-SELF-OWNED-MOB-ATTACKER.json"
 
 [[bug]]
 id = "DEATH-MESSAGE-OUTSIDE-BORDER-KEY"
@@ -4307,11 +4308,12 @@ title = "A burning player in creative or spectator mode keeps burning: contact_h
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "native-v2-p4-damage splash row: receipts 20261111T144354-native-v2-p4-damage-uxdbw87g and 20261111T151955-native-v2-p4-damage-wtrafs5z show only minecraft:on_fire wire events after a water fill in creative. Core splash_harming_thrown_at_own_feet passes, so the potion path was not the owner."
-regression = ["cargo:mc-core:contact_hazards_tests::creative_player_burn_clock_runs_and_water_douses_it"]
+regression = ["cargo:mc-core:tick_tests::contact_hazards_tests::creative_player_burn_clock_runs_and_water_douses_it", "harness:entities:native-v2-p4-damage"]
 fix_commit = "da9bca085da0c0c542cac42f95f38b373849bd99"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/CREATIVE-PLAYER-FIRE-NEVER-DOUSED.json"
 
 [[bug]]
 id = "EDGE-WORLD-QUEUE-LOST-ENTITY-FRAMES"
