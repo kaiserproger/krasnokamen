@@ -306,6 +306,11 @@ before observing a server-driven transition; waiting client ticks does not
 acknowledge a command. This checks current chat history, not freshness: use a
 unique ordered fence when the same reply could already be present.
 
+`native-low-roof-house` certifies a two-block-high enclosed house with a paired
+bed. An ordered command fence and block predicates check the bed and roof before
+the native client asserts the certification reply. This checks certification,
+not whether a villager sleeps or breeds.
+
 
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains
   its same-client-thread `game_time` and entity positions. Missing timestamps fail.

@@ -2404,7 +2404,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+regression = ["harness:scene-shot:native-low-roof-house"]
+fix_commit = "a6979209045bdae03d35ba6609a32ed71d92298c"
 
 [[bug]]
 id = "ISSUE-1-27"

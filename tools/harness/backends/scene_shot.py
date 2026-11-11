@@ -244,6 +244,9 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
         elif kind == "walk_capture":
             yield "minecraft_list_entities", {"radius": 32, "limit": 128}
             yield "minecraft_wait_ticks", {"ticks": 1}
+        elif kind == "falling_block_capture":
+            yield "minecraft_wait_for_visible_entity", {"entity_type": "minecraft:falling_block", "radius": 32, "timeout_seconds": 30}
+            yield "minecraft_wait_ticks", {"ticks": 1}
         elif kind == "cmd":
             yield "minecraft_send_chat", {"message": value, "command": True}
         elif kind == "tp":
@@ -330,6 +333,8 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and 0 <= value["phase"] < math.tau and 0 < value["tolerance"] < math.pi
                      and 0 < value["min_speed"] <= 1
                      and type(value["max_ticks"]) is int and 1 <= value["max_ticks"] <= 300)
+        elif kind == "falling_block_capture":
+            valid = client == "native" and isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value)
         elif kind == "mob_motion":
             valid = (isinstance(value, dict) and set(value) == {"samples", "name"}
                      and isinstance(value["name"], str) and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
@@ -502,6 +507,38 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             probe.check(f"{value['name']}_same_entity", first is not None and len(same_entity) == 1)
             probe.check(f"{value['name']}_render_phase", matching_walk(frame, value) is not None)
             shots.append(image)
+        elif kind == "falling_block_capture":
+            from . import falling_block_oracle
+
+            visible = probe.call("minecraft_wait_for_visible_entity", {
+                "entity_type": "minecraft:falling_block", "radius": 32,
+                "timeout_seconds": min(30, probe.remaining()),
+            })
+            identity = visible.get("entity_uuid")
+            probe.check("falling_entity_received", visible.get("matched") is True and bool(identity))
+            samples = []
+            for index in range(12):
+                image = capture(probe, artifact, f"{value}-{index}")
+                shots.append(image)
+                frame = json.loads(Path(image).with_suffix(".json").read_text())
+                rows = [row for row in frame.get("gait_frame", [])
+                        if row.get("entity_uuid") == identity and row.get("entity_type") == "minecraft:falling_block"]
+                probe.check("falling_frame_identity", len(rows) == 1)
+                samples.append({"frame": rows[0], "image": image})
+                if len(samples) >= 2 and falling_block_oracle.same_packet(samples[-2]["frame"], samples[-1]["frame"]):
+                    break
+                probe.call("minecraft_wait_ticks", {"ticks": 1})
+            else:
+                probe.check("falling_between_packets_sampled", False)
+            before, after = samples[-2:]
+            probe.check("falling_between_packets_sampled", True)
+            probe.check("falling_moves_down", after["frame"]["position"][1] < before["frame"]["position"][1] - 0.01)
+            boxes = [falling_block_oracle.sand_bounds(Path(sample["image"])) for sample in (before, after)]
+            probe.check("falling_sand_visible", all(box is not None for box in boxes))
+            probe.check("falling_pixels_move_down", boxes[1][1] > boxes[0][1])
+            (artifact / f"{value}-evidence.json").write_text(json.dumps({
+                "entity_uuid": identity, "samples": samples, "sand_bounds": boxes,
+            }, indent=2) + "\n")
         elif kind == "goat_horns_upright":
             from . import goat_horn_oracle
 
@@ -645,10 +682,15 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     """Load and validate exactly the inputs used by the scene runner."""
     if ctx.client not in ("native", "java") or not ctx.windowed or ctx.platform is not None:
         raise ValueError("scene-shot requires --client native|java --windowed")
-    if ctx.scenario_id == "native-command-feedback":
+    named_fixtures = {
+        "native-command-feedback": "command_feedback_scene.json",
+        "native-low-roof-house": "low_roof_house_scene.json",
+        "native-falling-block-prediction": "falling_block_scene.json",
+    }
+    if ctx.scenario_id in named_fixtures:
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
-            raise ValueError("native-command-feedback requires its registered native fixture without overrides")
-        scenario = json.loads((runtime.REPO_ROOT / "tools/harness/command_feedback_scene.json").read_text())
+            raise ValueError(f"{ctx.scenario_id} requires its registered native fixture without overrides")
+        scenario = json.loads((runtime.REPO_ROOT / "tools/harness" / named_fixtures[ctx.scenario_id]).read_text())
     elif scenario is None:
         args = ctx.extra_args
         if args and args[0] == "--":

@@ -239,6 +239,52 @@ class SceneShotTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "without overrides"):
                     scene_shot.validate_scenario(Context())
 
+    def test_named_low_roof_scene_rejects_overrides(self):
+        class Context:
+            client = "native"
+            windowed = True
+            platform = None
+            scenario_id = "native-low-roof-house"
+            extra_args = []
+            timeout_seconds = 180
+        with patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": ""}):
+            scenario = scene_shot.validate_scenario(Context())[0]
+            self.assertTrue(any("assert_chat" in step for step in scenario["steps"]))
+            with self.assertRaisesRegex(ValueError, "without overrides"):
+                scene_shot.validate_scenario(Context(), {"steps": []})
+
+    def test_named_falling_scene_rejects_overrides(self):
+        class Context:
+            client = "native"
+            windowed = True
+            platform = None
+            scenario_id = "native-falling-block-prediction"
+            extra_args = []
+            timeout_seconds = 180
+        with patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": ""}):
+            scenario = scene_shot.validate_scenario(Context())[0]
+            self.assertTrue(any("falling_block_capture" in step for step in scenario["steps"]))
+            with self.assertRaisesRegex(ValueError, "without overrides"):
+                scene_shot.validate_scenario(Context(), {"steps": []})
+
+    def test_falling_frame_packet_fence_and_sand_pixels(self):
+        from PIL import Image, ImageDraw
+        from tools.harness.backends import falling_block_oracle
+
+        first = {"observed_tick": 10, "sample_tick": 10, "received_position": [1, 2, 3], "position": [1, 2, 3]}
+        second = {**first, "sample_tick": 11, "position": [1, 1.96, 3]}
+        self.assertTrue(falling_block_oracle.same_packet(first, second))
+        self.assertFalse(falling_block_oracle.same_packet(first, {**second, "observed_tick": 11}))
+        self.assertFalse(falling_block_oracle.same_packet(first, {**second, "received_position": [1, 1, 3]}))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "frame.png"
+            image = Image.new("RGB", (1280, 720), "black")
+            image.save(path)
+            self.assertIsNone(falling_block_oracle.sand_bounds(path))
+            ImageDraw.Draw(image).rectangle((600, 300, 630, 330), fill=(210, 190, 120))
+            image.save(path)
+            self.assertEqual(falling_block_oracle.sand_bounds(path), (600, 300, 630, 330))
+
     def test_wait_respawn_rejects_dead_or_open_screen(self):
         class Probe:
             def wait(self, predicate, label, *, wait_for_play=False):
