@@ -529,10 +529,12 @@ def check_ledger_line(obj, strict=False):
 
 
 def read_ledger():
-    """(latest object per id in file order, errors, legacy profile-less lines)."""
-    latest, errors, legacy = {}, [], []
+    """(latest object per id in file order, errors, legacy profile-less lines, outdated profile lines).
+    An @profile line whose plugin_set is not the current fingerprint of its profile ran on an older
+    plugin build: it stays in the file as history but no longer counts as coverage."""
+    latest, errors, legacy, outdated = {}, [], [], []
     if not LEDGER.exists():
-        return latest, errors, legacy
+        return latest, errors, legacy, outdated
     with LEDGER.open() as f:
         for n, line in enumerate(f, 1):
             if not line.strip():
@@ -549,8 +551,11 @@ def read_ledger():
             if err:
                 errors.append(f"line {n}: {err}")
                 continue
+            if check_ledger_line(obj, strict=True):
+                outdated.append(f"line {n}: {obj['id']} plugin_set {obj['plugin_set'][:16]}…")
+                continue
             latest[obj["id"]] = obj
-    return latest, errors, legacy
+    return latest, errors, legacy, outdated
 
 
 def append_ledger(objs):
@@ -1255,7 +1260,7 @@ def show(sid):
 
 
 def status_report():
-    latest, errors, legacy = read_ledger()
+    latest, errors, legacy, outdated = read_ledger()
     groups = {"pairwise": [], "baseline": [], "triples": []}
     for sc in SCEN:
         groups[W1_GROUP.get(sc["id"].split(":", 1)[0][:2], "triples")].append(sc["id"])
@@ -1290,7 +1295,7 @@ def status_report():
     for sc in SCEN:
         per_client[sc["context"]["client_kind"]].append(latest[sc["id"]]["status"] if sc["id"] in latest else None)
     print(f"ledger: {LEDGER} ({len(latest)} ids, {len(errors)} invalid lines, {len(stale)} stale wave-1 ids, "
-          f"{len(legacy)} legacy profile-less lines)")
+          f"{len(legacy)} legacy profile-less lines, {len(outdated)} outdated plugin-set lines)")
     hdr = ("group", "total", "pass", "fail", "blocked", "skipped", "executed", "remaining")
     width = max(len(r[0]) for r in rows + [hdr])
     for r in [hdr] + rows:
@@ -1305,6 +1310,8 @@ def status_report():
         print("STALE (wave-1 id not in current matrix; its cell still counts)", i)
     for i in legacy[:20]:
         print("LEGACY (recorded before its subject got plugin profiles; not counted, rerun as @vanilla/@live)", i)
+    for i in outdated[:20]:
+        print("OUTDATED (ran on a plugin build that is no longer the profile's fingerprint; not counted, rerun)", i)
     return 1 if errors else 0
 
 
@@ -1320,7 +1327,7 @@ if ARGS.mode == "full":
             sys.exit(f"{name}: unknown {sorted(val - allowed)}")
     done = set()
     if ARGS.pending:
-        latest, errors, _legacy = read_ledger()
+        latest, errors, _legacy, _outdated = read_ledger()
         if errors:
             sys.exit("ledger has invalid lines; run --status")
         done = {i for i, o in latest.items() if o["status"] in ("pass", "fail")}
@@ -1606,7 +1613,8 @@ lines += [f"| **total** | **{FULL['valid']:,}** | " + " | ".join(f"**{FULL['wave
           f"- Plugin profiles: {len(PLUGIN_SENSITIVE)} plugin-sensitive subjects ({', '.join(f'{k} [{', '.join(v[0])}]' for k, v in PLUGIN_SENSITIVE.items())}) "
           "carry @vanilla (live set minus the listed plugins) or @live (full live set) in every id; their ledger lines need "
           "`plugin_set` = `gen_matrix.py --plugin-fingerprint <deployed dir>` (pass `--plugin-set FP` to --record); expected fingerprints are in `ledger_contract.plugin_profiles`. "
-          "Profile-less lines recorded earlier for these subjects are reported as LEGACY by --status and not counted.",
+          "Profile-less lines recorded earlier for these subjects are reported as LEGACY by --status and not counted; "
+          "lines whose plugin_set is no longer their profile's fingerprint (an older plugin build) are reported as OUTDATED and not counted.",
           "- Coverage cites real-server tests from `existing.py` (harness profiles/scenario ids) and unit test files by module; `e2e_other_context` shows the nearest existing test."]
 (OUT / "summary.md").write_text("\n".join(lines) + "\n")
 print(json.dumps({"scenarios": tot, "pairwise": N_PAIRWISE, "baseline": N_BASELINE, "triples": N_TRIPLE, "subjects": len(SUBJ), "domains": len(DOMAINS),
