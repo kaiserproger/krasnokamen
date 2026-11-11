@@ -87,8 +87,12 @@ async fn mutual_visibility(first: i32, second: i32) {
             })
             .await;
         let mut late = Client::join(address, "Late", second_profile, true).await;
-        sees(&mut late, "Early", second_player).await;
-        sees(&mut early, "Late", first_player).await;
+        // Both are read at once so each keeps answering keep-alives: an unread
+        // client is kicked and its player-list entry removed after 30 s.
+        tokio::join!(
+            sees(&mut late, "Early", second_player),
+            sees(&mut early, "Late", first_player)
+        );
     })
     .await
     .expect("mixed-version join within the deadline");
