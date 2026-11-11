@@ -47,6 +47,26 @@ class BattleRunnerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse((root / 'run').exists())
 
+    def test_incremental_server_pin_is_refused(self):
+        spec = importlib.util.spec_from_file_location('runner', Path(__file__).with_name('run-battle.py'))
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        with tempfile.TemporaryDirectory() as directory:
+            pin = Path(directory)
+            binary = pin / 'server'
+            binary.write_text('test')
+            manifest = {'kind': 'server', 'binary': str(binary),
+                        'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(), 'head': 'test'}
+            for recorded, accepted in ((None, True), (False, True), (True, False)):
+                with self.subTest(incremental=recorded):
+                    (pin / 'manifest.json').write_text(json.dumps(
+                        manifest if recorded is None else dict(manifest, incremental=recorded)))
+                    if accepted:
+                        self.assertEqual(runner.read_pin(pin)[0], binary.resolve())
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'incremental'):
+                            runner.read_pin(pin)
+
     def test_early_server_exit_writes_failed_receipt(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
