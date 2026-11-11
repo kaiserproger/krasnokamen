@@ -96,6 +96,10 @@ const LEGS_CARRIER: &str = "minecraft:leather";
 /// Dyed leather shades of each side colour (`minecraft:dyed_color` RGB).
 const RED_SHADES: [i32; 4] = [0x00B0_2E26, 0x008E_1B1B, 0x00C8_452E, 0x006E_1414];
 const BLUE_SHADES: [i32; 4] = [0x003C_44AA, 0x0024_397F, 0x004F_6BC4, 0x001E_2A66];
+/// Helmet plume tint: the pack's crested_helm and iron_plate carry their crest or
+/// plume as a dyeable layer (undyed red), so side 2 must dye it blue.
+const RED_PLUME: i32 = 0x00B9_2529;
+const BLUE_PLUME: i32 = 0x0029_4DB7;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Shield {
@@ -406,7 +410,13 @@ fn summon_tag(unit: Option<&Loadout>, side: u16) -> Tag {
                         Some(Shield::Kite) => "solaris_battle:iron_kite_shield",
                         Some(Shield::Tower) => "solaris_battle:iron_tower_shield",
                     })],
-                    "head" => vec![worn("head", unit.helmet)],
+                    "head" => vec![
+                        worn("head", unit.helmet),
+                        (
+                            "minecraft:dyed_color".to_owned(),
+                            Tag::Int(if red { RED_PLUME } else { BLUE_PLUME }),
+                        ),
+                    ],
                     "chest" => match unit.torso {
                         Torso::Surcoat => vec![worn(
                             "chest",

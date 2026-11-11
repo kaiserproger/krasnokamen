@@ -227,6 +227,33 @@ fn husk_shows_side_colour(state: &TickState, slot: crate::entities::EntitySlot, 
             .is_some_and(|model| model.as_str() == heater)
 }
 
+/// No piece carries the other side's colour: no other-side `red_`/`blue_` model or
+/// asset, every dye from the own palette, and the helmet plume dyed the own colour.
+fn only_own_side(pieces: &[Vec<(String, Tag)>], head: Option<&[(String, Tag)]>, side: u16) -> bool {
+    let (foreign, palette, plume) = if side == 1 {
+        (
+            "solaris_battle:blue_",
+            [&RED_SHADES[..], &[RED_PLUME]].concat(),
+            RED_PLUME,
+        )
+    } else {
+        (
+            "solaris_battle:red_",
+            [&BLUE_SHADES[..], &[BLUE_PLUME]].concat(),
+            BLUE_PLUME,
+        )
+    };
+    pieces.iter().all(|components| {
+        let model = matches!(
+            mc_data::item_nbt::field(components, "minecraft:item_model"),
+            Some(Tag::String(model)) if model.starts_with(foreign)
+        );
+        let asset = worn_asset(components).is_some_and(|(_, asset)| asset.starts_with(foreign));
+        let dye = dyed(components).is_some_and(|rgb| !palette.contains(&rgb));
+        !model && !asset && !dye
+    }) && head.is_none_or(|head| dyed(head) == Some(plume))
+}
+
 #[test]
 fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighter() {
     let mut state = fixture();
@@ -248,13 +275,26 @@ fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighte
         let side = state.entities.body(slot).faction;
         let row = state.entities.row(slot);
         let Some(weapon) = row.appearance.equipment[0].as_ref() else {
-            let armor = row.loot.body_armor.as_ref().unwrap();
-            caparisons.insert((side, worn_asset(&components(&state, armor)).unwrap()));
+            let armor = components(&state, row.loot.body_armor.as_ref().unwrap());
+            assert!(only_own_side(std::slice::from_ref(&armor), None, side));
+            caparisons.insert((side, worn_asset(&armor).unwrap()));
             continue;
         };
         assert!(
             husk_shows_side_colour(&state, slot, side),
             "fighter {id:?} hides side {side}"
+        );
+        let pieces: Vec<_> = row
+            .appearance
+            .equipment
+            .iter()
+            .flatten()
+            .map(|stack| components(&state, stack))
+            .collect();
+        let head = components(&state, row.appearance.equipment[5].as_ref().unwrap());
+        assert!(
+            only_own_side(&pieces, Some(head.as_slice()), side),
+            "fighter {id:?} wears the other side's colour on side {side}"
         );
         // Combat identities stay vanilla: only appearance components vary.
         let mounted = row.entity_life.mount.vehicle.is_some();
@@ -463,6 +503,14 @@ fn ten_thousand_side_spreads_every_variant_near_its_share_and_shows_side_colour(
                 let shield = mc_data::item_nbt::field(&parts("offhand"), "minecraft:item_model")
                     == Some(&Tag::String(heater.into()));
                 assert!(torso || shield, "{unit:?} hides side {side}");
+                let pieces: Vec<_> = ["mainhand", "offhand", "head", "chest", "legs"]
+                    .into_iter()
+                    .map(&parts)
+                    .collect();
+                assert!(
+                    only_own_side(&pieces, Some(parts("head").as_slice()), side),
+                    "{unit:?} wears the other side's colour on side {side}"
+                );
             }
             let of = |kind| all.iter().filter(|l| l.kind == kind).collect::<Vec<_>>();
             let (infantry, spears, archers, cavalry) = (

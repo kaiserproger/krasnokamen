@@ -30,7 +30,10 @@ regiment, index), so a retake with the same seed dresses every fighter the same:
   the item stays `minecraft:bow`); cavalry always the lance;
 - shield (foot): side heater 50%, kite 30%, tower 20%; cavalry heater 60%,
   kite 40%; archers carry none;
-- helmet: iron plate 45%, crested helm 30%, holy 25%;
+- helmet: iron plate 45%, crested helm 30%, holy 25%; every helmet carries the
+  side plume colour as `minecraft:dyed_color` (red `0xB92529`, blue `0x294DB7`),
+  which tints the dyeable crest/plume layer of the crested helm and iron plate in
+  the battle_video pack (undyed it stays red);
 - torso: side surcoat or vanilla leather dyed (`minecraft:dyed_color`) in one of
   four shades of the side colour; a fighter behind a side heater may instead
   wear the neutral holy body (heater bearers 45/35/20%, others 55/45%
@@ -40,8 +43,10 @@ regiment, index), so a retake with the same seed dresses every fighter the same:
 
 Side rule: every fighter shows the side colour on the torso (red or blue
 surcoat, red- or blue-dyed leather) or carries the red or blue heater shield;
-horses wear red or blue caparisons. Unit tests check that rule on every fighter
-of a 10,000 side. The client needs the authored battle resources to render
+horses wear red or blue caparisons. No piece shows the other side's colour: no
+other-side model or asset and every dye from the own palette. Unit tests check
+both rules on every fighter of a 10,000 side. The client needs the authored battle
+resources (the pack with the plume layers) to render
 these custom models.
 
 `run-battle.sh` creates a new run directory and never overwrites an existing
