@@ -112,13 +112,24 @@ fn bound_resident_leaves_an_open_air_bed_to_a_villager_that_sleeps_in_it() {
     let mut slept = false;
     for _ in 0..3000 {
         step(&mut state);
-        if state.entities.row(vanilla).villager.as_ref().unwrap().sleeping {
+        if state
+            .entities
+            .row(vanilla)
+            .villager
+            .as_ref()
+            .unwrap()
+            .sleeping
+        {
             slept = true;
             break;
         }
     }
     let v = state.entities.row(vanilla).villager.as_ref().unwrap();
-    assert_eq!(v.home, Some(open_air), "the unbound villager claims the free bed");
+    assert_eq!(
+        v.home,
+        Some(open_air),
+        "the unbound villager claims the free bed"
+    );
     assert!(slept, "and sleeps in it at night");
     assert_eq!(
         state.entities.row(resident).villager.as_ref().unwrap().home,

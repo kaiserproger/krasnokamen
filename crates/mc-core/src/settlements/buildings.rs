@@ -716,10 +716,7 @@ pub(crate) fn follow_moved_stations(
     if moved.is_empty() {
         return;
     }
-    let record = state
-        .settlements
-        .get_mut(settlement)
-        .expect("read above");
+    let record = state.settlements.get_mut(settlement).expect("read above");
     record.revision = record.revision.saturating_add(1);
     for (id, points) in moved {
         let building = record.buildings.get_mut(&id).expect("read above");
