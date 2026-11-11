@@ -492,6 +492,64 @@ fn the_swing_goes_round_the_enemy_men_not_their_leader_line() {
     );
 }
 
+/// Riders ride down a broken foot regiment's fugitives until they reach the
+/// edge of the field; then the chase ends and the riders swing round the
+/// enemy foot still fighting. Chasers stood on the enemy's rear edge for 100 s
+/// in the G1 rehearsal.
+#[test]
+fn a_chase_ends_when_the_fugitives_reach_the_edge() {
+    use super::super::formation::{Order, RegimentSpec};
+    let mut battle = BattleState::default();
+    battle
+        .formation
+        .set_bounds([-100.0, -100.0], [100.0, 100.0])
+        .unwrap();
+    let regiment = |id, faction, x: f64, z: f64, facing: f64, frontage| RegimentSpec {
+        id,
+        faction,
+        origin: [x, 64.0, z],
+        facing: [0.0, facing],
+        files: 10,
+        frontage,
+        order: Order::Advance,
+    };
+    let ids = |first: i32, n: i32| (first..first + n).map(EntityId).collect::<Vec<_>>();
+    for (spec, first) in [
+        (regiment(0, 1, 0.0, 0.0, 1.0, 1.0), 1),
+        (regiment(1, 2, 0.0, 4.0, -1.0, 1.0), 101),
+        (regiment(2, 1, -8.0, -30.0, 1.0, 2.0), 201),
+        (regiment(3, 2, 30.0, 40.0, -1.0, 1.0), 301),
+    ] {
+        battle
+            .formation
+            .add_regiment(spec, &ids(first, 10))
+            .unwrap();
+    }
+    for r in &mut battle.formation.regiments {
+        r.live_count = r.len;
+        r.live_sum = r.spec.origin.map(|x| x * r.len as f64);
+    }
+    battle.columns.ranged = vec![false; 40];
+    battle.formation.regiments[0].enemy = Some([0.0, 64.0, 4.0]);
+    battle.formation.regiments[0].gap = 4.0;
+    battle.formation.regiments[3].morale.broken = true;
+    let mut plans = Vec::new();
+    plan_sweeps(&battle, &mut plans);
+    assert_eq!(plans[2], Some(Sweep::Chase([30.0, 64.0, 40.0])));
+    // The fugitives have fled to the far edge.
+    let fled = &mut battle.formation.regiments[3];
+    fled.spec.origin = [30.0, 64.0, 97.0];
+    fled.live_sum = fled.spec.origin.map(|x| x * fled.len as f64);
+    plan_sweeps(&battle, &mut plans);
+    let Some(Sweep::Flank(plan)) = plans[2] else {
+        panic!(
+            "the riders stay on the fugitives at the edge: {:?}",
+            plans[2]
+        );
+    };
+    assert_eq!(plan.origin, [0.0, 64.0, 4.0]);
+}
+
 /// Eight riders (4 files x 2 ranks) swing round an enemy foot block: their
 /// own foot is 20 blocks from the enemy's front, so it is closing, and the
 /// flank point (-1, 28) lies past a U of stone walls open toward the riders

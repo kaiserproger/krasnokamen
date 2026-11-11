@@ -15,6 +15,10 @@ const REFORM_TICKS: u64 = 400;
 const FLANK_CLEARANCE: f64 = 14.0;
 /// Golden angle: consecutive riders' attack places round one target never line up.
 const ATTACK_ANGLE: f64 = 2.399_963_229_728_653;
+/// Fugitives whose live centre is this close to the bounds have reached the
+/// edge of the field: the chase ends and the riders rejoin the fight. Chasers
+/// stood on the enemy's rear edge for 100 s in the G1 rehearsal.
+const CHASE_EDGE_BLOCKS: f64 = 8.0;
 
 /// One mounted regiment's wide approach round one enemy foot regiment, in that
 /// regiment's frame: `side` is the lateral unit vector of the chosen flank.
@@ -90,6 +94,12 @@ fn nearest_enemy_foot<'a>(
                 && e.morale.broken == broken
                 && e.live_count > 0
                 && (broken || !battle.columns.ranged.get(e.start).copied().unwrap_or(true))
+                && !(broken
+                    && super::formation::near_bounds(
+                        battle.formation.bounds,
+                        live_centre(e),
+                        CHASE_EDGE_BLOCKS,
+                    ))
         })
         .min_by(|a, b| {
             let d = |e: &&Regiment| {
@@ -128,7 +138,8 @@ fn flank_round(own: &Regiment, e: &Regiment) -> Flank {
 }
 
 /// Per-tick plan, bounded by regiments squared (at most 128²), never per rider.
-/// A broken regiment's origin is its live centroid, so a chase follows the rout.
+/// A broken regiment's origin is its live centroid, so a chase follows the rout
+/// until the fugitives reach the edge of the field.
 fn plan_sweeps(battle: &BattleState, plans: &mut Vec<Option<Sweep>>) {
     let regiments = &battle.formation.regiments;
     plans.clear();

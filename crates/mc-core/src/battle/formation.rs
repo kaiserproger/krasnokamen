@@ -28,6 +28,20 @@ const MAX_SOLDIERS: usize = 20_000;
 /// Window of the operator's stall census: ten seconds of advancing.
 pub(crate) const STALL_TICKS: u64 = 200;
 
+/// Whether `pos` lies within `margin` blocks of the battle bounds, or past them.
+pub(crate) fn near_bounds(
+    bounds: Option<([f64; 2], [f64; 2])>,
+    pos: [f64; 3],
+    margin: f64,
+) -> bool {
+    bounds.is_some_and(|(min, max)| {
+        pos[0] - min[0] < margin
+            || max[0] - pos[0] < margin
+            || pos[2] - min[1] < margin
+            || max[1] - pos[2] < margin
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Order {
     Advance,
@@ -441,15 +455,7 @@ impl FormationRuntime {
     /// otherwise both sides' routers pile into one corner and only touch.
     pub(crate) fn cornered_at(&self, index: usize) -> bool {
         let m = &self.members[index];
-        m.routing
-            && m.alive
-            && !m.wounded
-            && self.bounds.is_some_and(|(min, max)| {
-                m.pos[0] - min[0] < AT_BAY_BLOCKS
-                    || max[0] - m.pos[0] < AT_BAY_BLOCKS
-                    || m.pos[2] - min[1] < AT_BAY_BLOCKS
-                    || max[1] - m.pos[2] < AT_BAY_BLOCKS
-            })
+        m.routing && m.alive && !m.wounded && near_bounds(self.bounds, m.pos, AT_BAY_BLOCKS)
     }
 
     pub fn mark_wounded(&mut self, id: EntityId) {
@@ -795,7 +801,22 @@ impl FormationRuntime {
             r.morale.update(tick, r.len, r.removed, r.stamina, charging);
             r.broke_now = !was_broken && r.morale.broken;
             let mut new_panics = 0_u16;
+            // A rider who fled to the edge of the field rallies there and rides
+            // back into the fight; he panics again only if his regiment breaks.
+            // Fled riders stood idle on the bounds for the rest of the G1
+            // rehearsal (groups of 100-175 from t 150). Foot fugitives stay.
+            let rally = r.spec.frontage > 1.0 && !r.morale.broken;
+            let bounds = self.bounds;
             for m in &mut self.members[r.start..r.start + r.len] {
+                if rally
+                    && m.routing
+                    && m.alive
+                    && !m.wounded
+                    && near_bounds(bounds, m.pos, AT_BAY_BLOCKS)
+                {
+                    m.routing = false;
+                    m.nerve = 0.0;
+                }
                 let was_routing = m.routing;
                 m.wavering = r.morale.value < m.nerve + 15.0;
                 m.routing |= r.morale.value < m.nerve || r.morale.broken;
@@ -899,7 +920,11 @@ impl FormationRuntime {
         if m.routing || m.wounded || (r.spec.order == Order::Pursue && r.enemy_routing) {
             return self.destination(index).0;
         }
-        let interval = if r.gap <= 6.0 { r.interval } else { r.spec.frontage };
+        let interval = if r.gap <= 6.0 {
+            r.interval
+        } else {
+            r.spec.frontage
+        };
         position(&r.spec, m.file, m.rank, interval)
     }
 }

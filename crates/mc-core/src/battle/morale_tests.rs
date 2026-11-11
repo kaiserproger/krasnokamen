@@ -94,6 +94,63 @@ fn rear_rank_flight_precedes_front_and_then_whole_regiment_breaks() {
     assert!(runtime.members.iter().all(|m| m.routing));
 }
 
+/// Riders who fled to the edge of the field rally there and ride back; they
+/// panic again only if their regiment breaks. Fugitives short of the edge and
+/// foot fugitives at the edge keep fleeing. Fled riders stood idle on the
+/// bounds for the rest of the G1 rehearsal (groups of 100-175 from t 150).
+#[test]
+fn riders_who_fled_to_the_edge_rally_and_ride_back() {
+    let mut runtime = FormationRuntime::default();
+    runtime.set_bounds([-50.0, -50.0], [50.0, 50.0]).unwrap();
+    for (id, frontage, first) in [(0, 2.0, 1), (1, 1.0, 101)] {
+        runtime
+            .add_regiment(
+                RegimentSpec {
+                    frontage,
+                    id,
+                    faction: 1,
+                    origin: [0.0, 64.0, 0.0],
+                    facing: [0.0, 1.0],
+                    files: 10,
+                    order: Order::Hold,
+                },
+                &(first..first + 100).map(EntityId).collect::<Vec<_>>(),
+            )
+            .unwrap();
+    }
+    // Every third soldier of both regiments panicked earlier; the regiments
+    // themselves are steady (morale 75).
+    let fled: Vec<usize> = (0..runtime.members.len()).filter(|i| i % 3 == 0).collect();
+    for &i in &fled {
+        runtime.members[i].routing = true;
+    }
+    // Even ids have fled to the +x edge, odd ids are still on their way.
+    let sample = |id: EntityId| {
+        Some(SoldierSample {
+            slot: None,
+            pos: [if id.0 % 2 == 0 { 49.5 } else { 0.0 }, 64.0, 0.0],
+            health: 20.0,
+            faction: 1,
+        })
+    };
+    // Regiment `id` decides on ticks with tick % 10 == id.
+    for tick in [0, 1, 10, 11] {
+        runtime.prepare(tick, sample);
+        runtime.update_morale(tick);
+    }
+    assert!(runtime.regiments.iter().all(|r| !r.morale.broken));
+    for &i in &fled {
+        let m = &runtime.members[i];
+        let rallied = i < 100 && m.id.0 % 2 == 0;
+        assert_eq!(!m.routing, rallied, "member {i} at x {}", m.pos[0]);
+    }
+    // A rallied rider runs again once his regiment breaks.
+    runtime.regiments[0].morale.broken = true;
+    runtime.prepare(20, sample);
+    runtime.update_morale(20);
+    assert!(runtime.members[..100].iter().all(|m| m.routing));
+}
+
 #[test]
 fn pressure_levels_do_not_accumulate_and_shields_reduce_missile_effect() {
     let mut plain = Morale::default();
