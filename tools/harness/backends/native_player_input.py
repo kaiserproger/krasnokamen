@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ctypes as c
 import time
+import uuid
 
 from . import native_client
 from .menu_observer import holds, observe_menu
@@ -278,6 +279,32 @@ def sand(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     falling = steps.call("minecraft_wait_for_visible_entity", {
         "entity_type": "minecraft:falling_block", "radius": 64, "timeout_seconds": steps.remaining()})
     steps.report["falling_spawn"] = falling
+    # A frozen world holds the block between steps (vanilla TickRateManager.isEntityFrozen).
+    # Read the server's Pos until two successive reads agree. Each read is sent after its chat
+    # marker came back and the previous reply arrived, so the one reply newer than the marker
+    # (recent_chat lists newest first) is its own, answered by a later server tick. The spawn
+    # may arrive before `tick step 3` is spent; a held block then stops changing, a dropping
+    # one never does and soon lands ("No entity was found").
+    data, missing, reads = "has the following entity data: ", "No entity was found", []
+    def reply(state: dict, marker: str) -> str | None:
+        chat = [line for line in state["recent_chat"] if isinstance(line, str)]
+        newer = chat[:next((i for i, line in enumerate(chat) if marker in line), 0)]
+        return next((line for line in reversed(newer) if data in line or missing in line), None)
+    for index in range(8):
+        marker = f"sand hold {index} {uuid.uuid4().hex}"
+        steps.call("minecraft_send_chat", {"message": marker, "command": False})
+        steps.wait(lambda s, marker=marker: any(isinstance(line, str) and marker in line
+                                                for line in s["recent_chat"]),
+                   f"sand_hold_marker_{index}")
+        steps.fixture("data get entity @e[type=minecraft:falling_block,limit=1] Pos")
+        line = reply(steps.wait(lambda s, marker=marker: reply(s, marker) is not None,
+                                f"sand_hold_read_{index}"), marker)
+        reads.append(line.split(data, 1)[1] if data in line else None)
+        if reads[-1] is not None and reads[-2:] == [reads[-1]] * 2:
+            break
+    steps.report["falling_server_pos"] = reads
+    steps.check("sand_server_holds_frozen_block",
+                len(reads) > 1 and reads[-1] is not None and reads[-1] == reads[-2])
     _aim(steps, falling)
     def sample() -> dict:
         rows = steps.call("minecraft_list_entities", {

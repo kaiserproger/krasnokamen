@@ -23,13 +23,16 @@ class FrozenFall:
     follow the wall clock. Each harness request costs `latency` seconds. The client
     draws a frozen block at its previous predicted pose (the native client's
     partial-0 presentation), which the gate must accept along with vanilla's.
+    `holds=False` models a server that keeps dropping the block while frozen. Chat
+    observations are the native client's `recent_chat`: the last 20 lines, newest first.
     """
 
-    def __init__(self, latency: float, phase: int) -> None:
-        self.latency, self.phase = latency, phase
+    def __init__(self, latency: float, phase: int, holds: bool = True) -> None:
+        self.latency, self.phase, self.holds = latency, phase, holds
         self.now = self.next_tick = 0.
         self.rate, self.loop = 20., 0
         self.commands: list[str] = []
+        self.chat: list[str] = []
         self.server_steps = self.client_steps = 0
         self.sand_pending = False
         self.server: list[float] | None = None  # [y, velocity]
@@ -55,6 +58,9 @@ class FrozenFall:
                 self.rate = float(words[2])
             elif words[0] == "setblock":
                 self.sand_pending = True
+            elif words[:2] == ["data", "get"]:
+                self.chat.append(f"Falling Block has the following entity data: [0.0d, {self.server[0]!r}d, 0.0d]"
+                                 if self.server else "No entity was found")
         self.commands.clear()
         stepped = self.server_steps > 0
         self.server_steps -= stepped
@@ -62,7 +68,7 @@ class FrozenFall:
             self.sand_pending = False
             self.server, self.client = [107., 0.], [107., 0.]
             self.sent = self.received = self.presented = 107.
-        elif stepped and self.server:
+        elif self.server and (stepped or not self.holds):
             fall(self.server)
         if self.client_steps > 0:
             self.client_steps -= 1
@@ -89,8 +95,11 @@ class FrozenFall:
         self.report["fixture_commands"].append(command)
         self.commands.append(command)
 
-    def call(self, name: str, _arguments: dict | None = None) -> dict:
+    def call(self, name: str, arguments: dict | None = None) -> dict:
         self.advance(self.latency)
+        if name == "minecraft_send_chat":
+            self.chat.append(f"<HarnessEntities> {arguments['message']}")
+            return {}
         if name == "minecraft_wait_for_visible_entity":
             while self.client is None:
                 self.advance(self.latency)
@@ -101,9 +110,10 @@ class FrozenFall:
         deadline = self.now + (timeout_seconds or 600.)
         while self.now < deadline:
             self.advance(self.latency)  # observe; the predicate's own requests add theirs
-            if predicate({}):
+            state = {"recent_chat": self.chat[::-1][:20]}
+            if predicate(state):
                 self.check(label, True)
-                return {}
+                return state
         self.check(label, False)
         return {}
 
@@ -120,8 +130,8 @@ def fall(body: list[float]) -> None:
 
 
 class SandGateTests(unittest.TestCase):
-    def run_gate(self, latency: float, phase: int) -> FrozenFall:
-        world = FrozenFall(latency, phase)
+    def run_gate(self, latency: float, phase: int, holds: bool = True) -> FrozenFall:
+        world = FrozenFall(latency, phase, holds)
         with tempfile.TemporaryDirectory() as directory:
             frames = []
             for color in ("red", "blue"):
@@ -145,6 +155,12 @@ class SandGateTests(unittest.TestCase):
                     world = self.run_gate(latency, phase)
                     self.assertTrue(all(world.report["assertions"].values()))
                     self.assertIn("tick rate 20", world.report["fixture_commands"])
+
+    def test_a_server_that_keeps_dropping_a_frozen_block_turns_the_gate_red(self) -> None:
+        for latency in (.05, .25, .5):
+            with self.subTest(latency=latency), \
+                    self.assertRaisesRegex(RuntimeError, "sand_server_holds_frozen_block"):
+                self.run_gate(latency, 7, holds=False)
 
     def test_prediction_check_is_vanilla_falling_block_integration(self) -> None:
         # Receipt 20261111T163719-native-v2-input-sand-2gazssgv: two client-predicted ticks.
