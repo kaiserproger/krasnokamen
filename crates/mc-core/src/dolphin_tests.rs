@@ -179,18 +179,21 @@ fn dolphin_feed_debit_reaches_the_client_inventory() {
         .unwrap();
     state.players.get_mut(&actor).unwrap().inventory.slots[0] = mc_data::ItemStack::new(cod, 1);
     let mut intents = Vec::new();
-    assert!(interact(&mut state, actor, dolphin, Hand::Main, &mut intents));
+    assert!(interact(
+        &mut state,
+        actor,
+        dolphin,
+        Hand::Main,
+        &mut intents
+    ));
     state.outbox.clear();
     assert_eq!(state.merge(&mut intents), 1);
     assert!(state.players[&actor].inventory.slots[0].is_empty());
-    let synced = state
-        .outbox
-        .get(&ConnectionId(1))
-        .is_some_and(|queue| {
-            queue
-                .iter()
-                .any(|change| matches!(change, crate::boundary::PlayerChange::MenuContents { .. }))
-        });
+    let synced = state.outbox.get(&ConnectionId(1)).is_some_and(|queue| {
+        queue
+            .iter()
+            .any(|change| matches!(change, crate::boundary::PlayerChange::MenuContents { .. }))
+    });
     assert!(synced, "the debited cod must be resynced to the client");
 }
 #[test]

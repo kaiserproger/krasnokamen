@@ -401,7 +401,11 @@ fn fix_mobs_placed_spawner_default_record_does_not_poison_chunk_hydration() {
         !decoded.contains_key(&key),
         "unconfigured spawner stays inert"
     );
-    assert_eq!(decoded.len(), 1, "the configured fixture spawner still loads");
+    assert_eq!(
+        decoded.len(),
+        1,
+        "the configured fixture spawner still loads"
+    );
 }
 
 #[test]

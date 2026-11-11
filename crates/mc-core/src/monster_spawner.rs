@@ -157,8 +157,8 @@ pub(crate) fn decode_chunk(
             .and_then(|id| registry.blocks.by_id(id))
             .is_some_and(|block| block.block.id.path() == "spawner")
         {
-            let fields = nbt::decode(bytes)
-                .map_err(|error| format!("monster spawner {pos:?}: {error}"))?;
+            let fields =
+                nbt::decode(bytes).map_err(|error| format!("monster spawner {pos:?}: {error}"))?;
             if field(&fields, "SpawnData").is_none() {
                 // A freshly placed spawner persists its default record without
                 // SpawnData (vanilla: no entity configured, nothing spawns).
