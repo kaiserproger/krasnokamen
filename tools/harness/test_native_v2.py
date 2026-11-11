@@ -221,6 +221,30 @@ class NativeV2ProbeTests(unittest.TestCase):
         self.assertFalse(predicate({"recent_chat": ["Game rule natural_health_regeneration is now set to true"]}))
         self.assertTrue(predicate({"recent_chat": ["Game rule natural_health_regeneration is now set to false"]}))
 
+    def test_damage_scenario_stops_the_zombie_before_slow_capture(self) -> None:
+        from .backends import native_p4
+
+        events: list[tuple[str, str]] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = lambda command: events.append(("fixture", command))
+        steps.call.side_effect = lambda tool, _args: events.append(("call", tool))
+
+        class Stop(Exception):
+            pass
+
+        def capture(_steps: object, name: str) -> None:
+            events.append(("capture", name))
+            if name == "p4-damage-hit":
+                raise Stop
+
+        with mock.patch.object(native_p4, "_capture", capture), self.assertRaises(Stop):
+            native_p4._damage(steps, (10, 70, 10))
+
+        hit = events.index(("call", "minecraft_wait_for_health_below"))
+        kill = events.index(("fixture", f"kill {native_p4._DAMAGE_ZOMBIE_UUID}"))
+        self.assertEqual(kill, hit + 1)
+        self.assertLess(kill, events.index(("capture", "p4-damage-hit")))
+
     def test_p4_advancement_labels_are_actual_visible_ui_nodes(self) -> None:
         from .backends.native_p4 import _advancement_labels
 

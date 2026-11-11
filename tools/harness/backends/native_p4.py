@@ -242,6 +242,9 @@ def _disable_natural_regeneration(steps: ProbeSteps) -> None:
     )
 
 
+_DAMAGE_ZOMBIE_UUID = "00000000-0000-0000-0000-00000001e242"  # UUID:[I;0,0,0,123458]
+
+
 def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
     steps.fixture("time set 18000")
@@ -255,7 +258,7 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     zombie: dict[str, Any] = {}
     def zombie_received(_: dict[str, Any]) -> bool:
         row = next((row for row in _rows(steps, 16)
-                    if row.get("entity_uuid") == "00000000-0000-0000-0000-00000001e242"), None)
+                    if row.get("entity_uuid") == _DAMAGE_ZOMBIE_UUID), None)
         if row is None:
             return False
         zombie.update(row)
@@ -263,6 +266,10 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.wait(zombie_received, "damage_zombie_authored_uuid_received")
     hit = steps.call("minecraft_wait_for_health_below", {"health": baseline, "timeout_seconds": steps.remaining()})
     steps.report["hit"] = hit
+    # One received hit is the whole claim. Screenshots and observations below take
+    # many client ticks; a living zombie keeps hitting and kills the survival
+    # player before the cleanup fixture below reaches the server.
+    steps.fixture(f"kill {_DAMAGE_ZOMBIE_UUID}")
     hurt = steps.wait(lambda current: current["player"].get("hurt_tick") is not None
                       and abs(current["player"].get("hurt_tilt_deg", 0)) > .05,
                       "received_damage_event_nonzero_camera_tilt")
@@ -296,7 +303,6 @@ def _death_protection(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     player_id = steps.observe()["player"]["entity_id"]
     steps.fixture("gamerule natural_health_regeneration false")
     # Real client receives and consumes a non-totem death-protection component.
-    steps.fixture("kill @e[type=minecraft:zombie,distance=..32]")
     steps.fixture("gamemode creative @s")
     steps.fixture("effect give @s minecraft:instant_health 1 5 true")
     steps.fixture("effect give @s minecraft:slowness 60 0 true")
