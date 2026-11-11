@@ -280,7 +280,8 @@ class NativeV2ProbeTests(unittest.TestCase):
         events: list[str] = []
         steps = mock.MagicMock()
         steps.fixture.side_effect = events.append
-        steps.call.side_effect = lambda tool, args=None: events.append(f"{tool}:{(args or {}).get('ticks')}")
+        steps.call.side_effect = lambda tool, args=None: (
+            events.append(f"{tool}:{(args or {}).get('ticks')}") or {})
 
         def wait(_predicate, label, **_kwargs):
             if label == "in_fire_physical_identity_received":

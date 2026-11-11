@@ -243,6 +243,17 @@ def _wait_damage_identity(steps: ProbeSteps, predicate: Any, label: str, start: 
         raise
 
 
+def _note_region(steps: ProbeSteps, label: str, origin: tuple[int, int, int]) -> None:
+    """Record the non-air cells (blocks and fluids) around the player's cell as the client sees them."""
+    x, y, z = origin
+    scan = steps.call("minecraft_scan_blocks", {
+        "min_x": x - 1, "max_x": x + 1, "min_y": y - 1, "max_y": y + 3,
+        "min_z": z - 1, "max_z": z + 1, "max_blocks": 64})
+    steps.report.setdefault("region_cells", {})[label] = [
+        row for row in scan.get("blocks", [])
+        if row.get("block_id") != "minecraft:air" or not (row.get("fluid") or {}).get("empty", True)]
+
+
 def _disable_gamerule(steps: ProbeSteps, rule: str) -> None:
     """Set a boolean rule false and wait for the server's acknowledgement."""
     steps.fixture(f"gamerule {rule} false")
@@ -509,6 +520,7 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
             # on_fire row never starts; let the douse water settle first.
             steps.call("minecraft_wait_ticks", {"ticks": 60})
         baseline = steps.observe()["player"]["health"]
+        _note_region(steps, f"{kind}_before_fixture", origin)
         start = len(steps.client.p4_damage_wire())
         steps.fixture("gamemode survival @s")
         if kind == "stalagmite":
