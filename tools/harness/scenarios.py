@@ -986,7 +986,8 @@ SCENARIOS: dict[str, Scenario] = {
     ),
     "native-v2-p4-damage": _entry(
         id="native-v2-p4-damage", summary="Native zombie hit and retained before/hit/after frames",
-        owner="core:harness", evidence="tcp", profile="entities", scenario_id="native-v2-p4-damage",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-p4-damage",
+        requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_p4.py"),
         fixture="native v2; nighttime zombie beside healthy survival player",
         proves="received health loss and live client/input after the hit",

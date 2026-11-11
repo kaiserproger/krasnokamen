@@ -66,7 +66,7 @@ native-v2-p2-enderman            tcp          Native arrow reverses and Enderman
 native-v2-p2-fishing             tcp          Native open-water cast, real bite, reel, caught inventory and early-reel refusal
 native-v2-p2-slime               tcp          Native medium slime kill, small children and no recursive split
 native-v2-p4-advancements        tcp          Native story advancements, earned stone pickaxe and restart
-native-v2-p4-damage              tcp          Native zombie hit and retained before/hit/after frames
+native-v2-p4-damage              graphical   Native zombie hit and retained before/hit/after frames
 native-v2-p4-hopper              tcp          Native Q drop enters nearby hopper, exact withdrawal and no duplicate
 native-v2-p4-nameplates          tcp          Native explicit/hidden armor-stand labels, targeted pig and server restart
 native-v2-p4-statistics          tcp          Native earned statistics, tabs, restart and repeated authoritative requests
