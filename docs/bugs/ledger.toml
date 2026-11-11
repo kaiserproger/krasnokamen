@@ -1582,7 +1582,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-ENABLE Fix patch: reversing it removes the enable/disable arms (and the in-progress guard) from datapack_management::dispatch, back to list-only dispatch."
-regression = ["cargo:mc-core:datapacks::command_tests::enable_and_disable_follow_vanilla_ordering_errors_and_results", "cargo:mc-core:datapacks::command_tests::the_saved_pack_selection_decides_which_recipes_load_after_a_restart", "cargo:mc-core:datapacks::command_tests::a_selected_pack_gone_from_disk_is_dropped_with_a_warning", "cargo:mc-core:datapacks::command_tests::a_pack_removed_while_the_server_is_down_opens_the_world_without_it", "cargo:mc-core:datapacks::command_tests::a_corrupt_saved_selection_fails_closed", "harness:datapack-reload:native-datapack-reload"]
+regression = ["cargo:mc-core:datapacks::command_tests::enable_and_disable_follow_vanilla_ordering_errors_and_results", "cargo:mc-core:datapacks::command_tests::the_saved_pack_selection_decides_which_recipes_load_after_a_restart", "cargo:mc-core:datapacks::command_tests::a_selected_pack_gone_from_disk_is_dropped_with_a_warning", "cargo:mc-core:datapacks::command_tests::a_pack_removed_while_the_server_is_down_opens_the_world_without_it", "cargo:mc-core:datapacks::command_tests::a_corrupt_saved_selection_fails_closed", "harness:datapack-reload:native-datapack-reload", "cargo:mc-core:datapacks::command_tests::unreadable_or_non_pack_folder_entries_are_skipped_at_start_and_named", "cargo:mc-core:datapacks::command_tests::a_reload_skips_a_new_broken_pack_and_applies_the_rest_but_a_broken_saved_pack_refuses_it", "cargo:mc-core:datapacks::command_tests::list_and_activation_work_beside_unreadable_entries", "cargo:mc-core:datapacks::command_tests::a_filter_the_regex_engine_refuses_is_a_pack_load_error_named_like_any_other"]
 fix_commit = "patch:ae952b710b447efb53086f6ce311e5157dee2236b89e916391a53b188c30586b"
 
 [[bug]]
@@ -1767,7 +1767,7 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/BreakJoinRows/FINDINGS.md#F1 (javap/ListPlayersCommand.txt, ServerPlayer$3.txt) Fix patch: reversing it answers /list with feedback() instead of success_feedback(), so the reply ignores send_command_feedback again."
-regression = ["cargo:mc-edge:server::view_distance_tests::list_obeys_the_send_command_feedback_rule", "harness:chat-visibility:native-chat-visibility"]
+regression = ["cargo:mc-edge:server::view_distance_tests::list_obeys_the_send_command_feedback_rule", "harness:chat-visibility:native-chat-visibility", "cargo:mc-core:dimensions::tests::send_command_feedback_set_from_the_nether_is_published_for_the_edge"]
 fix_commit = "patch:1aed53805ed4661b36912d435ccc2b0c50c5be5f3994bf473eb8dd5a96a4f0d8"
 
 [[bug]]
