@@ -22,6 +22,47 @@ fn random(seed: u64) -> u64 {
     value ^ (value >> 31)
 }
 
+/// Shared indexed orb allocation; producers supply native value/count and motion.
+pub(crate) fn spawn(
+    state: &mut TickState,
+    type_id: u32,
+    pos: [f64; 3],
+    value_count: (i32, i32),
+    vel: [f64; 3],
+    yaw: f32,
+) -> EntityId {
+    let id = state.entities.alloc_id();
+    state.entities.spawn(
+        id,
+        state.entity_uuid(id),
+        EntityKind::ExperienceOrb { type_id },
+        ColdFields {
+            pos,
+            vel,
+            yaw,
+            pitch: 0.0,
+            ground: false,
+            health: 5.0,
+            breed_cooldown: 0,
+            pickup_delay: 0,
+            item: None,
+            appearance: Arc::new(EntityAppearance {
+                experience_orb: Some(value_count),
+                health: 5.0,
+                ..Default::default()
+            }),
+            movement: crate::blueprint::MovementClass::Item,
+            half_width: 0.25,
+            height: 0.5,
+            speed: 0.0,
+            attack_damage: 0.0,
+            sight_range: 0.0,
+            attack_reach: 0.0,
+        },
+    );
+    id
+}
+
 /// Spawn denominations; the vanilla randomized 40-group merge bounds orb density.
 pub(crate) fn award(
     state: &mut TickState,
@@ -69,40 +110,19 @@ pub(crate) fn award(
             state.appearance_changed.push(body.id);
             continue;
         }
-        let id = state.entities.alloc_id();
         let unit = |salt| random(seed ^ salt) as f64 / u64::MAX as f64;
-        state.entities.spawn(
-            id,
-            state.entity_uuid(id),
-            EntityKind::ExperienceOrb { type_id },
-            ColdFields {
-                pos,
-                // Core velocities are blocks/second; vanilla uses blocks/tick.
-                vel: [
-                    (unit(1) * 0.4 - 0.2) * 20.0,
-                    unit(2) * 8.0,
-                    (unit(3) * 0.4 - 0.2) * 20.0,
-                ],
-                yaw: (unit(4) * 360.0) as f32,
-                pitch: 0.0,
-                ground: false,
-                health: 5.0,
-                breed_cooldown: 0,
-                pickup_delay: 0,
-                item: None,
-                appearance: Arc::new(EntityAppearance {
-                    experience_orb: Some((value, 1)),
-                    health: 5.0,
-                    ..Default::default()
-                }),
-                movement: crate::blueprint::MovementClass::Item,
-                half_width: 0.25,
-                height: 0.5,
-                speed: 0.0,
-                attack_damage: 0.0,
-                sight_range: 0.0,
-                attack_reach: 0.0,
-            },
+        let id = spawn(
+            state,
+            type_id,
+            pos,
+            (value, 1),
+            // Core velocities are blocks/second; vanilla uses blocks/tick.
+            [
+                (unit(1) * 0.4 - 0.2) * 20.0,
+                unit(2) * 8.0,
+                (unit(3) * 0.4 - 0.2) * 20.0,
+            ],
+            (unit(4) * 360.0) as f32,
         );
         spawned.push(id);
     }
@@ -571,7 +591,10 @@ fn run_inner(
             .expect("orb");
         let player = state.players.get_mut(&collector).expect("player");
         let (remaining, repaired) = mend(player, value, state.tick ^ id.0 as u64);
-        crate::commands::add_experience(&mut player.vitals.experience, remaining, false);
+        // Native playerTouch credits only a positive Mending remainder.
+        if remaining > 0 {
+            crate::commands::add_experience(&mut player.vitals.experience, remaining, false);
+        }
         let connection = player.connection;
         let xp = player.experience_change();
         let inventory = repaired.then(|| player.inventory_contents());

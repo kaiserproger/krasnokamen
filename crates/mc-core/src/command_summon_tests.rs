@@ -17,6 +17,124 @@ fn summon(kind: &str, nbt: &str) -> (TickState, EntityId) {
 }
 
 #[test]
+fn experience_orb_summon_preserves_native_value_count_kind_and_checkpoint() {
+    for (nbt, expected) in [
+        ("{Value:5s,Count:4,Motion:[0d,0d,0d]}", (5, 4)),
+        ("{Value:7s}", (7, 1)),
+        ("", (0, 1)),
+        ("{}", (0, 1)),
+        ("{Value:-1s}", (-1, 1)),
+    ] {
+        let (state, id) = summon("experience_orb", nbt);
+        let slot = state.entities.slot_of(id).unwrap();
+        let body = state.entities.body(slot);
+        let row = state.entities.row(slot);
+        assert_eq!(
+            state.entities.experience_orbs().collect::<Vec<_>>(),
+            vec![id]
+        );
+        assert!(
+            state
+                .entities
+                .bodies()
+                .iter()
+                .all(|body| !matches!(body.kind, crate::entities::EntityKind::Mob { .. })),
+            "{nbt}: not a mob row"
+        );
+        assert!(matches!(
+            body.kind,
+            crate::entities::EntityKind::ExperienceOrb { .. }
+        ));
+        assert_eq!(row.appearance.experience_orb, Some(expected));
+        assert_eq!(body.movement, crate::blueprint::MovementClass::Item);
+        assert_eq!((body.half_width, body.height), (0.25, 0.5));
+        let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+        let native = chunks
+            .values()
+            .flat_map(|chunk| &chunk.entities)
+            .find(|entity| entity.uuid == row.uuid)
+            .unwrap();
+        assert_eq!(native.experience_orb, Some(expected));
+        let fields = mc_data::entity_nbt::entity_to_fields(&state.registry.items, native).unwrap();
+        assert!(fields.contains(&("Value".into(), Tag::Short(expected.0 as i16))));
+        assert!(fields.contains(&("Count".into(), Tag::Int(expected.1))));
+        if expected.0 < 0 {
+            let root = std::env::temp_dir().join(format!(
+                "solaris-summon-signed-orb-{}",
+                uuid::Uuid::new_v4()
+            ));
+            mc_world::anvil::write_entity_regions(&root, &state.registry.items, &chunks, 0)
+                .unwrap();
+            let reopened =
+                mc_world::anvil::read_entity_regions(&root, &state.registry.items).unwrap();
+            let restored = reopened
+                .values()
+                .flat_map(|chunk| &chunk.entities)
+                .find(|entity| entity.uuid == row.uuid)
+                .unwrap();
+            assert_eq!(restored.experience_orb, Some(expected));
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+}
+
+#[test]
+fn experience_orb_summon_enters_native_pickup_processing() {
+    let (mut state, id) = summon("experience_orb", "{Value:5s,Count:4}");
+    let player = *state.players.keys().next().unwrap();
+    crate::experience_orbs::run(&mut state, &mut ChangeSet::default(), &mut Vec::new());
+    assert_eq!(state.players[&player].vitals.experience.total, 5);
+    let slot = state.entities.slot_of(id).expect("three pickups remain");
+    assert_eq!(
+        state.entities.row(slot).appearance.experience_orb,
+        Some((5, 3))
+    );
+}
+
+#[test]
+fn negative_experience_orb_pickup_preserves_xp_and_native_mending_damage() {
+    for (nbt, expected_damage) in [
+        ("{Value:-1s}", None),
+        ("{Value:-1s}", Some(20)),
+        ("{Value:-32768s}", Some(20)),
+    ] {
+        let (mut state, id) = summon("experience_orb", nbt);
+        let player = *state.players.keys().next().unwrap();
+        let actor = state.players.get_mut(&player).unwrap();
+        actor.vitals.experience.add_points(10);
+        let before = actor.vitals.experience;
+        if expected_damage.is_some() {
+            actor.inventory.slots[0] = crate::command_items::ItemArgument::parse(
+                r#"minecraft:diamond_pickaxe[damage=20,enchantments={"minecraft:mending":1}]"#,
+            )
+            .unwrap()
+            .stack(&state.registry.items)
+            .unwrap();
+        }
+        let mut changes = ChangeSet::default();
+        crate::experience_orbs::run(&mut state, &mut changes, &mut Vec::new());
+        assert_eq!(state.players[&player].vitals.experience, before, "{nbt}");
+        assert_eq!(
+            state.players[&player].inventory.slots[0].damage,
+            expected_damage
+        );
+        assert!(state.entities.slot_of(id).is_none());
+        assert_eq!(changes.entities_removed, vec![id]);
+    }
+}
+
+#[test]
+fn experience_orb_summon_rejects_invalid_or_misapplied_fields_before_allocation() {
+    let mut state = rejected_tag_fixture();
+    for value in ["0", "-1", "1.5f", "'bad'"] {
+        rejected_tag_in_state(&mut state, "experience_orb", "Count", value);
+    }
+    rejected_tag_in_state(&mut state, "experience_orb", "Value", "'bad'");
+    rejected_tag_in_state(&mut state, "cow", "Value", "5s");
+    rejected_tag_in_state(&mut state, "cow", "Count", "4");
+}
+
+#[test]
 fn persistence_required_iron_golem_template_and_checkpoint_are_native() {
     let (state, id) = summon("iron_golem", "{NoAI:1b,PersistenceRequired:1b}");
     let slot = state.entities.slot_of(id).unwrap();

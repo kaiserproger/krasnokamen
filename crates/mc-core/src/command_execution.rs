@@ -957,8 +957,7 @@ pub(crate) fn execute(
                 .registry
                 .blueprint(type_id)
                 .map_or(20.0, |blueprint| blueprint.params.max_health);
-            let id = state.spawn_mob(type_id, at, health);
-            crate::command_summon::apply(state, id, image);
+            let id = crate::command_summon::spawn(state, type_id, at, health, image);
             changes.entities_spawned.push(id);
             success_feedback(
                 state,
