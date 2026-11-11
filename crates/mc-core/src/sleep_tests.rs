@@ -630,6 +630,122 @@ fn a_bed_holds_one_sleeper() {
     assert_eq!(rig.state.sleepers.len(), 1);
 }
 
+/// A villager asleep in the rig's bed, as the brain leaves it.
+fn sleeping_villager(rig: &mut Rig) -> (crate::entities::EntitySlot, EntityId) {
+    let head = rig.head;
+    let slot = crate::settlements::allocator::tests::villager(
+        &mut rig.state,
+        [
+            f64::from(head.x) + 0.5,
+            f64::from(head.y) + 0.6875,
+            f64::from(head.z) + 0.5,
+        ],
+    );
+    let villager = rig.state.entities.body(slot).id;
+    let dimension = rig.state.dimension.name().to_owned();
+    let v = rig
+        .state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .expect("villager");
+    v.home = Some(head);
+    v.home_dimension = dimension;
+    v.activity = crate::villager::Activity::Rest;
+    v.sleeping = true;
+    crate::villager::sync_appearance(&mut rig.state, slot);
+    assert_eq!(rig.pose(villager), SLEEPING_POSE);
+    (slot, villager)
+}
+
+fn villager_sleeping(rig: &Rig, slot: crate::entities::EntitySlot) -> bool {
+    rig.state
+        .entities
+        .row(slot)
+        .villager
+        .as_ref()
+        .expect("villager")
+        .sleeping
+}
+
+/// Vanilla `BedBlock.useWithoutItem` on a bed a villager sleeps in: the
+/// click only kicks the villager out; the next click puts the player to bed.
+#[test]
+fn using_a_bed_a_villager_sleeps_in_only_wakes_the_villager() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    let head = rig.head;
+    let (slot, villager) = sleeping_villager(&mut rig);
+
+    let drains = rig.use_bed(1);
+    assert!(
+        !rig.state.sleepers.contains_key(&rig.player),
+        "the click that wakes the villager does not put the player to bed"
+    );
+    assert!(!said(&drains, "This bed is occupied"));
+    assert!(
+        !rig.state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .expect("villager")
+            .sleeping
+    );
+    assert_eq!(rig.pose(villager), 0);
+    assert_eq!(rig.state.entities.body(slot).height, 1.95);
+    assert_eq!(rig.state.entities.pos(slot)[1], f64::from(head.y));
+
+    // The woken villager stays up through its brain's decisions beside the
+    // bed (vanilla SleepInBed waits 100 ticks after LAST_WOKEN), so the next
+    // click sleeps.
+    rig.run(40);
+    assert!(
+        !villager_sleeping(&rig, slot),
+        "lay down again within 40 ticks"
+    );
+    let at = crate::settlements::allocator::distance(
+        rig.state.entities.pos(slot),
+        crate::settlements::allocator::centre(head),
+    );
+    assert!(at <= 4.0, "the villager stays within bed reach: {at}");
+    rig.use_bed(1);
+    assert_eq!(
+        rig.state
+            .sleepers
+            .get(&rig.player)
+            .map(|sleeper| sleeper.bed),
+        Some(head)
+    );
+}
+
+/// The kicked villager lies down again on its own, but only once the
+/// 100-tick wake cooldown has passed.
+#[test]
+fn kicked_villager_lies_down_again_only_after_the_wake_cooldown() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    let (slot, _) = sleeping_villager(&mut rig);
+    rig.use_bed(1);
+    assert!(!villager_sleeping(&rig, slot));
+    let kicked = rig.state.tick;
+    let mut again = None;
+    for _ in 0..400 {
+        rig.run(1);
+        if villager_sleeping(&rig, slot) {
+            again = Some(rig.state.tick);
+            break;
+        }
+    }
+    let again = again.expect("the villager lies down again the same night");
+    assert!(
+        again >= kicked + 100,
+        "lay down {} ticks after the kick",
+        again - kicked
+    );
+}
+
 #[test]
 fn leaving_the_bed_wakes_the_player() {
     let mut rig = Rig::new();

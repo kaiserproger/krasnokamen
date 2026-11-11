@@ -29,6 +29,9 @@ pub(crate) use social::*;
 /// Fixed (once 600 on hosts with <= 2 CPUs, 200 otherwise) so the same inputs
 /// produce the same world regardless of the host's core count.
 const SCHEDULE_WINDOW: u64 = 200;
+/// Vanilla `SleepInBed.COOLDOWN_AFTER_BEING_WOKEN`: a woken villager does not
+/// lie down again for this many ticks (`LAST_WOKEN`; here the last tick asleep).
+const WAKE_COOLDOWN: u64 = 100;
 
 // Full decisions spend the global tick allowance shared with settlement
 // allocation and other dimensions; the brain never refills it locally.
@@ -278,13 +281,70 @@ pub(super) fn bodies_near(
 }
 
 fn roofed(state: &TickState, pos: BlockPos) -> bool {
-    (pos.y + 1..state.world.geometry().max_y()).any(|y| {
-        state
-            .world
-            .block_at(pos.x, y, pos.z)
-            .and_then(|id| state.registry.collision_boxes.get(id as usize))
-            .is_some_and(|shapes| !shapes.is_empty())
-    })
+    allocator::roofed(&state.world, &state.registry, pos)
+}
+
+/// Vanilla `stopSleeping`: the woken body takes its standing size on a free
+/// cell beside the bed.
+fn stand_up(state: &mut TickState, slot: EntitySlot, baby: bool) {
+    let (width, height) = if baby { (0.15, 0.975) } else { (0.3, 1.95) };
+    state.entities.set_half_width(slot, width);
+    state.entities.body_mut(slot).height = height;
+    let cell = at(state.entities.pos(slot));
+    // A sleeping body rests at bed.y + 0.6875, which `at` rounds up to
+    // bed.y + 1; the stand-up cells beside the bed sit at bed level, so
+    // search one block down first, then the rounded cell itself.
+    for dy in [-1, 0] {
+        for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            if let Some(p) = standing(
+                &state.world,
+                &state.registry,
+                BlockPos {
+                    x: cell.x + dx,
+                    y: cell.y + dy,
+                    z: cell.z + dz,
+                },
+                width,
+                height,
+            ) {
+                state.entities.set_pos(slot, p);
+                return;
+            }
+        }
+    }
+}
+
+/// Vanilla `BedBlock.kickVillagerOutOfBed`: wake the villager asleep in the
+/// bed whose head is `head`. `false` when none sleeps there.
+pub(crate) fn kick_out_of_bed(state: &mut TickState, head: BlockPos) -> bool {
+    let chunk = ChunkPos {
+        x: head.x.div_euclid(16),
+        z: head.z.div_euclid(16),
+    };
+    let dimension = state.dimension.name();
+    let Some(slot) = state
+        .entities
+        .villager_chunks()
+        .get(&chunk)
+        .into_iter()
+        .flatten()
+        .filter_map(|&id| state.entities.slot_of(id))
+        .find(|&slot| {
+            state.entities.row(slot).villager.as_ref().is_some_and(|v| {
+                v.sleeping && v.home == Some(head) && v.home_dimension == dimension
+            })
+        })
+    else {
+        return false;
+    };
+    let tick = state.tick;
+    let v = state.entities.row_mut(slot).villager.as_mut().unwrap();
+    v.sleeping = false;
+    v.last_slept = Some(tick);
+    let baby = v.age < 0;
+    stand_up(state, slot, baby);
+    super::sync_appearance(state, slot);
+    true
 }
 
 /// A roofed bottom stair beside the villager with body room above it (a stair
@@ -910,6 +970,10 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             && sleep_home_allowed
             && !v.sleeping
             && v.activity == Activity::Rest
+            && !v
+                .last_slept
+                .and_then(|slept| state.tick.checked_sub(slept))
+                .is_some_and(|elapsed| elapsed < WAKE_COOLDOWN)
             && let Some(home) = home
         {
             let available = decision_phase!(cache, 1, {
@@ -930,40 +994,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             }
         }
         if was_sleeping && !v.sleeping {
-            let (width, height) = if v.age < 0 {
-                (0.15, 0.975)
-            } else {
-                (0.3, 1.95)
-            };
-            state.entities.set_half_width(slot, width);
-            state.entities.body_mut(slot).height = height;
-            let cell = at(pos);
-            // A sleeping body rests at bed.y + 0.6875, which `at` rounds up to
-            // bed.y + 1; the stand-up cells beside the bed sit at bed level, so
-            // search one block down first, then the rounded cell itself.
-            for dy in [-1, 0] {
-                let mut placed = false;
-                for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-                    if let Some(p) = standing(
-                        &state.world,
-                        &state.registry,
-                        BlockPos {
-                            x: cell.x + dx,
-                            y: cell.y + dy,
-                            z: cell.z + dz,
-                        },
-                        width,
-                        height,
-                    ) {
-                        state.entities.set_pos(slot, p);
-                        placed = true;
-                        break;
-                    }
-                }
-                if placed {
-                    break;
-                }
-            }
+            stand_up(state, slot, v.age < 0);
         }
         let changing_seated_activity = old_activity != v.activity && v.seat.is_some();
         // A resident heading to its own bed at rest never stops on a seat.
