@@ -302,7 +302,7 @@ SCENARIOS: dict[str, Scenario] = {
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
                  "tools/harness/backends/client_probes.py"),
         fixture="placed spawner, day, peaceful difficulty",
-        proves="SpawnData.id reads minecraft:cow after egg use, no adjacent mob appears on use, and the spawner later spawns the cow",
+        proves="SpawnData.entity.id reads minecraft:cow after egg use, no adjacent mob appears on use, and the spawner later spawns the cow",
         limits="one spawner, one egg, one spawned cow",
     ),
     "native-v2-golem": _entry(

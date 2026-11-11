@@ -138,7 +138,7 @@ def _spawner_egg(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     steps.call("minecraft_look_at_block", {**spawner, "face": "north"})
     _use(steps, spawner, "north")
-    steps.fixture(f"data get block {spawner['x']} {spawner['y']} {spawner['z']} SpawnData.id")
+    steps.fixture(f"data get block {spawner['x']} {spawner['y']} {spawner['z']} SpawnData.entity.id")
     _chat_has(steps, "spawner_configured_with_cow", "minecraft:cow")
     near_now = [row for row in _rows(steps, 8)
                 if row["entity_type"] == "minecraft:cow" and row["entity_uuid"] not in before

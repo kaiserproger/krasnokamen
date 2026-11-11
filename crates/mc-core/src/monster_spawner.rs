@@ -57,7 +57,12 @@ impl Spawner {
         bytes: &[u8],
         registry: &crate::registry::CoreRegistry,
     ) -> Result<Self, String> {
-        let fields = nbt::decode(bytes)?;
+        Self::from_fields(nbt::decode(bytes)?, registry)
+    }
+    fn from_fields(
+        fields: Fields,
+        registry: &crate::registry::CoreRegistry,
+    ) -> Result<Self, String> {
         let spawn = nbt::compound(&fields, "SpawnData")?.ok_or("SpawnData missing")?;
         let spawn = data::SpawnData::decode(spawn, registry)?;
         let potentials = data::potentials(&fields, registry)?;
@@ -152,7 +157,16 @@ pub(crate) fn decode_chunk(
             .and_then(|id| registry.blocks.by_id(id))
             .is_some_and(|block| block.block.id.path() == "spawner")
         {
-            let entry = Spawner::decode(bytes, registry)
+            let fields = nbt::decode(bytes)
+                .map_err(|error| format!("monster spawner {pos:?}: {error}"))?;
+            if field(&fields, "SpawnData").is_none() {
+                // A freshly placed spawner persists its default record without
+                // SpawnData (vanilla: no entity configured, nothing spawns).
+                // It stays inert until an egg or `data merge` configures it;
+                // rejecting it would make the whole chunk unloadable.
+                continue;
+            }
+            let entry = Spawner::from_fields(fields, registry)
                 .map_err(|error| format!("monster spawner {pos:?}: {error}"))?;
             decoded.insert((pos.x, pos.y, pos.z), entry);
         }
