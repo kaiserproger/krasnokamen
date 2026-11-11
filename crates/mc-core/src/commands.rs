@@ -157,6 +157,9 @@ pub struct Selector {
     pub nbt: Vec<(mc_nbt::Tag, bool)>,
     /// Advancement filters (`advancements={id=true}`).
     pub advancements: Vec<(String, bool)>,
+    /// Loot-predicate filters (`predicate=<id>` / `predicate=!<id>`) by
+    /// canonical identifier, resolved against the datapack predicates.
+    pub predicates: Vec<(String, bool)>,
     pub distance: Option<(Option<f64>, Option<f64>)>,
     /// Absolute selector-origin overrides (`x`, `y`, `z`).
     pub position: [Option<f64>; 3],
@@ -621,6 +624,7 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
         yaw: None,
         nbt: Vec::new(),
         advancements: Vec::new(),
+        predicates: Vec::new(),
         distance: None,
         position: [None; 3],
         extent: [None; 3],
@@ -823,9 +827,15 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
                 selector.nbt.push((nbt, negated));
             }
             "predicate" => {
-                return Err(CommandError::Message(
-                    "unsupported selector option 'predicate'".into(),
-                ));
+                let negated = value.starts_with('!');
+                let id = value.strip_prefix('!').unwrap_or(value);
+                let id = if id.contains(':') {
+                    id.to_owned()
+                } else {
+                    format!("minecraft:{id}")
+                };
+                let id = Identifier::parse(id).map_err(|_| invalid())?;
+                selector.predicates.push((id.as_str().to_owned(), negated));
             }
             "advancements" => {
                 let body = value

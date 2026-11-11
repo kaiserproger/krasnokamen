@@ -117,6 +117,41 @@ pub fn evaluate_criterion(criterion: &Criterion, context: &EventContext<'_>) -> 
     }
 }
 
+/// Evaluate a predicate file (one condition or a list of conditions) for a
+/// selector `predicate=` option. `event` carries the facts: `player` is the
+/// `this` entity snapshot (with an optional `scores` map), `location` its
+/// location, `time` the day time, `weather` the raining/thundering flags and
+/// `random` a fresh draw in `[0, 1)`. Unsupported conditions are reported and
+/// never match, also inside an inverted or alternative condition.
+#[must_use]
+pub fn evaluate_predicate(predicate: &Value, event: &Value) -> Evaluation {
+    let context = EventContext {
+        trigger: "minecraft:tick",
+        event,
+        inventory: &[],
+    };
+    let mut evaluator = Evaluator {
+        context: &context,
+        unsupported: BTreeSet::new(),
+        missing: 0,
+    };
+    let matches = match predicate {
+        Value::Array(_) => evaluator.conditions(predicate, "predicate"),
+        single => evaluator.condition(single, None, "predicate"),
+    };
+    Evaluation {
+        matches: matches && evaluator.unsupported.is_empty(),
+        unsupported: evaluator.unsupported,
+    }
+}
+
+/// Conditions of `predicate` that [`evaluate_predicate`] cannot evaluate,
+/// found without any entity: a datapack carrying one is refused at load.
+#[must_use]
+pub fn predicate_unsupported(predicate: &Value) -> BTreeSet<String> {
+    evaluate_predicate(predicate, &Value::Null).unsupported
+}
+
 fn trigger_fields(trigger: &str) -> Option<&'static [&'static str]> {
     Some(match trigger.strip_prefix("minecraft:")? {
         "impossible"
@@ -582,6 +617,10 @@ impl Evaluator<'_, '_> {
             "minecraft:block_state_property" => &["condition", "block", "properties"],
             "minecraft:inverted" => &["condition", "term"],
             "minecraft:all_of" | "minecraft:any_of" => &["condition", "terms"],
+            "minecraft:random_chance" => &["condition", "chance"],
+            "minecraft:time_check" => &["condition", "value", "period"],
+            "minecraft:weather_check" => &["condition", "raining", "thundering"],
+            "minecraft:entity_scores" => &["condition", "entity", "scores"],
             _ => {
                 self.unsupported.insert(child);
                 return false;
@@ -655,6 +694,93 @@ impl Evaluator<'_, '_> {
                         result &= matched;
                     } else {
                         result |= matched;
+                    }
+                }
+                result
+            }
+            "minecraft:random_chance" => {
+                let chance = get(condition, "chance");
+                let chance = chance.as_f64().or_else(|| {
+                    (get(chance, "type").as_str() == Some("minecraft:constant"))
+                        .then(|| get(chance, "value").as_f64())
+                        .flatten()
+                });
+                let Some(chance) = chance else {
+                    self.unsupported.insert(format!("{child}.chance"));
+                    return false;
+                };
+                match get(self.context.event, "random").as_f64() {
+                    Some(draw) => draw < chance,
+                    None => {
+                        self.missing += 1;
+                        false
+                    }
+                }
+            }
+            "minecraft:time_check" => {
+                let Some(time) = get(self.context.event, "time").as_i64() else {
+                    self.missing += 1;
+                    return false;
+                };
+                let actual = match get(condition, "period").as_i64() {
+                    Some(period) if period > 0 => time.rem_euclid(period),
+                    Some(_) => {
+                        self.unsupported.insert(format!("{child}.period"));
+                        return false;
+                    }
+                    None => time,
+                };
+                self.range(
+                    get(condition, "value"),
+                    &Value::from(actual),
+                    &format!("{child}.value"),
+                )
+            }
+            "minecraft:weather_check" => {
+                let weather = get(self.context.event, "weather");
+                let mut result = true;
+                for field in ["raining", "thundering"] {
+                    if let Some(expected) = get(condition, field).as_bool() {
+                        match get(weather, field).as_bool() {
+                            Some(actual) => result &= actual == expected,
+                            None => {
+                                self.missing += 1;
+                                result = false;
+                            }
+                        }
+                    }
+                }
+                result
+            }
+            "minecraft:entity_scores" => {
+                let actual = match get(condition, "entity").as_str() {
+                    Some("this") => entity.unwrap_or_else(|| get(self.context.event, "player")),
+                    Some("attacker") => get(self.context.event, "attacker"),
+                    Some("direct_attacker") => get(self.context.event, "direct_attacker"),
+                    Some("attacking_player") => get(self.context.event, "player"),
+                    _ => {
+                        self.unsupported.insert(format!("{child}.entity"));
+                        return false;
+                    }
+                };
+                let Some(scores) = get(condition, "scores").as_object() else {
+                    self.unsupported.insert(format!("{child}.scores"));
+                    return false;
+                };
+                if actual.is_null() {
+                    self.missing += 1;
+                    return false;
+                }
+                let mut result = true;
+                for (objective, range) in scores {
+                    // An unset score never satisfies a range (vanilla
+                    // `EntityHasScoreCondition`), also when inverted.
+                    match get(get(actual, "scores"), objective) {
+                        Value::Null => result = false,
+                        value => {
+                            result &=
+                                self.range(range, value, &format!("{child}.scores.{objective}"));
+                        }
                     }
                 }
                 result

@@ -50,22 +50,29 @@ fn id(input: &mut &str) -> Result<String, String> {
         .as_str()
         .to_owned())
 }
-fn source(state: &TickState, input: &mut &str) -> Result<Tag, String> {
-    if crate::command_nbt_path::argument(input)? != "storage" {
-        return Err("Only storage sources are supported".into());
-    }
-    let name = id(input)?;
-    let empty = Tag::Compound(Vec::new());
-    let root = state.command_storage.get(&name).unwrap_or(&empty);
+fn source(state: &TickState, context: Context, input: &mut &str) -> Result<Tag, String> {
+    let kind = crate::command_nbt_path::argument(input)?;
+    let root = match kind {
+        "storage" => {
+            let name = id(input)?;
+            state
+                .command_storage
+                .get(&name)
+                .cloned()
+                .unwrap_or_else(|| Tag::Compound(Vec::new()))
+        }
+        "entity" | "block" => crate::command_data::target_root(state, context, kind, input)?.0,
+        _ => return Err("Expected storage, entity or block source".into()),
+    };
     if input.trim().is_empty() {
-        Ok(root.clone())
+        Ok(root)
     } else {
         let path = crate::command_nbt_path::argument(input)?;
-        Ok(crate::command_nbt_path::get(root, path)?.into_owned())
+        Ok(crate::command_nbt_path::get(&root, path)?.into_owned())
     }
 }
 pub(crate) fn command(state: &mut TickState, context: Context, input: &str) -> CommandResult {
-    match run(state, input) {
+    match run(state, context, input) {
         Ok((count, message)) => {
             if crate::command_execution::accepts_success(state, context.connection) {
                 state.push_player(
@@ -84,7 +91,7 @@ pub(crate) fn command(state: &mut TickState, context: Context, input: &str) -> C
         }
     }
 }
-fn run(state: &mut TickState, mut input: &str) -> Result<(i32, String), String> {
+fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<(i32, String), String> {
     let word = crate::command_nbt_path::argument;
     if word(&mut input)? != "data" {
         return Err("Expected data".into());
@@ -128,10 +135,31 @@ fn run(state: &mut TickState, mut input: &str) -> Result<(i32, String), String> 
         return Ok((result, message));
     }
     let previous = root.clone();
-    let count = match action {
+    let count = mutate(state, context, action, &mut root, &mut input)?;
+    if count == 0 || root == previous {
+        return Err("Data did not change".into());
+    }
+    state.command_storage.insert(name, root);
+    state.command_storage_dirty = true;
+    Ok((count, "Storage data updated".into()))
+}
+
+/// `data merge|modify|remove`: apply the action's remaining `input` to `root`
+/// and return the number of changes. The caller decides whether an unchanged
+/// `root` is a failure and where the result goes.
+pub(crate) fn mutate(
+    state: &TickState,
+    context: Context,
+    action: &str,
+    root: &mut Tag,
+    input: &mut &str,
+) -> Result<i32, String> {
+    let word = crate::command_nbt_path::argument;
+    Ok(match action {
         "merge" => {
+            let previous = root.clone();
             let patch = crate::command_snbt::parse(input.trim()).map_err(str::to_owned)?;
-            let (Tag::Compound(fields), Tag::Compound(patch)) = (&mut root, patch) else {
+            let (Tag::Compound(fields), Tag::Compound(patch)) = (&mut *root, patch) else {
                 return Err("Expected compound".into());
             };
             fn merge(fields: &mut Vec<(String, Tag)>, patch: Vec<(String, Tag)>) {
@@ -148,49 +176,41 @@ fn run(state: &mut TickState, mut input: &str) -> Result<(i32, String), String> 
                 }
             }
             merge(fields, patch);
-            i32::from(root != previous)
+            i32::from(*root != previous)
         }
         "remove" => {
-            let path = word(&mut input)?;
+            let path = word(input)?;
             if !input.trim().is_empty() {
                 return Err("Trailing arguments".into());
             }
-            crate::command_nbt_path::modify(&mut root, path, "remove", None, 0)?
+            crate::command_nbt_path::modify(root, path, "remove", None, 0)?
         }
         "modify" => {
-            let path = word(&mut input)?;
-            let operation = word(&mut input)?;
+            let path = word(input)?;
+            let operation = word(input)?;
             if !matches!(operation, "set" | "merge" | "append" | "prepend" | "insert") {
                 return Err("Invalid data operation".into());
             }
             let index = if operation == "insert" {
-                word(&mut input)?
-                    .parse()
-                    .map_err(|_| "Invalid list index")?
+                word(input)?.parse().map_err(|_| "Invalid list index")?
             } else {
                 0
             };
-            let value = match word(&mut input)? {
+            let value = match word(input)? {
                 "value" => {
                     let (value, consumed) = crate::command_snbt::parse_prefix(input.trim_start())
                         .map_err(str::to_owned)?;
-                    input = &input.trim_start()[consumed..];
+                    *input = &input.trim_start()[consumed..];
                     value
                 }
-                "from" => source(state, &mut input)?,
+                "from" => source(state, context, input)?,
                 _ => return Err("Expected value or from".into()),
             };
             if !input.trim().is_empty() {
                 return Err("Trailing arguments".into());
             }
-            crate::command_nbt_path::modify(&mut root, path, operation, Some(&value), index)?
+            crate::command_nbt_path::modify(root, path, operation, Some(&value), index)?
         }
         _ => return Err("Expected data get, merge, modify or remove".into()),
-    };
-    if count == 0 || root == previous {
-        return Err("Data did not change".into());
-    }
-    state.command_storage.insert(name, root);
-    state.command_storage_dirty = true;
-    Ok((count, "Storage data updated".into()))
+    })
 }

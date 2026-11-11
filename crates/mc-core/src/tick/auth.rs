@@ -16,6 +16,7 @@ pub(super) fn refuse_input(state: &mut TickState, input: &PlayerInput) -> bool {
         | PlayerInput::SpawnProtectionOperators { .. }
         | PlayerInput::SetViewDistance { .. }
         | PlayerInput::SetLocale { .. }
+        | PlayerInput::SetChatVisibility { .. }
         | PlayerInput::ConfirmTeleport { .. }
         | PlayerInput::BuildResync { .. }
         | PlayerInput::BuildPreviewFence { .. } => return false,

@@ -13,6 +13,7 @@ pub(super) async fn admit_native_session(
     ip: std::net::IpAddr,
     view_distance: u8,
     locale: String,
+    chat_visibility: mc_core::boundary::ChatVisibility,
 ) -> Result<mc_core::core::PlayerSession, mc_core::CoreError> {
     let _guard = server.operator_updates.lock().await;
     server.admin.register(id, uuid, name.clone(), ip);
@@ -23,6 +24,7 @@ pub(super) async fn admit_native_session(
         server.admin.session_level(id),
         view_distance,
         locale,
+        chat_visibility,
     );
     if session.is_err() {
         server.admin.remove(id);
@@ -274,7 +276,7 @@ async fn run_connection(
         .ok_or_else(|| anyhow::anyhow!("cannot admit player {peer}: remote IP unavailable"))?;
     lifecycle.native = Some(admit_native_session(
         &server, id, outcome.uuid, outcome.name.clone(), ip,
-        view_distance as u8, config_outcome.client_language.clone(),
+        view_distance as u8, config_outcome.client_language.clone(), config_outcome.client_chat_visibility,
     ).await.inspect_err(|error| {
         warn!(%peer, connection = id.0, stage = "join-submit", name = %outcome.name, %error, "native session refused; connection closed");
     })?);
@@ -287,6 +289,7 @@ async fn run_connection(
         &outcome.name,
         config_outcome.client_view_distance,
         &config_outcome.client_language,
+        config_outcome.client_chat_visibility,
     )
     .await
     {
@@ -322,6 +325,7 @@ async fn run_connection(
     } else {
         server.admin.session_level(id)
     };
+    let recipes = server.recipes.current();
     if let Err(error) = crate::play::send_join_burst(crate::play::JoinBurst {
         conn: &mut conn,
         data: &server.data,
@@ -332,7 +336,7 @@ async fn run_connection(
         view_distance,
         simulation_distance,
         game_mode,
-        recipes: &server.recipes,
+        recipes: &recipes,
         op_level: burst_op_level,
         plugin_commands: server.hub.plugin_commands(),
         online_mode: server.cfg.auth.online_mode,

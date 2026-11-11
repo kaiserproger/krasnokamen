@@ -1,7 +1,7 @@
 //! Cancellation-safe native admission: one FIFO queue, including reserved Leave.
 use tokio::sync::mpsc::{OwnedPermit, Sender, error::TrySendError};
 
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::{ChatVisibility, ConnectionId, PlayerInput};
 use crate::config::CoreError;
 
 /// An admitted edge session. Dropping it queues its native Leave exactly once.
@@ -21,6 +21,7 @@ impl PlayerSession {
         permission_level: u8,
         view_distance: u8,
         locale: String,
+        chat_visibility: ChatVisibility,
     ) -> Result<Self, CoreError> {
         let leave = sender
             .clone()
@@ -31,13 +32,13 @@ impl PlayerSession {
             })?;
         // Reserve all initial inputs before publishing any. A refused join
         // leaves no radius row behind, and no caller waits while holding credit.
-        let mut inputs = sender.try_reserve_many(3).map_err(|error| match error {
+        let mut inputs = sender.try_reserve_many(4).map_err(|error| match error {
             TrySendError::Full(_) => CoreError::InputFull,
             TrySendError::Closed(_) => CoreError::TickStopped,
         })?;
         inputs
             .next()
-            .expect("three reserved inputs")
+            .expect("four reserved inputs")
             .send(PlayerInput::SetViewDistance {
                 connection,
                 view_distance,
@@ -49,6 +50,13 @@ impl PlayerSession {
         inputs
             .next()
             .expect("third reserved input")
+            .send(PlayerInput::SetChatVisibility {
+                connection,
+                visibility: chat_visibility,
+            });
+        inputs
+            .next()
+            .expect("fourth reserved input")
             .send(PlayerInput::Join {
                 connection,
                 uuid,

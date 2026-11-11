@@ -30,6 +30,19 @@ pub struct EntityId(pub i32);
 )]
 pub struct ConnectionId(pub u64);
 
+/// The client's chat setting: which text the server may send it (vanilla
+/// `ChatVisiblity`). `System` is "commands only": no player chat, but command
+/// feedback and other system messages; `Hidden` receives neither.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub enum ChatVisibility {
+    #[default]
+    Full,
+    System,
+    Hidden,
+}
+
 /// One player action decoded by the edge.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum PlayerInput {
@@ -73,6 +86,15 @@ pub enum PlayerInput {
     SetLocale {
         connection: ConnectionId,
         locale: String,
+    },
+    /// Trusted edge snapshot of the client's chat setting
+    /// (`ClientInformation.chat_visibility`). Recorded before
+    /// [`PlayerInput::Join`] from the configuration phase and re-sent on every
+    /// Play ClientInformation that changes it: transient per-connection
+    /// state, cleared on [`PlayerInput::Leave`].
+    SetChatVisibility {
+        connection: ConnectionId,
+        visibility: ChatVisibility,
     },
     /// Connection closed for any reason; the core saves and removes the player.
     Leave { connection: ConnectionId },
@@ -371,6 +393,7 @@ impl PlayerInput {
             | Self::PermissionLevel { connection, .. }
             | Self::SetViewDistance { connection, .. }
             | Self::SetLocale { connection, .. }
+            | Self::SetChatVisibility { connection, .. }
             | Self::Leave { connection }
             | Self::Move { connection, .. }
             | Self::MoveRotation { connection, .. }
@@ -838,6 +861,36 @@ pub enum BossBarChange {
     Properties(u8),
 }
 
+/// The registry a datapack reload installed, shared by every connection's
+/// [`PlayerChange::RecipesReloaded`]. `shared` lets the edge build its packets
+/// once for all of them.
+#[derive(Clone)]
+pub struct RegistryReload {
+    pub registry: Arc<crate::registry::CoreRegistry>,
+    pub shared: Arc<std::sync::OnceLock<Arc<dyn std::any::Any + Send + Sync>>>,
+}
+impl RegistryReload {
+    #[must_use]
+    pub fn new(registry: Arc<crate::registry::CoreRegistry>) -> Self {
+        Self {
+            registry,
+            shared: Arc::default(),
+        }
+    }
+}
+impl std::fmt::Debug for RegistryReload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RegistryReload")
+            .field("recipes", &self.registry.recipes.len())
+            .finish()
+    }
+}
+impl PartialEq for RegistryReload {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.registry, &other.registry)
+    }
+}
+
 /// Reliable results for the connection identified by the enclosing outbox queue key.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlayerChange {
@@ -851,6 +904,12 @@ pub enum PlayerChange {
     },
     AdvancementsTab {
         tab: Option<String>,
+    },
+    /// A datapack reload replaced the registry's recipes. The edge announces
+    /// the new recipes to this client; the player's recipe book follows as
+    /// [`PlayerChange::RecipesUnlocked`] with `replace`.
+    RecipesReloaded {
+        reload: RegistryReload,
     },
     RecipesUnlocked {
         recipes: Vec<String>,

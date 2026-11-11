@@ -20,7 +20,9 @@ fn fixture(require_plugin_login: bool) -> (EdgeServer, std::path::PathBuf) {
     let data = Arc::new(mc_data::solaris_required_data());
     let cfg = EdgeConfig::default();
     let server = EdgeServer {
-        recipes: crate::recipes::RecipePackets::new(hub.registry()).unwrap(),
+        recipes: crate::recipes::SharedRecipes::new(
+            crate::recipes::RecipePackets::new(hub.registry()).unwrap(),
+        ),
         loader_manifest: None,
         protocols: crate::translation::Catalog::default(),
         wire: WireRegistries {

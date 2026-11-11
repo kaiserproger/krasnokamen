@@ -213,6 +213,64 @@ fn initial_book_is_empty_and_core_unlocks_only_named_recipe_displays() {
     }
 }
 #[test]
+fn reloaded_recipes_are_announced_once_and_feed_the_next_book() {
+    let dir = std::env::temp_dir().join(format!("mc-edge-recipe-reload-{}", uuid::Uuid::new_v4()));
+    let core = mc_core::Core::open({
+        let mut config = mc_core::config::CoreConfig::new(dir.join("world"), 42);
+        config.vanilla_data_dir =
+            Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"));
+        config
+    })
+    .unwrap();
+    let before = crate::recipes::RecipePackets::new(core.registry()).unwrap();
+    // A reload that dropped every stonecutter recipe.
+    let mut reloaded = (**core.registry()).clone();
+    reloaded
+        .recipes
+        .retain(|recipe| !matches!(recipe.kind, mc_data::recipes::RecipeKind::Stonecutting(_)));
+    drop(core);
+    std::fs::remove_dir_all(dir).unwrap();
+    assert!(!before.update.stonecutter_recipes.is_empty());
+
+    let reload = mc_core::boundary::RegistryReload::new(Arc::new(reloaded));
+    let shared = crate::recipes::SharedRecipes::new(before);
+    let old = shared.current();
+    let mut viewer = crate::plan::ViewerState::new(ConnectionId(7), EntityId(1), [0.0; 3]);
+    viewer.advancements = Arc::clone(&old.advancements);
+    let name = old.advancements.recipes.keys().next().unwrap().clone();
+    let changes = [
+        PlayerChange::RecipesReloaded {
+            reload: reload.clone(),
+        },
+        PlayerChange::RecipesUnlocked {
+            recipes: vec![name],
+            replace: true,
+        },
+    ];
+    let packets = crate::plan::plan_player_changes(&changes, &mut viewer);
+    assert_eq!(packets.len(), 2, "the new recipes, then the book");
+    let update =
+        mc_protocol::packets::play::ClientboundUpdateRecipes::decode(&mut &body(&packets[0])[..])
+            .unwrap();
+    assert!(
+        update.stonecutter_recipes.is_empty(),
+        "the client gets the reloaded recipes"
+    );
+    assert_ne!(update, old.update);
+    ClientboundRecipeBookAdd::decode(&mut &body(&packets[1])[..]).unwrap();
+
+    // Every connection's copy of the announcement shares one build, which
+    // later joiners also get.
+    let built = crate::recipes::reloaded(&reload).unwrap();
+    assert!(Arc::ptr_eq(&built.advancements, &viewer.advancements));
+    shared.adopt(&built);
+    assert!(Arc::ptr_eq(&shared.current(), &built));
+    assert!(Arc::ptr_eq(
+        &crate::recipes::reloaded(&reload.clone()).unwrap(),
+        &built
+    ));
+}
+#[test]
 fn displayed_tree_layout_uses_depth_and_distinct_leaf_rows() {
     let mut tree = AdvancementTree::default();
     for (id, parent) in [("root", None), ("a", Some("root")), ("b", Some("root"))] {

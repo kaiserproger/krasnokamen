@@ -24,6 +24,7 @@ impl TickState {
             self.connections.by_entity.remove(&id);
             self.connections.view_distances.remove(&connection);
             self.connections.locales.remove(&connection);
+            self.connections.chat_visibilities.remove(&connection);
             self.outbox.remove(&connection);
         }
         self.players.remove(&id);

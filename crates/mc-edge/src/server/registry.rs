@@ -23,6 +23,9 @@ pub(super) struct RegistryInner {
     /// Client locale last admitted to the core (`ClientInformation.language`);
     /// deduplicates Play updates and is cleared on disconnect.
     pub(super) locales: HashMap<ConnectionId, String>,
+    /// Chat setting last admitted to the core (`ClientInformation.chat_visibility`);
+    /// deduplicates Play updates and is cleared on disconnect.
+    pub(super) chat_visibilities: HashMap<ConnectionId, mc_core::boundary::ChatVisibility>,
     pub(super) roster_dirty: bool,
     // Join state and its waiters share the queue registry's atomic removal.
     pub(super) pending_joins: HashMap<ConnectionId, JoinedSpawn>,
@@ -252,6 +255,7 @@ impl ConnectionRegistry {
                 self.setup_fences_pending.store(false, Ordering::Release);
             }
             inner.locales.remove(&id);
+            inner.chat_visibilities.remove(&id);
             inner.closers.remove(&id)
         };
         if let Some(closer) = closer {

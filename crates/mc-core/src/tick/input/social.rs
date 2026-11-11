@@ -1,5 +1,6 @@
 use crate::boundary::{BlockPos, ConnectionId, PlayerChange};
 use crate::tick::TickState;
+use mc_nbt::Tag;
 
 /// Vanilla's TickThrottler(20, 200), checked before fan-out rather than after it.
 /// The counter travels with the player across respawns/dimensions, but not rejoins.
@@ -67,15 +68,37 @@ pub(in crate::tick) fn chat(
     state: &mut TickState,
     (connection, message): (&ConnectionId, &String),
 ) {
-    // Reliable fan-out at commit: every joined connection gets
-    // the broadcast in its own reliable outbox (never skipped).
-    // No ChangeSet copy: the edge plans both, so a copy would
+    // Reliable fan-out at commit: every joined connection whose chat setting
+    // is `Full` gets the broadcast in its own reliable outbox (never
+    // skipped). No ChangeSet copy: the edge plans both, so a copy would
     // deliver every message twice.
     let Some(entity) = state.connections.entity_of(*connection) else {
         return;
     };
+    // Vanilla `ServerGamePacketListenerImpl.tryHandleChat`: a client that
+    // hides chat cannot send it; it is told so, in red, and nothing goes out.
+    if state.connections.chat_visibility_of(*connection) == crate::boundary::ChatVisibility::Hidden
+    {
+        let Tag::Compound(mut disabled) =
+            crate::command_feedback::translated("chat.disabled.options", Vec::new())
+        else {
+            unreachable!("translated builds a compound");
+        };
+        disabled.push(("color".into(), Tag::String("red".into())));
+        state.push_player_unfiltered(
+            *connection,
+            PlayerChange::StyledChat {
+                content: Tag::Compound(disabled),
+            },
+        );
+        return;
+    }
     let content = crate::scoreboard::chat_component(state, entity, message);
-    let recipients: Vec<ConnectionId> = state.connections.all_connections().collect();
+    let recipients: Vec<ConnectionId> = state
+        .connections
+        .all_connections()
+        .filter(|recipient| state.accepts_chat(*recipient))
+        .collect();
     for recipient in recipients {
         state.push_player(
             recipient,
@@ -88,6 +111,6 @@ pub(in crate::tick) fn chat(
         state
             .dimension_globals
             .broadcasts
-            .push(crate::dimensions::globals::Broadcast::Chat(content));
+            .push(crate::dimensions::globals::Broadcast::PlayerChat(content));
     }
 }

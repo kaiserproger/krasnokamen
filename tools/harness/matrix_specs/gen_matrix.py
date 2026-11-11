@@ -1039,6 +1039,7 @@ for sc in SCEN:
     seen["subject"].add(sc["subject"])
 PI_MAP = {"Join": "session.join_fresh_spawn", "PluginClientReady": "loader_content.bundle_handshake_cache", "LoaderViewRequest": "loader_content.loader_view_request",
           "PermissionLevel": "commands.op", "SetViewDistance": "session.view_distance_negotiation", "SetLocale": "session.locale_presentation",
+          "SetChatVisibility": "chat.chat_visibility_setting",
           "Leave": "session.rejoin_restore_state", "Move": "movement.walk_sprint_jump", "MoveRotation": "movement.walk_sprint_jump", "MoveStatus": "movement.walk_sprint_jump",
           "ConfirmTeleport": "movement.teleport_confirm", "Dig": "block_break.tool_tier_required", "BuildPreviewFence": "settlements.build",
           "AuthorizedBuild": "settlements.build", "BuildResync": "block_place.rejected_resync", "UseItemOn": "block_place.full_block", "UseItem": "items.eat_food",

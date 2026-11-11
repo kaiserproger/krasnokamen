@@ -38,6 +38,46 @@ impl RecipePackets {
     }
 }
 
+/// The recipe packets new joiners get: the startup recipes until a datapack
+/// reload replaces them.
+pub struct SharedRecipes(parking_lot::RwLock<std::sync::Arc<RecipePackets>>);
+
+impl SharedRecipes {
+    pub fn new(packets: RecipePackets) -> Self {
+        Self(parking_lot::RwLock::new(std::sync::Arc::new(packets)))
+    }
+    pub fn current(&self) -> std::sync::Arc<RecipePackets> {
+        std::sync::Arc::clone(&self.0.read())
+    }
+    /// Adopt the recipes of a reload the core announced, unless they are the
+    /// ones already in use.
+    pub(crate) fn adopt(&self, packets: &std::sync::Arc<RecipePackets>) {
+        let mut current = self.0.write();
+        if !std::sync::Arc::ptr_eq(&current, packets) {
+            *current = std::sync::Arc::clone(packets);
+        }
+    }
+}
+
+/// The packets for a reload's registry, built by the first connection that
+/// plans it and shared with every other. `None` when the new recipes cannot
+/// be encoded; clients then keep the recipes they have.
+pub(crate) fn reloaded(
+    reload: &mc_core::boundary::RegistryReload,
+) -> Option<std::sync::Arc<RecipePackets>> {
+    let built = reload.shared.get_or_init(|| {
+        let packets = RecipePackets::new(&reload.registry)
+            .inspect_err(|error| tracing::warn!(%error, "recipe packets after datapack reload"))
+            .ok()
+            .map(std::sync::Arc::new);
+        std::sync::Arc::new(packets)
+    });
+    std::sync::Arc::clone(built)
+        .downcast::<Option<std::sync::Arc<RecipePackets>>>()
+        .ok()
+        .and_then(|packets| (*packets).clone())
+}
+
 fn item_max_stack(item_facts: &ItemFactsTable, items: &ItemRegistry, stack: &ItemStack) -> i32 {
     mc_data::item_semantics_26_1_2::max_stack_for_stack(item_facts, items, stack)
 }

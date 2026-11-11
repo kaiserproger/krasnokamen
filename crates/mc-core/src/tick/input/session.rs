@@ -41,6 +41,18 @@ pub(in crate::tick) fn set_locale(
     state.connections.set_locale(*connection, locale.clone());
 }
 
+/// Pre-Join friendly like the locale: the edge records the chat setting
+/// before Join and every Play ClientInformation that changes it updates it
+/// in place, so the next chat or system message already follows it.
+pub(in crate::tick) fn set_chat_visibility(
+    state: &mut TickState,
+    (connection, visibility): (&ConnectionId, &crate::boundary::ChatVisibility),
+) {
+    state
+        .connections
+        .set_chat_visibility(*connection, *visibility);
+}
+
 /// Vanilla's yellow `multiplayer.player.joined` / `multiplayer.player.left`
 /// announcement, delivered reliably to every joined connection and relayed
 /// across local dimensions.

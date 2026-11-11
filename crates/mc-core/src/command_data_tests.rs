@@ -751,3 +751,230 @@ fn data_storage_modify_reports_results_and_survives_reads() {
         state.command_storage
     );
 }
+
+fn said(state: &mut TickState) -> String {
+    format!(
+        "{:?}",
+        state
+            .outbox
+            .remove(&crate::command_console::CONNECTION)
+            .unwrap_or_default()
+    )
+}
+/// The result of one `data` command; -1 when it failed.
+fn data(state: &mut TickState, context: Context, line: &str) -> i32 {
+    state.command_context.current = Some(context);
+    let result = command(state, context.connection, context.executor, line);
+    state.command_context.current = None;
+    match result {
+        crate::command_execution::CommandResult::Success(value) => value,
+        crate::command_execution::CommandResult::Completed => 0,
+        _ => -1,
+    }
+}
+fn cow_uuid_and_pos(state: &TickState) -> (uuid::Uuid, [f64; 3]) {
+    let slot = state
+        .entities
+        .slots()
+        .find(|slot| {
+            crate::command_execution::entity_type_name(state, state.entities.body(*slot).id)
+                == Some("minecraft:cow")
+        })
+        .unwrap();
+    (state.entities.row(slot).uuid, state.entities.pos(slot))
+}
+
+#[test]
+fn data_merge_modify_and_remove_edit_a_mobs_data_and_keep_its_identity() {
+    let (mut state, _, context) = fixture();
+    run(
+        &mut state,
+        context,
+        "summon minecraft:cow 4 60 4 {Health:9f}",
+    );
+    let (uuid, pos) = cow_uuid_and_pos(&state);
+    let cow = "@e[type=minecraft:cow,limit=1]";
+
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {cow} {{Health:5f,CustomName:'\"Bessie\"',NoAI:1b}}")
+        ),
+        1
+    );
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data get entity {cow} Health")
+        ),
+        5
+    );
+    assert_eq!(
+        data(&mut state, context, &format!("data get entity {cow} NoAI")),
+        1
+    );
+    assert!(
+        data(
+            &mut state,
+            context,
+            &format!("data get entity {cow} CustomName")
+        ) >= 1
+    );
+    assert_eq!(
+        cow_uuid_and_pos(&state),
+        (uuid, pos),
+        "identity and place stay"
+    );
+
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data modify entity {cow} Health set value 3f")
+        ),
+        1
+    );
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data get entity {cow} Health")
+        ),
+        3
+    );
+    // Copying from another target: the cow takes the player's health value.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data modify entity {cow} Health set from entity @s Health")
+        ),
+        1
+    );
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data get entity {cow} Health")
+        ),
+        20
+    );
+
+    // A removed field loads as its default.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data remove entity {cow} NoAI")
+        ),
+        1
+    );
+    assert_eq!(
+        data(&mut state, context, &format!("data get entity {cow} NoAI")),
+        0
+    );
+    assert_eq!(cow_uuid_and_pos(&state), (uuid, pos));
+    said(&mut state);
+
+    // Nothing changed is a failure, not a success.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {cow} {{Health:20f}}")
+        ),
+        -1
+    );
+    assert!(said(&mut state).contains("Nothing changed"));
+}
+
+#[test]
+fn data_entity_edits_refuse_players_unsupported_fields_and_position_without_changing_anything() {
+    let (mut state, _, context) = fixture();
+    run(
+        &mut state,
+        context,
+        "summon minecraft:cow 4 60 4 {Health:9f}",
+    );
+    let cow = "@e[type=minecraft:cow,limit=1]";
+    said(&mut state);
+
+    assert_eq!(
+        data(&mut state, context, "data merge entity @s {Health:1f}"),
+        -1
+    );
+    assert!(said(&mut state).contains("Unable to modify player data"));
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {cow} {{Air:12s}}")
+        ),
+        -1
+    );
+    assert!(said(&mut state).contains("Editing Air of minecraft:cow is not supported"));
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data modify entity {cow} Pos[0] set value 99.0d")
+        ),
+        -1
+    );
+    assert!(said(&mut state).contains("Editing Pos is not supported"));
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data get entity {cow} Health")
+        ),
+        9
+    );
+    // A command that is not an edit of an entity target keeps its old answer.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            "data modify block 0 60 0 x set value 1b"
+        ),
+        -1
+    );
+    assert!(said(&mut state).contains("storage and entity"));
+}
+
+#[test]
+fn data_entity_edit_of_a_villager_keeps_its_profession_level_and_age() {
+    let (mut state, _, context) = fixture();
+    run(
+        &mut state,
+        context,
+        "summon minecraft:villager 4 60 4 {Age:-123,VillagerData:{type:\"minecraft:plains\",profession:\"minecraft:none\",level:3}}",
+    );
+    let villager = "@e[type=minecraft:villager,limit=1]";
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {villager} {{CustomName:'\"Vic\"'}}")
+        ),
+        1
+    );
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data get entity {villager} VillagerData.level")
+        ),
+        3
+    );
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data get entity {villager} Age")
+        ),
+        -123
+    );
+}

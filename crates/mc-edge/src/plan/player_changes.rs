@@ -133,6 +133,13 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                 tab: tab.as_ref().and_then(|id| Identifier::parse(id).ok()),
             },
         ),
+        PlayerChange::RecipesReloaded { reload } => {
+            if let Some(packets) = crate::recipes::reloaded(reload) {
+                // The recipe book entries that follow come from these recipes.
+                viewer.advancements = std::sync::Arc::clone(&packets.advancements);
+                push_reliable(out, conn, &packets.update);
+            }
+        }
         PlayerChange::RecipesUnlocked {
             recipes, replace, ..
         } => {

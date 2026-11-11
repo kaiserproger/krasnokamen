@@ -189,7 +189,7 @@ pub(super) fn configured_viewer(
         .get(&connection)
         .copied();
     viewer.dimension_type_ids = server.wire.dimension_type_ids;
-    viewer.advancements = Arc::clone(&server.recipes.advancements);
+    viewer.advancements = Arc::clone(&server.recipes.current().advancements);
     viewer
 }
 
@@ -313,6 +313,15 @@ pub(super) fn route_changes(
     handles: &ConnectionHandles,
     server: &Arc<EdgeServer>,
 ) -> bool {
+    for change in changes {
+        if let mc_core::boundary::PlayerChange::RecipesReloaded { reload } = change
+            && let Some(packets) = crate::recipes::reloaded(reload)
+        {
+            // Every connection's announcement shares one build; later
+            // joiners get these recipes too.
+            server.recipes.adopt(&packets);
+        }
+    }
     for planned in crate::plan::plan_routed_player_changes(changes, viewer) {
         if handles.reliable_tx.try_send(planned.data).is_err() {
             server.connections.remove(viewer.connection);
@@ -476,6 +485,7 @@ pub(super) async fn wait_for_join(
     _name: &str,
     client_view_distance: i8,
     client_language: &str,
+    chat_visibility: mc_core::boundary::ChatVisibility,
 ) -> anyhow::Result<JoinedSpawn> {
     {
         let mut inner = server.connections.inner.lock();
@@ -486,6 +496,7 @@ pub(super) async fn wait_for_join(
         // Already submitted before Join: remember it so the first Play
         // ClientInformation does not repeat the same locale.
         inner.locales.insert(id, client_language.to_owned());
+        inner.chat_visibilities.insert(id, chat_visibility);
     }
     // Fast path: Joined arrived before we registered interest.
     if let Some(joined) = server.connections.take_join(id) {

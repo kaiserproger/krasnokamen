@@ -260,8 +260,9 @@ pub struct EdgeServer {
     pub tick_stats: Arc<TickStats>,
     /// Network counters backing `/stats network`.
     pub net_counters: Arc<NetCounters>,
-    /// Join-burst recipe packets, built once from the core's recipe list.
-    pub recipes: crate::recipes::RecipePackets,
+    /// Join-burst recipe packets: built from the core's recipe list at start
+    /// and replaced when a datapack reload changes it.
+    pub recipes: crate::recipes::SharedRecipes,
     pub(crate) admin: crate::admin::Admin,
     pub(crate) console_state: crate::console::ConsoleState,
     stop: tokio::sync::watch::Sender<bool>,
@@ -375,7 +376,8 @@ impl EdgeServer {
             items: mc_data::items::solaris_required_items(),
             block_entity_types: mc_data::block_entity_types::solaris_required_block_entity_types(),
         };
-        let recipes = crate::recipes::RecipePackets::new(hub.registry())?;
+        let recipes =
+            crate::recipes::SharedRecipes::new(crate::recipes::RecipePackets::new(hub.registry())?);
         let admin = crate::admin::Admin::open(&cfg.server_dir)?;
         anyhow::ensure!(
             hub.submit(PlayerInput::SpawnProtectionOperators {
@@ -703,6 +705,8 @@ impl EdgeServer {
                 );
                 registry.view_distances.insert(id, view_distance);
             }
+            let chat_visibility =
+                crate::configuration::chat_visibility(request.information.chat_visibility);
             let locale = request.information.language;
             if registry.locales.get(&id) != Some(&locale) {
                 anyhow::ensure!(
@@ -713,6 +717,16 @@ impl EdgeServer {
                     "locale admission queue is full"
                 );
                 registry.locales.insert(id, locale);
+            }
+            if registry.chat_visibilities.get(&id) != Some(&chat_visibility) {
+                anyhow::ensure!(
+                    self.hub.submit(PlayerInput::SetChatVisibility {
+                        connection: id,
+                        visibility: chat_visibility,
+                    }),
+                    "chat setting admission queue is full"
+                );
+                registry.chat_visibilities.insert(id, chat_visibility);
             }
             return Ok(true);
         }

@@ -6,7 +6,9 @@
 
 mod location;
 mod predicates;
-pub use predicates::{Evaluation, EventContext, evaluate_criterion};
+pub use predicates::{
+    Evaluation, EventContext, evaluate_criterion, evaluate_predicate, predicate_unsupported,
+};
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};

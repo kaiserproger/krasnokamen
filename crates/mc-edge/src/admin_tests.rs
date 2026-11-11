@@ -13,7 +13,9 @@ pub(crate) fn fixture() -> (EdgeServer, std::path::PathBuf) {
     let data = Arc::new(mc_data::solaris_required_data());
     let cfg = EdgeConfig::default();
     let server = EdgeServer {
-        recipes: crate::recipes::RecipePackets::new(hub.registry()).unwrap(),
+        recipes: crate::recipes::SharedRecipes::new(
+            crate::recipes::RecipePackets::new(hub.registry()).unwrap(),
+        ),
         loader_manifest: None,
         protocols: crate::translation::Catalog::default(),
         wire: WireRegistries {
@@ -169,6 +171,7 @@ async fn deop_reaches_rejoining_native_session() {
         "127.0.0.1".parse().unwrap(),
         2,
         "en_us".into(),
+        mc_core::boundary::ChatVisibility::Full,
     )
     .await
     .unwrap();
@@ -206,6 +209,7 @@ async fn joining_session_and_deop_keep_native_permission_order() {
         "127.0.0.1".parse().unwrap(),
         2,
         "en_us".into(),
+        mc_core::boundary::ChatVisibility::Full,
     );
     tokio::pin!(joining);
     let deop = server.handle_admin_command(operator, "deop Alex");
@@ -285,6 +289,7 @@ async fn deop_between_snapshot_and_registration_reaches_native_join() {
         "127.0.0.1".parse().unwrap(),
         2,
         "en_us".into(),
+        mc_core::boundary::ChatVisibility::Full,
     )
     .await
     .unwrap();

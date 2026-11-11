@@ -174,6 +174,63 @@ pub(crate) fn prepare_item(state: &TickState, nbt: &Tag) -> Result<ItemSummon, C
         invulnerable,
     })
 }
+/// Whether the summon NBT field `key` applies to the entity `name`; `None`
+/// when no entity takes it.
+pub(crate) fn supports(state: &TickState, type_id: u32, name: &str, key: &str) -> Option<bool> {
+    let contract = mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id);
+    let living = contract
+        .is_some_and(|c| c.behavior.archetype == mc_data::entity_types::EntityArchetype::Living);
+    let horse = crate::taming::horse(name);
+    let ageable = state
+        .registry
+        .blueprint(type_id)
+        .is_some_and(|b| b.offspring.is_some() || b.capabilities.ageable);
+    Some(match key {
+        "Health" | "NoAI" | "PersistenceRequired" | "CanPickUpLoot" | "leash" | "drop_chances" => {
+            living
+        }
+        "Owner" | "Tame" => {
+            horse
+                || matches!(
+                    name,
+                    "minecraft:wolf" | "minecraft:cat" | "minecraft:parrot"
+                )
+        }
+        "Sitting" => matches!(
+            name,
+            "minecraft:wolf" | "minecraft:cat" | "minecraft:parrot"
+        ),
+        "Temper" => horse,
+        "CollarColor" => matches!(name, "minecraft:wolf" | "minecraft:cat"),
+        "equipment" => living || name == "minecraft:armor_stand",
+        "Age" => {
+            ageable
+                || matches!(
+                    name,
+                    "minecraft:villager" | "minecraft:wandering_trader" | "minecraft:tadpole"
+                )
+        }
+        "IsBaby" => crate::entity_life::uses_is_baby(name),
+        "VillagerData" => matches!(name, "minecraft:villager" | "minecraft:zombie_villager"),
+        "InLove" | "LoveCause" => ageable,
+        "Color" | "Sheared" => name == "minecraft:sheep",
+        "Pumpkin" => name == "minecraft:snow_golem",
+        "Type" | "stew_effects" => name == "minecraft:mooshroom",
+        "Trusting" => name == "minecraft:ocelot",
+        "Trusted" => name == "minecraft:fox",
+        "Small" | "ShowArms" | "NoBasePlate" | "Marker" | "Invisible" | "DisabledSlots"
+        | "Pose" => name == "minecraft:armor_stand",
+        "Size" => matches!(name, "minecraft:slime" | "minecraft:magma_cube"),
+        "facing" | "variant" => name == "minecraft:painting",
+        "Value" | "Count" => contract.is_some_and(|c| {
+            c.behavior.physical_simulation
+                == mc_data::entity_types::PhysicalSimulationClass::ExperienceOrb
+        }),
+        "CustomName" | "CustomNameVisible" | "Invulnerable" | "NoGravity" | "Motion"
+        | "Rotation" | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" => true,
+        _ => return None,
+    })
+}
 pub(crate) fn prepare(
     state: &TickState,
     type_id: u32,
@@ -184,70 +241,16 @@ pub(crate) fn prepare(
     let Tag::Compound(authored) = nbt else {
         return Err(error("Summon NBT must be a compound"));
     };
-    let contract = mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id);
-    let living = contract
-        .is_some_and(|c| c.behavior.archetype == mc_data::entity_types::EntityArchetype::Living);
     let horse = crate::taming::horse(name);
-    let ageable = state
-        .registry
-        .blueprint(type_id)
-        .is_some_and(|b| b.offspring.is_some() || b.capabilities.ageable);
     let mut fields = Vec::with_capacity(authored.len());
     for (key, value) in authored {
         if fields.iter().any(|(seen, _)| seen == key) {
             return Err(error(format!("Duplicate summon NBT field {key}")));
         }
-        let supported = match key.as_str() {
-            "Health"
-            | "NoAI"
-            | "PersistenceRequired"
-            | "CanPickUpLoot"
-            | "leash"
-            | "drop_chances" => living,
-            "Owner" | "Tame" => {
-                horse
-                    || matches!(
-                        name,
-                        "minecraft:wolf" | "minecraft:cat" | "minecraft:parrot"
-                    )
-            }
-            "Sitting" => matches!(
-                name,
-                "minecraft:wolf" | "minecraft:cat" | "minecraft:parrot"
-            ),
-            "Temper" => horse,
-            "CollarColor" => matches!(name, "minecraft:wolf" | "minecraft:cat"),
-            "equipment" => living || name == "minecraft:armor_stand",
-            "Age" => {
-                ageable
-                    || matches!(
-                        name,
-                        "minecraft:villager" | "minecraft:wandering_trader" | "minecraft:tadpole"
-                    )
-            }
-            "IsBaby" => crate::entity_life::uses_is_baby(name),
-            "VillagerData" => matches!(name, "minecraft:villager" | "minecraft:zombie_villager"),
-            "InLove" | "LoveCause" => ageable,
-            "Color" | "Sheared" => name == "minecraft:sheep",
-            "Pumpkin" => name == "minecraft:snow_golem",
-            "Type" | "stew_effects" => name == "minecraft:mooshroom",
-            "Trusting" => name == "minecraft:ocelot",
-            "Trusted" => name == "minecraft:fox",
-            "Small" | "ShowArms" | "NoBasePlate" | "Marker" | "Invisible" | "DisabledSlots"
-            | "Pose" => name == "minecraft:armor_stand",
-            "Size" => matches!(name, "minecraft:slime" | "minecraft:magma_cube"),
-            "facing" | "variant" => name == "minecraft:painting",
-            "Value" | "Count" => contract.is_some_and(|c| {
-                c.behavior.physical_simulation
-                    == mc_data::entity_types::PhysicalSimulationClass::ExperienceOrb
-            }),
-            "CustomName" | "CustomNameVisible" | "Invulnerable" | "NoGravity" | "Motion"
-            | "Rotation" | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" => true,
-            _ => {
-                return Err(error(format!(
-                    "Unknown or unsupported summon NBT field {key}"
-                )));
-            }
+        let Some(supported) = supports(state, type_id, name, key) else {
+            return Err(error(format!(
+                "Unknown or unsupported summon NBT field {key}"
+            )));
         };
         if !supported {
             return Err(error(format!(

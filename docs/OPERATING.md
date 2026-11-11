@@ -541,11 +541,12 @@ authenticated reverse proxy; `allow_remote` is required for non-loopback binds.
 
 ### Datapacks and command blocks
 
-Solaris loads **directory** packs from `<world_dir>/datapacks/<pack>/` at
+Solaris loads **directory and ZIP** packs from `<world_dir>/datapacks/` at
 startup. Each needs `pack.mcmeta` with a `pack` object. Packs are ordered by
-directory name and the lexically later resource wins. ZIP files, symlinks,
-worldgen or custom-dimension resources and unimplemented resource kinds fail
-startup with an explicit error rather than falling back to built-in content.
+directory name and the lexically later resource wins. Symlinks, ZIP entries
+that escape the archive, worldgen or custom-dimension resources and
+unimplemented resource kinds fail startup with an explicit error rather than
+falling back to built-in content.
 
 Supported resources (singular 26.1.2 directory names):
 
@@ -565,14 +566,41 @@ Supported resources (singular 26.1.2 directory names):
 Level-2 commands: `/function <id|#tag>`, `/schedule function <id|#tag> <time>
 [append|replace]`, `/schedule clear <id|#tag>`, `/reload` and
 `/datapack list [available|enabled]`, `/datapack enable <pack> [first|last|before
-<pack>|after <pack>]`, `/datapack disable <pack>` (`create` is refused; the
-client command tree advertises only `list [enabled]`). Schedule times use ticks
+<pack>|after <pack>]`, `/datapack disable <pack>`. `/datapack create <id>
+<description>` (level 4) writes an empty directory pack (`pack.mcmeta` with the
+description as a JSON text component, plus `data/`); the pack starts disabled.
+`list` scans the pack folder on a worker thread, so a pack added or removed on
+disk shows at once without `/reload`; each entry is a clickable, shift-click
+insertable chat link whose hover shows the pack title and description
+(`file/<name>` packs are labelled as world packs). Schedule times use ticks
 or `t`/`s`/`d`; zero or negative delays are rejected. Schedules survive restart.
-`/reload`, `enable` and `disable` compile off the tick thread and swap
-functions and tags at a tick boundary. **Recipe and loot changes are
-startup-only:** a candidate that changes them is refused whole and the old set is
-kept, as is a candidate with load errors. Schedules and load/tick tags run from
-the overworld source; functions keep the source dimension they were invoked from.
+`/reload`, `enable` and `disable` compile off the tick thread. They swap
+functions and tags at a tick boundary and also **install the changed recipes,
+block loot and predicates**: the registry is rebuilt from the world's start
+content plus the enabled packs, every world adopts it, and each client receives
+the new recipe list and its recipe book again. A candidate with load errors, or
+with a recipe the server cannot encode, is refused whole and the old packs, selection
+and registry are kept. The enabled/disabled selection is saved with the world,
+so a restart loads the same packs, recipes and loot. A pack that appears on disk is
+enabled by `/reload` and at startup but never as a side effect of enabling another
+pack. Schedules and load/tick tags run from the overworld source; functions
+keep the source dimension they were invoked from.
+
+`/debug start|stop|function <id|#tag>` (level 3) follow vanilla: `start` and `stop`
+report the elapsed seconds, ticks and ticks per second; `function` runs the
+function (or every function of a tag) on the calling tick and writes the trace
+`debug/debug-trace-<time>.txt` in the world folder (`[C]` command, `[R]` result,
+`[F]` function, `[E]` error, `[M]` message). `/debug give`/`menu` keep their
+Solaris fixture grammar.
+
+`@e[predicate=<id>]` selects by a datapack loot predicate
+(`data/<ns>/predicate/<path>.json`) evaluated with the candidate as `this`;
+`entity_properties`, `inverted`, `all_of`, `any_of`, `random_chance`,
+`time_check`, `weather_check` and `entity_scores` are supported, and a pack
+carrying any other condition is refused at load. ZIP packs
+(`<pack>.zip` with `pack.mcmeta` at its root) load like directory packs. Packs with
+worldgen or custom-dimension resources are refused: the generators are native
+code, not data.
 
 Execution is bounded: each root command or function invocation gets its own
 `minecraft:max_command_sequence_length` budget shared by nested functions and
@@ -598,13 +626,25 @@ Map-making command surface (full status in [COMPATIBILITY.md](COMPATIBILITY.md))
 - `send_command_feedback false` suppresses player-source success replies for
   the native command paths that honor it; failures remain visible and console
   success remains enabled. Command execution and ordinary chat are unchanged.
+- A client's chat setting (`ClientInformation.chat_visibility`, admitted before
+  Join and on every change) filters what it is sent, as in vanilla: **Full**
+  receives everything; **Commands only** receives system text (command
+  feedback, announcements) but no player chat (`/say`, `/me`, `/msg`, team
+  messages, public chat); **Hidden** receives no text lines at all (titles and
+  the action bar still arrive), and its own chat is refused with the red
+  `chat.disabled.options` message.
 
 - `/data get entity|block` (level 2) reads native owners, including live
   inventory and timers, without editing state; paths accept dotted keys, indices
   and compound filters and must select one value. `/data merge block` writes only
   command-block `Command` and `auto`. Namespaced storage supports `get`, `merge`,
-  `remove` and `modify` (world-global, journaled). Entity and block `/data modify`
-  are not supported.
+  `remove` and `modify` (world-global, journaled), and `from` accepts storage,
+  entity or block sources. `/data merge|modify|remove entity <one entity>` edits a
+  mob or experience orb in the sender's dimension by loading the edited NBT back
+  through the summon field set: a changed field `/summon` cannot author, `Pos`,
+  item entities and players are refused with a message and nothing changes; a
+  removed field reverts to its default and the entity keeps its UUID and place.
+  Block `/data modify` and `/data remove` are not supported.
 - `/clone <begin> <end> <dest> [replace|masked|filtered <block|#tag>]
   [normal|force|move]` copies loaded regions within the `max_block_modifications`
   gamerule limit. Block-entity copies use the command-data snapshot; live state

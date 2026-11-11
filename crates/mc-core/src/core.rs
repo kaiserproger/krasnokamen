@@ -607,13 +607,8 @@ impl Core {
             runtime.load_catalogs(&registry)?;
         }
         let datapack_root = config.world_dir.join("datapacks");
-        let datapacks =
-            crate::datapacks::PackSet::load(&datapack_root, crate::datapacks::Selection::default())
-                .map_err(CoreError::Registry)?;
-        datapacks
-            .install_content(&mut registry)
-            .map_err(CoreError::Registry)?;
         let registry = Arc::new(registry);
+        let content_base = crate::datapacks::ContentBase::of(&registry);
         let plugin_commands = plugin_runtime
             .as_ref()
             .map(crate::plugin::PluginRuntime::commands)
@@ -676,7 +671,30 @@ impl Core {
             plugin_runtime,
             build_queries,
         )?;
-        tick_state.datapacks.install(datapacks, datapack_root);
+        // The enabled packs are the ones the world last saved: recovery has
+        // restored that selection, so load it, not the default.
+        let datapacks = crate::datapacks::PackSet::load(
+            &datapack_root,
+            tick_state.datapacks.selection().clone(),
+        )
+        .map_err(CoreError::Registry)?;
+        let registry = if datapacks.has_registry_content() {
+            let mut content = (*registry).clone();
+            datapacks
+                .install_content(&mut content)
+                .map_err(CoreError::Registry)?;
+            let content = Arc::new(content);
+            tick_state.registry = Arc::clone(&content);
+            for world in tick_state.other_dimensions.values_mut() {
+                world.registry = Arc::clone(&content);
+            }
+            content
+        } else {
+            registry
+        };
+        tick_state
+            .datapacks
+            .install(datapacks, datapack_root, content_base);
         let world_spawn = tick_state.world.world_spawn();
         let terrain_epoch = crate::terrain::epoch_for_open(&tick_state)?;
         // Fresh epoch (minted when the stored record had none): stage it in
@@ -948,7 +966,7 @@ impl Core {
         })
     }
 
-    /// Admit the initial view, locale and Join together, reserving one FIFO Leave slot
+    /// Admit the initial view, locale, chat setting and Join together, reserving one FIFO Leave slot
     /// for every exit, including task cancellation before Play registration.
     pub fn join_session(
         &self,
@@ -958,6 +976,7 @@ impl Core {
         permission_level: u8,
         view_distance: u8,
         locale: String,
+        chat_visibility: crate::boundary::ChatVisibility,
     ) -> Result<PlayerSession, CoreError> {
         PlayerSession::admit(
             &self.inner.input_tx,
@@ -967,6 +986,7 @@ impl Core {
             permission_level,
             view_distance,
             locale,
+            chat_visibility,
         )
     }
 

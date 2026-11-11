@@ -126,7 +126,10 @@ async fn vanilla_configuration_completes_with_only_native_optional_bundle() {
     // Tolerated packet while waiting for ack, then ack.
     client
         .send_packet(&ServerboundClientInformation {
-            information: information_locale("ru_ru", 9),
+            information: ClientInformation {
+                chat_visibility: ChatVisibility::Hidden,
+                ..information_locale("ru_ru", 9)
+            },
         })
         .await
         .unwrap();
@@ -139,6 +142,11 @@ async fn vanilla_configuration_completes_with_only_native_optional_bundle() {
     assert_eq!(outcome.client_view_distance, 9);
     // The latest `Client Information` also carries the locale for dialogs.
     assert_eq!(outcome.client_language, "ru_ru");
+    assert_eq!(
+        outcome.client_chat_visibility,
+        mc_core::boundary::ChatVisibility::Hidden,
+        "and the chat setting the core filters text by"
+    );
 }
 
 #[test]

@@ -101,7 +101,7 @@ pub(crate) fn error(state: &mut TickState, connection: ConnectionId, message: im
     );
 }
 
-fn entity_type_name(state: &TickState, entity: EntityId) -> Option<&'static str> {
+pub(crate) fn entity_type_name(state: &TickState, entity: EntityId) -> Option<&'static str> {
     let body = state.entities.body(state.entities.slot_of(entity)?);
     match body.kind {
         EntityKind::Player { .. } => Some("minecraft:player"),
@@ -584,14 +584,14 @@ pub(crate) fn execute(
             crate::tick::apply_player_effects(state, connection, executor, effects, changes);
         }
         Command::DebugStart => {
-            return crate::command_debug::start(state, connection, executor, command);
+            return crate::command_debug::start(state, connection);
         }
         Command::DebugStop => {
-            return crate::command_debug::stop(state, connection, executor, command);
+            return crate::command_debug::stop(state, connection);
         }
         Command::DebugFunction { name } => {
             return crate::command_debug::trace_function(
-                state, connection, executor, name, command,
+                state, connection, executor, name, changes,
             );
         }
         Command::Teleport {
@@ -1076,7 +1076,11 @@ pub(crate) fn execute(
                     },
                 );
             }
-            let connections: Vec<_> = state.connections.all_connections().collect();
+            let connections: Vec<_> = state
+                .connections
+                .all_connections()
+                .filter(|recipient| state.accepts_chat(*recipient))
+                .collect();
             for connection in connections {
                 state.push_player(
                     connection,
@@ -1089,7 +1093,7 @@ pub(crate) fn execute(
                 state
                     .dimension_globals
                     .broadcasts
-                    .push(crate::dimensions::globals::Broadcast::Chat(content));
+                    .push(crate::dimensions::globals::Broadcast::PlayerChat(content));
             }
             return Success(1);
         }
@@ -1129,6 +1133,11 @@ pub(crate) fn execute(
                 text(message)
             };
             for recipient in recipients {
+                // The sender's own copy is a system message; teammates' copies
+                // are chat and only reach `Full` clients.
+                if recipient != connection && !state.accepts_chat(recipient) {
+                    continue;
+                }
                 feedback(
                     state,
                     recipient,
@@ -1180,7 +1189,11 @@ pub(crate) fn execute(
                 text(message)
             };
             for target in targets {
-                if let Some(recipient) = state.connections.entity_connection(target) {
+                if let Some(recipient) = state
+                    .connections
+                    .entity_connection(target)
+                    .filter(|recipient| state.accepts_chat(*recipient))
+                {
                     feedback(
                         state,
                         recipient,

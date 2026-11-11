@@ -1753,6 +1753,7 @@ dependencies = [
  "uuid",
  "wit-component 0.259.0",
  "workspace-features",
+ "zip",
 ]
 
 [[package]]

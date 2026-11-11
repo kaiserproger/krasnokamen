@@ -227,6 +227,10 @@ pub(super) fn apply_inputs<'a>(
             PlayerInput::SetLocale { connection, locale } => {
                 input::session::set_locale(state, (connection, locale))
             }
+            PlayerInput::SetChatVisibility {
+                connection,
+                visibility,
+            } => input::session::set_chat_visibility(state, (connection, visibility)),
             PlayerInput::Join {
                 connection,
                 uuid,

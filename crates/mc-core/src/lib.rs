@@ -59,11 +59,12 @@ mod command_context;
 pub mod command_damage;
 mod command_data;
 pub(crate) mod command_debug;
+mod command_entity_data;
 mod command_particle;
 mod command_sound;
 mod command_storage;
 mod command_tag;
-pub(crate) use command_debug::{Profiler as DebugProfiler, TraceArtifact as DebugTraceArtifact};
+pub(crate) use command_debug::{Profiler as DebugProfiler, Tracer as DebugTracer};
 #[cfg(test)]
 mod command_difficulty_tests;
 pub mod command_enchant;
@@ -221,6 +222,8 @@ pub mod world;
 
 #[cfg(test)]
 mod blueprint_tests;
+#[cfg(test)]
+mod chat_visibility_tests;
 #[cfg(test)]
 mod core_tests;
 #[cfg(test)]

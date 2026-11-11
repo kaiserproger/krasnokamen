@@ -680,6 +680,7 @@ pub fn recover_with_reader(
             end_fight: image.end_fight.clone(),
             wandering_trader: image.wandering_trader,
             scheduled_functions: image.scheduled_functions.clone(),
+            datapack_selection: image.datapack_selection.clone(),
             generated_entity_claims: image.generated_entity_claims.clone(),
             tickets: image.tickets.clone(),
             block_ticks: image.block_ticks.clone(),
@@ -979,6 +980,9 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
         image
             .scheduled_functions
             .clone_from(&replay.scheduled_functions);
+        image
+            .datapack_selection
+            .clone_from(&replay.datapack_selection);
         image.end_fight = replay.end_fight.clone();
         let memory = crate::world::ChunkWorld::new(
             world.config.seed,

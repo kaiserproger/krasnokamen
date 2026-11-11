@@ -38,8 +38,7 @@ struct FireFact {
 }
 
 /// Dense startup tables keep state-property parsing out of scheduled work.
-#[derive(Debug)]
-#[cfg_attr(test, derive(Clone))]
+#[derive(Debug, Clone)]
 pub(crate) struct FireStates {
     facts: Vec<FireFact>,
     normal: [[u32; 16]; 32],
