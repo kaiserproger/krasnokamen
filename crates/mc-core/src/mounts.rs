@@ -839,16 +839,22 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         let live = rider(state, slot).is_some_and(|r| {
             let body = state.entities.body(r);
             body.alive
-                && state
-                    .players
-                    .get(&body.id)
-                    .is_some_and(|p| !p.spectator() && !p.vitals.is_dead())
+                && match body.kind {
+                    EntityKind::Player { .. } => state
+                        .players
+                        .get(&body.id)
+                        .is_some_and(|p| !p.spectator() && !p.vitals.is_dead()),
+                    EntityKind::Mob { .. } => state.entities.row(r).health > 0.0,
+                    _ => false,
+                }
         });
         if !state.entities.body(slot).alive || !live {
             clear_rider(state, slot);
             continue;
         }
-        let equine = capabilities(state, slot).taming.equine();
+        let equine = capabilities(state, slot).taming.equine()
+            && rider(state, slot)
+                .is_some_and(|r| matches!(state.entities.body(r).kind, EntityKind::Player { .. }));
         let row = state.entities.row_mut(slot);
         row.entity_life.mounted = true;
         if equine && !row.entity_life.tamed && crate::taming::roll(row, 50) == 0 {

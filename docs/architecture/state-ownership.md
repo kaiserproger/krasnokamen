@@ -9,6 +9,7 @@ and [mutations.md](mutations.md) for routes.
 | --- | --- | --- | --- |
 | Player inventory, cursor, held item, survival and experience | `mc-core` native input/merge and gameplay modules | immutable player results; edge menu and wire caches | same tick WAL and native checkpoint as related effects |
 | Player pose, combat and entity lifecycle | native core entity state and intent merge | edge tracking and per-viewer movement; never an alternate entity store | entity/player native post-images in tick WAL/checkpoint |
+| Mob/player mount relation | vehicle row owns rider UUID; `mounts` rebuilds rider reverse link and passenger projection | rider/vehicle motion and edge passenger packet | `solaris:Rider` in checkpoint and native WAL image; duplicate riders, self-riding and nested vehicles refuse recovery |
 | Blocks, block entities and physical containers | native core block/input/merge phases | immutable chunk views, client block/menu projections, admitted plugin observations | native chunk/block-entity post-images and checkpoint fences |
 | Scheduled block/fluid work | native core scheduled queues | gameplay reads and offline interchange | absolute native deadlines in WAL/checkpoint; Anvil export translates interchange delays |
 | World clock, weather, rules and dimensions | native tick owner | edge time/weather packets, console/admin reads | native domain images in the same tick stream |
@@ -28,6 +29,35 @@ advances it once. Edge `SET_TIME` uses that simulated age, not the WAL frame.
 `day_time` and its client rate remain independent daylight-clock projections.
 The held offset is currently runtime-only: recovery restores the WAL frame but
 not that offset (`TICK-FROZEN-GAME-AGE-RESTART` in the bug ledger).
+
+### Staged battle actions
+
+`battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
+regiment volley clocks, and `cavalry.rs` owns charge/refusal timers. These are
+runtime battle state: pause holds their clock; restart restores bodies and
+mount custody, not an in-progress battle. The native projectile owner alone
+moves arrows and resolves hits through its chunk index.
+
+Sword/spear/mace cycles last 21/23/25 ticks, with contact at 10/11/12.
+Unblocked contact attempts remove 1.3% on the authored deterministic roll,
+nine wounded per death; shield parries reduce actual removals. Wounded soldiers
+withdraw via formation membership rather than being killed. Pursuit increases
+fatality; film pacing changes lulls, never swing speed. These are simulation
+choices based on [Sabin](https://gwern.net/doc/history/2000-sabin.pdf), not
+measured historical per-swing probabilities. Volleys use 220 ticks sustained,
+110 in an opening burst capped at 1,200 ticks, and 60 arrows per archer.
+Horses refuse steady frontal ranks and run out to a flank; accepted charge
+bonus decays over 260 ticks. The work counters bound visits, target checks,
+reaction checks, strikes, arc iterations and charge decisions; they are not a
+20-TPS performance measurement.
+
+Mob riders use the same horse-owned UUID relation as player riders. Staging
+uses `battle::cavalry::mount`; recovery allows a live mob passenger rather than
+requiring a player UUID, and the mount tick rebuilds reverse links/appearance.
+Native checkpoint/WAL regression:
+`mob_rider_survives_native_checkpoint_restart_and_rejects_duplicate_or_nested_links`.
+Protocol and persistence changes require Main's independent review.
+
 
 ## Rules
 
