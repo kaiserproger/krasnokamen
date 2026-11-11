@@ -531,7 +531,9 @@ authenticated reverse proxy; `allow_remote` is required for non-loopback binds.
   holds the autonomous world (entities, random and scheduled block updates,
   redstone, fluids, spawning, weather, daylight) while players still move, build
   and chat. The WAL tick number keeps advancing, so absolute-tick deadlines fire
-  on `unfreeze`. Rate, freeze and sprint state is never saved.
+  on `unfreeze`. Rate, freeze and sprint state is never saved, but the game age
+  (`/time query gametime`) survives a restart: a world restarted while frozen keeps
+  the age it was frozen at.
 - `/locate structure|biome|poi` (level 2) runs on a worker thread and never
   blocks the tick; a request is refused while two are pending or eight queued.
   Structure searches read saved native or imported start metadata and plan

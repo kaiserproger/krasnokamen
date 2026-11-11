@@ -332,11 +332,26 @@ fn real_core_reopen_uses_checkpoint_and_tail_climate_not_the_tick_number() {
     }
 }
 
-/// Recovery at the frame after a checkpoint and an optional held WAL tail must
+/// What follows the clock checkpoint in the WAL.
+#[derive(Clone, Copy, Debug)]
+enum ClockTail {
+    Empty,
+    /// Frames stay or become held after the checkpoint.
+    Held,
+    /// A frozen checkpoint, then `unfreeze` and simulated frames.
+    Unfrozen,
+}
+
+/// Recovery at the frame after a checkpoint and an optional WAL tail must
 /// publish the age the world had, not the frame counter.
 #[test]
 fn frozen_game_age_survives_checkpoint_and_held_wal_tail() {
-    for (frozen_checkpoint, held_tail) in [(true, false), (true, true), (false, true)] {
+    for (frozen_checkpoint, tail) in [
+        (true, ClockTail::Empty),
+        (true, ClockTail::Held),
+        (false, ClockTail::Held),
+        (true, ClockTail::Unfrozen),
+    ] {
         let dir = std::env::temp_dir().join(format!("mc-core-held-clock-{}", uuid::Uuid::new_v4()));
         let mut config = crate::config::CoreConfig::new(dir.clone(), 42);
         config.simulation_distance = 1;
@@ -347,6 +362,13 @@ fn frozen_game_age_survives_checkpoint_and_held_wal_tail() {
         let mut manifest = read_manifest(&config).unwrap();
         let mut state = fixture();
         state.tick = manifest.tick;
+        if matches!(tail, ClockTail::Unfrozen) {
+            // Running frames re-journal the climate while the daylight or
+            // weather clocks move; isolate the clock's own record.
+            for rule in ["advance_time", "advance_weather"] {
+                state.gamerules.insert(rule.into(), "false".into());
+            }
+        }
         let journal_tick = |state: &mut TickState| {
             let (output, _, _) = run_tick(state, &[]);
             let entries = crate::core::journal_entries_for_tick(state, &output);
@@ -361,30 +383,44 @@ fn frozen_game_age_survives_checkpoint_and_held_wal_tail() {
                 journal_tick(&mut state);
             }
         }
-        let age = state.tick_control.game_ticks(state.tick);
         manifest.tick = state.tick;
         manifest.climate = Some(ClimateImage::capture(&state));
         write_manifest(&config, &manifest).expect("clock checkpoint");
-        if held_tail {
-            state.tick_control.set_frozen(true);
+        let checkpoint_age = state.tick_control.game_ticks(state.tick);
+        if matches!(tail, ClockTail::Held | ClockTail::Unfrozen) {
+            state
+                .tick_control
+                .set_frozen(matches!(tail, ClockTail::Held));
             let mut writer = JournalWriter::open(&dir, 1).expect("writer");
+            let mut climate_records = 0;
             for index in 0..3 {
                 let (output, entries) = journal_tick(&mut state);
-                assert_eq!(output.snapshot.game_time, age);
+                if matches!(tail, ClockTail::Held) {
+                    assert_eq!(output.snapshot.game_time, checkpoint_age);
+                }
                 let has_climate = entries
                     .iter()
                     .any(|entry| matches!(entry, JournalEntry::Climate { .. }));
+                climate_records += usize::from(has_climate);
+                let expected_climate = match tail {
+                    ClockTail::Held => !frozen_checkpoint && index == 0,
+                    ClockTail::Unfrozen => index == 0,
+                    ClockTail::Empty => false,
+                };
                 assert_eq!(
-                    has_climate,
-                    !frozen_checkpoint && index == 0,
-                    "only the switch to held frames journals the clock"
+                    has_climate, expected_climate,
+                    "only a mode switch journals the clock, tail {tail:?} frame {index}"
                 );
                 writer
                     .append(output.tick, output.tick, &entries)
-                    .expect("held tail");
+                    .expect("clock tail");
             }
             writer.flush().expect("flush tail");
+            if matches!(tail, ClockTail::Unfrozen) {
+                assert_eq!(climate_records, 1, "one climate record in the WAL tail");
+            }
         }
+        let age = state.tick_control.game_ticks(state.tick);
         let recovered = state.tick;
         let core = crate::core::Core::open(config.clone()).expect("reopen");
         let mut rx = core.subscribe();
@@ -392,7 +428,7 @@ fn frozen_game_age_survives_checkpoint_and_held_wal_tail() {
         assert_eq!(
             output.snapshot.game_time,
             age + output.tick - recovered,
-            "frozen checkpoint {frozen_checkpoint}, held tail {held_tail}"
+            "frozen checkpoint {frozen_checkpoint}, tail {tail:?}"
         );
         core.shutdown();
         std::fs::remove_dir_all(&dir).expect("cleanup");
