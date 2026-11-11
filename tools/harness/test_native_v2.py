@@ -175,7 +175,8 @@ class NativeV2ProbeTests(unittest.TestCase):
                 "native-v2-end-restart", "native-v2-entity-gallery",
                 "native-v2-p2-optional-pack", "native-v2-custody-mount-export",
                 "native-v2-cursor-close", "native-v2-banner-placement",
-                "native-v2-snow-golem-shear", "native-v2-destroyed-chest-race",
+                "native-v2-snow-golem-shear", "native-v2-peaceful-removal", "native-v2-command-score-store",
+                "native-v2-destroyed-chest-race",
                 "native-v2-duplicate-login", "native-v2-corrupt-block-entities",
                 "native-v2-corrupt-chunk-near-camera", "native-v2-chest-drag-disconnect") else "tcp")
             self.assertEqual(entry.evidence, expected)

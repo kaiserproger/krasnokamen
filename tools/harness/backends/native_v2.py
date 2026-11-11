@@ -717,6 +717,12 @@ def _promotion_mobs(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     run(steps, origin, steps.report["id"].removeprefix("native-v2-"))
 
 
+def _promotion_commands(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_promotion_commands import run
+
+    run(steps, origin)
+
+
 def _promotion_maps(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_promotion_maps import run
 
@@ -751,6 +757,8 @@ RUNNERS = {
     "native-v2-map-inventory-player-markers": _promotion_maps,
     "native-v2-banner-placement": _promotion_banner,
     "native-v2-snow-golem-shear": _promotion_mobs,
+    "native-v2-peaceful-removal": _promotion_mobs,
+    "native-v2-command-score-store": _promotion_commands,
     "native-v2-cursor-close": _promotion_cursor,
     "native-v2-custody-mount-export": _promotion_custody,
     "native-v2-p2-optional-pack": _promotion_custody,

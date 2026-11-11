@@ -287,6 +287,14 @@ The `entities` profile includes windowed native-client probes:
   block-entity NBT; the actual patterned and plain banners are captured for review.
 - `native-v2-snow-golem-shear`: ordinary shears clear the same golem's received
   pumpkin flag, reveal its face and yield one carved-pumpkin pickup.
+- `native-v2-peaceful-removal`: creates a zombie and cow with natural spawning
+  disabled, switches to peaceful and checks that the same zombie disappears
+  while the same cow remains. A graphical receipt and negative control are
+  required before this scenario can support promotion.
+- `native-v2-command-score-store`: checks generic damage, main-hand totem and
+  custom death protection, writable death/player/total kill counters and a swap,
+  stored result/success for give, clear and failed clear, and inventory counts.
+  A graphical receipt and negative control are required before promotion.
 - `native-v2-map-*`: separate frame waypoint, banner removal/locked
   toggle, inventory clone tracking, pumpkin hiding, terrain shading and Nether
   terrain repros. Read-only receipts reconstruct the graphical viewer's exact

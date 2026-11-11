@@ -86,6 +86,35 @@ class MobPromotionTests(unittest.TestCase):
         self.assertIn("minecraft_press_inputs", steps.calls)
         self.assertTrue(any("Rotation:[180f,0f]" in call for call in steps.calls))
 
+    def test_peaceful_requires_zombie_removal_and_cow_retention(self):
+        class Steps:
+            def __init__(self):
+                self.report = {}
+
+            def fixture(self, command):
+                pass
+
+            def check(self, label, condition):
+                if not condition:
+                    raise RuntimeError(label)
+
+            def wait(self, predicate, label, **kwargs):
+                self.check(label, predicate({}))
+
+        zombie = {"entity_id": 1, "entity_uuid": "z", "entity_type": "minecraft:zombie"}
+        cow = {"entity_id": 2, "entity_uuid": "c", "entity_type": "minecraft:cow"}
+        for after, failure in (([zombie, cow], "same_zombie_removed_after_peaceful"),
+                               ([], "same_cow_remains"), ([cow], None)):
+            steps = Steps()
+            with mock.patch.object(mobs, "_echo"), mock.patch.object(mobs, "_capture"), \
+                 mock.patch.object(mobs, "_entity_at", side_effect=[zombie, cow]), \
+                 mock.patch.object(mobs, "_rows", return_value=after):
+                if failure:
+                    with self.assertRaisesRegex(RuntimeError, failure):
+                        mobs._peaceful(steps, (0, 0, 0))
+                else:
+                    mobs._peaceful(steps, (0, 0, 0))
+
 
 
 if __name__ == "__main__":
