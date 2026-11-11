@@ -27,7 +27,7 @@ fn typical_village(state: &mut TickState) {
         )
         .unwrap();
     for (x, z) in [(3, 2), (7, 2), (3, 13), (7, 13), (11, 13), (11, 2)] {
-        bed(state, x, z);
+        roofed_bed(state, x, z);
     }
     let composter = block(state, "minecraft:composter", &[]);
     state.world.set_block(12, 201, 8, composter);

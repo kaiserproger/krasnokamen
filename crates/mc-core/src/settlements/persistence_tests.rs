@@ -825,6 +825,8 @@ fn sigkill_child_reopen_keeps_identical_records_and_high_water() {
         );
         live.world.set_block(7, 80, 8, foot);
         live.world.set_block(8, 80, 8, head);
+        // A settlement resident holds only a roofed bed.
+        live.world.set_block(8, 84, 8, live.registry.states.stone);
         for x in 3..=5 {
             for z in 3..=5 {
                 live.world.set_block(x, 79, z, live.registry.states.stone);
