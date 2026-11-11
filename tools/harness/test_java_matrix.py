@@ -80,6 +80,33 @@ class MatrixTest(unittest.TestCase):
             self.assertEqual(path.parent, Path(directory))
             self.assertLess(len(path.name), 255)
 
+    def test_server_instance_reserves_its_own_ports_instead_of_hardcoding(self):
+        # Regression: every java-matrix server hardcoded 26200/26201, so two
+        # concurrent runs on the shared host collided; the loser's server died
+        # with "Address already in use" while its clients joined the winner's
+        # server (auth ack never arrived). Ports must be bind-probed per instance.
+        with tempfile.TemporaryDirectory() as directory:
+            args = SimpleNamespace(
+                server_bin=Path("/bin/true"), plugins_dir=Path(directory),
+                data_dir=Path(directory), timeout_seconds=30,
+                context=SimpleNamespace(commands=[], cwds=[], exits=[], logs=[]),
+            )
+            with patch.object(matrix, "copy_plugins", return_value=[]), \
+                    patch.object(matrix, "prepare_access"), \
+                    patch.object(matrix, "ProtocolServer") as server_cls, \
+                    patch.object(matrix, "reserve_matrix_port", side_effect=[26250, 26251]) as reserve:
+                server = server_cls.return_value
+                server._process = None
+                server.running = False
+                with matrix.server_instance(args, Path(directory) / "server", 1):
+                    kwargs = server_cls.call_args.kwargs
+            self.assertEqual(kwargs["port"], 26250)
+            self.assertEqual(kwargs["dashboard_port"], 26251)
+            self.assertEqual(kwargs["port_range"], matrix.PORT_RANGE)
+            self.assertEqual(reserve.call_args_list[0].kwargs, {"port_range": matrix.PORT_RANGE})
+            self.assertEqual(reserve.call_args_list[1].kwargs,
+                             {"exclude": 26250, "port_range": matrix.PORT_RANGE})
+
 
 if __name__ == "__main__":
     unittest.main()

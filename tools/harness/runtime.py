@@ -328,6 +328,77 @@ def _probe_port(port: int, timeout_seconds: float) -> bool:
         sock.close()
 
 
+def _listener_inodes(port: int) -> set[int]:
+    """Socket inodes of the LISTEN sockets on 127.0.0.1:<port> (procfs)."""
+    inodes: set[int] = set()
+    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            rows = Path(table).read_text().splitlines()[1:]
+        except OSError:
+            continue
+        for row in rows:
+            fields = row.split()
+            if len(fields) < 10 or fields[3] != "0A":  # 0A = LISTEN
+                continue
+            if int(fields[1].rsplit(":", 1)[1], 16) == port:
+                inodes.add(int(fields[9]))
+    return inodes
+
+
+def _descendant_pids(root_pid: int) -> set[int]:
+    """`root_pid` plus all its descendants, via /proc/<pid>/task/<tid>/children.
+
+    Loader clients are forked by Gradle's JavaExec, so the MCP listener can
+    belong to a grandchild of the spawned process.
+    """
+    seen = {root_pid}
+    pending = [root_pid]
+    while pending:
+        pid = pending.pop()
+        task_dir = Path(f"/proc/{pid}/task")
+        try:
+            tids = os.listdir(task_dir)
+        except OSError:
+            continue
+        for tid in tids:
+            try:
+                children = (task_dir / tid / "children").read_text().split()
+            except OSError:
+                continue
+            for child in children:
+                child_pid = int(child)
+                if child_pid not in seen:
+                    seen.add(child_pid)
+                    pending.append(child_pid)
+    return seen
+
+
+def _owns_listener(process: subprocess.Popen[Any], port: int) -> bool:
+    """True only when a LISTEN socket on `port` belongs to `process` or one of
+    its descendants.
+
+    A port that merely accepts may belong to a foreign process (a concurrent
+    or stale server on the shared host); readiness must be proven, not assumed.
+    """
+    inodes = _listener_inodes(port)
+    if not inodes:
+        return False
+    for pid in _descendant_pids(process.pid):
+        fd_dir = Path(f"/proc/{pid}/fd")
+        try:
+            entries = os.listdir(fd_dir)
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                target = os.readlink(fd_dir / entry)
+            except OSError:
+                continue
+            if target.startswith("socket:[") and int(target[8:-1]) in inodes:
+                return True
+    return False
+
+
 def _require_event_fds(
     process: subprocess.Popen[Any] | None, parent: Path
 ) -> tuple[selectors.BaseSelector, int, int]:
@@ -430,10 +501,13 @@ def wait_port(
     log_path: Path,
     phase_name: str = "server_start",
 ) -> None:
-    """Return once port accepts; raise if the process exits or time runs out.
+    """Return once `process` itself listens on the port; raise if the process
+    exits or time runs out.
 
-    `phase_name` is the lifecycle phase a failure belongs to: the server's
-    readiness by default, `client_start` when the port is a client's MCP.
+    A bare accept on the port is not readiness: on the shared host another
+    run's server may hold it. `phase_name` is the lifecycle phase a failure
+    belongs to: the server's readiness by default, `client_start` when the
+    port is a client's MCP.
     """
     with phase(phase_name):
         _wait_port(port, timeout_seconds, process, log_path)
@@ -442,6 +516,9 @@ def wait_port(
 def _wait_port(port: int, timeout_seconds: float, process: subprocess.Popen[Any], log_path: Path) -> None:
     """Re-probes happen only after real events: socket writability, log growth
     (inotify), or process exit (pidfd). There is no polling quantum.
+
+    A probe that succeeds against a foreign listener is not readiness: the
+    port counts as ready only once `process` owns the LISTEN socket itself.
     """
     if timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be positive")
@@ -465,7 +542,7 @@ def _wait_port(port: int, timeout_seconds: float, process: subprocess.Popen[Any]
                     f"port {port} did not become ready within "
                     f"{timeout_seconds:.1f}s; log {log_path}: {tail[-2000:]}"
                 )
-            if _probe_port(port, remaining):
+            if _probe_port(port, remaining) and _owns_listener(process, port):
                 return
             # Only log growth or process exit wakes us to probe again.
             for key, _ in selector.select(max(0.0, deadline - time.monotonic())):
