@@ -215,6 +215,16 @@ async fn run_connection(
         return Ok(());
     };
 
+    // Vanilla kicks a session of the profile already in Play when the newer login finishes,
+    // not when its configuration ends (that late finisher is refused in the core's Join).
+    anyhow::ensure!(
+        server.hub.submit(PlayerInput::ProfileLogin {
+            connection: id,
+            uuid: outcome.uuid,
+        }),
+        "authoritative login admission queue is full or stopped"
+    );
+
     // Configuration has its own per-read and resource-pack deadlines.
     let profile = conn.profile().cloned();
     let (data, tags) = match &profile {

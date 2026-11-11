@@ -85,24 +85,29 @@ pub(crate) fn announce_player(
 /// Vanilla `multiplayer.disconnect.duplicate_login`.
 const DUPLICATE_LOGIN: &str = "You logged in from another location";
 
-pub(in crate::tick) fn join(
+/// The connection already in Play for `uuid`. An unverified plugin-login claimant
+/// neither kicks nor is refused by a verified session; authentication arbitrates those.
+fn session_in_play(state: &TickState, uuid: &uuid::Uuid) -> Option<ConnectionId> {
+    if state.require_plugin_login {
+        return None;
+    }
+    state
+        .connections
+        .uuids
+        .iter()
+        .find_map(|(other, joined)| (joined == uuid).then_some(*other))
+}
+
+/// Vanilla `verifyLoginAndFinishConnectionSetup` → `disconnectAllPlayersWithProfile`: the
+/// newer login wins over a session already in Play. The incumbent's ordinary Leave capture
+/// (menus closed, image saved) runs here, so its inventory moves rather than copies.
+pub(in crate::tick) fn profile_login(
     state: &mut TickState,
-    (connection, uuid, name, permission_level): (&ConnectionId, &uuid::Uuid, &String, &u8),
+    (connection, uuid): (&ConnectionId, &uuid::Uuid),
     changes: &mut ChangeSet,
 ) {
-    if state.connections.by_connection.contains_key(connection) {
-        return;
-    }
-    // Vanilla duplicate login: the newer login wins. The incumbent's ordinary
-    // Leave capture (menus closed, image saved) is restored below, so its
-    // inventory moves rather than copies. An unverified plugin-login claimant
-    // never kicks a verified session; authentication arbitrates those.
-    if !state.require_plugin_login
-        && let Some(incumbent) = state
-            .connections
-            .uuids
-            .iter()
-            .find_map(|(other, joined)| (joined == uuid).then_some(*other))
+    if let Some(incumbent) = session_in_play(state, uuid)
+        && incumbent != *connection
     {
         leave(state, &incumbent, changes);
         state.push_player(
@@ -112,6 +117,29 @@ pub(in crate::tick) fn join(
             },
         );
         state.disconnects.push((incumbent, state.tick));
+    }
+}
+
+pub(in crate::tick) fn join(
+    state: &mut TickState,
+    (connection, uuid, name, permission_level): (&ConnectionId, &uuid::Uuid, &String, &u8),
+    changes: &mut ChangeSet,
+) {
+    if state.connections.by_connection.contains_key(connection) {
+        return;
+    }
+    // Vanilla `handleConfigurationFinished`: a connection that finishes configuration while
+    // the profile is already in Play is refused; the player in Play and its custody stay
+    // untouched. A newer login already kicked its incumbent in `profile_login`.
+    if session_in_play(state, uuid).is_some() {
+        state.push_player(
+            *connection,
+            PlayerChange::Disconnect {
+                reason: DUPLICATE_LOGIN.to_owned(),
+            },
+        );
+        state.disconnects.push((*connection, state.tick));
+        return;
     }
     if state.entities.slot_of_uuid(*uuid).is_some()
         || state

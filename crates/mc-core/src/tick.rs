@@ -61,6 +61,8 @@ mod build;
 pub(crate) use build::*;
 
 #[cfg(test)]
+mod duplicate_login_tests;
+#[cfg(test)]
 mod furnace_tests;
 #[cfg(test)]
 pub(crate) mod mining_tests;

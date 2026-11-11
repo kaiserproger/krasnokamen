@@ -4506,3 +4506,14 @@ regression = ["cargo:mc-core:projectiles::flight_tests::adventure_and_mob_arrows
 failing_first = "reported"
 fix_commit = "cd727225"
 promotion = "docs/bugs/promotions/PROJECTILE-CAN-BREAK-NOT-EVALUATED.json"
+
+[[bug]]
+id = "DUPLICATE-LOGIN-LATE-CONFIGURATION-REPLACES-PLAYING"
+title = "A connection that finishes configuration after another session of the same profile is already in Play kicks the playing session instead of being refused"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Breaker finding F7 (slice DUPLICATE-LOGIN 2): a same-profile client held in configuration through a loopback proxy and released after a second client entered Play joined and kicked the playing session (7/7 runs, both orders). Vanilla 26.3 ServerConfigurationPacketListenerImpl.handleConfigurationFinished refuses the late finisher with DUPLICATE_LOGIN_DISCONNECT_MESSAGE; only a newer login (ServerLoginPacketListenerImpl.verifyLoginAndFinishConnectionSetup -> disconnectAllPlayersWithProfile) kicks a session in Play. Custody held in every run. Arbitration lived only in crates/mc-core/src/tick/input/session.rs join."
+regression = ["cargo:mc-core:tick::duplicate_login_tests::late_configuration_finisher_is_refused_and_the_player_in_play_keeps_custody", "cargo:mc-core:tick::duplicate_login_tests::second_finisher_is_refused_even_when_it_logged_in_later", "cargo:mc-core:tick::duplicate_login_tests::newer_login_still_kicks_a_session_already_in_play_and_takes_over_custody"]
+failing_first = "reported"
