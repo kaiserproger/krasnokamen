@@ -206,7 +206,16 @@ def _golem(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture(f"summon minecraft:iron_golem {x + 14.5} {y} {z + 14.5} {{NoAI:1b}}")
     far = _echo(steps, "far_golem_summon_ordered")
     steps.check("far_golem_summoned", any("Summoned new Iron Golem" in line for line in far["recent_chat"]))
-    far_golem = _entity_at(steps, "minecraft:iron_golem", x + 14.5, z + 14.5)
+    far_golem: dict = {}
+
+    def far_received(_state: dict) -> bool:
+        # 20 blocks from the player: beyond _entity_at's 16-block search radius.
+        row = next((r for r in _rows(steps, 32) if r["entity_type"] == "minecraft:iron_golem"
+                    and abs(r["x"] - (x + 14.5)) < .6 and abs(r["z"] - (z + 14.5)) < .6), None)
+        if row is not None:
+            far_golem.update(row)
+        return row is not None
+    steps.wait(far_received, "received_far_iron_golem")
     steps.call("minecraft_wait_ticks", {"ticks": 100})
     steps.call("minecraft_wait_ticks", {"ticks": 100})
 
