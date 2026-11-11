@@ -1033,9 +1033,12 @@ title = "Painting no lifecycle."
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PAINTINGS"
-regression = ["cargo:mc-core:interact_parity_tests::interact_parity_painting_places_on_wall", "cargo:mc-core:interact_parity_tests::painting_drops_when_shared_command_commit_removes_support"]
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_painting_places_on_wall", "cargo:mc-core:interact_parity_tests::painting_drops_when_shared_command_commit_removes_support", "harness:entities:native-v2-ledger-painting"]
+failing_first = "receipts/A1BlocksGate/gates/20261111T125116-native-v2-ledger-painting-bd1_5pec (display :3): the painting stays after its only support became air"
+fix_commit = "patch:aad4ce47c9e3a4bef534f95592faba14a3935ef638f0fd486d52fb804b18551c"
+promotion = "docs/bugs/promotions/PAINTINGS.json"
 
 [[bug]]
 id = "SPAWN-PEACEFUL-REMOVAL"
