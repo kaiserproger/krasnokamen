@@ -15,8 +15,14 @@ use serde::Deserialize;
 const RETAINED: &str = "solaris:ProjectileRuntime";
 
 pub(crate) fn validate_state(state: &ProjectileState) -> Result<(), &'static str> {
-    if state.ground_lifetime == 0 || state.ground_lifetime > super::ARROW_GROUND_LIFETIME {
-        return Err("ground_lifetime: expected 1..=1201");
+    if state.ground_lifetime != super::ARROW_GROUND_LIFETIME
+        && !(state.ground_lifetime == super::BATTLE_ARROW_GROUND_LIFETIME
+            && matches!(
+                state.kind,
+                ProjectileKind::Arrow | ProjectileKind::SpectralArrow
+            ))
+    {
+        return Err("ground_lifetime: expected 1201, or 100 for an arrow");
     }
     if state.grounded_at_age.is_some()
         && (!state.stuck

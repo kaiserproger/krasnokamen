@@ -71,6 +71,8 @@ projectile ticks neither take `row_mut` nor publish appearance merely to age.
 Pickup, expiry and physical-profile custody changes still use native owners.
 `grounded_at_age` and `ground_lifetime` persist in projectile state, paired with
 native `solaris:LifetimeAge`; vanilla `life` projects the effective ground age.
+Hydration refuses an anchored projectile without a native lifetime-age long;
+retained lifetimes accept only 1,201, or 100 for Arrow/SpectralArrow.
 Active-clock WAL replay, frozen chunks and wrapping entity age retain elapsed
 time without one arrow image per tick. Loyalty tridents keep their dynamic
 return path and are not treated as idle arrows.
@@ -81,7 +83,8 @@ the horse so native battle motion is not suppressed as ordinary tamed AI.
 Recovery allows a live mob passenger rather than requiring a player UUID,
 rejects item/boat/dead/nested passengers, and rebuilds reverse links/appearance.
 Native regressions include checkpoint/WAL mount custody, real mounted movement,
-100-tick grounded expiry, idle no-touch pickup and native lazy-clock replay.
+100-tick grounded expiry, idle no-touch pickup, native lazy-clock replay, and
+matching uninterrupted/restarted expiry through actual checkpoint and WAL producers.
 Protocol and persistence changes require Main's independent review.
 
 

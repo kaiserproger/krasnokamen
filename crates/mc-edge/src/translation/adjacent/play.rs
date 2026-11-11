@@ -214,7 +214,9 @@ fn translate_clientbound<'a>(
             // -> 26.1.2 `animate` swing main (0) / off hand (3) (see `legacy_name`).
             w.write_varint(r.read_varint()?);
             w.write_u8(if r.read_varint()? == 0 { 0 } else { 3 });
-            r.read_varint()?;
+            if r.read_varint()? == 0 {
+                return Ok(None);
+            }
             r.read_varint()?;
         }
         "level_particles" => {

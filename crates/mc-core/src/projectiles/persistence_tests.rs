@@ -728,6 +728,165 @@ fn crossbow_launch_custody_and_confirmed_kills_round_trip_without_inference() {
     assert!(validate_state(&arrow).is_err());
 }
 
+fn landed_battle_arrow() -> (crate::tick::TickState, crate::boundary::EntityId, u64) {
+    let (mut state, _, centre) = super::super::flight_tests::setup();
+    let kind = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:husk").unwrap())
+        .unwrap();
+    let owner = state.spawn_mob(kind, centre, 20.0);
+    let owner_slot = state.entities.slot_of(owner).unwrap();
+    state.entities.set_faction(owner_slot, 1);
+    state.entities.row_mut(owner_slot).controls.no_ai = true;
+    let owner_uuid = state.entities.row(owner_slot).uuid;
+    let arrow = super::super::launch(
+        &mut state,
+        ProjectileState::new(ProjectileKind::Arrow, Some(owner_uuid), ItemStack::EMPTY),
+        [centre[0] + 4.0, centre[1] + 0.5, centre[2]],
+        [0.0, -1.0, 0.0],
+    )
+    .unwrap();
+    let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    crate::core::journal_entries_for_tick(&mut state, &output);
+    let record = state
+        .entities
+        .row(state.entities.slot_of(arrow).unwrap())
+        .projectile
+        .as_ref()
+        .unwrap();
+    assert!(record.stuck && record.grounded_at_age.is_some());
+    assert_eq!(record.ground_lifetime, 100);
+    let landed_at = state.tick;
+    (state, arrow, landed_at)
+}
+
+#[test]
+fn anchored_arrow_checkpoint_requires_native_lifetime_age() {
+    let (state, arrow, _) = landed_battle_arrow();
+    let entity =
+        crate::core::entity_data_record(&state, state.entities.slot_of(arrow).unwrap()).unwrap();
+    let fields = mc_data::entity_nbt::entity_to_fields(&state.registry.items, &entity).unwrap();
+    let mut valid = Replay {
+        tick: state.tick,
+        ..Default::default()
+    };
+    crate::native_checkpoint::hydrate_entity(
+        &state.registry,
+        &mut valid,
+        &Tag::Compound(fields.clone()),
+        state.tick,
+    )
+    .unwrap();
+    assert!(
+        valid.entities[&arrow.0]
+            .projectile
+            .as_ref()
+            .unwrap()
+            .grounded_at_age
+            .is_some()
+    );
+    for replacement in [None, Some(Tag::Int(1))] {
+        let mut corrupt = fields.clone();
+        corrupt.retain(|(name, _)| name != "solaris:LifetimeAge");
+        if let Some(value) = replacement {
+            corrupt.push(("solaris:LifetimeAge".into(), value));
+        }
+        let mut rejected = Replay {
+            tick: state.tick,
+            ..Default::default()
+        };
+        let error = crate::native_checkpoint::hydrate_entity(
+            &state.registry,
+            &mut rejected,
+            &Tag::Compound(corrupt),
+            state.tick,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("solaris:LifetimeAge"), "{error}");
+        assert!(
+            rejected.entities.is_empty(),
+            "invalid image must not publish a body"
+        );
+    }
+}
+
+#[test]
+fn battle_arrow_real_checkpoint_wal_restart_matches_uninterrupted_expiry() {
+    let (mut live, arrow, landed_at) = landed_battle_arrow();
+    for _ in 0..37 {
+        let (output, _, _) = crate::tick::run_tick(&mut live, &[]);
+        crate::core::journal_entries_for_tick(&mut live, &output);
+    }
+    let checkpoint_tick = live.tick;
+    let entity =
+        crate::core::entity_data_record(&live, live.entities.slot_of(arrow).unwrap()).unwrap();
+    let fields = mc_data::entity_nbt::entity_to_fields(&live.registry.items, &entity).unwrap();
+    let mut base = Replay {
+        tick: checkpoint_tick,
+        ..Default::default()
+    };
+    crate::native_checkpoint::hydrate_entity(
+        &live.registry,
+        &mut base,
+        &Tag::Compound(fields),
+        checkpoint_tick,
+    )
+    .unwrap();
+    base.sim_debt.extend(
+        live.world
+            .debt_checkpoint(checkpoint_tick)
+            .into_iter()
+            .map(|image| (image.chunk, image)),
+    );
+    let saved = &base.entities[&arrow.0];
+    assert_eq!(saved.projectile.as_ref().unwrap().ground_age(saved.age), 37);
+
+    let directory = tempfile::tempdir().unwrap();
+    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    for _ in 0..13 {
+        let (output, _, _) = crate::tick::run_tick(&mut live, &[]);
+        let entries = crate::core::journal_entries_for_tick(&mut live, &output);
+        writer.append(output.tick, output.tick, &entries).unwrap();
+    }
+    writer.flush().unwrap();
+    drop(writer);
+    let batches =
+        read_complete_batches_after(&directory.path().join("journal"), checkpoint_tick).unwrap();
+    assert_eq!(batches.len(), 13);
+    assert!(
+        batches.iter().any(|(_, _, entries)| !entries.is_empty()),
+        "exercise actual journal producers, not an invented empty WAL tail"
+    );
+    let replay = replay_batches(base, &batches);
+    assert_eq!(replay.tick, live.tick);
+    let saved = &replay.entities[&arrow.0];
+    assert_eq!(saved.projectile.as_ref().unwrap().ground_age(saved.age), 50);
+    assert_eq!(saved.projectile.as_ref().unwrap().ground_lifetime, 100);
+    let (mut restarted, _, _) = super::super::flight_tests::setup();
+    restarted.tick = replay.tick;
+    restarted.world.restore_sim_debt(&replay, None).unwrap();
+    crate::core::restore_entity(&mut restarted, arrow.0, saved).unwrap();
+    let mut removed_at = None;
+    for _ in 0..100 {
+        crate::tick::run_tick(&mut live, &[]);
+        crate::tick::run_tick(&mut restarted, &[]);
+        assert_eq!(live.tick, restarted.tick);
+        let present = live.entities.slot_of(arrow).is_some();
+        assert_eq!(
+            present,
+            restarted.entities.slot_of(arrow).is_some(),
+            "restart changed removal at tick {}",
+            live.tick
+        );
+        if !present {
+            removed_at = Some(live.tick);
+            break;
+        }
+    }
+    assert_eq!(removed_at, Some(landed_at + 100));
+}
+
 #[test]
 fn lazy_ground_clock_survives_native_checkpoint_wal_active_pause_and_age_wrap() {
     let state = live_state();
@@ -811,10 +970,24 @@ fn ground_clock_legacy_defaults_and_invalid_native_states() {
     let legacy: ProjectileState = serde_json::from_value(encoded).unwrap();
     assert_eq!(legacy.ground_lifetime, super::super::ARROW_GROUND_LIFETIME);
     assert_eq!(legacy.grounded_at_age, None);
-    for lifetime in [0, super::super::ARROW_GROUND_LIFETIME + 1] {
+    for lifetime in [0, 1, 500, super::super::ARROW_GROUND_LIFETIME + 1] {
         let mut invalid = arrow.clone();
         invalid.ground_lifetime = lifetime;
         assert!(validate_state(&invalid).is_err());
+    }
+    for kind in [
+        ProjectileKind::Arrow,
+        ProjectileKind::SpectralArrow,
+        ProjectileKind::Trident,
+        ProjectileKind::Snowball,
+    ] {
+        let mut state = ProjectileState::new(kind, None, ItemStack::EMPTY);
+        assert!(validate_state(&state).is_ok());
+        state.ground_lifetime = 100;
+        assert_eq!(
+            validate_state(&state).is_ok(),
+            matches!(kind, ProjectileKind::Arrow | ProjectileKind::SpectralArrow)
+        );
     }
     let mut invalid = arrow;
     invalid.grounded_at_age = Some(0);
