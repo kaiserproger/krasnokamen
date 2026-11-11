@@ -273,6 +273,24 @@ fn restored_sensor_retains_its_frequency_and_active_deadline() {
 }
 
 #[test]
+fn sealed_record_exposes_committing_tick() {
+    let mut rig = Rig::new();
+    let pos = rig.cell(0);
+    let stone = rig.state.registry.states.stone;
+    rig.state.world.set_block(pos.x, pos.y, pos.z, stone);
+    rig.state.world.fold_overlay();
+    rig.dig(pos);
+    let sealed = rig.state.block_log.records.back().expect("break record");
+    assert_eq!(sealed.tick, Some(rig.state.tick));
+    assert!(
+        describe(&rig.state, sealed, sealed.time).contains(&format!("[tick={}]", rig.state.tick))
+    );
+    let mut old = sealed.clone();
+    old.tick = None;
+    assert!(describe(&rig.state, &old, old.time).contains("[tick=unknown]"));
+}
+
+#[test]
 fn grief_rollback_restores_blocks_and_chests_exactly_and_restore_reapplies() {
     let mut rig = Rig::new();
     let (stone_cell, dirt_cell, chest_cell, broken_cell) =
@@ -444,6 +462,7 @@ fn parse_accepts_coreprotect_parameters() {
 fn record(seq: u64, time: u64) -> Record {
     Record {
         seq,
+        tick: Some(123),
         time,
         actor: Arc::from("Alice"),
         pos: [1, 64, seq as i32],
@@ -548,6 +567,9 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
         floors: vec![(Dimension::Overworld, 1), (Dimension::Nether, 0)],
     });
     backlog.write(&store, &blocks, &items).expect("write");
+    drop(store);
+    let store = mc_world::native::NativeStore::open(&directory.path().join("state.redb"), [7; 32])
+        .expect("reopen");
     let rows = load(&store.checkpoint_reader().expect("reader"), &blocks, &items).expect("rows");
     assert_eq!(rows[&Dimension::Nether].records, [stone(0)]);
     let overworld = rows[&Dimension::Overworld].clone();
@@ -571,6 +593,223 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
         log.next_seq, 8,
         "a mark of an evicted record still reserves its seq"
     );
+}
+
+/// A native row as written before records carried their committing tick.
+fn old_format_row(
+    blocks: &mc_world::BlockRegistry,
+    items: &mc_data::items::ItemRegistry,
+) -> Vec<u8> {
+    let record = Record {
+        change: Change::Block {
+            before: blocks
+                .block(&id("minecraft:stone"))
+                .expect("stone")
+                .default
+                .0,
+            after: blocks.block(&id("minecraft:air")).expect("air").default.0,
+            entity: None,
+        },
+        ..record(1, 99)
+    };
+    let bytes = encode_record(&record, blocks, items).expect("encode");
+    let (_, mut root) = mc_nbt::read_named(&mut bytes.as_slice()).expect("row nbt");
+    let mc_nbt::Tag::Compound(fields) = &mut root else {
+        panic!("block-log row is a compound");
+    };
+    fields.retain(|(name, _)| name != "tick");
+    let mut old = Vec::new();
+    mc_nbt::write_named(&mut old, "", &root).expect("write row");
+    old
+}
+
+#[test]
+fn block_log_tick_survives_wal_and_old_records_are_unknown() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let batch = |tick: u64| {
+        directory
+            .path()
+            .join(format!("journal/batch-{tick:020}-{tick:020}.bin"))
+    };
+    let entry = crate::journal::JournalEntry::BlockLog {
+        value: Box::new(Delta {
+            records: vec![record(1, 99)],
+            marks: Vec::new(),
+        }),
+    };
+    let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).expect("wal");
+    writer
+        .append(123, 123, std::slice::from_ref(&entry))
+        .expect("append");
+    let replayed = crate::journal::read_batch_file(&batch(123)).expect("new batch");
+    assert_eq!(replayed, std::slice::from_ref(&entry));
+    let mut old = serde_json::to_value(&entry).expect("entry json");
+    old["BlockLog"]["value"]["records"][0]
+        .as_object_mut()
+        .expect("record object")
+        .remove("tick");
+    let old: crate::journal::JournalEntry = serde_json::from_value(old).expect("old entry");
+    writer
+        .append(124, 124, std::slice::from_ref(&old))
+        .expect("append");
+    let old_disk = crate::journal::read_batch_file(&batch(124)).expect("old batch");
+    let crate::journal::JournalEntry::BlockLog { value } = &old_disk[0] else {
+        panic!("block-log entry");
+    };
+    assert_eq!(value.records[0].tick, None);
+
+    let blocks = required_blocks();
+    let items = mc_data::items::solaris_required_items();
+    let old_row = old_format_row(&blocks, &items);
+    assert_eq!(
+        decode_record(&old_row, 1, &blocks, &items)
+            .expect("old row decodes")
+            .tick,
+        None
+    );
+    let path = directory.path().join("old-state.redb");
+    let store = mc_world::native::NativeStore::create(&path, [7; 32]).expect("store");
+    store
+        .write_block_log(&[(key(RECORD_ROW, Dimension::Overworld, 1), old_row)], &[])
+        .expect("write old row");
+    drop(store);
+    let store = mc_world::native::NativeStore::open(&path, [7; 32]).expect("reopen");
+    let rows = load(&store.checkpoint_reader().expect("reader"), &blocks, &items).expect("rows");
+    assert_eq!(rows[&Dimension::Overworld].records[0].tick, None);
+}
+
+#[test]
+#[ignore = "child process of replayed_wal_tail_survives_the_checkpoint_that_prunes_it"]
+fn block_log_crash_child() {
+    use std::io::Write;
+    let world = std::env::var_os("SOLARIS_BLOCK_LOG_CRASH_DIR").expect("world directory");
+    let tick: u64 = std::env::var("SOLARIS_BLOCK_LOG_CRASH_TICK")
+        .expect("tick")
+        .parse()
+        .expect("tick number");
+    let registry = CoreRegistry::load(None).expect("registry");
+    let mut old = record(2, unix_now());
+    old.tick = None;
+    old.change = Change::Block {
+        before: registry.states.stone,
+        after: registry.states.air,
+        entity: None,
+    };
+    let mut new = old.clone();
+    new.seq = 3;
+    new.tick = Some(tick);
+    let entry = crate::journal::JournalEntry::BlockLog {
+        value: Box::new(Delta {
+            records: vec![old, new],
+            marks: Vec::new(),
+        }),
+    };
+    let mut wal =
+        crate::journal::JournalWriter::open(std::path::Path::new(&world), 1).expect("wal");
+    wal.append(tick, tick, &[entry]).expect("append");
+    wal.flush().expect("flush");
+    println!("BLOCK_LOG_WAL_READY");
+    std::io::stdout().flush().expect("stdout");
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line).expect("stdin");
+    panic!("parent must kill child before any graceful shutdown");
+}
+
+/// Crash -> replay -> checkpoint (prunes the WAL) -> reopen: the replayed
+/// block-log tail reaches the native table before its WAL batch is pruned.
+#[test]
+fn replayed_wal_tail_survives_the_checkpoint_that_prunes_it() {
+    use std::io::BufRead;
+    let world = tempfile::tempdir().expect("tempdir");
+    let mut config = crate::CoreConfig::new(world.path().to_path_buf(), 42);
+    config.view_distance = 1;
+    config.simulation_distance = 1;
+    let initial = crate::Core::open(config.clone()).expect("fresh world");
+    initial.shutdown();
+    drop(initial);
+    let base = crate::native_checkpoint::tests::read_manifest(&config)
+        .expect("manifest")
+        .tick;
+    let registry = CoreRegistry::load(None).expect("registry");
+    // An existing world's table still holds a row from before tick capture.
+    let store = crate::native_checkpoint::tests::fixture_store(&config).expect("store");
+    store
+        .write_block_log(
+            &[(
+                key(RECORD_ROW, Dimension::Overworld, 1),
+                old_format_row(&registry.blocks, &registry.items),
+            )],
+            &[],
+        )
+        .expect("write old row");
+    drop(store);
+
+    let mut child = std::process::Command::new(std::env::current_exe().expect("test binary"))
+        .args([
+            "--exact",
+            "block_log::tests::block_log_crash_child",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env("SOLARIS_BLOCK_LOG_CRASH_DIR", world.path())
+        .env("SOLARIS_BLOCK_LOG_CRASH_TICK", (base + 1).to_string())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn crash child");
+    let mut reader = std::io::BufReader::new(child.stdout.take().expect("child stdout"));
+    let mut ready = false;
+    let mut line = String::new();
+    while reader.read_line(&mut line).expect("child output") != 0 {
+        if line.contains("BLOCK_LOG_WAL_READY") {
+            ready = true;
+            break;
+        }
+        line.clear();
+    }
+    if !ready {
+        let status = child.wait().expect("child status");
+        panic!("child failed before durable WAL: {status}");
+    }
+    child.kill().expect("kill child");
+    assert!(!child.wait().expect("child status").success());
+
+    let assert_rows = |stage: &str| {
+        let store = crate::native_checkpoint::tests::fixture_store(&config).expect("store");
+        let rows = load(
+            &store.checkpoint_reader().expect("reader"),
+            &registry.blocks,
+            &registry.items,
+        )
+        .expect("rows");
+        let records = &rows
+            .get(&Dimension::Overworld)
+            .unwrap_or_else(|| panic!("{stage}: no overworld block-log rows"))
+            .records;
+        let tick = |seq| {
+            records
+                .iter()
+                .find(|record| record.seq == seq)
+                .unwrap_or_else(|| panic!("{stage}: replayed record {seq} missing"))
+                .tick
+        };
+        assert_eq!(tick(2), None, "{stage}");
+        assert_eq!(tick(3), Some(base + 1), "{stage}");
+    };
+    let replayed = crate::Core::open(config.clone()).expect("world with old row and WAL opens");
+    replayed.shutdown();
+    drop(replayed);
+    let batch = world.path().join(format!(
+        "journal/batch-{:020}-{:020}.bin",
+        base + 1,
+        base + 1
+    ));
+    assert!(!batch.exists(), "the checkpoint pruned the replayed batch");
+    assert_rows("after the pruning checkpoint");
+    let reopened = crate::Core::open(config.clone()).expect("world reopens after WAL prune");
+    reopened.shutdown();
+    drop(reopened);
+    assert_rows("after reopen");
 }
 
 /// Rows name blocks and items, so a game version that renumbers runtime ids
@@ -829,7 +1068,7 @@ fn block_log_capture_cost() {
         }
         rig.state.world.fold_overlay();
         let start = std::time::Instant::now();
-        journal(&mut rig.state, &mut entries);
+        journal(&mut rig.state, 123, &mut entries);
         sealed += start.elapsed();
         entries.clear();
         rig.state.block_log.unpersisted.clear();

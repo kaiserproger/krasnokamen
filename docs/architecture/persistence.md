@@ -19,6 +19,12 @@ idle-despawn-counter changes alone are checkpoint-durable only. An entity
 crossing chunks emits a full image. Do not claim exact per-tick mob motion
 recovery.
 
+Block-log records in `JournalEntry::BlockLog` and the native `block_log` table
+carry the committing server tick. Records from before tick capture have an
+unknown tick, not a reconstructed value; tick-based checks must reject them.
+After replay, block-log WAL deltas remain queued for native-table upsert before
+the next checkpoint can prune their batches, including rollback marks.
+
 Journal admission uses a 128-item FIFO and a 256 MiB estimated in-flight
 append budget; an oversized batch can enter alone. A full queue blocks the
 tick, not discard or reorder accepted work. A failed writer halts the core.
