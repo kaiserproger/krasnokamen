@@ -874,7 +874,8 @@ SCENARIOS: dict[str, Scenario] = {
     ),
     "native-v2-p4-identities": _entry(
         id="native-v2-p4-identities", summary="Named damage identities and an angered warden sonic attack",
-        owner="core:harness", evidence="tcp", profile="entities", scenario_id="native-v2-p4-identities",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-p4-identities",
+        requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_p4.py"),
         fixture="seven explicit damage types on a healthy survival player, then lever-provoked warden behind a wall",
         proves="received command damage identities and health loss; real warden sonic cause, death screen and respawn",
@@ -882,7 +883,8 @@ SCENARIOS: dict[str, Scenario] = {
     ),
     "native-v2-p4-death-protection": _entry(
         id="native-v2-p4-death-protection", summary="Custom held death protection consumes authored effects",
-        owner="core:harness", evidence="tcp", profile="entities", scenario_id="native-v2-p4-death-protection",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-p4-death-protection",
+        requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_p4.py"),
         fixture="held stick with clear-all and speed actions, followed by lethal generic damage",
         proves="survival at one health, one item consumed, authored speed without default totem effects",
