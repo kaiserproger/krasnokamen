@@ -81,8 +81,9 @@ decides it):
   and `mc-world` do not reference `earth`. Port or delete is the owner's call.
 - [ADR 0021](decisions/0021-build-time-and-crate-split.md) step 2 (settlements
   crate pilot) is designed, not started, and recommends against splitting
-  while 189 of 421 top-level `mc-core` modules form one dependency cycle (the
-  ADR's 2026-11-05 count, not recounted here). Step 3 is the plan to narrow it.
+  while most top-level `mc-core` modules form one dependency cycle. Step 3's
+  policy, settled-block and book ownership cuts reduce it from 189 of 193 to
+  184 of 192 modules (2026-11-09 canonical code-health).
 - [ADR 0016](decisions/0016-mob-capabilities.md) Layer 3 (Wasm capability
   code), operator data-directory blueprints and persistent sensor
   subscriptions.

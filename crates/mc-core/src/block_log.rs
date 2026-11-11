@@ -25,31 +25,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::boundary::{BlockPos, ChunkPos, ConnectionId, EntityId, PlayerChange};
 use crate::commands::CommandError;
-use crate::config::CoreError;
+use crate::config::{BlockLogSettings, CoreError};
 use crate::dimensions::Dimension;
 use crate::entities::EntityKind;
 use crate::tick::TickState;
-
-/// `[block_log]` operator policy. `enabled` gates capture only; retained
-/// records stay queryable and are pruned by age and count either way.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Settings {
-    pub enabled: bool,
-    /// Records older than this are pruned; zero keeps them until `max_records`.
-    pub retention_secs: u64,
-    /// Per-dimension record cap; the oldest records are pruned first.
-    pub max_records: usize,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            retention_secs: 30 * 24 * 60 * 60,
-            max_records: 200_000,
-        }
-    }
-}
 
 /// Block-entity pre-image restored together with a rolled-back block.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -121,7 +100,7 @@ struct PendingContainer {
 /// Dimension-local log owned by its [`TickState`].
 #[derive(Debug)]
 pub struct BlockLog {
-    settings: Settings,
+    settings: BlockLogSettings,
     records: VecDeque<Record>,
     /// Retained player block history, indexed without scanning the log during
     /// construction site evaluation. Counts follow the same retention policy.
@@ -141,15 +120,15 @@ pub struct BlockLog {
 /// Fixtures that never hydrate from configuration do not capture.
 impl Default for BlockLog {
     fn default() -> Self {
-        Self::new(Settings {
+        Self::new(BlockLogSettings {
             enabled: false,
-            ..Settings::default()
+            ..BlockLogSettings::default()
         })
     }
 }
 
 impl BlockLog {
-    pub(crate) fn new(settings: Settings) -> Self {
+    pub(crate) fn new(settings: BlockLogSettings) -> Self {
         Self {
             settings,
             records: VecDeque::new(),
@@ -167,7 +146,7 @@ impl BlockLog {
     }
 
     /// Rebuild from table rows followed by the WAL tail, in order.
-    pub(crate) fn restore(settings: Settings, deltas: Vec<Delta>) -> Self {
+    pub(crate) fn restore(settings: BlockLogSettings, deltas: Vec<Delta>) -> Self {
         let mut records = BTreeMap::new();
         // A WAL-tail mark may outlive its evicted record; never reuse its seq.
         let mut next_seq = 0;

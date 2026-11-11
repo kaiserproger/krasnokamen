@@ -6,7 +6,8 @@
 against it at today's coupling. Step 3 root-only feature unification passes
 workspace build, formatting and code-health; consumer test scope is below.
 Comparative timings await Main's batched quiet window.
-Leaf extraction is implemented and under acceptance; cycle cuts have not landed.
+Leaf extraction is implemented; config owns block-log policy. Further cycle cuts
+remain under acceptance.
 The cycle ratchet
 (owner-approved 2026-11-07, implemented) makes code-health fail when the module
 cycle grows.
@@ -258,10 +259,93 @@ this is not a full-workspace correctness claim. Receipts under
 `offline-root-only-affected-tests-01`, `offline-root-only-fmt-01`, and
 `offline-root-only-code-health-02`.
 
-The `config -> block_log` ownership cut and final whole-workspace correctness
-gate remain unperformed at this checkpoint. The cycle ceiling is still 189.
-Build-time comparisons remain deferred to the authorized batched quiet window;
-ordinary acceptance durations establish no performance gain.
+### Config owns block-log policy
+
+`config::BlockLogSettings` owns the unchanged enabled/retention/count policy and
+defaults; `block_log::BlockLog` still owns capture, queries, pruning and recovery.
+Core configuration and the edge adapter use the new owner directly, with no
+compatibility alias. No persisted field or operator configuration key changes.
+
+On base `6b594d8f`, canonical code-health measured 189 of 193 modules in the
+largest cycle (191,211 production lines). This cut measures 186 of 193
+(190,745 lines): `config`, `debt` and `carrier_blocks` leave it. The ceiling
+is lowered to 186. Receipt:
+`receipts/CrateCuts/cut1-cycle/20261109T133700-code-health-4zqnqllh/code-health.log`.
+
+The converter prerequisite restores four live domain checks through both graceful
+checkpoint export and abrupt-exit checkpoint/WAL-tail export: wandering traders,
+warden warning clocks, villager job claims and inhabited time. All eight pass
+on unchanged production code; removing their recovered export projections makes
+all eight fail at exported-value assertions. Evidence and mutation patch:
+`receipts/CrateCuts/persistence-base-evidence.json` and
+`receipts/CrateCuts/persistence-negative.patch`.
+
+Affected acceptance passes all 21 selected block-log, edge configuration and live
+persistence tests. Receipt:
+`receipts/CrateCuts/cut1-affected/20261109T133909-test-6yma_vz9/test.log`.
+Build-time comparisons remain deferred to Main's batched quiet window; ordinary
+acceptance durations establish no performance gain.
+
+### Tick owns settled-block orchestration
+
+The former top-level `blocks` module is now `tick::blocks`, with byte-identical
+phase code and the same position in `run_tick`. Falling, placement, plants and
+sign policy keep their existing owners; no adapter or callback replaces the
+removed top-level module. Three fluid owner tests call the tick child directly.
+
+Canonical code-health measures 185 of 192 top-level modules in the cycle
+(190,746 production lines), down from 186 of 193 after the policy cut. The
+ceiling is lowered to 185. This removes a false boundary, not a runtime algorithm.
+Receipts: `receipts/CrateCuts/cut2-byte-oracle.json` and
+`receipts/CrateCuts/cut2-cycle/20261109T142805-code-health-gpu84yzk/code-health.log`.
+
+Affected acceptance passes all 172 selected block tools, falling, placement,
+fluid and live checkpoint/WAL/export tests, plus formatting and the tightened
+code-health gate. Receipts are under `receipts/CrateCuts/cut2-affected/`,
+`cut2-fmt/` and `cut2-ratchet/`. Build timing remains deferred to the same
+quiet-window batch; this cut makes no build-speed claim.
+
+### Pure book encoding, tick-owned inventory authority
+
+`books::replacement` depends only on `mc-data` and `mc-nbt`: the original stack,
+item registry, pages, optional title and explicit author yield a replacement or
+refusal. UTF-16 limits and book component replacement remain unchanged.
+`tick::book_actions` retains session, alive/spectator and slot checks, book-open
+publication, the custody-floor check immediately before commit, and authoritative
+inventory publication. The two dispatchers call that existing tick owner;
+there is no second inventory API or injected policy.
+
+Canonical code-health measures 184 of 192 top-level modules in the cycle
+(190,691 production lines), with `books` now outside it; the ceiling is lowered
+to 184. Receipt:
+`receipts/CrateCuts/cut3-cycle/20261109T144106-code-health-xokla2h6/code-health.log`.
+The build-time effect still requires Main's frozen quiet-window batch.
+
+Affected acceptance passes all 42 selected book and live checkpoint/WAL/export
+tests and formatting (`receipts/CrateCuts/cut3-affected/20261109T144409-test-n8x7ak6i/`
+and `cut3-fmt/20261109T145156-fmt-uuuzn3x_/`). New coverage exercises exact and
+over-limit UTF-16 input, unrelated component preservation, real native custody
+reservation refusal, and book opening through both hand dispatchers.
+
+After rebasing onto `9062a976`, the tightened 184-module gate passes
+(`receipts/CrateCuts/rebased-ratchet/20261109T150721-code-health-fxfimnf8/`).
+Separate negative controls also fail at the original inventory assertions:
+raising the UTF-16 page bound accepts an oversized page, and removing the
+custody-floor check signs a reserved writable book. Both mutations are restored.
+Receipts: `receipts/CrateCuts/rebased-utf16-negative/20261109T150825-test-lilybvrm/`
+and `rebased-custody-negative/20261109T151112-test-4397i811/`.
+Final cuts are rebased onto `8dd2c61f`. Strict workspace Clippy passes
+(`receipts/CrateCuts/final-clippy/20261111T083013-clippy-utavssiy/`).
+The full workspace/all-target suite passes 7,496 of 7,497 tests
+(`receipts/CrateCuts/final-nextest/20261111T083049-test-82ddtht3/`); its sole
+failure is the pre-existing one-tick illusioner fixture after Main's target-search
+cadence change. A separate approved fixture patch retains every assertion and
+journals each tick until acquisition; it passes three requested runs under
+`receipts/CrateCuts/illusioner-positive-{1,2,3}/`. Earlier regression and formatting
+passes are retained rather than repeated. This is staged L2 evidence, not a claim
+of a new all-green `correctness` invocation; the exact trees and receipts are in
+`receipts/CrateCuts/final-manifest.json`. Build timing remains Main's quiet-window
+batch; no build-speed or real-client acceptance claim is made by these cuts.
 
 
 ## Cycle ratchet (implemented 2026-11-07)

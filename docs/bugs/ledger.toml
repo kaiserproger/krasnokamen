@@ -1175,7 +1175,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-002"
-regression = ["cargo:mc-core:books::tests::lectern_insert_read_turn_take_preserves_exact_book"]
+regression = ["cargo:mc-core:tick::book_actions::tests::lectern_insert_read_turn_take_preserves_exact_book"]
 
 [[bug]]
 id = "CONTAINERS-003"

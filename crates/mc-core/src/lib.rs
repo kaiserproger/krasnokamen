@@ -24,7 +24,6 @@ pub mod block_ticks;
 pub(crate) mod block_tools;
 #[cfg(test)]
 mod block_tools_tests;
-pub mod blocks;
 pub mod blueprint;
 #[cfg(test)]
 mod blueprint_family_tests;

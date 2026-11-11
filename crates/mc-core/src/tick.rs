@@ -33,6 +33,8 @@ use crate::world::ChunkWorld;
 
 mod auth;
 pub(crate) use auth::unlock_session;
+pub(crate) mod blocks;
+mod book_actions;
 mod container_access;
 pub(crate) mod damage;
 mod death_message;
@@ -1493,7 +1495,7 @@ fn run_dimension_tick_inner<'a>(
         state.world.set_block(pos.x, pos.y, pos.z, write_state);
         block_writes.push((pos, write_state));
     }
-    crate::blocks::run(
+    blocks::run(
         state,
         &mut block_writes,
         &mut popped_drops,

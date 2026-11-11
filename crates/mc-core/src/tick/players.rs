@@ -389,7 +389,7 @@ pub(super) fn apply_inputs<'a>(
                 pages,
                 title,
             } => {
-                crate::books::edit(state, *connection, *slot, pages, title.as_deref());
+                super::book_actions::edit(state, *connection, *slot, pages, title.as_deref());
             }
             PlayerInput::SignUpdate {
                 connection,
