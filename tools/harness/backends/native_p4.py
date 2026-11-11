@@ -285,13 +285,14 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.wait(zombie_received, "damage_zombie_authored_uuid_received")
     hit = steps.call("minecraft_wait_for_health_below", {"health": baseline, "timeout_seconds": steps.remaining()})
     steps.report["hit"] = hit
+    # The hurt tilt lasts about ten client ticks, so it is observed before anything slow.
+    hurt = steps.wait(lambda current: current["player"].get("hurt_tick") is not None
+                      and abs(current["player"].get("hurt_tilt_deg", 0)) > .05,
+                      "received_damage_event_nonzero_camera_tilt")
     # One received hit is the whole claim. Screenshots and observations below take
     # many client ticks; a living zombie keeps hitting and kills the survival
     # player before the cleanup fixture below reaches the server.
     steps.fixture(f"kill {_DAMAGE_ZOMBIE_UUID}")
-    hurt = steps.wait(lambda current: current["player"].get("hurt_tick") is not None
-                      and abs(current["player"].get("hurt_tilt_deg", 0)) > .05,
-                      "received_damage_event_nonzero_camera_tilt")
     steps.report["hurt_observation"] = {key: hurt["player"].get(key) for key in
                                        ("hurt_tick", "hurt_tilt_deg", "hurt_direction", "health")}
     steps.report["hurt_observation"]["client_tick"] = hurt["client_tick"]

@@ -327,6 +327,12 @@ class NativeV2ProbeTests(unittest.TestCase):
         steps.fixture.side_effect = lambda command: events.append(("fixture", command))
         steps.call.side_effect = lambda tool, _args: events.append(("call", tool))
 
+        def wait(_predicate, label, **_kwargs):
+            events.append(("wait", label))
+            return mock.MagicMock()
+
+        steps.wait.side_effect = wait
+
         class Stop(Exception):
             pass
 
@@ -339,8 +345,11 @@ class NativeV2ProbeTests(unittest.TestCase):
             native_p4._damage(steps, (10, 70, 10))
 
         hit = events.index(("call", "minecraft_wait_for_health_below"))
+        tilt = events.index(("wait", "received_damage_event_nonzero_camera_tilt"))
         kill = events.index(("fixture", f"kill {native_p4._DAMAGE_ZOMBIE_UUID}"))
-        self.assertEqual(kill, hit + 1)
+        # The hurt tilt fades within ten client ticks: it is observed first, the kill follows
+        # at once, and both precede every slow capture.
+        self.assertEqual((tilt, kill), (hit + 1, hit + 2))
         self.assertLess(kill, events.index(("capture", "p4-damage-hit")))
 
     def test_p4_advancement_labels_are_actual_visible_ui_nodes(self) -> None:
