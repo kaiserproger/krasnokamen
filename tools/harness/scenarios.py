@@ -1011,6 +1011,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="survival at one health, one item consumed, authored speed without default totem effects",
         limits="clear/apply actions only; remove, probability, sound and codec variants have separate Cargo regressions",
     ),
+    "native-v2-team-deaths": _entry(
+        id="native-v2-team-deaths", summary="Two native clients in different teams read each other's death messages",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-team-deaths",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_team_deaths.py"),
+        fixture="victim in team red, second windowed client in team blue; /kill, a zombie kill and each deathMessageVisibility value",
+        proves="each client's rendered chat shows generic_kill and mob death texts, and honours always/never/hideForOtherTeams/hideForOwnTeam",
+        limits="chat text of the received components and the death-screen class; no teammate peer, spectator or dimension-global roster",
+    ),
     "native-v2-p4-hopper": _entry(
         id="native-v2-p4-hopper", summary="Native Q drop enters nearby hopper, exact withdrawal and no duplicate",
         owner="core:harness", evidence="tcp", profile="entities", scenario_id="native-v2-p4-hopper",

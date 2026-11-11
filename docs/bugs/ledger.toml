@@ -1105,9 +1105,12 @@ title = "Player /kill used out_of_world instead of generic_kill."
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#KILL-TYPE"
-regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes"]
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes", "harness:entities:native-v2-team-deaths"]
+# Fix commit lost. Patch docs/bugs/fix-patches/KILL-TYPE.patch: the control turns player /kill back into out_of_world (command_execution.rs).
+fix_commit = "patch:5af10f8099365eb55d433f08b226c1222d4e9391b1f84b116fe7bc57a2e25f15"
+promotion = "docs/bugs/promotions/KILL-TYPE.json"
 
 [[bug]]
 id = "DAMAGE-IDENTITIES"
@@ -1128,9 +1131,12 @@ title = "Death event contained English text rather than vanilla death translatio
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-COMPONENT"
-regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes"]
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes", "harness:entities:native-v2-team-deaths"]
+# Fix commit lost. Patch docs/bugs/fix-patches/DEATH-COMPONENT.patch: the control returns the pre-fix English death text instead of the translation component (death_message.rs component()).
+fix_commit = "patch:3a1a6a0e69602a5bc4c02fab1b404e437842661605fb9914840ab96bbdda9dbc"
+promotion = "docs/bugs/promotions/DEATH-COMPONENT.json"
 
 [[bug]]
 id = "DEATH-NOTIFY"
@@ -1178,9 +1184,12 @@ title = "team modify deathMessageVisibility never was rejected before broadcast 
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEAM-DEATH-VISIBILITY"
-regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes"]
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes", "harness:entities:native-v2-team-deaths"]
+# Fix commit lost. Patch docs/bugs/fix-patches/TEAM-DEATH-VISIBILITY.patch: the control broadcasts to every player and ignores deathMessageVisibility (death_message.rs broadcast()).
+fix_commit = "patch:f3a8e761197ba9a882087db607349dd1bbe2fccee887093deb49dc9338ab0ae2"
+promotion = "docs/bugs/promotions/TEAM-DEATH-VISIBILITY.json"
 
 [[bug]]
 id = "CONTAINERS-001"
@@ -4357,7 +4366,7 @@ area = "client"
 repro = "client"
 severity = "blocker"
 status = "open"
-source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F2, 2/2): server encodes the 26.3 layout (receipts/BreakJoinRows/javap/SetPlayerTeamParameters.txt: display name, prefix, suffix, visibility, collision, Optional<color>, options); solaris-client src/ui/hud.rs:304-318 decodes the old order. Being fixed on solaris-client wt/ClientTeamPacket."
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F2, 2/2): server encodes the 26.3 layout (receipts/BreakJoinRows/javap/SetPlayerTeamParameters.txt: display name, prefix, suffix, visibility, collision, Optional<color>, options); solaris-client src/ui/hud.rs:304-318 decodes the old order. Fixed in solaris-client ef4dc465 (client gate line wt/ClientGateLine d5f25569 = f4bd26d4 + ef4dc465 + census fix 04f3e0f9, pin pins/d5f25569b785-client-x86_64-unknown-linux-gnu-incr, receipts/ClientGateLine/pin.log; 3/3 team scene receipts/ClientTeamPacket/run-team{1,2,3}.log, negative control with the old client receipts/ClientTeamPacket/run-oldctl.log). Status stays open: client-repo rows wait for the owner's promotion-rule decision."
 regression = []
 failing_first = "reported"
 

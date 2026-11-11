@@ -703,6 +703,12 @@ def _p4(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     native_p4.run(steps, origin, steps.report["id"].split("-", 3)[3])
 
 
+def _team_deaths(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from . import native_team_deaths
+
+    native_team_deaths.run(steps, origin)
+
+
 def _p5(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from . import native_p5
 
@@ -966,6 +972,7 @@ RUNNERS = {
     "native-v2-p4-damage": _p4,
     "native-v2-p4-identities": _p4,
     "native-v2-p4-death-protection": _p4,
+    "native-v2-team-deaths": _team_deaths,
     "native-v2-p4-hopper": _p4,
     "native-v2-p4-statistics": _p4,
     "native-v2-p5-humanoid-armor": _p5,
