@@ -22,6 +22,11 @@ from .probe_steps import ProbeSteps
 
 CORE_TOOLS = frozenset({"minecraft_observe", "minecraft_wait_for_state_change", "minecraft_send_chat"})
 
+def world_dir_toml(artifact: Path) -> str:
+    """Quote the absolute world path even when receipts live outside the repository."""
+    return json.dumps(str(artifact / "world"))
+
+
 
 def run_core_subset(client: Any, artifact_dir: Path, timeout: float) -> dict[str, Any]:
     with ProbeSteps(client, artifact_dir / "core-probe", timeout, "core-client-chat-subset") as steps:
@@ -97,7 +102,9 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         "native-v2-map-inventory-player-markers", "native-v2-map-pumpkin-hiding")
     if ctx.scenario_id == "native-v2-cursor-close":
         required = required | {"minecraft_open_inventory", "client_capture"}
-    if ctx.scenario_id in ("native-v2-craft-drag", "native-v2-craft-drag-paced"):
+    if ctx.scenario_id in ("native-v2-craft-drag", "native-v2-craft-drag-paced",
+                           "native-v2-shift-double-click", "native-v2-shift-components",
+                           "native-v2-shift-chest-correction"):
         required = required | {"minecraft_open_inventory", "client_capture"}
     if ctx.scenario_id == "native-v2-chest-drag-disconnect":
         required = required | {"minecraft_connect", "minecraft_wait_for_no_visible_item", "client_capture"}
@@ -111,8 +118,12 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         required = java_p5.REQUIRED_TOOLS
     if protocol_pot:
         required = java_protocol_pot.REQUIRED_TOOLS
-    if ctx.scenario_id in ("java-v2-p5-craft-drag", "java-v2-p5-craft-drag-paced"):
+    if ctx.scenario_id in ("java-v2-p5-craft-drag", "java-v2-p5-craft-drag-paced",
+                           "java-v2-p5-shift-double-click"):
         required = required | {"minecraft_open_inventory"}
+    if ctx.scenario_id in ("native-v2-shift-double-click", "native-v2-shift-chest-correction",
+                           "java-v2-p5-shift-double-click"):
+        required = required | {"minecraft_wait_for_container_slot"}
     artifact = ctx.artifact_dir
     plugin_dir = plugin_directory(ctx)
     if auth_scenario:
@@ -156,7 +167,7 @@ online_mode = false
 {auth_setting}[plugins]
 directory = {json.dumps(str(plugin_dir))}
 [data]
-world_dir = "{(artifact / "world").relative_to(runtime.REPO_ROOT).as_posix()}"
+world_dir = {world_dir_toml(artifact)}
 vanilla_data_dir = {json.dumps(os.environ.get("SOLARIS_SERVER_VANILLA_DATA_DIR", "data/vanilla"))}
 seed = 81
 ''')
@@ -187,9 +198,17 @@ seed = 81
                                   stderr=subprocess.STDOUT, start_new_session=True)
         ctx.logs.append(str(server_log_path))
         runtime.wait_port(port, startup_timeout, server, log_path=server_log_path)
+        if ctx.scenario_id in ("native-v2-shift-double-click", "native-v2-shift-chest-correction",
+                               "java-v2-p5-shift-double-click"):
+            from .shift_correction_wire import CorrectionWire
+
+            data = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"])
+            report = (data.parent / "26.1.2" if ctx.client == "java" else data) / "reports" / "packets.json"
+            wire_trace = CorrectionWire(port, artifact, report)
+            evidence["correction_wire_trace"] = str(wire_trace.receipt_path)
         if ctx.client == "native":
             display = None
-            client_address = address
+            client_address = wire_trace.address if wire_trace is not None else address
             if (ctx.scenario_id == "native-v2-p1-signs" and os.environ.get("SOLARIS_P1_SIGN_WIRE_TRACE") == "1"
                     or ctx.scenario_id == "native-v2-p2-fishing"
                     or ctx.scenario_id in ("native-v2-p1-armor-stand", "native-v2-p1-helmet-equip",
@@ -328,7 +347,7 @@ seed = 81
 
                     evidence["window_focus"] = native_focus.acquire(display, client_process.pid, startup_timeout)
         else:
-            client_address = address
+            client_address = wire_trace.address if wire_trace is not None else address
             if protocol_pot:
                 report = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]).parent / "26.1.2/reports/packets.json"
                 wire_trace = light_wire.LightWireProxy(
@@ -346,11 +365,20 @@ seed = 81
                     "simulationDistance:5\nmaxFps:30\npauseOnLostFocus:false\n")
             client_process, client_log = runtime.start_client(
                 game_dir=artifact / "game", log_path=artifact / "client.log", token=token,
-                mcp_port=mcp_port, username=username, display=display)
+                mcp_port=mcp_port, username=username, display=display,
+                client_profile="vanilla" if ctx.scenario_id == "java-v2-p5-shift-double-click" else None)
+            if ctx.scenario_id == "java-v2-p5-shift-double-click":
+                agent_jar = runtime._agent_jar_path()
+                with agent_jar.open("rb") as source:
+                    evidence.update(java_client_profile="vanilla", java_version=os.environ.get("SOLARIS_JAVA_VERSION", "26.1.2"),
+                                    java_agent_jar=str(agent_jar), java_agent_sha256=hashlib.file_digest(source, "sha256").hexdigest())
             mcp = McpClient(f"http://127.0.0.1:{mcp_port}/mcp", token, startup_timeout + 10)
             mcp.initialize()
             ctx.logs.extend([str(artifact / "client.log"), str(artifact / "xvfb.log")])
         mcp.request_timeout_seconds = 130.0
+        if ctx.scenario_id in ("native-v2-shift-double-click", "native-v2-shift-chest-correction",
+                               "java-v2-p5-shift-double-click"):
+            mcp.correction_wire = wire_trace
         tools = mcp.list_tools()
         evidence["available_tools"] = sorted(tool["name"] for tool in tools)
         require_tools(tools, required | {"minecraft_wait_for_play", "minecraft_disconnect"}, kind)
@@ -481,7 +509,7 @@ seed = 81
                     mcp.promotion_mount_export_reimport = export_reimport
             result = native_v2.run(mcp, artifact, timeout, ctx.scenario_id)
         elif p5_scenario:
-            from . import java_craft_drag
+            from . import java_craft_drag, shift_matrix
 
             runners = {
                 "java-v2-p5-towns": java_p5.run_towns,
@@ -489,6 +517,7 @@ seed = 81
                 "java-v2-p5-cursor": java_p5.run_cursor,
                 "java-v2-p5-craft-drag": java_craft_drag.run,
                 "java-v2-p5-craft-drag-paced": java_craft_drag.run_paced,
+                "java-v2-p5-shift-double-click": shift_matrix.run_java,
             }
             result = runners[ctx.scenario_id](mcp, artifact, timeout)
         elif kind == "entities":
