@@ -3106,9 +3106,9 @@ area = "client"
 repro = "client"
 severity = "major"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:29"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:29. Client fix 6e541f96 (wt/ClientEntityParity): 26.3 PotDecorations sides are ItemStackTemplates whose CODEC takes a bare item id or an {id} record (javap receipts/ClientEntityParity/javap/potdecorations.txt, itemstacktemplate.txt); block and item renderers share pot_side_texture(). entities::render_blocks::village_tests::static_decorated_pot_uses_received_sherd_textures and entities::presentation::tests::decorated_pot_item_bakes_all_sides_and_received_sherds are red with only the two call-site hunks reverted (receipts/ClientEntityParity/negative-control/pot-reverted.txt). Graphical native-vs-Java pot frames not yet captured."
 regression = ["cargo:mc-core:block_entity_defaults::tests::placed_head_and_pot_preserve_their_item_components"]
-failing_first = "not recorded"
+failing_first = "reported"
 
 [[bug]]
 id = "MODEL-DYNAMIC-CONTEXT"
@@ -3512,7 +3512,7 @@ area = "client"
 repro = "client"
 severity = "major"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/receipts/BvDeathTilt (native scene-shot base vs candidate, death-tilt-base-vs-candidate.png; fix death-tilt.patch 642165ec on client wt/ClientBattleIntegration 45ceeaf with entities::animation_tests::death_tilt_turns_about_the_feet_on_the_vanilla_curve and entities::crowd::tests::dying_crowd_instances_tilt_about_the_feet_like_the_cpu_pose)"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/BvDeathTilt (native scene-shot base vs candidate, death-tilt-base-vs-candidate.png; fix death-tilt.patch 642165ec on client wt/ClientBattleIntegration 45ceeaf with entities::animation_tests::death_tilt_turns_about_the_feet_on_the_vanilla_curve and entities::crowd::tests::dying_crowd_instances_tilt_about_the_feet_like_the_cpu_pose). The 45ceeafb code matches the 26.3 javap chain step by step (receipts/ClientEntityParity/javap/death-tilt-chain.txt). The BvDeathTilt native frames ran on display :1 and are invalid under the owner display rule; no valid native-vs-Java death frames or pre-45ceeafb gate exist yet."
 regression = []
 
 [[bug]]
@@ -4022,7 +4022,7 @@ area = "client"
 repro = "client"
 severity = "major"
 status = "open"
-source = "After the core seating candidate keeps the resident's physical body safely above a stair, the native client leaves a visible height gap because its entity consumers ignore the received parent attachment. The SourceNext candidate shares the existing vehicle attachment rules without lowering the core body. Isolated native observations retain received body Y 202 while presented bounds begin at marker Y 201.5, then restore the same UUID's received body after dismount and work travel. Independent marker and reconnect observations pass in three fresh worlds; other parent branches, graphics coverage and negative controls remain incomplete."
+source = "After the core seating candidate keeps the resident's physical body safely above a stair, the native client leaves a visible height gap because its entity consumers ignore the received parent attachment. The SourceNext candidate shares the existing vehicle attachment rules without lowering the core body. Isolated native observations retain received body Y 202 while presented bounds begin at marker Y 201.5, then restore the same UUID's received body after dismount and work travel. Independent marker and reconnect observations pass in three fresh worlds; other parent branches, graphics coverage and negative controls remain incomplete. Client fix 895c63f3 is in wt/ClientBattleIntegration; the 26.3 javap chain (ClientLevel.tickPassenger -> rideTick -> positionRider = vehicle position + PASSENGER attachment - rider VEHICLE attachment; marker armor stand fixed(0,0) attachments are zero) is in receipts/ClientEntityParity/javap/seat-chain.txt."
 regression = []
 failing_first = "reported"
 
@@ -4110,6 +4110,6 @@ area = "client"
 repro = "source"
 severity = "minor"
 status = "open"
-source = "solaris-client 2edbb590 src/ui/packets.rs read_advancements reads the show-toast flag as `let _show` and discards it; no toast renderer exists anywhere in solaris-client/src. Paired frames: Java receipts/VisualItemsClient/20261111T140325-scene-shot-znvexbrh statue-sitting.png and framed-map.png show 'New Recipe(s) Unlocked!'; the native frames of the same scene (20261111T135619-scene-shot-gmao8eqn) show none (Main, 2026-11-11)."
+source = "solaris-client 2edbb590 src/ui/packets.rs read_advancements reads the show-toast flag as `let _show` and discards it; no toast renderer exists anywhere in solaris-client/src. Paired frames: Java receipts/VisualItemsClient/20261111T140325-scene-shot-znvexbrh statue-sitting.png and framed-map.png show 'New Recipe(s) Unlocked!'; the native frames of the same scene (20261111T135619-scene-shot-gmao8eqn) show none (Main, 2026-11-11). Client fix 8deb8fd7 (wt/ClientEntityParity): src/ui/toasts.rs follows 26.3 ToastManager/AdvancementToast/RecipeToast/SystemToast (javap receipts/ClientEntityParity/javap/toast-*.txt; Java HashMap progress order java-oracle/hashmap-order.txt). ui::advancements::tests::completed_show_toast_advancements_raise_stacked_toasts is red with only the wiring hunks reverted (receipts/ClientEntityParity/negative-control/toasts-reverted.txt); ui::toasts::tests cover slots, slide timing, recipe merge and the unsecure-server toast. Graphical native-vs-Java toast frames not yet captured."
 regression = []
 failing_first = "reported"
