@@ -14,7 +14,7 @@ fn plan_entities_for(
     let index = TickPlanIndex::with_previous(out, viewer.previous_entities());
     let mut scratch = PlanScratch::default();
     let mut packets = Vec::new();
-    let mut credit = credit;
+    let mut credit = WorldCredit::frames(credit);
     plan_entities(
         &out.snapshot,
         viewer,
@@ -109,7 +109,7 @@ fn movement_waiting_for_its_phase_survives_an_unchanged_snapshot() {
     baseline.position[0] -= 1.0;
     viewer
         .tracked_entities
-        .insert(mob.id, TrackedEntity::new(&baseline, 0));
+        .insert(mob.id, TrackedEntity::new(&baseline, 0, 0));
     let mut out = output(vec![], vec![mob.clone()], ChangeSet::default());
     let interval = u64::from(
         mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(mob.type_id)
@@ -141,7 +141,7 @@ fn credit_blocked_movement_is_retained_without_new_entity_changes() {
     baseline.position[0] -= 1.0;
     viewer
         .tracked_entities
-        .insert(mob.id, TrackedEntity::new(&baseline, 0));
+        .insert(mob.id, TrackedEntity::new(&baseline, 0, 0));
     let mut out = output(vec![], vec![mob.clone()], ChangeSet::default());
     while !entity_movement_due(&mob, out.snapshot.tick, None) {
         Arc::get_mut(&mut out.snapshot).unwrap().tick += 1;
@@ -200,7 +200,7 @@ fn walking_inside_negative_chunk_reconciles_exact_enter_leave_strips() {
         let index = TickPlanIndex::with_previous(&out, viewer.previous_entities());
         let mut scratch = PlanScratch::default();
         let mut packets = Vec::new();
-        let mut credit = usize::MAX;
+        let mut credit = WorldCredit::frames(usize::MAX);
         plan_entities(
             &out.snapshot,
             &mut viewer,
@@ -229,8 +229,10 @@ fn walking_inside_negative_chunk_reconciles_exact_enter_leave_strips() {
     }
 }
 
+/// Updates of equal priority (same distance, same wait) drain one per
+/// publish in canonical chunk/id order.
 #[test]
-fn shrinking_delivery_debt_resumes_at_first_blocked_entity() {
+fn equal_priority_delivery_debt_drains_in_canonical_order() {
     let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
     viewer.loaded_chunks.insert((0, 0), 0);
     let mut rows = Vec::new();
@@ -241,7 +243,7 @@ fn shrinking_delivery_debt_resumes_at_first_blocked_entity() {
         baseline.position[0] -= 1.0;
         viewer
             .tracked_entities
-            .insert(mob.id, TrackedEntity::new(&baseline, 0));
+            .insert(mob.id, TrackedEntity::new(&baseline, 0, 0));
         rows.push(mob);
     }
     let mut out = output(vec![], rows, ChangeSet::default());
@@ -252,14 +254,242 @@ fn shrinking_delivery_debt_resumes_at_first_blocked_entity() {
     ) {
         Arc::get_mut(&mut out.snapshot).unwrap().tick += 1;
     }
-    let mut sent = Vec::new();
-    for _ in 0..3 {
-        let packets = plan_entities_for(&out, &mut viewer, 1);
-        assert_eq!(packets.len(), 1);
-        let movement = MoveEntityPos::decode(&mut &body_of(&packets[0])[..]).unwrap();
-        sent.push(movement.entity_id);
+    assert_eq!(drain_one_move_per_publish(&out, &mut viewer), [10, 13, 16]);
+}
+
+/// Under credit for one update per publish, the nearest pending update
+/// goes first, then the next nearest.
+#[test]
+fn limited_credit_sends_the_nearest_pending_update_first() {
+    let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
+    viewer.loaded_chunks.insert((0, 0), 0);
+    let mut rows = Vec::new();
+    for (id, x) in [(10, 15.0), (13, 12.0), (16, 9.0)] {
+        let mut mob = entity(id, [x, 64.0, 8.0]);
+        mob.type_id = type_id_of("minecraft:cow");
+        let mut baseline = mob.clone();
+        baseline.position[2] -= 0.5;
+        viewer
+            .tracked_entities
+            .insert(mob.id, TrackedEntity::new(&baseline, 0, 0));
+        rows.push(mob);
     }
-    assert_eq!(sent, [10, 13, 16]);
+    let mut out = output(vec![], rows, ChangeSet::default());
+    while !entity_movement_due(
+        out.snapshot.entities.get(EntityId(10)).unwrap(),
+        out.snapshot.tick,
+        None,
+    ) {
+        Arc::get_mut(&mut out.snapshot).unwrap().tick += 1;
+    }
+    assert_eq!(drain_one_move_per_publish(&out, &mut viewer), [16, 13, 10]);
+}
+
+/// Byte credit is soft: any remaining byte admits one more whole update
+/// group, and nothing goes out once the bytes are spent. Updates that do
+/// not fit are counted as deferred.
+#[test]
+fn byte_credit_admits_whole_groups_until_spent() {
+    let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
+    viewer.loaded_chunks.insert((0, 0), 0);
+    // Interval-1 rows: due on every publish, nearest first.
+    let rows: Vec<_> = [(10, 9.0), (11, 10.0), (12, 11.0)]
+        .into_iter()
+        .map(|(id, x)| entity(id, [x, 64.0, 8.0]))
+        .collect();
+    for row in &rows {
+        let mut baseline = row.clone();
+        baseline.position[2] -= 0.25;
+        viewer
+            .tracked_entities
+            .insert(row.id, TrackedEntity::new(&baseline, 0, 0));
+    }
+    let out = output(vec![], rows, ChangeSet::default());
+    let plan = |viewer: &mut ViewerState, bytes: usize| {
+        let index = TickPlanIndex::with_previous(&out, viewer.previous_entities());
+        let mut packets = Vec::new();
+        plan_entities(
+            &out.snapshot,
+            viewer,
+            4,
+            &mut PlanScratch::default(),
+            &index,
+            &mut packets,
+            &mut WorldCredit { frames: 64, bytes },
+        );
+        packets
+            .iter()
+            .map(|packet| {
+                let id = MoveEntityPos::decode(&mut &body_of(packet)[..])
+                    .unwrap()
+                    .entity_id;
+                (id, packet.data.len())
+            })
+            .collect::<Vec<_>>()
+    };
+    assert!(plan(&mut viewer, 0).is_empty(), "spent bytes send nothing");
+    assert_eq!(viewer.deferred_updates, 3);
+    let first = plan(&mut viewer, 1);
+    assert_eq!(first.len(), 1, "one byte left admits one whole group");
+    assert_eq!(first[0].0, 10);
+    assert_eq!(viewer.deferred_updates, 2);
+    let rest = plan(&mut viewer, first[0].1 + 1);
+    assert_eq!(
+        rest.iter().map(|&(id, _)| id).collect::<Vec<_>>(),
+        [11, 12],
+        "a group's bytes are charged; the last byte admits one more"
+    );
+    assert_eq!(viewer.deferred_updates, 0);
+    assert!(plan(&mut viewer, usize::MAX).is_empty(), "nothing left");
+}
+
+/// Spawns the credit cuts count as deferred until they go out.
+#[test]
+fn spawns_left_without_credit_count_as_deferred() {
+    let held = || {
+        let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
+        viewer.loaded_chunks.insert((0, 0), 0);
+        viewer
+    };
+    let one = output(
+        vec![],
+        vec![entity(10, [9.0, 64.0, 8.0])],
+        ChangeSet::default(),
+    );
+    let group = plan_entities_for(&one, &mut held(), usize::MAX).len();
+    let two = output(
+        vec![],
+        vec![entity(10, [9.0, 64.0, 8.0]), entity(11, [10.0, 64.0, 8.0])],
+        ChangeSet::default(),
+    );
+    let mut viewer = held();
+    let spawns = |packets: Vec<PlannedPacket>| {
+        packets
+            .iter()
+            .filter(|packet| packet.id == AddEntity::ID)
+            .count()
+    };
+    let sent = spawns(plan_entities_for(&two, &mut viewer, group));
+    assert_eq!((sent, viewer.deferred_updates), (1, 1));
+    let sent = spawns(plan_entities_for(&two, &mut viewer, usize::MAX));
+    assert_eq!((sent, viewer.deferred_updates), (1, 0));
+}
+
+/// A near unit that moves every publish cannot starve a far one: waiting
+/// raises the far update's priority until it wins a publish, while the
+/// near unit keeps most of the credit.
+#[test]
+fn far_updates_wait_longer_but_never_starve_under_constant_pressure() {
+    let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
+    viewer.loaded_chunks.insert((0, 0), 0);
+    viewer.loaded_chunks.insert((4, 0), 0);
+    // Interval-1 rows: both are due on every publish.
+    let mut near = entity(10, [9.0, 64.0, 8.0]);
+    let mut far = entity(11, [68.0, 64.0, 8.0]);
+    for row in [&near, &far] {
+        let mut baseline = row.clone();
+        baseline.position[2] -= 0.25;
+        viewer
+            .tracked_entities
+            .insert(row.id, TrackedEntity::new(&baseline, 0, 0));
+    }
+    let mut sent = Vec::new();
+    for tick in 1..=12 {
+        let mut out = output(
+            vec![],
+            vec![near.clone(), far.clone()],
+            ChangeSet::default(),
+        );
+        Arc::get_mut(&mut out.snapshot).unwrap().tick = tick;
+        let packets = plan_entities_for(&out, &mut viewer, 1);
+        assert_eq!(packets.len(), 1, "tick {tick}: one update fits");
+        sent.push(
+            MoveEntityPos::decode(&mut &body_of(&packets[0])[..])
+                .unwrap()
+                .entity_id,
+        );
+        near.position[2] += 0.25;
+        far.position[2] += 0.25;
+    }
+    assert_eq!(sent[0], 10, "nearest first");
+    let far_sends: Vec<_> = (0..sent.len()).filter(|&i| sent[i] == 11).collect();
+    assert!(far_sends.len() >= 2, "far unit starved: {sent:?}");
+    assert!(
+        far_sends.windows(2).all(|pair| pair[1] - pair[0] <= 6) && far_sends[0] < 6,
+        "far unit waited more than six publishes: {sent:?}"
+    );
+    assert!(
+        sent.len() - far_sends.len() >= 2 * far_sends.len(),
+        "{sent:?}"
+    );
+}
+
+/// Arrows track at 4 chunks for players; a recorder tracks them to its
+/// whole view distance. The override is scoped to the recorder viewer, and
+/// a type vanilla never sends (marker, range 0) stays unsent for both.
+#[test]
+fn recorder_tracks_arrows_past_their_range_and_players_do_not() {
+    let of_type = |name, id, x| EntityView {
+        type_id: type_id_of(name),
+        ..entity(id, [x, 64.0, 8.0])
+    };
+    // 40 and 100 blocks east of the viewer: inside and past 4 chunks; the
+    // marker one block away.
+    let out = output(
+        vec![],
+        vec![
+            of_type("minecraft:arrow", 10, 48.0),
+            of_type("minecraft:arrow", 11, 108.0),
+            of_type("minecraft:marker", 12, 9.0),
+        ],
+        ChangeSet::default(),
+    );
+    let spawned = |recorder: bool| {
+        let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
+        viewer.recorder = recorder;
+        viewer.loaded_chunks.insert((0, 0), 0);
+        viewer.loaded_chunks.insert((3, 0), 0);
+        viewer.loaded_chunks.insert((6, 0), 0);
+        let index = TickPlanIndex::with_previous(&out, viewer.previous_entities());
+        let mut packets = Vec::new();
+        plan_entities(
+            &out.snapshot,
+            &mut viewer,
+            8,
+            &mut PlanScratch::default(),
+            &index,
+            &mut packets,
+            &mut WorldCredit::frames(64),
+        );
+        let mut ids: Vec<i32> = packets
+            .iter()
+            .filter(|packet| packet.id == AddEntity::ID)
+            .map(|packet| AddEntity::decode(&mut body_of(packet)).unwrap().entity_id)
+            .collect();
+        ids.sort_unstable();
+        ids
+    };
+    assert_eq!(spawned(true), [10, 11]);
+    assert_eq!(spawned(false), [10]);
+}
+
+/// Plan the same snapshot with credit for one frame until no move is left;
+/// returns the moved entity ids in send order.
+fn drain_one_move_per_publish(out: &TickOutput, viewer: &mut ViewerState) -> Vec<i32> {
+    let mut sent = Vec::new();
+    loop {
+        let packets = plan_entities_for(out, viewer, 1);
+        let Some(packet) = packets.first() else {
+            return sent;
+        };
+        assert_eq!(packets.len(), 1);
+        sent.push(
+            MoveEntityPos::decode(&mut &body_of(packet)[..])
+                .unwrap()
+                .entity_id,
+        );
+        assert!(sent.len() <= 16, "debt never drains: {sent:?}");
+    }
 }
 
 #[test]

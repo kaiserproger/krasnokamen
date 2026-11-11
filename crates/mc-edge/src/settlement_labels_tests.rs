@@ -428,7 +428,13 @@ fn settlement_labels_retained_updates_survive_zero_spawn_credit_and_stale_dimens
     let mut viewer = viewer_at(1, [8.5, 64.0, 8.5]);
     settle_chunks(&mut viewer, &first, 4);
     let mut packets = Vec::new();
-    plan_labels(&first.snapshot, &mut viewer, 4, &mut packets, &mut 512);
+    plan_labels(
+        &first.snapshot,
+        &mut viewer,
+        4,
+        &mut packets,
+        &mut WorldCredit::frames(512),
+    );
     assert_eq!(packets.len(), 2);
     let (pos, chunk) = chunk_at(0, 0);
     let changed = output(
@@ -437,13 +443,25 @@ fn settlement_labels_retained_updates_survive_zero_spawn_credit_and_stale_dimens
         Dimension::Overworld,
     );
     packets.clear();
-    plan_labels(&changed.snapshot, &mut viewer, 4, &mut packets, &mut 0);
+    plan_labels(
+        &changed.snapshot,
+        &mut viewer,
+        4,
+        &mut packets,
+        &mut WorldCredit::frames(0),
+    );
     assert_eq!(packets.len(), 1);
     assert_eq!(packets[0].id, ClientboundSetEntityData::ID);
     assert!(packets[0].reliable);
     viewer.dimension = Dimension::Nether;
     packets.clear();
-    plan_labels(&changed.snapshot, &mut viewer, 4, &mut packets, &mut 512);
+    plan_labels(
+        &changed.snapshot,
+        &mut viewer,
+        4,
+        &mut packets,
+        &mut WorldCredit::frames(512),
+    );
     assert_eq!(packets.len(), 1);
     assert_eq!(packets[0].id, RemoveEntities::ID);
     assert!(

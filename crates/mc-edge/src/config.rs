@@ -63,6 +63,9 @@ pub struct EdgeConfig {
     /// Proximity voice relay for native clients.
     #[serde(default)]
     pub voice: crate::voice::VoiceConfig,
+    /// Connections that record the server stream (battle video).
+    #[serde(default)]
+    pub recorder: crate::recorder::RecorderSection,
     /// Startup-only import; explicit TOML leaves override imported properties.
     #[serde(default)]
     pub properties: PropertiesSection,
@@ -699,6 +702,10 @@ impl EdgeConfig {
             (1..=128).contains(&cfg.distant_horizons.radius_chunks),
             "distant_horizons.radius_chunks must be in 1..=128"
         );
+        anyhow::ensure!(
+            cfg.recorder.world_queue_bytes > 0,
+            "recorder.world_queue_bytes must be positive"
+        );
         Ok(cfg)
     }
 
@@ -730,6 +737,7 @@ const KNOWN_SECTIONS: &[&str] = &[
     "rcon",
     "query",
     "resource_pack",
+    "recorder",
 ];
 
 /// Unknown leaf keys (`section.key`) under a known section, depth-first.
@@ -837,6 +845,10 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
         (
             "resource_pack",
             &["url", "sha1", "required", "prompt", "id"],
+        ),
+        (
+            "recorder",
+            &["players", "world_queue_bytes", "allow_remote"],
         ),
     ];
     for (section, keys) in KNOWN {

@@ -47,8 +47,8 @@ fn scoreboard_bulk_join_replay_fits_reliable_queue() {
     }];
     changes.extend(bulk_score_changes());
     assert!(registry.handles_or_stash(id, &mut changes).is_none());
-    let (reliable_tx, mut reliable_rx) = mpsc::channel(crate::fanout::OUTBOUND_QUEUE_BOUND);
-    let (world_tx, _world_rx) = mpsc::channel(crate::fanout::OUTBOUND_QUEUE_BOUND);
+    let (reliable_tx, mut reliable_rx) = mpsc::channel(crate::fanout::RELIABLE_QUEUE_BOUND);
+    let (world_tx, _world_rx) = world_queue(WORLD_QUEUE_FRAMES, WORLD_QUEUE_BYTES);
     let stashed = registry
         .register(
             id,
@@ -69,7 +69,7 @@ fn scoreboard_bulk_live_updates_fit_reliable_queue() {
     let id = ConnectionId(1);
     let mut viewer = crate::plan::ViewerState::new(id, mc_core::boundary::EntityId(1), [0.0; 3]);
     let packets = crate::plan::plan_player_changes(&bulk_score_changes(), &mut viewer);
-    let (tx, mut rx) = mpsc::channel(crate::fanout::OUTBOUND_QUEUE_BOUND);
+    let (tx, mut rx) = mpsc::channel(crate::fanout::RELIABLE_QUEUE_BOUND);
     for packet in packets {
         tx.try_send(packet.data).expect("bulk live reliable queue");
     }
@@ -89,7 +89,7 @@ fn text_burst_live_updates_fit_reliable_queue() {
         .collect();
     let burst = [mc_core::boundary::PlayerChange::TextBurst { lines }];
     let packets = crate::plan::plan_player_changes(&burst, &mut viewer);
-    let (tx, mut rx) = mpsc::channel(crate::fanout::OUTBOUND_QUEUE_BOUND);
+    let (tx, mut rx) = mpsc::channel(crate::fanout::RELIABLE_QUEUE_BOUND);
     for packet in packets {
         tx.try_send(packet.data).expect("text burst reliable queue");
     }
@@ -127,7 +127,7 @@ fn removed_registration_fails_join_replay_without_panicking() {
     ];
     assert!(registry.handles_or_stash(id, &mut changes).is_none());
     let (reliable_tx, mut reliable_rx) = mpsc::channel(4);
-    let (world_tx, _world_rx) = mpsc::channel(4);
+    let (world_tx, _world_rx) = world_queue(4, WORLD_QUEUE_BYTES);
     let stashed = registry
         .register(
             id,
@@ -154,7 +154,7 @@ fn late_reliable_results_do_not_revive_removed_connection() {
     let registry = ConnectionRegistry::new();
     let id = registry.joining_id();
     let (reliable_tx, _reliable_rx) = mpsc::channel(4);
-    let (world_tx, _world_rx) = mpsc::channel(4);
+    let (world_tx, _world_rx) = world_queue(4, WORLD_QUEUE_BYTES);
     registry
         .register(
             id,
@@ -275,7 +275,7 @@ async fn removed_join_rejects_late_join_reason_waiter_and_registration() {
     assert!(registry.take_disconnect_reason(id).is_none());
     assert!(registry.wait_join(id).await.is_err());
     let (reliable_tx, _) = mpsc::channel(1);
-    let (world_tx, _) = mpsc::channel(1);
+    let (world_tx, _) = world_queue(1, WORLD_QUEUE_BYTES);
     assert!(
         registry
             .register(

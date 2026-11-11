@@ -185,9 +185,9 @@ the normal terrain/light and GPU-completion fences, not an elapsed-time bypass.
 
 [`example.toml`](../example.toml) documents every section and its starter
 values: `[server]`, `[network]`, `[auth]`, `[proxy]`, `[dashboard]`,
-`[properties]`, `[rcon]`, `[query]`, `[resource_pack]`, `[anti_xray]`, `[lod]`,
-`[distant_horizons]`, `[mob_griefing]`, `[anti_cheat]`, `[plugins]`, `[data]`,
-`[voice]` and `[computer]`. Keys it omits:
+`[recorder]`, `[properties]`, `[rcon]`, `[query]`, `[resource_pack]`,
+`[anti_xray]`, `[lod]`, `[distant_horizons]`, `[mob_griefing]`, `[anti_cheat]`,
+`[plugins]`, `[data]`, `[voice]` and `[computer]`. Keys it omits:
 
 ```toml
 [server]
@@ -202,6 +202,9 @@ retention_days = 30              # 0 keeps records until max_records
 max_records = 200000             # per dimension; oldest go first
 [dashboard]
 # metrics_bearer_token = "..."   # protects /metrics only
+[recorder]
+# world_queue_bytes = 16777216   # a recorder's world-queue byte bound
+# allow_remote = false           # true: recorder mode from any address or proxy
 [msmp]                           # see "Minecraft Server Management Protocol"
 enabled = false
 bind_address = "127.0.0.1"
@@ -847,7 +850,8 @@ crash recovery does. It covers world state only.
 
 The dashboard is off by default, read-only and unauthenticated. It serves JSON at
 `/stats`, `/tps` (rolling TPS plus p50/p95/p99 MSPT), `/profile` and
-`/load-metrics`, and a Prometheus text scrape at `/metrics`.
+`/load-metrics`, JSON lines at `/telemetry.jsonl`, and a Prometheus text scrape
+at `/metrics`.
 
 ```toml
 [dashboard]
@@ -865,6 +869,71 @@ bind or put the JSON endpoints behind an authenticated reverse proxy. A
 non-loopback address needs `allow_remote = true`; otherwise the dashboard does
 not start and a warning is logged. Operators at level 2 can run `/tps` and
 `/mspt` in game; both report the same rolling window and are observation only.
+
+`/telemetry.jsonl?after_tick=N` (same `wait` and `min_samples` as
+`/load-metrics`) returns one JSON object per retained core tick: the
+`/load-metrics` sample plus `host`, a host sample taken on the first tick of
+each 20-tick window (`null` on the others). `host` holds the server cgroup's
+`memory.current` and `cpu.stat` `usage_usec` (cgroup v2), the `/proc/stat`
+CPU total and `steal` in `USER_HZ` ticks, and the process RSS; an unreadable
+value is `null`. Counters are cumulative: graph CPU and steal as differences
+between samples. While battle units exist (staged, paused or running), each
+sample (here and in `/load-metrics`) also carries `battle`, counted after the
+tick's merge so it matches that tick's snapshot: `units`, the battle units
+(nonzero faction) in the entity store, and `alive`, alive units per faction
+keyed by the faction number as a string
+(`{"units":20000,"alive":{"1":9870,"2":9640}}`); without battle units the key
+is absent. The ring keeps 16384 ticks (about 13.6 minutes), so export a run by
+polling with the last tick seen:
+
+```sh
+last=; while :; do
+  curl -sf "http://127.0.0.1:8080/telemetry.jsonl?${last:+after_tick=$last&}wait=true&min_samples=200" >> run.jsonl
+  last=$(tail -n1 run.jsonl | jq .tick)
+done
+```
+
+Ticks with a recorder connection also carry `recorders`:
+`{"connections":n,"deferred_updates_sum":n,"deferred_updates_max":n}`, the
+entity spawns and updates the fanout of that tick left without world-queue
+credit, summed over recorders and the largest single recorder's count. A
+complete recording keeps both at 0. `/telemetry.jsonl` serves a tick only
+after the edge has fanned it out, so a served line never lacks `recorders`
+for a tick that had a recorder.
+
+A tick missing from the stream was skipped or overwritten, never filled in.
+
+### Recorder connections
+
+`[recorder] players` lists login names that join as stream recorders: a
+camera client that records the server stream for offline replay (the battle
+video pipeline). Recorder mode is granted only to a listed name connecting
+directly (no proxy) from a loopback address. With offline-mode auth (the
+default) any client can claim a listed name, so this gate is the trust
+boundary; `[recorder] allow_remote = true` grants it from any address or
+through a proxy and should be set only on a trusted network. A listed name
+from elsewhere joins as an ordinary player, with a warning in the log. For
+recorder connections only:
+
+- the view distance is the server's `view_distance`, whatever the client asks;
+- every entity type vanilla sends is tracked to that distance, instead of
+  vanilla per-type ranges (arrows normally stop at 4 chunks, most mobs at 8);
+  types vanilla never sends (`minecraft:marker`) stay unsent;
+- the world queue holds 65536 frames and `world_queue_bytes` bytes (default
+  16 MiB) instead of 16384 frames and 1 MiB, so a loopback recorder is never
+  thinned;
+- every published tick starts with a `solaris:tick` custom payload: `tick`
+  then `wall_ns`, both u64 big-endian, where `wall_ns` is that tick's
+  `wall_start_unix_ns` in `/load-metrics` and `/telemetry.jsonl`. All world
+  packets after one marker and before the next were planned from that tick,
+  except `solaris:lod/tile` frames, which are queued when their tile is
+  ready; reliable packets (chat, inventory, keepalive) are not ordered
+  against them. A skipped tick, or a tick whose world queue had no free frame
+  slot, has no marker.
+
+Every other player keeps vanilla tracking and the normal queue. With fewer
+free bytes than its pending entity updates need, a viewer gets the nearest and
+longest-waiting units first; far units update less often but are not dropped.
 
 ### Input log
 

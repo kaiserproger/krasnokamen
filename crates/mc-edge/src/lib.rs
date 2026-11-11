@@ -8,18 +8,21 @@
 //! Entity interest uses the sorted chunk index. Publish shares dimension-local
 //! change buckets; viewers retain their window and planning buffers. Movement
 //! follows the vanilla type's id-phased update interval and horizontal tracking
-//! square, capped by view distance and gated on the client holding the chunk.
+//! square, capped by view distance and gated on the client holding the chunk
+//! ([`recorder`] connections track every type to their full view distance).
 //! A due phase crossed by coalesced snapshots is reconciled on the next observed
 //! tick, so a viewer cannot permanently miss an entity's update phase.
 //! Tracked baselines advance only when the whole packet group fits world credit;
-//! deferred moves, appearance changes and removals are reconciled later.
+//! deferred moves, appearance changes and removals are reconciled later, the
+//! most overdue and nearest first.
 //!
 //! Slow-consumer policy (see [`fanout`]): per-connection bounded outbound
-//! queues; fanout uses `try_send` and never blocks the tick. On a full queue
-//! best-effort packets (chunk data, entity moves) are coalesced to the latest
-//! and older ones dropped; reliable packets (disconnect, block ack, inventory,
-//! health) are retained up to the bound, then the connection is dropped rather
-//! than stalling the tick.
+//! queues; fanout uses `try_send` and never blocks the tick. World packets
+//! (chunk data, entity moves) are planned within the world queue's free
+//! frame slots and bytes, so none is dropped; what does not fit is planned
+//! again from a newer snapshot. Reliable packets (disconnect, block ack,
+//! inventory, health) are retained up to the bound, then the connection is
+//! dropped rather than stalling the tick.
 
 pub use mc_core::boundary;
 
@@ -44,6 +47,7 @@ mod dh;
 mod dimensions;
 pub mod fanout;
 pub mod handshake;
+mod host_telemetry;
 mod light;
 mod lod;
 pub mod login;
@@ -54,6 +58,7 @@ pub mod play;
 mod plugin_loader;
 pub mod proxy;
 pub mod recipes;
+pub mod recorder;
 pub mod server;
 pub(crate) mod settlement_labels;
 pub mod startup_data;

@@ -74,10 +74,10 @@ fn known_same_type_marks_seen_while_wrong_type_becomes_spawn_candidate() {
     stale_row.type_id = 30;
     viewer
         .tracked_entities
-        .insert(EntityId(10), TrackedEntity::new(&same, 0));
+        .insert(EntityId(10), TrackedEntity::new(&same, 0, 0));
     viewer
         .tracked_entities
-        .insert(EntityId(11), TrackedEntity::new(&stale_row, 0));
+        .insert(EntityId(11), TrackedEntity::new(&stale_row, 0, 0));
     let out = output(
         vec![],
         vec![
@@ -147,11 +147,11 @@ fn type_replacement_waits_when_removal_consumes_the_last_credit() {
     previous.type_id = type_id_of("minecraft:cow");
     viewer
         .tracked_entities
-        .insert(current.id, TrackedEntity::new(&previous, 0));
+        .insert(current.id, TrackedEntity::new(&previous, 0, 0));
     let out = output(vec![], vec![current.clone()], ChangeSet::default());
     let mut scratch = PlanScratch::default();
     let mut packets = Vec::new();
-    let mut credit = 1;
+    let mut credit = WorldCredit::frames(1);
     plan_entities(
         &out.snapshot,
         &mut viewer,
@@ -161,14 +161,14 @@ fn type_replacement_waits_when_removal_consumes_the_last_credit() {
         &mut packets,
         &mut credit,
     );
-    assert_eq!(credit, 0);
+    assert_eq!(credit.frames, 0);
     assert_eq!(packets.len(), 1);
     assert_eq!(packets[0].id, RemoveEntities::ID);
     assert!(!viewer.tracked_entities.contains_key(&current.id));
     assert!(scratch.spawns.is_empty());
 
     packets.clear();
-    credit = 16;
+    credit = WorldCredit::frames(16);
     let index = TickPlanIndex::with_previous(&out, viewer.previous_entities());
     plan_entities(
         &out.snapshot,

@@ -53,10 +53,10 @@ fn reliable_overflow_threshold() {
             .collect()
     };
     assert!(reliable_overflow(&mk(10)).is_empty());
-    let victims = reliable_overflow(&mk(OUTBOUND_QUEUE_BOUND * 2 + 2));
+    let victims = reliable_overflow(&mk(RELIABLE_QUEUE_BOUND * 2 + 2));
     assert_eq!(victims.len(), 2);
     // Best-effort never overflows.
-    let best: Vec<AddressedPacket> = (0..OUTBOUND_QUEUE_BOUND * 3)
+    let best: Vec<AddressedPacket> = (0..RELIABLE_QUEUE_BOUND * 3)
         .map(|_| AddressedPacket {
             connection: ConnectionId(9),
             data: bytes::Bytes::from_static(b"x"),
@@ -68,7 +68,7 @@ fn reliable_overflow_threshold() {
 
 #[test]
 fn queue_bound_sane() {
-    assert_eq!(OUTBOUND_QUEUE_BOUND, 512);
+    assert_eq!(RELIABLE_QUEUE_BOUND, 512);
 }
 
 #[test]

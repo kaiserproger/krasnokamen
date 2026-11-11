@@ -4,9 +4,10 @@
 //!
 //! - **World state** (chunk packets, entity spawns/moves/removes, block
 //!   deltas, one-shot visuals): best-effort, planned within each viewer's
-//!   world-queue credit so nothing planned is ever dropped. On lag the pump
-//!   skips to the latest tick and reconciles each viewer's held world view
-//!   against it; stale world packets are simply never sent.
+//!   world-queue credit (free frame slots and free bytes, see
+//!   [`crate::server::WorldSender`]) so nothing planned is ever dropped. On
+//!   lag the pump skips to the latest tick and reconciles each viewer's held
+//!   world view against it; stale world packets are simply never sent.
 //! - **Player-change-derived packets** (join/sync, acks, menus, cursor,
 //!   health, experience, chat, game-mode): NEVER skipped. They route to a
 //!   separate per-connection **reliable queue** at the server layer, which
@@ -30,8 +31,9 @@ use crate::plan::{
     plan_viewer_indexed,
 };
 
-/// Per-connection outbound queue bound (both reliable and world queues).
-pub const OUTBOUND_QUEUE_BOUND: usize = 512;
+/// Per-connection reliable queue bound, in items. World queues are bounded
+/// in frames and bytes ([`crate::server::world_queue()`]).
+pub const RELIABLE_QUEUE_BOUND: usize = 512;
 
 /// Routing priority for one framed packet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -156,9 +158,26 @@ pub fn publish_with_registries<'a>(
             )
         })
         .collect();
-    let mut planned: Vec<(ConnectionId, Vec<PlannedPacket>)> = viewers
+    // A recorder's tick marker is the first world frame of the publish. Its
+    // slot and bytes are reserved before planning so the bounds hold;
+    // without a free slot nothing else is planned either, and that tick has
+    // no marker.
+    let marker = viewers
+        .iter()
+        .any(|viewer| viewer.recorder)
+        .then(|| crate::recorder::tick_marker_frame(output.tick, output.times.wall_start_unix_ns));
+    let marker_bytes = marker.as_ref().map_or(0, bytes::Bytes::len);
+    let mut planned: Vec<(ConnectionId, Vec<PlannedPacket>)> = Vec::with_capacity(viewers.len());
+    let mut marked: Vec<ConnectionId> = Vec::new();
+    for (connection, packets, reserved) in viewers
         .par_iter_mut()
         .map(|viewer| {
+            let reserved = viewer.recorder && viewer.world_credit > 0;
+            if reserved {
+                viewer.world_credit -= 1;
+                viewer.world_bytes = viewer.world_bytes.saturating_sub(marker_bytes);
+            }
+            viewer.deferred_updates = 0;
             let dimension = viewer.dimension;
             let packets = output
                 .in_dimension(dimension)
@@ -172,9 +191,15 @@ pub fn publish_with_registries<'a>(
                         registries,
                     )
                 });
-            (viewer.connection, packets)
+            (viewer.connection, packets, reserved)
         })
-        .collect();
+        .collect::<Vec<_>>()
+    {
+        if reserved {
+            marked.push(connection);
+        }
+        planned.push((connection, packets));
+    }
     let failed = crate::plan::fill_chunk_packets(output, &mut planned, registries, chunk_cache);
     for (connection, pos) in failed {
         if let Some(viewer) = viewers
@@ -186,6 +211,13 @@ pub fn publish_with_registries<'a>(
     }
     let mut addressed = Vec::new();
     for (connection, packets) in planned {
+        if let Some(marker) = marker.as_ref().filter(|_| marked.contains(&connection)) {
+            addressed.push(AddressedPacket {
+                connection,
+                data: marker.clone(),
+                priority: Priority::BestEffort,
+            });
+        }
         for packet in packets {
             addressed.push(AddressedPacket {
                 connection,
@@ -205,8 +237,8 @@ pub fn publish_with_registries<'a>(
 /// disconnect them: reliable packets are never skipped, so an over-full
 /// reliable queue means the consumer is gone.
 ///
-/// Counts framed reliable bytes per connection; any connection with more
-/// than [`OUTBOUND_QUEUE_BOUND`] queued reliable packets overflows. (The
+/// Counts reliable packets per connection; any connection with more than
+/// [`RELIABLE_QUEUE_BOUND`] queued reliable packets overflows. (The
 /// live queue depth is owned by the server layer; this pure helper lets
 /// the pump decide from a single `publish` batch.)
 pub fn reliable_overflow(packets: &[AddressedPacket]) -> Vec<ConnectionId> {
@@ -218,7 +250,7 @@ pub fn reliable_overflow(packets: &[AddressedPacket]) -> Vec<ConnectionId> {
     }
     counts
         .into_iter()
-        .filter(|(_, count)| *count > OUTBOUND_QUEUE_BOUND)
+        .filter(|(_, count)| *count > RELIABLE_QUEUE_BOUND)
         .map(|(connection, _)| connection)
         .collect()
 }

@@ -46,7 +46,9 @@ pub(super) fn collect(
                 .entities
                 .in_chunk(mc_core::boundary::ChunkPos { x, z })
             {
-                if let Some(range) = entity_interest::tracking_range(entity.type_id, distance) {
+                if let Some(range) =
+                    entity_interest::tracking_range(entity.type_id, distance, viewer.recorder)
+                {
                     scratch.tracking_ranges.insert(range);
                 }
                 if !super::entity_trackable(entity, &*viewer, view_distance) {
