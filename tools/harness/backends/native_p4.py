@@ -254,6 +254,25 @@ def _note_region(steps: ProbeSteps, label: str, origin: tuple[int, int, int]) ->
         if row.get("block_id") != "minecraft:air" or not (row.get("fluid") or {}).get("empty", True)]
 
 
+def _douse_and_drain(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    """Douse a burning player, then wait until the client sees no water around the fixture cell.
+
+    Removing the sources leaves flowing water that decays for dozens of ticks; a player standing in
+    it is cushioned from falls, cannot ignite and loses a berry bush to the flow."""
+    x, y, z = origin
+    steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:water")
+    steps.call("minecraft_wait_ticks", {"ticks": 10})
+    steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:air")
+
+    def dry(_: dict[str, Any]) -> bool:
+        scan = steps.call("minecraft_scan_blocks", {
+            "min_x": x - 3, "max_x": x + 3, "min_y": y, "max_y": y + 3,
+            "min_z": z - 3, "max_z": z + 3, "max_blocks": 256})
+        return all((row.get("fluid") or {}).get("empty", True) for row in scan.get("blocks", []))
+
+    steps.wait(dry, "douse_water_drained", timeout_seconds=60)
+
+
 def _disable_gamerule(steps: ProbeSteps, rule: str) -> None:
     """Set a boolean rule false and wait for the server's acknowledgement."""
     steps.fixture(f"gamerule {rule} false")
@@ -496,9 +515,7 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
     results = []
     for kind, fixture in fixtures:
         steps.fixture("gamemode creative @s")
-        steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:water")
-        steps.call("minecraft_wait_ticks", {"ticks": 10})
-        steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:air")
+        _douse_and_drain(steps, origin)
         if kind in ("fall", "stalagmite", "falling_anvil", "falling_stalactite"):
             steps.fixture(f"fill {x} {y + 4} {z} {x} {y + 11} {z} minecraft:air")
         if kind == "falling_stalactite":
@@ -515,10 +532,6 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
         steps.wait(lambda state: state["player"]["health"] >= 18 and
                    abs(state["player"]["z"] - z - .5) < .3, f"{kind}_fixture_ready")
         steps.call("minecraft_wait_ticks", {"ticks": 25})
-        if kind == "in_fire":
-            # Water still flowing back into the cell when the fire lands blocks ignition and the
-            # on_fire row never starts; let the douse water settle first.
-            steps.call("minecraft_wait_ticks", {"ticks": 60})
         baseline = steps.observe()["player"]["health"]
         _note_region(steps, f"{kind}_before_fixture", origin)
         start = len(steps.client.p4_damage_wire())
@@ -557,9 +570,7 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
             results.append({"type": "on_fire", "health": burned["player"]["health"],
                             "events": steps.client.p4_damage_wire()[before_burn:]})
     steps.fixture("gamemode creative @s")
-    steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:water")
-    steps.call("minecraft_wait_ticks", {"ticks": 10})
-    steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:air")
+    _douse_and_drain(steps, origin)
     steps.fixture(f"tp @s {x + .5} {y} {z + .5}")
     steps.fixture("effect give @s minecraft:instant_health 1 5 true")
     steps.fixture("clear @s")

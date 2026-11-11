@@ -271,7 +271,7 @@ class NativeV2ProbeTests(unittest.TestCase):
         self.assertIs(seen.get("outside_play"), True)
         self.assertNotIn("wait_for_play", seen)
 
-    def test_damage_in_fire_row_lets_the_douse_water_settle_before_the_fire(self) -> None:
+    def test_damage_rows_wait_for_the_douse_water_to_drain_before_their_fixture(self) -> None:
         from .backends import native_p4
 
         class Stop(Exception):
@@ -280,19 +280,26 @@ class NativeV2ProbeTests(unittest.TestCase):
         events: list[str] = []
         steps = mock.MagicMock()
         steps.fixture.side_effect = events.append
-        steps.call.side_effect = lambda tool, args=None: (
-            events.append(f"{tool}:{(args or {}).get('ticks')}") or {})
+        steps.call.return_value = {}
 
-        def wait(_predicate, label, **_kwargs):
-            if label == "in_fire_physical_identity_received":
+        def wait(predicate, label, **_kwargs):
+            events.append(f"wait:{label}")
+            if label == "douse_water_drained":
+                steps.call.return_value = {"blocks": [{"fluid": {"empty": False}}]}
+                self.assertFalse(predicate({}))
+                steps.call.return_value = {"blocks": [{"fluid": {"empty": True}}]}
+                self.assertTrue(predicate({}))
+                steps.call.return_value = {}
+            if label == "in_wall_fixture_ready":
                 raise Stop
             return mock.MagicMock()
 
         steps.wait.side_effect = wait
         with self.assertRaises(Stop):
             native_p4._damage_environment(steps, (10, 70, 10), 1)
-        fire = events.index("setblock 10 70 10 minecraft:fire")
-        self.assertIn("minecraft_wait_ticks:60", events[fire - 8:fire])
+        air = events.index("fill 9 70 9 11 73 11 minecraft:air")
+        self.assertLess(air, events.index("wait:douse_water_drained"))
+        self.assertLess(events.index("wait:douse_water_drained"), events.index("tp @s 10.5 70 10.5"))
 
     def test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack(self) -> None:
         from .backends import native_p4
