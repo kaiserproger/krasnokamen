@@ -124,14 +124,16 @@ def _failing_verdict(receipt, profile, verdict):
 def _scenario_assertion_failed(receipt, check, error_text):
     """A named-scenario ref is red when its run failed on one of the scenario's own
     assertions; a join/timeout flake without that marker stays unrunnable."""
-    if 'assertion failed' not in error_text:
-        return False
     details = receipt.get('details', {}) if isinstance(receipt, dict) else {}
+    receipt_error = receipt.get('error', '') if isinstance(receipt, dict) else ''
+    text = f'{error_text} {receipt_error}'
+    if 'assertion failed' not in text:
+        return False
     scenario = details.get('scenario') if isinstance(details.get('scenario'), dict) else details
     named = (scenario or {}).get('named_scenario') if isinstance(scenario, dict) else None
     if isinstance(named, dict) and named.get('id'):
         return named['id'] == check
-    return check in error_text
+    return check in text
 
 
 def _work_root() -> Path:
