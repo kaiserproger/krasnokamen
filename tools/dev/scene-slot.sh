@@ -9,11 +9,12 @@ import fcntl, os, sys, threading
 cmd = sys.argv[1:]
 if not cmd:
     sys.exit("usage: scene-slot.sh <command> [args...]")
+lock_dir = os.environ.get("SOLARIS_SCENE_SLOT_DIR", "/tmp")  # tests use a private dir
 guard, won, chosen = threading.Lock(), threading.Event(), []
 
 def take(slot):
     # Non-inheritable fd (PEP 446): a losing slot is released at exec at the latest.
-    fd = os.open("/tmp/solaris-scene-slot-%s.lock" % slot, os.O_WRONLY | os.O_CREAT, 0o666)
+    fd = os.open("%s/solaris-scene-slot-%s.lock" % (lock_dir, slot), os.O_WRONLY | os.O_CREAT, 0o666)
     fcntl.flock(fd, fcntl.LOCK_EX)
     with guard:
         if chosen:

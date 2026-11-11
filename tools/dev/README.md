@@ -93,4 +93,4 @@ Dry run by default. In pooled slots `<work>/targets/slot-<l>` (or the slots name
 
 For Main at checkpoints; no daemon. `main-guard --baseline` writes `<work>/receipts/.main-guard-baseline.json`: every modified or untracked non-ignored file under `crates/`, `sdk/` and `tools/harness/backends/` of `<work>/solaris` with a content hash. A plain `main-guard` compares against it and prints `NEW <path>` (dirty now, not in the baseline), `CHANGED <path>` (content differs from the baseline) and `GONE <path>` (dirty then, clean now: committed or reverted); exit status 1 when anything is NEW or CHANGED. Read-only: git runs with optional locks off.
 
-Tests: `python3 tools/dev/test_slot_gc.py`, `python3 tools/dev/test_slot_select.py` and `python3 tools/dev/test_registry.py`.
+Tests: `python3 tools/dev/test_slot_gc.py`, `python3 tools/dev/test_slot_select.py`, `python3 tools/dev/test_registry.py` and `python3 tools/dev/test_scene_slot.py`.
