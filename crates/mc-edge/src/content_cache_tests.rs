@@ -62,7 +62,7 @@ pub(crate) fn write_valid_cache(root: &Path) {
         "reports/registries.json",
         &json!({
             "minecraft:block": {"entries": {"minecraft:stone": {"protocol_id": 1}}},
-            "minecraft:item": {"entries": {"minecraft:stick": {"protocol_id": 1}}},
+            (mc_data::tags::ITEM_REGISTRY): {"entries": {"minecraft:stick": {"protocol_id": 1}}},
             "minecraft:entity_type": {"entries": {"minecraft:pig": {"protocol_id": 1}}},
         }),
     );

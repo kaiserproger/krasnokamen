@@ -34,7 +34,7 @@ pub(crate) fn prepare(
             [site.min[0], site.max[1] - height + 1, site.min[2]]
         })
         .unwrap_or(site.min);
-    let mut ledger = ledger(state)?;
+    let ledger = ledger(state)?;
     if ledger.structures.values().any(|record| {
         record.snapshot.dimension == state.dimension.name()
             && record.snapshot.state != ScriptStructureState::Cancelled
@@ -125,6 +125,8 @@ pub(crate) fn prepare(
         Vec::new(),
     );
     snapshot.validate().map_err(|_| Failure::InvalidRequest)?;
+    drop(ledger);
+    let mut ledger = ledger_mut(state)?;
     ledger.structures.insert(
         id.clone(),
         Structure {
@@ -154,12 +156,14 @@ pub(crate) fn area_reserved(state: &TickState, bounds: ScriptWorldBounds) -> boo
 }
 
 pub(crate) fn cancel(state: &mut TickState, id: SettlementId) -> Result<(), Failure> {
-    let mut ledger = ledger(state)?;
+    let ledger = ledger(state)?;
     if !ledger.structures.values().any(|record| {
         record.settlement == Some(id) && record.snapshot.state != ScriptStructureState::Cancelled
     }) {
         return Ok(());
     }
+    drop(ledger);
+    let mut ledger = ledger_mut(state)?;
     let revision = next(ledger.revision)?;
     for record in ledger
         .structures
@@ -183,7 +187,7 @@ pub(crate) fn cancel_structure(
     settlement: SettlementId,
     handle: &str,
 ) -> Result<(), Failure> {
-    let mut ledger = ledger(state)?;
+    let mut ledger = ledger_mut(state)?;
     structure(&ledger, &owner(settlement), handle)?;
     let revision = next(ledger.revision)?;
     let record = ledger.structures.get_mut(handle).ok_or(Failure::NotFound)?;
@@ -217,13 +221,16 @@ pub(crate) fn recover(
     settlement: SettlementId,
     handle: &str,
 ) -> Result<bool, Failure> {
-    let mut ledger = ledger(state)?;
-    let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
+    let ledger = ledger(state)?;
+    let record = structure(&ledger, &owner(settlement), handle)?;
     if record.snapshot.state != ScriptStructureState::Paused
         || record.snapshot.pause_reason.as_deref() != Some("footprint_changed")
     {
         return Ok(false);
     }
+    drop(ledger);
+    let mut ledger = ledger_mut(state)?;
+    let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
     let bounds = bounds_of_structure(&record)?;
     record.image = fingerprint(world(state, &record.snapshot.dimension)?, bounds, true)?;
     record.snapshot.state = ScriptStructureState::Running;

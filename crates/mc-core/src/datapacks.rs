@@ -404,7 +404,7 @@ impl PackSet {
                 ));
             }
         }
-        registry.refresh_iron_smelting();
+        registry.refresh_recipe_indexes();
         Ok(())
     }
 }
@@ -796,7 +796,7 @@ mod iron_smelting_tests {
     fn recipe_install_refreshes_iron_smelting_fact() {
         let mut registry = CoreRegistry::load(None).unwrap();
         registry.recipes.clear();
-        registry.refresh_iron_smelting();
+        registry.refresh_recipe_indexes();
         assert!(registry.iron_smelting.is_none());
 
         let mut packs = PackSet::default();

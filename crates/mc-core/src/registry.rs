@@ -114,6 +114,8 @@ pub struct CoreRegistry {
     pub(crate) worldgen_tags: Option<Arc<mc_worldgen::vanilla_features::CacheTags>>,
     /// Crafting/furnace recipes, index = recipe display id (contract).
     pub recipes: Vec<mc_data::recipes::Recipe>,
+    /// Ordered construction candidates, compiled once with recipes, items and tags.
+    pub(crate) construction_crafting: Arc<crate::settlements::construction_crafting::Index>,
     /// First native iron-smelting recipe, resolved when registry content changes.
     pub(crate) iron_smelting: Option<crate::villager::smelting::IronSmelting>,
     pub advancements: Arc<mc_data::advancements::AdvancementTree>,
@@ -180,9 +182,16 @@ impl std::fmt::Debug for CoreRegistry {
 }
 
 impl CoreRegistry {
-    pub(crate) fn refresh_iron_smelting(&mut self) {
+    pub(crate) fn refresh_recipe_indexes(&mut self) {
         self.iron_smelting =
             resolve_iron_smelting(&self.items, &self.item_facts, &self.tags, &self.recipes);
+        self.construction_crafting =
+            Arc::new(crate::settlements::construction_crafting::Index::build(
+                &self.items,
+                &self.item_facts,
+                &self.tags,
+                &self.recipes,
+            ));
     }
 
     /// [`ItemRules`](crate::inventory::ItemRules) over immutable startup data.
@@ -326,6 +335,13 @@ impl CoreRegistry {
             ),
         };
         let iron_smelting = resolve_iron_smelting(&items, &item_facts, &tags, &recipes);
+        let construction_crafting =
+            Arc::new(crate::settlements::construction_crafting::Index::build(
+                &items,
+                &item_facts,
+                &tags,
+                &recipes,
+            ));
         let biome_spawns = match vanilla_data_dir {
             Some(dir) => mc_data::biomes::load_biome_spawn_rules(
                 dir.join("data")
@@ -544,6 +560,7 @@ impl CoreRegistry {
             tags,
             worldgen_tags,
             recipes,
+            construction_crafting,
             iron_smelting,
             advancements,
             advancement_blocks,
@@ -858,25 +875,25 @@ mod tests {
         ];
         registry.tags = Arc::new(mc_data::tags::TagsData::from_registries(BTreeMap::from([
             (
-                id("minecraft:item"),
+                id(mc_data::tags::ITEM_REGISTRY),
                 BTreeMap::from([(tag.clone(), vec![raw as i32])]),
             ),
         ])));
-        registry.refresh_iron_smelting();
+        registry.refresh_recipe_indexes();
         let fact = registry.iron_smelting.expect("tagged recipe matches");
         assert_eq!((fact.raw, fact.iron, fact.cook_ticks), (raw, iron, 1));
 
         Arc::make_mut(&mut registry.tags)
             .registries
-            .get_mut(&id("minecraft:item"))
+            .get_mut(&id(mc_data::tags::ITEM_REGISTRY))
             .unwrap()
             .get_mut(&tag)
             .unwrap()
             .clear();
-        registry.refresh_iron_smelting();
+        registry.refresh_recipe_indexes();
         assert_eq!(registry.iron_smelting.unwrap().cook_ticks, 37);
         registry.recipes.clear();
-        registry.refresh_iron_smelting();
+        registry.refresh_recipe_indexes();
         assert!(registry.iron_smelting.is_none());
     }
 

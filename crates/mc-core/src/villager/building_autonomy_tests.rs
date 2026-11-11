@@ -710,16 +710,50 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
             .unwrap()
     });
     let mut observed = [false; 4];
-    for _ in 0..20_000 {
-        state.tick += 20;
-        state.day_time = (state.tick as i64 + 3000).rem_euclid(24_000);
-        state.tick_budget.reset(state.tick);
-        let mut changes = ChangeSet::default();
-        crate::settlements::autonomy::tick(&mut state, &mut changes);
-        crate::settlements::tick(&mut state, &mut changes);
-        super::brain::tick(&mut state, &mut changes);
-        let residents: Vec<_> = crate::settlements::construction::residents(&state, id).collect();
-        for slot in residents {
+    let planks = state
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:oak_planks").unwrap())
+        .unwrap()
+        .default
+        .0;
+    let mut published_construction = false;
+    let mut residents = Vec::new();
+    crate::settlements::construction_crafting::reset_scan_stats();
+    crate::plugin_structures::reset_ledger_stats();
+    let started = std::time::Instant::now();
+    let deadline = std::time::Duration::from_secs(120);
+    let mut phase_us = [0_u64; 11];
+    let mut brain_us = 0_u128;
+    // Preserve the 400,000-tick horizon, but include the real root's renewable
+    // resource growth rather than ticking only settlement and brain systems.
+    state.day_time = 3000;
+    for _ in 0..400_000 {
+        let (output, _, timing) = crate::tick::run_tick(&mut state, &[]);
+        brain_us += state.villager_pois.brain_us;
+        for (total, elapsed) in phase_us.iter_mut().zip([
+            timing.input_us,
+            timing.chunks_us,
+            timing.entity_us,
+            timing.merge_us,
+            timing.block_us,
+            timing.commit_us,
+            timing.snapshot_us,
+            timing.views_us,
+            timing.publish_us,
+            timing.coordination_us,
+            timing.plugins_us,
+        ]) {
+            *total += elapsed;
+        }
+        published_construction |= output
+            .changes
+            .blocks
+            .iter()
+            .any(|change| change.state == planks);
+        residents.clear();
+        residents.extend(crate::settlements::construction::residents(&state, id));
+        for &slot in &residents {
             let next = state
                 .entities
                 .row(slot)
@@ -739,8 +773,6 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
                 }
             }
         }
-        // Match the real root tick's block commit boundary before POI refresh.
-        state.world.fold_overlay();
         for (index, item) in items.iter().enumerate() {
             observed[index] |= state.block_entities.values().any(|container| {
                 container
@@ -771,15 +803,46 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
             }
             assert!(record.owner.is_none());
             assert!(
-                !state.plugin_block_writes.is_empty(),
-                "canonical structure executor journals construction"
+                published_construction,
+                "canonical structure executor publishes construction block changes"
             );
             assert!(state.entities.slots().any(|slot| {
                 state.entities.row(slot).villager.as_ref().is_some_and(|v| {
                     v.settlement == Some(id) && v.data.profession == VillagerProfession::Builder
                 })
             }));
+            eprintln!(
+                "adopted closure accepted: tick={} elapsed={:?} scans={:?}",
+                state.tick,
+                started.elapsed(),
+                crate::settlements::construction_crafting::scan_stats(),
+            );
+            eprintln!(
+                "adopted structures: {:?}",
+                crate::plugin_structures::ledger_stats()
+            );
             return;
+        }
+        if state.tick.is_multiple_of(1000) || started.elapsed() >= deadline {
+            eprintln!(
+                "adopted closure: tick={} day={} elapsed={:?} sources={observed:?} project={:?} phase_us(input,chunks,entity,merge,block,commit,snapshot,views,publish,coordination,plugins)={phase_us:?}",
+                state.tick,
+                state.day_time,
+                started.elapsed(),
+                crate::settlements::construction::project_status(&state, id),
+            );
+            eprintln!("adopted brain: total_us={brain_us}");
+            eprintln!(
+                "adopted crafting: {:?}",
+                crate::settlements::construction_crafting::scan_stats(),
+            );
+            eprintln!(
+                "adopted structures: {:?}",
+                crate::plugin_structures::ledger_stats()
+            );
+        }
+        if started.elapsed() >= deadline {
+            break;
         }
     }
     let mut stock = std::collections::BTreeMap::<String, i32>::new();
@@ -805,7 +868,10 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
         })
         .collect();
     panic!(
-        "autonomous closure failed: sources={observed:?}; projects={:?}\nstock={stock:?}\nminers={miners:?}\nroles={:?}",
+        "autonomous closure failed: tick={} day={} elapsed={:?} sources={observed:?}; projects={:?}\nstock={stock:?}\nminers={miners:?}\nroles={:?}",
+        state.tick,
+        state.day_time,
+        started.elapsed(),
         crate::settlements::construction::project_status(&state, id),
         crate::settlements::construction::residents(&state, id)
             .map(|slot| {

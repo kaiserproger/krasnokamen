@@ -927,7 +927,7 @@ mod tests {
         round_trip(UpdateTags {
             registries: vec![
                 UpdateTagsRegistry {
-                    registry: Identifier::parse("minecraft:item").unwrap(),
+                    registry: Identifier::parse(mc_data::tags::ITEM_REGISTRY).unwrap(),
                     tags: vec![
                         UpdateTagsEntry {
                             tag: Identifier::parse("minecraft:enchantable/melee_weapon").unwrap(),
@@ -972,7 +972,7 @@ mod tests {
 
         let mut tags = Vec::new();
         tags.write_varint(1);
-        tags.write_identifier(&Identifier::parse("minecraft:item").unwrap())
+        tags.write_identifier(&Identifier::parse(mc_data::tags::ITEM_REGISTRY).unwrap())
             .unwrap();
         tags.write_varint(65_537);
         assert_eq!(
@@ -986,7 +986,7 @@ mod tests {
         let mut entries = Vec::new();
         entries.write_varint(1);
         entries
-            .write_identifier(&Identifier::parse("minecraft:item").unwrap())
+            .write_identifier(&Identifier::parse(mc_data::tags::ITEM_REGISTRY).unwrap())
             .unwrap();
         entries.write_varint(1);
         entries
@@ -1006,7 +1006,7 @@ mod tests {
     fn update_tags_rejects_infeasible_large_entry_count_before_allocation() {
         let mut body = Vec::new();
         body.write_varint(1);
-        body.write_identifier(&Identifier::parse("minecraft:item").unwrap())
+        body.write_identifier(&Identifier::parse(mc_data::tags::ITEM_REGISTRY).unwrap())
             .unwrap();
         body.write_varint(1);
         body.write_identifier(&Identifier::parse("minecraft:test").unwrap())

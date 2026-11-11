@@ -3820,6 +3820,20 @@ regression = ["cargo:mc-core:command_execution::tests::gamerule_suppresses_playe
 failing_first = "reported"
 
 [[bug]]
+id = "CIV-SEED24-CROSS-VILLAGE-TREE-SWEEP"
+title = "Lumberjack radius sweep wastes the workday walking past nearby trees, starving house funding and births."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa 20261107T213213: no house or birth. Checkpoint tick 32405 has 62 carried logs, target [153,76,-260] 85 blocks away, and an eligible tree at [148,75,-172] only 5.5 blocks away. Planner trace 32420-33200 remains unfunded; the 158-node path consumes the remaining shift before a single cut."
+failing_first = "reported"
+regression = [
+  "cargo:mc-core:villager::lumber_tests::lumberjack_searches_near_worker_before_cross_village_sweep",
+  "cargo:mc-core:villager::lumber_tests::lumberjack_restarts_nearby_search_after_harvest",
+]
+
+[[bug]]
 id = "TICK-FROZEN-GAME-AGE-WIRE"
 title = "SET_TIME advances client game age during tick freeze by sending the WAL frame counter"
 area = "gameplay"
@@ -4026,4 +4040,15 @@ severity = "major"
 status = "open"
 source = "SeatAttachmentQA reproduced the visible defect in two fresh two-client scenes on native 4f96c55b and Core5e, with actual SetPassengers receipts and mounted, movement and dismount frames. The shared first-passenger attachment agrees with the local reference source. The authored adult camel back was 0.625 blocks below the standing seat anchor; camel and camel_husk had the same low geometry. Fixed in the unintegrated client branch only: the authored camel, camel husk and saddle rigs now reach the two-block seat, and the adult sitting depth matches the sitting seat. The seat rule and core body are unchanged. Regression camel_back_and_saddle_carry_the_received_standing_and_sitting_seat fails on the old geometry. The unchanged two-client probe on native e5fd1c08 and Core5e showed the rider seated on the back in 2/2 fresh scenes. Evidence: receipts/SeatAttachmentQA/report.yaml, receipts/ClientSeatAttachment/camel-owner-diagnosis.json and receipts/ClientCamelGeometry/verification.json. Sitting is not constructible on core. No matched vanilla frame, independent QA, integration or promotion."
 regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CIV-ADOPTED-CLOSURE-ROOT-TICK-COST"
+title = "Adopted-village root-tick closure takes hours in villager decisions before proving stock and construction"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Initial CivSimLanding base 6b594d8f plus imported CivSim5: native-root closure was stopped after 6022.693 seconds without completing. Bounded 120-second reproduction advanced to tick 824 with only wool observed; root commit consumed 120255822 us of 121 seconds. A second bounded diagnostic reached tick 689 in 122.506 seconds: villager brain consumed 113735258 us, while its instrumented decision subphases totalled only 0.064 seconds. Residents and mining progress advanced, so this was pathological per-tick decision cost, not evidence of an infinite loop or unreachable construction. Later owner counters and perf identified construction-funding catalog/result scans, repeated slot counting and structure-ledger decoding/copying. On fd2391be plus the landing, the unchanged native-root oracle passed at tick 73017 in 108.39148085 seconds, retaining all original four-source, Storage, House, natural-worksite, Builder and published-block assertions and the fail-closed 120-second guard. Separate fix-only controls failed: recipe lookup 11502 ticks/120.002 s, dependency admission 60301/120.084 s, and memo misses 66001/120.026 s. Arc-identity, count-rollback and WAL-invalidation controls also fail their exact regressions. Receipts: receipts/CivSimLanding/adopted-dependency-admission-command.json, adopted-dependency-admission-counters.log, negative-recipe-lookup.json, negative-dependency-admission.json, negative-funding-memo.json, negative-identity-wal.json and negative-slot-totals.json. After the canonical item-registry-key cutover, the final-source harness passed at tick 73017 in 115.442156618 seconds: .analysis/validation/20261111T115103-test-7i5_rlka/result.json (status passed; compile-plus-test duration 308.3 seconds), copied to receipts/CivSimLanding/final-adopted-root-result.json. Fixture proof only; promotion and real-client acceptance remain separate."
+regression = ["cargo:mc-core:villager::building_autonomy_tests::adopted_village_with_resident_shears_produces_stock_and_builds", "cargo:mc-core:settlements::construction_crafting::tests::funding_reuses_loaded_index_without_resolving_recipe_results", "cargo:mc-core:settlements::construction_crafting::tests::unavailable_recipe_dependencies_reject_without_changing_the_canonical_answer", "cargo:mc-core:settlements::construction_crafting::tests::slot_totals_preserve_saturation_unknown_ids_and_nested_rollback", "cargo:mc-core:settlements::construction_crafting::tests::funding_memo_matches_every_input_class_by_value_and_retains_index_identity", "cargo:mc-core:plugin_structures::tests::decoded_structure_ledger_is_derived_from_checkpoint_and_wal_bytes"]
 failing_first = "reported"

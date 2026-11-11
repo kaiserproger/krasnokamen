@@ -342,7 +342,8 @@ fn convert_crafting_recipes(
             }
             _ => Vec::new(),
         };
-        let item_registry = Identifier::parse("minecraft:item").expect("static registry id");
+        let item_registry =
+            Identifier::parse(mc_data::tags::ITEM_REGISTRY).expect("static registry id");
         for alternative in ingredients
             .iter()
             .flat_map(|ingredient| &ingredient.alternatives)
@@ -443,7 +444,8 @@ fn convert_recipe_definitions(
 ) -> Result<Vec<mc_data::recipes::work::WorkRecipe>, ContributionRefusal> {
     let items = &*REQUIRED_ITEMS;
     let tags = &*REQUIRED_ITEM_TAGS;
-    let item_registry = Identifier::parse("minecraft:item").expect("static registry id");
+    let item_registry =
+        Identifier::parse(mc_data::tags::ITEM_REGISTRY).expect("static registry id");
     let mut recipes = Vec::with_capacity(definitions.len());
     let mut ids = std::collections::BTreeSet::new();
     for definition in definitions {

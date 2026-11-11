@@ -437,6 +437,9 @@ pub struct VillagerState {
     /// Earliest tick for another breeding-ration and spare-bed search.
     #[serde(skip)]
     pub(crate) ration_at: u64,
+    /// Storage destination selected by ration provisioning, never a worker haul.
+    #[serde(skip)]
+    pub(crate) ration_target: Option<BlockPos>,
     /// Resumable certified-farm sweep and selected crop, owned by the tick.
     #[serde(skip)]
     pub(crate) harvest_progress: harvest::Progress,
@@ -509,6 +512,7 @@ impl Default for VillagerState {
             harvest_at: 0,
             shepherd_at: 0,
             ration_at: 0,
+            ration_target: None,
             harvest_progress: harvest::Progress::default(),
             poi_validation: crate::settlements::allocator::PoiValidation::default(),
             trade_work: None,

@@ -63,7 +63,7 @@ pub fn source(
         for (i, stack) in input.iter().enumerate().filter(|(_, s)| !s.is_empty()) {
             if i != index
                 && !tags.contains_raw_id(
-                    "minecraft:item",
+                    crate::tags::ITEM_REGISTRY,
                     "minecraft:book_cloning_target",
                     i32::try_from(stack.item_id).ok()?,
                 )

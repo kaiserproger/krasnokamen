@@ -478,6 +478,15 @@ not proven by static validation.
   finished` event under the remaining scenario deadline, not the 120-second MCP
   request cap. Slow simulation is recorded in sprint TPS and `MC_CORE_PHASE_LOG`
   phase timings; neither elapsed time nor a missing completion is success.
+  Its isolated fixture uses simulation distance 6 while keeping view distance 4:
+  the village's mine must remain active beyond the presentation window. Other
+  autonomy profiles and the global playable configuration stay unchanged.
+  House milestone capture uses the received entrance door, approaches and uses
+  it ordinarily when closed, and awaits both open halves before the existing
+  exact-bed capture. It returns to the original observer afterward. A found
+  path, bed row or exterior-wall screenshot does not replace the exact bed
+  raycast and rendered capture; saved-world route proofs are not fresh-seed
+  civilization acceptance.
 - Full workflows for graphical failures: [real-client gates](development/real-client-gates.md)
   and [live-gate triage](development/live-gate-triage.md).
 

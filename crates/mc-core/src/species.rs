@@ -233,7 +233,8 @@ pub(crate) fn apply_food_tags(
     tags: &mc_data::tags::TagsData,
     blueprints: &mut [(u32, MobBlueprint)],
 ) {
-    let registry = mc_data::Identifier::parse("minecraft:item").expect("canonical registry");
+    let registry =
+        mc_data::Identifier::parse(mc_data::tags::ITEM_REGISTRY).expect("canonical registry");
     let Some(item_tags) = tags.registries.get(&registry) else {
         return;
     };

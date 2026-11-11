@@ -132,6 +132,71 @@ def completed_project(building: dict[str, Any], baseline_buildings: set[int],
                  and village._blueprint_placements(building, blueprints[p["blueprint"]], p["origin"])), None)
 
 
+def entity_census(probe: ProbeSteps, entity_type: str | None = None) -> dict[str, Any]:
+    """Read every page, without shrinking the 128-block received-entity census."""
+    arguments: dict[str, Any] = {"radius": 128, "limit": 16, "cursor": ""}
+    if entity_type is not None:
+        arguments["entity_type"] = entity_type
+    rows: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    total: int | None = None
+    while True:
+        page = probe.call("minecraft_list_entities", dict(arguments))
+        if total is None:
+            total = page["visible_count"]
+        elif page["visible_count"] != total:
+            raise RuntimeError("entity census membership changed during pagination")
+        for entity in page["entities"]:
+            identity = entity["entity_id"]
+            if identity in seen or (entity_type is not None and entity["entity_type"] != entity_type):
+                raise RuntimeError("entity census returned a duplicate identity or wrong type")
+            seen.add(identity)
+            rows.append(entity)
+        cursor = page.get("next_cursor")
+        if cursor is None:
+            if page["truncated"] or len(rows) != page["visible_count"]:
+                raise RuntimeError("entity census is incomplete or changed during pagination")
+            return {**page, "entities": rows, "census_pages_complete": True}
+        if (not page["truncated"] or not page["entities"] or
+                (arguments["cursor"] and int(cursor) <= int(arguments["cursor"]))):
+            raise RuntimeError("entity census cursor did not advance")
+        arguments["cursor"] = cursor
+
+
+def capture_house(probe: ProbeSteps, artifact: Path, label: str,
+                  target: tuple[float, float, float],
+                  blocks: list[dict[str, Any]]) -> dict[str, Any]:
+    """Open the received entrance, prove the exact bed, then return outside."""
+    door = next((block for block in blocks
+                 if str(block.get("block_id", "")).endswith("_door")
+                 and block.get("properties", {}).get("half") == "lower"), None)
+    if door is None:
+        raise RuntimeError("house capture has no received entrance door")
+    probe.call("minecraft_close_screen", {})
+    initial = probe.observe()["player"]
+    position = {axis: door[axis] for axis in ("x", "y", "z")}
+    probe.call("minecraft_navigate_to_block", {**position, "timeout_seconds": 120.0})
+    current = probe.call("minecraft_read_block", position)
+    if current.get("block_id") != door["block_id"]:
+        raise RuntimeError("house entrance changed before ordinary use")
+    if current.get("properties", {}).get("open") != "true":
+        face = {"north": "south", "south": "north",
+                "east": "west", "west": "east"}[current["properties"]["facing"]]
+        probe.call("minecraft_look_at_block", {**position, "face": face})
+        probe.call("minecraft_use_item_on", {**position, "face": face, "hand": "main_hand"})
+    for offset, half in ((0, "lower"), (1, "upper")):
+        probe.call("minecraft_wait_for_block_state", {
+            **position, "y": position["y"] + offset, "block_id": door["block_id"],
+            "properties": {"half": half, "open": "true"}, "timeout_seconds": 10.0,
+        })
+    shot = capture_target(probe, artifact, label, target)
+    probe.call("minecraft_navigate_to_block", {
+        "x": math.floor(initial["x"]), "y": math.floor(initial["y"]),
+        "z": math.floor(initial["z"]), "timeout_seconds": 120.0,
+    })
+    return shot
+
+
 def capture_target(probe: ProbeSteps, artifact: Path, label: str,
                    target: tuple[float, float, float], *,
                    entity: dict[str, Any] | None = None,
@@ -140,15 +205,38 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
     initial = probe.observe()["player"]
     if entity:
         probe.call("minecraft_approach_entity", {"entity_id": entity["entity_id"], "timeout_seconds": 120.0})
-        seen = probe.call("minecraft_list_entities", {"radius": 128, "limit": 512})
+        seen = entity_census(probe, "minecraft:villager")
         current = next((e for e in seen.get("entities", [])
                         if e.get("entity_uuid") == entity["entity_uuid"]), None)
         if current is None or current.get("received_baby") is not True:
             raise RuntimeError("baby no longer visible for milestone capture")
         target = (current["x"], current["y"] + 0.5, current["z"])
     else:
+        destination = [math.floor(value) for value in target]
+        if building:
+            low, high = building["min"], building["max"]
+            faces = ((low[0] - 1, low[0] - 1, low[2], high[2]),
+                     (high[0] + 1, high[0] + 1, low[2], high[2]),
+                     (low[0], high[0], low[2] - 1, low[2] - 1),
+                     (low[0], high[0], high[2] + 1, high[2] + 1))
+            blocks = []
+            for min_x, max_x, min_z, max_z in faces:
+                bounds = {"min_x": min_x, "max_x": max_x,
+                          "min_y": low[1] - 2, "max_y": high[1] + 2,
+                          "min_z": min_z, "max_z": max_z, "max_blocks": 4096}
+                offset = 0
+                while True:
+                    scan = probe.call("minecraft_scan_blocks", {**bounds, "offset": offset})
+                    blocks.extend(scan.get("blocks", []))
+                    if not scan.get("truncated"):
+                        break
+                    following = scan.get("next_offset")
+                    if not isinstance(following, int) or following <= offset:
+                        raise RuntimeError("observer perimeter scan pagination did not advance")
+                    offset = following
+            destination = building_observer_stand(blocks, building, target[1], initial)
         probe.call("minecraft_navigate_to_block", {
-            "x": math.floor(target[0]), "y": math.floor(target[1]), "z": math.floor(target[2]),
+            "x": destination[0], "y": destination[1], "z": destination[2],
             "timeout_seconds": 120.0,
         })
     player = probe.observe()["player"]
@@ -278,7 +366,7 @@ def building_blocks(probe: ProbeSteps, lines: list[str]) -> list[dict[str, Any]]
             "max_x": hi[0], "max_y": hi[1], "max_z": hi[2],
         })
         relevant = [block for block in scan.get("blocks", [])
-                    if str(block.get("block_id", "")).endswith(("_bed", ":furnace", ":blast_furnace"))]
+                    if str(block.get("block_id", "")).endswith(("_bed", "_door", ":furnace", ":blast_furnace"))]
         evidence.append({"building": building, "blocks": relevant, "truncated": scan.get("truncated", False)})
     return evidence
 
@@ -330,6 +418,32 @@ def standable_height(blocks: list[dict[str, Any]], player_y: float) -> int | Non
     return min(heights, key=lambda h: abs(h - player_y)) if heights else None
 
 
+def building_observer_stand(blocks: list[dict[str, Any]], building: dict[str, Any],
+                            target_y: float, player: dict[str, Any]) -> tuple[int, int, int]:
+    """Choose one received exterior standpoint, not a route through a sealed room."""
+    low, high = building["min"], building["max"]
+    columns: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    for block in blocks:
+        columns.setdefault((block["x"], block["z"]), []).append(block)
+    best = None
+    for (x, z), column in columns.items():
+        on_face = ((x in (low[0] - 1, high[0] + 1) and low[2] <= z <= high[2])
+                   or (z in (low[2] - 1, high[2] + 1) and low[0] <= x <= high[0]))
+        if not on_face:
+            continue
+        height = standable_height(column, target_y)
+        if height is None or not low[1] <= height + 1.62 <= high[1] + 1:
+            continue
+        distance = ((x + 0.5 - player["x"]) ** 2 + (height - player["y"]) ** 2
+                    + (z + 0.5 - player["z"]) ** 2)
+        rank = (distance, x, height, z)
+        if best is None or rank < best:
+            best = rank
+    if best is None:
+        raise RuntimeError("building capture has no received supported standing cell")
+    return best[1:]
+
+
 def walk_to_village(probe: ProbeSteps, detail: dict[str, Any]) -> dict[str, Any]:
     """Walk bounded, terrain-sampled local waypoints; retain every refused route."""
     target = village.VILLAGE_CENTER
@@ -377,8 +491,8 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
              server_log: Path, read_container: Callable[[tuple[int, int, int]], dict[str, int]]) -> None:
     spawn = probe.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
     detail["player_spawn"] = {key: spawn["player"].get(key) for key in ("x", "y", "z")}
-    detail["spawn_entities"] = probe.call("minecraft_list_entities", {"radius": 128, "limit": 512})
-    detail["census_coverage"] = "At most 512 client-visible entities within 128 blocks; membership counts come from settlement info."
+    detail["spawn_entities"] = entity_census(probe)
+    detail["census_coverage"] = "Every received client-visible entity within 128 blocks, paged in groups of 16 without an aggregate limit; membership counts also come from settlement info."
     arrived = walk_to_village(probe, detail)
     detail["player_after_walk"] = {key: arrived["player"].get(key) for key in ("x", "y", "z")}
     detail["spawn_to_target_horizontal_blocks"] = math.dist(
@@ -427,7 +541,7 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
     probe.report["fixture_commands"].append("console: " + command)
     item_merge._console(server, command)
     detail["observer_mode"] = "creative after claim and founding transfer; player survival is not tested"
-    entities = probe.call("minecraft_list_entities", {"radius": 128, "limit": 512})
+    entities = entity_census(probe)
     detail["initial_entities"] = entities
     detail["initial_sheep_count"] = sum(
         1 for entity in entities.get("entities", [])
@@ -463,8 +577,8 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
         project = status.get("project")
         if project and project["blueprint"] in blueprints and project not in projects:
             projects.append(project)
-        entities = probe.call("minecraft_list_entities", {"radius": 128, "limit": 512})
-        ecology = village._probe_ecology(probe, detail, status["buildings_now"])
+        entities = entity_census(probe)
+        ecology = village._probe_ecology(probe, detail, status["buildings_now"], entities=entities)
         blocks = building_blocks(probe, status["buildings_now"])
         workstations = workstation_blocks(probe, chest)
         workstation_shots = []
@@ -537,7 +651,9 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                     target = tuple(bed[axis] + 0.5 for axis in ("x", "y", "z"))
                     detail["milestones"]["new_house"] = {
                         "sprint_ticks": advanced, "building": building, "project": project, "bed": bed,
-                        "screenshot": capture_target(probe, artifact, f"civilization-house-{advanced:06d}", target),
+                        "screenshot": capture_house(
+                            probe, artifact, f"civilization-house-{advanced:06d}",
+                            target, evidence.get("blocks", [])),
                     }
             elif "second_building" not in detail["milestones"]:
                 target = tuple((building["min"][i] + building["max"][i] + 1) / 2 for i in range(3))

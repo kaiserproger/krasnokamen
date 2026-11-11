@@ -172,7 +172,8 @@ impl FuelValues {
     }
 
     fn has_complete_fuel_tags(tags: &TagsData) -> bool {
-        let item_registry = Identifier::parse("minecraft:item").expect("static identifier");
+        let item_registry =
+            Identifier::parse(crate::tags::ITEM_REGISTRY).expect("static identifier");
         let Some(item_tags) = tags.registries.get(&item_registry) else {
             return false;
         };
@@ -220,7 +221,8 @@ impl<'a> Builder<'a> {
     }
 
     fn tag_members(&self, path: &str) -> BTreeSet<u32> {
-        let item_registry = Identifier::parse("minecraft:item").expect("static identifier");
+        let item_registry =
+            Identifier::parse(crate::tags::ITEM_REGISTRY).expect("static identifier");
         let tag =
             Identifier::parse(format!("minecraft:{path}")).expect("static fuel tag identifier");
         self.tags
@@ -287,8 +289,10 @@ mod tests {
                 (Identifier::parse(*tag).unwrap(), ids)
             })
             .collect();
-        let registries =
-            BTreeMap::from([(Identifier::parse("minecraft:item").unwrap(), item_tags)]);
+        let registries = BTreeMap::from([(
+            Identifier::parse(crate::tags::ITEM_REGISTRY).unwrap(),
+            item_tags,
+        )]);
         (items, TagsData::from_registries(registries))
     }
 
@@ -374,7 +378,7 @@ mod tests {
             })
             .collect();
         let tags = TagsData::from_registries(BTreeMap::from([(
-            Identifier::parse("minecraft:item").unwrap(),
+            Identifier::parse(crate::tags::ITEM_REGISTRY).unwrap(),
             item_tags,
         )]))
         .with_vanilla_fuel_values(&items);

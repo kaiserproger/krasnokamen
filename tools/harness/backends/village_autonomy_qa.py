@@ -628,6 +628,9 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
         ('directory = "plugins"', f"directory = {json.dumps(str(artifact / 'plugins'))}"),
         ("seed = 0", f"seed = {SEED}"),
     )
+    if civilization:
+        # The village's mine must tick beyond the four-chunk presentation window.
+        replacements += (("simulation_distance = 4", "simulation_distance = 6"),)
     for old_tok, new_tok in replacements:
         if source.count(old_tok) != 1:
             raise RuntimeError(f"expected one autonomy-qa config token: {old_tok}")
@@ -1501,7 +1504,8 @@ def _gametime(probe: ProbeSteps) -> int:
     return 0
 
 
-def _probe_ecology(probe: ProbeSteps, detail: dict[str, Any], building_lines: list[str]) -> dict[str, Any]:
+def _probe_ecology(probe: ProbeSteps, detail: dict[str, Any], building_lines: list[str], *,
+                   entities: dict[str, Any] | None = None) -> dict[str, Any]:
     """Client-visible ecology: farm crop maturity, sheep count, mine-zone presence."""
     import re as _re
     ecology: dict[str, Any] = {"farms": [], "sheep": None, "mine_zone": None, "lumber_zone": None}
@@ -1533,7 +1537,8 @@ def _probe_ecology(probe: ProbeSteps, detail: dict[str, Any], building_lines: li
                                      "farmland": len(farmland), "crop_blocks": len(crops),
                                      "mature": len(mature), "sample": crops[:6]})
     try:
-        entities = probe.call("minecraft_list_entities", {"radius": 128})
+        if entities is None:
+            entities = probe.call("minecraft_list_entities", {"radius": 128})
         rows = entities.get("entities", [])
         ecology["sheep"] = sum(1 for r in rows if isinstance(r, dict) and r.get("entity_type") == "minecraft:sheep")
         ecology["villagers"] = sum(1 for r in rows if isinstance(r, dict) and r.get("entity_type") == "minecraft:villager")

@@ -81,7 +81,7 @@ fn campfire_inputs(
     use mc_data::recipes::{IngredientAlternative, RecipeKind};
     let item_tags = tags
         .registries
-        .get(&Identifier::parse("minecraft:item").expect("static id"));
+        .get(&Identifier::parse(mc_data::tags::ITEM_REGISTRY).expect("static id"));
     let mut item_ids = Vec::new();
     for recipe in recipes {
         let RecipeKind::CampfireCooking(cooking) = &recipe.kind else {
@@ -422,7 +422,7 @@ mod tests {
         let chicken_id = items.id_of(&chicken).unwrap() as i32;
         let cod_id = items.id_of(&cod).unwrap() as i32;
         tags.registries
-            .entry(Identifier::parse("minecraft:item").unwrap())
+            .entry(Identifier::parse(mc_data::tags::ITEM_REGISTRY).unwrap())
             .or_default()
             .insert(tag.clone(), vec![chicken_id, cod_id, cod_id]);
         let mut recipe = recipes

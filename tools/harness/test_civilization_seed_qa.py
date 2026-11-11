@@ -9,6 +9,47 @@ from .backends import civilization_seed_qa as qa
 
 
 class CivilizationEvidenceTests(unittest.TestCase):
+    def test_entity_census_retains_all_pages_including_a_distant_newborn(self):
+        entities = [{"entity_id": index, "entity_uuid": str(index),
+                     "entity_type": "minecraft:villager", "received_baby": index == 599}
+                    for index in range(600)]
+        probe = Mock()
+        def page(name, arguments):
+            self.assertEqual(name, "minecraft_list_entities")
+            self.assertEqual((arguments["radius"], arguments["limit"]), (128, 16))
+            start = int(arguments["cursor"]) + 1 if arguments["cursor"] else 0
+            rows = entities[start:start + 16]
+            more = start + len(rows) < len(entities)
+            return {"entities": rows, "visible_count": len(entities),
+                    "truncated": more, "next_cursor": str(rows[-1]["entity_id"]) if more else None}
+        probe.call.side_effect = page
+        census = qa.entity_census(probe)
+        self.assertEqual(census["entities"], entities)
+        self.assertFalse(census["truncated"])
+        self.assertEqual(qa.newborn(census, {str(index) for index in range(599)}, True)["entity_id"], 599)
+
+    def test_entity_census_never_accepts_an_incomplete_or_repeated_page(self):
+        for pages in (
+            [{"entities": [], "visible_count": 1, "truncated": False, "next_cursor": None}],
+            [{"entities": [], "visible_count": 1, "truncated": True, "next_cursor": None}],
+            [{"entities": [{"entity_id": 1}], "visible_count": 2, "truncated": True, "next_cursor": "1"},
+             {"entities": [{"entity_id": 1}], "visible_count": 2, "truncated": False, "next_cursor": None}],
+            [{"entities": [{"entity_id": 1}], "visible_count": 3, "truncated": True, "next_cursor": "1"},
+             {"entities": [{"entity_id": 2}], "visible_count": 2, "truncated": False, "next_cursor": None}],
+        ):
+            with self.subTest(pages=pages):
+                probe = Mock()
+                probe.call.side_effect = pages
+                with self.assertRaises(RuntimeError):
+                    qa.entity_census(probe)
+
+    def test_ecology_reuses_the_complete_census(self):
+        probe = Mock()
+        census = {"entities": [{"entity_type": "minecraft:sheep"}, {"entity_type": "minecraft:villager"}]}
+        ecology = qa.village._probe_ecology(probe, {}, [], entities=census)
+        self.assertEqual((ecology["sheep"], ecology["villagers"]), (1, 1))
+        probe.call.assert_not_called()
+
     def test_verdict_requires_all_evidence_and_stall_wins(self):
         stages = {name: True for name in ("new_house", "births", "second_building", "iron_smelted")}
         self.assertTrue(qa.acceptance_verdict(stages, stalled=False)["all"])
@@ -101,6 +142,93 @@ class CivilizationEvidenceTests(unittest.TestCase):
         self.assertEqual(probe.call.call_args_list[2].args,
                          ("minecraft_look", {"yaw_deg": 0, "pitch_deg": 0}))
 
+    def test_house_capture_opens_both_halves_before_exact_bed_and_returns_outside(self):
+        for already_open in (False, True):
+            with self.subTest(already_open=already_open):
+                probe = Mock()
+                door = {"block_id": "minecraft:oak_door", "x": 4, "y": 65, "z": 6,
+                        "properties": {"half": "lower", "facing": "north",
+                                       "open": "true" if already_open else "false"}}
+                probe.observe.return_value = {"player": {"x": 1.5, "y": 64.0, "z": 2.5}}
+                probe.call.return_value = door
+                target = (5.5, 65.5, 7.5)
+                def capture(*args):
+                    self.assertEqual(args, (probe, "artifact", "house", target))
+                    waits = [call.args[1] for call in probe.call.call_args_list
+                             if call.args[0] == "minecraft_wait_for_block_state"]
+                    self.assertEqual(waits, [
+                        {"x": 4, "y": 65 + offset, "z": 6, "block_id": "minecraft:oak_door",
+                         "properties": {"half": half, "open": "true"}, "timeout_seconds": 10.0}
+                        for offset, half in ((0, "lower"), (1, "upper"))])
+                    return {"retained_path": "house.png"}
+                with patch.object(qa, "capture_target", side_effect=capture):
+                    shot = qa.capture_house(probe, "artifact", "house", target, [door])
+                self.assertEqual(shot["retained_path"], "house.png")
+                uses = [call.args for call in probe.call.call_args_list
+                        if call.args[0] == "minecraft_use_item_on"]
+                self.assertEqual(uses, [] if already_open else [
+                    ("minecraft_use_item_on", {"x": 4, "y": 65, "z": 6,
+                                              "face": "south", "hand": "main_hand"})])
+                self.assertEqual(probe.call.call_args_list[-1].args, (
+                    "minecraft_navigate_to_block", {"x": 1, "y": 64, "z": 2, "timeout_seconds": 120.0}))
+
+    def test_house_capture_refuses_missing_or_changed_entrance_before_capture(self):
+        probe = Mock()
+        probe.observe.return_value = {"player": {"x": 1.5, "y": 64.0, "z": 2.5}}
+        door = {"block_id": "minecraft:oak_door", "x": 4, "y": 65, "z": 6,
+                "properties": {"half": "lower"}}
+        probe.call.return_value = {"block_id": "minecraft:air"}
+        with patch.object(qa, "capture_target") as capture:
+            with self.assertRaisesRegex(RuntimeError, "no received entrance door"):
+                qa.capture_house(probe, "artifact", "house", (5.5, 65.5, 7.5), [])
+            with self.assertRaisesRegex(RuntimeError, "entrance changed"):
+                qa.capture_house(probe, "artifact", "house", (5.5, 65.5, 7.5), [door])
+        capture.assert_not_called()
+
+    def test_building_capture_uses_supported_exterior_not_sealed_volume_midpoint(self):
+        building = {"id": 4294967302, "kind": "builder",
+                    "min": [148, 75, -262], "max": [152, 78, -256]}
+        # Received column from the failed seed-24 Builder capture: y77 has
+        # air below it; y76 has the cobblestone floor and two clear cells.
+        column = [{"x": 150, "y": y, "z": -259, "block_id": block,
+                   "collision_empty": empty, "fluid": {"empty": True}}
+                  for y, block, empty in (
+                      (75, "minecraft:cobblestone", False),
+                      (76, "minecraft:air", True),
+                      (77, "minecraft:air", True),
+                      (78, "minecraft:birch_slab", False))]
+        # An exterior supported column is an observer-fixture input, not a
+        # claim that the recorded interior is reachable through its closed door.
+        exterior = [{**block, "z": -255} for block in column]
+        blocks = column + exterior
+        class NavigationRequested(Exception):
+            pass
+        probe = Mock()
+        probe.observe.return_value = {"player": {"x": 131.9, "y": 76.9375, "z": -215.5}}
+        def call(name, arguments):
+            if name == "minecraft_scan_blocks":
+                return {"blocks": blocks, "truncated": False}
+            if name == "minecraft_navigate_to_block":
+                raise NavigationRequested(arguments)
+            return {}
+        probe.call.side_effect = call
+        with self.assertRaises(NavigationRequested) as navigation:
+            qa.capture_target(probe, "artifact", "builder", (150.5, 77.0, -258.5), building=building)
+        self.assertEqual(navigation.exception.args[0],
+                         {"x": 150, "y": 76, "z": -255, "timeout_seconds": 120.0})
+
+    def test_building_capture_refuses_a_column_without_supported_standing_space(self):
+        probe = Mock()
+        probe.observe.return_value = {"player": {"x": 131.9, "y": 76.9375, "z": -215.5}}
+        probe.call.return_value = {"blocks": [
+            {"x": 150, "y": y, "z": -255, "collision_empty": True, "fluid": {"empty": True}}
+            for y in range(74, 81)], "truncated": False}
+        with self.assertRaisesRegex(RuntimeError, "supported standing"):
+            qa.capture_target(probe, "artifact", "builder", (150.5, 77.0, -258.5),
+                              building={"min": [148, 75, -262], "max": [152, 78, -256]})
+        self.assertNotIn("minecraft_navigate_to_block",
+                         [call.args[0] for call in probe.call.call_args_list])
+
     def test_occluded_stage_target_never_produces_screenshot(self):
         probe = Mock()
         probe.observe.return_value = {"player": {"x": 0, "y": 64, "z": 0},
@@ -112,15 +240,19 @@ class CivilizationEvidenceTests(unittest.TestCase):
 
     def test_baby_capture_checks_identity_after_approach(self):
         probe = Mock()
-        baby = {"entity_id": 17, "entity_uuid": "new", "received_baby": True,
-                "x": 0, "y": 65.12, "z": 4}
-        probe.call.side_effect = lambda name, args=None: {"entities": [baby]} if name == "minecraft_list_entities" else {}
+        baby = {"entity_id": 17, "entity_uuid": "new", "entity_type": "minecraft:villager",
+                "received_baby": True, "x": 0, "y": 65.12, "z": 4}
+        probe.call.side_effect = lambda name, args=None: {
+            "entities": [baby], "visible_count": 1, "truncated": False, "next_cursor": None
+        } if name == "minecraft_list_entities" else {}
         probe.observe.return_value = {"player": {"x": 0, "y": 64, "z": 0},
                                       "target": {"type": "entity", "entity_uuid": "new"}}
         with patch.object(qa.native_client, "capture", return_value={"retained_path": "baby.png"}):
             result = qa.capture_target(probe, "artifact", "baby", (0, 65.62, 4), entity=baby)
         self.assertEqual(result["observed_target"]["entity_uuid"], "new")
         probe.call.assert_any_call("minecraft_approach_entity", {"entity_id": 17, "timeout_seconds": 120.0})
+        probe.call.assert_any_call("minecraft_list_entities", {
+            "radius": 128, "limit": 16, "cursor": "", "entity_type": "minecraft:villager"})
         probe.observe.return_value["target"]["entity_uuid"] = "other"
         with patch.object(qa.native_client, "capture") as capture:
             with self.assertRaisesRegex(RuntimeError, "occluded or out of reach"):
@@ -142,7 +274,9 @@ class CivilizationEvidenceTests(unittest.TestCase):
         with patch("tools.harness.backends.probe_steps.time.monotonic", return_value=100.0):
             probe = qa.ProbeSteps(Mock(), None, 7200.0, "sprint")
         probe.wait = Mock(return_value=player)
-        probe.call = Mock(return_value={})
+        probe.call = Mock(return_value={
+            "entities": [], "visible_count": 0, "truncated": False, "next_cursor": None,
+        })
 
         def planner(probe, detail, chest, read_container, capture):
             capture()
@@ -261,6 +395,7 @@ class CivilizationEvidenceTests(unittest.TestCase):
                 census += 1
                 if census == 2:
                     raise RuntimeError("observation begins")
+                return {"entities": [], "visible_count": 0, "truncated": False, "next_cursor": None}
             return {}
 
         probe.call.side_effect = call

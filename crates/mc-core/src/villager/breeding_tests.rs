@@ -141,6 +141,97 @@ fn bound_workers_breed_from_real_bootstrap_chest_food() {
     );
 }
 
+/// The seed-24 builder could see the new house's bed near its site, but not
+/// from the founding chest. Rechecking the local bed scan on arrival turned
+/// the ration trip back into work before any bread could enter carry.
+#[test]
+fn ration_trip_completes_when_storage_is_beyond_the_spare_bed_scan() {
+    let mut state = test_state();
+    let chunks = (0..5)
+        .map(|x| (crate::boundary::ChunkPos { x, z: 0 }, 0))
+        .collect();
+    state.world.ensure_blocking(&chunks);
+    for x in 0..5 {
+        state.tickets.insert(
+            format!("ration-trip-{x}"),
+            (crate::boundary::ChunkPos { x, z: 0 }, 0),
+        );
+    }
+    state.refresh_active_chunks(0);
+    for x in 0..80 {
+        for z in 0..16 {
+            state
+                .world
+                .set_block(x, 200, z, state.registry.states.stone);
+            for y in 201..206 {
+                state.world.set_block(x, y, z, state.registry.states.air);
+            }
+        }
+    }
+    let home = bed(&mut state, 44, 3);
+    let spare = bed(&mut state, 70, 3);
+    let settlement = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "ration-trip".into(),
+            "owner".into(),
+            [40, 201, 8],
+            96,
+        )
+        .unwrap();
+    let chest = block(&state, "minecraft:chest", &[]);
+    let bread = item(&state, "minecraft:bread");
+    let logs = item(&state, "minecraft:birch_log");
+    state.world.set_block(8, 201, 8, chest);
+    let mut slots = vec![ItemStack::EMPTY; 27];
+    slots[0] = ItemStack::new(bread, 6);
+    state.block_entities.insert(
+        (8, 201, 8),
+        crate::tick::BlockEntityState {
+            slots,
+            furnace: None,
+        },
+    );
+    state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .bootstrap_storage = Some([8, 201, 8]);
+    let slot = villager(&mut state, [40.5, 201.0, 8.5]);
+    let entity = state.entities.body(slot).id;
+    crate::settlements::bind(&mut state, settlement, entity).unwrap();
+    let resident = state.entities.row_mut(slot).villager.as_mut().unwrap();
+    resident.home = Some(home);
+    resident.inventory[0] = Some(ItemStack::new(logs, 32));
+    state.day_time = 3000;
+    state.world.fold_overlay();
+    for _ in 0..1_200 {
+        step(&mut state);
+        if food_count(&state, slot, bread) == 3 {
+            assert!(distance(state.entities.pos(slot), centre(spare)) > 48.0 * 48.0);
+            assert_eq!(state.block_entities[&(8, 201, 8)].slots[0].count, 3);
+            assert_eq!(food_count(&state, slot, logs), 32);
+            assert!(
+                state
+                    .entities
+                    .row(slot)
+                    .villager
+                    .as_ref()
+                    .unwrap()
+                    .ration_target
+                    .is_none()
+            );
+            return;
+        }
+    }
+    panic!(
+        "admitted ration trip never withdrew real bread: pos={:?}, resident={:?}",
+        state.entities.pos(slot),
+        state.entities.row(slot).villager
+    );
+}
+
 #[test]
 fn bound_village_uses_reachable_food_when_nearest_chest_is_blocked() {
     let (mut state, parents, bread) = stored_food_village(3);

@@ -261,7 +261,7 @@ fn is_sword(rules: &ItemRules<'_>, held: &ItemStack) -> bool {
         && i32::try_from(held.item_id).is_ok_and(|raw| {
             rules
                 .tags
-                .contains_raw_id("minecraft:item", "minecraft:swords", raw)
+                .contains_raw_id(mc_data::tags::ITEM_REGISTRY, "minecraft:swords", raw)
         })
 }
 
