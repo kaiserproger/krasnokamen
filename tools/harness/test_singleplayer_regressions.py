@@ -1,6 +1,8 @@
 """Focused checks for singleplayer regression registration and event setup."""
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -122,6 +124,24 @@ class SingleplayerRegressionTests(unittest.TestCase):
             with patch.object(sp.runtime, "wait_for_path_condition", appeared):
                 sp._wait_path(database, 30)
             self.assertEqual(seen, [world, world / "native", database])
+
+    def test_owned_server_is_matched_by_binary_not_by_file_name(self):
+        # The ledger tooling hard-links the server it built as `solaris-v2-<sha256>`.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            server = root / "solaris-v2-0123abcd"
+            other = root / "unrelated-binary"
+            shutil.copy2("/usr/bin/sleep", server)
+            shutil.copy2("/usr/bin/sleep", other)
+            owner = SimpleNamespace(pid=os.getpid())
+            child = subprocess.Popen([str(server), "30"])
+            try:
+                self.assertEqual(sp._server_child(owner, server.resolve()), child.pid)
+                with self.assertRaisesRegex(RuntimeError, "expected one owned singleplayer server"):
+                    sp._server_child(owner, other.resolve())
+            finally:
+                child.kill()
+                child.wait()
 
 
 if __name__ == "__main__":
