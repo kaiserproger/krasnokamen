@@ -4234,3 +4234,14 @@ source = "BreakIssue1x11 break-it pass on ISSUE-1-11, finding F4 (receipts/Break
 regression = ["cargo:mc-core:settlements::allocator::claim_tests::bound_resident_leaves_an_open_air_bed_to_a_villager_that_sleeps_in_it", "cargo:mc-core:settlements::allocator::claim_tests::breeding_spare_bed_of_a_resident_is_never_an_open_air_bed", "cargo:mc-core:settlements::allocator::claim_tests::removing_the_roof_releases_a_residents_bed", "cargo:mc-core:settlements::allocator::claim_tests::open_air_claim_recorded_before_the_rule_is_released_on_load", "cargo:mc-core:villager::brain::tests::breeding_tests::open_air_only_settlement_gives_residents_no_home_rations_or_births"]
 failing_first = "reported"
 fix_commit = "patch:493fa248dcd5e68c3e20fcf70bf81a055f92fabdfb2c0c8e981f2ec254d6be5a"
+
+[[bug]]
+id = "CIV-ADOPTED-CLOSURE-SLOW-ON-MAIN"
+title = "On main the adopted-village closure test adopted_village_with_resident_shears_produces_stock_and_builds does not finish in 10 minutes (killed at 40 minutes in a full lib run); its per-tick cost fix exists only on unmerged wt/CivSimLanding"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "VillageBreakFixes slice 3 (receipts/VillageBreakFixes/results.md 'Slice 3'): the debug test binary built at main 5b4006df runs the test past a 600 s deadline (hang/base-trace.log, exit 124); the same test at 263c7c9c was killed at Main's 40-minute deadline (adopted-village-263c7c9c.log). Traced side by side (hang/base-trace-3.log, hang/head-trace.log, same trace patch), both trees reach tick 4020 after 945 s and 948 s in an identical state: all four stock items seen, LumberCamp, Mine and farmer workshop certified, no Storage, no House, no bed anywhere, no resident home. So 400000 ticks take hours on main; it is not a loop. The fixture village has no beds until its first House is built, so the settlement roof-bed rule is not reached before that point. Same cause as CIV-ADOPTED-CLOSURE-ROOT-TICK-COST on wt/CivSimLanding (pathological construction-funding cost in villager decisions; that branch passes the test in about 115 s and carries the fix and its regression); merge that row into this one, or drop this row, when CivSimLanding lands."
+regression = ["cargo:mc-core:villager::building_autonomy_tests::adopted_village_with_resident_shears_produces_stock_and_builds"]
+failing_first = "receipts/VillageBreakFixes/hang/base-trace.log: tree 5b4006df, debug test binary run alone, exit 124 at 600 s"
