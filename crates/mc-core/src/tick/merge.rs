@@ -569,6 +569,7 @@ impl TickState {
             intent.kind,
             IntentKind::PlaceBlock { .. }
                 | IntentKind::FeedAnimal { .. }
+                | IntentKind::DolphinFeed { .. }
                 | IntentKind::Bucket { .. }
                 | IntentKind::Cultivate { .. }
                 | IntentKind::ComposterFill { .. }

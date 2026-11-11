@@ -362,3 +362,66 @@ fn fix_mobs_turtle_spawner_uses_sand_and_sea_level_not_grass() {
             .set_block(x, y - 1, z, state.registry.states.air);
     }
 }
+
+fn place_default_spawner(state: &mut TickState, key: Key) -> BlockPos {
+    let id = state
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:spawner").unwrap())
+        .unwrap()
+        .default
+        .0;
+    let pos = BlockPos {
+        x: key.0,
+        y: key.1,
+        z: key.2,
+    };
+    state.world.set_block(key.0, key.1, key.2, id);
+    crate::block_entity_defaults::after_blocks(state, &[(pos, id)]);
+    state.world.fold_overlay();
+    pos
+}
+
+#[test]
+fn fix_mobs_placed_spawner_default_record_does_not_poison_chunk_hydration() {
+    // SPAWN-SPAWNER-EGG: a client- or command-placed spawner persists the default
+    // {id,x,y,z} record without SpawnData; rehydrating its chunk must not fail
+    // ("SpawnData missing" made the chunk unavailable and dropped the egg use).
+    let (mut state, _, key) = fixture("silverfish");
+    let key = (key.0 + 2, key.1, key.2 + 2);
+    let pos = place_default_spawner(&mut state, key);
+    let chunk_pos = ChunkPos {
+        x: key.0.div_euclid(16),
+        z: key.2.div_euclid(16),
+    };
+    let chunk = state.world.chunk(chunk_pos).unwrap();
+    assert!(chunk.block_entities.contains_key(&pos), "default record");
+    let decoded = decode_chunk(&state.registry, chunk).expect("chunk hydrates");
+    assert!(
+        !decoded.contains_key(&key),
+        "unconfigured spawner stays inert"
+    );
+    assert_eq!(decoded.len(), 1, "the configured fixture spawner still loads");
+}
+
+#[test]
+fn fix_mobs_spawner_with_malformed_spawn_data_still_rejects_chunk() {
+    let (mut state, _, key) = fixture("silverfish");
+    let pos = BlockPos {
+        x: key.0,
+        y: key.1,
+        z: key.2,
+    };
+    let bytes = nbt::encode(
+        vec![("SpawnData".into(), Tag::Compound(vec![]))],
+        "minecraft:mob_spawner",
+        [key.0, key.1, key.2],
+    );
+    state.world.set_opaque_block_entity(pos, Some(bytes));
+    state.world.fold_overlay();
+    let chunk_pos = ChunkPos {
+        x: key.0.div_euclid(16),
+        z: key.2.div_euclid(16),
+    };
+    assert!(decode_chunk(&state.registry, state.world.chunk(chunk_pos).unwrap()).is_err());
+}

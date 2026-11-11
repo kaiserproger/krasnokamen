@@ -1,0 +1,52 @@
+{
+  "id": "AXOLOTL-PLAY-DEAD",
+  "verdict": "promoted",
+  "fix_commit": "patch:5619e71a98ca75c4e0f8287a79cd9cedc7827c9a3668f0e5eb6cba233159b155",
+  "fix_commit_full": "patch:5619e71a98ca75c4e0f8287a79cd9cedc7827c9a3668f0e5eb6cba233159b155",
+  "promoted_at": "2026-11-11T22:29:42+00:00",
+  "tree_head": "0ea7a8f4e3d9e840e92332e34f9f4f9469b6472f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "5619e71a98ca75c4e0f8287a79cd9cedc7827c9a3668f0e5eb6cba233159b155",
+  "reversed_files": [
+    "crates/mc-core/src/tick/damage.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:mob_lanes::tests::playing_dead_axolotl_releases_attackers_and_wakes_after_200_active_ticks": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:mob_lanes::tests::hurt_axolotl_in_water_plays_dead_and_regenerates": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-axolotl-play-dead": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-axolotl-play-dead --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/A1MobsCommandsGate/.analysis/validation/20261111T220928-ledger-promote-6s6z_v20/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:mob_lanes::tests::playing_dead_axolotl_releases_attackers_and_wakes_after_200_active_ticks": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:mob_lanes::tests::hurt_axolotl_in_water_plays_dead_and_regenerates": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/A1MobsCommandsGate/.analysis/validation/20261111T210218-native-v2-axolotl-play-dead-lj4tloyu/result.json",
+    "tree_head": "0ea7a8f4e3d9e840e92332e34f9f4f9469b6472f",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "4b5069bc16e9099f1a5378bf96f8a096aedfcfac27cc2cb4d4ac5ea498ac7f45",
+    "covers": [
+      "harness:entities:native-v2-axolotl-play-dead"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/A1MobsCommandsGate/.analysis/validation/20261111T220928-ledger-promote-6s6z_v20"
+}

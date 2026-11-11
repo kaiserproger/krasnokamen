@@ -917,7 +917,7 @@ regression = ["cargo:mc-core:falling::tests::restored_due_gravity_tick_starts_th
 
 [[bug]]
 id = "GOLEM-GOSSIP"
-title = "Five eligible recently slept gossiping villagers cannot summon; owner only admits Panic route."
+title = "Five eligible recently slept gossiping villagers cannot summon; owner only admits Panic route. Graphical gate native-v2-golem-gossip is blocked until branch wt/LedgerCommandsB10 (row DATA-MUTATION-STORAGE, commits 32069cbb and 0900f85f) lands `/data merge entity` in main; the gate seeds villager state with it."
 area = "gameplay"
 repro = "manual"
 severity = "major"
@@ -931,9 +931,11 @@ title = "Live golem at diagonal15.5/15.5 is rejected by spherical detection desp
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-AABB"
-regression = ["cargo:mc-core:villager::brain::tests::golem_detection_uses_axis_aligned_range_and_ignores_dead_golems"]
+regression = ["cargo:mc-core:villager::brain::tests::golem_detection_uses_axis_aligned_range_and_ignores_dead_golems", "harness:entities:native-v2-golem"]
+fix_commit = "patch:0f67aabd72fd491262c0b0cbf7ba28255212b736f52f8c09767e6d7028e65640"
+promotion = "docs/bugs/promotions/GOLEM-AABB.json"
 
 [[bug]]
 id = "GOLEM-REPAIR"
@@ -941,9 +943,11 @@ title = "Original interaction with a60-health iron golem using an iron ingot lef
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-REPAIR"
-regression = ["cargo:mc-core:golems::tests::iron_ingot_repairs_golem_from_either_hand_without_overhealing"]
+regression = ["cargo:mc-core:golems::tests::iron_ingot_repairs_golem_from_either_hand_without_overhealing", "harness:entities:native-v2-golem"]
+fix_commit = "patch:451207291bdb4b360460fba745bb0e51bf416587a08df4355c939bbf3fff4efe"
+promotion = "docs/bugs/promotions/GOLEM-REPAIR.json"
 
 [[bug]]
 id = "GOLEM-DIFFICULTY"
@@ -951,9 +955,11 @@ title = "Original natural iron golem player hit remained15 on Easy/Normal/Hard a
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-DIFFICULTY"
-regression = ["cargo:mc-core:golems::tests::natural_golem_player_damage_scales_with_difficulty"]
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-DIFFICULTY (promotion control: docs/bugs/fix-patches/GOLEM-DIFFICULTY.patch removes Difficulty::scale_mob_damage for every mob, reproducing the original symptom that golem hits were not scaled by difficulty)"
+regression = ["cargo:mc-core:golems::tests::natural_golem_player_damage_scales_with_difficulty", "harness:entities:native-v2-golem"]
+fix_commit = "patch:e9af51b7d2043033adccaf5836671ef6457321e693510a5f2788fef1673a29e9"
+promotion = "docs/bugs/promotions/GOLEM-DIFFICULTY.json"
 
 [[bug]]
 id = "P4"
@@ -1057,7 +1063,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-PEACEFUL-REMOVAL"
-regression = ["cargo:mc-core:natural_spawn_tests::fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled"]
+regression = ["cargo:mc-core:natural_spawn_tests::fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled", "harness:entities:native-v2-peaceful-removal"]
 
 [[bug]]
 id = "SPAWN-SPAWNER-EGG"
@@ -1065,9 +1071,11 @@ title = "Using spawn egg on spawner spawns adjacent mob rather than configuring 
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-SPAWNER-EGG"
-regression = ["cargo:mc-core:spawn_egg::tests::fix_mobs_spawn_egg_configures_spawner_without_spawning_adjacent_mob"]
+regression = ["cargo:mc-core:spawn_egg::tests::fix_mobs_spawn_egg_configures_spawner_without_spawning_adjacent_mob", "cargo:mc-core:monster_spawner::tests::fix_mobs_placed_spawner_default_record_does_not_poison_chunk_hydration", "harness:entities:native-v2-spawner-egg"]
+fix_commit = "patch:3b38fe9cf26516c2f1639bd071dd6b861c688d84c797dffe598be04ffd251125"
+promotion = "docs/bugs/promotions/SPAWN-SPAWNER-EGG.json"
 
 [[bug]]
 id = "SPAWN-SPAWNER-CATEGORIES"
@@ -1075,9 +1083,11 @@ title = "Cow/passive spawner rejected by Monster-only category admission. Custom
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-SPAWNER-CATEGORIES"
-regression = ["cargo:mc-core:monster_spawner::tests::fix_mobs_passive_spawner_hydrates_and_spawns_in_peaceful", "cargo:mc-core:monster_spawner::tests::fix_mobs_spawner_accepts_custom_light_rules", "cargo:mc-core:monster_spawner::tests::fix_mobs_weighted_spawn_potential_replaces_current_data_on_reset"]
+regression = ["cargo:mc-core:monster_spawner::tests::fix_mobs_passive_spawner_hydrates_and_spawns_in_peaceful", "cargo:mc-core:monster_spawner::tests::fix_mobs_spawner_accepts_custom_light_rules", "cargo:mc-core:monster_spawner::tests::fix_mobs_weighted_spawn_potential_replaces_current_data_on_reset", "cargo:mc-core:monster_spawner::tests::fix_mobs_placed_spawner_default_record_does_not_poison_chunk_hydration", "harness:entities:native-v2-spawner-egg"]
+fix_commit = "patch:438f217eadec02dc71b53c1e41d2bd96a2f3049d3d1862528ec743603195f044"
+promotion = "docs/bugs/promotions/SPAWN-SPAWNER-CATEGORIES.json"
 
 [[bug]]
 id = "TOTEM"
@@ -1087,7 +1097,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TOTEM"
-regression = ["cargo:mc-core:tick_tests::combat_parity_tests::fix_mobs_totem_intercepts_lethal_damage_in_either_hand_but_not_void"]
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::fix_mobs_totem_intercepts_lethal_damage_in_either_hand_but_not_void", "harness:entities:native-v2-command-score-store"]
 
 [[bug]]
 id = "KILL-TYPE"
@@ -1150,7 +1160,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-CRITERIA-WRITABLE"
-regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_counter_criteria_allow_writes_and_swap_sources"]
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_counter_criteria_allow_writes_and_swap_sources", "harness:entities:native-v2-command-score-store"]
 
 [[bug]]
 id = "SCORE-TOTAL-KILLS"
@@ -1160,7 +1170,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-TOTAL-KILLS"
-regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_actual_mob_and_player_deaths_credit_distinct_kill_counters_once"]
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_actual_mob_and_player_deaths_credit_distinct_kill_counters_once", "harness:entities:native-v2-command-score-store"]
 
 [[bug]]
 id = "TEAM-DEATH-VISIBILITY"
@@ -1265,7 +1275,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#EXECUTE-STORE"
-regression = ["cargo:mc-core:command_data::tests::execute_store_give_and_clear_execute_once_and_return_real_counts"]
+regression = ["cargo:mc-core:command_data::tests::execute_store_give_and_clear_execute_once_and_return_real_counts", "harness:entities:native-v2-command-score-store"]
 
 [[bug]]
 id = "P1"
@@ -1623,7 +1633,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DAMAGE-COMMAND"
-regression = ["cargo:mc-core:command_damage::tests::damage_command_commits_default_damage_and_reports_actual_rejection"]
+regression = ["cargo:mc-core:command_damage::tests::damage_command_commits_default_damage_and_reports_actual_rejection", "harness:entities:native-v2-command-score-store"]
 
 [[bug]]
 id = "HC-4"
@@ -1693,7 +1703,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-PROTECTION-COMPONENT"
-regression = ["cargo:mc-core:tick_tests::combat_parity_tests::death_protection_component_rescues_any_held_item_without_default_totem_effects"]
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::death_protection_component_rescues_any_held_item_without_default_totem_effects", "harness:entities:native-v2-command-score-store"]
 
 [[bug]]
 id = "SHUTDOWN-ERROR-LOG"
@@ -1837,9 +1847,11 @@ title = "GotFish never triggered search."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DOLPHIN-TREASURE"
-regression = ["cargo:mc-core:dolphin::tests::fed_dolphin_swims_toward_treasure_chest"]
+regression = ["cargo:mc-core:dolphin::tests::fed_dolphin_swims_toward_treasure_chest", "harness:entities:native-v2-dolphin-treasure", "cargo:mc-core:dolphin::tests::dolphin_feed_debit_reaches_the_client_inventory"]
+fix_commit = "patch:76fc3e613bf04ef8a38ff14927da187fdb3ed49fd009cd84cfcba98a21511a00"
+promotion = "docs/bugs/promotions/DOLPHIN-TREASURE.json"
 
 [[bug]]
 id = "TARGET-PROJECTILE-POWER"
@@ -1999,10 +2011,12 @@ title = "Hurt axolotls never play dead: vanilla grants a chance to drop and take
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AXOLOTL-PLAY-DEAD"
-regression = ["cargo:mc-core:mob_lanes::tests::hurt_axolotl_in_water_plays_dead_and_regenerates", "cargo:mc-core:mob_lanes::tests::playing_dead_axolotl_releases_attackers_and_wakes_after_200_active_ticks"]
+regression = ["cargo:mc-core:mob_lanes::tests::hurt_axolotl_in_water_plays_dead_and_regenerates", "cargo:mc-core:mob_lanes::tests::playing_dead_axolotl_releases_attackers_and_wakes_after_200_active_ticks", "harness:entities:native-v2-axolotl-play-dead"]
+fix_commit = "patch:5619e71a98ca75c4e0f8287a79cd9cedc7827c9a3668f0e5eb6cba233159b155"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/AXOLOTL-PLAY-DEAD.json"
 
 [[bug]]
 id = "PATROL-SPAWN-ABSENT"
@@ -2093,9 +2107,11 @@ title = "Goats never ram: no `Ram` goal kind exists in `blueprint.rs` GoalKind, 
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOAT-RAM-ABSENT"
-regression = ["cargo:mc-core:mob_lanes::tests::goat_rams_a_nearby_living_target", "cargo:mc-core:mob_lanes::tests::goat_ram_into_stone_drops_one_horn_with_instrument_and_updates_metadata"]
+regression = ["cargo:mc-core:mob_lanes::tests::goat_rams_a_nearby_living_target", "cargo:mc-core:mob_lanes::tests::goat_ram_into_stone_drops_one_horn_with_instrument_and_updates_metadata", "harness:entities:native-v2-goat-ram"]
+fix_commit = "patch:26f4b8aa95c2742a1ee15df7e88bef9c3d1cd6284af8074bad7950bfb0b9fffb"
+promotion = "docs/bugs/promotions/GOAT-RAM-ABSENT.json"
 
 [[bug]]
 id = "TURTLE-LAY-EGG-ABSENT"
