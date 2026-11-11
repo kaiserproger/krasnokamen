@@ -1111,6 +1111,7 @@ fn first_solid_column_reads_match_world_reads_before_and_after_folding() {
                 expected,
                 "from={from:?} step={step:?} radius={radius}"
             );
+            assert_start_cell(state, from, step, radius);
         }
         for refused in &segments[..3] {
             assert_eq!(first_solid(state, refused.0, refused.1, refused.2), Err(()));
@@ -1123,4 +1124,170 @@ fn first_solid_column_reads_match_world_reads_before_and_after_folding() {
     assert!(state.world.overlay_is_empty());
     assert_eq!(compare(&state), pending);
     assert!(pending > 20, "fixture must hit placed shapes: {pending}");
+}
+
+/// An accepted overlay-free sweep reports the start cell's world state;
+/// with writes pending in the overlay it reports none and the caller reads.
+fn assert_start_cell(state: &TickState, from: [f64; 3], step: [f64; 3], radius: f64) {
+    let Ok(swept) = sweep(state, from, step, radius) else {
+        return;
+    };
+    let cell = from.map(|value| value.floor() as i32);
+    let expected = state
+        .world
+        .overlay_is_empty()
+        .then(|| state.world.block_at(cell[0], cell[1], cell[2]).unwrap());
+    assert_eq!(swept.start, expected, "from={from:?} step={step:?}");
+}
+
+/// Uniform air, uniform water (no collision shape), uniform stone and a mixed
+/// section stacked in every column: a sweep reads cells one by one only in
+/// sections that can hold a collision shape, yet its hits, ties, refusals and
+/// start cell still match world reads.
+#[test]
+fn sweep_reads_cells_only_in_sections_that_can_hold_collision_shapes() {
+    struct Layers(mc_world::Chunk);
+    impl mc_world::ChunkGenerator for Layers {
+        fn generate(&self, pos: mc_world::ChunkPos) -> mc_world::Chunk {
+            let mut chunk = self.0.clone();
+            chunk.pos = pos;
+            chunk
+        }
+    }
+    let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
+    let air = mc_world::BlockStateId(registry.states.air);
+    let stone = registry.states.stone;
+    let water = registry.states.water;
+    assert!(registry.collision_boxes[water as usize].is_empty());
+    assert!(!registry.collision_boxes[stone as usize].is_empty());
+    let mut template = mc_world::Chunk::empty(
+        mc_world::ChunkPos { x: 0, z: 0 },
+        air,
+        Identifier::parse("minecraft:plains").unwrap(),
+    );
+    // Sections from y = -64: stone 0..=15, water 16..=31, mixed 32..=47.
+    template.sections[4] = mc_world::ChunkSection::filled(mc_world::BlockStateId(stone), air);
+    template.sections[5] = mc_world::ChunkSection::filled(mc_world::BlockStateId(water), air);
+    template.set_block(3, 40, 3, mc_world::BlockStateId(stone));
+    template.status = "minecraft:full".into();
+    let world = crate::world::ChunkWorld::new(
+        42,
+        Arc::new(Layers(template)),
+        &registry,
+        air,
+        [8, 64, 8],
+        mc_world::OVERWORLD_GEOMETRY,
+    );
+    let mut state = TickState::new(registry, world, 2, 512);
+    let chunks: Vec<_> = (-1..=1)
+        .flat_map(|x| (-1..=1).map(move |z| crate::boundary::ChunkPos { x, z }))
+        .collect();
+    state
+        .world
+        .ensure_blocking(&chunks.iter().map(|&chunk| (chunk, 0)).collect());
+    assert!(state.world.overlay_is_empty());
+    let below = i32::from(
+        state
+            .registry
+            .max_collision_box_y
+            .div_ceil(16)
+            .saturating_sub(1),
+    );
+    let rows = (below + 1) as usize;
+    let check = |from: [f64; 3], step: [f64; 3], radius: f64| {
+        take_swept_cells();
+        let hit = sweep(&state, from, step, radius).map(|swept| swept.hit);
+        let read = take_swept_cells();
+        assert_eq!(
+            hit,
+            first_solid_by_world_reads(&state, from, step, radius),
+            "from={from:?} step={step:?} radius={radius}"
+        );
+        assert_start_cell(&state, from, step, radius);
+        (hit, read)
+    };
+    // Inside uniform air and uniform water: nothing is read cell by cell.
+    assert_eq!(
+        check([4.5, 100.5, 4.5], [2.0, 1.0, -2.0], 0.3),
+        (Ok(None), 0)
+    );
+    assert_eq!(check([4.5, 24.5, 4.5], [1.0, 1.0, 1.0], 0.3), (Ok(None), 0));
+    // From water down into uniform stone, which holds shapes: only the stone
+    // rows are read, and the hit is the stone's top face.
+    let (hit, read) = check([4.5, 17.5, 4.5], [0.0, -3.0, 0.0], 0.0);
+    assert_eq!(
+        hit.unwrap().unwrap().1,
+        crate::boundary::BlockPos { x: 4, y: 15, z: 4 }
+    );
+    assert_eq!(read, rows + 1);
+    // Down from the mixed section into water: only the mixed rows are read.
+    assert_eq!(
+        check([4.5, 33.0, 4.5], [0.0, -2.0, 0.0], 0.0),
+        (Ok(None), 2)
+    );
+    // The mixed section across a column seam, then onto its one stone.
+    assert_eq!(
+        check([14.5, 40.5, 3.5], [3.0, 0.0, 0.0], 0.0),
+        (Ok(None), 4 * rows)
+    );
+    let (hit, read) = check([1.5, 40.5, 3.5], [3.0, 0.0, 0.0], 0.0);
+    assert_eq!(
+        hit.unwrap().unwrap().1,
+        crate::boundary::BlockPos { x: 3, y: 40, z: 3 }
+    );
+    assert_eq!(read, 4 * rows);
+    // Skipped air still refuses an unloaded column and the world's ends.
+    assert_eq!(check([1000.5, 100.5, 4.5], [1.0, 0.0, 0.0], 0.3).0, Err(()));
+    assert_eq!(check([4.5, 318.0, 4.5], [0.0, 4.0, 0.0], 0.0).0, Err(()));
+    assert_eq!(check([4.5, -62.0, 4.5], [0.0, -4.0, 0.0], 0.3).0, Err(()));
+    // Random sweeps through every layer and across the column seams.
+    let mut seed = 0x2545_F491_4F6C_DD1D_u64;
+    let mut next = |range: f64| {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        (seed >> 11) as f64 / (1_u64 << 53) as f64 * 2.0 * range - range
+    };
+    let mut hits = 0;
+    for index in 0..600 {
+        let from = [next(14.0), 24.0 + next(28.0), next(14.0)];
+        let step = [next(4.0), next(4.0), next(4.0)];
+        hits += usize::from(matches!(
+            check(from, step, [0.0, 0.3, 0.5][index % 3]).0,
+            Ok(Some(_))
+        ));
+    }
+    assert!(hits > 100, "fixture must hit stone: {hits}");
+}
+
+/// An arrow's water drag reads its start cell: from the sweep while no write
+/// is pending, from the overlay-first world read while one is.
+#[test]
+fn arrow_drag_reads_start_cell_from_sweep_or_pending_write() {
+    for (water, pending) in [(false, false), (true, false), (true, true), (false, true)] {
+        let (mut state, player) = scene();
+        state.world.fold_overlay();
+        // Water in the start cell, or a stone write away from the flight.
+        let (x, block) = if water {
+            (-41, state.registry.states.water)
+        } else {
+            (-60, state.registry.states.stone)
+        };
+        state.world.set_block(x, 230, 20, block);
+        if !pending {
+            state.world.fold_overlay();
+        }
+        assert_eq!(state.world.overlay_is_empty(), !pending);
+        let id = arrow(&mut state, player, [-40.5, 230.5, 20.5], [0.5, 0.0, 0.0], 0);
+        exhaustive(&mut state, &mut Vec::new(), &[id]);
+        let velocity = state
+            .entities
+            .vel(state.entities.slot_of(id).unwrap())
+            .map(|value| value / 20.0);
+        let drag = if water { 0.6 } else { 0.99 };
+        assert!(
+            (velocity[0] - 0.5 * drag).abs() < 1e-9,
+            "water={water} pending={pending} velocity={velocity:?}"
+        );
+    }
 }
