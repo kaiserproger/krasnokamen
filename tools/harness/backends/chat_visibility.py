@@ -24,7 +24,7 @@ import socket
 import subprocess
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .. import runtime
 from ..profiles import ProfileContext
@@ -70,16 +70,39 @@ def write_varint(value: int) -> bytes:
 
 
 class ClientInformationRewriter:
-    """Rewrite the chat mode of the client's ClientInformation frames; every other byte passes untouched."""
+    """Rewrite the chat mode of the client's ClientInformation frames; every other byte passes untouched.
 
-    def __init__(self, mode: int) -> None:
-        if not 0 <= mode < 0x80:
-            raise ValueError("chat mode must fit one varint byte")
-        self.mode = mode
+    `mode` is the chat mode, or a callable that picks it (given this rewriter) when the handshake asks to log in: the native
+    client also opens status (server list ping) connections, which carry no ClientInformation and must
+    not use up one of the planned modes.
+    """
+
+    def __init__(self, mode: int | Callable[[ClientInformationRewriter], int]) -> None:
+        self.pick = mode if callable(mode) else lambda _: mode
+        self.mode = -1  # until the handshake logs in
         self.threshold: int | None = None
         self.phase = "handshake"
         self.buffer = bytearray()
         self.rewrites: list[dict[str, Any]] = []
+
+    @staticmethod
+    def check(mode: int) -> None:
+        if not 0 <= mode < 0x80:
+            raise ValueError("chat mode must fit one varint byte")
+
+    def handshake(self, payload: bytearray, body: int) -> None:
+        """Status connections are forwarded untouched; a login or transfer one claims its chat mode."""
+        protocol = read_varint(payload, body)
+        address = read_varint(payload, protocol[1]) if protocol else None
+        intent = read_varint(payload, address[1] + address[0] + 2) if address else None
+        if intent is None:
+            raise ValueError("malformed handshake")
+        if intent[0] == 1:
+            self.phase = "status"
+            return
+        self.mode = self.pick(self)
+        self.check(self.mode)
+        self.phase = "login"
 
     def feed(self, data: bytes) -> bytes:
         """Bytes to forward now: every complete frame, rewritten where it carries the setting."""
@@ -107,7 +130,7 @@ class ClientInformationRewriter:
             return bytes(payload)
         packet_id, body = parsed
         if self.phase == "handshake":
-            self.phase = "login"
+            self.handshake(payload, body)
         elif self.phase == "login":
             if packet_id == 3:  # login acknowledged
                 self.phase = "configuration"
@@ -133,12 +156,13 @@ class ClientInformationRewriter:
 
 
 class RewritingProxy:
-    """Accepts the client's connections one after another; connection N asks for MODES[N]."""
+    """Accepts the client's connections; the Nth one that logs in asks for MODES[N], status pings pass through."""
 
     def __init__(self, target_port: int, modes: tuple[int, ...]) -> None:
         self.target_port = target_port
         self.modes = modes
-        self.rewriters: list[ClientInformationRewriter] = []
+        self.logins: list[ClientInformationRewriter] = []
+        self.claim_lock = threading.Lock()
         self.listener = socket.socket()
         self.listener.bind(("127.0.0.1", 0))
         self.listener.listen()
@@ -151,16 +175,19 @@ class RewritingProxy:
         self.thread.start()
         return self.port
 
+    def claim(self, rewriter: ClientInformationRewriter) -> int:
+        with self.claim_lock:
+            index = len(self.logins)
+            if index >= len(self.modes):
+                raise ValueError("the client logged in more often than the gate planned")
+            self.logins.append(rewriter)
+            return self.modes[index]
+
     def accept_loop(self) -> None:
         try:
             while True:
                 client, _ = self.listener.accept()
-                index = len(self.rewriters)
-                if index >= len(self.modes):
-                    client.close()
-                    raise RuntimeError("the client made more connections than the gate planned")
-                rewriter = ClientInformationRewriter(self.modes[index])
-                self.rewriters.append(rewriter)
+                rewriter = ClientInformationRewriter(self.claim)
                 upstream = socket.create_connection(("127.0.0.1", self.target_port))
                 self.sockets += [client, upstream]
                 threading.Thread(target=self.client_to_server, args=(client, upstream, rewriter), daemon=True).start()
@@ -285,7 +312,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             try:
                 scenario(probe, proxy, address)
             finally:
-                probe.report["client_information_rewrites"] = [r.rewrites for r in proxy.rewriters]
+                probe.report["client_information_rewrites"] = [r.rewrites for r in proxy.logins]
         return {"scenario": probe.report}
     finally:
         if mcp is not None:
@@ -317,9 +344,9 @@ def scenario(probe: ProbeSteps, proxy: RewritingProxy, address: str) -> None:
         probe.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), f"c{index}_player_present")
         # The server must have been asked for this connection's mode before the player speaks.
         probe.check(f"c{index}_client_information_rewritten", proxy.error is None
-                    and len(proxy.rewriters) == index + 1
+                    and len(proxy.logins) == index + 1
                     and any(r["phase"] == "configuration" and r["now"] == MODES[index]
-                            for r in proxy.rewriters[index].rewrites))
+                            for r in proxy.logins[index].rewrites))
 
     def speak(index: int, label: str) -> dict[str, bool]:
         """Chat and system text to the operator, then an inventory change that orders them."""
@@ -360,7 +387,7 @@ def scenario(probe: ProbeSteps, proxy: RewritingProxy, address: str) -> None:
 
     # Leave in the Nether: the next join is routed into that dimension, and the setting must follow it.
     probe.fixture("execute in minecraft:the_nether run tp @s 0 80 0")
-    probe.wait(in_nether, "left_in_the_nether")
+    probe.wait(in_nether, "left_in_the_nether", wait_for_play=True)  # the client rebuilds its world for the dimension change
     probe.call("minecraft_disconnect", {})
     join(3)
     probe.wait(in_nether, "joined_into_the_nether")

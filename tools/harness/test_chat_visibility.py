@@ -17,6 +17,15 @@ def client_information(mode: int) -> bytes:
     return write_varint(5) + b"en_us" + bytes([8]) + write_varint(mode) + b"\x01\x7f\x01\x00\x01\x00"
 
 
+def handshake_body(intent: int) -> bytes:
+    address = b"127.0.0.1"
+    return write_varint(775) + write_varint(len(address)) + address + b"\xb3\x05" + write_varint(intent)
+
+
+def handshake(intent: int) -> bytes:
+    return frame(0, handshake_body(intent))
+
+
 class ChatVisibilityGateTests(unittest.TestCase):
     def test_scenario_resolves_to_graphical_profile(self) -> None:
         scenario = scenarios.SCENARIOS["native-chat-visibility"]
@@ -32,7 +41,7 @@ class ChatVisibilityGateTests(unittest.TestCase):
                     gate.run(ctx)
 
     def stream(self, play_mode: int = 0) -> bytes:
-        return (frame(0, b"\x00" * 6) + frame(0, b"name") + frame(3)
+        return (handshake(2) + frame(0, b"name") + frame(3)
                 + frame(CONFIG_INFORMATION, client_information(0)) + frame(2, b"x") + frame(3)
                 + frame(0, b"\x01") + frame(PLAY_INFORMATION, client_information(play_mode)))
 
@@ -56,12 +65,29 @@ class ChatVisibilityGateTests(unittest.TestCase):
                 rewriter.threshold = 256 if compressed else None
                 data = b"".join(
                     frame(pid, body, compressed=compressed)
-                    for pid, body in ((0, b"\x00" * 6), (0, b"name"), (3, b""),
+                    for pid, body in ((0, handshake_body(2)), (0, b"name"), (3, b""),
                                       (CONFIG_INFORMATION, client_information(0)), (3, b""),
                                       (PLAY_INFORMATION, client_information(0))))
                 out = b"".join(rewriter.feed(data[i:i + 1]) for i in range(len(data)))
                 self.assertEqual(len(out), len(data))
                 self.assertEqual([r["now"] for r in rewriter.rewrites], [1, 1])
+
+    def test_status_connections_pass_through_and_do_not_use_up_a_mode(self) -> None:
+        proxy = gate.RewritingProxy(1, gate.MODES)
+        try:
+            status = ClientInformationRewriter(proxy.claim)
+            data = handshake(1) + frame(0) + frame(1, b"\x00" * 8)
+            self.assertEqual(status.feed(data), data)
+            self.assertEqual(proxy.logins, [])
+            logins = [ClientInformationRewriter(proxy.claim) for _ in gate.MODES]
+            for rewriter, mode in zip(logins, gate.MODES):
+                rewriter.feed(self.stream())
+                self.assertEqual([r["now"] for r in rewriter.rewrites], [mode, mode])
+            self.assertEqual(proxy.logins, logins)
+            with self.assertRaisesRegex(ValueError, "more often than the gate planned"):
+                ClientInformationRewriter(proxy.claim).feed(handshake(2))
+        finally:
+            proxy.close()
 
     def test_a_compressed_frame_is_forwarded_untouched(self) -> None:
         rewriter = ClientInformationRewriter(gate.HIDDEN)

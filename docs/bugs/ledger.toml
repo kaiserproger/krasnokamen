@@ -1670,7 +1670,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-HOT-RELOAD-RECIPES-LOOT"
-regression = ["cargo:mc-core:datapacks::command_tests::enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clients", "cargo:mc-core:datapacks::command_tests::a_reload_with_an_unusable_recipe_keeps_the_old_registry_and_selection", "cargo:mc-edge:advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book"]
+regression = ["cargo:mc-core:datapacks::command_tests::enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clients", "cargo:mc-core:datapacks::command_tests::a_reload_with_an_unusable_recipe_keeps_the_old_registry_and_selection", "cargo:mc-edge:advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book", "harness:datapack-reload:native-datapack-reload"]
 
 [[bug]]
 id = "DATAPACK-WORLDGEN-ZIP"
@@ -2685,7 +2685,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUDIT-CHAT-VISIBILITY"
-regression = ["cargo:mc-core:chat_visibility_tests::public_chat_reaches_only_full_clients", "cargo:mc-core:chat_visibility_tests::a_hidden_client_cannot_chat_and_is_told_so_in_red", "cargo:mc-core:chat_visibility_tests::system_text_reaches_commands_only_clients_but_not_hidden_ones", "cargo:mc-core:chat_visibility_tests::say_and_private_messages_are_chat_not_system_text", "cargo:mc-core:chat_visibility_tests::the_setting_changes_in_place_and_resets_when_the_player_leaves", "cargo:mc-edge:server::view_distance_tests::client_chat_setting_is_admitted_at_join_and_on_play_changes", "cargo:mc-core:dimensions::tests::rejoin_child_dimension_keeps_the_clients_chat_setting"]
+regression = ["cargo:mc-core:chat_visibility_tests::public_chat_reaches_only_full_clients", "cargo:mc-core:chat_visibility_tests::a_hidden_client_cannot_chat_and_is_told_so_in_red", "cargo:mc-core:chat_visibility_tests::system_text_reaches_commands_only_clients_but_not_hidden_ones", "cargo:mc-core:chat_visibility_tests::say_and_private_messages_are_chat_not_system_text", "cargo:mc-core:chat_visibility_tests::the_setting_changes_in_place_and_resets_when_the_player_leaves", "cargo:mc-edge:server::view_distance_tests::client_chat_setting_is_admitted_at_join_and_on_play_changes", "cargo:mc-core:dimensions::tests::rejoin_child_dimension_keeps_the_clients_chat_setting", "harness:chat-visibility:native-chat-visibility"]
 
 [[bug]]
 id = "AUDIT-SCULK"
