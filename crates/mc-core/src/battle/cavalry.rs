@@ -13,6 +13,8 @@ pub const CHARGE_DECAY_TICKS: u64 = 260;
 const REFORM_TICKS: u64 = 400;
 /// Lateral clearance outside the enemy's end file while swinging round it.
 const FLANK_CLEARANCE: f64 = 14.0;
+/// Golden angle: consecutive riders' attack places round one target never line up.
+const ATTACK_ANGLE: f64 = 2.399_963_229_728_653;
 
 /// One mounted regiment's wide approach round one enemy foot regiment, in that
 /// regiment's frame: `side` is the lateral unit vector of the chosen flank.
@@ -91,22 +93,33 @@ fn nearest_enemy_foot<'a>(
         })
         .min_by(|a, b| {
             let d = |e: &&Regiment| {
-                mth::length2(
-                    e.spec.origin[0] - own.spec.origin[0],
-                    e.spec.origin[2] - own.spec.origin[2],
-                )
+                let (p, q) = (live_centre(e), live_centre(own));
+                mth::length2(p[0] - q[0], p[2] - q[2])
             };
             d(a).total_cmp(&d(b)).then(a.spec.id.cmp(&b.spec.id))
         })
 }
 
+/// Where a regiment's living soldiers stand. On relief the virtual leader
+/// (`spec.origin`) marches on while files lag behind slopes and trees, so a
+/// swing laid round the leader's line could end on empty ground: in the G1
+/// rehearsals a red cavalry regiment waited there for 100 s with no foe within
+/// reach.
+fn live_centre(r: &Regiment) -> [f64; 3] {
+    if r.live_count > 0 {
+        r.live_sum.map(|x| x / r.live_count as f64)
+    } else {
+        r.spec.origin
+    }
+}
+
 fn flank_round(own: &Regiment, e: &Regiment) -> Flank {
+    let (from, origin) = (live_centre(own), live_centre(e));
     let right = [e.spec.facing[1], -e.spec.facing[0]];
-    let lateral = (own.spec.origin[0] - e.spec.origin[0]) * right[0]
-        + (own.spec.origin[2] - e.spec.origin[2]) * right[1];
+    let lateral = (from[0] - origin[0]) * right[0] + (from[2] - origin[2]) * right[1];
     let sign = if lateral >= 0.0 { 1.0 } else { -1.0 };
     Flank {
-        origin: e.spec.origin,
+        origin,
         facing: e.spec.facing,
         side: [right[0] * sign, right[1] * sign],
         half_width: f64::from(e.spec.files.saturating_sub(1)) * e.interval * 0.5,
@@ -140,8 +153,8 @@ fn plan_sweeps(battle: &BattleState, plans: &mut Vec<Option<Sweep>>) {
 /// drive; the mounted pass below scales it to horse speed. The regiment rides
 /// the plan as a block: each rider follows the plan from its own slot, i.e. as
 /// if it were the leader shifted by its file/rank offset. One shared point for
-/// every rider piled a whole regiment onto one block wherever terrain held them
-/// short of that point (a pocket, a trough), and the pile then rode as one body.
+/// every rider piled a whole regiment onto one block wherever it arrived with
+/// no foe in reach, and the pile then rode as one body.
 fn sweep_drives(battle: &mut BattleState, combat: &mut CombatRuntime) {
     let mut plans = std::mem::take(&mut combat.sweeps);
     plan_sweeps(battle, &mut plans);
@@ -377,8 +390,20 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
                 (right[1] * side - toward[1]) * 3.8,
             ]
         } else {
-            let speed = if distance <= 46.0 { 6.4 } else { 4.6 };
-            [toward[0] * speed, 0.0, toward[1] * speed]
+            // Each rider closes on its own place round its target: angle from
+            // its column index, four rings 1.2..3.6 blocks out. Riding at the
+            // target itself piled every rider that chose the same foe onto
+            // one block (76 riders on two foot in the G1 rehearsal).
+            let (sin, cos) = (bi as f64 * ATTACK_ANGLE).sin_cos();
+            let ring = 1.2 + 0.8 * (bi % 4) as f64;
+            let place = [
+                target.pos[0] + cos * ring - position[0],
+                target.pos[2] + sin * ring - position[2],
+            ];
+            let gap = mth::length2(place[0], place[1]);
+            let way = super::steering::unit(place, toward);
+            let speed = (if distance <= 46.0 { 6.4 } else { 4.6 }) * (gap / 0.5).min(1.0);
+            [way[0] * speed, 0.0, way[1] * speed]
         };
         let velocity = battle.formation.constrain_velocity(position, velocity);
         let velocity = super::steering::around_obstacles(

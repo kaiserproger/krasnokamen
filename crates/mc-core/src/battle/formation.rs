@@ -839,14 +839,23 @@ impl FormationRuntime {
                 [m.pos[0] - source[0], m.pos[2] - source[2]],
                 [-r.spec.facing[0], -r.spec.facing[1]],
             );
-            return (
-                [
-                    m.pos[0] + away[0] * 20.0,
-                    m.pos[1],
-                    m.pos[2] + away[1] * 20.0,
-                ],
-                0.2,
-            );
+            let mut target = [
+                m.pos[0] + away[0] * 20.0,
+                m.pos[1],
+                m.pos[2] + away[1] * 20.0,
+            ];
+            // A fugitive that has reached an edge of the battle stays where it
+            // met it. Running on along the edge herded whole regiments into the
+            // corners, where they stood in heaps until the end of the take.
+            if let Some((min, max)) = self.bounds {
+                if m.pos[0] - min[0] < AT_BAY_BLOCKS || max[0] - m.pos[0] < AT_BAY_BLOCKS {
+                    target[2] = m.pos[2];
+                }
+                if m.pos[2] - min[1] < AT_BAY_BLOCKS || max[1] - m.pos[2] < AT_BAY_BLOCKS {
+                    target[0] = m.pos[0];
+                }
+            }
+            return (target, 0.2);
         }
         if r.spec.order == Order::Pursue
             && r.enemy_routing

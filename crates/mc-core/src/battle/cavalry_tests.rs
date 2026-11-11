@@ -417,8 +417,10 @@ fn riders_swing_round_once_their_foot_closes_and_ride_down_a_rout() {
     horse.origin[0] = -8.0;
     horse.frontage = 2.0;
     battle.formation.add_regiment(horse, &ids(201, 10)).unwrap();
+    // Every soldier stands on his leader's line: live centroids = origins.
     for r in &mut battle.formation.regiments {
         r.live_count = r.len;
+        r.live_sum = r.spec.origin.map(|x| x * r.len as f64);
     }
     battle.columns.ranged = vec![false; 70];
     let mut plans = Vec::new();
@@ -439,6 +441,55 @@ fn riders_swing_round_once_their_foot_closes_and_ride_down_a_rout() {
     battle.formation.regiments[1].spec.origin = [3.0, 64.0, 40.0];
     plan_sweeps(&battle, &mut plans);
     assert_eq!(plans[2], Some(Sweep::Chase([3.0, 64.0, 40.0])));
+}
+
+/// On relief a regiment's virtual leader marches on while its files lag
+/// behind slopes and trees: the swing goes round where the enemy's men stand
+/// (their live centroid), not round the leader's empty line ahead of them.
+#[test]
+fn the_swing_goes_round_the_enemy_men_not_their_leader_line() {
+    use super::super::formation::{Order, RegimentSpec};
+    let mut battle = BattleState::default();
+    let regiment = |id, faction, x: f64, z: f64, facing: f64, frontage| RegimentSpec {
+        id,
+        faction,
+        origin: [x, 64.0, z],
+        facing: [0.0, facing],
+        files: 10,
+        frontage,
+        order: Order::Advance,
+    };
+    let ids = |first: i32, n: i32| (first..first + n).map(EntityId).collect::<Vec<_>>();
+    for (spec, first) in [
+        (regiment(0, 1, 0.0, 0.0, 1.0, 1.0), 1),
+        (regiment(1, 2, 0.0, 4.0, -1.0, 1.0), 101),
+        (regiment(2, 1, -8.0, -30.0, 1.0, 2.0), 201),
+    ] {
+        battle
+            .formation
+            .add_regiment(spec, &ids(first, 10))
+            .unwrap();
+    }
+    for r in &mut battle.formation.regiments {
+        r.live_count = r.len;
+        r.live_sum = r.spec.origin.map(|x| x * r.len as f64);
+    }
+    // The enemy's leader has marched 12 blocks past its men.
+    let enemy = &mut battle.formation.regiments[1];
+    let men = [6.0, 70.0, 16.0];
+    enemy.live_sum = men.map(|x| x * enemy.len as f64);
+    battle.columns.ranged = vec![false; 30];
+    battle.formation.regiments[0].enemy = Some([0.0, 64.0, 4.0]);
+    battle.formation.regiments[0].gap = 4.0;
+    let mut plans = Vec::new();
+    plan_sweeps(&battle, &mut plans);
+    let Some(Sweep::Flank(plan)) = plans[2] else {
+        panic!("riders swing round once the foot closes: {:?}", plans[2]);
+    };
+    assert_eq!(
+        plan.origin, men,
+        "the swing is laid round the leader's empty line"
+    );
 }
 
 /// Eight riders (4 files x 2 ranks) swing round an enemy foot block: their
@@ -685,5 +736,77 @@ fn chasing_riders_hold_their_frontage_on_open_ground() {
     assert!(
         span >= 5.0 && closest >= 0.5,
         "riders piled up on open ground: x span {span:.2}, closest pair {closest:.2}: {horses:?}"
+    );
+}
+
+/// Riders that chose the same foe close on their own places round it, so a
+/// pile of riders attacking one man gets drives that fan out. Riding at the
+/// foe itself gave every rider of a pile the same drive: in the G1 rehearsal
+/// 76 riders stood on one block over two foot soldiers.
+#[test]
+fn riders_attacking_one_foe_fan_out_round_it() {
+    use super::super::formation::{Order, RegimentSpec};
+    let (mut state, _, pos) = fixture();
+    let target_pos = [pos[0] + 5.0, pos[1], pos[2]];
+    let target = spawn(&mut state, "husk", target_pos);
+    state.entities.set_faction(slot(&state, target), 2);
+    let mut pairs = Vec::new();
+    for _ in 0..8 {
+        let horse = spawn(&mut state, "horse", pos);
+        let rider = spawn(&mut state, "husk", pos);
+        state.entities.set_faction(slot(&state, rider), 1);
+        mount(&mut state, rider, horse).unwrap();
+        pairs.push((rider, horse));
+    }
+    let mut battle = BattleState::default();
+    battle
+        .formation
+        .add_regiment(
+            RegimentSpec {
+                id: 2,
+                faction: 2,
+                origin: target_pos,
+                facing: [-1.0, 0.0],
+                files: 1,
+                frontage: 1.0,
+                order: Order::Hold,
+            },
+            &[target],
+        )
+        .unwrap();
+    prepare(&state, &mut battle, 0);
+    // A wavering foe: the riders commit instead of refusing.
+    battle.formation.regiments[0].morale.value = 20.0;
+    battle.formation.members[0].wavering = true;
+    for &(rider, _) in &pairs {
+        let bi = index(&state, &battle, rider);
+        battle.columns.targets[bi] = Some(super::super::EnemyTarget {
+            id: target,
+            pos: target_pos,
+            distance: 5.0,
+        });
+    }
+    let frame = Frame {
+        entities: &state.entities,
+        registry: &state.registry,
+        world: &state.world,
+        tick: 0,
+    };
+    let mut combat = CombatRuntime::default();
+    combat.prepare(&battle.columns.ids);
+    step(&frame, &mut battle, &mut combat);
+    let angles: Vec<f64> = pairs
+        .iter()
+        .map(|&(_, horse)| {
+            let d = battle.columns.drive[index(&state, &battle, horse)];
+            assert!(d[0] > 0.0, "every rider closes on the foe: {d:?}");
+            d[2].atan2(d[0]).to_degrees()
+        })
+        .collect();
+    let fan = angles.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+        - angles.iter().copied().fold(f64::INFINITY, f64::min);
+    assert!(
+        fan >= 20.0,
+        "the pile rides at the foe as one body: drive angles {angles:?}"
     );
 }
