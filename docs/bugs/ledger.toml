@@ -4186,3 +4186,14 @@ regression = ["cargo:mc-core:projectiles::flight_tests::projectile_breaks_pot_on
 repro_check = "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run protocol-matrix --server-bin /run/media/kaiserroman/games/solaris-work/pins/e4304662b8f4-server-x86_64-unknown-linux-gnu-incr/solaris-v2 --vanilla-data /run/media/kaiserroman/games/solaris-work/receipts/H08Orbs/protocol-content/26.3 --subject gamerules.projectiles_can_break_blocks --port 26741 --dashboard-port 26742"
 failing_first = "reported"
 fix_commit = "70e5c6d6"
+
+[[bug]]
+id = "EDGE-WORLD-QUEUE-LOST-ENTITY-FRAMES"
+title = "A world-queue send that fails after planning loses entity frames (AddEntity, data, passengers, leash) while the viewer records them as delivered; only geometry is repaired"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Rule-5 review of the recorder fix c731c550 (ReviewRecorderOverflow, 2026-11-12, finding F2): pump.rs:398-406 repairs only geometry after a failed world try_send; LOD tiles are a second producer on world_tx (lod.rs:317, LOD on by default config.rs:383), so pump.rs:341-342 'Only the pump sends world packets' is false. Example: a dismount SetPassengers(horse,[]) is lost and the client keeps the rider mounted until the next link change or re-pairing. Fix direction: take LOD tiles off world_tx, or treat a lost entity frame as a re-pair."
+regression = []
+failing_first = "not recorded"
