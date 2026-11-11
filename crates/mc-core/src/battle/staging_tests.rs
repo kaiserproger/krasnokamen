@@ -46,6 +46,50 @@ fn preset_has_exact_homogeneous_mix_and_spaced_horse_flanks() {
 }
 
 #[test]
+fn staged_equipment_exposes_authored_assets_for_both_sides_and_all_kinds() {
+    let mut state = fixture();
+    let mut changes = ChangeSet::default();
+    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 42, 100).unwrap();
+    let mut seen = [[false; 5]; 2];
+    for id in changes.entities_spawned {
+        let slot = state.entities.slot_of(id).unwrap();
+        let body = state.entities.body(slot);
+        let side = usize::from(body.faction - 1);
+        let row = state.entities.row(slot);
+        let equippable = |stack: &mc_data::ItemStack, expected: &str, expected_slot: &str| {
+            let fields = mc_data::item_nbt::stack_to_fields(&state.registry.items, stack).unwrap();
+            let Some(Tag::Compound(components)) = mc_data::item_nbt::field(&fields, "components") else { panic!("missing components") };
+            let Some(Tag::Compound(value)) = mc_data::item_nbt::field(components, "minecraft:equippable") else { panic!("missing equippable") };
+            assert_eq!(mc_data::item_nbt::field(value, "slot"), Some(&Tag::String(expected_slot.into())));
+            assert_eq!(mc_data::item_nbt::field(value, "asset_id"), Some(&Tag::String(expected.into())));
+        };
+        let Some(weapon) = row.appearance.equipment[0].as_ref() else {
+            let armor = row.loot.body_armor.as_ref().unwrap();
+            equippable(armor, if side == 0 { "solaris_battle:red_caparison" } else { "solaris_battle:blue_caparison" }, "body");
+            seen[side][4] = true;
+            continue;
+        };
+        let item = state.registry.items.name_of(weapon.item_id).unwrap().as_str();
+        let (kind, model) = match (item, row.entity_life.mount.vehicle.is_some()) {
+            ("minecraft:trident", _) => (1, "solaris_battle:iron_spear"),
+            ("minecraft:bow", _) => (2, "solaris_battle:iron_longbow_standby"),
+            ("minecraft:iron_sword", true) => (3, "solaris_battle:iron_lance"),
+            ("minecraft:iron_sword", false) => (0, "solaris_battle:iron_longsword"),
+            _ => panic!("unexpected battle weapon {item}"),
+        };
+        seen[side][kind] = true;
+        assert_eq!(weapon.item_model.as_ref().unwrap().as_str(), model);
+        equippable(row.appearance.equipment[5].as_ref().unwrap(), if kind == 3 { "solaris_battle:crested_helm" } else { "solaris_battle:iron_plate" }, "head");
+        equippable(row.appearance.equipment[4].as_ref().unwrap(), if side == 0 { "solaris_battle:red_surcoat" } else { "solaris_battle:blue_surcoat" }, "chest");
+        if kind != 2 {
+            let shield = row.appearance.equipment[1].as_ref().unwrap();
+            assert_eq!(shield.item_model.as_ref().unwrap().as_str(), if side == 0 { "solaris_battle:red_heater_shield" } else { "solaris_battle:blue_heater_shield" });
+        }
+    }
+    assert_eq!(seen, [[true; 5]; 2]);
+}
+
+#[test]
 fn reset_removes_battle_units_and_ticket_not_other_mobs() {
     let mut state = fixture();
     let unrelated = state.entities.slots().map(|slot| state.entities.body(slot).id).collect::<Vec<_>>();

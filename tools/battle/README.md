@@ -18,7 +18,10 @@ after reset; restore them explicitly if the world is reused.
 The side mix is 50% sword/shield infantry, 20% spearmen, 20% archers and
 10% cavalry (integer rounding goes to infantry). Regiments are homogeneous:
 archers deploy behind the foot and mounted troops on the flanks, with two-block
-cavalry frontage. The units use vanilla husks and equipment.
+cavalry frontage. Units use husks with vanilla combat item identities and
+`solaris_battle` appearance components: red or blue surcoats, shields and
+horse caparisons distinguish the sides. The client needs the authored battle
+resources to render these custom models.
 
 `run-battle.sh` creates a new run directory and never overwrites an existing
 one. `--world` copies a **stopped** native world, including its spawn and

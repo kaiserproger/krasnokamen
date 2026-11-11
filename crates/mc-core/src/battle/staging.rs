@@ -41,7 +41,7 @@ pub fn parse(args: &[&str]) -> Result<BattleCommand, CommandError> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind { Infantry, Spear, Archer, Cavalry }
 
-// One table owns the vanilla equipment until the asset slice replaces it.
+// Vanilla item identities retain their combat behaviour; components select authored visuals.
 fn equipment(kind: Kind) -> &'static [(&'static str, &'static str)] {
     match kind {
         Kind::Infantry => &[("mainhand", "minecraft:iron_sword"), ("offhand", "minecraft:shield"), ("head", "minecraft:iron_helmet"), ("chest", "minecraft:iron_chestplate")],
@@ -133,22 +133,44 @@ fn reset(state: &mut TickState, changes: &mut ChangeSet) -> usize {
     ids.len()
 }
 
-fn summon_tag(kind: Option<Kind>) -> Tag {
+fn summon_tag(kind: Option<Kind>, side: u16) -> Tag {
     let mut fields = vec![("PersistenceRequired".into(), Tag::Byte(1))];
-    if let Some(kind) = kind {
-        let slots = equipment(kind).iter().map(|(slot, item)| {
-            ((*slot).into(), Tag::Compound(vec![("id".into(), Tag::String((*item).into()))]))
-        }).collect();
-        fields.push(("equipment".into(), Tag::Compound(slots)));
-    }
+    let items = kind.map_or(&[("body", "minecraft:iron_horse_armor")][..], equipment);
+    let slots = items.iter().map(|&(slot, item)| {
+        let component = match (kind, slot, side) {
+            (Some(Kind::Infantry), "mainhand", _) => ("minecraft:item_model", "solaris_battle:iron_longsword"),
+            (Some(Kind::Spear), "mainhand", _) => ("minecraft:item_model", "solaris_battle:iron_spear"),
+            (Some(Kind::Archer), "mainhand", _) => ("minecraft:item_model", "solaris_battle:iron_longbow_standby"),
+            (Some(Kind::Cavalry), "mainhand", _) => ("minecraft:item_model", "solaris_battle:iron_lance"),
+            (_, "offhand", 1) => ("minecraft:item_model", "solaris_battle:red_heater_shield"),
+            (_, "offhand", _) => ("minecraft:item_model", "solaris_battle:blue_heater_shield"),
+            (Some(Kind::Cavalry), "head", _) => ("minecraft:equippable", "solaris_battle:crested_helm"),
+            (_, "head", _) => ("minecraft:equippable", "solaris_battle:iron_plate"),
+            (_, "chest", 1) => ("minecraft:equippable", "solaris_battle:red_surcoat"),
+            (_, "chest", _) => ("minecraft:equippable", "solaris_battle:blue_surcoat"),
+            (_, "body", 1) => ("minecraft:equippable", "solaris_battle:red_caparison"),
+            (_, "body", _) => ("minecraft:equippable", "solaris_battle:blue_caparison"),
+            _ => unreachable!("battle equipment table contains an unknown slot"),
+        };
+        let value = if component.0 == "minecraft:equippable" {
+            Tag::Compound(vec![("slot".into(), Tag::String(slot.into())), ("asset_id".into(), Tag::String(component.1.into()))])
+        } else {
+            Tag::String(component.1.into())
+        };
+        (slot.into(), Tag::Compound(vec![
+            ("id".into(), Tag::String(item.into())),
+            ("components".into(), Tag::Compound(vec![(component.0.into(), value)])),
+        ]))
+    }).collect();
+    fields.push(("equipment".into(), Tag::Compound(slots)));
     Tag::Compound(fields)
 }
 
-fn spawn(state: &mut TickState, changes: &mut ChangeSet, name: &str, position: [f64; 3], unit: Option<Kind>, tag: &[u8]) -> Result<EntityId, String> {
+fn spawn(state: &mut TickState, changes: &mut ChangeSet, name: &str, position: [f64; 3], unit: Option<Kind>, loadout: &Tag, tag: &[u8]) -> Result<EntityId, String> {
     let identifier = mc_data::Identifier::parse(name.to_owned()).map_err(|e| e.to_string())?;
     let facts = state.registry.entity_types.facts_of(&identifier).ok_or_else(|| format!("unknown battle entity {name}"))?;
     let type_id = facts.protocol_id;
-    let image = crate::command_summon::prepare(state, type_id, name, position, &summon_tag(unit)).map_err(|e| e.message())?;
+    let image = crate::command_summon::prepare(state, type_id, name, position, loadout).map_err(|e| e.message())?;
     let health = state.registry.blueprint(type_id).map_or(20.0, |b| b.params.max_health);
     let id = state.spawn_mob(type_id, position, health);
     crate::command_summon::apply(state, id, image);
@@ -177,15 +199,17 @@ fn setup(state: &mut TickState, changes: &mut ChangeSet, origin: [f64; 3], seed:
     state.tickets.insert(OWNER.into(), (centre, TICKET_RADIUS));
     let result = (|| {
         for side in 1..=2_u16 {
+            let horse_loadout = summon_tag(None, side);
             for (spec, kind, size) in plan(seed, count, origin, side) {
+                let loadout = summon_tag(Some(kind), side);
                 let mut members = Vec::with_capacity(size);
                 for index in 0..size {
                     let pos = slot_position(&spec, index);
-                    let id = spawn(state, changes, "minecraft:husk", pos, Some(kind), &tag)?;
+                    let id = spawn(state, changes, "minecraft:husk", pos, Some(kind), &loadout, &tag)?;
                     let slot = state.entities.slot_of(id).expect("battle unit");
                     state.entities.set_faction(slot, side);
                     if kind == Kind::Cavalry {
-                        let horse = spawn(state, changes, "minecraft:horse", pos, None, &tag)?;
+                        let horse = spawn(state, changes, "minecraft:horse", pos, None, &horse_loadout, &tag)?;
                         crate::battle::cavalry::mount(state, id, horse).map_err(|e| format!("battle mount: {e}"))?;
                     }
                     members.push(id);
