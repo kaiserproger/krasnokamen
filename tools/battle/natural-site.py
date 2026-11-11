@@ -232,20 +232,90 @@ def prepare(a):
     return receipt
 
 
-def render_map(scan_dir, output, scale=1):
-    from PIL import Image, ImageDraw
+F_WATER, F_LAVA, F_TREE, F_OTHER = 1, 2, 4, 16
 
+
+def load_columns(scan_dir):
+    """`battle_site_scan detail` output: stats plus row-major ground heights and flags."""
     stats = json.loads((scan_dir / "stats.json").read_text())
     area = stats["area"]
-    width, depth, margin = area["width"], area["depth"], area["margin"]
+    width, depth = area["width"], area["depth"]
     raw = (scan_dir / "columns.bin").read_bytes()
     if len(raw) != width * depth * 5:
         raise ValueError(f"columns.bin has {len(raw)} bytes, expected {width * depth * 5}")
-    ground, flags = [], []
-    for i in range(width * depth):
-        g, _top, f = struct.unpack_from("<hhB", raw, i * 5)
-        ground.append(g)
-        flags.append(f)
+    ground = [struct.unpack_from("<h", raw, i * 5)[0] for i in range(width * depth)]
+    flags = raw[4::5]
+    return stats, width, depth, ground, flags
+
+
+def prefix_sums(values, width, depth):
+    sums = [0] * ((width + 1) * (depth + 1))
+    for z in range(depth):
+        row = 0
+        for x in range(width):
+            row += values[z * width + x]
+            sums[(z + 1) * (width + 1) + x + 1] = sums[z * (width + 1) + x + 1] + row
+    return sums
+
+
+def rect_sum(sums, width, x0, z0, x1, z1):
+    """Sum over columns [x0, x1) x [z0, z1)."""
+    w = width + 1
+    return sums[z1 * w + x1] - sums[z0 * w + x1] - sums[z1 * w + x0] + sums[z0 * w + x0]
+
+
+def refine(scan_dir, field_width, field_depth, stride, top):
+    """Rank every field placement inside the generated area by its real columns.
+
+    Placements free of water, lava and non-natural blocks come first. Within
+    each group the score is steep neighbour steps (>= 2 blocks) plus 400 per
+    block of p1..p99 ground range plus 200 per block of the middle half's full
+    range (both every 4th column) plus a quarter of the tree columns.
+    """
+    stats, width, depth, ground, flags = load_columns(scan_dir)
+    area = stats["area"]
+    wet = [1 if f & (F_WATER | F_LAVA) else 0 for f in flags]
+    other = [1 if f & F_OTHER else 0 for f in flags]
+    tree = [1 if f & F_TREE else 0 for f in flags]
+    steep = [0] * (width * depth)
+    for z in range(depth):
+        for x in range(width):
+            i = z * width + x
+            if x + 1 < width and abs(ground[i + 1] - ground[i]) >= 2:
+                steep[i] = 1
+            if z + 1 < depth and abs(ground[i + width] - ground[i]) >= 2:
+                steep[i] = 1
+    sums = {name: prefix_sums(values, width, depth) for name, values in
+            (("wet", wet), ("other", other), ("tree", tree), ("steep", steep))}
+    results = []
+    for z0 in range(0, depth - field_depth + 1, stride):
+        for x0 in range(0, width - field_width + 1, stride):
+            x1, z1 = x0 + field_width, z0 + field_depth
+            count = {name: rect_sum(s, width, x0, z0, x1, z1) for name, s in sums.items()}
+            sample = sorted(ground[z * width + x] for z in range(z0, z1, 4) for x in range(x0, x1, 4))
+            p1, p99 = sample[len(sample) // 100], sample[len(sample) * 99 // 100]
+            # Where the lines meet: the middle half of the field on both axes.
+            middle = sorted(ground[z * width + x]
+                            for z in range(z0 + field_depth // 4, z1 - field_depth // 4, 4)
+                            for x in range(x0 + field_width // 4, x1 - field_width // 4, 4))
+            cx, cz = area["x0"] + x0 + field_width // 2, area["z0"] + z0 + field_depth // 2
+            results.append({"cx": cx, "cz": cz, "steep_columns": count["steep"], "p1_p99_range": p99 - p1,
+                            "range": sample[-1] - sample[0], "middle_range": middle[-1] - middle[0],
+                            "tree_columns": count["tree"],
+                            "water_or_lava_columns": count["wet"], "non_natural_columns": count["other"],
+                            "centre_ground_y": ground[(z0 + field_depth // 2) * width + x0 + field_width // 2]})
+    results.sort(key=lambda r: (r["water_or_lava_columns"] + r["non_natural_columns"] > 0,
+                                r["steep_columns"] + 400 * r["p1_p99_range"] + 200 * r["middle_range"]
+                                + r["tree_columns"] // 4))
+    return results[:top]
+
+
+def render_map(scan_dir, output, scale=1):
+    from PIL import Image, ImageDraw
+
+    stats, width, depth, ground, flags = load_columns(scan_dir)
+    area = stats["area"]
+    margin = area["margin"]
     lo, hi = stats["ground_p1"] - 2, max(stats["ground_p99"] + 2, stats["surroundings"]["top_max"] // 2)
     lo, hi = min(lo, stats["ground_min"]), max(hi, stats["ground_max"])
     image = Image.new("RGB", (width, depth))
@@ -299,9 +369,19 @@ def main(argv=None):
     m.add_argument("--scan-dir", type=Path, required=True)
     m.add_argument("--output", type=Path, required=True)
     m.add_argument("--scale", type=int, default=1)
+    r = sub.add_parser("refine", help="rank field placements inside a detail area by its real columns")
+    r.add_argument("--scan-dir", type=Path, required=True)
+    r.add_argument("--width", type=int, default=420)
+    r.add_argument("--depth", type=int, default=340)
+    r.add_argument("--stride", type=int, default=8)
+    r.add_argument("--top", type=int, default=10)
     a = parser.parse_args(argv)
     if a.mode == "map":
         print(json.dumps(render_map(a.scan_dir, a.output, a.scale)))
+        return 0
+    if a.mode == "refine":
+        for row in refine(a.scan_dir, a.width, a.depth, a.stride, a.top):
+            print(json.dumps(row))
         return 0
     if a.dry_run:
         print("\n".join(plan(a.center_x, a.center_z, a.radius, a.spawn_y)))

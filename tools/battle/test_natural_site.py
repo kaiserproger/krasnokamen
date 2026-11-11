@@ -72,6 +72,27 @@ class MapTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 natural_site.render_map(scan, scan / "map.png")
 
+class RefineTests(unittest.TestCase):
+    def test_clean_flat_placement_ranks_first(self):
+        # 40x16 area at x0=100: water at x=100, a 3-block cliff between x=129 and x=130.
+        width, depth = 40, 16
+        raw = bytearray()
+        for z in range(depth):
+            for x in range(width):
+                ground = 70 + (3 if x >= 30 else 0)
+                raw += struct.pack("<hhB", ground, ground, 1 if x == 0 else 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            scan = Path(tmp)
+            (scan / "stats.json").write_text(json.dumps({"area": {"x0": 100, "z0": -50, "width": width, "depth": depth, "margin": 0}}))
+            (scan / "columns.bin").write_bytes(bytes(raw))
+            rows = natural_site.refine(scan, 16, 8, 4, 100)
+        best = rows[0]
+        self.assertEqual((best["water_or_lava_columns"], best["non_natural_columns"], best["steep_columns"]), (0, 0, 0))
+        self.assertEqual(best["p1_p99_range"], 0)
+        self.assertTrue(101 <= best["cx"] - 8 and best["cx"] + 8 <= 129, best)
+        self.assertGreater(rows[-1]["water_or_lava_columns"], 0)
+
+
 
 if __name__ == "__main__":
     unittest.main()
