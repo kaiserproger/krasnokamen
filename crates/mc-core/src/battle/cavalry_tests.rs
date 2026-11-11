@@ -445,9 +445,8 @@ fn riders_swing_round_once_their_foot_closes_and_ride_down_a_rout() {
 /// own foot is 20 blocks from the enemy's front, so it is closing, and the
 /// flank point (-1, 28) lies past a U of stone walls open toward the riders
 /// (back wall z = 8, x -15..1), so relief deflection holds every rider in
-/// that pocket. Riders start in their slots, or all on one point inside the
-/// pocket (`piled`). Returns the horse positions after `ticks` real ticks.
-fn sweep_into_pocket(piled: bool, ticks: usize) -> Vec<[f64; 3]> {
+/// that pocket. Returns the horse positions after `ticks` real ticks.
+fn sweep_into_pocket(ticks: usize) -> Vec<[f64; 3]> {
     use super::super::formation::{Order, RegimentSpec, slot_position};
     let (mut state, _, pos) = fixture();
     let (stone, air) = (state.registry.states.stone, state.registry.states.air);
@@ -504,11 +503,7 @@ fn sweep_into_pocket(piled: bool, ticks: usize) -> Vec<[f64; 3]> {
     };
     let mut riders = Vec::new();
     for i in 0..8 {
-        let p = if piled {
-            at(-7.0, 5.0)
-        } else {
-            slot_position(&cavalry, i)
-        };
+        let p = slot_position(&cavalry, i);
         let horse = spawn(&mut state, "horse", p);
         let rider = spawn(&mut state, "husk", p);
         state.entities.set_faction(slot(&state, rider), 1);
@@ -571,7 +566,7 @@ fn spread(horses: &[[f64; 3]]) -> (f64, f64) {
 /// the two ranks close up, but no two riders share a spot.
 #[test]
 fn sweeping_riders_keep_their_spacing_in_a_concave_pocket() {
-    let horses = sweep_into_pocket(false, 600);
+    let horses = sweep_into_pocket(600);
     let (span, closest) = spread(&horses);
     assert!(
         span >= 5.0 && closest >= 0.3,
@@ -579,15 +574,116 @@ fn sweeping_riders_keep_their_spacing_in_a_concave_pocket() {
     );
 }
 
-/// A pile (riders on one point, as the rehearsal stack after t 80) spreads
-/// to the block's frontage again; with one shared point every rider of the
-/// pile got the same drive and the pile rode on as one body.
+/// Open ground, no obstacle within 15 blocks: riders chase a broken foot
+/// regiment whose two fugitives are boxed in 36 blocks apart, so its live
+/// centroid, the chase point, is empty grass with no enemy in reach (the
+/// integration take's stacks of 80 and 64 horses on open ground). Riders
+/// that share the point stand on one block; riders that ride the chase from
+/// their own slots stand as a block with the regiment's frontage.
 #[test]
-fn riders_piled_in_a_pocket_spread_again() {
-    let horses = sweep_into_pocket(true, 300);
+fn chasing_riders_hold_their_frontage_on_open_ground() {
+    use super::super::formation::{Order, RegimentSpec, slot_position};
+    let (mut state, _, pos) = fixture();
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    let (px, py, pz) = (pos[0] as i32, pos[1] as i32, pos[2] as i32);
+    for x in px - 24..=px + 24 {
+        for z in pz - 14..=pz + 30 {
+            state.world.set_block(x, py - 1, z, stone);
+            for dy in 0..6 {
+                state.world.set_block(x, py + dy, z, air);
+            }
+        }
+    }
+    // A one-block cell, walls three high, for each fugitive.
+    for cx in [px - 18, px + 18] {
+        for dx in -1..=1 {
+            for dz in -1..=1 {
+                if (dx, dz) != (0, 0) {
+                    for dy in 0..3 {
+                        state.world.set_block(cx + dx, py + dy, pz + 20 + dz, stone);
+                    }
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let at = |dx: f64, dz: f64| [pos[0] + dx, pos[1], pos[2] + dz];
+    let fugitives: Vec<_> = [at(-18.0, 20.0), at(18.0, 20.0)]
+        .into_iter()
+        .map(|p| {
+            let id = spawn(&mut state, "husk", p);
+            state.entities.set_faction(slot(&state, id), 2);
+            id
+        })
+        .collect();
+    let battle = &mut state.hostile.battle;
+    battle
+        .formation
+        .add_regiment(
+            RegimentSpec {
+                id: 1,
+                faction: 2,
+                origin: at(0.0, 20.0),
+                facing: [0.0, -1.0],
+                files: 2,
+                frontage: 1.0,
+                order: Order::Hold,
+            },
+            &fugitives,
+        )
+        .unwrap();
+    battle.formation.regiments[0].morale.broken = true;
+    let cavalry = RegimentSpec {
+        id: 2,
+        faction: 1,
+        origin: at(0.0, -6.0),
+        facing: [0.0, 1.0],
+        files: 4,
+        frontage: 2.0,
+        order: Order::Hold,
+    };
+    let mut riders = Vec::new();
+    for i in 0..8 {
+        let p = slot_position(&cavalry, i);
+        let horse = spawn(&mut state, "horse", p);
+        let rider = spawn(&mut state, "husk", p);
+        state.entities.set_faction(slot(&state, rider), 1);
+        mount(&mut state, rider, horse).unwrap();
+        riders.push((rider, horse));
+    }
+    let ids: Vec<_> = riders.iter().map(|&(rider, _)| rider).collect();
+    state
+        .hostile
+        .battle
+        .formation
+        .add_regiment(cavalry, &ids)
+        .unwrap();
+    state.hostile.battle.running = true;
+    for _ in 0..300 {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    let plan = state.hostile.battle.combat.sweeps.get(1).copied().flatten();
+    assert!(
+        matches!(plan, Some(Sweep::Chase(point)) if (point[0] - pos[0]).abs() < 1.0),
+        "riders must chase the fugitives' empty centroid: {plan:?}"
+    );
+    let horses: Vec<[f64; 3]> = riders
+        .iter()
+        .map(|&(rider, horse)| {
+            assert_pair(&state, rider, horse);
+            state.entities.pos(slot(&state, horse))
+        })
+        .collect();
+    // They arrived: the block stands round the chase point, no enemy in reach.
+    assert!(
+        horses
+            .iter()
+            .all(|p| mth::length2(p[0] - pos[0], p[2] - pos[2] - 20.0) < 8.0),
+        "riders did not reach the chase point: {horses:?}"
+    );
     let (span, closest) = spread(&horses);
     assert!(
-        span >= 4.0 && closest >= 0.3,
-        "the pile stayed together: x span {span:.2}, closest pair {closest:.2}: {horses:?}"
+        span >= 5.0 && closest >= 0.5,
+        "riders piled up on open ground: x span {span:.2}, closest pair {closest:.2}: {horses:?}"
     );
 }
