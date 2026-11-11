@@ -1655,6 +1655,7 @@ regression = [
   "cargo:mc-core:core::stop_tests::native_writer_channel_close_logs_stop_cause",
   "cargo:mc-core:core::stop_tests::journal_io_failure_still_logs_error_and_never_acknowledges",
   "cargo:mc-edge:console::tests::console_stop_has_no_error_logs_and_keeps_checkpoint",
+  "harness:entities:native-v2-console-shutdown",
 ]
 fix_commit = "3acf6374f2e67c0e413dff79b2c1049edee14904"
 

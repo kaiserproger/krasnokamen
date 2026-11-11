@@ -24,6 +24,7 @@ def _console_shutdown(steps: ProbeSteps) -> None:
         ("tick_owner_stopped", "core tick owner stopping"),
         ("journal_owner_stopped", "core journal owner stopped"),
         ("checkpoint_writer_stopped", "native checkpoint writer stopped"),
+        ("server_loop_stopped", "server stopping"),
         ("shutdown_checkpoint_committed", "checkpoint committed"),
     ):
         steps.check(label, message in log)

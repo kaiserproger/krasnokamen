@@ -152,7 +152,7 @@ class PromotionWorldTests(unittest.TestCase):
         steps = Steps()
         steps.client.console_shutdown_log = "\n".join((
             "core tick owner stopping", "core journal owner stopped",
-            "native checkpoint writer stopped", "checkpoint committed",
+            "native checkpoint writer stopped", "server stopping", "checkpoint committed",
         ))
         with mock.patch.object(world, "_echo"), mock.patch.object(world, "_restart"):
             world.run(steps, (0, 64, 0), "console-shutdown")

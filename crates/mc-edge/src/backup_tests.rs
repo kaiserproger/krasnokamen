@@ -219,7 +219,12 @@ fn restore_refuses_nonempty_target_without_changing_data() {
         std::fs::read(target.join("existing")).unwrap(),
         b"live data"
     );
-    assert_eq!(std::fs::read_dir(&target).unwrap().count(), 1);
+    let entries: Vec<_> = std::fs::read_dir(&target)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .filter(|name| name != mc_world::storage::WORLD_LEASE_FILE_NAME)
+        .collect();
+    assert_eq!(entries, ["existing"]);
 }
 
 #[test]
@@ -239,7 +244,11 @@ fn every_hash_is_verified_before_any_target_data_is_written() {
     let empty = root.path().join("empty");
     std::fs::create_dir(&empty).unwrap();
     assert!(run_restore(&backup, &empty).is_err());
-    assert!(std::fs::read_dir(&empty).unwrap().next().is_none());
+    assert!(
+        std::fs::read_dir(&empty)
+            .unwrap()
+            .all(|entry| entry.unwrap().file_name() == mc_world::storage::WORLD_LEASE_FILE_NAME)
+    );
 }
 
 #[test]
