@@ -1172,9 +1172,15 @@ fn acquire(
             (PoiKind::Job(_), PoiKind::Job(p)) => !traded(v) || p == v.data.profession,
             _ => candidate == kind,
         });
-        cache
-            .candidates
-            .retain(|(_, poi)| scope_allows(scope, poi.pos));
+        // A resident sleeps only in a roofed bed and shelters otherwise: an
+        // open-air bed it claimed would stay empty yet barred to everyone else.
+        let bound = matches!(scope, HousingScope::Bound { .. });
+        cache.candidates.retain(|(_, poi)| {
+            scope_allows(scope, poi.pos)
+                && !(bound
+                    && poi.kind == PoiKind::Home
+                    && !crate::villager::brain::roofed(state, poi.pos))
+        });
     }
     let kind_index = match kind {
         PoiKind::Home => 0,

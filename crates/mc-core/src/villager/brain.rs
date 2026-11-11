@@ -280,7 +280,7 @@ pub(super) fn bodies_near(
     })
 }
 
-fn roofed(state: &TickState, pos: BlockPos) -> bool {
+pub(crate) fn roofed(state: &TickState, pos: BlockPos) -> bool {
     (pos.y + 1..state.world.geometry().max_y()).any(|y| {
         state
             .world
@@ -947,12 +947,11 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         } else {
             cache.activity_for(v.age, v.data.profession, state.day_time)
         };
-        // Residents go to their own home bed, roofed or not, as vanilla
-        // villagers do; homeless residents shelter beside a roofed one.
+        // Residents with a roofed home bed go to that bed; the rest shelter beside one.
         let shelter_night = v.settlement.is_some()
             && (12_000..24_000).contains(&state.day_time.rem_euclid(24_000))
             && matches!(v.activity, Activity::Rest | Activity::Idle)
-            && home.is_none();
+            && !home.is_some_and(|bed| roofed(state, bed));
         if shelter_night {
             v.activity = Activity::Rest;
         }

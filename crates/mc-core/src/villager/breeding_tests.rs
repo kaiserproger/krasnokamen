@@ -89,8 +89,12 @@ fn stored_food_village(beds: usize) -> (TickState, [EntitySlot; 2], u32) {
             crate::settlements::commands::DEFAULT_RADIUS,
         )
         .unwrap();
+    // Residents claim only roofed beds (they shelter instead of sleeping in
+    // the open), so each bed gets a roof block clear of breeding headroom.
+    let stone = state.registry.states.stone;
     for (x, z) in [(3, 3), (7, 3), (11, 3)].into_iter().take(beds) {
         bed(&mut state, x, z);
+        state.world.set_block(x, 205, z, stone);
     }
     let chest = block(&state, "minecraft:chest", &[]);
     state.world.set_block(8, 201, 8, chest);

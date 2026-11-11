@@ -1,6 +1,6 @@
 //! Break-it regressions on settlement claims (BreakIssue1x11): a workstation
 //! moved inside its certified building keeps the job (F2), and a resident
-//! sleeps in the open-air bed it claimed instead of hoarding it (F4).
+//! never holds an open-air bed it will not sleep in (F4).
 use super::tests::{bed, block, test_state, villager};
 use crate::boundary::{BlockPos, ChangeSet};
 use crate::entities::EntitySlot;
@@ -91,26 +91,37 @@ fn workstation_moved_inside_its_certified_workshop_keeps_the_job() {
 }
 
 #[test]
-fn bound_resident_sleeps_in_its_open_air_home_bed() {
+fn bound_resident_leaves_an_open_air_bed_to_a_villager_that_sleeps_in_it() {
     let mut state = test_state();
     state.day_time = 18_000;
     let open_air = bed(&mut state, 12, 12);
     state.world.fold_overlay();
     let id = settlement(&mut state);
-    // A resident that claimed an open-air bed used to shelter instead of
-    // sleeping in it, keeping the bed empty yet barred to every villager.
+    // A homeless resident searches first: it shelters at night, so an
+    // open-air bed would stay its unused claim forever.
     let resident = bound_villager(&mut state, id, [2.5, 201.0, 2.5]);
+    for _ in 0..60 {
+        step(&mut state);
+    }
+    assert_eq!(
+        state.entities.row(resident).villager.as_ref().unwrap().home,
+        None,
+        "a resident claims only a bed it sleeps in"
+    );
+    let vanilla = villager(&mut state, [10.5, 201.0, 14.5]);
     let mut slept = false;
     for _ in 0..3000 {
         step(&mut state);
-        if state.entities.row(resident).villager.as_ref().unwrap().sleeping {
+        if state.entities.row(vanilla).villager.as_ref().unwrap().sleeping {
             slept = true;
             break;
         }
     }
+    let v = state.entities.row(vanilla).villager.as_ref().unwrap();
+    assert_eq!(v.home, Some(open_air), "the unbound villager claims the free bed");
+    assert!(slept, "and sleeps in it at night");
     assert_eq!(
         state.entities.row(resident).villager.as_ref().unwrap().home,
-        Some(open_air)
+        None
     );
-    assert!(slept, "a resident sleeps in the bed it claimed, roofed or not");
 }
