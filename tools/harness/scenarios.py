@@ -324,6 +324,16 @@ SCENARIOS: dict[str, Scenario] = {
         proves="disabled success messages are absent, failure and chat remain visible, enabled success is visible",
         limits="native player command path; console behavior is covered separately by a Rust regression",
     ),
+    "native-frozen-game-age": _entry(
+        id="native-frozen-game-age",
+        summary="Frozen simulated age stays fixed across teleport and local input",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-frozen-game-age", requires=("xvfb",),
+        sources=("tools/harness/backends/scene_shot.py", "tools/harness/frozen_game_age_scene.json"),
+        fixture="private native client, operator freeze and teleport, local input",
+        proves="received game age stays constant across held frames and teleport",
+        limits="one native client; does not cover restart",
+    ),
     "native-v2-chest-drag-disconnect": _entry(
         id="native-v2-chest-drag-disconnect",
         summary="Physical chest drag then disconnect with an item on the cursor",

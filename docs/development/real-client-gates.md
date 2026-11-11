@@ -300,6 +300,11 @@ is required; use an ordered chat fence after the commands under test before
 checking absence. `tools/harness/command_feedback_scene.json` exercises player
 success suppression, failure visibility and the enabled feedback control.
 
+`assert_same_game_time` compares integer `time.game_time` from two named native
+observations and requires the specified daylight change, proving a fresh clock
+update arrived. The registered `native-frozen-game-age` scene fences freeze,
+teleport and time-command replies across held frames and local input.
+
 `wait_chat` (native only) takes a nonempty substring and waits on client state
 notifications until `recent_chat` contains it. Use a received acknowledgement
 before observing a server-driven transition; waiting client ticks does not
