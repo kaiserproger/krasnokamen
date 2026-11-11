@@ -92,16 +92,15 @@ pub async fn handle_configuration(
     })
     .await?;
 
-    // Loader content first declares its serverbound channels. Optional-only content
-    // then asks whether the client speaks the Loader before known-pack negotiation,
-    // so its hello (sent while handling the probe) is read ahead of its known-pack
-    // reply.
+    // Loader content first declares its serverbound channels, then asks whether the
+    // client speaks the Loader before known-pack negotiation, so its hello (sent while
+    // handling the probe) is read ahead of its known-pack reply. Required content
+    // probes too: negotiation keeps a Loader client alive through a long stall, but
+    // refuses a client that is not one after `LOADER_HELLO_TIMEOUT`.
     let mut loader_hello = false;
     if loader_manifest.is_some() {
         crate::plugin_loader::send_channel_register(conn).await?;
-        if !loader_required {
-            crate::plugin_loader::send_probe(conn).await?;
-        }
+        crate::plugin_loader::send_probe(conn).await?;
     }
 
     // Advertise the endpoint's own known pack, not any intermediate step.
@@ -221,7 +220,7 @@ pub async fn handle_configuration(
     // the probe; everyone else joins without Loader content.
     let loader_session = match loader_manifest {
         Some(manifest) if loader_required || loader_hello => {
-            Some(crate::plugin_loader::negotiate(conn, manifest, &mut prefs).await?)
+            Some(crate::plugin_loader::negotiate(conn, manifest, &mut prefs, loader_hello).await?)
         }
         _ => None,
     };

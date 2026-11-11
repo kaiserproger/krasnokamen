@@ -171,9 +171,11 @@ worker, runs the negative control.
    profile check; a timeout, a client that never reached play (`in_play`), a
    missing prerequisite or any failure without a negative verdict is
    unrunnable and cannot be a control. A scenario ref has no verdict map; it is
-   red only when the failed run's own error text carries the scenario's
-   `assertion failed` marker (and its `named_scenario.id` matches the ref), so a
-   join or timeout flake never counts. Control worktrees
+   red only when the failed receipt's `details.named_scenario.id` is the ref and
+   its own `error` reads `<id> assertion failed: <name>` (never the argv of the
+   child), with `<name>` not a connection check (`in_play`, `*_entered_play`,
+   join) and the failure not tagged before the scenario body (`join`, start-up
+   phases). Any other failure, a timeout or a join flake never counts. Control worktrees
    are temporary `git worktree`s beside the other worktrees (`<work>/wt/`),
    one promotion at a time (a lock), at fixed paths (`ledger-control-candidate`,
    `ledger-control-fix`). Every cargo build or test for such a tree runs through

@@ -1,11 +1,14 @@
 //! Shared Loader protocol transport for v2 configuration sessions.
 
 use std::collections::BTreeSet;
+use std::time::Duration;
+
+use tokio::time::Instant;
 
 use mc_loader::{LoaderArtifactRequest, LoaderClientAck, LoaderManifest, LoaderSession};
 use mc_protocol::packets::configuration::{
     AcknowledgeFinishConfiguration, ClientboundCustomPayload, ConfigurationDisconnect,
-    ServerboundCustomPayload,
+    ConfigurationKeepAlive, ServerboundConfigurationKeepAlive, ServerboundCustomPayload,
 };
 use mc_protocol::packets::{CustomPayload, Packet};
 
@@ -66,12 +69,37 @@ pub(crate) fn is_hello(id: i32, body: &bytes::Bytes) -> anyhow::Result<bool> {
     }
 }
 
+/// Total time one Loader negotiation may take, from the manifest to the ack. The client
+/// verifies and fetches bundles between those two points, which can take over a minute
+/// on a loaded host; nothing past this bound holds a pre-play slot.
+pub(crate) const LOADER_NEGOTIATION_TOTAL_TIMEOUT: Duration = Duration::from_secs(120);
+/// How long a client that has not shown itself as a Loader client (no hello, request or
+/// ack) may stay silent after the manifest: the vanilla client of a Loader-required
+/// server, which gets the Loader disconnect message instead of waiting out its own
+/// timeout.
+pub(crate) const LOADER_HELLO_TIMEOUT: Duration = crate::connection::PRE_PLAY_READ_TIMEOUT;
+/// Keepalive period while a Loader client works. The vanilla client closes the
+/// connection after 30 s without a byte from the server (`ReadTimeoutHandler(30)`).
+pub(crate) const LOADER_KEEPALIVE_PERIOD: Duration = Duration::from_secs(10);
+
+/// `loader_hello`: the client already answered the probe as a Loader client.
 pub(crate) async fn negotiate(
     conn: &mut Connection,
     manifest: &LoaderManifest,
     prefs: &mut crate::configuration::ClientPrefs,
+    loader_hello: bool,
 ) -> anyhow::Result<LoaderSession> {
-    let result = negotiate_inner(conn, manifest, prefs).await;
+    let result = match tokio::time::timeout(
+        LOADER_NEGOTIATION_TOTAL_TIMEOUT,
+        negotiate_inner(conn, manifest, prefs, loader_hello),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Err(anyhow::anyhow!(
+            "negotiation not finished within {LOADER_NEGOTIATION_TOTAL_TIMEOUT:?}"
+        )),
+    };
     if let Err(error) = &result {
         let reason = format!(
             "This server requires the Solaris Loader client mod. Install it and reconnect. \
@@ -90,6 +118,7 @@ async fn negotiate_inner(
     conn: &mut Connection,
     manifest: &LoaderManifest,
     prefs: &mut crate::configuration::ClientPrefs,
+    loader_hello: bool,
 ) -> anyhow::Result<LoaderSession> {
     conn.send_packet(&ClientboundCustomPayload {
         payload: CustomPayload::Unknown {
@@ -100,17 +129,40 @@ async fn negotiate_inner(
     .await?;
     let mut requests = BTreeSet::new();
     let mut ignored = 0usize;
+    let started = Instant::now();
+    let mut loader_seen = loader_hello;
+    let mut next_keepalive = started + LOADER_KEEPALIVE_PERIOD;
+    let mut keepalive_id = 0i64;
     loop {
-        let frame = conn
-            .read_frame_in_with(
-                mc_protocol::State::Configuration,
-                crate::connection::LOADER_NEGOTIATE_READ_TIMEOUT,
-            )
-            .await?;
+        let frame = tokio::select! {
+            frame = conn.read_frame_in_untimed(mc_protocol::State::Configuration) => frame?,
+            () = tokio::time::sleep_until(next_keepalive), if loader_seen => {
+                keepalive_id += 1;
+                conn.send_packet(&ConfigurationKeepAlive { id: keepalive_id }).await?;
+                next_keepalive += LOADER_KEEPALIVE_PERIOD;
+                continue;
+            }
+            () = tokio::time::sleep_until(started + LOADER_HELLO_TIMEOUT), if !loader_seen => {
+                anyhow::bail!("no Loader hello, request or ack from the client");
+            }
+        };
         anyhow::ensure!(
             frame.id != AcknowledgeFinishConfiguration::ID,
             "client finished configuration before acknowledging required Loader packages"
         );
+        if frame.id == ServerboundConfigurationKeepAlive::ID {
+            let mut body = frame.body.clone();
+            let _echo = ServerboundConfigurationKeepAlive::decode(&mut body)?;
+            anyhow::ensure!(body.is_empty(), "trailing keep alive bytes");
+            continue;
+        }
+        if is_hello(frame.id, &frame.body)? {
+            if !loader_seen {
+                loader_seen = true;
+                next_keepalive = Instant::now() + LOADER_KEEPALIVE_PERIOD;
+            }
+            continue;
+        }
         if frame.id == ServerboundCustomPayload::ID {
             let mut body = frame.body.clone();
             let payload = CustomPayload::decode_serverbound(&mut body)?;
@@ -121,6 +173,7 @@ async fn negotiate_inner(
                     return Ok(manifest.bind_ack(&ack)?);
                 }
                 if channel == *mc_loader::loader_request_channel() {
+                    loader_seen = true;
                     let request = LoaderArtifactRequest::decode(&payload)?;
                     let (bundle, artifact) = manifest.requested_artifact(&request)?;
                     anyhow::ensure!(

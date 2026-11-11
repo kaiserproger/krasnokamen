@@ -22,10 +22,6 @@ use crate::crypto::MinecraftCipher;
 
 /// Per-packet read timeout before play.
 pub const PRE_PLAY_READ_TIMEOUT: Duration = Duration::from_secs(10);
-/// Per-read deadline during Loader package negotiation. After the manifest the client
-/// verifies and fetches bundles, which can exceed [`PRE_PLAY_READ_TIMEOUT`] on a loaded
-/// host (observed 2026-11-11: loader-live gate stalled in Configuration after 10 s).
-pub const LOADER_NEGOTIATE_READ_TIMEOUT: Duration = Duration::from_secs(120);
 /// Total deadline for handshake, status and login, before configuration.
 pub const PRE_PLAY_TOTAL_TIMEOUT: Duration = Duration::from_secs(30);
 /// Maximum packets accepted during pre-play.
@@ -268,23 +264,31 @@ impl Connection {
     /// [`Connection::read_frame_play`] (no read deadline; client silence is
     /// governed by keepalive, not by a read timeout).
     pub async fn read_frame_in(&mut self, state: State) -> anyhow::Result<RawFrame> {
-        self.read_frame_in_with(state, PRE_PLAY_READ_TIMEOUT).await
+        self.read_pre_play_frame(Some(PRE_PLAY_READ_TIMEOUT), state)
+            .await
     }
 
-    /// Like [`Connection::read_frame_in`] but with an explicit per-read deadline, for
-    /// configuration sub-phases (Loader negotiation) that may legitimately stall.
-    pub async fn read_frame_in_with(
+    /// Like [`Connection::read_frame_in`] without the per-read deadline, for a caller
+    /// that bounds the wait itself (Loader negotiation: one total deadline plus
+    /// keepalives). Cancel-safe: partial frames stay in the connection's buffer, so a
+    /// caller may drop this future (for example in a `select!`) and read again.
+    pub(crate) async fn read_frame_in_untimed(&mut self, state: State) -> anyhow::Result<RawFrame> {
+        self.read_pre_play_frame(None, state).await
+    }
+
+    async fn read_pre_play_frame(
         &mut self,
+        timeout: Option<Duration>,
         state: State,
-        timeout: Duration,
     ) -> anyhow::Result<RawFrame> {
         loop {
-            let frame = tokio::time::timeout(
-                timeout,
-                read_frame_inner(&mut self.reader, &mut self.buf, self.compression),
-            )
-            .await
-            .map_err(|_| anyhow::anyhow!("read timed out in {state:?}"))??;
+            let read = read_frame_inner(&mut self.reader, &mut self.buf, self.compression);
+            let frame = match timeout {
+                Some(timeout) => tokio::time::timeout(timeout, read)
+                    .await
+                    .map_err(|_| anyhow::anyhow!("read timed out in {state:?}"))??,
+                None => read.await?,
+            };
             self.budget.record(&frame)?;
             match &mut self.translation {
                 None => return Ok(frame),
