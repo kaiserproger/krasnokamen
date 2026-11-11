@@ -606,7 +606,8 @@ pub(crate) fn nbt_equal(left: &mc_nbt::Tag, right: &mc_nbt::Tag) -> bool {
     }
 }
 
-fn nbt_subset(expected: &mc_nbt::Tag, actual: &mc_nbt::Tag) -> bool {
+/// `NbtUtils.compareNbt(expected, actual, partial lists)`.
+pub(crate) fn nbt_subset(expected: &mc_nbt::Tag, actual: &mc_nbt::Tag) -> bool {
     match (expected, actual) {
         (mc_nbt::Tag::Compound(expected), mc_nbt::Tag::Compound(actual)) => {
             expected.iter().all(|(key, value)| {

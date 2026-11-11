@@ -4148,7 +4148,106 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "The e430 plugin-free gamerules.projectiles_can_break_blocks adapter passed both charged bow ammunition waits and the disabled-rule decorated-pot control, but the enabled-rule control expected air at (3,80,0) and observed the pot still present. Receipt: /run/media/kaiserroman/games/solaris-work/wt/LedgerMatrixB15/.analysis/validation/20261111T124021-protocol-matrix-o6c42bqi/result.json. Arrow spawn packets were received in the target block cell; exact impact face is not independently established. crates/mc-core/src/projectiles/flight.rs:906-947 has no pot handling; the gamerule occurs in command registration and metadata upgrade, not projectile execution."
-regression = ["cargo:mc-core:projectiles::flight_tests::projectile_breaks_pot_only_when_rule_enabled", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_chorus_flower_only_when_rule_enabled", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_pointed_dripstone_only_with_fast_trident", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_sulfur_spike_only_with_fast_trident", "cargo:mc-core:projectiles::flight_tests::projectile_pot_break_follows_owner_and_spawn_protection", "cargo:mc-core:projectiles::flight_tests::projectile_cracks_pot_before_destroying_it", "cargo:mc-core:projectiles::flight_tests::two_shots_at_one_sherd_pot_drop_its_sherds_and_contents_once", "cargo:mc-core:projectiles::flight_tests::arrow_that_breaks_a_pot_stays_stuck_and_pickable", "cargo:mc-core:plugin_player::zone_protection_tests::projectiles_break_zone_blocks_only_for_admitted_shooters"]
+regression = ["cargo:mc-core:projectiles::flight_tests::projectile_breaks_pot_only_when_rule_enabled", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_chorus_flower_only_when_rule_enabled", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_pointed_dripstone_only_with_fast_trident", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_sulfur_spike_only_with_fast_trident", "cargo:mc-core:projectiles::flight_tests::projectile_pot_break_follows_owner_and_spawn_protection", "cargo:mc-core:projectiles::flight_tests::projectile_cracks_pot_before_destroying_it", "cargo:mc-core:projectiles::flight_tests::two_shots_at_one_sherd_pot_drop_its_sherds_and_contents_once", "cargo:mc-core:projectiles::flight_tests::arrow_that_breaks_a_pot_falls_to_the_floor_and_stays_pickable", "cargo:mc-core:plugin_player::zone_protection_tests::projectiles_break_zone_blocks_only_for_admitted_shooters"]
 repro_check = "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run protocol-matrix --server-bin /run/media/kaiserroman/games/solaris-work/pins/e4304662b8f4-server-x86_64-unknown-linux-gnu-incr/solaris-v2 --vanilla-data /run/media/kaiserroman/games/solaris-work/receipts/H08Orbs/protocol-content/26.3 --subject gamerules.projectiles_can_break_blocks --port 26741 --dashboard-port 26742"
 failing_first = "reported"
 fix_commit = "70e5c6d6"
+
+[[bug]]
+id = "PROJECTILE-STUCK-ARROW-NEVER-FALLS"
+title = "An arrow or trident stuck in a block stays floating when that block is removed instead of falling"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Source review against 26.3 AbstractArrow javap (.analysis/codex-logs/impact-parity/AbstractArrow.javap tick 165-209, shouldFall 759-780, startFalling 782-815): an in-ground arrow whose AABB(pos,pos).inflate(0.06) no longer collides clears IN_GROUND, scales its zero motion and resets life. crates/mc-core/src/projectiles/flight.rs stuck branch only despawned or picked up, so an arrow that broke a pot, primed TNT or lost its support hung in the air."
+regression = ["cargo:mc-core:projectiles::flight_tests::arrow_that_breaks_a_pot_falls_to_the_floor_and_stays_pickable"]
+failing_first = "reported"
+
+[[bug]]
+id = "PROJECTILE-BELL-NO-RING"
+title = "A projectile striking a bell never rings it"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Source review against 26.3 BellBlock javap (.analysis/codex-logs/impact-parity/parity.javap BellBlock.onProjectileHit/onHit/isProperHit/attemptToRing): a proper hit (horizontal face, at most 0.8124f above the cell floor, side allowed by attachment and facing) sends block event 1 with the face, the bell sound, BLOCK_CHANGE and the player owner's bell_ring stat. crates/mc-core/src/projectiles had no bell reaction."
+regression = ["cargo:mc-core:projectiles::flight_tests::arrow_rings_a_floor_bell_only_on_a_proper_hit"]
+failing_first = "reported"
+
+[[bug]]
+id = "PROJECTILE-CANDLE-NOT-LIT"
+title = "A burning projectile does not light candles or candle cakes"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Source review against 26.3 AbstractCandleBlock/CandleBlock/CandleCakeBlock javap (.analysis/codex-logs/impact-parity/parity.javap): onProjectileHit with projectile.isOnFire() and canBeLit (unlit; a candle also dry) calls setLit (setBlock flags 11). crates/mc-core/src/projectiles had no candle reaction."
+regression = ["cargo:mc-core:projectiles::flight_tests::burning_arrow_lights_dry_candles_and_candle_cakes", "cargo:mc-core:projectiles::flight_tests::small_fireball_lights_a_candle_but_a_wind_charge_does_not"]
+failing_first = "reported"
+
+[[bug]]
+id = "PROJECTILE-BIG-DRIPLEAF-NO-TILT"
+title = "A projectile striking a big dripleaf does not tilt it, and big dripleaf has no tilt ticks at all"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Source review against 26.3 BigDripleafBlock javap (.analysis/codex-logs/impact-parity/parity.javap lines 767-1485): onProjectileHit sets tilt FULL with the tilt-down sound and schedules a tick; tick walks UNSTABLE->PARTIAL->FULL (10, 10) and resets FULL after 100 with the tilt-up sound; a neighbour signal resets; setTilt emits BLOCK_CHANGE for a changed vibrating tilt. Solaris had no big_dripleaf tilt code."
+regression = ["cargo:mc-core:projectiles::flight_tests::projectile_tilts_big_dripleaf_until_its_tick_levels_it", "cargo:mc-core:redstone::big_dripleaf::tests::scheduled_ticks_walk_the_tilt_and_reset_a_full_leaf", "cargo:mc-core:redstone::big_dripleaf::tests::a_neighbour_signal_resets_a_tilted_leaf", "cargo:mc-core:redstone::big_dripleaf::tests::a_projectile_hit_keeps_the_pending_tick"]
+failing_first = "reported"
+
+[[bug]]
+id = "PROJECTILE-AMETHYST-NO-CHIME"
+title = "A projectile striking amethyst does not chime"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Source review against 26.3 AmethystBlock javap (.analysis/codex-logs/impact-parity/parity.javap lines 1486-1518): onProjectileHit plays AMETHYST_BLOCK_CHIME, BLOCKS, volume 1, pitch 0.5 + nextFloat * 1.2; budding amethyst, buds and clusters inherit it. crates/mc-core/src/projectiles had no amethyst reaction."
+regression = ["cargo:mc-core:projectiles::flight_tests::projectile_chimes_amethyst_once"]
+failing_first = "reported"
+
+[[bug]]
+id = "PROJECTILE-TNT-CAMPFIRE-CONSUMES-ARROW"
+title = "A burning arrow that primes TNT or relights a campfire is deleted instead of sticking"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Source review against 26.3 TntBlock/CampfireBlock/AbstractArrow javap: the block reaction runs inside Projectile.onHitBlock and AbstractArrow.onHitBlock then sticks the arrow; crates/mc-core/src/projectiles/flight.rs returned true (remove) after prime_block or relight."
+regression = ["cargo:mc-core:projectiles::flight_tests::burning_arrow_primes_exact_tnt_cell_once_on_negative_axis_impact", "cargo:mc-core:projectiles::flight_tests::flaming_arrow_relights_dry_but_not_waterlogged_campfire"]
+failing_first = "reported"
+
+[[bug]]
+id = "PROJECTILE-BREAK-NO-BLOCK-DESTROY-VIBRATION"
+title = "A projectile breaking a pot, chorus flower or speleothem emits no BLOCK_DESTROY vibration"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Source review: 26.3 Level.destroyBlock emits GameEvent.BLOCK_DESTROY at the cell; crates/mc-core/src/projectiles/block_impact.rs destroy() staged the break and level event 2001 without a vibration (review ReviewProjectileBreak low)."
+regression = ["cargo:mc-core:projectiles::flight_tests::projectile_pot_break_emits_block_destroy"]
+failing_first = "reported"
+
+[[bug]]
+id = "PROJECTILE-MAY-INTERACT-IGNORES-WORLD-BORDER"
+title = "A player's projectile interacts with blocks outside the world border"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Source review against 26.3 ServerLevel.mayInteract javap (.analysis/codex-logs/impact-parity/blocks.javap 9270-9293): a player also needs WorldBorder.isWithinBounds(pos) (parity.javap 3144-3186: minX <= x < maxX, minZ <= z < maxZ). crates/mc-core/src/projectiles/block_impact.rs may_interact checked spawn protection only."
+regression = ["cargo:mc-core:projectiles::flight_tests::player_arrow_primes_tnt_only_inside_the_world_border"]
+failing_first = "reported"
+
+[[bug]]
+id = "PROJECTILE-CAN-BREAK-NOT-EVALUATED"
+title = "Adventure-mode and mob projectiles never break or ignite blocks even when the arrow's can_break admits them"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Source review against 26.3 Projectile.canBreakBlockInAdventureMode (.analysis/codex-logs/impact-parity/Projectile.javap 459-496: ownerless outside default adventure and non-adventure players pass; mob owners and adventure players need canBreak, applied from the arrow pickup stack by AbstractArrow.javap 96) and TntBlock.prime (parity.javap 2613+: an adventure igniter needs stack.canBreakBlockInAdventureMode). crates/mc-core/src/projectiles/block_impact.rs denied every such shot because Solaris evaluated no can_break predicate."
+regression = ["cargo:mc-core:projectiles::flight_tests::adventure_and_mob_arrows_break_pots_only_through_can_break", "cargo:mc-core:projectiles::flight_tests::adventure_burning_arrow_primes_tnt_only_through_can_break", "cargo:mc-core:projectiles::can_break::tests::block_ids_lists_and_alternatives_select_the_block", "cargo:mc-core:projectiles::can_break::tests::state_properties_match_exact_values_and_ordered_ranges", "cargo:mc-core:projectiles::can_break::tests::nbt_needs_a_block_entity_whose_image_contains_it"]
+failing_first = "reported"

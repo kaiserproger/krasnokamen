@@ -124,3 +124,46 @@ fn run(state: &mut TickState, context: Context, input: &str) -> Result<i32, Stri
     }
     Ok(count)
 }
+
+/// `SoundSource.BLOCKS` ordinal.
+pub(crate) const BLOCKS: i32 = 4;
+
+/// Server-played block sound: vanilla `Level.playSound(null, pos, event, BLOCKS,
+/// volume, pitch)` sends one sound at the block centre to every player of the
+/// level closer than the event range, `16 * max(volume, 1)`
+/// (`SoundEvent.getRange`, `PlayerList.broadcast`).
+pub(crate) fn play_block(
+    state: &mut TickState,
+    pos: crate::boundary::BlockPos,
+    sound: &str,
+    volume: f32,
+    pitch: f32,
+) {
+    let Ok(sound) = mc_data::Identifier::parse(sound) else {
+        return;
+    };
+    let centre = crate::vibration::centre(pos);
+    let range = 16.0 * f64::from(volume.max(1.0));
+    let listeners: Vec<_> = state
+        .players
+        .iter()
+        .filter_map(|(id, player)| {
+            let at = state.entities.pos(state.entities.slot_of(*id)?);
+            let squared: f64 = (0..3).map(|axis| (at[axis] - centre[axis]).powi(2)).sum();
+            (squared < range * range).then_some(player.connection)
+        })
+        .collect();
+    for connection in listeners {
+        state.push_player(
+            connection,
+            crate::boundary::PlayerChange::CommandSound {
+                sound: sound.clone(),
+                fixed_range: None,
+                source: BLOCKS,
+                position: centre.map(|value| (value * 8.0).floor() as i32),
+                volume,
+                pitch,
+            },
+        );
+    }
+}
