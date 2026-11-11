@@ -421,7 +421,7 @@ fn mounted_spawn_burst_links_ride_the_world_queue_without_reliable_overflow() {
         "a spawn burst must not overflow the reliable queue"
     );
     let mut spawned = std::collections::HashSet::new();
-    let (mut passengers, mut leashes) = (0, 0);
+    let (mut passengers, mut leashes, mut riders_after_vehicle) = (0, 0, 0);
     for packet in &packets {
         let mut bytes = bytes::BytesMut::from(packet.data.as_ref());
         let frame = try_decode_frame(&mut bytes, Compression::Threshold(256))
@@ -429,11 +429,14 @@ fn mounted_spawn_burst_links_ride_the_world_queue_without_reliable_overflow() {
             .unwrap();
         let entity = match frame.id {
             AddEntity::ID => {
-                spawned.insert(
-                    AddEntity::decode(&mut frame.body.clone())
-                        .unwrap()
-                        .entity_id,
-                );
+                let id = AddEntity::decode(&mut frame.body.clone())
+                    .unwrap()
+                    .entity_id;
+                // Riders have odd ids, one above their horse's.
+                if id % 2 == 1 && spawned.contains(&(id - 1)) {
+                    riders_after_vehicle += 1;
+                }
+                spawned.insert(id);
                 continue;
             }
             ClientboundSetPassengers::ID => {
@@ -460,5 +463,11 @@ fn mounted_spawn_burst_links_ride_the_world_queue_without_reliable_overflow() {
             "link before the AddEntity of {entity}"
         );
     }
-    assert_eq!((passengers, leashes), (horses, horses / 2));
+    // One SetPassengers in each horse's pairing, and one more in the pairing of
+    // each rider spawned after its horse (vanilla `sendPairingData`).
+    assert!(riders_after_vehicle > 0, "the burst mixes spawn orders");
+    assert_eq!(
+        (passengers, leashes),
+        (horses + riders_after_vehicle, horses / 2)
+    );
 }
