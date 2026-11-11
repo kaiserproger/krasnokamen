@@ -82,7 +82,9 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         _die(steps, peer, display, actor_pid, "kill", f"kill {VICTIM}", "was killed", True, True)
         # DEATH-COMPONENT: a mob kill names the mob, which only the vanilla translation carries.
         steps.fixture(f"summon minecraft:zombie {x + .5} {y} {z + 2.5} {{NoAI:1b,PersistenceRequired:1b}}")
-        steps.call("minecraft_wait_ticks", {"ticks": 10})
+        # The damage command's selector must find the zombie: wait until the client has received it.
+        steps.call("minecraft_wait_for_visible_entity", {
+            "entity_type": "minecraft:zombie", "radius": 16, "timeout_seconds": steps.remaining()})
         _die(steps, peer, display, actor_pid, "mob",
              f"damage {VICTIM} 100 minecraft:mob_attack by @e[type=minecraft:zombie,limit=1]",
              "was slain by Zombie", True, True)
