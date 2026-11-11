@@ -290,9 +290,14 @@ The `entities` profile includes windowed native-client probes:
 - `native-v2-happy-ghast-harness`: an ordinary survival harness debit admits the
   graphical player and three independent native peers; a fifth peer is refused.
   Received passenger packets prove distinct seats and independent dismount.
-  An input-ordered read of the vehicle's rider NBT fences the refusal check;
-  ordered chat alone cannot fence the world publication queue. The focused
-  native checkpoint regression separately checks harness/rider custody on disk.
+  The public NBT view hides `solaris:` keys, so the refusal is fenced by the
+  fourth rider's later dismount in the same ordered passenger stream: no
+  passenger event before it may carry a fifth id. The focused native
+  checkpoint regression separately checks harness/rider custody on disk.
+- `native-v2-mob-metadata-spot`: one frog, strider, camel and sniffer stand in
+  frame on a private pad, a small slime is then eaten by the frog; the client
+  must stay in play and its log must carry no decode failure (sniffer state is
+  accessor 18; frog tongue, strider cold and camel dash are 19).
 - `native-v2-map-*`: separate frame waypoint, banner removal/locked
   toggle, inventory clone tracking, pumpkin hiding, terrain shading and Nether
   terrain repros. Read-only receipts reconstruct the graphical viewer's exact

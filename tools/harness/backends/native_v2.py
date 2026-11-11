@@ -746,8 +746,14 @@ def _happy_ghast(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     run(steps, origin)
 
 
+def _mob_metadata(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_mob_metadata import run
+    run(steps, origin)
+
+
 RUNNERS = {
     "native-v2-happy-ghast-harness": _happy_ghast,
+    "native-v2-mob-metadata-spot": _mob_metadata,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,

@@ -123,6 +123,9 @@ pub(crate) fn run(state: &mut TickState) {
     state.serial_entity_slots = slots;
 }
 
+/// `Frog.DATA_TONGUE_TARGET_ID`: Animal ends at 17, the variant is 18 (local javap).
+const TONGUE_INDEX: u8 = 19;
+
 fn hunt(state: &mut TickState, frog: crate::entities::EntitySlot) {
     use crate::boundary::EntityDataValue;
     let pos = state.entities.pos(frog);
@@ -163,6 +166,18 @@ fn hunt(state: &mut TickState, frog: crate::entities::EntitySlot) {
                 .then(a.1.cmp(&b.1))
         });
     let Some((distance, target, prey)) = prey else {
+        let row = state.entities.row(frog);
+        if row.entity_life.frog_prey.is_none()
+            && row.entity_life.frog_tongue_ticks == 0
+            && row.appearance.pose != 9
+            && !row
+                .appearance
+                .extra
+                .iter()
+                .any(|(index, _)| *index == TONGUE_INDEX)
+        {
+            return;
+        }
         let row = state.entities.row_mut(frog);
         row.entity_life.frog_prey = None;
         row.entity_life.frog_tongue_ticks = 0;
@@ -170,7 +185,12 @@ fn hunt(state: &mut TickState, frog: crate::entities::EntitySlot) {
             std::sync::Arc::make_mut(&mut row.appearance).pose = 0;
             state.appearance_changed.push(id);
         }
-        crate::special_mobs::metadata(state, frog, 18, EntityDataValue::OptionalUnsignedInt(None));
+        crate::special_mobs::metadata(
+            state,
+            frog,
+            TONGUE_INDEX,
+            EntityDataValue::OptionalUnsignedInt(None),
+        );
         return;
     };
     let target_pos = state.entities.pos(prey);
@@ -192,7 +212,7 @@ fn hunt(state: &mut TickState, frog: crate::entities::EntitySlot) {
         crate::special_mobs::metadata(
             state,
             frog,
-            18,
+            TONGUE_INDEX,
             EntityDataValue::OptionalUnsignedInt(Some(target.0 as u32)),
         );
     }
@@ -255,6 +275,11 @@ fn hunt(state: &mut TickState, frog: crate::entities::EntitySlot) {
         row.entity_life.frog_tongue_ticks = 0;
         std::sync::Arc::make_mut(&mut row.appearance).pose = 0;
         state.appearance_changed.push(id);
-        crate::special_mobs::metadata(state, frog, 18, EntityDataValue::OptionalUnsignedInt(None));
+        crate::special_mobs::metadata(
+            state,
+            frog,
+            TONGUE_INDEX,
+            EntityDataValue::OptionalUnsignedInt(None),
+        );
     }
 }

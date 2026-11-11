@@ -196,17 +196,20 @@ pub(crate) fn action(
     }
     None
 }
-pub(crate) fn roll(row: &mut ColdRow, bound: u32) -> u32 {
-    row.entity_life.taming.rolls = row.entity_life.taming.rolls.wrapping_add(1);
-    let mut seed = row.uuid.as_u128() as u64
-        ^ row
-            .entity_life
-            .taming
-            .rolls
-            .wrapping_mul(0x9E3779B97F4A7C15);
+fn mix(uuid: u128, counter: u64, bound: u32) -> u32 {
+    let mut seed = uuid as u64 ^ counter.wrapping_mul(0x9E3779B97F4A7C15);
     seed = (seed ^ (seed >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
     seed = (seed ^ (seed >> 27)).wrapping_mul(0x94D049BB133111EB);
     ((seed ^ (seed >> 31)) % u64::from(bound)) as u32
+}
+/// Persisted roll: advances `taming.rolls`, so it is a durable entity change.
+pub(crate) fn roll(row: &mut ColdRow, bound: u32) -> u32 {
+    row.entity_life.taming.rolls = row.entity_life.taming.rolls.wrapping_add(1);
+    mix(row.uuid.as_u128(), row.entity_life.taming.rolls, bound)
+}
+/// Per-tick ambient roll keyed by the world tick; reads the row, writes nothing.
+pub(crate) fn roll_at(row: &ColdRow, tick: u64, bound: u32) -> u32 {
+    mix(row.uuid.as_u128(), tick, bound)
 }
 fn max_health(state: &TickState, body: &crate::entities::Body, row: &ColdRow) -> f32 {
     let base = crate::mounts::type_id(body)

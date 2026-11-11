@@ -59,11 +59,16 @@ pub(crate) fn from_fields(
             }
         }
     }
+    if fields.iter().any(|(name, _)| name == "solaris:Rider") {
+        // The scalar form predates the ordered rider list; reading it as an
+        // opaque field would silently unseat the rider.
+        return Err(invalid("solaris:Rider is obsolete, use solaris:Riders"));
+    }
     if let Some(tag) = field(fields, "solaris:Riders")? {
         let Tag::List(list) = tag else {
             return Err(invalid("solaris:Riders"));
         };
-        if list.elements.len() > 4
+        if list.elements.len() > super::MAX_PASSENGERS
             || (!list.elements.is_empty() && list.element_type != tag_type::INT_ARRAY)
         {
             return Err(invalid("solaris:Riders"));
@@ -303,12 +308,8 @@ pub(crate) fn validate_replay(replay: &crate::journal::Replay) -> Result<(), Cor
         .collect::<Result<std::collections::HashSet<_>, _>>()?;
     let mut riders = std::collections::BTreeMap::new();
     for (id, entity) in &replay.entities {
-        let maximum =
-            mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(entity.type_id)
-                .map_or(1, |kind| {
-                    usize::from(kind.behavior.vehicle_passenger.max_passengers)
-                });
-        if entity.state.entity_life.mount.riders.len() > maximum.min(4) {
+        let maximum = super::seat_capacity(entity.type_id);
+        if entity.state.entity_life.mount.riders.len() > maximum {
             return Err(CoreError::Storage(format!(
                 "invalid mounted passengers on {id}: capacity {maximum}"
             )));

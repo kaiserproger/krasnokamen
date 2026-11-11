@@ -219,7 +219,17 @@ SCENARIOS: dict[str, Scenario] = {
                  "tools/harness/backends/client_probes.py"),
         fixture="private ghast, one survival harness, graphical rider and four independent headless peers",
         proves="bare-ghast refusal, harness debit, four distinct passenger ids, fifth refusal and independent dismount",
-        limits="restart custody is covered by the focused core regression; screenshots require recorded review",
+        limits="the checkpoint codec round trip is covered by the focused core regression, not a restart; screenshots require recorded review",
+    ),
+    "native-v2-mob-metadata-spot": _entry(
+        id="native-v2-mob-metadata-spot", summary="Frog, strider, camel and sniffer entity data decode in one native client",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-mob-metadata-spot",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_mob_metadata.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="private obsidian pad, one dirt cell, one each of frog, strider, camel, sniffer and one small slime",
+        proves="the client stays in play through the sniffer state, strider cold, frog tongue target and the unchanged camel accessors, and its log has no decode failure",
+        limits="the camel dash flag needs a mounted jump and is covered by the focused core test and wire test, not this spot-check; screenshots require recorded review",
     ),
     "native-v2-custody-mount-export": _entry(
         id="native-v2-custody-mount-export", summary="Imported chested donkey withdrawal and deposit survive native export and reimport",

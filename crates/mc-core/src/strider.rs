@@ -1,10 +1,13 @@
 //! Strider.tick warmth and transient suffocating movement modifier (local javap).
 use crate::{boundary::EntityDataValue, tick::TickState};
 
+/// `Strider.DATA_SUFFOCATING`: Animal ends at 17, boost time is 18 (local javap).
+const SUFFOCATING_INDEX: u8 = 19;
+
 pub(crate) fn cold(row: &crate::entities::ColdRow) -> bool {
     row.appearance
         .extra
-        .contains(&(18, EntityDataValue::Boolean(true)))
+        .contains(&(SUFFOCATING_INDEX, EntityDataValue::Boolean(true)))
 }
 
 pub(crate) fn run(state: &mut TickState) {
@@ -31,7 +34,12 @@ pub(crate) fn run(state: &mut TickState) {
             })
         });
         if cold(state.entities.row(slot)) != !warm {
-            crate::special_mobs::metadata(state, slot, 18, EntityDataValue::Boolean(!warm));
+            crate::special_mobs::metadata(
+                state,
+                slot,
+                SUFFOCATING_INDEX,
+                EntityDataValue::Boolean(!warm),
+            );
             crate::entity_loot::restore(state, slot);
         }
     }

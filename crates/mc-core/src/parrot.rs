@@ -18,7 +18,7 @@ pub(crate) fn run(state: &mut TickState) {
                 (pos[0].floor() as i32).div_euclid(16),
                 (pos[2].floor() as i32).div_euclid(16),
             )
-            || crate::taming::roll(state.entities.row_mut(slot), 50) != 0
+            || crate::taming::roll_at(state.entities.row(slot), state.tick, 50) != 0
         {
             continue;
         }

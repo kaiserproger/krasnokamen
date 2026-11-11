@@ -10,8 +10,14 @@ use uuid::Uuid;
 pub(crate) mod menus;
 pub(crate) mod persistence;
 
+/// Seats `sync_rider` and the persisted rider list can hold.
+pub(crate) const MAX_PASSENGERS: usize = 4;
+/// `Camel.DASH`: AbstractHorse flags are 18, the camel's own accessors follow (local javap).
+const CAMEL_DASH_INDEX: u8 = 19;
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+// An old image's scalar `rider` must fail the load, not default to no rider.
+#[serde(default, deny_unknown_fields)]
 pub struct MountState {
     pub riders: Vec<Uuid>,
     #[serde(skip)]
@@ -128,7 +134,7 @@ pub(crate) fn input(state: &mut TickState, actor: EntityId, flags: u8) {
     crate::special_mobs::metadata(
         state,
         slot,
-        18,
+        CAMEL_DASH_INDEX,
         crate::boundary::EntityDataValue::Boolean(true),
     );
     let yaw = f64::from(state.entities.rot(slot)[0]).to_radians();
@@ -148,12 +154,21 @@ pub(crate) fn input(state: &mut TickState, actor: EntityId, flags: u8) {
     state.entities.set_ground(slot, false);
 }
 
+/// Only the camel and the happy ghast have a seat per passenger; every other
+/// vehicle seats exactly one rider, whatever its contract says.
+pub(crate) fn seat_capacity(type_id: u32) -> usize {
+    mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id).map_or(1, |kind| {
+        match kind.name {
+            "minecraft:camel" | "minecraft:happy_ghast" => {
+                usize::from(kind.behavior.vehicle_passenger.max_passengers).min(MAX_PASSENGERS)
+            }
+            _ => 1,
+        }
+    })
+}
+
 fn passenger_limit(state: &TickState, slot: EntitySlot) -> usize {
-    type_id(state.entities.body(slot))
-        .and_then(mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id)
-        .map_or(1, |contract| {
-            usize::from(contract.behavior.vehicle_passenger.max_passengers)
-        })
+    type_id(state.entities.body(slot)).map_or(1, seat_capacity)
 }
 
 fn action(
@@ -662,7 +677,7 @@ fn leave_vehicle(state: &mut TickState, slot: EntitySlot, actor: EntityId) {
 pub(crate) fn sync_rider(state: &mut TickState, slot: EntitySlot) {
     let vehicle = state.entities.body(slot).id;
     let pos = state.entities.pos(slot);
-    let mut passengers = [EntityId(0); 4];
+    let mut passengers = [EntityId(0); MAX_PASSENGERS];
     let mut passenger_count = 0;
     for index in 0..state.entities.row(slot).entity_life.mount.riders.len() {
         let uuid = state.entities.row(slot).entity_life.mount.riders[index];
@@ -695,7 +710,9 @@ pub(crate) fn sync_rider(state: &mut TickState, slot: EntitySlot) {
                     0.0,
                 )
             } else if kind == "minecraft:happy_ghast" {
-                let (forward, side) = [(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)][index];
+                // EntityTypes.HAPPY_GHAST passengerAttachments (local javap): (x, 4.0, z) with
+                // x lateral and z forward, so index 0 is 1.7 ahead and index 1 is x = -1.7.
+                let (forward, side) = [(1.7, 0.0), (0.0, -1.7), (-1.7, 0.0), (0.0, 1.7)][index];
                 (state.entities.body(slot).height, forward, side)
             } else {
                 (
@@ -965,17 +982,15 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         let cooldown = *cooldown;
         if cooldown < 50
             && state.entities.ground(slot)
-            && state
-                .entities
-                .row(slot)
-                .appearance
-                .extra
-                .contains(&(18, crate::boundary::EntityDataValue::Boolean(true)))
+            && state.entities.row(slot).appearance.extra.contains(&(
+                CAMEL_DASH_INDEX,
+                crate::boundary::EntityDataValue::Boolean(true),
+            ))
         {
             crate::special_mobs::metadata(
                 state,
                 slot,
-                18,
+                CAMEL_DASH_INDEX,
                 crate::boundary::EntityDataValue::Boolean(false),
             );
         }

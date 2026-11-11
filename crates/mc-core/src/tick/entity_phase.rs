@@ -1794,7 +1794,9 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
     {
         vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
         look_target = Some(target);
-    } else if let Some((target, speed)) = crate::sniffer::drive(ctx.entities.row(row.slot)) {
+    } else if !row.breed_ready
+        && let Some((target, speed)) = crate::sniffer::drive(ctx.entities.row(row.slot))
+    {
         vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
         look_target = Some(target);
     } else if !think {

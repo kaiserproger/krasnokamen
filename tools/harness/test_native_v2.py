@@ -177,7 +177,8 @@ class NativeV2ProbeTests(unittest.TestCase):
                 "native-v2-cursor-close", "native-v2-banner-placement",
                 "native-v2-snow-golem-shear", "native-v2-destroyed-chest-race",
                 "native-v2-duplicate-login", "native-v2-corrupt-block-entities",
-                "native-v2-corrupt-chunk-near-camera", "native-v2-chest-drag-disconnect") else "tcp")
+                "native-v2-corrupt-chunk-near-camera", "native-v2-chest-drag-disconnect",
+                "native-v2-happy-ghast-harness", "native-v2-mob-metadata-spot") else "tcp")
             self.assertEqual(entry.evidence, expected)
 
     def test_p1_catalog_covers_all_five_surfaces(self) -> None:

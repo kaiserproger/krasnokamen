@@ -133,14 +133,14 @@ fn adult_sniffer_digs_one_seed_on_suitable_ground_then_cools_down() {
     let sniffer = spawn(&mut state, "sniffer", pos);
     assert!(state.entities.slot_of(sniffer).is_some());
     let mut digging = false;
-    for _ in 0..240 {
+    for _ in 0..460 {
         run_tick(&mut state, &[]);
         digging |= state
             .entities
             .row(slot(&state, sniffer))
             .appearance
             .extra
-            .contains(&(17, EntityDataValue::SnifferState(5)));
+            .contains(&(18, EntityDataValue::SnifferState(5)));
     }
     assert!(digging, "sniffer never published its actual digging state");
     let seeds = item_names(&state)
@@ -194,9 +194,24 @@ fn frog_tongue_consumes_only_small_prey_and_drops_vanilla_loot() {
         crate::entity_loot::set_size(&mut state, prey_slot, 1, true);
         state.entities.row_mut(prey_slot).controls.no_ai = true;
         let cow = spawn(&mut state, "cow", [pos[0] + 2.0, pos[1], pos[2] + 2.0]);
+        let mut targeted = false;
         for _ in 0..40 {
             run_tick(&mut state, &[]);
+            let extra = &state.entities.row(slot(&state, frog)).appearance.extra;
+            targeted |= extra.contains(&(
+                19,
+                EntityDataValue::OptionalUnsignedInt(Some(prey.0 as u32)),
+            ));
+            assert!(
+                !extra.iter().any(|(index, value)| *index == 18
+                    && matches!(value, EntityDataValue::OptionalUnsignedInt(_))),
+                "accessor 18 is the frog variant, never the tongue target"
+            );
         }
+        assert!(
+            targeted,
+            "tongue target id was never published at accessor 19"
+        );
         assert!(
             state.entities.slot_of(prey).is_none(),
             "frog left small {prey_kind} alive"
@@ -241,7 +256,7 @@ fn strider_cold_state_slows_and_lava_restores_it() {
             .row(strider_slot)
             .appearance
             .extra
-            .contains(&(18, EntityDataValue::Boolean(true),))
+            .contains(&(19, EntityDataValue::Boolean(true),))
     );
     let lava = block(&state, "minecraft:lava", &[]);
     state
@@ -256,7 +271,7 @@ fn strider_cold_state_slows_and_lava_restores_it() {
             .row(strider_slot)
             .appearance
             .extra
-            .contains(&(18, EntityDataValue::Boolean(true),))
+            .contains(&(19, EntityDataValue::Boolean(true),))
     );
 }
 
@@ -317,7 +332,7 @@ fn sniffer_requires_adulthood_ai_and_diggable_ground() {
             let slot = slot(&state, sniffer);
             state.entities.row_mut(slot).controls.no_ai = true;
         }
-        for _ in 0..240 {
+        for _ in 0..460 {
             run_tick(&mut state, &[]);
         }
         assert!(
@@ -333,7 +348,7 @@ fn sniffer_requires_adulthood_ai_and_diggable_ground() {
 #[test]
 fn parrot_record_events_and_nearby_hostile_imitation() {
     let (mut state, player, pos) = fixture();
-    let _parrot = spawn(&mut state, "parrot", [pos[0] + 2.0, pos[1], pos[2]]);
+    let parrot = spawn(&mut state, "parrot", [pos[0] + 2.0, pos[1], pos[2]]);
     let jukebox = BlockPos {
         x: pos[0] as i32,
         y: pos[1] as i32,
@@ -383,13 +398,32 @@ fn parrot_record_events_and_nearby_hostile_imitation() {
     );
     let zombie = spawn(&mut state, "zombie", [pos[0] + 1.0, pos[1], pos[2]]);
     assert!(state.entities.slot_of(zombie).is_some());
+    let rolls = state
+        .entities
+        .row(slot(&state, parrot))
+        .entity_life
+        .taming
+        .rolls;
     let mut imitated = false;
-    for _ in 0..401 {
+    for _ in 0..4000 {
         let (_, changes, _) = run_tick(&mut state, &[]);
         imitated |= changes.iter().flat_map(|(_, changes)| changes).any(|change| matches!(change,
             PlayerChange::CommandSound { sound, .. } if sound.as_str() == "minecraft:entity.parrot.imitate.zombie"));
+        if imitated {
+            break;
+        }
     }
     assert!(imitated);
+    assert_eq!(
+        state
+            .entities
+            .row(slot(&state, parrot))
+            .entity_life
+            .taming
+            .rolls,
+        rolls,
+        "the ambient imitation roll must not write persisted taming state"
+    );
 }
 
 #[test]
@@ -532,6 +566,22 @@ fn saddled_camel_admits_two_riders_and_dash_has_cooldown() {
             .dash_cooldown
             > 0
     );
+    let dashed = state.entities.row(camel_slot);
+    assert!(
+        dashed
+            .appearance
+            .extra
+            .contains(&(19, EntityDataValue::Boolean(true))),
+        "Camel.DASH is accessor 19"
+    );
+    assert!(
+        !dashed
+            .appearance
+            .extra
+            .iter()
+            .any(|(index, _)| *index == 18),
+        "accessor 18 is the AbstractHorse flags byte"
+    );
     for _ in 0..5 {
         run_tick(&mut state, &[]);
     }
@@ -660,6 +710,313 @@ fn happy_ghast_harness_admits_four_riders_and_survives_rider_codec() {
         state
             .entities
             .row(slot(&state, ghast))
+            .appearance
+            .passengers
+            .len(),
+        3
+    );
+}
+
+fn clear_touched(state: &mut TickState) {
+    let ids = state.entities.take_touched();
+    state.entities.recycle_touched(ids);
+}
+
+#[test]
+fn sniffer_uses_accessor_18_and_leaves_the_age_lock_accessor_alone() {
+    let (mut state, _player, pos) = fixture();
+    let pos = [pos[0] + 4.0, pos[1], pos[2]];
+    state.world.set_block(
+        pos[0] as i32,
+        pos[1] as i32 - 1,
+        pos[2] as i32,
+        block(&state, "minecraft:dirt", &[]),
+    );
+    state.world.fold_overlay();
+    let sniffer = spawn(&mut state, "sniffer", pos);
+    let sniffer_slot = slot(&state, sniffer);
+    // AgeableMob.DATA_AGE_LOCKED sits at 17.
+    crate::special_mobs::metadata(&mut state, sniffer_slot, 17, EntityDataValue::Boolean(true));
+    for _ in 0..260 {
+        run_tick(&mut state, &[]);
+    }
+    let extra = &state.entities.row(sniffer_slot).appearance.extra;
+    assert!(extra.contains(&(17, EntityDataValue::Boolean(true))));
+    assert!(
+        extra
+            .iter()
+            .any(|(index, value)| *index == 18 && matches!(value, EntityDataValue::SnifferState(_)))
+    );
+    assert!(
+        !extra
+            .iter()
+            .any(|(index, value)| *index == 17 && matches!(value, EntityDataValue::SnifferState(_)))
+    );
+}
+
+#[test]
+fn cooling_sniffer_writes_nothing_and_scans_on_its_own_period() {
+    let (mut state, _player, pos) = fixture();
+    let pos = [pos[0] + 4.0, pos[1], pos[2]];
+    state.world.set_block(
+        pos[0] as i32,
+        pos[1] as i32 - 1,
+        pos[2] as i32,
+        block(&state, "minecraft:dirt", &[]),
+    );
+    state.world.fold_overlay();
+    let sniffer = spawn(&mut state, "sniffer", pos);
+    let sniffer_slot = slot(&state, sniffer);
+    state.entities.set_ground(sniffer_slot, true);
+    state.entities.row_mut(sniffer_slot).entity_life.sniffer =
+        Some(Box::new(crate::sniffer::Sniffer {
+            cooldown_until: 500,
+            ..Default::default()
+        }));
+    clear_touched(&mut state);
+    for tick in 0..500 {
+        state.tick = tick;
+        crate::sniffer::run(&mut state);
+    }
+    assert!(
+        !state.entities.touched_ids().contains(&sniffer),
+        "a cooling sniffer was rewritten while it waited"
+    );
+    let phase = state.entities.row(sniffer_slot).uuid.as_u128() as u64;
+    let expected = (500..).find(|tick| (tick + phase) % 20 == 0).unwrap();
+    let mut found = None;
+    for tick in 500..540 {
+        state.tick = tick;
+        crate::sniffer::run(&mut state);
+        if found.is_none()
+            && state
+                .entities
+                .row(sniffer_slot)
+                .entity_life
+                .sniffer
+                .as_ref()
+                .is_some_and(|sniffer| sniffer.target.is_some())
+        {
+            found = Some(tick);
+        }
+    }
+    assert_eq!(found, Some(expected), "ground scans are one per period");
+}
+
+#[test]
+fn idle_parrot_and_frog_ticks_do_not_dirty_their_rows() {
+    let (mut state, _player, pos) = fixture();
+    let parrot = spawn(&mut state, "parrot", [pos[0] + 2.0, pos[1], pos[2]]);
+    let frog = spawn(&mut state, "frog", [pos[0] - 2.0, pos[1], pos[2]]);
+    clear_touched(&mut state);
+    for tick in 0..400 {
+        state.tick = tick;
+        crate::parrot::run(&mut state);
+        crate::frog::run(&mut state);
+    }
+    let touched = state.entities.touched_ids();
+    assert!(!touched.contains(&parrot), "parrot row written per tick");
+    assert!(!touched.contains(&frog), "idle frog row written per tick");
+}
+
+fn sniffer_record(fields: Vec<(String, mc_nbt::Tag)>) -> mc_data::entity_nbt::VanillaEntity {
+    mc_data::entity_nbt::VanillaEntity {
+        id: "minecraft:sniffer".into(),
+        extra_fields: vec![("solaris:Sniffer".into(), mc_nbt::Tag::Compound(fields))],
+        ..Default::default()
+    }
+}
+
+#[test]
+fn sniffer_nbt_and_wal_images_share_one_validation() {
+    use mc_nbt::{ListTag, Tag};
+    let int_array = |x: i32| Tag::IntArray(vec![x, 0, 0]);
+    let list = |element_type: u8, elements: Vec<Tag>| {
+        Tag::List(ListTag {
+            element_type,
+            elements,
+        })
+    };
+    // An empty list may carry any element type.
+    for element_type in [0, mc_nbt::tag_type::INT_ARRAY, mc_nbt::tag_type::STRING] {
+        let sniffer = crate::sniffer::from_record(&sniffer_record(vec![
+            ("CooldownUntil".into(), Tag::Long(7)),
+            ("Elapsed".into(), Tag::Short(0)),
+            ("Explored".into(), list(element_type, Vec::new())),
+        ]))
+        .unwrap()
+        .unwrap();
+        assert!(sniffer.explored.is_empty() && sniffer.cooldown_until == 7);
+    }
+    let too_many = list(
+        mc_nbt::tag_type::INT_ARRAY,
+        (0..21).map(int_array).collect(),
+    );
+    for fields in [
+        vec![("Explored".into(), too_many)],
+        vec![("Elapsed".into(), Tag::Short(5))],
+        vec![
+            ("Elapsed".into(), Tag::Short(200)),
+            ("Target".into(), int_array(1)),
+        ],
+        vec![("CooldownUntil".into(), Tag::Long(-1))],
+        vec![("Cooldown".into(), Tag::Int(9))],
+    ] {
+        assert!(crate::sniffer::from_record(&sniffer_record(fields)).is_err());
+    }
+    let image = |patch: serde_json::Value| {
+        let mut base = serde_json::json!({
+            "cooldown_until": 5, "elapsed": 0, "target": null, "explored": []
+        });
+        base.as_object_mut()
+            .unwrap()
+            .extend(patch.as_object().unwrap().clone());
+        serde_json::from_value::<crate::sniffer::Sniffer>(base)
+    };
+    assert!(image(serde_json::json!({})).is_ok());
+    assert!(image(serde_json::json!({"target": [1, 2, 3], "elapsed": 9})).is_ok());
+    for bad in [
+        serde_json::json!({"cooldown": 3}),
+        serde_json::json!({"elapsed": 3}),
+        serde_json::json!({"elapsed": 200, "target": [1, 2, 3]}),
+        serde_json::json!({"explored": (0..21).map(|x| [x, 0, 0]).collect::<Vec<_>>()}),
+    ] {
+        assert!(image(bad.clone()).is_err(), "{bad}");
+    }
+}
+
+#[test]
+fn obsolete_scalar_rider_fails_closed_in_nbt_and_wal() {
+    use mc_nbt::{ListTag, Tag, tag_type};
+    let mut life = crate::entity_life::EntityLifeState::default();
+    let error = crate::mounts::persistence::from_fields(
+        &mut life,
+        &[("solaris:Rider".into(), Tag::IntArray(vec![0, 0, 0, 1]))],
+    )
+    .unwrap_err();
+    assert!(
+        error.to_string().contains("solaris:Rider is obsolete"),
+        "{error}"
+    );
+    let riders = |ids: &[i32]| {
+        Tag::List(ListTag {
+            element_type: tag_type::INT_ARRAY,
+            elements: ids
+                .iter()
+                .map(|id| Tag::IntArray(vec![0, 0, 0, *id]))
+                .collect(),
+        })
+    };
+    for (ids, reason) in [
+        (&[1, 1][..], "duplicate"),
+        (&[1, 2, 3, 4, 5][..], "solaris:Riders"),
+    ] {
+        let error = crate::mounts::persistence::from_fields(
+            &mut life,
+            &[("solaris:Riders".into(), riders(ids))],
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains(reason), "{error}");
+    }
+    assert!(
+        serde_json::from_value::<crate::mounts::MountState>(serde_json::json!({"rider": null}))
+            .is_err()
+    );
+    assert!(
+        serde_json::from_value::<crate::mounts::MountState>(serde_json::json!({"riders": []}))
+            .is_ok()
+    );
+    let mut image = serde_json::to_value(crate::entity_life::EntityLifeState::default()).unwrap();
+    image["mount"]["rider"] = serde_json::json!("00000000-0000-0000-0000-000000000001");
+    assert!(serde_json::from_value::<crate::entity_life::EntityLifeState>(image).is_err());
+}
+
+fn replay_vehicle(
+    state: &TickState,
+    name: &str,
+    uuid: u128,
+    riders: &[u128],
+) -> crate::journal::ReplayEntity {
+    let mut image = crate::journal::EntityStateImage::default();
+    image.entity_life.mount.riders = riders.iter().map(|id| uuid::Uuid::from_u128(*id)).collect();
+    crate::journal::ReplayEntity {
+        uuid: uuid::Uuid::from_u128(uuid).to_string(),
+        type_id: state
+            .registry
+            .entity_types
+            .id_of(&Identifier::parse(format!("minecraft:{name}")).unwrap())
+            .unwrap(),
+        pos: [0.0; 3],
+        vel: [0.0; 3],
+        yaw: 0.0,
+        pitch: 0.0,
+        ground: true,
+        health: 20.0,
+        alive: true,
+        age: 0,
+        breed_cooldown: 0,
+        pickup_delay: 0,
+        item: None,
+        appearance: Default::default(),
+        active_effects: Default::default(),
+        villager: None,
+        state: image,
+        projectile: None,
+        tick: 0,
+    }
+}
+
+#[test]
+fn replay_refuses_overfull_shared_and_single_seat_vehicles() {
+    let (state, _, _) = fixture();
+    let check = |vehicles: Vec<(&str, u128, Vec<u128>)>| {
+        let mut replay = crate::journal::Replay::default();
+        for (index, (name, uuid, riders)) in vehicles.iter().enumerate() {
+            replay.entities.insert(
+                index as i32 + 1,
+                replay_vehicle(&state, name, *uuid, riders),
+            );
+        }
+        crate::mounts::persistence::validate_replay(&replay)
+    };
+    assert!(check(vec![("camel", 10, vec![101, 102])]).is_ok());
+    assert!(check(vec![("happy_ghast", 10, vec![101, 102, 103, 104])]).is_ok());
+    assert!(check(vec![("camel", 10, vec![101, 102, 103, 104])]).is_err());
+    assert!(check(vec![("camel", 10, vec![101, 102, 103])]).is_ok());
+    assert!(check(vec![("happy_ghast", 10, vec![101, 102, 103, 104, 105])]).is_err());
+    assert!(check(vec![("cow", 10, vec![101, 102])]).is_err());
+    assert!(
+        check(vec![
+            ("camel", 10, vec![101]),
+            ("happy_ghast", 11, vec![101]),
+        ])
+        .is_err(),
+        "one rider on two vehicles"
+    );
+}
+
+// Camel.canAddPassenger is `getPassengers().size() <= 2` (local javap, 26.1.2 and
+// 26.2): three seats, the second and third sharing the -0.7 attachment.
+#[test]
+fn camel_seats_three_riders_and_refuses_a_fourth() {
+    let (mut state, first, pos) = fixture();
+    let camel = spawn(&mut state, "camel", pos);
+    hold(&mut state, first, "saddle", 1);
+    run_tick(&mut state, &[use_entity(camel)]);
+    run_tick(&mut state, &[use_entity(camel)]);
+    let second = join(&mut state, 2);
+    interact(&mut state, 2, camel);
+    let third = join(&mut state, 3);
+    interact(&mut state, 3, camel);
+    let fourth = join(&mut state, 4);
+    interact(&mut state, 4, camel);
+    assert!(crate::mounts::vehicle(&state, second).is_some());
+    assert!(crate::mounts::vehicle(&state, third).is_some());
+    assert!(crate::mounts::vehicle(&state, fourth).is_none());
+    assert_eq!(
+        state
+            .entities
+            .row(slot(&state, camel))
             .appearance
             .passengers
             .len(),

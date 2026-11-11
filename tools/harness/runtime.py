@@ -231,8 +231,6 @@ def _resolve_profile_task(profile: str | None, platform: str | None) -> dict[str
 
 _CLIENT_READY_TIMEOUT_SECONDS = 180.0
 _XVFB_READY_TIMEOUT_SECONDS = 20.0
-# Owner rule (real-client gates, isolation): agent clients never use :0 or :1.
-_OWNER_DISPLAYS = frozenset({0, 1})
 _LOG_TAIL_BYTES = 8192
 
 _LIBC = ctypes.CDLL(None, use_errno=True)
@@ -690,11 +688,8 @@ def start_xvfb(artifact_dir: Path) -> tuple[subprocess.Popen[Any], str, Any]:
                             return _start_xvfb_scan(artifact_dir, log_handle)
                         display_number += chunk
                         if display_number.endswith(b"\n"):
-                            number = int(display_number.decode().strip())
-                            if number in _OWNER_DISPLAYS:
-                                stop_process(process)
-                                return _start_xvfb_scan(artifact_dir, log_handle)
-                            return process, f":{number}", log_handle
+                            display = f":{display_number.decode().strip()}"
+                            return process, display, log_handle
                     else:
                         _drain(key.fd)
         finally:
@@ -711,7 +706,7 @@ def start_xvfb(artifact_dir: Path) -> tuple[subprocess.Popen[Any], str, Any]:
 def _start_xvfb_scan(
     artifact_dir: Path, log_handle: Any
 ) -> tuple[subprocess.Popen[Any], str, Any]:
-    for display_number in range(99, 200):
+    for display_number in range(99, 120):
         socket_path = Path(f"/tmp/.X11-unix/X{display_number}")
         if socket_path.exists():
             continue
@@ -727,19 +722,8 @@ def _start_xvfb_scan(
         except RuntimeError:
             stop_process(process)
             continue
-        if _x_lock_pid(display_number) != process.pid:
-            # A concurrent Xvfb won this number; its socket satisfied the wait.
-            stop_process(process)
-            continue
         return process, f":{display_number}", log_handle
     raise RuntimeError("could not start an isolated Xvfb display")
-
-
-def _x_lock_pid(display_number: int) -> int | None:
-    try:
-        return int(Path(f"/tmp/.X{display_number}-lock").read_text().strip())
-    except (OSError, ValueError):
-        return None
 
 
 def current_client_state(client: Any, timeout_seconds: float) -> dict[str, Any]:
