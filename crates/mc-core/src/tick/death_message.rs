@@ -44,6 +44,7 @@ pub(super) fn component(
         "fly_into_wall" => "flyIntoWall",
         "indirect_magic" => "indirectMagic",
         "dragon_breath" => "dragonBreath",
+        "outside_border" => "outsideBorder",
         "player_attack" => "player",
         "mob_attack" => "mob",
         name => name,

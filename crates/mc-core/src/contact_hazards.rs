@@ -602,6 +602,11 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
         sneaking |= state.entities.row(slot).appearance.pose == 5;
     }
     if immune {
+        // Contact hazards do not apply, but the fire clock still runs and water
+        // still douses it (vanilla Entity.baseTick), so a creative player does
+        // not leave creative burning. The damage pass is discarded.
+        let water = crate::conduit::water(state, [pos[0], pos[1] + shape[1] * 0.5, pos[2]]);
+        retained_burn(state, slot, water, false, &mut Vec::new());
         scratch.negative[index] = None;
         return;
     }
