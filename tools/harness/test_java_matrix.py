@@ -80,32 +80,34 @@ class MatrixTest(unittest.TestCase):
             self.assertEqual(path.parent, Path(directory))
             self.assertLess(len(path.name), 255)
 
-    def test_server_instance_reserves_its_own_ports_instead_of_hardcoding(self):
-        # Regression: every java-matrix server hardcoded 26200/26201, so two
-        # concurrent runs on the shared host collided; the loser's server died
-        # with "Address already in use" while its clients joined the winner's
-        # server (auth ack never arrived). Ports must be bind-probed per instance.
+    def test_server_instance_lets_the_server_choose_the_game_port(self):
+        # Regression: java-matrix servers used hardcoded 26200/26201, then
+        # bind-probed reservations that close the socket before the server
+        # binds, so two concurrent runs could be handed the same port and the
+        # loser's clients joined the winner's server (auth ack never arrived).
+        # The game port must be chosen by the server itself (port 0); the
+        # dashboard port is a cross-process flock lease.
         with tempfile.TemporaryDirectory() as directory:
             args = SimpleNamespace(
                 server_bin=Path("/bin/true"), plugins_dir=Path(directory),
                 data_dir=Path(directory), timeout_seconds=30,
                 context=SimpleNamespace(commands=[], cwds=[], exits=[], logs=[]),
             )
+            lease = matrix.PortReservation(26250, Path(directory) / "26250.lock", -1)
             with patch.object(matrix, "copy_plugins", return_value=[]), \
                     patch.object(matrix, "prepare_access"), \
                     patch.object(matrix, "ProtocolServer") as server_cls, \
-                    patch.object(matrix, "reserve_matrix_port", side_effect=[26250, 26251]) as reserve:
+                    patch.object(matrix, "reserve_matrix_port", return_value=lease) as reserve:
                 server = server_cls.return_value
                 server._process = None
                 server.running = False
                 with matrix.server_instance(args, Path(directory) / "server", 1):
                     kwargs = server_cls.call_args.kwargs
-            self.assertEqual(kwargs["port"], 26250)
-            self.assertEqual(kwargs["dashboard_port"], 26251)
+            self.assertEqual(kwargs["port"], 0)
+            self.assertEqual(kwargs["dashboard_port"], 26250)
+            self.assertIs(kwargs["dashboard_port"], lease)
             self.assertEqual(kwargs["port_range"], matrix.PORT_RANGE)
-            self.assertEqual(reserve.call_args_list[0].kwargs, {"port_range": matrix.PORT_RANGE})
-            self.assertEqual(reserve.call_args_list[1].kwargs,
-                             {"exclude": 26250, "port_range": matrix.PORT_RANGE})
+            reserve.assert_called_once_with(port_range=matrix.PORT_RANGE)
 
 
 if __name__ == "__main__":
