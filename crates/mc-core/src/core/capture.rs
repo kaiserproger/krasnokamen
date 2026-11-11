@@ -243,13 +243,20 @@ fn capture_entities(
 
 /// Explicit entity tombstones of one capture over every dimension: identities
 /// removed since the durable checkpoint that are live in no dimension now, so a
-/// transfer or rebirth stays an upsert (ADR 0020).
+/// transfer or rebirth stays an upsert (ADR 0020). A corpse (a row on the dying
+/// clock) is not live: its death already logged the removal.
 pub(crate) fn checkpoint_tombstones(state: &TickState) -> Vec<uuid::Uuid> {
     let worlds =
         || std::iter::once(state).chain(state.other_dimensions.values().map(|world| &**world));
+    let live = |world: &TickState, uuid| {
+        world
+            .entities
+            .slot_of_uuid_any(uuid)
+            .is_some_and(|slot| !world.entities.is_dying(world.entities.body(slot).id))
+    };
     let mut tombstones: Vec<uuid::Uuid> = worlds()
         .flat_map(|world| world.entities.checkpoint_removals())
-        .filter(|&uuid| worlds().all(|world| world.entities.slot_of_uuid_any(uuid).is_none()))
+        .filter(|&uuid| worlds().all(|world| !live(world, uuid)))
         .collect();
     tombstones.sort_unstable();
     tombstones.dedup();
@@ -338,7 +345,9 @@ pub(crate) fn entity_data_record(
 }
 
 /// One non-player entity's vanilla checkpoint record and its chunk, or `None`
-/// for players and entity types without a vanilla contract.
+/// for players, corpses (a row on the dying clock is a durable removal, see
+/// `EntityStore::begin_dying`) and entity types without a vanilla contract.
+/// Other dead rows keep their record.
 pub(super) fn entity_capture_record(
     view: &EntityCaptureView<'_>,
     slot: crate::entities::EntitySlot,
@@ -353,6 +362,9 @@ pub(super) fn entity_capture_record(
         | EntityKind::ExperienceOrb { type_id } => type_id,
         EntityKind::Player { .. } => return None,
     };
+    if view.entities.is_dying(body.id) {
+        return None;
+    }
     let name = view.registry.entity_type_name(type_id)?.to_owned();
     let tick = view.tick;
     let rot = view.entities.rot(slot);

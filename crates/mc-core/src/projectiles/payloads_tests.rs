@@ -275,7 +275,8 @@ fn channeling_trident_launch_and_victim_killed_before_bolt_hits_do_not_count_as_
     );
     state.merge(&mut intents);
     assert_eq!(state.commit_merge_effects().0, [victim]);
-    assert!(state.entities.slot_of_any(victim).is_none());
+    // The body lies dead for vanilla `deathTime`; it is no longer a target.
+    assert!(state.entities.slot_of(victim).is_none());
     assert!(
         state.advancement_events.is_empty(),
         "accepted trident spawns a bolt but is not its victim"
@@ -1377,15 +1378,15 @@ fn owner_death_removes_only_owned_pearls_when_the_gamerule_is_true() {
                 assert!(state.entities.slot_of(id).is_some());
                 assert!(!removed.contains(&id));
             }
-            assert_eq!(removed.contains(&owner), !player_owner);
-            if player_owner {
-                assert!(
-                    !state
-                        .entities
-                        .body(state.entities.slot_of_any(owner).unwrap())
-                        .alive
-                );
-            }
+            // A dead player stays for respawn, a dead mob as its corpse
+            // (`tick::dying`); neither row leaves in the death commit.
+            assert!(!removed.contains(&owner));
+            assert!(
+                !state
+                    .entities
+                    .body(state.entities.slot_of_any(owner).unwrap())
+                    .alive
+            );
             // A later commit cannot emit the same pearl tombstones again.
             assert!(state.commit_merge_effects().3.is_empty());
         }

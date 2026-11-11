@@ -513,8 +513,11 @@ fn lethal_attack_drops_allay_custody_once_and_disk_wal_replays_once() {
                 target: id,
             }],
         );
-        assert!(original.entities.slot_of_any(id).is_none());
-        assert_eq!(output.changes.entities_removed, vec![id]);
+        // Vanilla keeps the dead body 20 ticks (`tick::dying`); custody still
+        // drops at death and the death WAL image replays as the removal.
+        assert!(original.entities.slot_of(id).is_none());
+        assert!(original.entities.slot_of_any(id).is_some());
+        assert!(!output.changes.entities_removed.contains(&id));
         assert_eq!(output.changes.entities_spawned.len(), expected.len());
         for stack in &expected {
             assert_eq!(
@@ -540,6 +543,11 @@ fn lethal_attack_drops_allay_custody_once_and_disk_wal_replays_once() {
         let death = crate::core::journal_entries_for_tick(&mut original, &output);
         let (output, _, _) = crate::tick::run_tick(&mut original, &[]);
         assert!(output.changes.entities_spawned.is_empty());
+        for _ in 2..=20 {
+            let (output, _, _) = crate::tick::run_tick(&mut original, &[]);
+            assert!(output.changes.entities_spawned.is_empty());
+        }
+        assert!(original.entities.slot_of_any(id).is_none());
         let mut writer = JournalWriter::open(&dir, 1).unwrap();
         writer.append(1, birth_tick, &birth).unwrap();
         writer.append(death_tick, death_tick, &death).unwrap();
