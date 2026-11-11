@@ -1019,7 +1019,7 @@ pub(crate) struct Listing {
 }
 /// A finished worker job.
 enum Completed {
-    Packs(PackSet),
+    Packs(Box<PackSet>),
     Listing(Listing),
     Created,
 }
@@ -1072,7 +1072,7 @@ fn create_pack(root: &Path, id: &str, description: &str) -> Result<(), Failure> 
 /// The worker body: all filesystem access of a job.
 fn work(root: &Path, selection: Selection, job: &Job) -> Result<Completed, Failure> {
     match job {
-        Job::Reload => Ok(Completed::Packs(PackSet::load(root, selection)?)),
+        Job::Reload => Ok(Completed::Packs(Box::new(PackSet::load(root, selection)?))),
         Job::Activation { action, id } => {
             let packs = PackSet::load_known(root, selection)?;
             // A pack that is not on disk cannot be enabled.
@@ -1082,7 +1082,7 @@ fn work(root: &Path, selection: Selection, job: &Job) -> Result<Completed, Failu
                     args: vec![id.clone()],
                 });
             }
-            Ok(Completed::Packs(packs))
+            Ok(Completed::Packs(Box::new(packs)))
         }
         Job::List(_) => Ok(Completed::Listing(PackSet::listing(root, &selection)?)),
         Job::Create { id, description } => {
@@ -1567,7 +1567,7 @@ fn finish(state: &mut TickState, reload: Reload, result: Result<Completed, Failu
             }
             state.datapacks.selection_dirty |= state.datapacks.packs.selection != packs.selection;
             let warnings = packs.warnings(Some(&state.datapacks.packs));
-            state.datapacks.packs = Arc::new(packs);
+            state.datapacks.packs = Arc::new(*packs);
             state.datapacks.load_pending = true;
             match &reload.job {
                 Job::Activation { action, id } => {
