@@ -52,6 +52,67 @@ its requested recording duration starts only after that roster is observed.
 It streams dashboard telemetry and stops the server after the recorder exits.
 This does not establish real-time performance or all-dirty residency.
 
+## Take mode (the recorded shot)
+
+`--take` records a shot, not a measurement ladder. Everything that costs ticks in
+the shot window is off or moved before it:
+
+- **Checkpoint cadence.** `server.toml` gets `checkpoint_every_ticks =
+  (duration + 120) * 20` (`--checkpoint-every-ticks N` overrides; a value not
+  above `duration * 20` is refused). The server counts ticks since its last
+  checkpoint; the runner forces one (`save-all`, waits for `Saved the game`)
+  right after the final census and just before `battle start`, which restarts
+  that counter outside the window. The next periodic capture is then due after
+  the recorder has stopped. A capture is 97-219 ms on the tick thread in the
+  20k ladder, so this is the spike the shot must not contain. The server must
+  be built from `95c4bc59` or later: older pins (for example `2df71e49`) do not
+  map `[data] checkpoint_every_ticks` and run on the default 1200 with only a
+  `ignoring unknown config key` warning; the runner refuses a take when it sees
+  that warning.
+- **Phase log off.** `MC_CORE_PHASE_LOG` is removed from the server environment
+  even if the caller exported it (`--phase-log` brings it back).
+- **No status polling.** Before start, each telemetry batch (about every 100
+  ticks, a long-poll on the dashboard, no timer) requests `battle status` only
+  to drive the population barrier. After the barrier closes there is no poll
+  (`--status-every N` brings it back, 0 = never; default 100 outside a take).
+- **Gaps are recorded, not fatal** (`--allow-marker-gaps`, implied): recorder
+  marker gaps and skipped telemetry ticks go into `take.json`. Any gap, a phase
+  log, status polling or a checkpoint spike in the window marks the take not
+  clean (`take_clean` in `result.json`, reasons in `take.json`).
+- **Deterministic staging.** The battle is `battle setup <seed> ...` from
+  `--seed` (default 42) on a copied flat world; `take.json` records the seed, the
+  setup command and the census (`side1/side2/resident/active/horses/regiments`)
+  taken right before start. Entity UUIDs are random per run; the census is the
+  comparison between takes.
+- **Telemetry.** `telemetry.jsonl` is the E1 per-tick export (see the contract:
+  `tick`, `wall_us`, `phase_us`, `host` with `process_rss_bytes` and cgroup
+  series, `battle`, `recorders`), written without gaps filled. `take.json`
+  summarises the shot window `battle_start+1 .. recorder last_tick`: samples,
+  missing ticks, `wall_us` mean/p50/p95/p99/max, TPS from `wall_start_unix_ns`,
+  max `process_rss_bytes`, deferred updates.
+- `--view-distance N` sets the server and recorder view distance (default 12;
+  the staging ticket stays 12 chunks, so more only adds terrain around the
+  field). `--server-scope [SLICE]` starts the server in its own transient
+  `systemd-run --user --scope` unit (`server-scope.json` records its cgroup), so
+  the `cgroup_*` host series is the server alone, not server plus recorder.
+
+Evidence for "no checkpoint in the window" is two independent records.
+`server.log` keeps the INFO line `checkpoint committed tick=N` for every
+checkpoint even with the phase log off; `take.json` lists them under
+`server_checkpoints` (`in_window`, the last one before the window, and the
+ticks left until the next periodic one). The telemetry is the second record: a
+capture runs inside `owner_post_us` (in the 20k ladder 100.8-247.5 ms there
+against a 23.8 ms maximum on every other tick), so ticks of the window with
+`owner_post_us >= 50 ms` are listed as `checkpoint_spike_ticks`. The spike
+threshold is a heuristic calibrated on that ladder; the log line is exact. Either
+one inside the window makes the take not clean.
+
+```sh
+tools/battle/run-battle.sh --take --pin ... --client ... --client-data ... --cache ... \
+  --world /absolute/stopped-flat-world --run-dir /absolute/new-run \
+  --seed 42 --scenario field-10k --duration 180 --server-scope
+```
+
 ## Checkpoint observation
 
 `checkpoint-report.py TELEMETRY.jsonl SERVER.log --output REPORT.json` joins the
@@ -76,8 +137,8 @@ For the 20,000-moving-unit experiment, run the staged battle across at least
 two periodic checkpoints with `MC_CORE_PHASE_LOG=1`, retaining the full server
 log and exporting telemetry before the 16,384-tick ring wraps. Record the pin,
 world, seed, CPU quota, allocator, and `battle status` counts for each side
-and resident/active units. The runner requests status about every 100 recorded
-ticks; the report pairs each checkpoint with the nearest sample and shows its
+and resident/active units. Outside take mode the runner requests status about
+every 100 recorded ticks (`--status-every`); the report pairs each checkpoint with the nearest sample and shows its
 signed tick gap. Nonzero velocity is a snapshot,
 not proof that every unit changed position since the preceding checkpoint; a
 true all-dirty claim requires actual movement or dirty-set evidence. The ADR
