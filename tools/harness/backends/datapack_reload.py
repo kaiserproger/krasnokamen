@@ -241,4 +241,4 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     probe.fixture("reload")
     says("reload_skips_unreadable_new_packs", "Skipping new datapack file/brokenzip.zip")
     says("reload_names_the_pack_without_mcmeta", "Skipping new datapack file/nometa")
-    says("reload_still_completes", "Reloaded")
+    says("reload_still_completes", "Reloading!")  # vanilla text of commands.reload.success

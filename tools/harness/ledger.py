@@ -349,6 +349,8 @@ def _split_non_test(diff, source_of):
             continue
         lines = chunk.splitlines(keepends=True)
         match = re.match(r'diff --git a/(.+) b/(.+)$', lines[0].rstrip('\n'))
+        if match is None:
+            raise Refused(f'fix patch has an unparseable diff header (expected `diff --git a/<path> b/<path>`): {lines[0].rstrip()!r}')
         path = match.group(2)
         starts = [i for i, text in enumerate(lines) if text.startswith('@@ ')]
         if not starts:
