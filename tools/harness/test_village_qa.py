@@ -110,6 +110,13 @@ class VillageQaHelpersTests(unittest.TestCase):
         jobless = self._row(207.5, -434.5, "Николай · безработный · работа", 0)
         self.assertFalse(village_qa.returned_to_job(jobless, "lumberjack", self.STATIONS))
 
+    def test_one_villager_per_job_so_the_bed_sleeper_always_works(self) -> None:
+        # a0rmeano & co.: a fourth, jobless villager took the only bed.
+        roles = village_qa.VILLAGER_ROLES
+        self.assertEqual(len(roles), len(set(roles)))
+        self.assertEqual(set(roles), set(village_qa.JOB_WIRE_PROFESSION))
+        self.assertEqual(set(roles), set(village_qa.JOB_ROLES.values()))
+
 
 if __name__ == "__main__":
     unittest.main()

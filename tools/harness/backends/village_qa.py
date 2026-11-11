@@ -7,15 +7,15 @@ wooden door and a valid bed, a workshop (composter + mature wheat farmland
 inside reach), a storage (chest), a top-of-zone mine (smithing table at grade)
 and a lumber camp (fletching table) near mature persistent=false oaks;
 `/settlement create` with a computed radius covering the fixtures, certify
-buildings via chat commands, `/summon` plain villagers (no profession NBT:
-the allocator assigns certified slots), sequential nearest-bind per role.
+buildings via chat commands, `/summon` one plain villager per job (no
+profession NBT: the allocator assigns certified slots), sequential nearest-bind per role.
 Frozen daylight (`gamerule advance_time false`, no natural clock advance) and frozen
 random growth (`gamerule random_tick_speed 0`, mature saplings/leaves persist) + real
 event ticks, single `time set` per phase (3000 work, 18000 night, 3000 morning, 9000):
 
 1. a worker physically crosses a certified door (open seen + plane flip by a
    worker UUID, close awaited on a bounded exact predicate);
-2. the same 4 entities persist through the night; a villager holding a fixture
+2. the same 3 entities persist through the night; a villager holding a fixture
    job (nameplate and received VillagerData agree, whatever role it was
    summoned for) sleeps in the bed, still holds that job on waking at 3000
    and returns within 2.5 blocks of that job's station;
@@ -147,6 +147,9 @@ def sleeping_at_bed(row: dict[str, Any], bed: tuple[int, int, int]) -> bool:
 JOB_ROLES = {"фермер": "farmer", "шахтёр": "miner", "лесоруб": "lumberjack"}
 JOB_WIRE_PROFESSION = {"farmer": 5, "miner": 13, "lumberjack": 7}
 RETURN_RADIUS = 2.5
+# One summoned villager per fixture job, house villager first. A jobless extra
+# villager could hold the only bed, leaving sleep_return no worker to judge.
+VILLAGER_ROLES = ("farmer", "miner", "lumberjack")
 
 
 def nameplate(row: dict[str, Any]) -> str | None:
@@ -417,8 +420,8 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     fixture(f"setblock {bed_head[0]} {bed_head[1]} {bed_head[2]} minecraft:red_bed[facing=east,part=head,occupied=false]")
     _expect_block(probe, door, "minecraft:oak_door", "house_door_placed")
     _expect_block(probe, bed_head, "minecraft:red_bed", "house_bed_placed")
-    sleeper_stage = (hx0 + 3, hy0 + 1, hz0 + 3)
-    fixture(f"setblock {sleeper_stage[0]} {sleeper_stage[1]} {sleeper_stage[2]} minecraft:air")
+    house_stage = (hx0 + 3, hy0 + 1, hz0 + 3)
+    fixture(f"setblock {house_stage[0]} {house_stage[1]} {house_stage[2]} minecraft:air")
     if ctx.windowed:
         native_client.capture(probe.client, artifact, "village-qa-house")
 
@@ -547,7 +550,7 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     # --- settlement radius covers every fixture, then certification ---
     cover = [house_lo, house_hi, work_lo, work_hi, store_lo, store_hi,
              mine_lo, mine_hi, camp_lo, camp_hi, *tree_soils,
-             farmer_stage, miner_stage, lumber_stage, sleeper_stage]
+             farmer_stage, miner_stage, lumber_stage, house_stage]
     radius = required_radius(origin, cover)
     detail["settlement_radius"] = radius
     fixture(f"settlement create {SETTLEMENT} {radius}")
@@ -588,10 +591,9 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     if empty_totals:
         raise RuntimeError(f"village-qa fixture failed: chest not empty: {empty_totals}")
 
-    # --- summon + bind sequentially, nearest fresh villager per role (sleeper last) ---
+    # --- summon + bind sequentially, nearest fresh villager per role ---
     detail["villager_uuids"] = []
-    role_plan = (("farmer", sleeper_stage), ("miner", miner_stage),
-                 ("lumberjack", lumber_stage), ("sleeper", farmer_stage))
+    role_plan = tuple(zip(VILLAGER_ROLES, (house_stage, miner_stage, lumber_stage), strict=True))
     role_uuid: dict[str, str] = {}
     for role, stage in role_plan:
         fixture(f"summon minecraft:villager {stage[0]} {stage[1]} {stage[2]}")
@@ -613,7 +615,8 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     detail["bind_chat"] = bound_echo.get("recent_chat", [])[:12]
     detail["bind_ok_count"] = sum(1 for line in probe.observe().get("recent_chat", [])
                                   if "Bound " in line and f" to {SETTLEMENT}." in line)
-    probe.check("four_villagers_bound", len(set(role_uuid.values())) == 4 and detail["bind_ok_count"] >= 4)
+    probe.check("three_villagers_bound", len(set(role_uuid.values())) == len(VILLAGER_ROLES)
+                and detail["bind_ok_count"] >= len(VILLAGER_ROLES))
     detail["villagers_visible"] = len(_villagers(probe))
     detail["villager_uuids_observed"] = list(role_uuid.values())
     if count_time_sets(probe.report["fixture_commands"]) != 1:
@@ -753,7 +756,7 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
                          "station": station, "closest": closest, "woke_nameplate": woke_plate}
     if same_entities and held_by_day and returned:
         _verdict(detail, "sleep_return", "PASS",
-                 f"same 4 entities persist; {sleeper[:8]} held {sleeper_job} by day, slept by bed "
+                 f"same {len(evening)} entities persist; {sleeper[:8]} held {sleeper_job} by day, slept by bed "
                  f"{list(bed_head)}, still held it on waking and returned within {RETURN_RADIUS} "
                  f"of the {sleeper_job} station {station} (closest {closest:.2f})")
     else:

@@ -1155,7 +1155,11 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 // A one-cell arrival tolerance can leave a builder inside the
                 // future footprint despite its selected perimeter goal.
                 exact_target = worker_exact;
+                // Nothing to work on yet (e.g. just woken, or between tree
+                // sweeps): walk to the job site like any vanilla worker in its
+                // work period instead of standing wherever the villager is.
                 worker_target
+                    .or(job_site.filter(|job| distance(pos, centre(*job)) > JOB_SITE_REACH_SQUARED))
             } else {
                 match v.activity {
                     Activity::Work

@@ -203,3 +203,32 @@ fn allocator_job_loss_reaches_the_client_villager_data_at_once() {
         "the client must see the job change when it happens, not at the next sleep"
     );
 }
+
+#[test]
+fn idle_lumberjack_walks_back_to_its_job_site_at_work_time() {
+    // umbaup5f: a lumberjack woke beside its bed with no tree targeted yet and
+    // stood there through the whole morning instead of going back to work.
+    use crate::settlements::buildings::BuildingKind;
+    let (mut state, slot, worker) = super::mining_tests::fixture(BuildingKind::LumberCamp);
+    let job = worker.job_site.expect("fixture lumberjack holds the camp");
+    state.entities.row_mut(slot).villager = Some(worker);
+    // Far from the camp, nothing to cut anywhere in the settlement.
+    state.entities.set_pos(slot, [12.5, 201.0, 12.5]);
+    state.world.fold_overlay();
+    let mut returned = false;
+    for _ in 0..600 {
+        step(&mut state);
+        if distance(state.entities.pos(slot), centre(job)) <= JOB_SITE_REACH_SQUARED {
+            returned = true;
+            break;
+        }
+    }
+    let v = state.entities.row(slot).villager.as_ref().unwrap();
+    assert_eq!(v.activity, crate::villager::Activity::Work);
+    assert_eq!(v.job_site, Some(job), "the camp claim is kept");
+    assert!(
+        returned,
+        "a lumberjack with nothing to cut walks to its job site in the work period, pos={:?}",
+        state.entities.pos(slot)
+    );
+}
