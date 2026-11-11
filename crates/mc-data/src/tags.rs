@@ -45,6 +45,9 @@ pub const MOB_EFFECT_REGISTRY: &str = "minecraft:mob_effect";
 /// Entity type registry, for gameplay tag lookups by entity type raw id.
 pub const ENTITY_TYPE_REGISTRY: &str = "minecraft:entity_type";
 
+/// Block registry, for gameplay tag lookups by block raw id.
+pub const BLOCK_REGISTRY: &str = "minecraft:block";
+
 /// Entity types whose block hits may break blocks (`Projectile.mayBreak`).
 pub const IMPACT_PROJECTILES: &str = "minecraft:impact_projectiles";
 

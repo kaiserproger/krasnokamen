@@ -245,6 +245,223 @@ class NativeV2ProbeTests(unittest.TestCase):
                          {"native-v2-p4-nameplates", "native-v2-p4-advancements",
                           "native-v2-p4-statistics"})
 
+    def test_damage_gamerule_fixture_requires_supported_rule_and_ack(self) -> None:
+        from .backends.native_p4 import _disable_gamerule
+
+        for rule in ("natural_health_regeneration", "spawn_mobs"):
+            with self.subTest(rule=rule):
+                steps = mock.Mock()
+                _disable_gamerule(steps, rule)
+                steps.fixture.assert_called_once_with(f"gamerule {rule} false")
+                predicate, label = steps.wait.call_args.args
+                self.assertEqual(label, f"{rule}_disabled")
+                self.assertFalse(predicate({"recent_chat": ["Unknown game rule"]}))
+                self.assertFalse(predicate({"recent_chat": [f"Game rule {rule} is now set to true"]}))
+                self.assertTrue(predicate({"recent_chat": [f"Game rule {rule} is now set to false"]}))
+
+    def test_damage_scenario_disables_mob_spawning_before_the_night(self) -> None:
+        from .backends import native_p4
+
+        events: list[str] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = events.append
+        with mock.patch.object(native_p4, "_capture", side_effect=RuntimeError("stop")), \
+                self.assertRaises(RuntimeError):
+            native_p4._damage(steps, (10, 70, 10))
+        self.assertLess(events.index("gamerule spawn_mobs false"), events.index("time set 18000"))
+
+    def test_damage_scenario_pins_clear_weather_before_its_rows(self) -> None:
+        from .backends import native_p4
+
+        events: list[str] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = events.append
+        with mock.patch.object(native_p4, "_capture", side_effect=RuntimeError("stop")), \
+                self.assertRaises(RuntimeError):
+            native_p4._damage(steps, (10, 70, 10))
+        self.assertIn("gamerule advance_weather false", events)
+        self.assertLess(events.index("weather clear"), events.index("time set 18000"))
+
+    def test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world(self) -> None:
+        from .backends import native_p4
+
+        class Stop(Exception):
+            pass
+
+        seen: dict[str, object] = {}
+
+        def wait(_predicate, label, **kwargs):
+            if label == "thorns_authored_uuid_received":
+                self.assertTrue(_predicate({}))
+            if label == "void_physical_identity_received":
+                seen.update(kwargs)
+                raise Stop
+            return mock.MagicMock()
+
+        row = {"entity_uuid": "00000000-0000-0000-0000-00000001e240", "entity_id": 7,
+               "entity_type": "minecraft:zombie"}
+        steps = mock.MagicMock()
+        steps.wait.side_effect = wait
+        with mock.patch.object(native_p4, "_rows", return_value=[row]), self.assertRaises(Stop):
+            native_p4._damage_environment(steps, (10, 70, 10), 1)
+        self.assertIs(seen.get("outside_play"), True)
+        self.assertNotIn("wait_for_play", seen)
+
+    def test_damage_rows_wait_for_the_douse_water_to_drain_before_their_fixture(self) -> None:
+        from .backends import native_p4
+
+        class Stop(Exception):
+            pass
+
+        events: list[str] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = events.append
+        steps.call.return_value = {}
+
+        def wait(predicate, label, **_kwargs):
+            events.append(f"wait:{label}")
+            if label == "douse_water_drained":
+                steps.call.return_value = {"blocks": [{"fluid": {"empty": False}}]}
+                self.assertFalse(predicate({}))
+                steps.call.return_value = {"blocks": [{"fluid": {"empty": True}}]}
+                self.assertTrue(predicate({}))
+                steps.call.return_value = {}
+            if label == "in_wall_fixture_ready":
+                raise Stop
+            return mock.MagicMock()
+
+        steps.wait.side_effect = wait
+        with self.assertRaises(Stop):
+            native_p4._damage_environment(steps, (10, 70, 10), 1)
+        air = events.index("fill 9 70 9 11 73 11 minecraft:air")
+        self.assertLess(air, events.index("wait:douse_water_drained"))
+        self.assertLess(events.index("wait:douse_water_drained"), events.index("tp @s 10.5 70 10.5"))
+
+    def test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit(self) -> None:
+        from .backends import native_p4
+
+        class Stop(Exception):
+            pass
+
+        events: list[str] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = events.append
+
+        def call(tool, args=None):
+            events.append(f"{tool}:{(args or {}).get('ticks')}")
+            if tool == "minecraft_attack_entity_once":
+                raise Stop
+            return {}
+
+        def wait(predicate, label, **_kwargs):
+            if label == "thorns_authored_uuid_received":
+                predicate({})
+            return mock.MagicMock()
+
+        steps.call.side_effect = call
+        steps.wait.side_effect = wait
+        row = {"entity_uuid": "00000000-0000-0000-0000-00000001e240", "entity_id": 7,
+               "entity_type": "minecraft:zombie"}
+        with mock.patch.object(native_p4, "_rows", return_value=[row]), self.assertRaises(Stop):
+            native_p4._damage_environment(steps, (10, 70, 10), 1)
+        attack = events.index("minecraft_attack_entity_once:None")
+        survival = max(i for i, event in enumerate(events) if event == "gamemode survival @s")
+        self.assertEqual(events[survival + 1], "minecraft_wait_ticks:10")
+        self.assertEqual(survival + 2, attack)
+
+    def test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack(self) -> None:
+        from .backends import native_p4
+
+        class Stop(Exception):
+            pass
+
+        events: list[str] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = events.append
+
+        def wait(predicate, label, **_kwargs):
+            events.append(f"wait:{label}")
+            if label == "thorns_fixture_ready":
+                self.assertTrue(predicate({"player": {"health": 20, "x": 10.5, "z": 10.5}}))
+                self.assertFalse(predicate({"player": {"health": 20, "x": 12.8, "z": 10.5}}))
+                raise Stop
+            return mock.MagicMock()
+
+        steps.wait.side_effect = wait
+        with self.assertRaises(Stop):
+            native_p4._damage_environment(steps, (10, 70, 10), 1)
+        authored = events.index("wait:thorns_authored_uuid_received")
+        self.assertIn("tp @s 10.5 70 10.5", events[authored:events.index("wait:thorns_fixture_ready")])
+
+    def test_damage_identity_timeout_reports_the_wire_events_it_saw(self) -> None:
+        from .backends.native_p4 import _wait_damage_identity
+
+        steps = mock.MagicMock()
+        steps.report = {}
+        steps.wait.side_effect = TimeoutError("late")
+        steps.client.p4_damage_wire.return_value = [{"type": "minecraft:magic"}, {"type": "minecraft:on_fire"}]
+        with self.assertRaises(TimeoutError):
+            _wait_damage_identity(steps, lambda state: False, "splash", 1, timeout_seconds=3)
+        self.assertEqual(steps.report["damage_wire_on_timeout"]["splash"], [{"type": "minecraft:on_fire"}])
+
+    def test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed(self) -> None:
+        from .backends import native_p4
+
+        class Stop(Exception):
+            pass
+
+        captured = {}
+
+        def wait(predicate, label, **_kwargs):
+            if label == "warden_lethal_health_prepared":
+                captured["predicate"] = predicate
+                raise Stop
+            return {"recent_chat": ["x has the following entity data: minecraft:speed"],
+                    "player": {"health": 1, "entity_id": 1}, "client_tick": 1,
+                    "screen": {"open": True}}
+
+        steps = mock.MagicMock()
+        steps.wait.side_effect = wait
+        with mock.patch.object(native_p4, "_capture"), self.assertRaises(Stop):
+            native_p4._damage(steps, (10, 70, 10))
+        predicate = captured["predicate"]
+        self.assertTrue(predicate({"player": {"health": 7.0}}))
+        self.assertTrue(predicate({"player": {"health": 0.0}}))
+        self.assertFalse(predicate({"player": {"health": 20.0}}))
+
+    def test_damage_scenario_stops_the_zombie_before_slow_capture(self) -> None:
+        from .backends import native_p4
+
+        events: list[tuple[str, str]] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = lambda command: events.append(("fixture", command))
+        steps.call.side_effect = lambda tool, _args: events.append(("call", tool))
+
+        def wait(_predicate, label, **_kwargs):
+            events.append(("wait", label))
+            return mock.MagicMock()
+
+        steps.wait.side_effect = wait
+
+        class Stop(Exception):
+            pass
+
+        def capture(_steps: object, name: str) -> None:
+            events.append(("capture", name))
+            if name == "p4-damage-hit":
+                raise Stop
+
+        with mock.patch.object(native_p4, "_capture", capture), self.assertRaises(Stop):
+            native_p4._damage(steps, (10, 70, 10))
+
+        hit = events.index(("call", "minecraft_wait_for_health_below"))
+        tilt = events.index(("wait", "received_damage_event_nonzero_camera_tilt"))
+        kill = events.index(("fixture", f"kill {native_p4._DAMAGE_ZOMBIE_UUID}"))
+        # The hurt tilt fades within ten client ticks: it is observed first, the kill follows
+        # at once, and both precede every slow capture.
+        self.assertEqual((tilt, kill), (hit + 1, hit + 2))
+        self.assertLess(kill, events.index(("capture", "p4-damage-hit")))
+
     def test_p4_advancement_labels_are_actual_visible_ui_nodes(self) -> None:
         from .backends.native_p4 import _advancement_labels
 
@@ -352,6 +569,15 @@ class NativeV2ProbeTests(unittest.TestCase):
             }])
             self.assertEqual(ctx.client_evidence["operator_fixture"], rows)
 
+
+    def test_probe_observe_outside_play_returns_the_state_only_when_declared(self) -> None:
+        client = mock.Mock(token="")
+        client.call_tool.return_value = {"in_play": False, "state_version": 3}
+        with tempfile.TemporaryDirectory() as directory:
+            with ProbeSteps(client, Path(directory), 1, "outside") as steps:
+                self.assertEqual(steps.observe(outside_play=True)["state_version"], 3)
+                with self.assertRaisesRegex(RuntimeError, "in_play"):
+                    steps.observe()
 
     def test_default_probe_observe_stays_strict_outside_play(self) -> None:
         client = mock.Mock(token="")

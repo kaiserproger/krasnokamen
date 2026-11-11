@@ -1795,10 +1795,11 @@ title = "Spiders and cave spiders avoid unrolled armadillos, not scared/rolled a
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMADILLO-THREAT-ROLL,ARMADILLO-ROLL-ABSENT"
 regression = ["cargo:mc-core:vanilla_mob_behavior_tests::spiders_avoid_only_unrolled_armadillos"]
 fix_commit = "patch:f466510fd50481c9932101bf17c150c3e08990d2f48850cc4c23a65f3e7f1081"
+promotion = "docs/bugs/promotions/ARMADILLO-SPIDER-DETERRENCE.json"
 
 [[bug]]
 id = "ARMADILLO-SCUTE-SHED"
@@ -2105,13 +2106,14 @@ title = "Sniffers never dig up seeds: no sniffer dig/sniff/explore logic exists 
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SNIFFER-DIG-ABSENT"
 regression = [
   "cargo:mc-core:vanilla_mob_behavior_tests::adult_sniffer_digs_one_seed_on_suitable_ground_then_cools_down",
   "cargo:mc-core:vanilla_mob_behavior_tests::sniffer_requires_adulthood_ai_and_diggable_ground",
 ]
 fix_commit = "patch:9237f03d9ed6d7d6438252fd4b6de93bb2e0bb6b29ec302ae03657143f02f91a"
+promotion = "docs/bugs/promotions/SNIFFER-DIG-ABSENT.json"
 
 [[bug]]
 id = "CAMEL-DASH-ABSENT"
@@ -2119,10 +2121,11 @@ title = "Camels never dash: no `dash/Dash` logic exists in core; camel appears o
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAMEL-DASH-ABSENT"
 regression = ["cargo:mc-core:vanilla_mob_behavior_tests::saddled_camel_admits_two_riders_and_dash_has_cooldown"]
 fix_commit = "patch:94f32f3b264bcb85d8511780a7c0cce3b911095441e8387265a18fd8d29577ea"
+promotion = "docs/bugs/promotions/CAMEL-DASH-ABSENT.json"
 
 [[bug]]
 id = "FROG-TONGUE-ABSENT"
@@ -2130,10 +2133,11 @@ title = "Frogs never eat with their tongue: no `tongue/croak` logic exists in co
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FROG-TONGUE-ABSENT"
 regression = ["cargo:mc-core:vanilla_mob_behavior_tests::frog_tongue_consumes_only_small_prey_and_drops_vanilla_loot"]
 fix_commit = "patch:5a40bebc829c62b81020f603368e0758b0da222ee79768b5afab3c4e6491c306"
+promotion = "docs/bugs/promotions/FROG-TONGUE-ABSENT.json"
 
 [[bug]]
 id = "LLAMA-SPIT-ABSENT"
@@ -2152,10 +2156,11 @@ title = "Cats never bring morning gifts: no `morning_gift/MorningGift` logic exi
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAT-GIFT-ABSENT"
 regression = ["cargo:mc-core:vanilla_mob_behavior_tests::tamed_cat_gives_one_morning_gift_not_an_arbitrary_wake_gift"]
 fix_commit = "patch:7bba9a462bce17ac86f6ed568d778aff0eeafa453b0c9990cb99b17e8488b19e"
+promotion = "docs/bugs/promotions/CAT-GIFT-ABSENT.json"
 
 [[bug]]
 id = "STRIDER-COLD-ABSENT"
@@ -2163,13 +2168,14 @@ title = "Striders never shiver outside lava: no `shiver/cold` strider logic exis
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#STRIDER-COLD-ABSENT"
 regression = [
   "cargo:mc-core:vanilla_mob_behavior_tests::strider_cold_state_slows_and_lava_restores_it",
   "cargo:mc-core:vanilla_mob_behavior_tests::cold_strider_rain_damage_obeys_roof_and_clear_weather",
 ]
 fix_commit = "patch:c7a40b6afebf99b151ec6ad8effe1fa16c867b7b30f2cc52741323c739eb502a"
+promotion = "docs/bugs/promotions/STRIDER-COLD-ABSENT.json"
 
 [[bug]]
 id = "PARROT-DANCE-ABSENT"
@@ -2177,10 +2183,11 @@ title = "Parrots never dance to music: no `dance/Dance` logic exists in core. Va
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PARROT-DANCE-ABSENT"
 regression = ["cargo:mc-core:vanilla_mob_behavior_tests::parrot_record_events_and_nearby_hostile_imitation"]
 fix_commit = "patch:9a0887f770f42d564833bdc7dd038433ee7f4803e16c4dee3051eb49cb17bbe7"
+promotion = "docs/bugs/promotions/PARROT-DANCE-ABSENT.json"
 
 [[bug]]
 id = "DATA-MUTATION-STORAGE"
@@ -2324,7 +2331,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = ["harness:village-qa:sleep_return", "cargo:mc-core:villager::sleep_return_tests::woken_bound_resident_stands_up_and_returns_to_its_job_site", "cargo:mc-core:villager::sleep_return_tests::allocator_job_loss_reaches_the_client_villager_data_at_once", "cargo:mc-core:villager::sleep_return_tests::idle_lumberjack_walks_back_to_its_job_site_at_work_time"]
+regression = ["harness:village-qa:sleep_return", "cargo:mc-core:villager::sleep_return_tests::woken_bound_resident_stands_up_and_returns_to_its_job_site", "cargo:mc-core:villager::sleep_return_tests::allocator_job_loss_reaches_the_client_villager_data_at_once", "cargo:mc-core:villager::sleep_return_tests::idle_lumberjack_walks_back_to_its_job_site_at_work_time", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_rock_outside_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_a_cave_under_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::alternate_lane_starts_on_a_floor_at_the_top_of_the_bounds"]
 
 [[bug]]
 id = "ISSUE-1-12"
@@ -2487,7 +2494,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = ["harness:village-qa:miner_deposit"]
+regression = ["harness:village-qa:miner_deposit", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_rock_outside_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_a_cave_under_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::alternate_lane_starts_on_a_floor_at_the_top_of_the_bounds"]
 
 [[bug]]
 id = "ISSUE-1-28"
@@ -2821,6 +2828,7 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-DIMENSION-BIOME"
 regression = ["cargo:mc-core:dimensions::tests::native_dimension_spawn_tables_and_census_are_local"]
+fix_commit = "9cc59fb37b5ea1e543eaca53f5864a0c0613051c"
 
 [[bug]]
 id = "TEST-FALLING-TORCH"
@@ -2831,6 +2839,7 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-FALLING-TORCH"
 regression = ["cargo:mc-core:falling::tests::empty_collision_attachment_is_not_a_floor_and_slab_landing_drops_instead"]
+fix_commit = "9cc59fb37b5ea1e543eaca53f5864a0c0613051c"
 
 [[bug]]
 id = "TEST-END-RESTART-OBSERVER"
@@ -3998,6 +4007,7 @@ status = "open"
 source = "tools/harness/plan.py _expand_innovation added a required innovation reviewer although AGENTS.md names the review checkpoints and adding-a-feature.md requires only a decision record for an innovation token. Corrected by preserving the decision record without the extra reviewer; two focused assertions failed before the fix, all 42 planner tests and actual dependency/persistence CLI smokes passed after it. Formal ledger promotion remains pending."
 regression = []
 failing_first = "reported"
+fix_commit = "6333b8d8a29d2e02a8f75720cc431275937a781a"
 
 [[bug]]
 id = "NATIVE-NAV-GROUNDED-EDGE-ORIGIN"
@@ -4020,6 +4030,7 @@ status = "open"
 source = "tools/coreperf/profiles.py pinned_binary unconditionally required the owner's absolute pin store. The relocated-pin regression failed before correction. Owner-host store and exact manifest path checks remain strict; other hosts verify the original manifest, binary name and SHA-256. Both host-boundary tests and a real release idle CLI lifecycle passed with the owner-host marker absent in a controlled local simulation, not on a second machine. Formal ledger promotion remains pending."
 regression = []
 failing_first = "reported"
+fix_commit = "80191f115bc889838a5620b554b2a84cb7d84cb0"
 
 [[bug]]
 id = "NATIVE-NAV-WAYPOINT-CORNER-DEADZONE"
@@ -4330,10 +4341,68 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "The e430 plugin-free gamerules.projectiles_can_break_blocks adapter passed both charged bow ammunition waits and the disabled-rule decorated-pot control, but the enabled-rule control expected air at (3,80,0) and observed the pot still present. Receipt: /run/media/kaiserroman/games/solaris-work/wt/LedgerMatrixB15/.analysis/validation/20261111T124021-protocol-matrix-o6c42bqi/result.json. Arrow spawn packets were received in the target block cell; exact impact face is not independently established. crates/mc-core/src/projectiles/flight.rs:906-947 has no pot handling; the gamerule occurs in command registration and metadata upgrade, not projectile execution."
-regression = ["cargo:mc-core:projectiles::flight_tests::projectile_breaks_pot_only_when_rule_enabled", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_chorus_flower_only_when_rule_enabled", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_pointed_dripstone_only_with_fast_trident", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_sulfur_spike_only_with_fast_trident", "cargo:mc-core:projectiles::flight_tests::projectile_pot_break_follows_owner_and_spawn_protection", "cargo:mc-core:projectiles::flight_tests::projectile_cracks_pot_before_destroying_it", "cargo:mc-core:projectiles::flight_tests::two_shots_at_one_sherd_pot_drop_its_sherds_and_contents_once", "cargo:mc-core:projectiles::flight_tests::arrow_that_breaks_a_pot_stays_stuck_and_pickable", "cargo:mc-core:plugin_player::zone_protection_tests::projectiles_break_zone_blocks_only_for_admitted_shooters"]
+regression = ["cargo:mc-core:projectiles::flight_tests::projectile_breaks_pot_only_when_rule_enabled", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_chorus_flower_only_when_rule_enabled", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_pointed_dripstone_only_with_fast_trident", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_sulfur_spike_only_with_fast_trident", "cargo:mc-core:projectiles::flight_tests::projectile_pot_break_follows_owner_and_spawn_protection", "cargo:mc-core:projectiles::flight_tests::projectile_cracks_pot_before_destroying_it", "cargo:mc-core:projectiles::flight_tests::two_shots_at_one_sherd_pot_drop_its_sherds_and_contents_once", "cargo:mc-core:projectiles::flight_tests::arrow_that_breaks_a_pot_falls_to_the_floor_and_stays_pickable", "cargo:mc-core:plugin_player::zone_protection_tests::projectiles_break_zone_blocks_only_for_admitted_shooters"]
 repro_check = "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run protocol-matrix --server-bin /run/media/kaiserroman/games/solaris-work/pins/e4304662b8f4-server-x86_64-unknown-linux-gnu-incr/solaris-v2 --vanilla-data /run/media/kaiserroman/games/solaris-work/receipts/H08Orbs/protocol-content/26.3 --subject gamerules.projectiles_can_break_blocks --port 26741 --dashboard-port 26742"
 failing_first = "reported"
 fix_commit = "70e5c6d6"
+
+[[bug]]
+id = "HARNESS-SCENE-SHOT-MISSING-SUBJECT"
+title = "Scene-shot cannot require a capture subject to be present"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "VisualRigsA runs 20261111T115908-scene-shot-wxnrjw82 and 20261111T120609-scene-shot-uo3_ay_m passed despite missing intended visual subjects; the scenario had no assertion for their presence."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "DEATH-MESSAGE-SELF-OWNED-MOB-ATTACKER"
+title = "A player killed by a special mob (warden-style attack submitted as a self-owned projectile) receives death.attack.mob with one argument; the native client rejects the system chat with `missing translation argument` and drops the session"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "native-v2-p4-damage rerun 20261111T131605-native-v2-p4-damage-9ys_sijn: `session failed: Play packet 0x7c sequence 14847: missing translation argument`; the same scenario with `gamerule show_death_messages false` (20261111T132303-native-v2-p4-damage-wdwexu3s) passes that point. Cause: statistics::attacker returns None for a projectile the mob owns itself, so death_message built the component without the attacker."
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::parity_special_mob_melee_death_names_the_mob_for_the_two_argument_template"]
+fix_commit = "cfac52dd669b3070289f839d08da1abce24ca033"
+failing_first = "reported"
+
+[[bug]]
+id = "DEATH-MESSAGE-OUTSIDE-BORDER-KEY"
+title = "Death by the world border sends the key death.attack.outside_border; the vanilla language key is death.attack.outsideBorder, so players see the raw key"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Probe of every DamageKind through the real death path (HarnessRows): death_message.rs maps message ids to camelCase keys but omits outside_border; en_us.json has no death.attack.outside_border."
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::parity_death_message_keys_match_the_damage_type_registry_and_language_file"]
+failing_first = "reported"
+fix_commit = "da9bca085da0c0c542cac42f95f38b373849bd99"
+
+[[bug]]
+id = "HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL"
+title = "native-v2-p4-damage kills its own survival player: the authored zombie keeps attacking during slow captures, and the falling-stalactite row (6 damage per fallen block) is lethal from 5 blocks"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Gate receipts under wt/HarnessRows/.analysis/validation: 20261111T120956-native-v2-p4-damage-6mwbxea3 (wait_for_inventory timeout; the player was slain by the zombie), 20261111T132303-native-v2-p4-damage-wdwexu3s (stalactite from y+5 deals 24 damage to a 20 HP player), 20261111T142141-native-v2-p4-damage-n54aaggu (night spawns a zombie that kills the player), 20261111T142757-native-v2-p4-damage-6pky77eh (warden kills the player before the 7 HP state is observed), 20261111T151144-native-v2-p4-damage-xiqtnmrl (thorns row starts out of reach), 20261111T185402-native-v2-p4-damage-1x27s3mu (void row: below the world the client reports in_play false with no player row, so the row is judged from the out_of_world wire event and the death screen), 20261111T190210-native-v2-p4-damage-6qo8d1ux (hurt tilt observed only after the kill command had cost the ten-tick animation), 20261111T191626-native-v2-p4-damage-hy75cx01 and 20261111T192723-native-v2-p4-damage-aw9r90m6 (on_fire row: no burn after the fire block is removed; the wire holds only in_fire), 20261111T192315-native-v2-p4-damage-wespznqp and 20261111T193311-native-v2-p4-damage-3bv6qiv1 (sweet_berry_bush row: no berry damage after a walk through the bush), 20261111T193906-native-v2-p4-damage-dhuzqzip and 20261111T194354-native-v2-p4-damage-o3gp55l2 (fall row: no fall damage). Cause of the on_fire, berry and fall failures: the water fill that douses the player leaves flowing water (amount 5-7, region scan in 20261111T194354-native-v2-p4-damage-o3gp55l2 scenario.json region_cells) that decays for dozens of ticks; in it a fall is cushioned (core test physics_flowing_water_cancels_landing_damage), fire cannot ignite and a berry bush is washed away. The gate now waits until the client sees no fluid around the cell (douse_water_drained). The server is vanilla-consistent here. Cause of the thorns failures (about half of the runs from 20261111T195113-native-v2-p4-damage-ml9kngg7 on): the row sent `gamemode survival @s` and the attack back to back; a creative player takes no reflected damage and the command and the attack packet are not ordered, so the row now waits ten ticks between them (not yet proven by three consecutive greens). A frozen night (advance_time false) was tried and reverted: it brings a hostile mob into the starve row. The causes above are fixed on branch wt/HarnessRows with a python unit test (tools.harness.test_native_v2.NativeV2ProbeTests.test_damage_*); the ledger has no python-test ref kind, so the row stays open."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CREATIVE-PLAYER-FIRE-NEVER-DOUSED"
+title = "A burning player in creative or spectator mode keeps burning: contact_hazards skips the whole fire clock for immune players, so water neither douses it nor does it tick down, and damage resumes in survival"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "native-v2-p4-damage splash row: receipts 20261111T144354-native-v2-p4-damage-uxdbw87g and 20261111T151955-native-v2-p4-damage-wtrafs5z show only minecraft:on_fire wire events after a water fill in creative. Core splash_harming_thrown_at_own_feet passes, so the potion path was not the owner."
+regression = ["cargo:mc-core:contact_hazards_tests::creative_player_burn_clock_runs_and_water_douses_it"]
+fix_commit = "da9bca085da0c0c542cac42f95f38b373849bd99"
+failing_first = "reported"
 
 [[bug]]
 id = "EDGE-WORLD-QUEUE-LOST-ENTITY-FRAMES"
@@ -4345,3 +4414,186 @@ status = "open"
 source = "Rule-5 review of the recorder fix c731c550 (ReviewRecorderOverflow, 2026-11-12, finding F2): pump.rs:398-406 repairs only geometry after a failed world try_send; LOD tiles are a second producer on world_tx (lod.rs:317, LOD on by default config.rs:383), so pump.rs:341-342 'Only the pump sends world packets' is false. Example: a dismount SetPassengers(horse,[]) is lost and the client keeps the rider mounted until the next link change or re-pairing. Fix direction: take LOD tiles off world_tx, or treat a lost entity frame as a re-pair."
 regression = []
 failing_first = "not recorded"
+
+[[bug]]
+id = "NATIVE-SET-PLAYER-TEAM-26-3-LAYOUT"
+title = "/team add disconnects the native client: it decodes set_player_team (Play 0x6f) in the pre-26.3 parameter order and fails with '4 trailing packet bytes'."
+area = "client"
+repro = "client"
+severity = "blocker"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F2, 2/2): server encodes the 26.3 layout (receipts/BreakJoinRows/javap/SetPlayerTeamParameters.txt: display name, prefix, suffix, visibility, collision, Optional<color>, options); solaris-client src/ui/hud.rs:304-318 decodes the old order. Being fixed on solaris-client wt/ClientTeamPacket."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "TELLRAW-PLAIN-STRING-COMPONENT-DROPPED"
+title = "tellraw with a plain JSON string component (tellraw @s \"text\") shows nothing and reports no error; {\"text\":...} works."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F3, 2/2, with send_command_feedback true and false). Vanilla 26.3 accepts a bare string as a text component."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "COMMAND-BLOCK-SETBLOCK-AUTO-NEVER-RUNS"
+title = "A command block placed by /setblock with {auto:1b} never runs; the same block powered by redstone runs."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F6, 2/2; javap receipts/BreakJoinRows/javap/CommandBlockEntity.txt: loadAdditional -> setAutomatic -> scheduleTick)."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "SP-PLAYER-ROTATION-LOST-ON-REOPEN"
+title = "Singleplayer: after a clean quit and reopen the player's position is kept but yaw/pitch come back as 0/0; vanilla persists Rotation."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F4, 8/8 including the uninterrupted control run); not caused by the WORLD-FIRST-START-INTERRUPTED fix."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "NATIVE-KICK-REASON-BROKEN-PIPE"
+title = "A duplicate-login kick of an incumbent in the Nether can show 'Broken pipe (os error 32)' on the native client instead of the kick reason the server sent."
+area = "client"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F5, 1/2, BREAK_DL_ATTACK=nether); the server log shows 'You logged in from another location' was sent."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "COMMAND-GAPS-BREAKJOINROWS-NOTICED"
+title = "Small command gaps seen once each: defaultgamemode is an unknown command; loot table minecraft:blocks/stone reported unsupported; failure messages show the raw key argument.entity.notfound.entity; command-block say shows [Server] instead of @ and ops get no [@: ...] admin broadcast."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md 'Noticed', single runs). Split into separate rows when one is picked up."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "PROJECTILE-STUCK-ARROW-NEVER-FALLS"
+title = "An arrow or trident stuck in a block stays floating when that block is removed instead of falling"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 AbstractArrow javap (.analysis/codex-logs/impact-parity/AbstractArrow.javap tick 165-209, shouldFall 759-780, startFalling 782-815): an in-ground arrow whose AABB(pos,pos).inflate(0.06) no longer collides clears IN_GROUND, scales its zero motion and resets life. crates/mc-core/src/projectiles/flight.rs stuck branch only despawned or picked up, so an arrow that broke a pot, primed TNT or lost its support hung in the air."
+regression = ["cargo:mc-core:projectiles::flight_tests::arrow_that_breaks_a_pot_falls_to_the_floor_and_stays_pickable"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-STUCK-ARROW-NEVER-FALLS.json"
+
+[[bug]]
+id = "PROJECTILE-BELL-NO-RING"
+title = "A projectile striking a bell never rings it"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 BellBlock javap (.analysis/codex-logs/impact-parity/parity.javap BellBlock.onProjectileHit/onHit/isProperHit/attemptToRing): a proper hit (horizontal face, at most 0.8124f above the cell floor, side allowed by attachment and facing) sends block event 1 with the face, the bell sound, BLOCK_CHANGE and the player owner's bell_ring stat. crates/mc-core/src/projectiles had no bell reaction."
+regression = ["cargo:mc-core:projectiles::flight_tests::arrow_rings_a_floor_bell_only_on_a_proper_hit"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-BELL-NO-RING.json"
+
+[[bug]]
+id = "PROJECTILE-CANDLE-NOT-LIT"
+title = "A burning projectile does not light candles or candle cakes"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 AbstractCandleBlock/CandleBlock/CandleCakeBlock javap (.analysis/codex-logs/impact-parity/parity.javap): onProjectileHit with projectile.isOnFire() and canBeLit (unlit; a candle also dry) calls setLit (setBlock flags 11). crates/mc-core/src/projectiles had no candle reaction."
+regression = ["cargo:mc-core:projectiles::flight_tests::burning_arrow_lights_dry_candles_and_candle_cakes", "cargo:mc-core:projectiles::flight_tests::small_fireball_lights_a_candle_but_a_wind_charge_does_not"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-CANDLE-NOT-LIT.json"
+
+[[bug]]
+id = "PROJECTILE-BIG-DRIPLEAF-NO-TILT"
+title = "A projectile striking a big dripleaf does not tilt it, and big dripleaf has no tilt ticks at all"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 BigDripleafBlock javap (.analysis/codex-logs/impact-parity/parity.javap lines 767-1485): onProjectileHit sets tilt FULL with the tilt-down sound and schedules a tick; tick walks UNSTABLE->PARTIAL->FULL (10, 10) and resets FULL after 100 with the tilt-up sound; a neighbour signal resets; setTilt emits BLOCK_CHANGE for a changed vibrating tilt. Solaris had no big_dripleaf tilt code."
+regression = ["cargo:mc-core:projectiles::flight_tests::projectile_tilts_big_dripleaf_until_its_tick_levels_it", "cargo:mc-core:redstone::big_dripleaf::tests::scheduled_ticks_walk_the_tilt_and_reset_a_full_leaf", "cargo:mc-core:redstone::big_dripleaf::tests::a_neighbour_signal_resets_a_tilted_leaf", "cargo:mc-core:redstone::big_dripleaf::tests::a_projectile_hit_keeps_the_pending_tick"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-BIG-DRIPLEAF-NO-TILT.json"
+
+[[bug]]
+id = "PROJECTILE-AMETHYST-NO-CHIME"
+title = "A projectile striking amethyst does not chime"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 AmethystBlock javap (.analysis/codex-logs/impact-parity/parity.javap lines 1486-1518): onProjectileHit plays AMETHYST_BLOCK_CHIME, BLOCKS, volume 1, pitch 0.5 + nextFloat * 1.2; budding amethyst, buds and clusters inherit it. crates/mc-core/src/projectiles had no amethyst reaction."
+regression = ["cargo:mc-core:projectiles::flight_tests::projectile_chimes_amethyst_once"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-AMETHYST-NO-CHIME.json"
+
+[[bug]]
+id = "PROJECTILE-TNT-CAMPFIRE-CONSUMES-ARROW"
+title = "A burning arrow that primes TNT or relights a campfire is deleted instead of sticking"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 TntBlock/CampfireBlock/AbstractArrow javap: the block reaction runs inside Projectile.onHitBlock and AbstractArrow.onHitBlock then sticks the arrow; crates/mc-core/src/projectiles/flight.rs returned true (remove) after prime_block or relight."
+regression = ["cargo:mc-core:projectiles::flight_tests::burning_arrow_primes_exact_tnt_cell_once_on_negative_axis_impact", "cargo:mc-core:projectiles::flight_tests::flaming_arrow_relights_dry_but_not_waterlogged_campfire"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-TNT-CAMPFIRE-CONSUMES-ARROW.json"
+
+[[bug]]
+id = "PROJECTILE-BREAK-NO-BLOCK-DESTROY-VIBRATION"
+title = "A projectile breaking a pot, chorus flower or speleothem emits no BLOCK_DESTROY vibration"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review: 26.3 Level.destroyBlock emits GameEvent.BLOCK_DESTROY at the cell; crates/mc-core/src/projectiles/block_impact.rs destroy() staged the break and level event 2001 without a vibration (review ReviewProjectileBreak low)."
+regression = ["cargo:mc-core:projectiles::flight_tests::projectile_pot_break_emits_block_destroy"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-BREAK-NO-BLOCK-DESTROY-VIBRATION.json"
+
+[[bug]]
+id = "PROJECTILE-MAY-INTERACT-IGNORES-WORLD-BORDER"
+title = "A player's projectile interacts with blocks outside the world border"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 ServerLevel.mayInteract javap (.analysis/codex-logs/impact-parity/blocks.javap 9270-9293): a player also needs WorldBorder.isWithinBounds(pos) (parity.javap 3144-3186: minX <= x < maxX, minZ <= z < maxZ). crates/mc-core/src/projectiles/block_impact.rs may_interact checked spawn protection only."
+regression = ["cargo:mc-core:projectiles::flight_tests::player_arrow_primes_tnt_only_inside_the_world_border"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-MAY-INTERACT-IGNORES-WORLD-BORDER.json"
+
+[[bug]]
+id = "PROJECTILE-CAN-BREAK-NOT-EVALUATED"
+title = "Adventure-mode and mob projectiles never break or ignite blocks even when the arrow's can_break admits them"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 Projectile.canBreakBlockInAdventureMode (.analysis/codex-logs/impact-parity/Projectile.javap 459-496: ownerless outside default adventure and non-adventure players pass; mob owners and adventure players need canBreak, applied from the arrow pickup stack by AbstractArrow.javap 96) and TntBlock.prime (parity.javap 2613+: an adventure igniter needs stack.canBreakBlockInAdventureMode). crates/mc-core/src/projectiles/block_impact.rs denied every such shot because Solaris evaluated no can_break predicate."
+regression = ["cargo:mc-core:projectiles::flight_tests::adventure_and_mob_arrows_break_pots_only_through_can_break", "cargo:mc-core:projectiles::flight_tests::adventure_burning_arrow_primes_tnt_only_through_can_break", "cargo:mc-core:projectiles::can_break::tests::block_ids_lists_and_alternatives_select_the_block", "cargo:mc-core:projectiles::can_break::tests::state_properties_match_exact_values_and_ordered_ranges", "cargo:mc-core:projectiles::can_break::tests::nbt_needs_a_block_entity_whose_image_contains_it"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-CAN-BREAK-NOT-EVALUATED.json"
