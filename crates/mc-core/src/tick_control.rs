@@ -21,6 +21,7 @@ use std::time::Duration;
 
 use crate::boundary::{ConnectionId, PlayerChange};
 use crate::command_feedback::text;
+use crate::config::CoreError;
 use crate::tick::TickState;
 use crate::weather::GameClockImage;
 
@@ -193,6 +194,24 @@ impl TickControl {
                 game_ticks: self.game_ticks(tick),
             }
         }
+    }
+
+    /// Recovery: the held-tick count at the recovered global tick `tick`.
+    pub(crate) fn restore_clock(
+        &mut self,
+        image: GameClockImage,
+        tick: u64,
+    ) -> Result<(), CoreError> {
+        let held_ticks = match image {
+            GameClockImage::Running { held_ticks } => (held_ticks <= tick).then_some(held_ticks),
+            GameClockImage::Held { game_ticks } => tick.checked_sub(game_ticks),
+        };
+        self.held_ticks = held_ticks.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "restore game clock: persisted {image:?} exceeds recovered tick {tick}"
+            ))
+        })?;
+        Ok(())
     }
 
     /// `TickRateManager.tick` plus `checkShouldSprintThisTick`. Returns the

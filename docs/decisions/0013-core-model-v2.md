@@ -45,7 +45,7 @@ execution is a model constraint, not a claim that a general scheduler exists.
 
 Client game age follows simulated ticks, not journal frame identifiers.
 [State ownership](../architecture/state-ownership.md#tick-and-wire-clocks) defines the
-freeze/step projection and its current restart limitation; daylight time remains
+freeze/step projection and how recovery restores that age; daylight time remains
 independent.
 
 ## Threads and backpressure

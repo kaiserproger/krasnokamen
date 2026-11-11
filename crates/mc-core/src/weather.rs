@@ -92,6 +92,9 @@ impl ClimateImage {
         {
             return Err(CoreError::Storage("invalid persisted weather state".into()));
         }
+        state
+            .tick_control
+            .restore_clock(self.game_clock, state.tick)?;
         state.day_time = self.day_time;
         state.weather = (kind, self.remaining_ticks);
         state.thunder_remaining_ticks = self.thunder_remaining_ticks;
