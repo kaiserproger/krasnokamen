@@ -386,7 +386,10 @@ def _warden_damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         _use(steps, lever)
         steps.call("minecraft_wait_ticks", {"ticks": 50})
     steps.fixture("damage @s 13 minecraft:generic")
-    steps.wait(lambda state: 0 < state["player"]["health"] < 10, "warden_lethal_health_prepared")
+    # Observations lag the server by many ticks on a graphical client: the warden's
+    # first sonic boom can land before the 7 HP state is ever observed, so "below
+    # lethal" includes already dead. The sonic wire identity is asserted next.
+    steps.wait(lambda state: state["player"]["health"] < 10, "warden_lethal_health_prepared")
 
     def sonic_received(_: dict[str, Any]) -> bool:
         return any(event["entity_id"] == player_id and event["type"] == "minecraft:sonic_boom"

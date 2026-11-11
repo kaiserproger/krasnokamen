@@ -234,6 +234,31 @@ class NativeV2ProbeTests(unittest.TestCase):
             native_p4._damage(steps, (10, 70, 10))
         self.assertLess(events.index("gamerule spawn_mobs false"), events.index("time set 18000"))
 
+    def test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed(self) -> None:
+        from .backends import native_p4
+
+        class Stop(Exception):
+            pass
+
+        captured = {}
+
+        def wait(predicate, label, **_kwargs):
+            if label == "warden_lethal_health_prepared":
+                captured["predicate"] = predicate
+                raise Stop
+            return {"recent_chat": ["x has the following entity data: minecraft:speed"],
+                    "player": {"health": 1, "entity_id": 1}, "client_tick": 1,
+                    "screen": {"open": True}}
+
+        steps = mock.MagicMock()
+        steps.wait.side_effect = wait
+        with mock.patch.object(native_p4, "_capture"), self.assertRaises(Stop):
+            native_p4._damage(steps, (10, 70, 10))
+        predicate = captured["predicate"]
+        self.assertTrue(predicate({"player": {"health": 7.0}}))
+        self.assertTrue(predicate({"player": {"health": 0.0}}))
+        self.assertFalse(predicate({"player": {"health": 20.0}}))
+
     def test_damage_scenario_stops_the_zombie_before_slow_capture(self) -> None:
         from .backends import native_p4
 
