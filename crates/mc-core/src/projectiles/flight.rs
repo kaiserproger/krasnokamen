@@ -625,6 +625,45 @@ fn first_solid(
     step: [f64; 3],
     radius: f64,
 ) -> Result<Option<(f64, crate::boundary::BlockPos)>, ()> {
+    sweep(state, from, step, radius).map(|sweep| sweep.hit)
+}
+
+/// One accepted block sweep: the first hit and, when the blocks were read
+/// from resident columns, the state of the start cell (`from` floored),
+/// which every sweep box contains.
+#[derive(Debug)]
+struct Sweep {
+    hit: Option<(f64, crate::boundary::BlockPos)>,
+    start: Option<u32>,
+}
+
+// Test-only count of cells whose state a sweep read one by one.
+#[cfg(test)]
+std::thread_local! {
+    static SWEPT_CELLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn take_swept_cells() -> usize {
+    SWEPT_CELLS.with(|cells| cells.replace(0))
+}
+
+/// The result is a function of the box's cells alone: `Err` when any cell is
+/// unloaded, outside the world height or unregistered, otherwise the
+/// earliest hit, ties to the first cell in y, z, x order.
+///
+/// Measured narrow hack (BvArrowPerf receipts). Bottleneck: per-cell reads
+/// plus a second chunk-map probe for the water check, once per flying arrow
+/// (thousands a tick in battle volleys, mostly over all-air sections).
+/// Boundary: overlay-free sweeps; a run of cells inside a single-state
+/// section whose state has no collision shape holds nothing to hit and is
+/// skipped after one registry check. Fence: the world-read oracle tests
+/// `sweep_reads_cells_only_in_sections_that_can_hold_collision_shapes` and
+/// `first_solid_column_reads_match_world_reads_before_and_after_folding`
+/// (hits, ties, refusals, start cell). Effect, S2 battle micro: sweep and
+/// water probe 434 -> 228 profile samples. Removal: drop the `uniform`
+/// branch and let `step` read the start cell through `block_at`.
+fn sweep(state: &TickState, from: [f64; 3], step: [f64; 3], radius: f64) -> Result<Sweep, ()> {
     if from
         .iter()
         .chain(step.iter())
@@ -647,53 +686,111 @@ fn first_solid(
             .div_ceil(16)
             .saturating_sub(1),
     );
-    // An overlay-free world is read through its resident columns: one map
-    // probe per column crossing instead of one per cell. Unfolded writes keep
-    // the overlay-first world read. Both refuse unloaded columns and heights.
-    let direct = state.world.overlay_is_empty();
-    let mut column: Option<(crate::boundary::ChunkPos, &crate::boundary::Chunk)> = None;
+    let low = min[1].saturating_sub(below);
     let mut first: Option<(f64, crate::boundary::BlockPos)> = None;
-    for y in min[1].saturating_sub(below)..=max[1] {
-        for z in min[2]..=max[2] {
-            for x in min[0]..=max[0] {
-                let block = if direct {
-                    let at = crate::boundary::ChunkPos {
-                        x: x.div_euclid(16),
-                        z: z.div_euclid(16),
-                    };
-                    let chunk = match column {
-                        Some((cached, chunk)) if cached == at => chunk,
-                        _ => {
-                            let chunk = state.world.chunk(at).ok_or(())?;
-                            column = Some((at, chunk));
-                            chunk
-                        }
-                    };
-                    chunk
-                        .get_block(x.rem_euclid(16) as u8, y, z.rem_euclid(16) as u8)
-                        .map(|id| id.0)
-                } else {
-                    state.world.block_at(x, y, z)
-                }
-                .ok_or(())?;
-                let Some(boxes) = state.registry.collision_boxes.get(block as usize) else {
-                    return Err(());
-                };
-                for collision_box in boxes {
-                    let local = collision_box.as_blocks();
-                    let offset = [f64::from(x), f64::from(y), f64::from(z)];
-                    let lower = std::array::from_fn(|axis| offset[axis] + local[axis]);
-                    let upper = std::array::from_fn(|axis| offset[axis] + local[axis + 3]);
-                    if let Some(t) = swept_sphere_enters(from, step, lower, upper, radius)
-                        && first.is_none_or(|(old, _)| t < old)
+    let mut test = |x: i32, y: i32, z: i32, block: u32| -> Result<(), ()> {
+        let boxes = state
+            .registry
+            .collision_boxes
+            .get(block as usize)
+            .ok_or(())?;
+        for collision_box in boxes {
+            let local = collision_box.as_blocks();
+            let offset = [f64::from(x), f64::from(y), f64::from(z)];
+            let lower = std::array::from_fn(|axis| offset[axis] + local[axis]);
+            let upper = std::array::from_fn(|axis| offset[axis] + local[axis + 3]);
+            if let Some(t) = swept_sphere_enters(from, step, lower, upper, radius)
+                && first.is_none_or(|(old, _)| t < old)
+            {
+                first = Some((t, crate::boundary::BlockPos { x, y, z }));
+            }
+        }
+        Ok(())
+    };
+    #[cfg(test)]
+    let mut read = 0;
+    // Unfolded writes keep the overlay-first world read.
+    if !state.world.overlay_is_empty() {
+        for y in low..=max[1] {
+            for z in min[2]..=max[2] {
+                for x in min[0]..=max[0] {
+                    test(x, y, z, state.world.block_at(x, y, z).ok_or(())?)?;
+                    #[cfg(test)]
                     {
-                        first = Some((t, crate::boundary::BlockPos { x, y, z }));
+                        read += 1;
                     }
                 }
             }
         }
+        #[cfg(test)]
+        SWEPT_CELLS.with(|cells| cells.set(cells.get() + read));
+        return Ok(Sweep {
+            hit: first,
+            start: None,
+        });
     }
-    Ok(first)
+    // An overlay-free world is read through its resident columns, one map
+    // probe per column crossing, one row run per column and section level.
+    let start_cell: [i32; 3] = from.map(|value| value.floor() as i32);
+    let mut start = None;
+    let mut column: Option<(crate::boundary::ChunkPos, &crate::boundary::Chunk)> = None;
+    for y in low..=max[1] {
+        for z in min[2]..=max[2] {
+            let mut x = min[0];
+            loop {
+                let at = crate::boundary::ChunkPos {
+                    x: x.div_euclid(16),
+                    z: z.div_euclid(16),
+                };
+                let chunk = match column {
+                    Some((cached, chunk)) if cached == at => chunk,
+                    _ => {
+                        let chunk = state.world.chunk(at).ok_or(())?;
+                        column = Some((at, chunk));
+                        chunk
+                    }
+                };
+                let (index, local_y) = chunk.geometry().world_y_to_section(y).ok_or(())?;
+                let section = &chunk.sections[index];
+                let last = max[0].min(at.x * 16 + 15);
+                let start_row =
+                    y == start_cell[1] && z == start_cell[2] && (x..=last).contains(&start_cell[0]);
+                let uniform = section.palette().is_none().then(|| section.get(0, 0, 0).0);
+                if let Some(block) = uniform
+                    && state
+                        .registry
+                        .collision_boxes
+                        .get(block as usize)
+                        .ok_or(())?
+                        .is_empty()
+                {
+                    if start_row {
+                        start = Some(block);
+                    }
+                } else {
+                    let local_z = z.rem_euclid(16) as u8;
+                    for x in x..=last {
+                        let block = section.get(x.rem_euclid(16) as u8, local_y, local_z).0;
+                        if start_row && x == start_cell[0] {
+                            start = Some(block);
+                        }
+                        test(x, y, z, block)?;
+                    }
+                    #[cfg(test)]
+                    {
+                        read += (last - x + 1) as usize;
+                    }
+                }
+                if last == max[0] {
+                    break;
+                }
+                x = last + 1;
+            }
+        }
+    }
+    #[cfg(test)]
+    SWEPT_CELLS.with(|cells| cells.set(cells.get() + read));
+    Ok(Sweep { hit: first, start })
 }
 fn water_hit_face(
     state: &TickState,
@@ -792,7 +889,11 @@ pub(super) fn run(
     let mut ranges = Vec::with_capacity(ids.len());
     for query in &queries {
         let start = candidates.len();
-        if let Some(query) = query {
+        // With the volley high above every body the snapshot is empty and so
+        // is every candidate set; native chunk sweeps would find nothing.
+        if !bodies.is_empty()
+            && let Some(query) = query
+        {
             query_candidates(
                 state,
                 query,
@@ -1119,7 +1220,11 @@ fn step(
     }
     let velocity = state.entities.vel(slot).map(|value| value / 20.0);
     let collision_radius = authored.map_or(0.0, |profile| profile.collision_radius);
-    let Ok(block_hit) = first_solid(state, pos, velocity, collision_radius) else {
+    let Ok(Sweep {
+        hit: block_hit,
+        start: start_block,
+    }) = sweep(state, pos, velocity, collision_radius)
+    else {
         return false;
     };
     let reach = block_hit.map_or(1.0, |(t, _)| t);
@@ -1434,11 +1539,16 @@ fn step(
         super::set_flight(state, slot, next);
         return false;
     }
-    let block = state.world.block_at(
-        pos[0].floor() as i32,
-        pos[1].floor() as i32,
-        pos[2].floor() as i32,
-    );
+    // Every write lands in the overlay: still empty, no write has replaced
+    // the start cell since the sweep read it.
+    let block = match start_block {
+        Some(block) if state.world.overlay_is_empty() => Some(block),
+        _ => state.world.block_at(
+            pos[0].floor() as i32,
+            pos[1].floor() as i32,
+            pos[2].floor() as i32,
+        ),
+    };
     let water =
         block.is_some_and(|block| state.registry.materials.classify(block) == BlockMaterial::Water);
     let (drag, gravity) = match record.kind {
