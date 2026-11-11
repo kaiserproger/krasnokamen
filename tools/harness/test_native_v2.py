@@ -234,7 +234,7 @@ class NativeV2ProbeTests(unittest.TestCase):
             native_p4._damage(steps, (10, 70, 10))
         self.assertLess(events.index("gamerule spawn_mobs false"), events.index("time set 18000"))
 
-    def test_damage_void_row_awaits_play_while_the_player_hangs_below_the_world(self) -> None:
+    def test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world(self) -> None:
         from .backends import native_p4
 
         class Stop(Exception):
@@ -256,7 +256,8 @@ class NativeV2ProbeTests(unittest.TestCase):
         steps.wait.side_effect = wait
         with mock.patch.object(native_p4, "_rows", return_value=[row]), self.assertRaises(Stop):
             native_p4._damage_environment(steps, (10, 70, 10), 1)
-        self.assertIs(seen.get("wait_for_play"), True)
+        self.assertIs(seen.get("outside_play"), True)
+        self.assertNotIn("wait_for_play", seen)
 
     def test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack(self) -> None:
         from .backends import native_p4
@@ -449,6 +450,15 @@ class NativeV2ProbeTests(unittest.TestCase):
             }])
             self.assertEqual(ctx.client_evidence["operator_fixture"], rows)
 
+
+    def test_probe_observe_outside_play_returns_the_state_only_when_declared(self) -> None:
+        client = mock.Mock(token="")
+        client.call_tool.return_value = {"in_play": False, "state_version": 3}
+        with tempfile.TemporaryDirectory() as directory:
+            with ProbeSteps(client, Path(directory), 1, "outside") as steps:
+                self.assertEqual(steps.observe(outside_play=True)["state_version"], 3)
+                with self.assertRaisesRegex(RuntimeError, "in_play"):
+                    steps.observe()
 
     def test_default_probe_observe_stays_strict_outside_play(self) -> None:
         client = mock.Mock(token="")

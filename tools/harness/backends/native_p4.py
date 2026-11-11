@@ -605,16 +605,16 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
     start = len(steps.client.p4_damage_wire())
     steps.fixture("gamemode survival @s")
     steps.fixture(f"tp @s {x + .5} -200 {z + .5}")
-    # The client reports in_play false while the player hangs below the world (no spawn meshes
-    # in reach) until the server kills it; the teleport into the void is a declared boundary.
-    void_state = steps.wait(lambda state: state["player"]["health"] < 18 and any(
+    # Below the world's block range the client shows no playable world (in_play false, no player
+    # row), so health is not observable there: the row is the received out_of_world wire event
+    # for the player and then the death screen.
+    steps.wait(lambda state: any(
         event["entity_id"] == player_id and event["type"] == "minecraft:out_of_world"
         for event in steps.client.p4_damage_wire()[start:]), "void_physical_identity_received",
-        wait_for_play=True, timeout_seconds=30)
-    results.append({"type": "out_of_world", "health": void_state["player"]["health"],
-                    "events": steps.client.p4_damage_wire()[start:]})
-    steps.wait(lambda state: state["player"]["health"] == 0 and state["screen"]["open"],
-               "void_death_screen_received")
+        outside_play=True, timeout_seconds=30)
+    results.append({"type": "out_of_world", "events": steps.client.p4_damage_wire()[start:]})
+    steps.wait(lambda state: state["screen"]["open"], "void_death_screen_received",
+               outside_play=True)
     steps.call("minecraft_respawn", {"timeout_seconds": steps.remaining()})
     steps.wait(lambda state: state["player"]["health"] > 0 and not state["screen"]["open"],
                "void_respawn_received", wait_for_play=True)
