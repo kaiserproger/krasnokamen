@@ -433,6 +433,24 @@ def sculk_sensor_signal(ctx):
         label = f'calibrated={calibrated}:distance={distance}:selected={selected}'
         call = getattr(ctx.clients[0], 'call', None)
         command(ctx, f'setblock 23 100 {16-distance} redstone_block')
+        # Native matrix evidence must observe the sensor transition itself,
+        # not infer it from a latched downstream bulb after the pulse.
+        if accepts and callable(call):
+            received = []
+            for phase in ('active', 'cooldown', 'inactive'):
+                properties = {'sculk_sensor_phase': phase}
+                if phase == 'active':
+                    properties['power'] = str(strength)
+                reply = call('minecraft_wait_for_block_state', {
+                    'x': 24, 'y': 100, 'z': 16,
+                    'block_id': 'minecraft:' + kind,
+                    'properties': properties,
+                    'timeout_seconds': 30.0,
+                })
+                received.append(reply['block']['properties']['sculk_sensor_phase'])
+            expected_phases = ['active', 'cooldown', 'inactive']
+            check(ctx, label + ':received-phases', received == expected_phases,
+                  received, expected_phases, source='Sculk_Sensor')
         # Bulbs retain the pulse after the sensor becomes inactive. Console
         # round trips must not decide whether a ten-tick pulse was observed.
         ticks(ctx, distance + 40)
