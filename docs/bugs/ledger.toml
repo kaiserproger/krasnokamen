@@ -4116,3 +4116,14 @@ status = "open"
 source = "solaris-client 2edbb590 src/ui/packets.rs read_advancements reads the show-toast flag as `let _show` and discards it; no toast renderer exists anywhere in solaris-client/src. Paired frames: Java receipts/VisualItemsClient/20261111T140325-scene-shot-znvexbrh statue-sitting.png and framed-map.png show 'New Recipe(s) Unlocked!'; the native frames of the same scene (20261111T135619-scene-shot-gmao8eqn) show none (Main, 2026-11-11)."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "SUMMON-NBT-FUSE-BLOCKSTATE"
+title = "/summon rejects valid vanilla entity NBT such as tnt {fuse:...} and falling_block {BlockState:{...}} with 'unknown field', so primed TNT and falling blocks cannot be summoned with their vanilla data"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "VisualWorldM scene runs 2026-11-11 (receipts/VisualWorldClient/rows.yaml, batch-fx2 scene uojfjhnq/wh9f5dcu): the server refused the fields identically for native and Java clients."
+regression = []
+failing_first = "reported"
