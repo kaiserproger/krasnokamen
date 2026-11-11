@@ -121,6 +121,19 @@ def _failing_verdict(receipt, profile, verdict):
     return False
 
 
+def _scenario_assertion_failed(receipt, check, error_text):
+    """A named-scenario ref is red when its run failed on one of the scenario's own
+    assertions; a join/timeout flake without that marker stays unrunnable."""
+    if 'assertion failed' not in error_text:
+        return False
+    details = receipt.get('details', {}) if isinstance(receipt, dict) else {}
+    scenario = details.get('scenario') if isinstance(details.get('scenario'), dict) else details
+    named = (scenario or {}).get('named_scenario') if isinstance(scenario, dict) else None
+    if isinstance(named, dict) and named.get('id'):
+        return named['id'] == check
+    return check in error_text
+
+
 def _work_root() -> Path:
     """The `<work>` directory holding the main checkouts (solaris, solaris-loader, ...)."""
     for base in (REPO_ROOT.parent, REPO_ROOT.parent.parent):
@@ -218,7 +231,10 @@ def _run_harness(ctx, refs, tree):
             receipt, path = regressions._client_receipt(ctx, profiles, command, env, profile, check, is_profile, cwd=tree)
         except regressions.ReceiptNotPassed as error:
             for ref, profile, check, is_profile in group:
-                red = error.status == 'failed' and is_profile and _failing_verdict(error.receipt, profile, check)
+                red = error.status == 'failed' and (
+                    (is_profile and _failing_verdict(error.receipt, profile, check))
+                    or (not is_profile and _scenario_assertion_failed(error.receipt, check, str(error)))
+                )
                 results[ref] = (RED if red else UNRUNNABLE, str(error), None)
             continue
         except Exception as error:

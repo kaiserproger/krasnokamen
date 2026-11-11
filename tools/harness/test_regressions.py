@@ -299,6 +299,20 @@ regression = []
                 with self.assertRaises(ValueError):
                     regressions._parse_ref(bad)
 
+    def test_scenario_ref_red_only_on_assertion_failure(self):
+        scene_receipt = {'status': 'failed', 'error': 'scene-shot assertion failed: house-certification_contains_0',
+                         'details': {'named_scenario': {'id': 'native-low-roof-house'}}}
+        self.assertTrue(ledger._scenario_assertion_failed(
+            scene_receipt, 'native-low-roof-house', str(regressions.ReceiptNotPassed('failed', '; x', scene_receipt))))
+        loader_receipt = {'status': 'failed',
+                          'error': 'loader-fabric-screen-admission assertion failed: fabric_screen_service_admitted',
+                          'details': {}}
+        self.assertTrue(ledger._scenario_assertion_failed(loader_receipt, 'loader-fabric-screen-admission', loader_receipt['error']))
+        flake = {'status': 'failed', 'error': 'real fabric client did not reach Play', 'details': {}}
+        self.assertFalse(ledger._scenario_assertion_failed(flake, 'loader-fabric-screen-admission', flake['error']))
+        wrong = {'status': 'failed', 'error': 'scene-shot assertion failed: x', 'details': {'named_scenario': {'id': 'other'}}}
+        self.assertFalse(ledger._scenario_assertion_failed(wrong, 'native-low-roof-house', 'scene-shot assertion failed: x'))
+
     def test_open_checks_are_run(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
