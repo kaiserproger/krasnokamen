@@ -605,10 +605,12 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
     start = len(steps.client.p4_damage_wire())
     steps.fixture("gamemode survival @s")
     steps.fixture(f"tp @s {x + .5} -200 {z + .5}")
+    # The client reports in_play false while the player hangs below the world (no spawn meshes
+    # in reach) until the server kills it; the teleport into the void is a declared boundary.
     void_state = steps.wait(lambda state: state["player"]["health"] < 18 and any(
         event["entity_id"] == player_id and event["type"] == "minecraft:out_of_world"
         for event in steps.client.p4_damage_wire()[start:]), "void_physical_identity_received",
-        timeout_seconds=30)
+        wait_for_play=True, timeout_seconds=30)
     results.append({"type": "out_of_world", "health": void_state["player"]["health"],
                     "events": steps.client.p4_damage_wire()[start:]})
     steps.wait(lambda state: state["player"]["health"] == 0 and state["screen"]["open"],

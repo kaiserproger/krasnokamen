@@ -234,6 +234,30 @@ class NativeV2ProbeTests(unittest.TestCase):
             native_p4._damage(steps, (10, 70, 10))
         self.assertLess(events.index("gamerule spawn_mobs false"), events.index("time set 18000"))
 
+    def test_damage_void_row_awaits_play_while_the_player_hangs_below_the_world(self) -> None:
+        from .backends import native_p4
+
+        class Stop(Exception):
+            pass
+
+        seen: dict[str, object] = {}
+
+        def wait(_predicate, label, **kwargs):
+            if label == "thorns_authored_uuid_received":
+                self.assertTrue(_predicate({}))
+            if label == "void_physical_identity_received":
+                seen.update(kwargs)
+                raise Stop
+            return mock.MagicMock()
+
+        row = {"entity_uuid": "00000000-0000-0000-0000-00000001e240", "entity_id": 7,
+               "entity_type": "minecraft:zombie"}
+        steps = mock.MagicMock()
+        steps.wait.side_effect = wait
+        with mock.patch.object(native_p4, "_rows", return_value=[row]), self.assertRaises(Stop):
+            native_p4._damage_environment(steps, (10, 70, 10), 1)
+        self.assertIs(seen.get("wait_for_play"), True)
+
     def test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack(self) -> None:
         from .backends import native_p4
 
