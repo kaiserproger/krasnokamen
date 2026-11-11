@@ -495,10 +495,9 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             for _ in range(value["max_ticks"]):
                 before = probe.call("minecraft_list_entities", args)
                 candidate = matching_walk(before, value)
-                # Start capture inside the leading half of the accepted bracket.
-                # The observation and the rendered frame are asynchronous, and
-                # waiting until the midpoint can overshoot while capture completes.
-                if candidate and candidate["walk_position"] >= max(0, value["phase"] - value["tolerance"] / 2):
+                # Start as soon as the observation enters the bracket. Capture
+                # is asynchronous and can cross several client ticks.
+                if candidate:
                     break
                 probe.call("minecraft_wait_ticks", {"ticks": 1})
             else:
