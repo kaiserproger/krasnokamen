@@ -493,48 +493,48 @@ ledger_contract:
     death_respawn.keep_inventory_false:
       changed_by:
       - graves
-      vanilla: 26e80fd7822e333c48cf8c2205b97db6bea35f5e0b267a8eca8e24bc0d0d6992
-      live: e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f
+      vanilla: 008ab38a8632a34a39e60d7d2eef6f44d362cf7cf1d55e9b9f49b6c07ddc31d5
+      live: 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57
     death_respawn.death_while_menu_open:
       changed_by:
       - graves
-      vanilla: 26e80fd7822e333c48cf8c2205b97db6bea35f5e0b267a8eca8e24bc0d0d6992
-      live: e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f
+      vanilla: 008ab38a8632a34a39e60d7d2eef6f44d362cf7cf1d55e9b9f49b6c07ddc31d5
+      live: 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57
     death_respawn.death_while_riding:
       changed_by:
       - graves
-      vanilla: 26e80fd7822e333c48cf8c2205b97db6bea35f5e0b267a8eca8e24bc0d0d6992
-      live: e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f
+      vanilla: 008ab38a8632a34a39e60d7d2eef6f44d362cf7cf1d55e9b9f49b6c07ddc31d5
+      live: 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57
     death_respawn.void_death:
       changed_by:
       - graves
-      vanilla: 26e80fd7822e333c48cf8c2205b97db6bea35f5e0b267a8eca8e24bc0d0d6992
-      live: e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f
+      vanilla: 008ab38a8632a34a39e60d7d2eef6f44d362cf7cf1d55e9b9f49b6c07ddc31d5
+      live: 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57
     commands.msg:
       changed_by:
       - solaris-essentials
-      vanilla: 49cd112a91fc390e2c3a963cc7f13f4f665ec6da5d1806b54b903779063a825b
-      live: e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f
+      vanilla: fa58d5973a4e7aaf0db730689ffd93301105e17076c2863037022ee1ec65dbf9
+      live: 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57
     chat.private_message:
       changed_by:
       - solaris-essentials
-      vanilla: 49cd112a91fc390e2c3a963cc7f13f4f665ec6da5d1806b54b903779063a825b
-      live: e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f
+      vanilla: fa58d5973a4e7aaf0db730689ffd93301105e17076c2863037022ee1ec65dbf9
+      live: 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57
     selectors.nonop_selector_msg:
       changed_by:
       - solaris-essentials
-      vanilla: 49cd112a91fc390e2c3a963cc7f13f4f665ec6da5d1806b54b903779063a825b
-      live: e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f
+      vanilla: fa58d5973a4e7aaf0db730689ffd93301105e17076c2863037022ee1ec65dbf9
+      live: 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57
     session.mute_warn:
       changed_by:
       - solaris-essentials
-      vanilla: 49cd112a91fc390e2c3a963cc7f13f4f665ec6da5d1806b54b903779063a825b
-      live: e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f
+      vanilla: fa58d5973a4e7aaf0db730689ffd93301105e17076c2863037022ee1ec65dbf9
+      live: 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57
     session.join_fresh_spawn:
       changed_by:
       - solaris-auth
-      vanilla: c9a9ed629f62f4152eed8a110732116ea15e7733f36ea1baa197883fec0a0083
-      live: e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f
+      vanilla: f5694fa463cf6b89f6e77627891ed33757d48bff79855518fb9827abd0c6c8d3
+      live: 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57
   writers: harness receipts -> `python3 gen_matrix.py --record ...` or `--record-file batch.jsonl` (validates, flock(LOCK_EX) on ledger.jsonl, one O_APPEND write, fsync, unlock); direct writers must do
     the same and never hold the lock across a scenario run
   executed: pass or fail; blocked/skipped stay remaining; a full-set cell counts as executed when any id carrying that CELL (wave-1 or F:) has pass/fail
@@ -31764,7 +31764,7 @@ scenarios:
   subject: death_respawn.death_while_menu_open
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions, solaris-towns
-    (fingerprint 26e80fd7822e333c48cf8c2205b97db6bea35f5e0b267a8eca8e24bc0d0d6992); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    (fingerprint 008ab38a8632a34a39e60d7d2eef6f44d362cf7cf1d55e9b9f49b6c07ddc31d5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with a container open and cursor stack'
   - 'Network (disconnect_during_menu): actor disconnects (TCP close) while a container/merchant/station menu is open, optionally carrying a cursor stack'
   oracle:
@@ -31810,7 +31810,7 @@ scenarios:
   subject: death_respawn.death_while_menu_open
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions,
-    solaris-towns (fingerprint e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    solaris-towns (fingerprint 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with a container open and cursor stack'
   - 'Network (disconnect_during_menu): actor disconnects (TCP close) while a container/merchant/station menu is open, optionally carrying a cursor stack'
   oracle:
@@ -38902,7 +38902,7 @@ scenarios:
   subject: session.join_fresh_spawn
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-economy, solaris-essentials, solaris-permissions, solaris-towns
-    (fingerprint c9a9ed629f62f4152eed8a110732116ea15e7733f36ea1baa197883fec0a0083); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    (fingerprint f5694fa463cf6b89f6e77627891ed33757d48bff79855518fb9827abd0c6c8d3); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: fresh account joins a fresh world'
   - 'Network (duplicate_login): a second connection with the same account/UUID logs in during the action'
   - Second client observes the actor's target
@@ -38953,7 +38953,7 @@ scenarios:
   subject: session.join_fresh_spawn
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions,
-    solaris-towns (fingerprint e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    solaris-towns (fingerprint 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: fresh account joins a fresh world'
   - 'Network (duplicate_login): a second connection with the same account/UUID logs in during the action'
   - Second client observes the actor's target
@@ -44716,7 +44716,7 @@ scenarios:
   subject: death_respawn.death_while_riding
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions, solaris-towns
-    (fingerprint 26e80fd7822e333c48cf8c2205b97db6bea35f5e0b267a8eca8e24bc0d0d6992); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    (fingerprint 008ab38a8632a34a39e60d7d2eef6f44d362cf7cf1d55e9b9f49b6c07ddc31d5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die while riding horse/boat'
   - 'Network (slow_reader_backpressure): actor reads its socket at a throttled rate (MIX-08 reader_rate_limit) during the action'
   - 'Lifecycle (hot_backup_during_action): operator hot backup taken during the action; backup later restored and inspected'
@@ -44764,7 +44764,7 @@ scenarios:
   subject: death_respawn.death_while_riding
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions,
-    solaris-towns (fingerprint e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    solaris-towns (fingerprint 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die while riding horse/boat'
   - 'Network (slow_reader_backpressure): actor reads its socket at a throttled rate (MIX-08 reader_rate_limit) during the action'
   - 'Lifecycle (hot_backup_during_action): operator hot backup taken during the action; backup later restored and inspected'
@@ -46554,7 +46554,7 @@ scenarios:
   subject: selectors.nonop_selector_msg
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-permissions, solaris-towns (fingerprint
-    49cd112a91fc390e2c3a963cc7f13f4f665ec6da5d1806b54b903779063a825b); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    fa58d5973a4e7aaf0db730689ffd93301105e17076c2863037022ee1ec65dbf9); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /tp or /effect with non-op /msg @a hi against several players/entities'
   - 'Network (malformed_or_stale_packet): actor injects a stale state_id / out-of-reach / malformed packet during the action'
   - 'Lifecycle (pause_when_empty_resume): all players leave (pause-when-empty-seconds>0), world pauses, players rejoin'
@@ -46600,7 +46600,7 @@ scenarios:
   subject: selectors.nonop_selector_msg
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions,
-    solaris-towns (fingerprint e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    solaris-towns (fingerprint 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /tp or /effect with non-op /msg @a hi against several players/entities'
   - 'Network (malformed_or_stale_packet): actor injects a stale state_id / out-of-reach / malformed packet during the action'
   - 'Lifecycle (pause_when_empty_resume): all players leave (pause-when-empty-seconds>0), world pauses, players rejoin'
@@ -47766,7 +47766,7 @@ scenarios:
   subject: chat.private_message
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-permissions, solaris-towns (fingerprint
-    49cd112a91fc390e2c3a963cc7f13f4f665ec6da5d1806b54b903779063a825b); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    fa58d5973a4e7aaf0db730689ffd93301105e17076c2863037022ee1ec65dbf9); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /msg /tell /w to player; non-op with selector'
   - 'Network (malformed_or_stale_packet): actor injects a stale state_id / out-of-reach / malformed packet during the action'
   - All 8 clients repeat the action concurrently on own targets and on one shared target
@@ -47812,7 +47812,7 @@ scenarios:
   subject: chat.private_message
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions,
-    solaris-towns (fingerprint e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    solaris-towns (fingerprint 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /msg /tell /w to player; non-op with selector'
   - 'Network (malformed_or_stale_packet): actor injects a stale state_id / out-of-reach / malformed packet during the action'
   - All 8 clients repeat the action concurrently on own targets and on one shared target
@@ -47946,7 +47946,7 @@ scenarios:
   subject: session.mute_warn
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-permissions, solaris-towns (fingerprint
-    49cd112a91fc390e2c3a963cc7f13f4f665ec6da5d1806b54b903779063a825b); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    fa58d5973a4e7aaf0db730689ffd93301105e17076c2863037022ee1ec65dbf9); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /mute target; target chats; /unmute; /warn target'
   - 'Network (malformed_or_stale_packet): actor injects a stale state_id / out-of-reach / malformed packet during the action'
   - 'Lifecycle (clean_restart_mid_action): /stop between action steps, restart same world, rejoin and continue'
@@ -47995,7 +47995,7 @@ scenarios:
   subject: session.mute_warn
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions,
-    solaris-towns (fingerprint e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    solaris-towns (fingerprint 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /mute target; target chats; /unmute; /warn target'
   - 'Network (malformed_or_stale_packet): actor injects a stale state_id / out-of-reach / malformed packet during the action'
   - 'Lifecycle (clean_restart_mid_action): /stop between action steps, restart same world, rejoin and continue'
@@ -49819,7 +49819,7 @@ scenarios:
   subject: death_respawn.death_while_menu_open
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions, solaris-towns
-    (fingerprint 26e80fd7822e333c48cf8c2205b97db6bea35f5e0b267a8eca8e24bc0d0d6992); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    (fingerprint 008ab38a8632a34a39e60d7d2eef6f44d362cf7cf1d55e9b9f49b6c07ddc31d5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with a container open and cursor stack'
   - 'Network (disconnect_during_menu): actor disconnects (TCP close) while a container/merchant/station menu is open, optionally carrying a cursor stack'
   - All 8 clients repeat the action concurrently on own targets and on one shared target
@@ -49867,7 +49867,7 @@ scenarios:
   subject: death_respawn.death_while_menu_open
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions,
-    solaris-towns (fingerprint e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    solaris-towns (fingerprint 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with a container open and cursor stack'
   - 'Network (disconnect_during_menu): actor disconnects (TCP close) while a container/merchant/station menu is open, optionally carrying a cursor stack'
   - All 8 clients repeat the action concurrently on own targets and on one shared target
@@ -54381,7 +54381,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions, solaris-towns
-    (fingerprint 26e80fd7822e333c48cf8c2205b97db6bea35f5e0b267a8eca8e24bc0d0d6992); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    (fingerprint 008ab38a8632a34a39e60d7d2eef6f44d362cf7cf1d55e9b9f49b6c07ddc31d5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   oracle:
   - 'reference: items drop at death spot; XP orbs 7*level capped 100; inventory empty on respawn'
@@ -54420,7 +54420,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions,
-    solaris-towns (fingerprint e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    solaris-towns (fingerprint 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   oracle:
   - 'reference: items drop at death spot; XP orbs 7*level capped 100; inventory empty on respawn'
@@ -54520,7 +54520,7 @@ scenarios:
   subject: death_respawn.void_death
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions, solaris-towns
-    (fingerprint 26e80fd7822e333c48cf8c2205b97db6bea35f5e0b267a8eca8e24bc0d0d6992); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    (fingerprint 008ab38a8632a34a39e60d7d2eef6f44d362cf7cf1d55e9b9f49b6c07ddc31d5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: fall below world bottom'
   oracle:
   - 'reference: void damage until death; drops lost in void'
@@ -54554,7 +54554,7 @@ scenarios:
   subject: death_respawn.void_death
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions,
-    solaris-towns (fingerprint e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    solaris-towns (fingerprint 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: fall below world bottom'
   oracle:
   - 'reference: void damage until death; drops lost in void'
@@ -57526,7 +57526,7 @@ scenarios:
   subject: commands.msg
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-permissions, solaris-towns (fingerprint
-    49cd112a91fc390e2c3a963cc7f13f4f665ec6da5d1806b54b903779063a825b); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    fa58d5973a4e7aaf0db730689ffd93301105e17076c2863037022ee1ec65dbf9); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /msg <player> hi (requires op 0; probe also at op 0)'
   - Second client observes the actor's target
   oracle:
@@ -57565,7 +57565,7 @@ scenarios:
   subject: commands.msg
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions,
-    solaris-towns (fingerprint e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    solaris-towns (fingerprint 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /msg <player> hi (requires op 0; probe also at op 0)'
   - Second client observes the actor's target
   oracle:
@@ -72290,7 +72290,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions, solaris-towns
-    (fingerprint 26e80fd7822e333c48cf8c2205b97db6bea35f5e0b267a8eca8e24bc0d0d6992); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    (fingerprint 008ab38a8632a34a39e60d7d2eef6f44d362cf7cf1d55e9b9f49b6c07ddc31d5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   - Two players take/use the same custody object (item frame, armor stand, shelf, jukebox, item entity, grave, cauldron, campfire, bucket source) in the same tick
   oracle:
@@ -72332,7 +72332,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions,
-    solaris-towns (fingerprint e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    solaris-towns (fingerprint 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   - Two players take/use the same custody object (item frame, armor stand, shelf, jukebox, item entity, grave, cauldron, campfire, bucket source) in the same tick
   oracle:
@@ -72374,7 +72374,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions, solaris-towns
-    (fingerprint 26e80fd7822e333c48cf8c2205b97db6bea35f5e0b267a8eca8e24bc0d0d6992); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    (fingerprint 008ab38a8632a34a39e60d7d2eef6f44d362cf7cf1d55e9b9f49b6c07ddc31d5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   - Destroy the holder (break block / kill entity / explosion) in the same tick as the take/insert
   oracle:
@@ -72415,7 +72415,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions,
-    solaris-towns (fingerprint e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    solaris-towns (fingerprint 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   - Destroy the holder (break block / kill entity / explosion) in the same tick as the take/insert
   oracle:
@@ -72456,7 +72456,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions, solaris-towns
-    (fingerprint 26e80fd7822e333c48cf8c2205b97db6bea35f5e0b267a8eca8e24bc0d0d6992); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    (fingerprint 008ab38a8632a34a39e60d7d2eef6f44d362cf7cf1d55e9b9f49b6c07ddc31d5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   - Complete the custody step (take/insert/break-and-pick-up), then /stop and restart before any further input
   oracle:
@@ -72497,7 +72497,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions,
-    solaris-towns (fingerprint e0a39fcf4c1f61061e5eff638ce8a743e8493e552a4199772323484d0b93381f); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    solaris-towns (fingerprint 5efb994aa6bdf75557eee65f2f30f6545b9d7838c2b60ee2f134e7724fa79d57); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   - Complete the custody step (take/insert/break-and-pick-up), then /stop and restart before any further input
   oracle:
