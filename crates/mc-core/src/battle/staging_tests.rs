@@ -165,97 +165,462 @@ fn scenario_pursues_only_routing_enemies_and_resumes_fighting_afterward() {
     assert_eq!(formation.regiments[melee].spec.order, Order::Advance);
 }
 
+fn components(state: &TickState, stack: &mc_data::ItemStack) -> Vec<(String, Tag)> {
+    let fields = mc_data::item_nbt::stack_to_fields(&state.registry.items, stack).unwrap();
+    match mc_data::item_nbt::field(&fields, "components") {
+        Some(Tag::Compound(components)) => components.clone(),
+        _ => Vec::new(),
+    }
+}
+
+/// The `(slot, asset_id)` of a stack's `minecraft:equippable` component.
+fn worn_asset(components: &[(String, Tag)]) -> Option<(String, String)> {
+    let Some(Tag::Compound(value)) = mc_data::item_nbt::field(components, "minecraft:equippable")
+    else {
+        return None;
+    };
+    match (
+        mc_data::item_nbt::field(value, "slot"),
+        mc_data::item_nbt::field(value, "asset_id"),
+    ) {
+        (Some(Tag::String(slot)), Some(Tag::String(asset))) => Some((slot.clone(), asset.clone())),
+        _ => None,
+    }
+}
+
+fn dyed(components: &[(String, Tag)]) -> Option<i32> {
+    match mc_data::item_nbt::field(components, "minecraft:dyed_color") {
+        Some(Tag::Int(rgb)) => Some(*rgb),
+        _ => None,
+    }
+}
+
+/// Side-colour rule read back from a spawned husk, independent of `Loadout`:
+/// a side surcoat or side-dyed leather torso, or the side heater shield.
+fn husk_shows_side_colour(state: &TickState, slot: crate::entities::EntitySlot, side: u16) -> bool {
+    let row = state.entities.row(slot);
+    let (surcoat, heater, shades) = if side == 1 {
+        (
+            "solaris_battle:red_surcoat",
+            "solaris_battle:red_heater_shield",
+            RED_SHADES,
+        )
+    } else {
+        (
+            "solaris_battle:blue_surcoat",
+            "solaris_battle:blue_heater_shield",
+            BLUE_SHADES,
+        )
+    };
+    let chest = components(state, row.appearance.equipment[4].as_ref().unwrap());
+    let torso = match worn_asset(&chest) {
+        Some((slot, asset)) if slot == "chest" && asset == surcoat => true,
+        Some((slot, asset)) if slot == "chest" && asset == "minecraft:leather" => {
+            dyed(&chest).is_some_and(|rgb| shades.contains(&rgb))
+        }
+        _ => false,
+    };
+    torso
+        || row.appearance.equipment[1]
+            .as_ref()
+            .and_then(|shield| shield.item_model.as_deref())
+            .is_some_and(|model| model.as_str() == heater)
+}
+
+/// No piece carries the other side's colour: no other-side `red_`/`blue_` model or
+/// asset, every dye from the own palette, and the helmet plume dyed the own colour.
+fn only_own_side(pieces: &[Vec<(String, Tag)>], head: Option<&[(String, Tag)]>, side: u16) -> bool {
+    let (foreign, palette, plume) = if side == 1 {
+        (
+            "solaris_battle:blue_",
+            [&RED_SHADES[..], &[RED_PLUME]].concat(),
+            RED_PLUME,
+        )
+    } else {
+        (
+            "solaris_battle:red_",
+            [&BLUE_SHADES[..], &[BLUE_PLUME]].concat(),
+            BLUE_PLUME,
+        )
+    };
+    pieces.iter().all(|components| {
+        let model = matches!(
+            mc_data::item_nbt::field(components, "minecraft:item_model"),
+            Some(Tag::String(model)) if model.starts_with(foreign)
+        );
+        let asset = worn_asset(components).is_some_and(|(_, asset)| asset.starts_with(foreign));
+        let dye = dyed(components).is_some_and(|rgb| !palette.contains(&rgb));
+        !model && !asset && !dye
+    }) && head.is_none_or(|head| dyed(head) == Some(plume))
+}
+
 #[test]
-fn staged_equipment_exposes_authored_assets_for_both_sides_and_all_kinds() {
+fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighter() {
     let mut state = fixture();
     let mut changes = ChangeSet::default();
-    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 42, 100).unwrap();
-    let mut seen = [[false; 5]; 2];
-    for id in changes.entities_spawned {
-        let slot = state.entities.slot_of(id).unwrap();
-        let body = state.entities.body(slot);
-        let side = usize::from(body.faction - 1);
-        let row = state.entities.row(slot);
-        let equippable = |stack: &mc_data::ItemStack, expected: &str, expected_slot: &str| {
-            let fields = mc_data::item_nbt::stack_to_fields(&state.registry.items, stack).unwrap();
-            let Some(Tag::Compound(components)) = mc_data::item_nbt::field(&fields, "components")
-            else {
-                panic!("missing components")
-            };
-            let Some(Tag::Compound(value)) =
-                mc_data::item_nbt::field(components, "minecraft:equippable")
-            else {
-                panic!("missing equippable")
-            };
-            assert_eq!(
-                mc_data::item_nbt::field(value, "slot"),
-                Some(&Tag::String(expected_slot.into()))
-            );
-            assert_eq!(
-                mc_data::item_nbt::field(value, "asset_id"),
-                Some(&Tag::String(expected.into()))
-            );
-        };
-        let Some(weapon) = row.appearance.equipment[0].as_ref() else {
-            let armor = row.loot.body_armor.as_ref().unwrap();
-            equippable(
-                armor,
-                if side == 0 {
-                    "solaris_battle:red_caparison"
-                } else {
-                    "solaris_battle:blue_caparison"
-                },
-                "body",
-            );
-            seen[side][4] = true;
-            continue;
-        };
-        let item = state
+    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 42, 1_000).unwrap();
+    let name = |state: &TickState, stack: &mc_data::ItemStack| {
+        state
             .registry
             .items
-            .name_of(weapon.item_id)
+            .name_of(stack.item_id)
             .unwrap()
-            .as_str();
-        let (kind, model) = match (item, row.entity_life.mount.vehicle.is_some()) {
-            ("minecraft:trident", _) => (1, "solaris_battle:iron_spear"),
-            ("minecraft:bow", _) => (2, "solaris_battle:iron_longbow_standby"),
-            ("minecraft:iron_sword", true) => (3, "solaris_battle:iron_lance"),
-            ("minecraft:iron_sword", false) => (0, "solaris_battle:iron_longsword"),
-            _ => panic!("unexpected battle weapon {item}"),
+            .as_str()
+            .to_owned()
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    let mut caparisons = std::collections::BTreeSet::new();
+    for id in changes.entities_spawned.clone() {
+        let slot = state.entities.slot_of(id).unwrap();
+        let side = state.entities.body(slot).faction;
+        let row = state.entities.row(slot);
+        let Some(weapon) = row.appearance.equipment[0].as_ref() else {
+            let armor = components(&state, row.loot.body_armor.as_ref().unwrap());
+            assert!(only_own_side(std::slice::from_ref(&armor), None, side));
+            caparisons.insert((side, worn_asset(&armor).unwrap()));
+            continue;
         };
-        seen[side][kind] = true;
-        assert_eq!(weapon.item_model.as_ref().unwrap().as_str(), model);
-        equippable(
+        assert!(
+            husk_shows_side_colour(&state, slot, side),
+            "fighter {id:?} hides side {side}"
+        );
+        let pieces: Vec<_> = row
+            .appearance
+            .equipment
+            .iter()
+            .flatten()
+            .map(|stack| components(&state, stack))
+            .collect();
+        let head = components(&state, row.appearance.equipment[5].as_ref().unwrap());
+        assert!(
+            only_own_side(&pieces, Some(head.as_slice()), side),
+            "fighter {id:?} wears the other side's colour on side {side}"
+        );
+        // Combat identities stay vanilla: only appearance components vary.
+        let mounted = row.entity_life.mount.vehicle.is_some();
+        let kind = match (name(&state, weapon).as_str(), mounted) {
+            ("minecraft:trident", _) => Kind::Spear,
+            ("minecraft:bow", _) => Kind::Archer,
+            ("minecraft:iron_sword", true) => Kind::Cavalry,
+            ("minecraft:iron_sword", false) => Kind::Infantry,
+            (other, _) => panic!("unexpected battle weapon {other}"),
+        };
+        for (index, (slot_name, item)) in equipment(kind).iter().enumerate() {
+            let stack = match *slot_name {
+                "mainhand" => weapon,
+                "offhand" => row.appearance.equipment[1].as_ref().unwrap(),
+                "head" => row.appearance.equipment[5].as_ref().unwrap(),
+                _ => row.appearance.equipment[4].as_ref().unwrap(),
+            };
+            assert_eq!(name(&state, stack), *item, "{kind:?} slot {index}");
+        }
+        if kind == Kind::Archer {
+            assert!(row.appearance.equipment[1].is_none());
+        }
+        seen.insert((
+            "weapon",
+            weapon.item_model.as_deref().unwrap().as_str().to_owned(),
+        ));
+        if let Some(shield) = row.appearance.equipment[1].as_ref() {
+            seen.insert((
+                "shield",
+                shield.item_model.as_deref().unwrap().as_str().to_owned(),
+            ));
+        }
+        let head = worn_asset(&components(
+            &state,
             row.appearance.equipment[5].as_ref().unwrap(),
-            if kind == 3 {
-                "solaris_battle:crested_helm"
-            } else {
-                "solaris_battle:iron_plate"
-            },
-            "head",
-        );
-        equippable(
-            row.appearance.equipment[4].as_ref().unwrap(),
-            if side == 0 {
-                "solaris_battle:red_surcoat"
-            } else {
-                "solaris_battle:blue_surcoat"
-            },
-            "chest",
-        );
-        if kind != 2 {
-            let shield = row.appearance.equipment[1].as_ref().unwrap();
-            assert_eq!(
-                shield.item_model.as_ref().unwrap().as_str(),
-                if side == 0 {
-                    "solaris_battle:red_heater_shield"
-                } else {
-                    "solaris_battle:blue_heater_shield"
+        ));
+        let (head_slot, helmet) = head.unwrap();
+        assert_eq!(head_slot, "head");
+        seen.insert(("helmet", helmet));
+        let chest = components(&state, row.appearance.equipment[4].as_ref().unwrap());
+        seen.insert(("torso", worn_asset(&chest).unwrap().1));
+        match row.appearance.equipment[3].as_ref() {
+            None => {
+                seen.insert(("legs", "bare".into()));
+            }
+            Some(legs) => {
+                assert_eq!(name(&state, legs), LEGS_CARRIER);
+                let legs_components = components(&state, legs);
+                let (legs_slot, asset) = worn_asset(&legs_components).unwrap();
+                assert_eq!(legs_slot, "legs");
+                if asset == "minecraft:leather" {
+                    assert!(dyed(&legs_components).is_some());
                 }
-            );
+                seen.insert(("legs", asset));
+            }
         }
     }
-    assert_eq!(seen, [[true; 5]; 2]);
+    let expected: std::collections::BTreeSet<_> = [
+        ("weapon", "solaris_battle:iron_longsword"),
+        ("weapon", "solaris_battle:iron_flanged_mace"),
+        ("weapon", "solaris_battle:iron_spear"),
+        ("weapon", "solaris_battle:iron_halberd"),
+        ("weapon", "solaris_battle:iron_longbow_standby"),
+        ("weapon", "solaris_battle:iron_heavy_crossbow_standby"),
+        ("weapon", "solaris_battle:iron_lance"),
+        ("shield", "solaris_battle:red_heater_shield"),
+        ("shield", "solaris_battle:blue_heater_shield"),
+        ("shield", "solaris_battle:iron_kite_shield"),
+        ("shield", "solaris_battle:iron_tower_shield"),
+        ("helmet", "solaris_battle:iron_plate"),
+        ("helmet", "solaris_battle:crested_helm"),
+        ("helmet", "solaris_battle:holy"),
+        ("torso", "solaris_battle:red_surcoat"),
+        ("torso", "solaris_battle:blue_surcoat"),
+        ("torso", "minecraft:leather"),
+        ("torso", "solaris_battle:holy"),
+        ("legs", "bare"),
+        ("legs", "minecraft:leather"),
+        ("legs", "solaris_battle:holy"),
+    ]
+    .into_iter()
+    .map(|(part, value)| (part, value.to_owned()))
+    .collect();
+    assert_eq!(seen, expected);
+    let caparison = |side, asset: &str| (side, ("body".to_owned(), asset.to_owned()));
+    assert_eq!(
+        caparisons,
+        [
+            caparison(1, "solaris_battle:red_caparison"),
+            caparison(2, "solaris_battle:blue_caparison"),
+        ]
+        .into_iter()
+        .collect()
+    );
+    // Worn legs add no armour: the carrier has no attribute modifier.
+    let rules = state.registry.item_rules();
+    let carrier = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse(LEGS_CARRIER).unwrap())
+        .unwrap();
+    let facts = rules
+        .facts
+        .facts_for_stack(&mc_data::ItemStack::new(carrier, 1), rules.items);
+    assert!(facts.is_none_or(|facts| facts.attribute_modifiers.is_empty()));
+}
+
+fn fighters(seed: u64, side: u16) -> Vec<Loadout> {
+    plan(seed, 10_000, [0.0, 80.0, 0.0], side)
+        .into_iter()
+        .flat_map(|(spec, kind, size)| {
+            (0..size).map(move |index| loadout(seed, side, spec.id, index, kind))
+        })
+        .collect()
+}
+
+#[test]
+fn same_seed_repeats_every_loadout_and_staged_appearance() {
+    // 42 and 44 share the regiment plan (even seeds), so only the dress differs.
+    for side in [1, 2] {
+        assert_eq!(fighters(42, side), fighters(42, side));
+        assert_ne!(fighters(42, side), fighters(44, side));
+    }
+    let appearance = |seed| {
+        let mut state = fixture();
+        let mut changes = ChangeSet::default();
+        setup(&mut state, &mut changes, [0.0, 80.0, 0.0], seed, 100).unwrap();
+        state
+            .hostile
+            .battle
+            .formation
+            .members
+            .iter()
+            .map(|member| {
+                let row = state
+                    .entities
+                    .row(state.entities.slot_of(member.id).unwrap());
+                row.appearance
+                    .equipment
+                    .iter()
+                    .map(|stack| stack.as_ref().map(|stack| components(&state, stack)))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+    };
+    let first = appearance(42);
+    assert_eq!(first, appearance(42));
+    assert_ne!(first, appearance(44));
+}
+
+#[test]
+fn ten_thousand_side_spreads_every_variant_near_its_share_and_shows_side_colour() {
+    fn share<T: PartialEq>(pool: &[&Loadout], pick: impl Fn(&Loadout) -> T, value: T) -> f64 {
+        pool.iter().filter(|l| pick(l) == value).count() as f64 * 100.0 / pool.len() as f64
+    }
+    fn near(actual: f64, expected: f64, what: &str) {
+        assert!(
+            (actual - expected).abs() <= 4.0,
+            "{what}: {actual:.1}% vs {expected}%"
+        );
+    }
+    for seed in [42, 7] {
+        for side in [1, 2] {
+            let all = fighters(seed, side);
+            assert_eq!(all.len(), 10_000);
+            // The rule read back from each fighter's summon tag.
+            for unit in &all {
+                let tag = summon_tag(Some(unit), side);
+                let Tag::Compound(fields) = &tag else {
+                    unreachable!()
+                };
+                let Some(Tag::Compound(slots)) = mc_data::item_nbt::field(fields, "equipment")
+                else {
+                    panic!("summon tag without equipment")
+                };
+                let parts = |slot: &str| match mc_data::item_nbt::field(slots, slot) {
+                    Some(Tag::Compound(stack)) => {
+                        match mc_data::item_nbt::field(stack, "components") {
+                            Some(Tag::Compound(components)) => components.clone(),
+                            _ => Vec::new(),
+                        }
+                    }
+                    _ => Vec::new(),
+                };
+                let chest = parts("chest");
+                let (surcoat, heater, shades) = if side == 1 {
+                    (
+                        "solaris_battle:red_surcoat",
+                        "solaris_battle:red_heater_shield",
+                        RED_SHADES,
+                    )
+                } else {
+                    (
+                        "solaris_battle:blue_surcoat",
+                        "solaris_battle:blue_heater_shield",
+                        BLUE_SHADES,
+                    )
+                };
+                let torso = match worn_asset(&chest) {
+                    Some((_, asset)) if asset == surcoat => true,
+                    Some((_, asset)) if asset == "minecraft:leather" => {
+                        dyed(&chest).is_some_and(|rgb| shades.contains(&rgb))
+                    }
+                    _ => false,
+                };
+                let shield = mc_data::item_nbt::field(&parts("offhand"), "minecraft:item_model")
+                    == Some(&Tag::String(heater.into()));
+                assert!(torso || shield, "{unit:?} hides side {side}");
+                let pieces: Vec<_> = ["mainhand", "offhand", "head", "chest", "legs"]
+                    .into_iter()
+                    .map(&parts)
+                    .collect();
+                assert!(
+                    only_own_side(&pieces, Some(parts("head").as_slice()), side),
+                    "{unit:?} wears the other side's colour on side {side}"
+                );
+            }
+            let of = |kind| all.iter().filter(|l| l.kind == kind).collect::<Vec<_>>();
+            let (infantry, spears, archers, cavalry) = (
+                of(Kind::Infantry),
+                of(Kind::Spear),
+                of(Kind::Archer),
+                of(Kind::Cavalry),
+            );
+            for (pool, variants) in [
+                (
+                    &infantry,
+                    [
+                        ("solaris_battle:iron_longsword", 60.0),
+                        ("solaris_battle:iron_flanged_mace", 40.0),
+                    ],
+                ),
+                (
+                    &spears,
+                    [
+                        ("solaris_battle:iron_spear", 60.0),
+                        ("solaris_battle:iron_halberd", 40.0),
+                    ],
+                ),
+                (
+                    &archers,
+                    [
+                        ("solaris_battle:iron_longbow_standby", 60.0),
+                        ("solaris_battle:iron_heavy_crossbow_standby", 40.0),
+                    ],
+                ),
+            ] {
+                for (model, expected) in variants {
+                    near(share(pool, |l| l.weapon, model), expected, model);
+                }
+            }
+            assert!(
+                cavalry
+                    .iter()
+                    .all(|l| l.weapon == "solaris_battle:iron_lance")
+            );
+            assert!(archers.iter().all(|l| l.shield.is_none()));
+            let foot: Vec<_> = infantry.iter().chain(&spears).copied().collect();
+            for (shield, expected) in [
+                (Shield::Heater, 50.0),
+                (Shield::Kite, 30.0),
+                (Shield::Tower, 20.0),
+            ] {
+                near(
+                    share(&foot, |l| l.shield, Some(shield)),
+                    expected,
+                    &format!("foot {shield:?}"),
+                );
+            }
+            for (shield, expected) in [(Shield::Heater, 60.0), (Shield::Kite, 40.0)] {
+                near(
+                    share(&cavalry, |l| l.shield, Some(shield)),
+                    expected,
+                    &format!("horse {shield:?}"),
+                );
+            }
+            let every: Vec<_> = all.iter().collect();
+            for (helmet, expected) in [
+                ("solaris_battle:iron_plate", 45.0),
+                ("solaris_battle:crested_helm", 30.0),
+                ("solaris_battle:holy", 25.0),
+            ] {
+                near(share(&every, |l| l.helmet, helmet), expected, helmet);
+            }
+            let (heater, plain): (Vec<&Loadout>, Vec<&Loadout>) = every
+                .iter()
+                .copied()
+                .partition(|l| l.shield == Some(Shield::Heater));
+            for (torso, expected) in [
+                (Torso::Surcoat, 45.0),
+                (Torso::Leather, 35.0),
+                (Torso::Holy, 20.0),
+            ] {
+                near(
+                    share(&heater, |l| l.torso, torso),
+                    expected,
+                    &format!("heater {torso:?}"),
+                );
+            }
+            for (torso, expected) in [(Torso::Surcoat, 55.0), (Torso::Leather, 45.0)] {
+                near(
+                    share(&plain, |l| l.torso, torso),
+                    expected,
+                    &format!("plain {torso:?}"),
+                );
+            }
+            for (legs, expected) in [
+                (Legs::Bare, 35.0),
+                (Legs::Leather, 35.0),
+                (Legs::Holy, 30.0),
+            ] {
+                near(
+                    share(&every, |l| l.legs, legs),
+                    expected,
+                    &format!("{legs:?}"),
+                );
+            }
+            for shade in 0..4 {
+                near(
+                    share(&every, |l| l.shade, shade),
+                    25.0,
+                    &format!("shade {shade}"),
+                );
+            }
+        }
+    }
 }
 
 #[test]

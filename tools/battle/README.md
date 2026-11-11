@@ -20,10 +20,34 @@ The side mix is 50% sword/shield infantry, 20% spearmen, 20% archers and
 archers deploy behind the foot and mounted troops on the flanks, with two-block
 cavalry frontage. At 10,000 per side, seven foot regiments deploy 46 files each
 (322 front positions); cavalry deploys behind their flanks to fit the staging
-ticket. Units use husks with vanilla combat item identities and
-`solaris_battle` appearance components: red or blue surcoats, shields and
-horse caparisons distinguish the sides. The client needs the authored battle
-resources to render these custom models.
+ticket. Units are husks with vanilla combat item identities (iron sword,
+trident, bow, shield, iron helmet, the arm's chestplate); only appearance
+components vary. Each fighter's loadout is a fixed hash of (seed, side,
+regiment, index), so a retake with the same seed dresses every fighter the same:
+
+- weapon: infantry longsword 60% / flanged mace 40%; spearmen spear 60% /
+  halberd 40%; archers longbow 60% / heavy crossbow 40% (held in the bow pose:
+  the item stays `minecraft:bow`); cavalry always the lance;
+- shield (foot): side heater 50%, kite 30%, tower 20%; cavalry heater 60%,
+  kite 40%; archers carry none;
+- helmet: iron plate 45%, crested helm 30%, holy 25%; every helmet carries the
+  side plume colour as `minecraft:dyed_color` (red `0xB92529`, blue `0x294DB7`),
+  which tints the dyeable crest/plume layer of the crested helm and iron plate in
+  the battle_video pack (undyed it stays red);
+- torso: side surcoat or vanilla leather dyed (`minecraft:dyed_color`) in one of
+  four shades of the side colour; a fighter behind a side heater may instead
+  wear the neutral holy body (heater bearers 45/35/20%, others 55/45%
+  surcoat/leather);
+- legs: bare 35%, side-dyed leather 35%, holy 30%. Leggings ride on
+  `minecraft:leather`, which has no armour modifier, so they never change damage.
+
+Side rule: every fighter shows the side colour on the torso (red or blue
+surcoat, red- or blue-dyed leather) or carries the red or blue heater shield;
+horses wear red or blue caparisons. No piece shows the other side's colour: no
+other-side model or asset and every dye from the own palette. Unit tests check
+both rules on every fighter of a 10,000 side. The client needs the authored battle
+resources (the pack with the plume layers) to render
+these custom models.
 
 `run-battle.sh` creates a new run directory and never overwrites an existing
 one. `--world` copies a **stopped** native world, including its spawn and
