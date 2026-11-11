@@ -507,7 +507,7 @@ pub(crate) fn journal_entries_for_tick(
             nbt,
         });
     }
-    crate::block_log::journal(state, &mut entries);
+    crate::block_log::journal(state, output.tick, &mut entries);
     // Player post-images whose durable fields (inventory, selected, vitals
     // incl. xp, game mode, position) differ from the last journaled one.
     // The open menu's grid/cursor fold back via close semantics at journal

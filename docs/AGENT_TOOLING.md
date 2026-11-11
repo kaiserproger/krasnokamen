@@ -357,6 +357,12 @@ Select a frozen protocol row with `--matrix tools/harness/matrix_specs/matrix.ya
 wrapper. On the owner host wrap every run in Main's absolute
 `tools/dev/mem-run.sh -m 6G` invocation.
 
+The wrapper points `XDG_DATA_HOME` at its private graph, where the native client
+finds no content and exits before MCP is ready. Run the harness through
+`sh -c 'XDG_DATA_HOME=<client data XDG> exec python3 -m tools.harness run native-matrix ...'`
+inside the wrapper, with that XDG's `solaris-client/` symlinking the client content
+(see [real-client gates](development/real-client-gates.md)).
+
 Optional CRAP measurement: `cargo-llvm-cov` and `cargo-crap` measure line
 coverage and cyclomatic complexity per function on one source tree. Retain the
 test command, revision, raw LCOV, analyzer output and exact test scope; a partial

@@ -1,0 +1,62 @@
+{
+  "id": "CORE-PICKUP-FULL-INVENTORY",
+  "verdict": "promoted",
+  "fix_commit": "d330c4a7",
+  "fix_commit_full": "d330c4a707a59e93d6d8dc28e1aecad94ddfd9b7",
+  "promoted_at": "2026-11-11T13:55:19+00:00",
+  "tree_head": "be8e547d046047b0cee0d3be0c6a28d1da7c6290",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "fix_commit",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/core.rs",
+    "crates/mc-core/src/inventory.rs",
+    "crates/mc-core/src/player.rs",
+    "crates/mc-core/src/tick/merge.rs",
+    "crates/mc-edge/src/computer.rs",
+    "crates/mc-edge/src/config.rs",
+    "crates/mc-edge/src/server.rs",
+    "example.toml"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/entity_phase_tests.rs",
+    "crates/mc-core/src/tick/statistics_tests.rs",
+    "crates/mc-core/src/world_tests.rs",
+    "crates/mc-edge/src/admin_tests.rs",
+    "crates/mc-edge/src/auth_edge_fence_tests.rs",
+    "crates/mc-edge/src/computer_tests.rs",
+    "crates/mc-edge/src/plan_tests.rs",
+    "crates/mc-edge/src/transfer_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:tick_tests::statistics_tests::pickup_with_lectern_open_updates_hidden_player_inventory": {
+      "state": "unrunnable",
+      "detail": "unknown or ignored test"
+    },
+    "cargo:mc-core:tick_tests::statistics_tests::pickup_into_offhand_syncs_inventory_with_or_without_open_chest": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:tick_tests::statistics_tests::pickup_publishes_only_changed_slots_for_active_menu": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick_tests::statistics_tests::pickup_into_offhand_syncs_inventory_with_or_without_open_chest": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick_tests::statistics_tests::pickup_publishes_only_changed_slots_for_active_menu": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick_tests::statistics_tests::pickup_with_lectern_open_updates_hidden_player_inventory": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteJoinInventory/.analysis/validation/20261111T133157-ledger-promote-g08w7tvt"
+}

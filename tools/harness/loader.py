@@ -159,6 +159,7 @@ def run(
     }
     try:
         xvfb, display, xvfb_log = runtime.start_xvfb(artifact_dir)
+        result["display"] = display
 
         server_log_path = artifact_dir / "server.log"
         server_log_handle = server_log_path.open("wb")

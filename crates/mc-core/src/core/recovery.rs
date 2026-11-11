@@ -213,7 +213,11 @@ pub(super) fn load_dimension_state(
     if let Some(selection) = replay.datapack_selection {
         tick_state.datapacks.restore_selection(selection)?;
     }
-    tick_state.block_log = crate::block_log::BlockLog::restore(config.block_log, replay.block_log);
+    tick_state.block_log = crate::block_log::BlockLog::restore_replay(
+        config.block_log,
+        replay.block_log,
+        replay.block_log_tail,
+    );
 
     // Replay player + entity records. Full player state (inventory,
     // vitals, xp, mode) restores here once the inventory/survival modules

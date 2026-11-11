@@ -256,6 +256,17 @@ packs, full RegistryData, chunks, block placement/breaking and chest opening.
 A missing cache fails; it is not a skipped/pass result. Set `SOLARIS_CONTENT_CACHE`
 to the isolated canonical root for a fresh-install gate.
 
+`translation::join_tests::visibility::protocol_<first>_then_<second>_see_each_other`
+(ignored, same real-cache requirement; all six ordered pairs of 775/776/777) joins
+two raw endpoint clients in order and requires each to hold the other's
+player-list entry and a player entity, applying the vanilla rule that a player
+added before its list entry is discarded. It is a translation/wire check. The
+second-joiner race (a viewer whose roster arrives after the spawn needs
+`remove_entities` plus a re-spawn, `EntityInterest::respawn`) only reproduces
+with three real Java clients, which is the graphical counterpart: joining 26.1.2,
+26.2, 26.3 and 26.2, 26.1.2, 26.3 in order, every client must list the others
+through `minecraft_list_entities`.
+
 `java-protocol-pot-creative-echo` is the graphical counterpart to the lossy
 creative-echo unit regression. With a 26.1.2 Java adapter, it physically picks up
 a named decorated pot with missing sides and a named nested count-three brick

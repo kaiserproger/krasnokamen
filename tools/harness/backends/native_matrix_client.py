@@ -37,6 +37,7 @@ class NativeMatrixClient:
         self.name, self.client, self.address, self.transcript = name, client, address, transcript
         self.on_reconnect=on_reconnect
         self.fixture_command=fixture_command
+        self.first_item_position: dict[str, list[float]]={}
 
     def call(self, tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         row: dict[str, Any] = {'client':self.name,'tool':tool,'arguments':arguments or {}}
@@ -48,6 +49,18 @@ class NativeMatrixClient:
         except Exception as error:
             row['error']=str(error)
             raise
+
+    def _entity_row(self, row: dict[str, Any]) -> dict[str, Any]:
+        result={**row,'id':row['entity_id'],'uuid':row['entity_uuid'],
+                'type':row['entity_type'],'position':[row[key] for key in ('x','y','z')]}
+        if row['entity_type']=='minecraft:item':
+            # The MCP observation has no spawn packet position. A dropped item
+            # barely moves before its first observation, so its first received
+            # position is the birth position for spatial drop attribution.
+            # Moving mobs get none: their first sighting is not their birth.
+            result['spawn_position']=list(self.first_item_position.setdefault(
+                row['entity_uuid'],result['position']))
+        return result
 
     def snapshot(self) -> dict[str, Any]:
         raw=self.call('minecraft_observe')
@@ -92,9 +105,7 @@ class NativeMatrixClient:
                 'entity_id':player.get('entity_id'),'position_origin':player.get('origin'),
                 'server_position':player.get('server_position'),
                 'connection':{'phase':phase,'disconnect_reason':reason},
-                'entities':[{**row,'id':row['entity_id'],'uuid':row['entity_uuid'],
-                             'type':row['entity_type'],'position':[row[key] for key in ('x','y','z')]}
-                            for row in self.entities()] if raw.get('in_play') else []}
+                'entities':[self._entity_row(row) for row in self.entities()] if raw.get('in_play') else []}
 
     def wait_until(self, predicate: Callable[[], Any], *, description: str,
                    timeout_seconds: float = 30.0) -> Any:

@@ -115,6 +115,9 @@ def _write_summary(matrix: dict[str,Any]) -> None:
     (root/'bugs.md').write_text('\n'.join(bugs)+'\n')
 
 
+VIEW_DISTANCE = 3
+
+
 class Lane:
     """Native clients around the shared ProtocolServer lifecycle primitive."""
     def __init__(self, ctx: Any, scenario: dict[str, Any], directory: Path, binary: Path,
@@ -139,7 +142,7 @@ class Lane:
         self.wal_checkpoint_baseline: str | None=None
         self.host = ProtocolServer(binary=binary, run_dir=directory, port=port,
             vanilla_data=Path(os.environ.get('SOLARIS_VANILLA_DATA', runtime.REPO_ROOT/'data/vanilla')), seed=81,
-            plugins_dir=directory/'plugins', server_name='RunNative', view_distance=3,
+            plugins_dir=directory/'plugins', server_name='RunNative', view_distance=VIEW_DISTANCE,
             startup_timeout_seconds=timeout, command_timeout_seconds=timeout,
             port_range=(26300,26399),
             pause_when_empty_seconds=1 if scenario['context']['server_lifecycle']=='pause_when_empty_resume' else 0)
@@ -162,7 +165,7 @@ class Lane:
         directory = self.directory / f'client-{len(self.processes)}'
         directory.mkdir()
         ctx = SimpleNamespace(artifact_dir=directory, client_evidence={}, windowed=True,
-                              commands=self.ctx.commands, cwds=self.ctx.cwds,
+                              scenario_id=None, commands=self.ctx.commands, cwds=self.ctx.cwds,
                               exits=self.ctx.exits, logs=self.ctx.logs)
         process, log, client = native_client.start(ctx, self.native, self.address, name,
                                                   self.timeout, display=self.display)
@@ -238,7 +241,7 @@ class Lane:
         for client,name in zip(self.clients,self.names):
             state=client.call_tool('minecraft_observe')
             while state.get('in_play'):
-                client.call_tool('minecraft_wait_for_state_change',{'observed_version':state['state_version'],'timeout_seconds':self.timeout})
+                client.call_tool('minecraft_wait_for_state_change',{'observed_version':state['state_version'],'timeout_seconds':min(self.timeout,120)})
                 state=client.call_tool('minecraft_observe')
             client.call_tool('minecraft_connect',{'server_addr':self.address})
             self.authenticate(client,name)
@@ -298,12 +301,27 @@ class Lane:
 
     def ensure_loaded(self, area: Any) -> None:
         low,high=area
+        context=self.scenario['context']
         for client,name in zip(self.clients,self.names):
-            for chunk_x in range(low[0]//16,high[0]//16+1):
-                for chunk_z in range(low[2]//16,high[2]//16+1):
-                    result=client.call_tool('minecraft_wait_for_loaded_block',{
-                        'x':chunk_x*16,'y':80,'z':chunk_z*16,'timeout_seconds':self.timeout})
-                    self.chunk_fences.append({'client':name,'chunk':[chunk_x,chunk_z],'result':result})
+            home=client.call_tool('minecraft_observe')['player']
+            chunks=[(chunk_x,chunk_z) for chunk_x in range(low[0]//16,high[0]//16+1)
+                    for chunk_z in range(low[2]//16,high[2]//16+1)]
+            far=any(max(abs(chunk_x-math.floor(home['x'])//16),abs(chunk_z-math.floor(home['z'])//16))
+                    >VIEW_DISTANCE for chunk_x,chunk_z in chunks)
+            if far:
+                # The client only receives chunks inside its own view distance, so
+                # a fixture area outside it is visited by a spectator (no gravity,
+                # no damage, no collision) and the player is returned exactly.
+                dimension='execute in minecraft:'+context['dimension']+' run tp '
+                self.console(f'gamemode spectator {name}')
+                self.console(f'{dimension}{name} {(low[0]+high[0])/2+.5} {(low[1]+high[1])/2} {(low[2]+high[2])/2+.5}')
+            for chunk_x,chunk_z in chunks:
+                result=client.call_tool('minecraft_wait_for_loaded_block',{
+                    'x':chunk_x*16,'y':80,'z':chunk_z*16,'timeout_seconds':min(self.timeout,120)})
+                self.chunk_fences.append({'client':name,'chunk':[chunk_x,chunk_z],'result':result})
+            if far:
+                self.console(f'{dimension}{name} {home["x"]} {home["y"]} {home["z"]}')
+                self.console(f'gamemode {context["game_mode"]} {name}')
 
     def close(self) -> None:
         audio_error=None

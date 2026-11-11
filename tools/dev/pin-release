@@ -44,6 +44,9 @@ BUILD_ENV = re.compile(
     r"^(RUSTFLAGS|RUSTDOCFLAGS|CARGO_ENCODED_RUSTFLAGS|RUSTC.*|CARGO_PROFILE_.*|CARGO_BUILD_.*|"
     r"CARGO_TARGET_.*|CARGO_CFG_.*|CC|CXX|CFLAGS|CXXFLAGS|LDFLAGS)$")
 BUILD_ENV_IGNORED = {"CARGO_BUILD_JOBS", "CARGO_BUILD_TARGET", "CARGO_TARGET_DIR", "CARGO_INCREMENTAL"}
+# What cargo itself tracks as environment inputs of a finished build (see build_env_names).
+RERUN_ENV = re.compile(r"^cargo::?rerun-if-env-changed=(\S+)\s*$")
+DEP_INFO_ENV = re.compile(r"^# env-dep:([^=\s]+)")
 # mem-run's pool lock files: slot-<l> is held through /tmp/solaris-mem-slots/<l>.
 SLOT_LOCKS = Path("/tmp/solaris-mem-slots")
 
@@ -105,6 +108,49 @@ def inputs_sha256(top: Path, tree: str, kind: str, rust_target: str, incremental
     return w.sha256_bytes("\n".join(parts).encode())
 
 
+def build_env(incremental: bool) -> dict[str, str]:
+    """The environment build() runs cargo with: ours, minus the target variables, plus the explicit
+    CARGO_INCREMENTAL. It is also what a reuse decision compares against (see build_env_deps)."""
+    env = dict(os.environ)
+    env.pop("CARGO_TARGET_DIR", None)
+    env.pop("CARGO_BUILD_TARGET", None)
+    env["CARGO_INCREMENTAL"] = str(int(incremental))
+    return env
+
+
+def build_env_names(artifact: Path, slot: Path) -> set[str]:
+    """Environment variable names cargo tracks for the build that produced `artifact`, from cargo's own
+    records: every `cargo:rerun-if-env-changed=VAR` (also `cargo::`) in build/*/output of build scripts, and
+    every `# env-dep:VAR[=value]` line in the dep-info (deps/*.d and the binary's .d). Read from the
+    artifact's profile directory and the slot's host `release/` (build scripts and proc macros of a
+    --target build live there). A pooled slot also holds stale outputs of other builds; including their
+    names is harmless, it only reduces reuse."""
+    directories = {artifact.parent, slot / "release"}
+    names: set[str] = set()
+    for directory in directories:
+        files = [*directory.glob("build/*/output"), *directory.glob("deps/*.d"), artifact.parent / (artifact.stem + ".d")]
+        for path in files:
+            try:
+                lines = path.read_text(errors="replace").splitlines()
+            except OSError:
+                continue
+            for line in lines:
+                match = RERUN_ENV.match(line) or DEP_INFO_ENV.match(line)
+                if match:
+                    names.add(match.group(1))
+    return names
+
+
+def build_env_deps(names: set[str], env: dict[str, str]) -> dict[str, str | None]:
+    """Sorted NAME -> value (None when unset) in `env` for every tracked name."""
+    return {name: env.get(name) for name in sorted(names)}
+
+
+def env_deps_match(recorded: object, env: dict[str, str]) -> bool:
+    """True only when a manifest recorded the map and `env` holds the same value (or absence) for every name."""
+    return isinstance(recorded, dict) and all(env.get(name) == value for name, value in recorded.items())
+
+
 def reuse_pin(pin_dir: Path, top: Path, kind: str, rust_target: str, incremental: bool, inputs: str,
               before: dict) -> Path | None:
     """Create `pin_dir` from an existing pin with the same build inputs, without building, or return None.
@@ -112,8 +158,11 @@ def reuse_pin(pin_dir: Path, top: Path, kind: str, rust_target: str, incremental
     Candidates are valid pins only (same repo/kind/target/incremental, binary present with its recorded
     sha256); a damaged one is skipped, never repaired. The binary is hard-linked (copied if linking
     fails) and the manifest records this tree's provenance, the shared inputs and `reused_from`. A bots pin
-    is reused only by the tree that built it (see below)."""
+    is reused only by the tree that built it (see below). A candidate is also valid only if it recorded
+    `env_deps` (the environment variables cargo tracked for its build, see build_env_names) and this process's
+    build environment holds the same value or absence for each; a manifest without the map is never reused."""
     spec = KINDS[kind]
+    env = build_env(incremental)
     for candidate in sorted(w.PINS.glob("*/manifest.json")):
         try:
             info = json.loads(candidate.read_text())
@@ -122,6 +171,8 @@ def reuse_pin(pin_dir: Path, top: Path, kind: str, rust_target: str, incremental
         source_dir = candidate.parent
         if (info.get("inputs_sha256") != inputs or info.get("repo") != spec["repo"] or info.get("kind") != kind
                 or info.get("target") != rust_target or bool(info.get("incremental", False)) != incremental):
+            continue
+        if not env_deps_match(info.get("env_deps"), env):
             continue
         binary = Path(info.get("binary", ""))
         if binary.parent != source_dir or not binary.is_file() or w.sha256_file(binary) != info.get("binary_sha256"):
@@ -145,7 +196,7 @@ def reuse_pin(pin_dir: Path, top: Path, kind: str, rust_target: str, incremental
                 "dirty": before["dirty"], "untracked_files": before["untracked_files"], "source": str(top),
                 "binary": str(pin_dir / binary.name), "binary_sha256": info["binary_sha256"],
                 "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "command": info.get("command", ""),
-                "inputs_sha256": inputs, "build_tree": info.get("build_tree"), "reused_from": source_dir.name,
+                "inputs_sha256": inputs, "build_tree": info.get("build_tree"), "env_deps": info["env_deps"], "reused_from": source_dir.name,
             }
             (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
             (stage / "manifest.json").chmod(0o444)
@@ -176,6 +227,13 @@ def existing_pin(pin_dir: Path, kind: str, rust_target: str, incremental: bool,
     if inputs and info.get("inputs_sha256") and info["inputs_sha256"] != inputs:
         raise w.ToolError(f"{pin_dir} was built with other build inputs (toolchain or build environment changed since); "
                           "pins are immutable, so it is not reused or rebuilt: the owner must remove it deliberately")
+    # Same head, diff and inputs but another value of a variable cargo tracked for the build (a build script's
+    # own switch, e.g. ZSTD_SYS_USE_PKG_CONFIG). Pins from before `env_deps` existed carry no map and stay
+    # accepted under their own name; reuse_pin never copies them.
+    if inputs and info.get("env_deps") is not None and not env_deps_match(info["env_deps"], build_env(incremental)):
+        raise w.ToolError(f"{pin_dir} was built with other values of environment variables its build tracks "
+                          "(see env_deps in its manifest); pins are immutable, so it is not reused or rebuilt: "
+                          "restore that environment or the owner must remove the pin deliberately")
     if not binary.is_file() or w.sha256_file(binary) != info.get("binary_sha256"):
         raise w.ToolError(f"pin {pin_dir} is damaged (binary missing or sha256 differs); pins are immutable, "
                           "so it is not rebuilt: the owner must remove it deliberately")
@@ -196,9 +254,7 @@ def build(top: Path, kind: str, rust_target: str | None, incremental: bool,
     if rust_target is not None:
         cmd += ["--target", rust_target]
     cmd += ["-p", spec["package"], "--bin", spec["bin"], "--message-format=json-render-diagnostics"]
-    env = dict(os.environ)
-    env.pop("CARGO_TARGET_DIR", None)
-    env.pop("CARGO_BUILD_TARGET", None)
+    env = build_env(incremental)
     say(f"building: {shlex.join(cmd)} (cwd {top})")
     artifact = None
     with subprocess.Popen(cmd, cwd=top, env=env, stdout=subprocess.PIPE, text=True) as proc:
@@ -317,6 +373,8 @@ def main() -> None:
                     subprocess.run("git ls-files -z | xargs -0 -r touch -c --", shell=True, cwd=top, check=True)
                     marker.write_text(f"{top}\n")
             cmd, artifact = build(top, kind, args.target, incremental, target=slot)
+            env_deps = (build_env_deps(build_env_names(artifact, slot), build_env(incremental))
+                        if inputs else None)
             after = provenance(top)
             if after["tree"] != before["tree"]:
                 raise w.ToolError("the tree changed during the build; the binary does not match any single provenance, nothing pinned")
@@ -339,7 +397,7 @@ def main() -> None:
                 "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "command": shlex.join(cmd),
             }
             if inputs:
-                manifest.update(inputs_sha256=inputs, build_tree=str(top))
+                manifest.update(inputs_sha256=inputs, build_tree=str(top), env_deps=env_deps)
             (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
             (stage / "manifest.json").chmod(0o444)
             os.rename(stage, pin_dir)  # atomic; fails rather than replacing an existing pin

@@ -42,7 +42,7 @@ impl PlayerInfoActions {
         )
     }
 
-    fn contains(self, other: Self) -> bool {
+    pub fn contains(self, other: Self) -> bool {
         self.0 & other.0 != 0
     }
 }

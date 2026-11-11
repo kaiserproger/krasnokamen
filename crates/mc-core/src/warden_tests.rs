@@ -78,6 +78,29 @@ fn vibrations_anger_roar_darkness_then_melee() {
     let hits = step(&mut state, mob, player, 164);
     assert!(hits.iter().any(|i|matches!(i.kind,crate::intent::IntentKind::DamageEntity{target,amount:30.0,kind:crate::survival::DamageKind::Melee,..} if target==player)));
 }
+
+#[test]
+fn angered_warden_sonic_attack_retains_damage_identity() {
+    let (mut state, mob, player, pos) = fixture(8.0);
+    for tick in [0, 40, 80] {
+        state.tick = tick;
+        vibration(&mut state, pos, Some(player));
+    }
+    assert!(step(&mut state, mob, player, 80).is_empty());
+    assert_eq!(value(&state, mob).pose, 11);
+    assert!(step(&mut state, mob, player, 164).is_empty());
+    let hits = step(&mut state, mob, player, 198);
+    assert!(hits.iter().any(|intent| matches!(
+        intent.kind,
+        crate::intent::IntentKind::DamageEntity {
+            target,
+            amount: 10.0,
+            kind: crate::survival::DamageKind::SonicBoom,
+            ..
+        } if target == player
+    )));
+}
+
 #[test]
 fn sniff_adds_anger_and_calm_warden_never_attacks() {
     let (mut state, mob, player, _) = fixture(4.0);

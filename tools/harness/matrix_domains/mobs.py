@@ -110,6 +110,16 @@ def sample(ctx):
         ctx.state['victim_minimum']=min(ctx.state['victim_minimum'],health)
 
 
+def melee_stand(x,y,z):
+    """Two blocks short of the target, never below the floor it stands on.
+
+    A received entity y can be quantised just under the block top (199.99976 on
+    a floor whose top is 200); a physical client teleported there is inside the
+    floor and falls through it.
+    """
+    return x,math.ceil(y*100)/100,z-2
+
+
 def act(ctx):
     if ctx.state['peaceful']:
         ctx.boundary()
@@ -133,7 +143,7 @@ def act(ctx):
         # Standard range, not an out-of-reach attack that could falsely prove
         # invulnerability. An aquatic target is approached in its own habitat.
         x,y,z=before_attack['position']
-        actor.teleport_to(x,y,z-2)
+        actor.teleport_to(*melee_stand(x,y,z))
         actor.look_at(x,y+0.5,z)
         ctx.state['health_before']=observed_health(ctx,UUID)
         actor.attack(before_attack['id'])
