@@ -24,6 +24,8 @@ fn experience_orb_summon_preserves_native_value_count_kind_and_checkpoint() {
         ("", (0, 1)),
         ("{}", (0, 1)),
         ("{Value:-1s}", (-1, 1)),
+        ("{Value:32767s}", (32767, 1)),
+        ("{Value:-32768s}", (-32768, 1)),
     ] {
         let (state, id) = summon("experience_orb", nbt);
         let slot = state.entities.slot_of(id).unwrap();
@@ -58,23 +60,23 @@ fn experience_orb_summon_preserves_native_value_count_kind_and_checkpoint() {
         let fields = mc_data::entity_nbt::entity_to_fields(&state.registry.items, native).unwrap();
         assert!(fields.contains(&("Value".into(), Tag::Short(expected.0 as i16))));
         assert!(fields.contains(&("Count".into(), Tag::Int(expected.1))));
-        if expected.0 < 0 {
-            let root = std::env::temp_dir().join(format!(
-                "solaris-summon-signed-orb-{}",
-                uuid::Uuid::new_v4()
-            ));
-            mc_world::anvil::write_entity_regions(&root, &state.registry.items, &chunks, 0)
-                .unwrap();
-            let reopened =
-                mc_world::anvil::read_entity_regions(&root, &state.registry.items).unwrap();
-            let restored = reopened
-                .values()
-                .flat_map(|chunk| &chunk.entities)
-                .find(|entity| entity.uuid == row.uuid)
-                .unwrap();
-            assert_eq!(restored.experience_orb, Some(expected));
-            std::fs::remove_dir_all(root).unwrap();
-        }
+        let root = std::env::temp_dir().join(format!(
+            "solaris-summon-signed-orb-{}",
+            uuid::Uuid::new_v4()
+        ));
+        mc_world::anvil::write_entity_regions(&root, &state.registry.items, &chunks, 0).unwrap();
+        let reopened = mc_world::anvil::read_entity_regions(&root, &state.registry.items).unwrap();
+        let restored = reopened
+            .values()
+            .flat_map(|chunk| &chunk.entities)
+            .find(|entity| entity.uuid == row.uuid)
+            .unwrap();
+        assert_eq!(
+            restored.experience_orb,
+            Some(expected),
+            "{nbt}: disk round-trip"
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
 
