@@ -216,6 +216,12 @@ pub(crate) fn run(
     spawned: &mut Vec<EntityId>,
     removed: &mut Vec<EntityId>,
 ) {
+    // `/tick freeze` holds every non-player entity until a step (vanilla
+    // `TickRateManager.isEntityFrozen`); a retained falling block must not
+    // keep descending while its client counterpart is held.
+    if !state.tick_control.runs_normally() {
+        return;
+    }
     let ids: Vec<_> = FALLING_BLOCK_TYPE
         .iter()
         .flat_map(|&type_id| state.entities.mob_slots(type_id))

@@ -1,0 +1,14 @@
+diff --git a/crates/mc-core/src/dimensions_commands.rs b/crates/mc-core/src/dimensions_commands.rs
+index 6e3ad516..6329071f 100644
+--- a/crates/mc-core/src/dimensions_commands.rs
++++ b/crates/mc-core/src/dimensions_commands.rs
+@@ -196,6 +196,9 @@ pub(crate) fn commit(world: &mut TickState, changes: &mut ChangeSet) {
+             }
+         }
+         world.world.fold_overlay();
++        // The same post-write consequences the tick block phase runs, so a
++        // command edit at this boundary cannot drop them.
++        crate::tick::post_write_consequences(world, &writes, &mut spawned);
+         changes.entities_spawned.append(&mut spawned);
+         changes.blocks.extend(
+             writes

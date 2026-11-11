@@ -268,6 +268,70 @@ fn explosions_spare_zone_blocks() {
     );
 }
 
+/// Shoots an arrow owned by `connection`'s player (none: ownerless) into a
+/// decorated pot inside the claim and reports whether the pot broke.
+fn arrow_breaks_zone_pot(w: &mut World, connection: Option<ConnectionId>) -> bool {
+    use crate::projectiles::{ProjectileKind, ProjectileState, launch};
+    const POT: BlockPos = BlockPos {
+        x: 13,
+        y: 64,
+        z: 12,
+    };
+    crate::projectiles::flight_tests::vanilla_impact_projectiles(&mut w.state);
+    let pot = set(&mut w.state, POT, "minecraft:decorated_pot");
+    w.state.world.fold_overlay();
+    let owner = connection.map(|connection| {
+        let entity = w.state.connections.entity_of(connection).unwrap();
+        w.state
+            .entities
+            .row(w.state.entities.slot_of(entity).unwrap())
+            .uuid
+    });
+    let arrow = w
+        .state
+        .registry
+        .items
+        .id_of(&Identifier::parse("minecraft:arrow").unwrap())
+        .unwrap();
+    let record = ProjectileState::new(ProjectileKind::Arrow, owner, ItemStack::new(arrow, 1));
+    launch(
+        &mut w.state,
+        record,
+        [f64::from(POT.x) - 0.75, f64::from(POT.y) + 0.25, 12.5],
+        [1.0, 0.0, 0.0],
+    )
+    .unwrap();
+    run_tick(&mut w.state, &[]);
+    w.state.world.block_at(POT.x, POT.y, POT.z) != Some(pot)
+}
+
+/// A shot breaks a zone block only for an actor the zone admits
+/// (`allows_block`); a shot without a player owner spares every protected
+/// cell, as explosions do.
+#[test]
+fn projectiles_break_zone_blocks_only_for_admitted_shooters() {
+    let mut w = world(false);
+    assert!(
+        !arrow_breaks_zone_pot(&mut w, Some(VISITOR)),
+        "visitor's arrow"
+    );
+    let mut w = world(false);
+    assert!(
+        arrow_breaks_zone_pot(&mut w, Some(MEMBER)),
+        "member's arrow"
+    );
+    let mut w = world(false);
+    assert!(!arrow_breaks_zone_pot(&mut w, None), "ownerless arrow");
+    w.state
+        .plugins
+        .set_domain("towns", ZONES, serde_json::json!({}));
+    restore(&mut w.state).unwrap();
+    assert!(
+        arrow_breaks_zone_pot(&mut w, None),
+        "the same ownerless shot breaks the pot without a claim"
+    );
+}
+
 #[test]
 fn zone_blocks_stay_protected_against_dig_by_a_visitor() {
     let mut w = world(false);

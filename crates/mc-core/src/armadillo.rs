@@ -45,6 +45,32 @@ pub(crate) fn is_armadillo(state: &TickState, type_id: u32) -> bool {
         .is_some_and(|b| b.name == "minecraft:armadillo")
 }
 
+/// Spider's avoidance predicate is `!Armadillo.isScared`, not the curled state.
+pub(crate) fn flee_target(
+    entities: &crate::entities::EntityStore,
+    at: [f64; 3],
+) -> Option<[f64; 3]> {
+    let type_id = crate::piglin::type_id_of("minecraft:armadillo")?;
+    entities
+        .mob_slots(type_id)
+        .filter(|slot| {
+            entities.body(*slot).alive
+                && !entities
+                    .row(*slot)
+                    .entity_life
+                    .armadillo
+                    .as_ref()
+                    .is_some_and(|a| a.rolled)
+        })
+        .filter_map(|slot| {
+            let pos = entities.pos(slot);
+            let distance: f64 = at.into_iter().zip(pos).map(|(a, b)| (a - b).powi(2)).sum();
+            (distance < 36.0).then_some((distance, entities.body(slot).id, pos))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
+        .map(|(_, _, pos)| [2.0 * at[0] - pos[0], at[1], 2.0 * at[2] - pos[2]])
+}
+
 fn threat_near(state: &TickState, self_slot: EntitySlot, at: [f64; 3]) -> bool {
     // Armadillo.isScaredBy (26.1.2): 7x2x7 box around self; undead entity
     // types, the last player/mob that hurt the armadillo, or a sprinting

@@ -42,6 +42,12 @@ const LAVA_RAW_ID: i32 = 4;
 /// Built-in effect registry shared by tag admission and gameplay lookups.
 pub const MOB_EFFECT_REGISTRY: &str = "minecraft:mob_effect";
 
+/// Entity type registry, for gameplay tag lookups by entity type raw id.
+pub const ENTITY_TYPE_REGISTRY: &str = "minecraft:entity_type";
+
+/// Entity types whose block hits may break blocks (`Projectile.mayBreak`).
+pub const IMPACT_PROJECTILES: &str = "minecraft:impact_projectiles";
+
 /// `(tags/<fs subpath>, "minecraft:<registry id>")` pairs the loader
 /// knows about. We deliberately limit the set to registries the
 /// vanilla client either knows natively (built-in `block`, `item`,
@@ -260,6 +266,20 @@ const INCORRECT_FOR_STONE_OR_COPPER_TOOL: &[&str] = &[
 ];
 
 const REQUIRED_BLOCK_TAGS: &[(&str, &[&str])] = &[
+    (
+        "minecraft:sniffer_diggable_block",
+        &[
+            "minecraft:dirt",
+            "minecraft:coarse_dirt",
+            "minecraft:rooted_dirt",
+            "minecraft:mud",
+            "minecraft:muddy_mangrove_roots",
+            "minecraft:moss_block",
+            "minecraft:pale_moss_block",
+            "minecraft:grass_block",
+            "minecraft:podzol",
+        ],
+    ),
     (
         "minecraft:snaps_goat_horn",
         &[

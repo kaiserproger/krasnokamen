@@ -102,6 +102,11 @@ pub(crate) fn loot_entity(state: &TickState, entity: EntityId) -> Option<EntityL
     result.flags.is_on_fire = row.appearance.shared_flags & 1 != 0;
     result.slime_size = row.loot.slime_size.map(i32::from);
     result.raider_is_captain = Some(row.loot.patrol_leader);
+    if crate::mounts::type_id(body).is_some_and(crate::frog::is_frog) {
+        result
+            .components
+            .insert(id("minecraft:frog/variant"), "minecraft:temperate".into());
+    }
     let held = state
         .players
         .get(&entity)
@@ -589,6 +594,8 @@ pub(crate) fn restore(state: &mut TickState, slot: EntitySlot) {
     let speed = f64::from(bp.params.speed) / 10.0;
     let damage = f64::from(bp.params.attack_damage);
     let sight = f64::from(bp.sensors.sight_range);
+    let strider_cold = bp.capabilities.riding == crate::blueprint::RidingProfile::FungusStick
+        && crate::strider::cold(state.entities.row(slot));
     if size_profile != crate::blueprint::SizeProfile::None {
         let size = state.entities.row(slot).loot.slime_size.unwrap_or(1);
         state.entities.set_half_width(slot, width * f64::from(size));
@@ -620,6 +627,9 @@ pub(crate) fn restore(state: &mut TickState, slot: EntitySlot) {
     }
     let rules = state.registry.item_rules();
     row.speed = (effective_attribute(&rules, row, "movement_speed", speed) * 10.0) as f32;
+    if strider_cold {
+        row.speed *= 0.66;
+    }
     row.attack_damage = effective_attribute(&rules, row, "attack_damage", damage) as f32;
     if size_profile == crate::blueprint::SizeProfile::Armored {
         row.attack_damage += 2.0;

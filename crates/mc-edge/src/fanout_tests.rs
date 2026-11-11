@@ -346,3 +346,128 @@ fn mooshroom_to_cow_fanout_removes_then_respawns_the_same_identity_for_every_vie
         frame.id != RemoveEntities::ID && frame.id != AddEntity::ID
     }));
 }
+
+/// A spawn burst of mounted and leashed entities larger than the reliable
+/// queue (battle cavalry: 2,000 horses at `battle setup 42 field-10k`). Links
+/// are world state: each one rides the world FIFO right after its own
+/// AddEntity, so one publish's reliable output does not grow with the burst
+/// and a client that keeps reading is never closed by `reliable_overflow`.
+#[test]
+fn mounted_spawn_burst_links_ride_the_world_queue_without_reliable_overflow() {
+    use mc_core::boundary::{EntityAppearance, EntityId, EntityView};
+    use mc_protocol::frame::{Compression, try_decode_frame};
+    use mc_protocol::packets::play::{
+        AddEntity, ClientboundSetEntityLeash, ClientboundSetPassengers,
+    };
+    let types = mc_data::entity_types::solaris_required_entity_types();
+    let type_id = |name: &str| {
+        types
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap()
+    };
+    let pos = mc_world::chunk::ChunkPos { x: 0, z: 0 };
+    let mut chunk = mc_world::chunk::Chunk::empty(
+        pos,
+        mc_world::BlockStateId(0),
+        mc_data::Identifier::parse("minecraft:plains").unwrap(),
+    );
+    chunk.section_lights.fill(mc_world::chunk::SectionLight {
+        block: Some(mc_world::chunk::LightSection::uniform(0)),
+        sky: Some(mc_world::chunk::LightSection::uniform(0xFF)),
+    });
+    let mut output = chunk_tick(1, Arc::new(chunk), None);
+    let horses = OUTBOUND_QUEUE_BOUND + 88;
+    let mut rows = Vec::with_capacity(2 * horses);
+    for i in 0..horses {
+        let horse = EntityId(10 + 2 * i as i32);
+        let rider = EntityId(horse.0 + 1);
+        // View distance 0 tracks only the viewer's own column: stack them.
+        let y = 64.0 + i as f64 * 0.05;
+        let row = |id: EntityId, type_id: u32, y: f64, appearance: EntityAppearance| EntityView {
+            id,
+            uuid: uuid::Uuid::from_u128(id.0 as u128),
+            type_id,
+            position: [8.0, y, 8.0],
+            velocity: [0.0; 3],
+            yaw: 0.0,
+            pitch: 0.0,
+            head_yaw: 0.0,
+            on_ground: true,
+            appearance: Arc::new(appearance),
+        };
+        rows.push(row(
+            horse,
+            type_id("minecraft:horse"),
+            y,
+            EntityAppearance {
+                passengers: vec![rider],
+                leash_holder: (i % 2 == 0).then_some(rider),
+                ..Default::default()
+            },
+        ));
+        rows.push(row(
+            rider,
+            type_id("minecraft:zombie"),
+            y + 0.025,
+            EntityAppearance::default(),
+        ));
+    }
+    Arc::get_mut(&mut output.snapshot).unwrap().entities = rows.into();
+    let mut viewer = ViewerState::new(ConnectionId(1), EntityId(1), [8.0, 80.0, 8.0]);
+    let packets = publish(&output, [&mut viewer].into_iter(), 0);
+    assert_eq!(viewer.tracked_entities.len(), 2 * horses);
+    assert!(
+        reliable_overflow(&packets).is_empty(),
+        "a spawn burst must not overflow the reliable queue"
+    );
+    let mut spawned = std::collections::HashSet::new();
+    let (mut passengers, mut leashes, mut riders_after_vehicle) = (0, 0, 0);
+    for packet in &packets {
+        let mut bytes = bytes::BytesMut::from(packet.data.as_ref());
+        let frame = try_decode_frame(&mut bytes, Compression::Threshold(256))
+            .unwrap()
+            .unwrap();
+        let entity = match frame.id {
+            AddEntity::ID => {
+                let id = AddEntity::decode(&mut frame.body.clone())
+                    .unwrap()
+                    .entity_id;
+                // Riders have odd ids, one above their horse's.
+                if id % 2 == 1 && spawned.contains(&(id - 1)) {
+                    riders_after_vehicle += 1;
+                }
+                spawned.insert(id);
+                continue;
+            }
+            ClientboundSetPassengers::ID => {
+                passengers += 1;
+                ClientboundSetPassengers::decode(&mut frame.body.clone())
+                    .unwrap()
+                    .vehicle_id
+            }
+            ClientboundSetEntityLeash::ID => {
+                leashes += 1;
+                ClientboundSetEntityLeash::decode(&mut frame.body.clone())
+                    .unwrap()
+                    .source_entity_id
+            }
+            _ => continue,
+        };
+        assert_eq!(
+            packet.priority,
+            Priority::BestEffort,
+            "links are world state"
+        );
+        assert!(
+            spawned.contains(&entity),
+            "link before the AddEntity of {entity}"
+        );
+    }
+    // One SetPassengers in each horse's pairing, and one more in the pairing of
+    // each rider spawned after its horse (vanilla `sendPairingData`).
+    assert!(riders_after_vehicle > 0, "the burst mixes spawn orders");
+    assert_eq!(
+        (passengers, leashes),
+        (horses + riders_after_vehicle, horses / 2)
+    );
+}

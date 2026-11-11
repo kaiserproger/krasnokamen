@@ -531,7 +531,15 @@ fn rider_eject_and_respawn_clear_both_links_and_steering_input() {
         None
     );
     assert_eq!(state.entities.row(actor_slot).entity_life.mount.input, 0);
-    assert_eq!(state.entities.row(pig_slot).entity_life.mount.rider, None);
+    assert!(
+        state
+            .entities
+            .row(pig_slot)
+            .entity_life
+            .mount
+            .riders
+            .is_empty()
+    );
     assert!(
         state
             .entities
@@ -566,7 +574,15 @@ fn rider_eject_and_respawn_clear_both_links_and_steering_input() {
         None
     );
     assert_eq!(state.entities.row(actor_slot).entity_life.mount.input, 0);
-    assert_eq!(state.entities.row(pig_slot).entity_life.mount.rider, None);
+    assert!(
+        state
+            .entities
+            .row(pig_slot)
+            .entity_life
+            .mount
+            .riders
+            .is_empty()
+    );
 }
 
 #[test]

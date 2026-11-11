@@ -11,7 +11,7 @@ import sys
 
 if sys.argv[1] == '--send-locks':
     fds = array.array('i')
-    for fd in (3, 6, 7, 8):
+    for fd in (3, 6, 7, 8, 9):  # -x/shared lock, perf lane, slot pool + use locks, build token
         try:
             os.fstat(fd)
         except OSError:
@@ -48,7 +48,7 @@ try:
         if any(key.fileobj == listener for key, _ in events):
             conn, _ = listener.accept()
             with conn:
-                _, ancillary, _, _ = conn.recvmsg(1, socket.CMSG_SPACE(4 * array.array('i').itemsize))
+                _, ancillary, _, _ = conn.recvmsg(1, socket.CMSG_SPACE(5 * array.array('i').itemsize))
                 for level, kind, data in ancillary:
                     if level == socket.SOL_SOCKET and kind == socket.SCM_RIGHTS:
                         fds = array.array('i')

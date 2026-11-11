@@ -1,0 +1,39 @@
+{
+  "id": "OUTBOX-TEXT-FLOOD-KICK",
+  "verdict": "promoted",
+  "fix_commit": "patch:8f5c5749fbc27e368a7c4f0e833783794c6fb803f7bf10ca0241c3a30213f1fd",
+  "fix_commit_full": "patch:8f5c5749fbc27e368a7c4f0e833783794c6fb803f7bf10ca0241c3a30213f1fd",
+  "promoted_at": "2026-11-11T16:51:58+00:00",
+  "tree_head": "be8e547d046047b0cee0d3be0c6a28d1da7c6290",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "8f5c5749fbc27e368a7c4f0e833783794c6fb803f7bf10ca0241c3a30213f1fd",
+  "reversed_files": [
+    "crates/mc-core/src/tick.rs",
+    "crates/mc-edge/src/plan/player_changes.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:datapacks::tests::function_chat_flood_in_one_tick_reaches_every_recipient": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:server::lifecycle_tests::text_burst_live_updates_fit_reliable_queue": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:datapacks::tests::function_chat_flood_in_one_tick_reaches_every_recipient": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::lifecycle_tests::text_burst_live_updates_fit_reliable_queue": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteJoinInventory/.analysis/validation/20261111T164923-ledger-promote-lpstuk54"
+}

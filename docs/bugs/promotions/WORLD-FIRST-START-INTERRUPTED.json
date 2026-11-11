@@ -1,0 +1,44 @@
+{
+  "id": "WORLD-FIRST-START-INTERRUPTED",
+  "verdict": "promoted",
+  "fix_commit": "patch:f04c88996f254f5477db049b6bbbaa06e428ac9d4aa95772a0919dd3a5abd7c5",
+  "fix_commit_full": "patch:f04c88996f254f5477db049b6bbbaa06e428ac9d4aa95772a0919dd3a5abd7c5",
+  "promoted_at": "2026-11-11T18:47:20+00:00",
+  "tree_head": "684e6adcc5b6061135eb62be97b5d62e122f2f03",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "f04c88996f254f5477db049b6bbbaa06e428ac9d4aa95772a0919dd3a5abd7c5",
+  "reversed_files": [
+    "crates/mc-core/src/core.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:core::native_checkpoint_crash_tests::first_start_stopped_before_its_initial_checkpoint_reopens_as_a_new_world": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:singleplayer-regressions:native-world-first-start-interrupted": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-world-first-start-interrupted --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/PromoteWorldFirstStart/.analysis/validation/20261111T183404-ledger-promote-_eswwgbb/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:core::native_checkpoint_crash_tests::first_start_stopped_before_its_initial_checkpoint_reopens_as_a_new_world": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/PromoteWorldFirstStart/.analysis/validation/20261111T182041-native-world-first-start-interrupted-arfibx8c/result.json",
+    "tree_head": "684e6adcc5b6061135eb62be97b5d62e122f2f03",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "79e2a2a248c869067e762a7ac6843bc07617502f5f0783fc204a6435b0479e49",
+    "covers": [
+      "harness:singleplayer-regressions:native-world-first-start-interrupted"
+    ],
+    "profile": "singleplayer-regressions"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteWorldFirstStart/.analysis/validation/20261111T183404-ledger-promote-_eswwgbb"
+}

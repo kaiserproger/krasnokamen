@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Claim a fleet task as a lease (owner host).
+
+    task-claim <task-id> --agent <name> --timebox <min> [--grace <min>]
+    task-claim --renew <task-id> --agent <name> [--timebox <min>]
+    task-claim --release <task-id> [--agent <name>]        (what task-release runs)
+
+A claim is one JSON file <work>/fleet/claims/<task-id>.json: task, agent, start,
+timebox_min, grace_min, lease_start, expires, renewals, released. Liveness is the
+lease, never a PID: Main's subagents run inside Main's own process, so several logical
+agents share one PID. A lease is live until it is released or until
+expires = lease_start + timebox + grace (grace default 15 min). Only its agent renews
+it: a new lease from now with the same or a new timebox. A claim of a live lease is
+refused naming the holder (exit 1); a released or expired lease is taken over and the
+takeover is logged with the previous holder. Each change happens under an flock on
+claims/.lock and replaces the file atomically (temp + rename); <work>/fleet/claims.log
+is an append-only JSONL of claim, takeover, renew, release and refuse lines.
+SOLARIS_FLEET_DIR moves <work>/fleet; SOLARIS_FLEET_NOW (epoch seconds) fixes the
+clock. Both are for tests only.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import re
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import wtlib as w  # noqa: E402
+
+TASK_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+GRACE_MIN = 15
+
+
+def fleet_dir() -> Path:
+    return Path(os.environ.get("SOLARIS_FLEET_DIR") or w.WORK / "fleet")
+
+
+def now() -> int:
+    return int(os.environ.get("SOLARIS_FLEET_NOW") or time.time())
+
+
+def stamp(epoch: int) -> str:
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(epoch))
+
+
+def state(claim: dict, at: int) -> str:
+    """live | expired | released"""
+    if claim.get("released") is not None:
+        return "released"
+    return "live" if at < claim["expires"] else "expired"
+
+
+def log(fleet: Path, op: str, task: str, agent: str, at: int, **extra) -> None:
+    line = json.dumps({"op": op, "task": task, "agent": agent, "at": at, **extra}) + "\n"
+    with open(fleet / "claims.log", "a") as handle:
+        handle.write(line)
+
+
+def write_claim(path: Path, claim: dict) -> None:
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(claim, indent=1) + "\n")
+    tmp.replace(path)
+
+
+def change(task: str, agent: str | None, timebox: int | None, grace: int, mode: str) -> str:
+    if not TASK_RE.match(task):
+        raise w.ToolError(f"invalid task id {task!r}")
+    fleet = fleet_dir()
+    claims = fleet / "claims"
+    claims.mkdir(parents=True, exist_ok=True)
+    path = claims / f"{task}.json"
+    at = now()
+    with open(claims / ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        claim = json.loads(path.read_text()) if path.exists() else None
+        current = state(claim, at) if claim else None
+        if mode == "claim":
+            if current == "live":
+                log(fleet, "refuse", task, agent, at, holder=claim["agent"])
+                raise w.ToolError(f"{task} is held by {claim['agent']} since {stamp(claim['start'])}, "
+                                  f"lease until {stamp(claim['expires'])}; refused")
+            new = {"task": task, "agent": agent, "start": at, "timebox_min": timebox, "grace_min": grace,
+                   "lease_start": at, "expires": at + (timebox + grace) * 60, "renewals": 0, "released": None}
+            write_claim(path, new)
+            if claim:
+                when = claim["released"] if current == "released" else claim["expires"]
+                log(fleet, "takeover", task, agent, at, previous=claim["agent"], previous_state=current,
+                    previous_at=when)
+                return (f"took over {task} for {agent} from {claim['agent']} ({current} {stamp(when)}); "
+                        f"timebox {timebox}m, lease until {stamp(new['expires'])}")
+            log(fleet, "claim", task, agent, at, timebox_min=timebox, expires=new["expires"])
+            return f"claimed {task} for {agent}: timebox {timebox}m, lease until {stamp(new['expires'])}"
+        if claim is None or current == "released":
+            raise w.ToolError(f"{task} has no {'claim' if claim is None else 'unreleased claim'}")
+        if agent is not None and agent != claim["agent"]:
+            raise w.ToolError(f"{task} is held by {claim['agent']}, not {agent}; refused")
+        if mode == "renew":
+            claim["timebox_min"] = timebox or claim["timebox_min"]
+            claim["lease_start"] = at
+            claim["expires"] = at + (claim["timebox_min"] + claim["grace_min"]) * 60
+            claim["renewals"] += 1
+            write_claim(path, claim)
+            log(fleet, "renew", task, claim["agent"], at, was=current, expires=claim["expires"])
+            return f"renewed {task} for {claim['agent']}: timebox {claim['timebox_min']}m, lease until {stamp(claim['expires'])}"
+        claim["released"] = at
+        write_claim(path, claim)
+        log(fleet, "release", task, claim["agent"], at, was=current)
+        return f"released {task} (held by {claim['agent']} since {stamp(claim['start'])})"
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(prog="task-claim", description=__doc__.split("\n\n")[0])
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--renew", action="store_true", help="extend the lease (holder only)")
+    mode.add_argument("--release", action="store_true", help="end the lease (task-release)")
+    parser.add_argument("task")
+    parser.add_argument("--agent", help="logical agent name (required to claim or renew)")
+    parser.add_argument("--timebox", type=int, help="minutes (required to claim)")
+    parser.add_argument("--grace", type=int, default=GRACE_MIN, help=f"minutes after the timebox (default {GRACE_MIN})")
+    args = parser.parse_args(argv)
+    kind = "renew" if args.renew else "release" if args.release else "claim"
+    if kind != "release" and not args.agent:
+        parser.error("--agent is required")
+    if kind == "claim" and not args.timebox:
+        parser.error("--timebox is required")
+    if (args.timebox is not None and args.timebox <= 0) or args.grace < 0:
+        parser.error("--timebox must be positive and --grace not negative")
+    print(change(args.task, args.agent, args.timebox, args.grace, kind))
+
+
+if __name__ == "__main__":
+    w.run_tool(main)

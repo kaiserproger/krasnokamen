@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Run one heavy command (cargo build/test/clippy/check, harness run, gradle) under a
 # hard memory cap inside solaris-heavy.slice (all heavy commands together <=25G).
-# No slots and no admission queue (owner 2026-10-28): every command starts at once in
-# its own scope and registers its cgroup, expected peak and a preemptible flag;
+# No memory slots and no admission queue (owner 2026-10-28): every command starts at
+# once in its own scope, except that a compile command first waits for one of three
+# build tokens (owner 2026-11-11, see "Build tokens" below). Each scope registers its
+# cgroup, expected peak and a preemptible flag;
 # heavy-watchdog.py (a user service this script starts) freezes the youngest
 # preemptible command only on real memory shortage (slice PSI or the slice hitting
 # MemoryMax) and thaws frozen commands oldest first once commands exit and their
@@ -35,6 +37,7 @@
 # Usage: mem-run.sh [-x] [-p] [-m 8G] command args...
 set -euo pipefail
 trap 'echo "mem-run: failed (exit $?) at line $LINENO" >&2' ERR
+args=("$@")  # passed again when a compile command re-execs under a build token
 mem=8G
 exclusive=0
 perf=0
@@ -57,6 +60,104 @@ fi
 dir=/tmp/solaris-mem-slots
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 mkdir -p "$dir/run"
+# Signature: argv without a leading `env` (its -u NAME / -flag / VAR=value words)
+# and without path-like words, so reruns of one command in different worktrees share
+# their measured peaks while different packages/filters stay apart.
+key_words=("$@")
+i=0
+if [ "${key_words[0]:-}" = env ]; then
+  i=1
+  while [ "$i" -lt "${#key_words[@]}" ]; do
+    w=${key_words[$i]}
+    if [ "$w" = -u ]; then i=$((i + 2))
+    elif [[ $w == *=* || ( $w == -* && $w != -- ) ]]; then i=$((i + 1))
+    else break; fi
+  done
+fi
+key=
+for w in "${key_words[@]:$i}"; do
+  [[ $w == */* ]] && continue
+  key+="${key:+ }$w"
+done
+cmd=("${key_words[@]:$i}")
+if [ "${cmd[0]:-}" = nice ]; then
+  if [ "${cmd[1]:-}" = -n ]; then cmd=("${cmd[@]:3}"); else cmd=("${cmd[@]:1}"); fi
+fi
+# Build tokens (owner 2026-11-11): at most three compile commands run host-wide.
+# Compile is decided once from argv, after leading env/nice/ionice/timeout words: cargo
+# with any subcommand but fmt/fetch/tree/metadata/clean/update and the like, gradle(w),
+# pin-release, harness `run build|clippy|code-health|correctness|test|regressions|
+# regressions-client|java|standard-pack` and harness `ledger probe|promote`. Running built
+# binaries, gates and servers takes none. A compile re-execs this script under
+# slot-lock.py (the scene-slot mechanism), which blocks on every token at once (no
+# polling, no CPU) and leaves the won lock at fd 9: this runner keeps it, the scope
+# guardian gets a copy (--send-locks) and the command does not, so the token returns
+# once the scope is empty, on any exit, kill or OOM. SOLARIS_BUILD_TOKEN{,_PID} name the
+# token and the runner holding it; a compile whose ancestor process is that runner
+# (harness runs and pin-release run mem-run or cargo again inside) reuses it, so outer
+# holders never wait on their own nested builds. The token is taken before the -x
+# lock: a queued compile never delays a -x window, and a -x window never waits for a
+# token while it holds that lock. Holders and waiters: tools/dev/fleet-status.
+# SOLARIS_BUILD_LANE=background (owner 2026-11-12: the battle video gets resources first):
+# such compiles wait only for tokens 1-2, so token 3 stays free for priority work.
+build_tokens=3
+token_slots=$(seq -s, "$build_tokens")
+[ "${SOLARIS_BUILD_LANE:-}" = background ] && token_slots=$(seq -s, $((build_tokens - 1)))
+tool=("${cmd[@]}")
+while :; do
+  case "${tool[0]:-}" in nice|ionice|timeout|env) ;; *) break ;; esac
+  w=${tool[0]}
+  tool=("${tool[@]:1}")
+  while [[ ${tool[0]:-} == -* || ${tool[0]:-} == *=* ]]; do
+    case ${tool[0]} in
+      -n|-c|-s|-k|-u|-C) tool=("${tool[@]:2}") ;;
+      *) tool=("${tool[@]:1}") ;;
+    esac
+  done
+  [ "$w" = timeout ] && tool=("${tool[@]:1}")  # its DURATION
+done
+compile=0
+case "${tool[0]:-}" in
+  cargo|*/cargo)
+    sub=
+    for w in "${tool[@]:1}"; do [[ $w == [-+]* ]] || { sub=$w; break; }; done
+    case "$sub" in
+      ''|fmt|fetch|tree|metadata|clean|update|generate-lockfile|locate-project|pkgid|search|help|version|verify-project) ;;
+      *) compile=1 ;;
+    esac ;;
+  gradle|*/gradle|gradlew|*/gradlew|pin-release|*/pin-release) compile=1 ;;
+  python|python3|python3.*|*/python|*/python3|*/python3.*)
+    if [[ ${tool[1]:-} == pin-release || ${tool[1]:-} == */pin-release ]]; then
+      compile=1
+    elif [ "${tool[1]:-}" = -m ] && [ "${tool[2]:-}" = tools.harness ]; then
+      case "${tool[3]:-} ${tool[4]:-}" in
+        "run build"|"run clippy"|"run code-health"|"run correctness"|"run test"|"run regressions"|\
+        "run regressions-client"|"run java"|"run standard-pack"|"ledger probe"|"ledger promote") compile=1 ;;
+      esac
+    fi ;;
+esac
+token_ancestor() {  # is the runner named by SOLARIS_BUILD_TOKEN_PID an ancestor of this one?
+  local p=$PPID want=${SOLARIS_BUILD_TOKEN_PID:-}
+  [[ $want =~ ^[0-9]+$ ]] || return 1
+  while [ "${p:-0}" -gt 1 ]; do
+    [ "$p" = "$want" ] && return 0
+    p=$(awk '$1 == "PPid:" {print $2}' "/proc/$p/status" 2>/dev/null) || p=0
+  done
+  return 1
+}
+token=none
+if [ "$compile" = 1 ]; then
+  if [ "${SOLARIS_BUILD_TOKEN_PID:-}" = "$$" ]; then
+    token=${SOLARIS_BUILD_TOKEN:-?}
+  elif token_ancestor; then
+    token="${SOLARIS_BUILD_TOKEN:-?}(reused)"
+  else
+    exec python3 "$here/slot-lock.py" --dir "$dir/tokens" --name 'token-%s.lock' --slots "$token_slots" \
+      --env SOLARIS_BUILD_TOKEN --fd 9 --wait-dir "$dir/tokens/wait" \
+      --wait-message "mem-run: build tokens $token_slots are in use; waiting for one (holders: $here/fleet-status)" \
+      -- bash "$here/${BASH_SOURCE[0]##*/}" "${args[@]}"
+  fi
+fi
 slice=solaris-heavy.slice
 # Capacity is derived from the host (owner host since 2026-11-10: Aeza, 16 CPUs, 90 GiB):
 # the slice gets all RAM but 16 GiB kept for agents and the system, and every CPU, but
@@ -104,25 +205,6 @@ if systemctl --user is-active -q solaris-heavy-watchdog.service && [ -p "$dir/jo
 fi
 # Wake the watchdog. Opened read-write: never blocks, even if it is restarting.
 notify() { local fd; exec {fd}<>"$dir/events"; printf '%s\n' "$1" >&"$fd"; exec {fd}>&-; }
-# Signature: argv without a leading `env` (its -u NAME / -flag / VAR=value words)
-# and without path-like words, so reruns of one command in different worktrees share
-# their measured peaks while different packages/filters stay apart.
-key_words=("$@")
-i=0
-if [ "${key_words[0]:-}" = env ]; then
-  i=1
-  while [ "$i" -lt "${#key_words[@]}" ]; do
-    w=${key_words[$i]}
-    if [ "$w" = -u ]; then i=$((i + 2))
-    elif [[ $w == *=* || ( $w == -* && $w != -- ) ]]; then i=$((i + 1))
-    else break; fi
-  done
-fi
-key=
-for w in "${key_words[@]:$i}"; do
-  [[ $w == */* ]] && continue
-  key+="${key:+ }$w"
-done
 cap_kib=$(( $(mem_mib "$mem") * 1024 ))
 peak_kib=$(awk -F'\t' -v k="$key" '$1 == k { v[n++] = $2 }
   END { m = 0; for (j = (n > 5 ? n - 5 : 0); j < n; j++) if (v[j] > m) m = v[j]; print m }' \
@@ -164,7 +246,7 @@ if [ "$exclusive" = 0 ] && [ "$perf" = 0 ]; then
   gc_free=$(df --output=avail -BG "$gc_root" 2>/dev/null | tail -1 | tr -dc 0-9 || true)
   if [ -n "$gc_free" ] && [ "$gc_free" -lt "$gc_floor" ]; then
     echo "mem-run: ${gc_free}G free, below ${gc_floor}G (floor + 10G): running slot-gc --delete on idle slots" >&2
-    if gc_out=$(timeout "${SOLARIS_SLOT_GC_TIMEOUT:-120}" "$here/slot-gc" --delete --lock-dir "$dir" 3>&- 6>&- 2>&1); then
+    if gc_out=$(timeout "${SOLARIS_SLOT_GC_TIMEOUT:-120}" "$here/slot-gc" --delete --lock-dir "$dir" 3>&- 6>&- 9>&- 2>&1); then
       printf '%s\n' "$gc_out" | sed 's/^/mem-run: slot-gc: /' >&2
     else
       gc_st=$?
@@ -215,10 +297,6 @@ cpu_pin=()
 # Preemptible (the watchdog may freeze it under memory pressure) only for plain
 # builds, decided once from argv: cargo build/check/clippy/doc/fetch and cargo
 # test/bench --no-run. Tests, harness runs, servers and clients never are.
-cmd=("${key_words[@]:$i}")
-if [ "${cmd[0]:-}" = nice ]; then
-  if [ "${cmd[1]:-}" = -n ]; then cmd=("${cmd[@]:3}"); else cmd=("${cmd[@]:1}"); fi
-fi
 preemptible=0
 if [ "${cmd[0]:-}" = cargo ]; then
   sub=
@@ -234,7 +312,7 @@ fi
 [ "$exclusive" = 1 ] && { niceness=0; cpu_pin=(); preemptible=0; }
 [ "$preemptible" = 1 ] && props=("${props[@]/CPUWeight=50/CPUWeight=10}")
 [ -n "${SOLARIS_SCENE_SLOT:-}" ] && [ "$perf" = 0 ] && props=("${props[@]/CPUWeight=*/CPUWeight=500}")
-echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf cpus=${cpu_pin[*]:-all} slice=$slice target=$target expect=$((est_kib / 1024))MiB key='$key'" >&2
+echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf cpus=${cpu_pin[*]:-all} slice=$slice target=$target token=$token expect=$((est_kib / 1024))MiB key='$key'" >&2
 # The wrapper registers its scope, expectation, preemptible flag and target dir with
 # the watchdog (the watchdog never freezes a command whose target dir another running
 # command uses: cargo's build lock would chain them), releases the shared -x lock,
@@ -268,7 +346,7 @@ cg=$(sed -n "s/^0:://p" /proc/self/cgroup)
 printf "%s\t%s\t%s\t%s\n" "$cg" "$MEMRUN_EST_KIB" "$MEMRUN_PREEMPTIBLE" "$MEMRUN_TARGET" > "$MEMRUN_DIR/run/$$"
 [ "$MEMRUN_EXCLUSIVE" = 1 ] || { flock -u 3; exec 3>&-; }
 notify start
-"$@" <&0 3>&- 6>&- 7>&- 8>&- & c=$!
+"$@" <&0 3>&- 6>&- 7>&- 8>&- 9>&- & c=$!
 trap "kill -TERM $c 2>/dev/null" TERM INT HUP
 st=0
 wait "$c" || st=$?

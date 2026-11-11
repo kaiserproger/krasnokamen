@@ -45,7 +45,10 @@ fn links(packets: &[PlannedPacket], target: EntityId) -> Vec<Option<i32>> {
             if link.source_entity_id != target.0 {
                 return None;
             }
-            assert!(packet.reliable, "link updates must be reliable");
+            assert!(
+                !packet.reliable,
+                "links are world state: world queue, after the entity's AddEntity"
+            );
             let mut expected = target.0.to_be_bytes().to_vec();
             expected.extend_from_slice(&link.holder_entity_id.unwrap_or(0).to_be_bytes());
             assert_eq!(

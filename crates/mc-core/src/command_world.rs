@@ -1287,6 +1287,53 @@ mod tests {
         assert!(state.block_entities[&(1, 200, 0)].slots[1].is_empty());
     }
 
+    /// QA5-SETBLOCK-SAND: a frozen world must hold the falling entity a
+    /// `/setblock` created; only `/tick step` moves it, one tick per step.
+    #[test]
+    fn frozen_world_holds_a_setblock_falling_block_until_stepped() {
+        let command = |text: &str| PlayerInput::Command {
+            connection: ConnectionId(1),
+            command: text.to_owned(),
+            permission_level: 4,
+        };
+        let height = |state: &TickState| {
+            let mut rows = state
+                .entities
+                .slots()
+                .filter(|slot| state.entities.row(*slot).falling.is_some());
+            let slot = rows.next().expect("setblock sand over air spawns a falling entity");
+            assert!(rows.next().is_none(), "one sand block, one entity");
+            state.entities.pos(slot)[1]
+        };
+
+        let (mut running, _) = fixture();
+        run_tick(&mut running, &[command("setblock 1 230 0 minecraft:sand")]);
+        let start = height(&running);
+        for _ in 0..3 {
+            run_tick(&mut running, &[]);
+        }
+        let after_three_ticks = height(&running);
+        assert!(after_three_ticks < start, "a running world drops the block");
+
+        let (mut frozen, _) = fixture();
+        run_tick(&mut frozen, &[command("tick freeze")]);
+        run_tick(&mut frozen, &[command("setblock 1 230 0 minecraft:sand")]);
+        assert_eq!(height(&frozen), start);
+        for _ in 0..5 {
+            run_tick(&mut frozen, &[]);
+        }
+        assert_eq!(height(&frozen), start, "frozen ticks must not move the block");
+        run_tick(&mut frozen, &[command("tick step 3")]);
+        for _ in 0..3 {
+            run_tick(&mut frozen, &[]);
+        }
+        assert_eq!(height(&frozen), after_three_ticks, "three steps are three ticks");
+        for _ in 0..5 {
+            run_tick(&mut frozen, &[]);
+        }
+        assert_eq!(height(&frozen), after_three_ticks, "the world is frozen again after the step");
+    }
+
     #[test]
     fn brushable_command_direct_update_hides_unopened_loot() {
         use crate::boundary::PlayerChange;

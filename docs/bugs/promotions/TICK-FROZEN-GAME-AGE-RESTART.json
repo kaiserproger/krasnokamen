@@ -1,0 +1,41 @@
+{
+  "id": "TICK-FROZEN-GAME-AGE-RESTART",
+  "verdict": "promoted",
+  "fix_commit": "c9c13b37505580495a3553eff10e10d1495292d2",
+  "fix_commit_full": "c9c13b37505580495a3553eff10e10d1495292d2",
+  "promoted_at": "2026-11-11T16:10:17+00:00",
+  "tree_head": "270a78198b45c42bf5eb4205434dba799810ba69",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/tick_control.rs",
+    "crates/mc-core/src/weather.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/weather_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:weather::tests::climate_image_recovers_game_age_in_every_tick_phase": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:weather::tests::frozen_game_age_survives_checkpoint_and_held_wal_tail": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:weather::tests::climate_image_recovers_game_age_in_every_tick_phase": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:weather::tests::frozen_game_age_survives_checkpoint_and_held_wal_tail": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/TickFreezeRows/.analysis/validation/20261111T152448-ledger-promote-306rm1y9"
+}

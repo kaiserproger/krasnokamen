@@ -121,6 +121,62 @@ def _failing_verdict(receipt, profile, verdict):
     return False
 
 
+def _work_root() -> Path:
+    """The `<work>` directory holding the main checkouts (solaris, solaris-loader, ...)."""
+    for base in (REPO_ROOT.parent, REPO_ROOT.parent.parent):
+        if (base / 'solaris-loader' / 'gradlew').is_file():
+            return base
+    return REPO_ROOT.parent
+
+def _loader_mc_version(loader_root: Path) -> str | None:
+    """The Minecraft version the Loader checkout builds its client against."""
+    properties = loader_root / 'gradle.properties'
+    if not properties.is_file():
+        return None
+    match = re.search(r'^minecraftVersion=(\S+)$', properties.read_text(), re.M)
+    return match.group(1) if match else None
+
+
+def _loader_live_setup(ctx, env, tree) -> str | None:
+    """Prepare env/placeholders for loader-live refs; return a fail-closed reason or None.
+
+    loader-live launches the real Loader client through Gradle under a private audio
+    graph, so it needs the loader checkout, the Gradle home with the cached client jar,
+    an empty plugins dir and the vanilla translation data in `tree` (26.1.2 client)."""
+    work = _work_root()
+
+    loader_root = Path(env.get('SOLARIS_LOADER_ROOT') or (work / 'solaris-loader'))
+    if not (loader_root / 'gradlew').is_file():
+        return f'loader-live requires a Loader checkout at {loader_root} (set SOLARIS_LOADER_ROOT)'
+    env['SOLARIS_LOADER_ROOT'] = str(loader_root)
+    gradle_home = Path(env.get('GRADLE_USER_HOME') or (work / 'loader-gradle-home'))
+    if not gradle_home.is_dir():
+        return f'loader-live requires a Gradle home at {gradle_home} (set GRADLE_USER_HOME)'
+    env['GRADLE_USER_HOME'] = str(gradle_home)
+    version = _loader_mc_version(loader_root)
+    if not env.get('SOLARIS_CLIENT_JAR'):
+        jar = gradle_home / 'caches' / 'fabric-loom' / (version or '') / 'minecraft-client.jar'
+        if not jar.is_file():
+            return f'loader-live requires the cached {version} client jar at {jar} (set SOLARIS_CLIENT_JAR)'
+        env['SOLARIS_CLIENT_JAR'] = str(jar)
+    wrapper = REPO_ROOT / 'tools' / 'harness' / 'screen_audio_graph.sh'
+    if not wrapper.is_file():
+        return f'loader-live requires the private audio wrapper {wrapper}'
+    env['SOLARIS_AUDIO_RECEIPT_DIR'] = str(ctx.artifact_dir)
+    plugins_dir = ctx.artifact_dir / 'loader-live-plugins'
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    data_source = Path(os.environ.get('SOLARIS_VANILLA_DATA_ROOT') or (_work_root() / 'solaris' / 'data'))
+    for name in ('vanilla-steps', f'vanilla-{version or ""}'):
+        source = data_source / name
+        target = Path(tree) / 'data' / name
+        if target.exists():
+            continue
+        if not source.is_dir():
+            return f'loader-live requires {source} (vanilla translation data for the Loader client)'
+        subprocess.run(['cp', '-a', '--', str(source), str(target)], check=True)
+    return None
+
+
 def _run_harness(ctx, refs, tree):
     """Run real-client refs in `tree` -> {ref: (state, detail, receipt path or None)}."""
     from . import profiles
@@ -138,9 +194,26 @@ def _run_harness(ctx, refs, tree):
         _, profile, check = ref.split(':', 2)
         command, is_profile = regressions._check_command(profile, check)
         grouped[tuple(command)].append((ref, profile, check, is_profile))
+    loader_refs = {ref for group in grouped.values() for ref, profile, _, _ in group if profile == 'loader-live'}
+    loader_reason = None
+    if loader_refs:
+        loader_reason = _loader_live_setup(ctx, env, tree)
+        if loader_reason is None:
+            env.setdefault('SOLARIS_AUDIO_RECEIPT_DIR', str(ctx.artifact_dir))
     results = {}
     for command, group in grouped.items():
         _, profile, check, is_profile = group[0]
+        command = list(command)
+        if profile == 'loader-live':
+            if loader_reason is not None:
+                results.update({ref: (UNRUNNABLE, loader_reason, None) for ref, *_ in group})
+                continue
+            wrapper = REPO_ROOT / 'tools' / 'harness' / 'screen_audio_graph.sh'
+            plugins_dir = ctx.artifact_dir / 'loader-live-plugins'
+            command = [str(wrapper)] + [
+                str(binary) if part == '{server_bin}' else str(plugins_dir) if part == '{plugins_dir}' else part
+                for part in command
+            ]
         try:
             receipt, path = regressions._client_receipt(ctx, profiles, command, env, profile, check, is_profile, cwd=tree)
         except regressions.ReceiptNotPassed as error:

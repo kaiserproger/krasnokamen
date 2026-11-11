@@ -1,0 +1,26 @@
+diff --git a/crates/mc-core/src/mounts/menus.rs b/crates/mc-core/src/mounts/menus.rs
+index 7ef5c78c..71cfb0b5 100644
+--- a/crates/mc-core/src/mounts/menus.rs
++++ b/crates/mc-core/src/mounts/menus.rs
+@@ -179,7 +179,7 @@ pub(crate) fn click(
+     };
+     let effects = if crate::plugin_inventories::has_reservations_for_player(state, actor) {
+         let plan = player.plan_inventory_transition(&contents, native);
+-        if false {
++        if crate::plugin_inventories::below_player_floors(state, actor, plan.player_slots()) {
+             player.inventory_transition_refused(&contents)
+         } else {
+             state
+diff --git a/crates/mc-core/src/vehicles/containers.rs b/crates/mc-core/src/vehicles/containers.rs
+index 2ea74d00..cb0f57bb 100644
+--- a/crates/mc-core/src/vehicles/containers.rs
++++ b/crates/mc-core/src/vehicles/containers.rs
+@@ -174,7 +174,7 @@ pub(crate) fn click(
+     };
+     let effects = if crate::plugin_inventories::has_reservations_for_player(state, player) {
+         let plan = p.plan_inventory_transition(&slots, native);
+-        if false {
++        if crate::plugin_inventories::below_player_floors(state, player, plan.player_slots()) {
+             p.inventory_transition_refused(&slots)
+         } else {
+             state
