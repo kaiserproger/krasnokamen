@@ -2794,6 +2794,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUDIT-CHAT-VISIBILITY"
 regression = ["cargo:mc-core:chat_visibility_tests::public_chat_reaches_only_full_clients", "cargo:mc-core:chat_visibility_tests::a_hidden_client_cannot_chat_and_is_told_so_in_red", "cargo:mc-core:chat_visibility_tests::system_text_reaches_commands_only_clients_but_not_hidden_ones", "cargo:mc-core:chat_visibility_tests::say_and_private_messages_are_chat_not_system_text", "cargo:mc-core:chat_visibility_tests::the_setting_changes_in_place_and_resets_when_the_player_leaves", "cargo:mc-edge:server::view_distance_tests::client_chat_setting_is_admitted_at_join_and_on_play_changes", "cargo:mc-core:dimensions::tests::rejoin_child_dimension_keeps_the_clients_chat_setting", "harness:chat-visibility:native-chat-visibility", "cargo:mc-edge:server::view_distance_tests::edge_sent_feedback_follows_the_clients_chat_setting"]
+fix_commit = "patch:2de60a266139a4f23cbfced3a9883825ea631ea136a20bf9099e2c0ffa1fde09"
 
 [[bug]]
 id = "AUDIT-SCULK"
