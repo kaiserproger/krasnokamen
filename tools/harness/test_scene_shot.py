@@ -162,6 +162,51 @@ class SceneShotTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "tool_wall_close_background"):
                 scene_shot.execute(probe, root, [{"tool_wall_visible": "tool"}])
 
+    def test_require_entities_fails_before_shot_when_summon_did_not_create_subject(self):
+        class Probe:
+            def __init__(self, entities):
+                self.entities = entities
+                self.calls = []
+            def call(self, name, args):
+                self.calls.append((name, args))
+                if name == "minecraft_wait_for_play":
+                    return {"in_play": True}
+                if name == "minecraft_list_entities":
+                    return {"entities": self.entities}
+                return {"status": "ok"}
+            def remaining(self):
+                return 10
+            def check(self, name, condition):
+                if not condition:
+                    raise AssertionError(name)
+
+        step = {"require_entities": {"name": "subjects", "args": {"radius": 16},
+                                     "types": ["minecraft:zombie", "minecraft:slime"]}}
+        scenario = [{"cmd": "summon minecraft:invalid"}, step, {"shot": "frame"}]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for client in ("native", "java"):
+                with self.subTest(client=client), patch.object(scene_shot, f"capture_{client}", return_value="frame") as capture:
+                    probe = Probe([{"entity_type": "minecraft:zombie"}])
+                    with self.assertRaisesRegex(AssertionError, "subjects_minecraft:slime"):
+                        scene_shot.execute(probe, root, scenario, client)
+                    capture.assert_not_called()
+                    self.assertEqual(json.loads((root / "subjects.json").read_text())["entities"], probe.entities)
+                    probe.entities.append({"entity_type": "minecraft:slime"})
+                    self.assertEqual(scene_shot.execute(probe, root, [step, {"shot": "frame"}], client), ["frame"])
+                    self.assertIn(("minecraft_list_entities", {"radius": 16}),
+                                  list(scene_shot.scene_mcp_calls([step])))
+                    probe.entities = None
+                    with self.assertRaisesRegex(RuntimeError, "entity snapshot omitted entities"):
+                        scene_shot.execute(probe, root, [step], client)
+
+    def test_require_entities_rejects_empty_or_invalid_type_lists(self):
+        for types in ([], ["zombie"], [""], [None]):
+            step = {"require_entities": {"name": "subjects", "args": {}, "types": types}}
+            for client in ("native", "java"):
+                with self.subTest(types=types, client=client), self.assertRaises(ValueError):
+                    scene_shot.validate_steps([step], client)
+
     def test_walk_phase_rejects_idle_missing_and_wrong_phase(self):
         spec = {"name": "walk", "entity_type": "minecraft:zombie", "phase": 0.0,
                 "tolerance": 0.25, "min_speed": 0.1, "max_ticks": 30}

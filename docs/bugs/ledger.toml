@@ -2759,6 +2759,7 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-DIMENSION-BIOME"
 regression = ["cargo:mc-core:dimensions::tests::native_dimension_spawn_tables_and_census_are_local"]
+fix_commit = "9cc59fb37b5ea1e543eaca53f5864a0c0613051c"
 
 [[bug]]
 id = "TEST-FALLING-TORCH"
@@ -2769,6 +2770,7 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-FALLING-TORCH"
 regression = ["cargo:mc-core:falling::tests::empty_collision_attachment_is_not_a_floor_and_slab_landing_drops_instead"]
+fix_commit = "9cc59fb37b5ea1e543eaca53f5864a0c0613051c"
 
 [[bug]]
 id = "TEST-END-RESTART-OBSERVER"
@@ -3919,6 +3921,7 @@ status = "open"
 source = "tools/harness/plan.py _expand_innovation added a required innovation reviewer although AGENTS.md names the review checkpoints and adding-a-feature.md requires only a decision record for an innovation token. Corrected by preserving the decision record without the extra reviewer; two focused assertions failed before the fix, all 42 planner tests and actual dependency/persistence CLI smokes passed after it. Formal ledger promotion remains pending."
 regression = []
 failing_first = "reported"
+fix_commit = "6333b8d8a29d2e02a8f75720cc431275937a781a"
 
 [[bug]]
 id = "NATIVE-NAV-GROUNDED-EDGE-ORIGIN"
@@ -3941,6 +3944,7 @@ status = "open"
 source = "tools/coreperf/profiles.py pinned_binary unconditionally required the owner's absolute pin store. The relocated-pin regression failed before correction. Owner-host store and exact manifest path checks remain strict; other hosts verify the original manifest, binary name and SHA-256. Both host-boundary tests and a real release idle CLI lifecycle passed with the owner-host marker absent in a controlled local simulation, not on a second machine. Formal ledger promotion remains pending."
 regression = []
 failing_first = "reported"
+fix_commit = "80191f115bc889838a5620b554b2a84cb7d84cb0"
 
 [[bug]]
 id = "NATIVE-NAV-WAYPOINT-CORNER-DEADZONE"
@@ -4152,3 +4156,14 @@ regression = ["cargo:mc-core:projectiles::flight_tests::projectile_breaks_pot_on
 repro_check = "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run protocol-matrix --server-bin /run/media/kaiserroman/games/solaris-work/pins/e4304662b8f4-server-x86_64-unknown-linux-gnu-incr/solaris-v2 --vanilla-data /run/media/kaiserroman/games/solaris-work/receipts/H08Orbs/protocol-content/26.3 --subject gamerules.projectiles_can_break_blocks --port 26741 --dashboard-port 26742"
 failing_first = "reported"
 fix_commit = "70e5c6d6"
+
+[[bug]]
+id = "HARNESS-SCENE-SHOT-MISSING-SUBJECT"
+title = "Scene-shot cannot require a capture subject to be present"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "VisualRigsA runs 20261111T115908-scene-shot-wxnrjw82 and 20261111T120609-scene-shot-uo3_ay_m passed despite missing intended visual subjects; the scenario had no assertion for their presence."
+regression = []
+failing_first = "reported"
