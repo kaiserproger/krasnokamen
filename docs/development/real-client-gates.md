@@ -264,8 +264,14 @@ each one of `cmd`, `tp` (five coordinates), `look`, `hotbar`, `wait_ticks`, `wai
 `scan_blocks`, `read_block`, `navigate_to_block`, `list_entities`, `timed_entities`,
 `mob_motion`, or `key` (`keys` and `ticks` MCP arguments; released when the step finishes). Optional
 `seed` defaults to 100, `world` copies an existing world, `server_view_distance`
-defaults to 4, and `client_settings` accepts `graphics_preset`, `render_distance`
-and `fov` (default 70: the owner's saved fov is never inherited). PNG paths are
+defaults to 4, `lod_enabled` optionally sets `[lod].enabled` in the private
+server config, and `lod_share_terrain_keys` optionally sets
+`[lod].share_terrain_keys` when LOD is enabled. Sharing reveals seed-derived
+terrain parameters to the client; use only with an isolated test world.
+`client_settings` accepts `graphics_preset`, `render_distance`
+and `fov` (default 70: the owner's saved fov is never inherited). Set
+`RUST_LOG=mc_edge::lod=debug` to retain a server log line for each successfully
+queued LOD tile response. PNG paths are
 recorded in `result.json`; settings and world are isolated per run.
 
 `use_phases` (native only) takes `name` and `ticks` (1–100), holds use across
