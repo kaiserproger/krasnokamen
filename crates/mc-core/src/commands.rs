@@ -69,6 +69,7 @@ pub const ROOTS: &[(&str, u8)] = &[
     ("tag", 2),
     ("playsound", 2),
     ("particle", 2),
+    ("swing", 2),
     ("tick", 3),
     ("kick", 3),
     ("mute", 3),
@@ -327,6 +328,8 @@ pub enum Command {
         target: Target,
     },
     Damage(crate::command_damage::DamageCommand),
+    /// Solaris attack presentation (`command_swing`).
+    Swing(crate::command_swing::SwingCommand),
     /// `time set` (`add == false`) or `time add`.
     Time {
         ticks: i64,
@@ -460,6 +463,7 @@ pub fn parse(command: &str, operator: bool) -> Result<Command, CommandError> {
         "effect" => crate::effects::parse_command(args),
         "advancement" => parse_advancement(args),
         "damage" => crate::command_damage::parse(args).map(Command::Damage),
+        "swing" => crate::command_swing::parse(args).map(Command::Swing),
         "kill" => match args {
             [] => Ok(Command::Kill {
                 target: Target::Executor,
