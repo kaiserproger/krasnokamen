@@ -60,9 +60,9 @@ async fn listen(server: &Arc<EdgeServer>) -> (std::net::SocketAddr, Vec<tokio::t
 }
 
 /// Read until a Play disconnect arrives and return its reason bytes.
-async fn play_disconnect_reason(client: &mut Client) -> String {
+async fn play_disconnect_reason(client: &mut Client, wait: Duration) -> String {
     let mut frame = client
-        .wait_for_frame_id_with_timeout(PlayDisconnect::ID, WAIT)
+        .wait_for_frame_id_with_timeout(PlayDisconnect::ID, wait)
         .await
         .expect("a Play disconnect with the refusal reason");
     String::from_utf8_lossy(&PlayDisconnect::decode(&mut frame.body).unwrap().reason_nbt)
@@ -108,7 +108,7 @@ async fn newer_login_of_the_same_account_kicks_the_session_in_play_and_reaches_p
     let (addr, tasks) = listen(&server).await;
     let mut first = enter_play(addr, "Dup").await;
     let _second = enter_play(addr, "Dup").await;
-    assert!(play_disconnect_reason(&mut first).await.contains(REASON));
+    assert!(play_disconnect_reason(&mut first, WAIT).await.contains(REASON));
     server.hub.shutdown();
     tasks.into_iter().for_each(|task| task.abort());
 }
@@ -126,7 +126,12 @@ async fn late_configuration_finisher_receives_the_duplicate_login_reason() {
     held.write_packet(&AcknowledgeFinishConfiguration)
         .await
         .unwrap();
-    assert!(play_disconnect_reason(&mut held).await.contains(REASON));
+    // Well inside the 10 s join deadline: the refusal wakes the join wait, it is not a timeout.
+    assert!(
+        play_disconnect_reason(&mut held, Duration::from_secs(5))
+            .await
+            .contains(REASON)
+    );
     // The player in Play was not kicked: no Play disconnect can be waiting for it.
     assert!(
         playing
