@@ -31,7 +31,11 @@ fn equippable_remaps_sound_and_entity_holders_on_both_adjacent_steps() {
         let mut t = tables(&["equippable"]);
         t.formats.lower = lower;
         t.formats.upper = upper;
-        t.sounds = IdMap::by_name([("equip", 5), ("shear", 6)], [("equip", 7), ("shear", 8)], |_| None);
+        t.sounds = IdMap::by_name(
+            [("equip", 5), ("shear", 6)],
+            [("equip", 7), ("shear", 8)],
+            |_| None,
+        );
         t.entities = IdMap::by_name([("zombie", 2)], [("zombie", 9)], |_| None);
         for named in [false, true] {
             let mut source = vec![1, 10, 1, 0, 0, 4, 6, 1];
