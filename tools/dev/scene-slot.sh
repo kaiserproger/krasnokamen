@@ -1,43 +1,18 @@
 #!/bin/sh
-# Run one graphical scene-shot/gate command in one of six shared host slots.
-# A waiter blocks (flock) on all six slots at once and takes whichever frees
-# first, so a long run in one slot never starves the queue. No polling; the
-# lock is held until the command exits (an fd >= 10 is inherited across exec).
+# Run one graphical scene-shot/gate command in one of six shared host slots,
+# through slot-lock.py (the same mechanism as mem-run.sh's build tokens): a waiter
+# blocks on all six slots at once and takes whichever frees first, so a long run in
+# one slot never starves the queue. No polling; the lock is held until the command
+# exits (an inherited fd >= 10, which mem-run.sh's own fds 3-9 never touch).
 # Six fits the 16-thread owner host: one scene (release server + native client
 # + Xvfb, or a Java oracle) measured about 1.5 cores and 3.5 GB (2026-11-11).
 # The command sees SOLARIS_SCENE_SLOT=<slot>; mem-run.sh then gives its scope a
 # higher CPU weight than tests and builds, so the gate keeps its tick rate.
-exec python3 -c '
-import fcntl, os, sys, threading
-
-cmd = sys.argv[1:]
-if not cmd:
-    sys.exit("usage: scene-slot.sh <command> [args...]")
-lock_dir = os.environ.get("SOLARIS_SCENE_SLOT_DIR", "/tmp")  # tests use a private dir
-guard, won, chosen = threading.Lock(), threading.Event(), []
-
-def take(slot):
-    # Non-inheritable fd (PEP 446): a losing slot is released at exec at the latest.
-    fd = os.open("%s/solaris-scene-slot-%s.lock" % (lock_dir, slot), os.O_WRONLY | os.O_CREAT, 0o666)
-    fcntl.flock(fd, fcntl.LOCK_EX)
-    with guard:
-        if chosen:
-            os.close(fd)
-            return
-        chosen.append((fd, slot))
-    won.set()
-
-for slot in "abcdef":
-    threading.Thread(target=take, args=(slot,), daemon=True).start()
-# Tests pass a pipe fd and wait on it instead of polling for the queued waiter.
-ready = os.environ.pop("SOLARIS_SCENE_SLOT_READY_FD", None)
-if ready:
-    os.write(int(ready), b"w")
-    os.close(int(ready))
-won.wait()
-# Inheritable copy at fd >= 10: mem-run.sh reopens and closes fds 3-8 (exec 3>, 3>&-),
-# which would release a low lock fd before the gate ends; bash {fd} only allocates.
-fcntl.fcntl(chosen[0][0], fcntl.F_DUPFD, 10)
-os.environ["SOLARIS_SCENE_SLOT"] = chosen[0][1]
-os.execvp(cmd[0], cmd)
-' "$@"
+# Holders and waiters: tools/dev/fleet-status.
+[ $# -gt 0 ] || { echo "usage: scene-slot.sh <command> [args...]" >&2; exit 1; }
+here=$(cd "$(dirname "$0")" && pwd)
+dir=${SOLARIS_SCENE_SLOT_DIR:-/tmp}  # tests use a private dir
+exec python3 "$here/slot-lock.py" --dir "$dir" --name 'solaris-scene-slot-%s.lock' --slots a,b,c,d,e,f \
+  --env SOLARIS_SCENE_SLOT --wait-dir "$dir/solaris-scene-slot-wait" \
+  --wait-message "scene-slot: all six scene slots are in use; waiting for one (holders: $here/fleet-status)" \
+  -- "$@"

@@ -634,6 +634,7 @@ fn identical_replacement_after_history_expiry_is_felled_and_conserved() {
         vec![crate::block_log::Delta {
             records: vec![crate::block_log::Record {
                 seq: 0,
+                tick: Some(1),
                 time: 0,
                 actor: Arc::from("player"),
                 pos: root,
@@ -680,6 +681,7 @@ fn retained_player_placement_vetoes_an_identical_worldgen_log() {
         vec![crate::block_log::Delta {
             records: vec![crate::block_log::Record {
                 seq: 0,
+                tick: Some(1),
                 time: 0,
                 actor: Arc::from("player"),
                 pos: root,
@@ -823,6 +825,7 @@ fn protected_crown_above_access_headroom_stays_while_the_building_finishes() {
         vec![crate::block_log::Delta {
             records: vec![crate::block_log::Record {
                 seq: 0,
+                tick: Some(1),
                 time: 0,
                 actor: Arc::from("player"),
                 pos: at,

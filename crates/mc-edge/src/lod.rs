@@ -313,8 +313,17 @@ impl LodConnection {
                 let Ok(frame) = frame(tile_channel(), payload) else {
                     return;
                 };
-                if let Some(handles) = server.connections.get(connection) {
-                    let _ = handles.world_tx.try_send(frame);
+                if let Some(handles) = server.connections.get(connection)
+                    && handles.world_tx.try_send(frame).is_ok()
+                {
+                    tracing::debug!(
+                        connection = connection.0,
+                        tile_x = request.tile_x,
+                        tile_z = request.tile_z,
+                        level = request.level,
+                        stored_only = request.stored_only,
+                        "lod tile queued"
+                    );
                 }
             });
         }

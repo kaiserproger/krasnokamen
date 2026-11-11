@@ -101,7 +101,8 @@ class MatrixTest(unittest.TestCase):
                 server = server_cls.return_value
                 server._process = None
                 server.running = False
-                with matrix.server_instance(args, Path(directory) / "server", 1):
+                with matrix.server_instance(args, Path(directory) / "server", 1, input_log=True):
+                    self.assertEqual(server.config_overrides, {'server': {'input_log': True}})
                     kwargs = server_cls.call_args.kwargs
             self.assertIs(kwargs["port"], game)
             self.assertIs(kwargs["dashboard_port"], dash)

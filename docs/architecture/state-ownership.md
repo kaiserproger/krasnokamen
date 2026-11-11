@@ -26,8 +26,12 @@ frames. `WorldSnapshot::game_time` projects the existing
 `TickControl::game_ticks` counter: frozen frames hold it, a simulated step
 advances it once. Edge `SET_TIME` uses that simulated age, not the WAL frame.
 `day_time` and its client rate remain independent daylight-clock projections.
-The held offset is currently runtime-only: recovery restores the WAL frame but
-not that offset (`TICK-FROZEN-GAME-AGE-RESTART` in the bug ledger).
+The climate post-image persists the simulated clock as the quantity its mode
+keeps constant: the held-tick count while frames simulate, the game age while
+they are held. It changes only when the mode does, so a held WAL tail needs no
+entry per frame; recovery derives the held offset at the recovered frame. Freeze
+and step control themselves stay session-only, as in vanilla. Older images
+without the clock recover with their frame as age.
 
 ## Rules
 

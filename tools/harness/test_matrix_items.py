@@ -352,7 +352,7 @@ class ItemAdaptersTest(unittest.TestCase):
         for extra, passed in (([], True), ([{'item': renamed}], False)):
             ctx = Context({'inventory': [diamond], 'xp': {'total': 0, 'level': 10}})
             ctx.state.update(death_custody=custody([diamond]), death_xp=0,
-                             death_level=10, enabled_plugins=['graves'])
+                             death_level=10, enabled_plugins=['graves'], death_cell=[4, 180, 4])
             with patch.object(death_respawn, 'entities', return_value=[{'item': kelp}] + extra), \
                  patch.object(death_respawn, 'block_is', return_value=False):
                 death_respawn.assert_death_custody(ctx, keep=True)
@@ -364,7 +364,7 @@ class ItemAdaptersTest(unittest.TestCase):
         from tools.harness.matrix_domains import death_respawn
         ctx = Context({'inventory': [], 'xp': {'total': 0, 'level': 0}})
         ctx.state.update(death_custody=custody([]), death_xp=0, death_level=10,
-                         enabled_plugins=['graves'])
+                         enabled_plugins=['graves'], death_cell=[4, 180, 4])
         with patch.object(death_respawn, 'entities', return_value=[]), \
              patch.object(death_respawn, 'block_is', return_value=False):
             death_respawn.assert_death_custody(ctx, keep=True)

@@ -131,9 +131,11 @@ python3 -m tools.harness list
 - *Owner host:* wrap heavy Cargo, harness and Gradle commands in Main's runner by
   absolute path: `<work>/solaris/tools/dev/mem-run.sh -m 6G <command>`
   (`-m 12G` for full `test`/`correctness`; at most 12G each), never a worktree's
-  or sibling repo's copy. There are no slots or queue: every command starts at
-  once; the heavy-watchdog pauses plain cargo builds under real memory pressure
-  and resumes them, never tests, servers or harness runs. The runner points
+  or sibling repo's copy. There are no memory slots: a compile command waits for
+  one of three host-wide build tokens (a nested compile reuses its parent's),
+  every other command starts at once; the heavy-watchdog pauses plain cargo
+  builds under real memory pressure and resumes them, never tests, servers or
+  harness runs. The runner points
   `RUSTC_WRAPPER` at `tools/dev/sccache.sh` (shared sccache; empty when its daemon is
   down), so never pass `env RUSTC_WRAPPER=` or plain `RUSTC_WRAPPER=sccache`; an old
   `env RUSTC_WRAPPER=` still works but is uncached. The runner makes Cargo

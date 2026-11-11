@@ -1,0 +1,63 @@
+{
+  "seed": 100,
+  "operator": true,
+  "username": "FrozenClock",
+  "client_settings": {
+    "graphics_preset": "low",
+    "render_distance": 4,
+    "fov": 70
+  },
+  "steps": [
+    {
+      "cmd": "tick freeze"
+    },
+    {
+      "wait_chat": "frozen"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "observe": "held-before"
+    },
+    {
+      "shot": "held-before"
+    },
+    {
+      "cmd": "tp @s ~3 ~ ~"
+    },
+    {
+      "wait_chat": "Teleported"
+    },
+    {
+      "key": {
+        "keys": [
+          "key.keyboard.w"
+        ],
+        "ticks": 5
+      }
+    },
+    {
+      "cmd": "time add 1000"
+    },
+    {
+      "wait_chat": "tick(s)"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "observe": "held-after"
+    },
+    {
+      "shot": "held-after"
+    },
+    {
+      "assert_same_game_time": {
+        "before": "held-before",
+        "after": "held-after",
+        "day_delta": 1000
+      }
+    }
+  ]
+}

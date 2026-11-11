@@ -287,6 +287,13 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
         kind, value = next(iter(step.items()))
         if kind in ("shot", "observe", "goat_horns_upright", "goat_side_horn", "tool_wall_visible"):
             valid = isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value)
+        elif kind == "assert_same_game_time":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"before", "after", "day_delta"}
+                     and all(isinstance(value[key], str)
+                             and re.fullmatch(r"[A-Za-z0-9_-]+", value[key])
+                             for key in ("before", "after"))
+                     and type(value["day_delta"]) is int and value["day_delta"] > 0)
         elif kind == "assert_chat":
             valid = (client == "native" and isinstance(value, dict)
                      and set(value) == {"name", "contains", "excludes"}
@@ -429,6 +436,19 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 shots.append(capture(probe, artifact, value))
             else:
                 (artifact / f"{value}.json").write_text(json.dumps(probe.observe(), indent=2) + "\n")
+        elif kind == "assert_same_game_time":
+            before = json.loads((artifact / f"{value['before']}.json").read_text())
+            after = json.loads((artifact / f"{value['after']}.json").read_text())
+            before_age = (before.get("time") or {}).get("game_time")
+            after_age = (after.get("time") or {}).get("game_time")
+            if type(before_age) is not int or type(after_age) is not int:
+                raise RuntimeError("client observation omitted game_time")
+            probe.check("frozen_game_time_holds_across_teleport", before_age == after_age)
+            before_day = (before.get("time") or {}).get("clock_time")
+            after_day = (after.get("time") or {}).get("clock_time")
+            if type(before_day) is not int or type(after_day) is not int:
+                raise RuntimeError("client observation omitted clock_time")
+            probe.check("received_fresh_day_time", after_day == before_day + value["day_delta"])
         elif kind == "wait_chat":
             probe.wait(
                 lambda state: any(value in line for line in state["recent_chat"]),
@@ -757,6 +777,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-command-feedback": "command_feedback_scene.json",
         "native-low-roof-house": "low_roof_house_scene.json",
         "native-falling-block-prediction": "falling_block_scene.json",
+        "native-frozen-game-age": "frozen_game_age_scene.json",
     }
     if ctx.scenario_id in named_fixtures:
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
@@ -794,6 +815,11 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     operator = scenario.get("operator", True)
     if type(operator) is not bool:
         raise ValueError("operator must be true or false")
+    if "lod_enabled" in scenario and type(scenario["lod_enabled"]) is not bool:
+        raise ValueError("lod_enabled must be true or false")
+    if "lod_share_terrain_keys" in scenario:
+        if type(scenario["lod_share_terrain_keys"]) is not bool or scenario.get("lod_enabled") is not True:
+            raise ValueError("lod_share_terrain_keys requires lod_enabled=true and a boolean value")
     username = scene_username(scenario)
     client_latency_ms = scenario.get("client_latency_ms", 0)
     if type(client_latency_ms) is not int or not 0 <= client_latency_ms <= 5000:
@@ -847,6 +873,12 @@ def run(
         if source.count(old) != 1:
             raise RuntimeError(f"expected one config token: {old}")
         source = source.replace(old, new, 1)
+    if "lod_enabled" in scenario:
+        if "[lod]" in source:
+            raise RuntimeError("playable.toml already contains a lod section")
+        source += f'\n[lod]\nenabled = {str(scenario["lod_enabled"]).lower()}\n'
+        if "lod_share_terrain_keys" in scenario:
+            source += f'share_terrain_keys = {str(scenario["lod_share_terrain_keys"]).lower()}\n'
     config.write_text(source)
     if scenario.get("world"):
         shutil.copytree(Path(scenario["world"]).expanduser().resolve(), artifact / "world")

@@ -120,6 +120,111 @@ def _insert(steps: ProbeSteps, item: str, target: int) -> None:
                 and state["container"]["carried"]["count"] == 0 and item_count(state, item) == 0)
 
 
+def _capture_ledger(steps: ProbeSteps, name: str) -> None:
+    from .native_p1 import _capture
+
+    _capture(steps, name)
+
+
+def _ledger_painting(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_p1 import _aim
+
+    support = _point(origin, dy=1, dz=3)
+    _set(steps, support, "minecraft:stone")
+    _give(steps, "minecraft:painting")
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    _use(steps, support, "north")
+    target = steps.call("minecraft_wait_for_visible_entity", {
+        "entity_type": "minecraft:painting", "radius": 8, "timeout_seconds": steps.remaining(),
+    })
+    identity = {key: target[key] for key in ("entity_id", "entity_uuid", "entity_type")}
+    _aim(steps, target)
+    _capture_ledger(steps, "painting-on-support")
+    _set(steps, support, "minecraft:air")
+    steps.call("minecraft_wait_for_entity_removed", {**identity, "timeout_seconds": steps.remaining()})
+    steps.check("painting_removed_after_support_loss", True)
+    _capture_ledger(steps, "painting-support-removed")
+
+
+def _ledger_axe(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    point = _point(origin)
+    _give(steps, "minecraft:iron_axe")
+    for source, result, properties in (
+        ("minecraft:oak_log[axis=x]", "minecraft:stripped_oak_log", {"axis": "x"}),
+        ("minecraft:oxidized_copper", "minecraft:weathered_copper", {}),
+        ("minecraft:waxed_weathered_copper", "minecraft:weathered_copper", {}),
+    ):
+        _set(steps, point, source)
+        steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+        _use(steps, point)
+        _block(steps, point, result, properties)
+        steps.check(f"axe_{source}_transformed", True)
+        steps.call("minecraft_look_at_block", {**point, "face": "north"})
+        _capture_ledger(steps, "axe-" + source.split(":", 1)[1].split("[", 1)[0])
+
+
+def _ledger_sponge(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    water = _point(origin, dx=1)
+    sponge = _point(origin)
+    _set(steps, water, "minecraft:water")
+    steps.call("minecraft_look_at_block", {**water, "face": "north"})
+    _capture_ledger(steps, "sponge-before-placement")
+    _give(steps, "minecraft:sponge")
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    _use(steps, _point(origin, dy=-1))
+    _block(steps, sponge, "minecraft:wet_sponge")
+    _block(steps, water, "minecraft:air")
+    steps.check("sponge_placement_absorbs_adjacent_source", True)
+    steps.call("minecraft_look_at_block", {**sponge, "face": "north"})
+    _capture_ledger(steps, "sponge-after-placement")
+
+
+def _ledger_setblock_snbt(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    point = _point(origin)
+    steps.fixture(f"setblock {point['x']} {point['y']} {point['z']} "
+                  'minecraft:chest{Items:[{Slot:0b,id:"minecraft:diamond",count:7}]}')
+    _block(steps, point, "minecraft:chest")
+    state = _open(steps, point, "ChestMenu", 63)
+    stack = container_slot(state, 0)
+    _capture_ledger(steps, "setblock-snbt-chest-open")
+    steps.check("setblock_snbt_chest_contains_seven_diamonds",
+                stack["item_id"] == "minecraft:diamond" and stack["count"] == 7)
+    _click(steps, 0, quick=True)
+    state = steps.wait(lambda s: item_count(s, "minecraft:diamond") == 7,
+                       "setblock_snbt_diamonds_withdrawn")
+    steps.check("setblock_snbt_no_duplicate", container_slot(state, 0)["count"] == 0)
+    steps.call("minecraft_close_screen")
+
+
+def _ledger_crafting_pickup(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    point = _point(origin)
+    _set(steps, point, "minecraft:crafting_table")
+    steps.fixture("debug give minecraft:oak_planks 16 0")
+    steps.call("minecraft_wait_for_inventory", {"item_id": "minecraft:oak_planks", "count": 16,
+                                                  "timeout_seconds": steps.remaining()})
+    state = _open(steps, point, "CraftingMenu", 46)
+    menu_id = state["container"]["container_id"]
+    sources = [s for s in state["container"]["slots"]
+               if s["item_id"] == "minecraft:oak_planks" and s["count"] == 16]
+    steps.check("crafting_pickup_one_source", len(sources) == 1)
+    _click(steps, sources[0]["slot"])
+    state = _echo(steps, "crafting_pickup_ordered")
+    steps.check("crafting_menu_stays_open_after_pickup",
+                state["container"]["container_id"] == menu_id
+                and state["container"]["menu_class"] == "net.minecraft.world.inventory.CraftingMenu"
+                and state["container"]["carried"]["item_id"] == "minecraft:oak_planks"
+                and state["container"]["carried"]["count"] == 16)
+    from .native_craft_drag import Pointer
+
+    pointer = Pointer(steps.client.p4_window)
+    try:
+        pointer.move(80, 80)
+        _capture_ledger(steps, "crafting-menu-after-pickup")
+    finally:
+        pointer.close()
+    steps.call("minecraft_close_screen")
+
+
 def _redstone(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     fixtures = ((-2, "minecraft:lever[face=floor,facing=east]"),
                 (-1, "minecraft:redstone_wire"), (0, "minecraft:repeater[facing=west,delay=1]"),
@@ -757,6 +862,11 @@ def _lease_navigation(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
 
 RUNNERS = {
     "native-v2-lease-navigation": _lease_navigation,
+    "native-v2-ledger-painting": _ledger_painting,
+    "native-v2-ledger-axe": _ledger_axe,
+    "native-v2-ledger-sponge": _ledger_sponge,
+    "native-v2-ledger-setblock-snbt": _ledger_setblock_snbt,
+    "native-v2-ledger-crafting-pickup": _ledger_crafting_pickup,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,

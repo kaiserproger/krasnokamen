@@ -221,6 +221,9 @@ class JavaMatrixClient:
             args["button"] = "primary" if button == 0 else "secondary"
             self.call("minecraft_click_container_slot", args)
 
+    def submit_input_batch(self, actions: list[dict[str, Any]]) -> dict[str, Any]:
+        return self.call("minecraft_submit_input_batch", {"actions": actions})
+
     def open_container(self, position: tuple[int, int, int]) -> None:
         self.call("minecraft_look_at_block", dict(zip(("x", "y", "z"), position)) | {"face": "up"})
         before = self.snapshot()["menu"]
