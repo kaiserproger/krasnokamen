@@ -73,6 +73,14 @@ def provenance(top: Path) -> dict:
     }
 
 
+def cargo_config_files(top: Path) -> list[Path]:
+    """Cargo config files outside the tree that Cargo merges into this build: `.cargo/config[.toml]` in
+    every parent directory and in CARGO_HOME. The tree's own `.cargo/` is in INPUT_PATHS."""
+    home = Path(os.environ.get("CARGO_HOME") or Path.home() / ".cargo")
+    dirs = [parent / ".cargo" for parent in top.resolve().parents] + [home]
+    return [directory / name for directory in dirs for name in ("config.toml", "config")]
+
+
 def inputs_sha256(top: Path, tree: str, kind: str, rust_target: str, incremental: bool) -> str:
     """Digest of everything the build reads, from the tree object of the working state.
 
@@ -84,6 +92,8 @@ def inputs_sha256(top: Path, tree: str, kind: str, rust_target: str, incremental
     parts.append("rustc=" + str(subprocess.check_output(["rustc", "-vV"], cwd=top, text=True)).strip())
     parts += [f"env.{name}={value}" for name, value in sorted(os.environ.items())
               if BUILD_ENV.match(name) and name not in BUILD_ENV_IGNORED]
+    parts += [f"cargo_config.{path}={w.sha256_file(path) if path.is_file() else 'absent'}"
+              for path in cargo_config_files(top)]
     parts += [f"target={rust_target}", f"kind={kind}", f"incremental={int(incremental)}"]
     return w.sha256_bytes("\n".join(parts).encode())
 

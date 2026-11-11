@@ -253,6 +253,21 @@ class InputKeyTests(unittest.TestCase):
         self.rustc = "rustc 1.99.1\nhost: x86_64-unknown-linux-gnu\n"
         self.assertNotEqual(self.key(), base)
 
+    def test_key_changes_for_cargo_config_outside_the_tree(self):
+        base = self.key()
+        parent_config = Path(self.temp.name) / ".cargo" / "config.toml"
+        parent_config.parent.mkdir()
+        parent_config.write_text("[profile.release]\nopt-level = 0\n")
+        self.assertNotEqual(self.key(), base, "a parent directory's Cargo config changes the build")
+        parent_config.unlink()
+        self.assertEqual(self.key(), base)
+        home = Path(self.temp.name) / "cargo-home"
+        home.mkdir()
+        with patch.dict(os.environ, {"CARGO_HOME": str(home)}):
+            empty_home = self.key()
+            (home / "config.toml").write_text("[profile.release]\nopt-level = 0\n")
+            self.assertNotEqual(self.key(), empty_home, "CARGO_HOME config changes the build")
+
 
 class ReuseTests(unittest.TestCase):
     def setUp(self):
