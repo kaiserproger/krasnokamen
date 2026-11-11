@@ -4251,3 +4251,14 @@ status = "open"
 source = "Rule-5 review of the recorder fix c731c550 (ReviewRecorderOverflow, 2026-11-12, finding F2): pump.rs:398-406 repairs only geometry after a failed world try_send; LOD tiles are a second producer on world_tx (lod.rs:317, LOD on by default config.rs:383), so pump.rs:341-342 'Only the pump sends world packets' is false. Example: a dismount SetPassengers(horse,[]) is lost and the client keeps the rider mounted until the next link change or re-pairing. Fix direction: take LOD tiles off world_tx, or treat a lost entity frame as a re-pair."
 regression = []
 failing_first = "not recorded"
+
+[[bug]]
+id = "LOADER-NEGOTIATE-CONFIGURATION-TIMEOUT"
+title = "Loader negotiation reused the 10 s pre-play read deadline; a Loader client slower than that after the manifest (verifying or fetching bundles on a loaded host) was dropped with 'read timed out in Configuration', failing loader-live gates intermittently."
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "open"
+source = "loader-live run 20261111T154235-loader-fabric-screen-admission-4rd2c0iz: server.log connection=2 stage=configuration error=read timed out in Configuration; client.log disconnect reason 'Loader negotiation failed: read timed out in Configuration' (copied to <work>/receipts/LoaderLivePromote/flake-run-20261111T154235)"
+regression = ["cargo:mc-edge:configuration::tests::loader_negotiation_tolerates_a_client_slower_than_the_pre_play_deadline"]
+failing_first = "not recorded"
