@@ -78,7 +78,8 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
                        else 600.0 if ctx.scenario_id in (native_light.SCENARIO_ID,
                                                         "native-v2-radius-full-view",
                                                         "native-v2-p4-damage",
-                                                        "native-v2-automation-storage")
+                                                        "native-v2-automation-storage",
+                                                        "native-v2-lease-navigation")
                        else 1200.0 if ctx.scenario_id == "native-v2-settlement-storage"
                        else 900.0 if ctx.scenario_id in ("native-v2-destroyed-chest-race",
                                                          "native-v2-corrupt-block-entities",
@@ -112,6 +113,8 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         required = required | {"client_capture"}
     if ctx.scenario_id == "native-v2-custody-mount-export":
         required = required | {"minecraft_approach_entity", "minecraft_interact_entity", "client_capture"}
+    if ctx.scenario_id == "native-v2-lease-navigation":
+        required = required | {"minecraft_approach_entity", "minecraft_navigate_to_block", "client_capture"}
     if ctx.scenario_id == "native-v2-duplicate-login":
         required = required | {"minecraft_connect"}
     if p5_scenario:

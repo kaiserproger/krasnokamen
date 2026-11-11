@@ -741,7 +741,15 @@ def _promotion_custody(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     run(steps, origin, steps.report["id"])
 
 
+def _lease_navigation(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_lease_navigation import run
+
+    run(steps, origin)
+
+
+
 RUNNERS = {
+    "native-v2-lease-navigation": _lease_navigation,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,

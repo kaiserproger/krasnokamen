@@ -231,6 +231,17 @@ SCENARIOS: dict[str, Scenario] = {
         proves="actual Configuration offer, matching serverbound Declined, subsequent Play login, ordered chat and graphical frame",
         limits="no installation, required-pack acceptance or Play-phase pack-offer claim",
     ),
+    "native-v2-lease-navigation": _entry(
+        id="native-v2-lease-navigation",
+        summary="Native writer lifetime, cancellation handoff, edge and open-door navigation",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-lease-navigation",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_lease_navigation.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="private operator platform, airborne stand, two MCP sessions, support edge and open-door corridor",
+        proves="bounded 120-second action retains writer; cancelled old writer leaves replacement and its held input; grounded edge and open-door routes arrive",
+        limits="single Linux native fixture; cancellation scheduling is nondeterministic",
+    ),
     "native-v2-end-restart": _entry(
         id="native-v2-end-restart", summary="Live peaceful End dragon survives clean checkpoint and graphical reconnect",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-end-restart",

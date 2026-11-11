@@ -237,6 +237,12 @@ establish exhaustive coverage of every nested value or every real-client path.
 
 The `entities` profile includes windowed native-client probes:
 
+- `native-v2-lease-navigation`: in a private operator-built fixture, a 120-second
+  native action retains its controller, a cancelled writer is replaced without
+  losing the replacement's held input, and navigation starts at a supported edge
+  and traverses an open door from an offset pose. Cancellation scheduling is
+  nondeterministic; deterministic owner-fence ordering remains a client unit test.
+
 - `native-v2-end-restart`: enter the End on hard difficulty, identify the live
   dragon, switch to peaceful, save and restart, then require the same player,
   End world and dragon UUID. This covers live peaceful-fight persistence, not
