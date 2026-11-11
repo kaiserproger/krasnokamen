@@ -1601,7 +1601,8 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SVC-BRIDGE"
-regression = []
+regression = ["cargo:mc-edge:svc_service::tests::svc_group_audio_stays_inside_the_password_protected_group"]
+fix_commit = "20bfb62a"
 
 [[bug]]
 id = "NATIVE-FREEZE-CAMERA"
