@@ -1,10 +1,10 @@
 //! Two raw clients of different releases on one server: each must receive the
 //! other's player-list entry and player entity, whichever joined first.
 use super::*;
-use std::sync::atomic::{AtomicBool, Ordering};
 use mc_protocol::packets::play::{
     AddEntity, PlayerInfoActions, PlayerInfoRemove, PlayerInfoUpdate, RemoveEntities,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// What one client has been sent about another player, applied like the
 /// vanilla client: a player entity added before its list entry is discarded
@@ -50,7 +50,10 @@ async fn sees(
                 }
             } else if frame.id == client.id("play", true, "minecraft:remove_entities") {
                 let removed = RemoveEntities::decode(&mut body).unwrap();
-                if seen.entity.is_some_and(|id| removed.entity_ids.contains(&id)) {
+                if seen
+                    .entity
+                    .is_some_and(|id| removed.entity_ids.contains(&id))
+                {
                     seen.entity = None;
                 }
             }
