@@ -1,8 +1,8 @@
 diff --git b/crates/mc-core/src/datapacks.rs a/crates/mc-core/src/datapacks.rs
-index be713ca1..609669b0 100644
+index e0f492f4..4c36d6ea 100644
 --- b/crates/mc-core/src/datapacks.rs
 +++ a/crates/mc-core/src/datapacks.rs
-@@ -840,11 +840,12 @@ impl PackSet {
+@@ -902,11 +902,12 @@ impl PackSet {
                  .filter(|id| *id == "vanilla" || packs.contains_key(*id))
                  .map(describe)
                  .collect(),

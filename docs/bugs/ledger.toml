@@ -1616,7 +1616,7 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-LIVE-DISCOVERY Fix patch: reversing it makes `/datapack list available` list only packs the selection already knows (explicitly disabled ones) instead of scanning the pack folder."
 regression = ["cargo:mc-core:datapacks::command_tests::list_sees_packs_added_and_removed_on_disk_without_a_reload", "harness:datapack-reload:native-datapack-reload"]
-fix_commit = "patch:877d19c21cfb198610e3d6b060c28faa3983ee68e684f9761df31c316babd0a4"
+fix_commit = "patch:722190e3d073f70cae4fbfa6606a7ab2cc494eb3fee4f375dc31138add0233ad"
 
 [[bug]]
 id = "DAMAGE-COMMAND"
@@ -1747,7 +1747,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-WORLDGEN-ZIP Fix patch: reversing it removes the .zip pack arm from the pack scan and the worldgen/dimension resource arm from add_file, so such packs are rejected again."
 regression = ["cargo:mc-core:datapacks::command_tests::zip_packs_load_functions_tags_recipes_and_refuse_unsafe_entries", "cargo:mc-core:datapacks::command_tests::an_archive_with_more_entries_than_the_resource_limit_is_refused", "cargo:mc-core:datapacks::command_tests::a_pack_with_worldgen_resources_loads_its_other_content_and_warns_once", "cargo:mc-core:datapacks::tests::worldgen_resources_are_ignored_and_unknown_resources_fail_with_explicit_error", "harness:datapack-reload:native-datapack-reload"]
-fix_commit = "patch:1a659e8dcf735e4a0821b6c21fc4c1fa8a5b42f5254d4b0a0e951a49f4ba95c0"
+fix_commit = "patch:a3a90be49eee1af7852525f3ff9e8647440eb4cead928872990bc6fb09d6d65f"
 
 [[bug]]
 id = "DATAPACK-WORLDGEN-OVERRIDES"
