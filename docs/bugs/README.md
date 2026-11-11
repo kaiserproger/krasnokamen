@@ -59,7 +59,14 @@ an exact test; `harness:<profile>:<scenario>` names an existing runnable
 scenario. A profile verdict runs that profile once for all rows citing it:
 the child receipt must pass and the named behaviour must be true in its
 boolean verdict map, or `PASS` in its legacy behaviour map. Unknown profiles
-and verdicts fail validation.
+and verdicts fail validation. `harness:loader-live:<scenario>` is valid for
+graphical `loader-live` scenarios: the runner executes them exactly as the
+loader-live gate does (Fabric platform, the tree's own built release server
+via `--server-bin`, an empty `--plugins-dir`, the private audio wrapper, and
+the Loader checkout/Gradle home/client jar from `SOLARIS_LOADER_ROOT`,
+`GRADLE_USER_HOME` and `SOLARIS_CLIENT_JAR`), records the harness Xvfb
+display in the receipt, and fails closed (unrunnable, never green) when any
+of those are missing or the scenario is not a registered loader-live entry.
 `regressions-client` builds its own release server (a known exception to the
 `pin-release` rule, listed in [open transitions](../STATUS.md#open-transitions))
 in the enclosing runner's pooled target, then hard-links it (copies if it

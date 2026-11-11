@@ -283,6 +283,22 @@ regression = []
         with self.assertRaises(ValueError):
             regressions._client_command('entities', 'no-such-scenario')
 
+    def test_loader_live_ref_parse_and_command(self):
+        ref = 'harness:loader-live:loader-fabric-screen-admission'
+        self.assertEqual(regressions._parse_ref(ref), ('harness', 'loader-live', 'loader-fabric-screen-admission'))
+        argv = regressions._client_command('loader-live', 'loader-fabric-screen-admission')
+        self.assertEqual(argv[5], 'loader-fabric-screen-admission')
+        self.assertEqual(argv[6:], ['--platform', 'fabric', '--server-bin', '{server_bin}',
+                                    '--plugins-dir', '{plugins_dir}', '--timeout-seconds', '420'])
+
+    def test_loader_live_ref_fails_closed(self):
+        for bad in ('harness:loader-live:', 'harness:loader-live:no-such-scenario',
+                    'harness:loader-live:native-low-roof-house', 'harness:dh-gate:all',
+                    'harness:loader-live:loader-fabric-screen-admission:extra'):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    regressions._parse_ref(bad)
+
     def test_open_checks_are_run(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
