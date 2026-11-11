@@ -1,5 +1,6 @@
 //! Retained native projectiles: one flight authority for mobs, items and dispensers.
 
+mod block_impact;
 pub(crate) mod embedded_projectiles;
 pub(crate) mod eye;
 

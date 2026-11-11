@@ -1007,3 +1007,302 @@ fn stuck_arrow_and_trident_retract_from_the_block_face_like_vanilla() {
         );
     }
 }
+
+fn default_block(state: &TickState, name: &str) -> u32 {
+    state
+        .registry
+        .blocks
+        .block(&Identifier::parse(name).unwrap())
+        .unwrap()
+        .default
+        .0
+}
+
+fn with_property(state: &TickState, block: u32, key: &str, value: &str) -> u32 {
+    let current = state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(block))
+        .unwrap();
+    let mut properties = current.properties.clone();
+    properties.iter_mut().find(|(k, _)| k == key).unwrap().1 = value.to_owned();
+    state
+        .registry
+        .blocks
+        .by_name_and_props(&current.block.id, &properties)
+        .unwrap()
+        .0
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Shooter {
+    Player(crate::commands::GameMode),
+    Skeleton,
+    Nobody,
+}
+
+fn shooter_uuid(
+    state: &mut TickState,
+    player: EntityId,
+    centre: [f64; 3],
+    shooter: Shooter,
+) -> Option<uuid::Uuid> {
+    let id = match shooter {
+        Shooter::Player(mode) => {
+            state.players.get_mut(&player).unwrap().game_mode = mode;
+            player
+        }
+        Shooter::Skeleton => {
+            let skeleton = state
+                .registry
+                .entity_types
+                .id_of(&Identifier::parse("minecraft:skeleton").unwrap())
+                .unwrap();
+            state.spawn_mob(skeleton, [centre[0], centre[1], centre[2] - 4.0], 20.0)
+        }
+        Shooter::Nobody => return None,
+    };
+    Some(state.entities.row(state.entities.slot_of(id).unwrap()).uuid)
+}
+
+/// The required-content test registry carries no entity type tags; a server
+/// loads 26.3 `data/minecraft/tags/entity_type/impact_projectiles.json`.
+fn vanilla_impact_projectiles(state: &mut TickState) {
+    let members = [
+        "minecraft:arrow",
+        "minecraft:spectral_arrow",
+        "minecraft:firework_rocket",
+        "minecraft:snowball",
+        "minecraft:fireball",
+        "minecraft:small_fireball",
+        "minecraft:egg",
+        "minecraft:trident",
+        "minecraft:dragon_fireball",
+        "minecraft:wither_skull",
+        "minecraft:wind_charge",
+        "minecraft:breeze_wind_charge",
+    ]
+    .map(|name| {
+        state
+            .registry
+            .entity_types
+            .id_of(&Identifier::parse(name).unwrap())
+            .unwrap() as i32
+    });
+    Arc::make_mut(&mut Arc::make_mut(&mut state.registry).tags)
+        .registries
+        .entry(Identifier::parse(mc_data::tags::ENTITY_TYPE_REGISTRY).unwrap())
+        .or_default()
+        .insert(
+            Identifier::parse(mc_data::tags::IMPACT_PROJECTILES).unwrap(),
+            members.to_vec(),
+        );
+}
+
+/// Fires `record` along +x, 0.25 above the floor of `block` (below a
+/// campfire's top), from 0.75 blocks (0.1 for a shot of at most 0.6 blocks per
+/// tick) in front of it, placed clear of the player two cells ahead of the
+/// centre, and returns the block's cell.
+fn shoot_block(
+    state: &mut TickState,
+    centre: [f64; 3],
+    block: u32,
+    record: ProjectileState,
+    speed: f64,
+) -> crate::boundary::BlockPos {
+    vanilla_impact_projectiles(state);
+    let pos = crate::boundary::BlockPos {
+        x: centre[0].floor() as i32 + 2,
+        y: centre[1] as i32,
+        z: centre[2].floor() as i32,
+    };
+    state.world.set_block(pos.x, pos.y, pos.z, block);
+    let gap = if speed > 0.6 { 0.75 } else { 0.1 };
+    let id = launch(
+        state,
+        record,
+        [f64::from(pos.x) - gap, centre[1] + 0.25, centre[2]],
+        [speed, 0.0, 0.0],
+    )
+    .unwrap();
+    super::flight::run(state, &mut Vec::new(), std::iter::once(id));
+    pos
+}
+
+/// Survival-player shots: `(kind, speed, projectiles_can_break_blocks, breaks)`.
+fn impact_break_cases(name: &str, cases: &[(ProjectileKind, f64, bool, bool)]) {
+    for &(kind, speed, enabled, breaks) in cases {
+        let (mut state, player, centre) = setup();
+        state
+            .gamerules
+            .insert("projectiles_can_break_blocks".into(), enabled.to_string());
+        let block = default_block(&state, name);
+        let owner = state
+            .entities
+            .row(state.entities.slot_of(player).unwrap())
+            .uuid;
+        let record = ProjectileState::new(kind, Some(owner), arrow_stack(&state));
+        let pos = shoot_block(&mut state, centre, block, record, speed);
+        assert_eq!(
+            state.world.block_at(pos.x, pos.y, pos.z) == Some(state.registry.states.air),
+            breaks,
+            "{name} {kind:?} speed={speed} enabled={enabled}"
+        );
+    }
+}
+
+#[test]
+fn projectile_breaks_pot_only_when_rule_enabled() {
+    impact_break_cases(
+        "minecraft:decorated_pot",
+        &[
+            (ProjectileKind::Arrow, 3.0, true, true),
+            (ProjectileKind::Arrow, 3.0, false, false),
+            // Not in the impact_projectiles entity tag.
+            (ProjectileKind::EnderPearl, 3.0, true, false),
+        ],
+    );
+}
+
+#[test]
+fn projectile_breaks_chorus_flower_only_when_rule_enabled() {
+    impact_break_cases(
+        "minecraft:chorus_flower",
+        &[
+            (ProjectileKind::Snowball, 3.0, true, true),
+            (ProjectileKind::Snowball, 3.0, false, false),
+        ],
+    );
+}
+
+#[test]
+fn projectile_breaks_pointed_dripstone_only_with_fast_trident() {
+    impact_break_cases(
+        "minecraft:pointed_dripstone",
+        &[
+            (ProjectileKind::Trident, 3.0, true, true),
+            (ProjectileKind::Trident, 0.6, true, false),
+            (ProjectileKind::Arrow, 3.0, true, false),
+            (ProjectileKind::Trident, 3.0, false, false),
+        ],
+    );
+}
+
+#[test]
+fn projectile_breaks_sulfur_spike_only_with_fast_trident() {
+    impact_break_cases(
+        "minecraft:sulfur_spike",
+        &[
+            (ProjectileKind::Trident, 3.0, true, true),
+            (ProjectileKind::Trident, 0.6, true, false),
+            (ProjectileKind::Trident, 3.0, false, false),
+        ],
+    );
+}
+
+/// `Projectile.mayBreak` passes only an ownerless or non-adventure player
+/// shot; `mayInteract` refuses a player under spawn protection.
+#[test]
+fn projectile_pot_break_follows_owner_and_spawn_protection() {
+    use crate::commands::GameMode;
+    for (shooter, protected, breaks) in [
+        (Shooter::Nobody, false, true),
+        (Shooter::Player(GameMode::Survival), false, true),
+        (Shooter::Player(GameMode::Survival), true, false),
+        (Shooter::Player(GameMode::Adventure), false, false),
+        (Shooter::Skeleton, false, false),
+    ] {
+        let (mut state, player, centre) = setup();
+        state.gamerules.insert("mob_griefing".into(), "true".into());
+        if protected {
+            state.spawn_protection = 256;
+            state.spawn_operators.insert(uuid::Uuid::new_v4());
+        }
+        let owner = shooter_uuid(&mut state, player, centre, shooter);
+        let record = ProjectileState::new(ProjectileKind::Arrow, owner, arrow_stack(&state));
+        let pot = default_block(&state, "minecraft:decorated_pot");
+        let pos = shoot_block(&mut state, centre, pot, record, 3.0);
+        assert_eq!(
+            state.world.block_at(pos.x, pos.y, pos.z) == Some(state.registry.states.air),
+            breaks,
+            "{shooter:?} protected={protected}"
+        );
+    }
+}
+
+/// DecoratedPotBlock cracks before `destroyBlock`: cracked loot, the 2001
+/// break event with the cracked state, and a waterlogged pot leaves water.
+#[test]
+fn projectile_cracks_pot_before_destroying_it() {
+    for waterlogged in ["false", "true"] {
+        let (mut state, player, centre) = setup();
+        let owner = state
+            .entities
+            .row(state.entities.slot_of(player).unwrap())
+            .uuid;
+        let record = ProjectileState::new(ProjectileKind::Arrow, Some(owner), arrow_stack(&state));
+        let pot = default_block(&state, "minecraft:decorated_pot");
+        let pot = with_property(&state, pot, "waterlogged", waterlogged);
+        let cracked = with_property(&state, pot, "cracked", "true");
+        let pos = shoot_block(&mut state, centre, pot, record, 3.0);
+        let left = if waterlogged == "true" {
+            state.registry.states.water
+        } else {
+            state.registry.states.air
+        };
+        assert_eq!(state.world.block_at(pos.x, pos.y, pos.z), Some(left));
+        assert_eq!(
+            state
+                .merge_command_broken
+                .iter()
+                .map(|(at, broken, _)| (*at, *broken))
+                .collect::<Vec<_>>(),
+            [(pos, cracked)]
+        );
+        let pot_item = state
+            .registry
+            .items
+            .id_of(&Identifier::parse("minecraft:decorated_pot").unwrap())
+            .unwrap();
+        assert!(
+            state.merge_command_broken[0]
+                .2
+                .iter()
+                .all(|drop| drop.item_id != pot_item),
+            "a cracked pot drops sherds, never itself"
+        );
+        assert!(state.outbox[&ConnectionId(1)].iter().any(|change| matches!(
+            change,
+            crate::boundary::PlayerChange::ProjectileLevelEvent { position, event: 2001, data }
+                if *position == pos && *data == cracked as i32
+        )));
+    }
+}
+
+/// TntBlock and CampfireBlock need `Projectile.mayInteract`: a mob's burning
+/// arrow ignites only while `mob_griefing` is on.
+#[test]
+fn burning_mob_arrow_ignites_only_with_mob_griefing() {
+    for griefing in [false, true] {
+        for block in ["minecraft:tnt", "minecraft:campfire"] {
+            let (mut state, player, centre) = setup();
+            state
+                .gamerules
+                .insert("mob_griefing".into(), griefing.to_string());
+            let owner = shooter_uuid(&mut state, player, centre, Shooter::Skeleton);
+            let mut record =
+                ProjectileState::new(ProjectileKind::Arrow, owner, arrow_stack(&state));
+            record.flame = true;
+            let mut target = default_block(&state, block);
+            if block == "minecraft:campfire" {
+                target = with_property(&state, target, "lit", "false");
+            }
+            let pos = shoot_block(&mut state, centre, target, record, 3.0);
+            assert_eq!(
+                state.world.block_at(pos.x, pos.y, pos.z) != Some(target),
+                griefing,
+                "{block} mob_griefing={griefing}"
+            );
+        }
+    }
+}
