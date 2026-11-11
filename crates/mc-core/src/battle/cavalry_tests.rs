@@ -440,3 +440,154 @@ fn riders_swing_round_once_their_foot_closes_and_ride_down_a_rout() {
     plan_sweeps(&battle, &mut plans);
     assert_eq!(plans[2], Some(Sweep::Chase([3.0, 64.0, 40.0])));
 }
+
+/// Eight riders (4 files x 2 ranks) swing round an enemy foot block: their
+/// own foot is 20 blocks from the enemy's front, so it is closing, and the
+/// flank point (-1, 28) lies past a U of stone walls open toward the riders
+/// (back wall z = 8, x -15..1), so relief deflection holds every rider in
+/// that pocket. Riders start in their slots, or all on one point inside the
+/// pocket (`piled`). Returns the horse positions after `ticks` real ticks.
+fn sweep_into_pocket(piled: bool, ticks: usize) -> Vec<[f64; 3]> {
+    use super::super::formation::{Order, RegimentSpec, slot_position};
+    let (mut state, _, pos) = fixture();
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    let (px, py, pz) = (pos[0] as i32, pos[1] as i32, pos[2] as i32);
+    for x in px - 20..=px + 12 {
+        for z in pz - 14..=pz + 32 {
+            state.world.set_block(x, py - 1, z, stone);
+            for dy in 0..6 {
+                state.world.set_block(x, py + dy, z, air);
+            }
+        }
+    }
+    for dy in 0..4 {
+        for x in px - 15..=px + 1 {
+            state.world.set_block(x, py + dy, pz + 8, stone);
+        }
+        for z in pz + 2..=pz + 8 {
+            state.world.set_block(px - 15, py + dy, z, stone);
+            state.world.set_block(px + 1, py + dy, z, stone);
+        }
+    }
+    state.world.fold_overlay();
+    let at = |dx: f64, dz: f64| [pos[0] + dx, pos[1], pos[2] + dz];
+    let foot = |id, faction, origin, facing| RegimentSpec {
+        id,
+        faction,
+        origin,
+        facing,
+        files: 1,
+        frontage: 1.0,
+        order: Order::Hold,
+    };
+    for (id, faction, origin, facing) in [
+        (1, 1, at(6.0, 0.0), [0.0, 1.0]),
+        (2, 2, at(6.0, 20.0), [0.0, -1.0]),
+    ] {
+        let soldier = spawn(&mut state, "husk", origin);
+        state.entities.set_faction(slot(&state, soldier), faction);
+        state
+            .hostile
+            .battle
+            .formation
+            .add_regiment(foot(id, faction, origin, facing), &[soldier])
+            .unwrap();
+    }
+    let cavalry = RegimentSpec {
+        id: 3,
+        faction: 1,
+        origin: at(-7.0, -6.0),
+        facing: [0.0, 1.0],
+        files: 4,
+        frontage: 2.0,
+        order: Order::Hold,
+    };
+    let mut riders = Vec::new();
+    for i in 0..8 {
+        let p = if piled {
+            at(-7.0, 5.0)
+        } else {
+            slot_position(&cavalry, i)
+        };
+        let horse = spawn(&mut state, "horse", p);
+        let rider = spawn(&mut state, "husk", p);
+        state.entities.set_faction(slot(&state, rider), 1);
+        mount(&mut state, rider, horse).unwrap();
+        riders.push((rider, horse));
+    }
+    let ids: Vec<_> = riders.iter().map(|&(rider, _)| rider).collect();
+    state
+        .hostile
+        .battle
+        .formation
+        .add_regiment(cavalry, &ids)
+        .unwrap();
+    state.hostile.battle.running = true;
+    for _ in 0..ticks {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    let plan = state.hostile.battle.combat.sweeps.get(2).copied().flatten();
+    assert!(
+        matches!(plan, Some(Sweep::Flank(_))),
+        "riders must be swinging round the enemy's end: {plan:?}"
+    );
+    let horses: Vec<[f64; 3]> = riders
+        .iter()
+        .map(|&(rider, horse)| {
+            assert_pair(&state, rider, horse);
+            state.entities.pos(slot(&state, horse))
+        })
+        .collect();
+    // The terrain held them: all inside the pocket, short of the point.
+    assert!(
+        horses.iter().all(|p| p[2] < pos[2] + 8.0),
+        "riders left the pocket: {horses:?}"
+    );
+    horses
+}
+
+/// (x span, closest pair) of horse positions.
+fn spread(horses: &[[f64; 3]]) -> (f64, f64) {
+    let span = horses
+        .iter()
+        .map(|p| p[0])
+        .fold(f64::NEG_INFINITY, f64::max)
+        - horses.iter().map(|p| p[0]).fold(f64::INFINITY, f64::min);
+    let closest = horses
+        .iter()
+        .enumerate()
+        .flat_map(|(i, a)| {
+            horses[i + 1..]
+                .iter()
+                .map(move |b| mth::length2(a[0] - b[0], a[2] - b[2]))
+        })
+        .fold(f64::INFINITY, f64::min);
+    (span, closest)
+}
+
+/// Riders that share one flank point converge on it while the pocket holds
+/// them (the G1 rehearsal's 457-rider stack); riders that ride the plan from
+/// their own slots keep the block's frontage. Pressed against the back wall
+/// the two ranks close up, but no two riders share a spot.
+#[test]
+fn sweeping_riders_keep_their_spacing_in_a_concave_pocket() {
+    let horses = sweep_into_pocket(false, 600);
+    let (span, closest) = spread(&horses);
+    assert!(
+        span >= 5.0 && closest >= 0.3,
+        "riders piled up: x span {span:.2}, closest pair {closest:.2}: {horses:?}"
+    );
+}
+
+/// A pile (riders on one point, as the rehearsal stack after t 80) spreads
+/// to the block's frontage again; with one shared point every rider of the
+/// pile got the same drive and the pile rode on as one body.
+#[test]
+fn riders_piled_in_a_pocket_spread_again() {
+    let horses = sweep_into_pocket(true, 300);
+    let (span, closest) = spread(&horses);
+    assert!(
+        span >= 4.0 && closest >= 0.3,
+        "the pile stayed together: x span {span:.2}, closest pair {closest:.2}: {horses:?}"
+    );
+}

@@ -91,7 +91,10 @@ battle uses sustained cadence; there is no unused opening-burst control.
 Horses refuse steady frontal foot ranks and run out to a flank; accepted charge
 bonus decays over 260 ticks. Once their own foot closes, unengaged riders swing
 round the nearest enemy foot regiment into its rear, and ride down the
-fugitives of the nearest broken foot regiment. The work counters bound visits,
+fugitives of the nearest broken foot regiment. A regiment rides these sweeps as
+a block: each rider follows the plan from its own file/rank slot, never toward
+one shared point, so terrain that holds riders short (a pocket, a trough) cannot
+pile them onto one block. The work counters bound visits,
 target checks, reaction checks, strikes, arc iterations and charge decisions;
 they are not a 20-TPS performance measurement.
 

@@ -137,7 +137,11 @@ fn plan_sweeps(battle: &BattleState, plans: &mut Vec<Option<Sweep>>) {
 }
 
 /// Unengaged steady riders of a regiment with a plan take its heading as their
-/// drive; the mounted pass below scales it to horse speed.
+/// drive; the mounted pass below scales it to horse speed. The regiment rides
+/// the plan as a block: each rider follows the plan from its own slot, i.e. as
+/// if it were the leader shifted by its file/rank offset. One shared point for
+/// every rider piled a whole regiment onto one block wherever terrain held them
+/// short of that point (a pocket, a trough), and the pile then rode as one body.
 fn sweep_drives(battle: &mut BattleState, combat: &mut CombatRuntime) {
     let mut plans = std::mem::take(&mut combat.sweeps);
     plan_sweeps(battle, &mut plans);
@@ -154,7 +158,17 @@ fn sweep_drives(battle: &mut BattleState, combat: &mut CombatRuntime) {
             {
                 continue;
             }
-            let heading = plan.heading(battle.columns.positions[bi]);
+            let slot = super::formation::slot_position(
+                &r.spec,
+                usize::from(m.rank) * usize::from(r.spec.files) + m.file,
+            );
+            let pos = battle.columns.positions[bi];
+            let leader = [
+                pos[0] - (slot[0] - r.spec.origin[0]),
+                pos[1],
+                pos[2] - (slot[2] - r.spec.origin[2]),
+            ];
+            let heading = plan.heading(leader);
             battle.columns.drive[bi] = [heading[0], 0.0, heading[1]];
         }
     }
