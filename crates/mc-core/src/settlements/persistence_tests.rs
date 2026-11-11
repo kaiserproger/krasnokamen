@@ -970,6 +970,7 @@ fn sigkill_child_reopen_keeps_identical_records_and_high_water() {
             ([7, 80, 8], foot),
             ([8, 80, 8], head),
             ([4, 80, 4], composter),
+            ([8, 84, 8], live.registry.states.stone),
         ] {
             entries.push(JournalEntry::Block { pos, state });
         }
