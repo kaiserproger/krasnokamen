@@ -820,7 +820,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SERVER-FABRIC-SCREEN-ADMISSION"
-regression = ["harness:loader-live:loader-fabric-screen-admission"]
+regression = []
 
 [[bug]]
 id = "NATIVE-SCREEN-AUDIO-CONSENT"
