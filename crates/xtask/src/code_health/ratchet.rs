@@ -31,10 +31,14 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // blocks leave the cycle without moving runtime state.
     // Settled-block orchestration is a tick child: 185 modules, 2026-11-09.
     // Books is a pure encoding leaf: 184 modules, 2026-11-09.
-    cycle_modules: 184,
+    // Merge ec3a463a (LedgerMobsB01) adds the sniffer, parrot and strider tick
+    // modules, all of which drive TickState: 187 modules, 2026-11-12.
+    cycle_modules: 187,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
-    vanilla_id_literals: 2_617,
+    // Merge ec3a463a (LedgerMobsB01) adds 29 mob-behaviour ids (armadillo,
+    // blueprint, loot, frog, mounts, parrot, sleep, sniffer, strider): 2646, 2026-11-12.
+    vanilla_id_literals: 2_646,
     path_equality: 114,
     panics: 5,
     merge_block_write_pushes: 17,
