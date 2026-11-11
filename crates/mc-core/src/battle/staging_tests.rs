@@ -373,9 +373,10 @@ fn fighters(seed: u64, side: u16) -> Vec<Loadout> {
 
 #[test]
 fn same_seed_repeats_every_loadout_and_staged_appearance() {
+    // 42 and 44 share the regiment plan (even seeds), so only the dress differs.
     for side in [1, 2] {
         assert_eq!(fighters(42, side), fighters(42, side));
-        assert_ne!(fighters(42, side), fighters(43, side));
+        assert_ne!(fighters(42, side), fighters(44, side));
     }
     let appearance = |seed| {
         let mut state = fixture();
@@ -401,7 +402,7 @@ fn same_seed_repeats_every_loadout_and_staged_appearance() {
     };
     let first = appearance(42);
     assert_eq!(first, appearance(42));
-    assert_ne!(first, appearance(43));
+    assert_ne!(first, appearance(44));
 }
 
 #[test]
