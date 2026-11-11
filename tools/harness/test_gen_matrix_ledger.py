@@ -1,7 +1,4 @@
-"""Ledger lines that ran on an older plugin build stop counting as matrix coverage.
-
-Needs the owner-host live plugin set (gen_matrix reads it); skipped elsewhere.
-"""
+"""Ledger lines that ran on an older plugin build stop counting as matrix coverage."""
 import json
 import os
 import subprocess
@@ -14,8 +11,8 @@ from tools.harness.matrix_execution import plugin_set_fingerprint
 
 REPO = Path(__file__).resolve().parents[2]
 GEN = REPO / "tools" / "harness" / "matrix_specs" / "gen_matrix.py"
-WORK = Path(os.environ.get("SOLARIS_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
-LIVE = Path(os.environ.get("SOLARIS_MATRIX_DATA", WORK / "scenarios")) / "live-plugins"
+# gen_matrix requires every plugin a plugin-sensitive subject depends on.
+PLUGINS = ("graves", "solaris-essentials", "solaris-auth")
 # Frozen wave-1 ids (MATRIX_FREEZE.json); both use the full live set.
 OUTDATED_ID = "bl:commands.msg/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0@live"
 CURRENT_ID = "bl:death_respawn.keep_inventory_false/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0@live"
@@ -26,18 +23,22 @@ def line(sid, plugin_set):
             "ts": "2026-11-11T00:00:00Z", "note": "fixture", "plugin_set": plugin_set}
 
 
-@unittest.skipUnless(LIVE.is_dir(), f"needs the live plugin set at {LIVE}")
 class OutdatedPluginSetTests(unittest.TestCase):
     def setUp(self):
-        current = plugin_set_fingerprint(LIVE)
-        older = "f" * 64 if current != "f" * 64 else "e" * 64
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.ledger = Path(tmp.name) / "ledger.jsonl"
-        self.ledger.write_text(json.dumps(line(OUTDATED_ID, older)) + "\n" + json.dumps(line(CURRENT_ID, current)) + "\n")
+        self.data = Path(tmp.name)
+        live = self.data / "live-plugins"
+        for plugin in PLUGINS:
+            (live / plugin).mkdir(parents=True)
+            (live / plugin / "plugin.toml").write_text(f'id = "{plugin}"\nentry = "plugin.wasm"\n')
+            (live / plugin / "plugin.wasm").write_bytes(plugin.encode())
+        current = plugin_set_fingerprint(live)
+        self.ledger = self.data / "ledger.jsonl"
+        self.ledger.write_text(json.dumps(line(OUTDATED_ID, "f" * 64)) + "\n" + json.dumps(line(CURRENT_ID, current)) + "\n")
 
     def gen(self, *args):
-        env = dict(os.environ, SCENARIO_LEDGER=str(self.ledger))
+        env = dict(os.environ, SCENARIO_LEDGER=str(self.ledger), SOLARIS_MATRIX_DATA=str(self.data))
         return subprocess.run([sys.executable, str(GEN), *args], cwd=REPO, env=env,
                               capture_output=True, text=True, timeout=300, check=True).stdout
 
