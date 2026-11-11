@@ -843,6 +843,19 @@ impl FormationRuntime {
         }
         (target, if context.pulsing { 0.10 } else { 0.079 })
     }
+
+    /// Where terrain detours aim: the formation slot without lanes, pulses or
+    /// wavering, so a body dressing sideways is still steered past a wall;
+    /// routing, wounded and pursuing members aim at their destination.
+    pub fn heading_target(&self, index: usize) -> [f64; 3] {
+        let m = &self.members[index];
+        let r = &self.regiments[m.regiment];
+        if m.routing || m.wounded || (r.spec.order == Order::Pursue && r.enemy_routing) {
+            return self.destination(index).0;
+        }
+        let interval = if r.gap <= 6.0 { r.interval } else { r.spec.frontage };
+        position(&r.spec, m.file, m.rank, interval)
+    }
 }
 
 fn passing_lane(m: &Member, spec: &RegimentSpec, mut target: [f64; 3], offset: f64) -> [f64; 3] {

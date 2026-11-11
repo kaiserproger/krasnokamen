@@ -16,6 +16,11 @@ pub(crate) const MOUNTED_CLEARANCE: f64 = 3.0;
 pub(crate) const SEARCH_RADIUS: i32 = 8;
 /// Probe distance past the body edge for obstacle steering, in blocks.
 const LOOKAHEAD: f64 = 0.45;
+/// Lateral reach, in blocks, of the search for an obstacle's nearer end.
+const AROUND: i32 = 8;
+/// Deepest drop a body walks into, in blocks; deeper holes are steered around
+/// and never staged in (vanilla mobs avoid falls over about three blocks).
+const MAX_DROP: f64 = 2.0;
 /// Contact tolerance for the staging census: physics rests bodies exactly on
 /// collision tops, so anything beyond this is a real gap or overlap.
 const CONTACT: f64 = 1e-3;
@@ -58,8 +63,9 @@ fn tree(registry: &CoreRegistry, state: u32) -> bool {
         })
 }
 
-/// Top of the highest non-tree collision block of a column, or `Err` when
-/// fluid lies on it. `None`: the column's chunk is not resident.
+/// Top of the highest non-tree collision block of a column, `-inf` when the
+/// column has no ground (a bottomless opening), or `Err` when fluid lies on
+/// it. `None`: the column's chunk is not resident.
 fn surface(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32) -> Option<Result<f64, ()>> {
     let chunk = world.chunk(mc_world::ChunkPos {
         x: x.div_euclid(16),
@@ -90,7 +96,7 @@ fn surface(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32) -> Optio
             return Some(Ok(f64::from(y) + top));
         }
     }
-    Some(Err(()))
+    Some(Ok(f64::NEG_INFINITY))
 }
 
 fn footprint(pos: [f64; 3], half_width: f64) -> (std::ops::RangeInclusive<i32>, std::ops::RangeInclusive<i32>) {
@@ -151,9 +157,39 @@ fn support(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3], half_widt
     Some(Ok(top))
 }
 
+/// A drop edge or the floor of a hole (cave opening, sinkhole): a column
+/// beside the footprint lies more than [`MAX_DROP`] blocks above or below the
+/// support, or the support lies more than that below the median ground eight
+/// blocks out (wide holes). Unknown and wet columns do not count.
+fn pit(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3], half_width: f64) -> bool {
+    let (xs, zs) = footprint(pos, half_width);
+    for x in xs.start() - 1..=xs.end() + 1 {
+        for z in zs.start() - 1..=zs.end() + 1 {
+            if let Some(Ok(top)) = surface(world, registry, x, z)
+                && (top - pos[1]).abs() > MAX_DROP
+            {
+                return true;
+            }
+        }
+    }
+    let (x, z) = (pos[0].floor() as i32, pos[2].floor() as i32);
+    let mut ring = [0.0; 8];
+    let mut known = 0;
+    for (dx, dz) in [(-8, -8), (0, -8), (8, -8), (-8, 0), (8, 0), (-8, 8), (0, 8), (8, 8)] {
+        if let Some(Ok(top)) = surface(world, registry, x + dx, z + dz) {
+            ring[known] = top;
+            known += 1;
+        }
+    }
+    let ring = &mut ring[..known];
+    ring.sort_by(f64::total_cmp);
+    known >= 5 && pos[1] + MAX_DROP < ring[known / 2]
+}
+
 /// Ground placement for one staged body: its own footprint first, then the
-/// nearest dry, clear footprint by whole-block offsets in deterministic ring
-/// order. Columns of chunks that are not resident are skipped.
+/// nearest dry, clear footprint that is not a pit, by whole-block offsets in
+/// deterministic ring order. Columns of chunks that are not resident are
+/// skipped.
 pub(crate) fn place(
     world: &ChunkWorld,
     registry: &CoreRegistry,
@@ -178,7 +214,13 @@ pub(crate) fn place(
                 let Some(Ok(y)) = support(world, registry, [x, 0.0, z], half_width) else {
                     continue;
                 };
+                if !y.is_finite() {
+                    continue;
+                }
                 let pos = [x, y, z];
+                if pit(world, registry, pos, half_width) {
+                    continue;
+                }
                 if clear(world, registry, pos, half_width, height) == Some(true) {
                     return Placement::At(pos);
                 }
@@ -232,9 +274,13 @@ pub(crate) fn audit(
     census.floating += usize::from(!inside && !rest);
 }
 
-/// A step ahead is crossable when the cell at head height above the feet is
-/// free and, if the feet cell holds a step, the cell above the step too
-/// (vanilla jump headroom). Unknown blocks are obstacles.
+/// A step ahead is crossable when, across the body's whole width just past
+/// its leading edge, the cell at head height above the feet is free, if the
+/// feet cell holds a step the cell above the step too (vanilla jump
+/// headroom), and ground lies within [`MAX_DROP`] blocks below the feet (a
+/// cave opening or sinkhole is an obstacle; water is no ground). Slots sit on
+/// block boundaries, so one body often straddles two columns. Unknown blocks
+/// are obstacles.
 fn crossable(
     world: &ChunkWorld,
     registry: &CoreRegistry,
@@ -242,36 +288,82 @@ fn crossable(
     half_width: f64,
     dir: [f64; 2],
 ) -> bool {
-    let x = (pos[0] + dir[0] * (half_width + LOOKAHEAD)).floor() as i32;
-    let z = (pos[2] + dir[1] * (half_width + LOOKAHEAD)).floor() as i32;
+    let reach = half_width + LOOKAHEAD;
+    let ahead = [pos[0] + dir[0] * reach, pos[2] + dir[1] * reach];
+    let right = [dir[1], -dir[0]];
+    let edge = half_width - CONTACT;
     let feet = (pos[1] + CONTACT).floor() as i32;
-    let solid = |y| {
-        world
-            .physics_block_at(x, y, z)
-            .is_none_or(|state| registry.materials.classify(state) == BlockMaterial::Solid)
-    };
-    !solid(feet + 1) && !(solid(feet) && solid(feet + 2))
+    let mut probed = [(i32::MIN, i32::MIN); 3];
+    for (i, lateral) in [0.0, edge, -edge].into_iter().enumerate() {
+        let x = (ahead[0] + right[0] * lateral).floor() as i32;
+        let z = (ahead[1] + right[1] * lateral).floor() as i32;
+        if probed[..i].contains(&(x, z)) {
+            continue;
+        }
+        probed[i] = (x, z);
+        let solid = |y| {
+            world
+                .physics_block_at(x, y, z)
+                .is_none_or(|state| registry.materials.classify(state) == BlockMaterial::Solid)
+        };
+        if solid(feet + 1) || (solid(feet) && solid(feet + 2)) {
+            return false;
+        }
+        // On level ground the cell under the feet is solid: one read.
+        if !solid(feet - 1) && (2..=MAX_DROP as i32 + 1).all(|depth| !solid(feet - depth)) {
+            return false;
+        }
+    }
+    true
 }
 
-/// Turn a horizontal drive aside from a trunk or a wall of two or more
-/// blocks: 45 then 90 degrees, `side` first. A crossable way keeps the
-/// drive exactly, so flat ground and one-block steps are unchanged.
+/// Steer a horizontal drive around a trunk or a wall of two or more blocks.
+/// `heading` is where the body is going without crowd pushes or lateral
+/// dressing (its formation slot). When the heading or the drive is blocked,
+/// the heading turns 45 then 90 degrees toward the obstacle's nearer end
+/// (the first lateral offset up to [`AROUND`] blocks whose way ahead is
+/// crossable), `side` on a tie or when neither end is near. A stable heading
+/// picks the side, so bodies at one wall split at its middle and file
+/// outward, and lateral dressing cannot pull a detouring body back behind
+/// the wall. When both ways are crossable the drive is returned exactly, so
+/// flat ground and one-block steps are unchanged.
 pub(crate) fn deflect(
     world: &ChunkWorld,
     registry: &CoreRegistry,
     pos: [f64; 3],
     half_width: f64,
     drive: [f64; 2],
+    heading: [f64; 2],
     side: f64,
 ) -> [f64; 2] {
     let speed = mc_physics::mth::length2(drive[0], drive[1]);
     if speed < 1e-9 {
         return drive;
     }
-    let dir = drive.map(|v| v / speed);
+    let length = mc_physics::mth::length2(heading[0], heading[1]);
+    let dir = if length < 1e-9 {
+        drive.map(|v| v / speed)
+    } else {
+        heading.map(|v| v / length)
+    };
     if crossable(world, registry, pos, half_width, dir) {
-        return drive;
+        if crossable(world, registry, pos, half_width, drive.map(|v| v / speed)) {
+            return drive;
+        }
+        // Crowd pushes into an obstacle: go the clear way instead.
+        return dir.map(|v| v * speed);
     }
+    // A positive turn rotates `dir` toward `left`.
+    let left = [-dir[1], dir[0]];
+    let side = (1..=AROUND)
+        .find_map(|offset| {
+            [side, -side].into_iter().find(|turn| {
+                let shift = f64::from(offset) * turn;
+                let probe = [pos[0] + left[0] * shift, pos[1], pos[2] + left[1] * shift];
+                crossable(world, registry, probe, half_width, dir)
+            })
+        })
+        .unwrap_or(side);
     for (cos, sin) in [
         (std::f64::consts::FRAC_1_SQRT_2, std::f64::consts::FRAC_1_SQRT_2),
         (0.0, 1.0),

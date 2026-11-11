@@ -9,7 +9,6 @@
 
 use super::formation::{FormationRuntime, Member, Regiment};
 use super::{BattleState, Frame, Output};
-use crate::boundary::EntityId;
 use crate::entities::EntitySlot;
 use mc_physics::entity_collision_26_1_2::{EntityPushInput, PushRecipient, vanilla_push_impulse};
 use mc_physics::mth;
@@ -236,11 +235,11 @@ fn movement_with_neighbours(
     drive
 }
 
-/// Riders (`carried`) are turned through their horse in cavalry.
+/// Mounted files (two-block frontage) are turned through their horse in
+/// cavalry: a rider's own feet are a seat, not the ground.
 fn sample_movement(
     frame: &Frame<'_>,
     runtime: &FormationRuntime,
-    carried: &[bool],
     index: usize,
 ) -> ([f64; 3], u64, u64) {
     let m = &runtime.members[index];
@@ -250,32 +249,35 @@ fn sample_movement(
     let (near, examined) = runtime.neighbours.nearest(index, &runtime.members);
     let (mut drive, pushes) = drive_with_neighbours(runtime, index, near);
     if let Some(slot) = m.slot
-        && !carried.get(index).copied().unwrap_or(false)
+        && runtime.regiments[m.regiment].spec.frontage <= 1.0
     {
-        drive = around_obstacles(frame, runtime, slot, m.id, drive);
+        let target = runtime.heading_target(index);
+        let heading = [target[0] - m.pos[0], target[2] - m.pos[2]];
+        drive = around_obstacles(frame, runtime, slot, drive, heading);
     }
     (drive, examined, pushes)
 }
 
-/// Terrain turn for a final physics velocity. Bounds are re-applied only when
-/// the drive turned, so an unobstructed drive stays bit-identical.
+/// Terrain turn for a final physics velocity; `heading` is where the body is
+/// going without crowd pushes or lateral dressing. Bounds are re-applied only
+/// when the drive turned, so an unobstructed drive stays bit-identical.
 pub(crate) fn around_obstacles(
     frame: &Frame<'_>,
     runtime: &FormationRuntime,
     slot: EntitySlot,
-    id: EntityId,
     velocity: [f64; 3],
+    heading: [f64; 2],
 ) -> [f64; 3] {
     let pos = frame.entities.pos(slot);
     let drive = [velocity[0], velocity[2]];
-    let side = if id.0 & 1 == 0 { 1.0 } else { -1.0 };
     let turned = super::ground::deflect(
         frame.world,
         frame.registry,
         pos,
         frame.entities.body(slot).half_width,
         drive,
-        side,
+        heading,
+        1.0,
     );
     if turned == drive {
         return velocity;
@@ -372,17 +374,12 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Outpu
         .neighbours
         .rebuild(&battle.formation.members);
     let formation = &battle.formation;
-    let carried = &battle.columns.carried[..];
     let drives = &mut battle.columns.drive[..formation.members.len()];
     let sample = |(chunk_index, chunk): (usize, &mut [[f64; 3]])| {
         let mut work = (0_u64, 0_u64);
         for (offset, drive) in chunk.iter_mut().enumerate() {
-            let (value, examined, pushes) = sample_movement(
-                frame,
-                formation,
-                carried,
-                chunk_index * DRIVE_CHUNK + offset,
-            );
+            let (value, examined, pushes) =
+                sample_movement(frame, formation, chunk_index * DRIVE_CHUNK + offset);
             *drive = value;
             work.0 += examined;
             work.1 += pushes;

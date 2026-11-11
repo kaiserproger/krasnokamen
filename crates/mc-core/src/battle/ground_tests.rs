@@ -13,10 +13,12 @@ fn state_id(state: &TickState, name: &str) -> u32 {
 }
 
 /// Rolling terraces: a 0..3 triangle wave of one-block steps every six
-/// blocks, plus a four-block hill. Neighbouring columns differ by one block.
+/// blocks, plus a four-block hill of three-block rings. The hill centre
+/// (1 mod 6 on both axes) keeps ring edges off terrace edges, so neighbouring
+/// columns differ by one block; two-block walls come only from `wall`.
 fn height(x: i32, z: i32) -> i32 {
     let t = (x.div_euclid(6) + z.div_euclid(6)).rem_euclid(6);
-    let hill = 4 - ((x - 30).abs().max((z + 60).abs()) / 3).min(4);
+    let hill = 4 - ((x - 31).abs().max((z + 59).abs()) / 3).min(4);
     64 + t.min(6 - t) + hill.max(0)
 }
 
@@ -29,9 +31,22 @@ fn pond(x: i32, z: i32) -> bool {
     (0..=2).contains(&x) && (-31..=-29).contains(&z)
 }
 
-/// Wall of three blocks across the first side's path (it faces +z).
+/// Wall of three blocks across the first side's path (it faces +z). Its row
+/// and the rows beside it hold no trunk: no wall-and-tree dead-end pocket.
 fn wall(x: i32, z: i32) -> bool {
-    (-6..=2).contains(&x) && z == -16
+    (-6..=2).contains(&x) && z == -20
+}
+
+/// Cave openings: a 3x3 one six deep in the second side's infantry path and a
+/// 2x2 one eight deep under its front rank (z 44.5, files at x -31 and -30).
+fn hole(x: i32, z: i32) -> Option<i32> {
+    if (-20..=-18).contains(&x) && (20..=22).contains(&z) {
+        Some(6)
+    } else if (-31..=-30).contains(&x) && (44..=45).contains(&z) {
+        Some(8)
+    } else {
+        None
+    }
 }
 
 fn relief_world(state: &mut TickState, area: std::ops::RangeInclusive<i32>) {
@@ -54,6 +69,11 @@ fn relief_world(state: &mut TickState, area: std::ops::RangeInclusive<i32>) {
             state.world.set_block(x, top - 1, z, grass);
             if pond(x, z) {
                 state.world.set_block(x, top - 1, z, water);
+            }
+            if let Some(depth) = hole(x, z) {
+                for y in top - depth..top {
+                    state.world.set_block(x, y, z, state.registry.states.air);
+                }
             }
             if wall(x, z) {
                 for y in top..top + 3 {
@@ -158,6 +178,18 @@ fn placement_stands_on_steps_and_moves_off_trunks_and_water() {
         place(world, registry, [5000.5, 64.0, 0.5], 0.3, 1.95),
         Placement::Wait
     );
+    // Cave openings are never ground: a slot over one stands beside it, off
+    // its rim, and no column beside the footprint drops more than two blocks.
+    for slot in [[-30.0, 64.0, 44.5], [-19.5, 64.0, 21.5]] {
+        let Placement::At(beside) = place(world, registry, slot, 0.3, 1.95) else {
+            panic!("no ground beside the hole at {slot:?}");
+        };
+        for x in [beside[0] - 1.3, beside[0], beside[0] + 1.3] {
+            for z in [beside[2] - 1.3, beside[2], beside[2] + 1.3] {
+                assert!(hole(x.floor() as i32, z.floor() as i32).is_none(), "{beside:?}");
+            }
+        }
+    }
 }
 
 fn mth_dist(a: [f64; 3], b: [f64; 3]) -> f64 {
@@ -169,22 +201,31 @@ fn deflection_keeps_open_ground_and_steps_but_turns_at_trunks_and_walls() {
     let state = relief_fixture();
     let (world, registry) = (&state.world, &state.registry);
     let ground = |x: i32, z: i32| [f64::from(x) + 0.5, f64::from(height(x, z)), f64::from(z) + 0.5];
+    let east = [0.08, 0.0];
+    let south = [0.0, 0.08];
     // Open ground and a one-block step ahead keep the exact drive (physics jumps it).
     let step = ground(5, 3);
-    assert_eq!(deflect(world, registry, step, 0.3, [0.08, 0.0], 1.0), [0.08, 0.0]);
-    // A trunk ahead turns the drive, toward `side` first.
+    assert_eq!(deflect(world, registry, step, 0.3, east, east, 1.0), east);
+    // A trunk ahead turns the drive; both ends are one block away, so `side` decides.
     let before_trunk = ground(3, 5);
-    let turned = deflect(world, registry, before_trunk, 0.3, [0.08, 0.0], 1.0);
-    assert_ne!(turned, [0.08, 0.0]);
+    let turned = deflect(world, registry, before_trunk, 0.3, east, east, 1.0);
+    assert_ne!(turned, east);
     assert!(turned[1] > 0.0 && (mc_physics::mth::length2(turned[0], turned[1]) - 0.08).abs() < 1e-12);
-    let other = deflect(world, registry, before_trunk, 0.3, [0.08, 0.0], -1.0);
+    let other = deflect(world, registry, before_trunk, 0.3, east, east, -1.0);
     assert!(other[1] < 0.0);
-    // A three-block wall ahead turns the drive too.
-    let before_wall = ground(-2, -17);
-    assert_ne!(
-        deflect(world, registry, before_wall, 0.3, [0.0, 0.08], 1.0),
-        [0.0, 0.08]
-    );
+    // A three-block wall (x -6..=2) turns bodies toward its nearer end, whatever
+    // `side` says and however the crowd pushes the drive: the line splits.
+    let west_half = deflect(world, registry, ground(-5, -21), 0.3, south, south, -1.0);
+    assert!(west_half[0] < 0.0, "{west_half:?}");
+    let pushed = [0.03, 0.074];
+    let east_half = deflect(world, registry, ground(1, -21), 0.3, pushed, south, 1.0);
+    // Lateral dressing toward a slot behind the wall does not pull a body back.
+    let dressing = [0.08, 0.0];
+    let held = deflect(world, registry, ground(-5, -21), 0.3, dressing, south, 1.0);
+    assert!(held[0] < 0.0, "{held:?}");
+    assert!(east_half[0] > 0.0, "{east_half:?}");
+    // A six-deep cave opening ahead is steered around, not walked into.
+    assert_ne!(deflect(world, registry, ground(-20, 19), 0.3, south, south, 1.0), south);
 }
 
 #[test]
@@ -233,12 +274,34 @@ fn armies_advance_over_relief_to_contact_without_stalls_or_teleports() {
                     horizontal <= 1.0 && (now[1] - before[1]).abs() <= 1.5,
                     "member {bi} jumped {before:?} -> {now:?} at tick {tick}"
                 );
+                let (x, z) = (now[0].floor() as i32, now[2].floor() as i32);
+                assert!(
+                    hole(x, z).is_none_or(|_| now[1] > f64::from(height(x, z)) - 2.0),
+                    "member {bi} fell into a cave opening at {now:?}, tick {tick}"
+                );
             }
         }
         previous = positions;
         if battle.elapsed_ticks % crate::battle::formation::STALL_TICKS == 1 {
             let (stalled, advancing) = (battle.formation.stalled, battle.formation.advancing);
             censused = censused.max(advancing);
+            if stalled * 50 >= advancing.max(1) {
+                for (bi, m) in battle.formation.members.iter().enumerate() {
+                    let r = &battle.formation.regiments[m.regiment];
+                    let Some(slot) = state.entities.slot_of(m.id) else { continue };
+                    let p = state.entities.pos(slot);
+                    let (target, _) = battle.formation.destination(bi);
+                    let cols: Vec<_> = (-1..=1).flat_map(|dz| (-1..=1).map(move |dx| (dx, dz))).map(|(dx, dz)| {
+                        let x = p[0].floor() as i32 + dx; let z = p[2].floor() as i32 + dz;
+                        surface(&state.world, &state.registry, x, z).map(|s| s.map(|y| y - p[1].floor()))
+                    }).collect();
+                    let h = battle.formation.heading_target(bi);
+                    let heading = [h[0] - m.pos[0], h[2] - m.pos[2]];
+                    let probe = deflect(&state.world, &state.registry, p, 0.3, [0.0, 1.58], heading, 1.0);
+                    eprintln!("STALL? reg={} order={:?} file={} rank={} pos={:.2?} target={:.2?} drive={:.3?} vel={:.3?} routing={} wounded={} mpos={:.2?} heading={:.2?} probe={:.3?} cols={:?} speed={:.3}",
+                        r.spec.id, r.spec.order, m.file, m.rank, p, target, battle.columns.drive.get(bi), state.entities.vel(slot), m.routing, m.wounded, m.pos, heading, probe, cols, r.speed);
+                }
+            }
             assert!(
                 stalled * 50 < advancing.max(1),
                 "{stalled} of {advancing} advancing soldiers stalled at tick {tick}"

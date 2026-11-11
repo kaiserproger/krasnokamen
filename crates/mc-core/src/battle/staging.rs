@@ -338,6 +338,7 @@ fn setup(
             let horse_loadout = summon_tag(None, side);
             for (spec, kind, size) in plan(seed, count, origin, side) {
                 let loadout = summon_tag(Some(kind), side);
+                let yaw = facing_yaw(spec.facing);
                 let mut members = Vec::with_capacity(size);
                 for index in 0..size {
                     let pos = slot_position(&spec, index);
@@ -352,6 +353,7 @@ fn setup(
                     )?;
                     let slot = state.entities.slot_of(id).expect("battle unit");
                     state.entities.set_faction(slot, side);
+                    state.entities.set_rot(slot, yaw, 0.0);
                     // A horse carries its rider: settle the pair through the horse.
                     let mut grounded = id;
                     if kind == Kind::Cavalry {
@@ -366,6 +368,8 @@ fn setup(
                         )?;
                         crate::battle::cavalry::mount(state, id, horse)
                             .map_err(|e| format!("battle mount: {e}"))?;
+                        let horse_slot = state.entities.slot_of(horse).expect("battle horse");
+                        state.entities.set_rot(horse_slot, yaw, 0.0);
                         grounded = horse;
                     }
                     state.hostile.battle.ground_pending.push(grounded);
@@ -411,6 +415,11 @@ fn setup(
         }
     }
     result
+}
+
+/// Vanilla yaw of a horizontal facing (0 = +z, 90 = -x), as mob look uses.
+fn facing_yaw(facing: [f64; 2]) -> f32 {
+    -(mc_physics::mth::atan2(facing[0], facing[1]) as f32) * mc_physics::mth::RAD_TO_DEG
 }
 
 /// Stand pending staged bodies on the ground of their footprint, normally
