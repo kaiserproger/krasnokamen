@@ -505,6 +505,10 @@ impl EdgeServer {
             self.console_state.feedback(text);
             return Ok(());
         }
+        // Vanilla's ServerPlayer.acceptsSystemMessages: a Hidden client gets no text lines.
+        if self.connections.chat_visibility(id) == mc_core::boundary::ChatVisibility::Hidden {
+            return Ok(());
+        }
         let mut content_nbt = Vec::new();
         mc_nbt::write_network(
             &mut content_nbt,

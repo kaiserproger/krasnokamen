@@ -589,7 +589,14 @@ with a recipe the server cannot encode, is refused whole and the old packs, sele
 and registry are kept. The enabled/disabled selection is saved with the world,
 so a restart loads the same packs, recipes and loot. A pack that appears on disk is
 enabled by `/reload` and at startup but never as a side effect of enabling another
-pack. Schedules and load/tick tags run from the overworld source; functions
+pack. At startup a new pack that cannot load (a bad file, an unsupported resource)
+is skipped with a warning naming the pack and the file, as vanilla skips a bad data
+pack, so a pack that a live `enable` refused cannot stop the next start; a pack the
+saved selection already holds that no longer loads still stops it, with the same
+pack and file in the error. A pack's `pack.mcmeta` `filter` (`block` entries with
+optional `namespace` and `path` patterns) hides the matching functions, tags,
+recipes, block loot and predicates of every pack below it, the builtin recipes and
+block loot included. Schedules and load/tick tags run from the overworld source; functions
 keep the source dimension they were invoked from.
 
 `/debug start|stop|function <id|#tag>` (level 3) follow vanilla: `start` and `stop`
@@ -642,7 +649,9 @@ Map-making command surface (full status in [COMPATIBILITY.md](COMPATIBILITY.md))
   Join and on every change) filters what it is sent, as in vanilla: **Full**
   receives everything; **Commands only** receives system text (command
   feedback, announcements) but no player chat (`/say`, `/me`, `/msg`, team
-  messages, public chat); **Hidden** receives no text lines at all (titles and
+  messages, public chat, and the sender's own `/msg` copy); **Hidden**
+  receives no text lines at all, including the join tip and the `/help` and
+  unknown-command lines the connection layer writes itself (titles and
   the action bar still arrive), and its own chat is refused with the red
   `chat.disabled.options` message.
 

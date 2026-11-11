@@ -1158,3 +1158,239 @@ fn a_corrupt_saved_selection_fails_closed() {
         "a manifest without the field opens with the default selection"
     );
 }
+
+const BAD_RECIPE: &str = r#"{"type": "minecraft:crafting_shapeless", "#;
+
+fn base_registry() -> crate::registry::CoreRegistry {
+    let (state, _, _) = crate::hostile_tests::setup(8.0);
+    (*state.registry).clone()
+}
+
+#[test]
+fn a_new_pack_that_cannot_load_is_skipped_at_start_and_the_error_names_pack_and_file() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    pack(&root, "good", "\"Good\"", &GEM_RECIPES);
+    pack(
+        &root,
+        "truncated",
+        "\"T\"",
+        &[("test/recipe/cut.json", BAD_RECIPE)],
+    );
+    pack(
+        &root,
+        "tagged",
+        "\"T\"",
+        &[("tagged/tags/item/gems.json", r#"{"values":[]}"#)],
+    );
+    let base = base_registry();
+    // The same selection a world that never saw these packs has.
+    let (packs, skipped) = PackSet::open(&root, Selection::default(), &base).unwrap();
+    assert_eq!(packs.selection.enabled, ["vanilla", "file/good"]);
+    assert_eq!(skipped.len(), 2, "{skipped:?}");
+    let named = |pack: &str, file: &str| {
+        skipped
+            .iter()
+            .any(|line| line.contains(pack) && line.contains(file))
+    };
+    assert!(
+        named("file/truncated", "test/recipe/cut.json"),
+        "{skipped:?}"
+    );
+    assert!(
+        named("file/tagged", "tagged/tags/item/gems.json"),
+        "{skipped:?}"
+    );
+
+    // A pack the saved selection already holds that no longer loads is not
+    // skipped: the world was saved with it enabled.
+    let saved = Selection {
+        enabled: vec!["vanilla".into(), "file/truncated".into()],
+        disabled: Vec::new(),
+    };
+    let error = PackSet::open(&root, saved, &base)
+        .err()
+        .expect("fails closed");
+    assert!(
+        error.contains("file/truncated") && error.contains("test/recipe/cut.json"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_pack_the_live_reload_refused_does_not_stop_the_next_start() {
+    let dir =
+        std::env::temp_dir().join(format!("mc-core-datapack-refused-{}", uuid::Uuid::new_v4()));
+    let packs = dir.join("datapacks");
+    pack(&packs, "keep", "\"K\"", &GEM_RECIPES);
+    let config = crate::config::CoreConfig::new(dir.clone(), 42);
+    let core = crate::core::Core::open(config.clone()).unwrap();
+    // The operator drops a broken pack in and enables it: refused, naming it.
+    pack(
+        &packs,
+        "broken",
+        "\"B\"",
+        &[("test/recipe/cut.json", BAD_RECIPE)],
+    );
+    console(&core, "datapack enable file/broken", "file/broken");
+    core.shutdown();
+
+    let core = crate::core::Core::open(config).unwrap();
+    assert!(
+        recipe_result(core.registry(), "test:new_gem").is_some(),
+        "the same selection as before the refusal"
+    );
+    core.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn the_live_refusal_of_a_pack_names_the_pack_and_the_file() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    pack(
+        &root,
+        "broken",
+        "\"B\"",
+        &[("test/recipe/cut.json", BAD_RECIPE)],
+    );
+    let mut state = fixture(&root);
+    state.datapacks = Runtime::new(
+        PackSet::load(
+            &root,
+            Selection {
+                enabled: vec!["vanilla".into()],
+                disabled: vec!["file/broken".into()],
+            },
+        )
+        .unwrap(),
+        root.clone(),
+    );
+    run(&mut state, "datapack enable file/broken");
+    settle(&mut state);
+    let shown = messages(&mut state);
+    let text = crate::command_debug::plain(&shown[0]);
+    assert!(
+        text.contains("file/broken")
+            && text.contains("test/recipe/cut.json")
+            && text.contains("old packs and selection retained"),
+        "{text}"
+    );
+}
+
+fn filter_pack(root: &Path, name: &str, filter: &str, resources: &[(&str, &str)]) {
+    pack(root, name, "\"F\"", resources);
+    std::fs::write(
+        root.join(name).join("pack.mcmeta"),
+        format!(r#"{{"pack":{{"pack_format":101,"description":"F"}},"filter":{filter}}}"#),
+    )
+    .unwrap();
+}
+
+#[test]
+fn a_pack_filter_hides_the_files_of_the_packs_below_it() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    pack(&root, "gems", "\"Gems\"", &GEM_RECIPES);
+    filter_pack(
+        &root,
+        "nobone",
+        r#"{"block":[{"namespace":"minecraft","path":"recipe/bone_meal\\..*"},{"path":"loot_table/blocks/stone.json"}]}"#,
+        &[("test/recipe/own.json", GEM_RECIPES[1].1)],
+    );
+    let base = base_registry();
+    assert!(recipe_result(&base, "minecraft:bone_meal").is_some());
+    let installed = |enabled: &[&str]| {
+        let selection = Selection {
+            enabled: enabled.iter().map(|id| (*id).to_owned()).collect(),
+            disabled: Vec::new(),
+        };
+        let packs = PackSet::load_known(&root, selection).unwrap();
+        let mut registry = base.clone();
+        packs.install_content(&mut registry).unwrap();
+        registry
+    };
+
+    // On top of the pack that replaces bone meal: both the pack's and the
+    // builtin recipe are hidden; the filtering pack's own files stay.
+    let registry = installed(&["vanilla", "file/gems", "file/nobone"]);
+    assert_eq!(recipe_result(&registry, "minecraft:bone_meal"), None);
+    assert_eq!(
+        recipe_result(&registry, "test:new_gem").as_deref(),
+        Some("minecraft:emerald"),
+        "another namespace is not matched"
+    );
+    assert_eq!(
+        recipe_result(&registry, "test:own").as_deref(),
+        Some("minecraft:emerald")
+    );
+    let stone = mc_data::Identifier::parse("minecraft:stone").unwrap();
+    assert!(
+        registry.loot.block_loot(&stone).is_none() && registry.loot.block_drop(&stone).is_none(),
+        "the filter's loot pattern hides every stone table below it"
+    );
+    // Below the pack that replaces it, the filter hides nothing of that pack.
+    let registry = installed(&["vanilla", "file/nobone", "file/gems"]);
+    assert_eq!(
+        recipe_result(&registry, "minecraft:bone_meal").as_deref(),
+        Some("minecraft:diamond")
+    );
+    assert_eq!(stone_drops(&registry), ["minecraft:diamond"]);
+}
+
+#[test]
+fn a_malformed_pack_filter_is_refused_naming_the_pack() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    filter_pack(&root, "bad", r#"{"block":[{"path":"("}]}"#, &[]);
+    let error = PackSet::load(&root, Selection::default())
+        .err()
+        .expect("refused");
+    assert!(
+        error.contains("file/bad") && error.contains("filter"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_pack_command_while_another_is_still_compiling_says_so_instead_of_misreporting_the_selection() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    pack(&root, "gems", "\"Gems\"", &GEM_RECIPES);
+    let mut state = fixture(&root);
+    state.datapacks = Runtime::new(
+        PackSet::load(
+            &root,
+            Selection {
+                enabled: vec!["vanilla".into()],
+                disabled: vec!["file/gems".into()],
+            },
+        )
+        .unwrap(),
+        root.clone(),
+    );
+    run(&mut state, "datapack enable file/gems");
+    run(&mut state, "datapack disable file/gems");
+    settle(&mut state);
+    let shown = messages(&mut state)
+        .iter()
+        .map(crate::command_debug::plain)
+        .collect::<Vec<_>>();
+    assert!(
+        shown
+            .iter()
+            .any(|line| line.contains("already in progress")),
+        "{shown:?}"
+    );
+    assert!(
+        !shown.iter().any(|line| line.contains("not enabled")),
+        "{shown:?}"
+    );
+    assert!(
+        state
+            .datapacks
+            .selection()
+            .enabled
+            .contains(&"file/gems".to_owned())
+    );
+}

@@ -101,6 +101,16 @@ impl ConnectionRegistry {
         Ok(inner.pending_reliable.remove(&id).unwrap_or_default())
     }
 
+    /// The chat setting last admitted for this connection; Full while none is known.
+    pub(crate) fn chat_visibility(&self, id: ConnectionId) -> mc_core::boundary::ChatVisibility {
+        self.inner
+            .lock()
+            .chat_visibilities
+            .get(&id)
+            .copied()
+            .unwrap_or(mc_core::boundary::ChatVisibility::Full)
+    }
+
     /// Read actual mpsc occupied-or-reserved slots only on telemetry requests.
     /// Senders cannot reveal queued versus reserved slots, or byte totals.
     pub fn load_queues(&self) -> Option<LoadQueues> {

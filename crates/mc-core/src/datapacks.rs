@@ -76,6 +76,63 @@ pub(crate) struct PackSet {
     pub(crate) ignored: BTreeMap<String, Vec<String>>,
     /// Selected packs this load found gone from disk and dropped from the selection.
     pub(crate) dropped: Vec<String>,
+    /// The pack that provided each recipe or loot resource, to name it in errors.
+    origins: BTreeMap<String, String>,
+    /// The `pack.mcmeta` filters of every enabled pack: they hide the files of
+    /// the packs below, the builtin `vanilla` pack included.
+    filters: Vec<Filter>,
+}
+
+/// One entry of a `pack.mcmeta` `filter.block` list: the files whose namespace
+/// and path (below `data/<namespace>/`) match are hidden from lower packs.
+#[derive(Clone)]
+struct Filter {
+    namespace: Option<regex::Regex>,
+    path: Option<regex::Regex>,
+}
+impl PartialEq for Filter {
+    fn eq(&self, other: &Self) -> bool {
+        let pattern =
+            |filter: &Option<regex::Regex>| filter.as_ref().map(|r| r.as_str().to_owned());
+        pattern(&self.namespace) == pattern(&other.namespace)
+            && pattern(&self.path) == pattern(&other.path)
+    }
+}
+impl Filter {
+    fn parse(metadata: &serde_json::Value) -> Result<Vec<Self>, String> {
+        let Some(filter) = metadata.get("filter") else {
+            return Ok(Vec::new());
+        };
+        let compile =
+            |entry: &serde_json::Value, key: &str| -> Result<Option<regex::Regex>, String> {
+                match entry.get(key) {
+                    None => Ok(None),
+                    Some(serde_json::Value::String(pattern)) => regex::Regex::new(pattern)
+                        .map(Some)
+                        .map_err(|e| format!("filter {key} is not a valid pattern: {e}")),
+                    Some(_) => Err(format!("filter {key} must be a string")),
+                }
+            };
+        filter
+            .get("block")
+            .and_then(serde_json::Value::as_array)
+            .ok_or("filter requires a block list")?
+            .iter()
+            .map(|entry| {
+                Ok(Self {
+                    namespace: compile(entry, "namespace")?,
+                    path: compile(entry, "path")?,
+                })
+            })
+            .collect()
+    }
+
+    fn hides(&self, namespace: &str, path: &str) -> bool {
+        self.namespace
+            .as_ref()
+            .is_none_or(|r| r.is_match(namespace))
+            && self.path.as_ref().is_none_or(|r| r.is_match(path))
+    }
 }
 impl Default for PackSet {
     fn default() -> Self {
@@ -88,6 +145,8 @@ impl Default for PackSet {
             resources: BTreeMap::new(),
             ignored: BTreeMap::new(),
             dropped: Vec::new(),
+            origins: BTreeMap::new(),
+            filters: Vec::new(),
         }
     }
 }
@@ -469,6 +528,47 @@ impl PackSet {
     fn load_known(root: &Path, selection: Selection) -> Result<Self, String> {
         Self::load_with(root, selection, false)
     }
+    /// The packs a starting server runs. A pack newly found on disk is enabled,
+    /// but one that cannot load (or whose recipes and loot cannot install onto
+    /// `base`) is skipped with a warning naming it, like vanilla skips a bad
+    /// data pack, so a pack that a live `/datapack enable` refused cannot stop
+    /// the next start. The saved selection itself must still load.
+    pub(crate) fn open(
+        root: &Path,
+        selection: Selection,
+        base: &crate::registry::CoreRegistry,
+    ) -> Result<(Self, Vec<String>), String> {
+        let usable = |packs: Self| -> Result<Self, String> {
+            packs.install_content(&mut base.clone())?;
+            Ok(packs)
+        };
+        let first = match Self::load(root, selection.clone()).and_then(usable) {
+            Ok(packs) => return Ok((packs, Vec::new())),
+            Err(error) => error,
+        };
+        let mut remaining = MAX_BYTES;
+        let found = scan(root, &mut remaining).map_err(|_| first.clone())?;
+        let new: Vec<String> = found
+            .into_keys()
+            .filter(|id| !selection.enabled.contains(id) && !selection.disabled.contains(id))
+            .collect();
+        if new.is_empty() {
+            return Err(first);
+        }
+        let mut accepted = Self::load_known(root, selection).and_then(usable)?;
+        let mut skipped = Vec::new();
+        for id in new {
+            let mut candidate = accepted.selection.clone();
+            candidate.enabled.push(id.clone());
+            match Self::load_known(root, candidate).and_then(usable) {
+                Ok(packs) => accepted = packs,
+                Err(error) => skipped.push(format!(
+                    "Skipping new datapack {id}, it is not enabled: {error}"
+                )),
+            }
+        }
+        Ok((accepted, skipped))
+    }
     fn load_with(root: &Path, mut selection: Selection, discover: bool) -> Result<Self, String> {
         selection.validate()?;
         let mut remaining = MAX_BYTES;
@@ -517,99 +617,25 @@ impl PackSet {
         };
         let mut visited = 0;
         let mut raw_tags = BTreeMap::<String, Vec<(String, bool)>>::new();
-        for id in &result.selection.enabled {
+        let enabled = result.selection.enabled.clone();
+        for id in &enabled {
             if id == "vanilla" {
                 continue;
             }
-            for (relative, text) in packs[id].source.data_files(&mut remaining, &mut visited)? {
-                let (namespace, tail) = relative
-                    .split_once('/')
-                    .ok_or("Resource must be namespaced")?;
-                let (kind, resource) = tail.split_once('/').ok_or("Resource must have a type")?;
-                if matches!(kind, "worldgen" | "dimension" | "dimension_type")
-                    || (kind == "tags" && resource.starts_with("worldgen/"))
-                {
-                    // The native generators are Rust: these resources cannot be
-                    // applied, so the rest of the pack loads and the operator is told.
-                    result.ignored.entry(id.clone()).or_default().push(relative);
-                    continue;
-                }
-                if kind == "function" && resource.ends_with(".mcfunction") {
-                    let id = identifier(&format!(
-                        "{namespace}:{}",
-                        resource
-                            .strip_suffix(".mcfunction")
-                            .expect("function extension checked")
-                    ))?;
-                    let lines = text
-                        .lines()
-                        .map(str::trim)
-                        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-                        .map(str::to_owned)
-                        .collect::<Vec<_>>();
-                    if lines.iter().any(|line| {
-                        line.len() > 32767 || line.starts_with('/') || line.starts_with('$')
-                    }) {
-                        return Err(format!(
-                            "Unsupported function line in {id} (macros and leading slashes are unsupported)"
-                        ));
-                    }
-                    result.functions.insert(id, lines.into());
-                } else if kind == "tags"
-                    && resource.starts_with("function/")
-                    && resource.ends_with(".json")
-                {
-                    let id = identifier(&format!(
-                        "{namespace}:{}",
-                        resource
-                            .strip_prefix("function/")
-                            .expect("function tag directory checked")
-                            .strip_suffix(".json")
-                            .expect("tag extension checked")
-                    ))?;
-                    let tag: serde_json::Value =
-                        serde_json::from_str(&text).map_err(|e| e.to_string())?;
-                    let values = raw_tags.entry(id).or_default();
-                    if tag.get("replace").and_then(serde_json::Value::as_bool) == Some(true) {
-                        values.clear();
-                    }
-                    for value in tag
-                        .get("values")
-                        .and_then(serde_json::Value::as_array)
-                        .ok_or("Function tag requires values")?
-                    {
-                        let name = value
-                            .as_str()
-                            .or_else(|| value.get("id").and_then(serde_json::Value::as_str))
-                            .ok_or("Invalid function tag entry")?;
-                        let required = value
-                            .get("required")
-                            .and_then(serde_json::Value::as_bool)
-                            .unwrap_or(true);
-                        values.push((name.to_owned(), required));
-                    }
-                } else if matches!(kind, "recipe" | "loot_table") && resource.ends_with(".json") {
-                    result.resources.insert(relative, text);
-                } else if kind == "predicate" && resource.ends_with(".json") {
-                    let id = identifier(&format!(
-                        "{namespace}:{}",
-                        resource
-                            .strip_suffix(".json")
-                            .expect("predicate extension checked")
-                    ))?;
-                    let predicate: serde_json::Value =
-                        serde_json::from_str(&text).map_err(|e| format!("{relative}: {e}"))?;
-                    let unsupported = mc_data::advancements::predicate_unsupported(&predicate);
-                    if !unsupported.is_empty() {
-                        return Err(format!(
-                            "Unsupported predicate {id}: {}",
-                            unsupported.into_iter().collect::<Vec<_>>().join(", ")
-                        ));
-                    }
-                    result.predicates.insert(id, predicate);
-                } else {
-                    return Err(format!("Unsupported datapack resource: {relative}"));
-                }
+            let pack = &packs[id];
+            // A pack's `filter` hides matching files of every pack below it.
+            let filters =
+                Filter::parse(&pack.metadata).map_err(|e| format!("{id}: pack.mcmeta: {e}"))?;
+            result.hide(&filters, &mut raw_tags);
+            result.filters.extend(filters);
+            let data = pack
+                .source
+                .data_files(&mut remaining, &mut visited)
+                .map_err(|e| format!("{id}: {e}"))?;
+            for (relative, text) in data {
+                result
+                    .add_file(&mut raw_tags, id, &relative, text)
+                    .map_err(|e| format!("{id}: {relative}: {e}"))?;
             }
         }
         fn expand(
@@ -665,6 +691,132 @@ impl PackSet {
         Ok(result)
     }
 
+    /// Remove what `filters` hide from the content the packs below have added.
+    fn hide(&mut self, filters: &[Filter], raw_tags: &mut BTreeMap<String, Vec<(String, bool)>>) {
+        if filters.is_empty() {
+            return;
+        }
+        let hidden = |namespace: &str, path: &str| filters.iter().any(|f| f.hides(namespace, path));
+        let split = |id: &str| {
+            id.split_once(':')
+                .map(|(n, p)| (n.to_owned(), p.to_owned()))
+        };
+        self.functions.retain(|id, _| {
+            split(id).is_none_or(|(n, p)| !hidden(&n, &format!("function/{p}.mcfunction")))
+        });
+        raw_tags.retain(|id, _| {
+            split(id).is_none_or(|(n, p)| !hidden(&n, &format!("tags/function/{p}.json")))
+        });
+        self.predicates.retain(|id, _| {
+            split(id).is_none_or(|(n, p)| !hidden(&n, &format!("predicate/{p}.json")))
+        });
+        self.resources.retain(|path, _| {
+            path.split_once('/')
+                .is_none_or(|(n, rest)| !hidden(n, rest))
+        });
+    }
+
+    /// Add one file of the pack `id` (`relative` is the path below `data/`).
+    fn add_file(
+        &mut self,
+        raw_tags: &mut BTreeMap<String, Vec<(String, bool)>>,
+        pack: &str,
+        relative: &str,
+        text: String,
+    ) -> Result<(), String> {
+        let (namespace, tail) = relative
+            .split_once('/')
+            .ok_or("Resource must be namespaced")?;
+        let (kind, resource) = tail.split_once('/').ok_or("Resource must have a type")?;
+        if matches!(kind, "worldgen" | "dimension" | "dimension_type")
+            || (kind == "tags" && resource.starts_with("worldgen/"))
+        {
+            // The native generators are Rust: these resources cannot be
+            // applied, so the rest of the pack loads and the operator is told.
+            self.ignored
+                .entry(pack.to_owned())
+                .or_default()
+                .push(relative.to_owned());
+            return Ok(());
+        }
+        if kind == "function" && resource.ends_with(".mcfunction") {
+            let id = identifier(&format!(
+                "{namespace}:{}",
+                resource
+                    .strip_suffix(".mcfunction")
+                    .expect("function extension checked")
+            ))?;
+            let lines = text
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                .map(str::to_owned)
+                .collect::<Vec<_>>();
+            if lines
+                .iter()
+                .any(|line| line.len() > 32767 || line.starts_with('/') || line.starts_with('$'))
+            {
+                return Err(format!(
+                    "Unsupported function line in {id} (macros and leading slashes are unsupported)"
+                ));
+            }
+            self.functions.insert(id, lines.into());
+        } else if kind == "tags" && resource.starts_with("function/") && resource.ends_with(".json")
+        {
+            let id = identifier(&format!(
+                "{namespace}:{}",
+                resource
+                    .strip_prefix("function/")
+                    .expect("function tag directory checked")
+                    .strip_suffix(".json")
+                    .expect("tag extension checked")
+            ))?;
+            let tag: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+            let values = raw_tags.entry(id).or_default();
+            if tag.get("replace").and_then(serde_json::Value::as_bool) == Some(true) {
+                values.clear();
+            }
+            for value in tag
+                .get("values")
+                .and_then(serde_json::Value::as_array)
+                .ok_or("Function tag requires values")?
+            {
+                let name = value
+                    .as_str()
+                    .or_else(|| value.get("id").and_then(serde_json::Value::as_str))
+                    .ok_or("Invalid function tag entry")?;
+                let required = value
+                    .get("required")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(true);
+                values.push((name.to_owned(), required));
+            }
+        } else if matches!(kind, "recipe" | "loot_table") && resource.ends_with(".json") {
+            self.resources.insert(relative.to_owned(), text);
+            self.origins.insert(relative.to_owned(), pack.to_owned());
+        } else if kind == "predicate" && resource.ends_with(".json") {
+            let id = identifier(&format!(
+                "{namespace}:{}",
+                resource
+                    .strip_suffix(".json")
+                    .expect("predicate extension checked")
+            ))?;
+            let predicate: serde_json::Value =
+                serde_json::from_str(&text).map_err(|e| e.to_string())?;
+            let unsupported = mc_data::advancements::predicate_unsupported(&predicate);
+            if !unsupported.is_empty() {
+                return Err(format!(
+                    "Unsupported predicate {id}: {}",
+                    unsupported.into_iter().collect::<Vec<_>>().join(", ")
+                ));
+            }
+            self.predicates.insert(id, predicate);
+        } else {
+            return Err("Unsupported datapack resource".into());
+        }
+        Ok(())
+    }
+
     /// Fresh listing for `/datapack list`: the selected packs still on disk in
     /// priority order, then every other compatible pack found in the folder.
     pub(crate) fn listing(root: &Path, selection: &Selection) -> Result<Listing, String> {
@@ -701,12 +853,14 @@ impl PackSet {
     /// Whether installing `self` instead of `current` changes the registry:
     /// any difference in recipes, loot or predicates.
     pub(crate) fn changes_registry(&self, current: &Self) -> bool {
-        self.resources != current.resources || self.predicates != current.predicates
+        self.resources != current.resources
+            || self.predicates != current.predicates
+            || self.filters != current.filters
     }
 
     /// Whether the registry needs this pack set's recipes, loot or predicates.
     pub(crate) fn has_registry_content(&self) -> bool {
-        !self.resources.is_empty() || !self.predicates.is_empty()
+        !self.resources.is_empty() || !self.predicates.is_empty() || !self.filters.is_empty()
     }
 
     /// One operator-facing warning per condition this load found that `previous`
@@ -746,39 +900,68 @@ impl PackSet {
         &self,
         registry: &mut crate::registry::CoreRegistry,
     ) -> Result<(), String> {
+        // The builtin vanilla pack is below every pack: their filters hide its files too.
+        if !self.filters.is_empty() {
+            let hidden = |id: &mc_data::Identifier, directory: &str| {
+                let path = format!("{directory}/{}.json", id.path());
+                self.filters.iter().any(|f| f.hides(id.namespace(), &path))
+            };
+            registry
+                .recipes
+                .retain(|recipe| !hidden(&recipe.id, "recipe"));
+            registry.loot.remove_blocks(|block| {
+                let path = block.path();
+                self.filters
+                    .iter()
+                    .any(|f| f.hides(block.namespace(), &format!("loot_table/blocks/{path}.json")))
+            });
+        }
         for (path, text) in &self.resources {
-            let (namespace, tail) = path.split_once('/').ok_or("Missing namespace")?;
-            let (kind, resource) = tail.split_once('/').ok_or("Missing resource kind")?;
-            let id = mc_data::Identifier::parse(format!(
-                "{namespace}:{}",
-                resource
-                    .strip_suffix(".json")
-                    .ok_or("Resource must be JSON")?
-            ))
-            .map_err(|e| e.to_string())?;
-            if kind == "recipe" {
-                let recipe = mc_data::recipes::parse_datapack_recipe(id, text)?;
-                if registry.items.id_of(&recipe.result.item).is_none() {
-                    return Err(format!("Unknown recipe output {}", recipe.result.item));
-                }
-                if let Some(existing) = registry.recipes.iter_mut().find(|old| old.id == recipe.id)
-                {
-                    *existing = recipe;
-                } else {
-                    registry.recipes.push(recipe);
-                }
-            } else if let Some(block) = id.path().strip_prefix("blocks/") {
-                let block = mc_data::Identifier::parse(format!("{namespace}:{block}"))
-                    .map_err(|e| e.to_string())?;
-                registry.loot.override_datapack_block(block, text)?;
-            } else {
-                return Err(format!(
-                    "Unsupported datapack loot domain: {id}; currently block loot tables only"
-                ));
-            }
+            let named = |error: String| match self.origins.get(path) {
+                Some(pack) => format!("{pack}: {path}: {error}"),
+                None => format!("{path}: {error}"),
+            };
+            self.install_resource(registry, path, text).map_err(named)?;
         }
         registry.predicates = self.predicates.clone();
         registry.refresh_iron_smelting();
+        Ok(())
+    }
+
+    fn install_resource(
+        &self,
+        registry: &mut crate::registry::CoreRegistry,
+        path: &str,
+        text: &str,
+    ) -> Result<(), String> {
+        let (namespace, tail) = path.split_once('/').ok_or("Missing namespace")?;
+        let (kind, resource) = tail.split_once('/').ok_or("Missing resource kind")?;
+        let id = mc_data::Identifier::parse(format!(
+            "{namespace}:{}",
+            resource
+                .strip_suffix(".json")
+                .ok_or("Resource must be JSON")?
+        ))
+        .map_err(|e| e.to_string())?;
+        if kind == "recipe" {
+            let recipe = mc_data::recipes::parse_datapack_recipe(id, text)?;
+            if registry.items.id_of(&recipe.result.item).is_none() {
+                return Err(format!("Unknown recipe output {}", recipe.result.item));
+            }
+            if let Some(existing) = registry.recipes.iter_mut().find(|old| old.id == recipe.id) {
+                *existing = recipe;
+            } else {
+                registry.recipes.push(recipe);
+            }
+        } else if let Some(block) = id.path().strip_prefix("blocks/") {
+            let block = mc_data::Identifier::parse(format!("{namespace}:{block}"))
+                .map_err(|e| e.to_string())?;
+            registry.loot.override_datapack_block(block, text)?;
+        } else {
+            return Err(format!(
+                "Unsupported datapack loot domain: {id}; currently block loot tables only"
+            ));
+        }
         Ok(())
     }
 }

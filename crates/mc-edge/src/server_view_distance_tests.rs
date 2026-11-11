@@ -356,6 +356,63 @@ async fn client_chat_setting_is_admitted_at_join_and_on_play_changes() {
     server.hub.shutdown();
 }
 
+/// Text the edge writes itself (join tip, /help, unknown command) obeys the
+/// client's chat setting like the core's: Hidden gets no text line at all.
+#[tokio::test]
+async fn edge_sent_feedback_follows_the_clients_chat_setting() {
+    use mc_core::boundary::ChatVisibility as Setting;
+    let root = tempfile::tempdir().unwrap();
+    let server = server(root.path());
+    let id = server.connections.joining_id();
+    server
+        .connections
+        .stash_join(id, (EntityId(1), [8.0, 64.0, 8.0], 0, Default::default()));
+    wait_for_join(&server, id, "Chat", 4, "en_us", Setting::Full)
+        .await
+        .unwrap();
+    let (reliable_tx, mut reliable_rx) = mpsc::channel(16);
+    let (world_tx, _world_rx) = mpsc::channel(16);
+    server
+        .connections
+        .register(
+            id,
+            ConnectionHandles {
+                reliable_tx,
+                world_tx,
+            },
+        )
+        .unwrap();
+    for (wire, lines) in [
+        (ChatVisibility::Full, 1),
+        (ChatVisibility::System, 1),
+        (ChatVisibility::Hidden, 0),
+        (ChatVisibility::Full, 1),
+    ] {
+        assert!(
+            server
+                .handle_edge_frame(
+                    id,
+                    ServerboundClientInformation::ID,
+                    &information_chat("en_us", 4, wire)
+                )
+                .await
+                .unwrap()
+        );
+        drain(&mut reliable_rx);
+        server
+            .feedback(id, "Unknown or incomplete command")
+            .unwrap();
+        let frames = drain(&mut reliable_rx);
+        let texts = frames
+            .iter()
+            .filter(|frame| frame.id == ClientboundSystemChat::ID)
+            .count();
+        assert_eq!(texts, lines, "{wire:?}");
+    }
+    server.connections.remove(id);
+    server.hub.shutdown();
+}
+
 #[test]
 fn the_wire_chat_setting_maps_to_the_core_setting() {
     use mc_core::boundary::ChatVisibility as Setting;

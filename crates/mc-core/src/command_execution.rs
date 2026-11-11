@@ -1192,12 +1192,16 @@ pub(crate) fn execute(
                         },
                     );
                 }
-                feedback(
-                    state,
-                    connection,
-                    "commands.message.display.outgoing",
-                    vec![entity_name(state, target), message.clone()],
-                );
+                // The sender's copy is chat too (MSG_COMMAND_OUTGOING): a
+                // commands-only client is not sent it.
+                if state.accepts_chat(connection) {
+                    feedback(
+                        state,
+                        connection,
+                        "commands.message.display.outgoing",
+                        vec![entity_name(state, target), message.clone()],
+                    );
+                }
             }
         }
         Command::TellRaw { target, message } => {

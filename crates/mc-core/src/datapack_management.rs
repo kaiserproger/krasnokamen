@@ -118,6 +118,11 @@ fn dispatch(
         ["datapack", "list"] => list(state, connection, ListScope::All),
         ["datapack", "list", "available"] => list(state, connection, ListScope::Available),
         ["datapack", "list", "enabled"] => list(state, connection, ListScope::Enabled),
+        // The selection changes when the worker answers, so a command checked against
+        // it meanwhile would report "not enabled" for a pack the first one is enabling.
+        ["datapack", "enable" | "disable", ..] if state.datapacks.reload.is_some() => {
+            Err("Datapack reload already in progress".into())
+        }
         ["datapack", "enable", name, order @ ..] => enable(state, connection, name, order),
         ["datapack", "disable", name] => disable(state, connection, name),
         ["datapack", "create", id, description] => {

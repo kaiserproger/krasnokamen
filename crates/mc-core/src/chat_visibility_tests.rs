@@ -154,6 +154,11 @@ fn say_and_private_messages_are_chat_not_system_text() {
         contains(&full, "commands.message.display.outgoing"),
         "the sender still sees the confirmation: {full:?}"
     );
+    let [_, _, system, _] = command(&mut state, SYSTEM, "msg full2 secret");
+    assert!(
+        !contains(&system, "commands.message.display.outgoing"),
+        "a commands-only sender is not sent its own chat copy: {system:?}"
+    );
     let [_, other_full, ..] = command(&mut state, FULL, "msg full2 hello");
     assert!(
         contains(&other_full, "commands.message.display.incoming"),

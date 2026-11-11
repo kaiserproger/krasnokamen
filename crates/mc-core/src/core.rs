@@ -675,12 +675,13 @@ impl Core {
         )?;
         // The enabled packs are the ones the world last saved: recovery has
         // restored that selection, so load it, not the default.
-        let datapacks = crate::datapacks::PackSet::load(
+        let (datapacks, skipped) = crate::datapacks::PackSet::open(
             &datapack_root,
             tick_state.datapacks.selection().clone(),
+            &registry,
         )
         .map_err(CoreError::Registry)?;
-        for warning in datapacks.warnings(None) {
+        for warning in skipped.into_iter().chain(datapacks.warnings(None)) {
             tracing::warn!("{warning}");
         }
         // The registry before any datapack: what every reload rebuilds on.
