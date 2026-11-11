@@ -1,0 +1,45 @@
+{
+  "id": "P1",
+  "verdict": "promoted",
+  "fix_commit": "patch:e293275c93a859e503ade5346229103777f1f670a68f366a4a1ea06135b30682",
+  "fix_commit_full": "patch:e293275c93a859e503ade5346229103777f1f670a68f366a4a1ea06135b30682",
+  "promoted_at": "2026-11-11T18:38:52+00:00",
+  "tree_head": "760ca0b59e219ad37b426406459154df618efa21",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "e293275c93a859e503ade5346229103777f1f670a68f366a4a1ea06135b30682",
+  "reversed_files": [
+    "crates/mc-core/src/falling.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:command_world::tests::frozen_world_holds_a_setblock_falling_block_until_stepped": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-input-sand": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261111T183737-native-v2-input-sand-kztyb7wr/result.json"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_world::tests::frozen_world_holds_a_setblock_falling_block_until_stepped": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/LedgerInputB03/.analysis/validation/20261111T181414-native-v2-input-sand-5t6yjf1e/result.json",
+    "tree_head": "760ca0b59e219ad37b426406459154df618efa21",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "233e733bff9e368bd07754a597579956b86b8b6f2c24fee3c259e22f4e7ef667",
+    "covers": [
+      "harness:entities:native-v2-input-sand"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/LedgerInputB03/.analysis/validation/20261111T183150-ledger-promote-4lk9jp5x"
+}
