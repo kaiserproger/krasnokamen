@@ -4209,6 +4209,7 @@ status = "open"
 source = "BreakIssue1x11 break-it pass on ISSUE-1-11, finding F2 (receipts/BreakIssue1x11/report.md, attacks G1 2/2 and J1 1/1): setblock the farmer's composter to air and re-place it 2 blocks over in the same workshop; the farmer stays jobless the whole next work period. Cause: buildings::job_profession and allocator::acquire matched only the work points captured at certify/upgrade; a moved station was not a slot and the stale point was air."
 regression = ["cargo:mc-core:settlements::allocator::claim_tests::workstation_moved_inside_its_certified_workshop_keeps_the_job"]
 failing_first = "reported"
+fix_commit = "patch:6884038408b2e18e6a3d425394fbc33d41bb8367dd100b5b658759c6c589ce8c"
 
 [[bug]]
 id = "VILLAGER-BED-USE-SLEEPS-PLAYER-OVER-VILLAGER"
@@ -4218,8 +4219,9 @@ repro = "client"
 severity = "minor"
 status = "open"
 source = "BreakIssue1x11 break-it pass on ISSUE-1-11, finding F3 (receipts/BreakIssue1x11/report.md, attack C2 2/2). Vanilla 26.x javap: BedBlock.useWithoutItem calls kickVillagerOutOfBed on an occupied bed and returns before Player.startSleepInBed; SleepInBed.COOLDOWN_AFTER_BEING_WOKEN = 100. Cause: sleep::use_bed checked only player sleepers. The bed block's occupied property is still not mirrored for any sleeper (Solaris derives occupancy from sleepers)."
-regression = ["cargo:mc-core:sleep::tests::using_a_bed_a_villager_sleeps_in_only_wakes_the_villager"]
+regression = ["cargo:mc-core:sleep::tests::using_a_bed_a_villager_sleeps_in_only_wakes_the_villager", "cargo:mc-core:sleep::tests::kicked_villager_lies_down_again_only_after_the_wake_cooldown"]
 failing_first = "reported"
+fix_commit = "patch:2c325bc08a93459835f22e53c301cf342f429efe2c54f2af66a58fba352d5734"
 
 [[bug]]
 id = "VILLAGER-RESIDENT-HOLDS-OPEN-AIR-BED"
@@ -4228,6 +4230,7 @@ area = "gameplay"
 repro = "client"
 severity = "major"
 status = "open"
-source = "BreakIssue1x11 break-it pass on ISSUE-1-11, finding F4 (receipts/BreakIssue1x11/report.md, sets F/K, 3 of 7 runs with an extra homeless resident): the unbound librarian stands 2.5-5 blocks from its outdoor bed all night with no minecraft:home; the breaker queried only 2 of 5 Brains. Cause (code read): allocator::acquire let bound residents claim any bed in the settlement radius, while villager/brain.rs shelter_night lets a resident sleep only in a roofed home bed (it shelters indoors otherwise, a tested settlement rule), so a homeless resident that searched first kept the open-air bed empty and barred to the vanilla villager. Residents now claim only roofed beds."
-regression = ["cargo:mc-core:settlements::allocator::claim_tests::bound_resident_leaves_an_open_air_bed_to_a_villager_that_sleeps_in_it"]
+source = "BreakIssue1x11 break-it pass on ISSUE-1-11, finding F4 (receipts/BreakIssue1x11/report.md, sets F/K, 3 of 7 runs with an extra homeless resident): the unbound librarian stands 2.5-5 blocks from its outdoor bed all night with no minecraft:home; the breaker queried only 2 of 5 Brains. Cause (code read): allocator::acquire let bound residents claim any bed in the settlement radius, while villager/brain.rs shelter_night lets a resident sleep only in a roofed home bed (it shelters indoors otherwise, a tested settlement rule), so a homeless resident that searched first kept the open-air bed empty and barred to the vanilla villager. Residents now claim only roofed beds: allocator::bed_allowed gates both acquire and free_bed (breeding spare bed, newborn home), and home validation releases a resident's bed whose roof is gone or that was claimed before the rule (roof flag cached per bed head chunk revision in ValidatedPoi). Policy in docs/settlements/breeding.md and jobs.md: an open-air-only settlement gets no rations and no births."
+regression = ["cargo:mc-core:settlements::allocator::claim_tests::bound_resident_leaves_an_open_air_bed_to_a_villager_that_sleeps_in_it", "cargo:mc-core:settlements::allocator::claim_tests::breeding_spare_bed_of_a_resident_is_never_an_open_air_bed", "cargo:mc-core:settlements::allocator::claim_tests::removing_the_roof_releases_a_residents_bed", "cargo:mc-core:settlements::allocator::claim_tests::open_air_claim_recorded_before_the_rule_is_released_on_load", "cargo:mc-core:villager::brain::tests::breeding_tests::open_air_only_settlement_gives_residents_no_home_rations_or_births"]
 failing_first = "reported"
+fix_commit = "patch:493fa248dcd5e68c3e20fcf70bf81a055f92fabdfb2c0c8e981f2ec254d6be5a"

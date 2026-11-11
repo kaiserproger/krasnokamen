@@ -1,0 +1,29 @@
+diff --git a/crates/mc-core/src/sleep.rs b/crates/mc-core/src/sleep.rs
+--- a/crates/mc-core/src/sleep.rs
++++ b/crates/mc-core/src/sleep.rs
+@@ -166,6 +166,11 @@
+     let Some(slot) = state.entities.slot_of(entity) else {
+         return true;
+     };
++    // Vanilla BedBlock.useWithoutItem: an occupied bed only wakes the villager
++    // asleep in it; the player is not put to bed on that click.
++    if is_bed(state, head) && crate::villager::brain::kick_out_of_bed(state, head) {
++        return true;
++    }
+     if !is_bed(state, head) || state.sleepers.values().any(|other| other.bed == head) {
+         say(state, connection, "This bed is occupied");
+         return true;
+diff --git a/crates/mc-core/src/villager/brain.rs b/crates/mc-core/src/villager/brain.rs
+--- a/crates/mc-core/src/villager/brain.rs
++++ b/crates/mc-core/src/villager/brain.rs
+@@ -970,6 +970,10 @@
+             && sleep_home_allowed
+             && !v.sleeping
+             && v.activity == Activity::Rest
++            && !v
++                .last_slept
++                .and_then(|slept| state.tick.checked_sub(slept))
++                .is_some_and(|elapsed| elapsed < WAKE_COOLDOWN)
+             && let Some(home) = home
+         {
+             let available = decision_phase!(cache, 1, {
