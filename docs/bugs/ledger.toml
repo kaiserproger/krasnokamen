@@ -956,6 +956,7 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P4"
 regression = ["cargo:mc-edge:screen::tests::leave_cancels_an_unanswered_request"]
+fix_commit = "68c0df4cef91a64a62fb1c646ff6ca791cc9f0ee"
 
 [[bug]]
 id = "INTERACT-001"
@@ -4080,10 +4081,12 @@ title = "Summoning an experience orb does not create an XP orb"
 area = "gameplay"
 repro = "cargo"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "The summon command rejected Value or created a mob row instead of an experience orb; vanilla loads Value as a signed short defaulting to zero."
 regression = ["cargo:mc-core:command_summon::tests::experience_orb_summon_preserves_native_value_count_kind_and_checkpoint"]
+fix_commit = "1bf193720f99740448be7fc290f33b1b97e312b5"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/SUMMON-EXPERIENCE-ORB-NOT-ORB.json"
 
 [[bug]]
 id = "HARNESS-JAVA-MATRIX-FOREIGN-PORT-AUTH-ACK"
