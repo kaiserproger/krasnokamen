@@ -223,6 +223,20 @@ fn cactus_damage_routes_through_merge_and_respects_creative_immunity() {
 }
 
 #[test]
+fn creative_player_burn_clock_runs_and_water_douses_it() {
+    // Graphical gate native-v2-p4-damage: a player burning in creative kept
+    // burning through a water fill and resumed damage in survival.
+    let (mut state, entity, pos) = flat_player_fixture();
+    let slot = state.entities.slot_of(entity).unwrap();
+    state.players.get_mut(&entity).unwrap().game_mode = crate::commands::GameMode::Creative;
+    crate::contact_hazards::ignite(&mut state, entity, 100);
+    place(&mut state, pos, "water", &[("level", "0")]);
+    assert!(!sample(&mut state, entity, DamageKind::OnFire));
+    assert_eq!(state.entities.body(slot).burn_ticks, 0);
+    assert_eq!(state.entities.row(slot).appearance.shared_flags & 1, 0);
+}
+
+#[test]
 fn ignition_extends_timer_water_extinguishes_and_rule_suppresses_damage() {
     let (mut state, entity, pos) = flat_player_fixture();
     let slot = state.entities.slot_of(entity).unwrap();
