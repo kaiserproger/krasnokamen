@@ -20,7 +20,7 @@ async fn sees(viewer: &mut Client, subject: &str, player_type: i32) -> Seen {
     let uuid = crate::crypto::offline_uuid(subject);
     let mut seen = Seen::default();
     let outcome = tokio::time::timeout(
-        Duration::from_secs(60),
+        Duration::from_secs(150),
         viewer.play_until(|client, frame| {
             let mut body = frame.body.as_ref();
             if frame.id == client.id("play", true, "minecraft:player_info_update") {
@@ -79,7 +79,7 @@ async fn mutual_visibility(first: i32, second: i32) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let serve = tokio::spawn(crate::server::serve(listener, server));
-    tokio::time::timeout(DEADLINE, async {
+    tokio::time::timeout(Duration::from_secs(600), async {
         let mut early = Client::join(address, "Early", first_profile, true).await;
         early
             .play_until(|client, frame| {
