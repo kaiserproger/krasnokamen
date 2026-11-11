@@ -533,11 +533,11 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
         if kind == "in_fire":
             before_burn = len(steps.client.p4_damage_wire())
             steps.fixture(f"setblock {x} {y} {z} minecraft:air")
-            burned = steps.wait(lambda state: state["player"]["health"] < hit_state["player"]["health"]
-                                and any(event["entity_id"] == player_id and
-                                        event["type"] == "minecraft:on_fire"
-                                        for event in steps.client.p4_damage_wire()[before_burn:]),
-                                "on_fire_physical_identity_received", timeout_seconds=30)
+            burned = _wait_damage_identity(
+                steps, lambda state: state["player"]["health"] < hit_state["player"]["health"]
+                and any(event["entity_id"] == player_id and event["type"] == "minecraft:on_fire"
+                        for event in steps.client.p4_damage_wire()[before_burn:]),
+                "on_fire_physical_identity_received", start, timeout_seconds=30)
             results.append({"type": "on_fire", "health": burned["player"]["health"],
                             "events": steps.client.p4_damage_wire()[before_burn:]})
     steps.fixture("gamemode creative @s")
