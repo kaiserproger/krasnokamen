@@ -102,6 +102,13 @@ without a checkpoint or marker fails closed. Required checkpoint player records
 must decode and match their keys; offline player custody is retained rather than
 silently discarded.
 
+Live maps retain at most 256 frame markers, the same bound recovery validates.
+Additional visible frames still appear while nearby but are not retained as
+distant waypoints once the map reaches that bound. Breaking a retained frame
+frees room for another. Previously the live writer could exceed the recovery
+limit and checkpoint an unreadable map; the bounded writer prevents new
+unrecoverable saves, while recovery continues to reject invalid stored maps.
+
 ## Quarantined chunks
 
 A chunk whose stored record cannot be loaded (decode error, invalid block

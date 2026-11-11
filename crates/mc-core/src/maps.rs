@@ -17,6 +17,7 @@ mod runtime;
 pub(crate) mod trades;
 
 pub const PIXELS: usize = 128 * 128;
+const MAX_FRAME_MARKERS: usize = 256;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Decoration {
@@ -83,7 +84,7 @@ impl SavedMap {
             || self.colors.iter().any(|c| *c >= 248)
             || self.banners.len() > 256
             || self.decorations.len() > 256
-            || self.frame_markers.len() > 256
+            || self.frame_markers.len() > MAX_FRAME_MARKERS
             || self.decorations.values().any(|d| {
                 !d.x.is_finite()
                     || !d.z.is_finite()

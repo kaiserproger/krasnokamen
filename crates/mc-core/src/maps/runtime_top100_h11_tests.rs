@@ -134,6 +134,46 @@ fn frame_boundary_and_hidden_clone_are_visible_to_the_right_viewer() {
 }
 
 #[test]
+fn retained_frame_markers_stay_recoverable_at_limit() {
+    let registry = Arc::new(CoreRegistry::load(None).expect("registry loads"));
+    let world = crate::horde_bench::flat_world(&registry);
+    let mut state = TickState::new(registry, world, 2, 512);
+    let player = join(&mut state, 1);
+    let slot = state.entities.slot_of(player).unwrap();
+    state.entities.set_pos(slot, [0.0, 65.0, 0.0]);
+    state.config_view_distance = 1;
+    let mut map = SavedMap::new([0, 0], 0, Dimension::Overworld).unwrap();
+    map.frame_markers = (0..255).map(|x| (1000 + x, 1000, 0)).collect();
+    let id = state.maps.allocate(map).unwrap();
+    let stack = crate::maps::filled_map(&state, id).unwrap();
+    state.players.get_mut(&player).unwrap().inventory.slots[0] = stack.clone();
+    for x in [7, 9] {
+        state.world.set_block(x + 1, 65, 8, state.registry.states.stone);
+        state.world.set_block(x, 65, 8, state.registry.states.air);
+    }
+    state.world.fold_overlay();
+    for x in [7, 9] {
+        crate::item_frame::spawn(
+            &mut state,
+            BlockPos { x, y: 65, z: 8 },
+            4,
+            false,
+            stack.clone(),
+        )
+        .expect("supported frame");
+    }
+    state.tick = 10;
+    tick(&mut state);
+    let retained = &state.maps.records[&id].frame_markers;
+    assert_eq!(retained.len(), 256);
+    assert_eq!(retained.iter().filter(|(x, _, _)| *x < 1000).count(), 1);
+    let mut globals = std::collections::BTreeMap::new();
+    crate::maps::checkpoint(&state.maps.records, state.tick, &mut globals).unwrap();
+    let restored = crate::maps::recover(&globals).expect("saved map must recover");
+    assert_eq!(restored[&id].frame_markers, *retained);
+}
+
+#[test]
 fn spatial_candidates_match_dense_frames_and_bound_work() {
     use crate::blueprint::MovementClass;
     use crate::boundary::{EntityAppearance, EntityId};
