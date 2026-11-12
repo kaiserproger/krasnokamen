@@ -35,6 +35,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import subprocess
 import time as _time
 from pathlib import Path
@@ -45,11 +46,15 @@ from ..profiles import ProfileContext
 from . import native_client
 from .gameplay import peak_rss_kib, prepare_operator_fixture
 from .probe_steps import ProbeSteps
+from .village_autonomy_qa import _rotate_blueprint_xz
 
 USERNAME = "BuildQA"
 SEED = 100
 VILLAGE_CENTER = (120, 70, 7)
 DIALOG_CLASS = "net.minecraft.client.gui.screens.dialog.MultiButtonDialogScreen"
+CONTAINER_CLASS = "net.minecraft.client.gui.screens.inventory.ContainerScreen"
+# Civil Projects menu (ui_menus.rs): the Status icon, and the active project's icon on the Construction page.
+PROJECT_STATUS_SLOT, PROJECT_ICON_SLOT = 52, 4
 
 BLUEPRINTS = ("house", "storage", "farm", "mason", "lumber_camp", "mine",
               "barracks", "wall", "watch_tower")
@@ -81,6 +86,10 @@ KIND_LABEL = {"house": "House", "storage": "Storage", "farm": "Farmer workshop",
               "mason": "Builder workshop", "lumber_camp": "Lumber camp",
               "mine": "Mine", "barracks": "Barracks", "wall": "Wall section",
               "watch_tower": "Tower"}
+# ui.rs blueprint_label (English): the `<label> L<level>` project icon.
+PROJECT_LABEL = {"house": "House", "storage": "Storage", "farm": "Farm", "mason": "Mason",
+                 "lumber_camp": "Lumber camp", "mine": "Mine", "barracks": "Barracks",
+                 "wall": "Wall", "watch_tower": "Watchtower"}
 KIND_PROFESSION = {"farm": "Farmer", "mason": "Builder",
                     "lumber_camp": "Lumberjack", "mine": "Miner"}
 # Parallel layout: one founded settlement per blueprint, centers 400 apart on
@@ -115,19 +124,73 @@ def _load_blueprints() -> dict[str, dict[str, Any]]:
     return BLUEPRINT_DATA
 
 
-def expected_cells(bp: str, level: int, origin: tuple[int, int, int]) -> dict[tuple[int, int, int], str]:
+def _level_frame(bp: str, level: int) -> tuple[int, int, int]:
+    """(width x, depth z, height y) of one blueprint level's layers."""
+    layers = _load_blueprints()[bp]["levels"][level - 1]["layers"]
+    return len(layers[0][0]), len(layers[0]), len(layers)
+
+
+def oriented_cells(bp: str, level: int, origin: tuple[int, int, int],
+                   turns: int) -> dict[tuple[int, int, int], str]:
+    """The level's authored cells as the server places them after `turns` quarter turns, bounds
+    minimum at `origin` (settlements/blueprints.rs:rotate_xz in the level's own frame)."""
+    width, depth, _ = _level_frame(bp, level)
     data = _load_blueprints()[bp]
-    layers: list[list[str]] = data["levels"][level - 1]["layers"]
-    palette: dict[str, str] = data["palette"]
     ox, oy, oz = origin
     out: dict[tuple[int, int, int], str] = {}
-    for y, layer in enumerate(layers):
+    for y, layer in enumerate(data["levels"][level - 1]["layers"]):
         for z, row in enumerate(layer):
             for x, ch in enumerate(row):
-                if ch == ".":
-                    continue
-                out[(ox + x, oy + y, oz + z)] = palette[ch]
+                if ch != ".":
+                    rx, rz = _rotate_blueprint_xz(x, z, width, depth, turns)
+                    out[(ox + rx, oy + y, oz + rz)] = data["palette"][ch]
     return out
+
+
+def best_turns(cells_by_turns: dict[int, dict[tuple[int, int, int], str]],
+               world: dict[tuple[int, int, int], str]) -> int:
+    """The quarter-turn count whose authored cells agree with the observed block ids the most
+    (the lowest count wins a tie). The house is rotated by the layout planner's door side, so the
+    gate reads the orientation from the world instead of assuming rot 0."""
+    def mismatches(turns: int) -> int:
+        return sum(1 for pos, want in cells_by_turns[turns].items()
+                   if world.get(pos) != _state_base(want))
+    return min(range(4), key=lambda turns: (mismatches(turns), turns))
+
+
+def _scan_box(probe: ProbeSteps, lo: tuple[int, int, int],
+              hi: tuple[int, int, int]) -> dict[tuple[int, int, int], str]:
+    """Every block id in the inclusive box, split spatially when a response is truncated."""
+    blocks: dict[tuple[int, int, int], str] = {}
+
+    def scan(low: list[int], high: list[int]) -> None:
+        arguments = {f"{edge}_{axis}": position[index]
+                     for edge, position in (("min", low), ("max", high))
+                     for index, axis in enumerate(("x", "y", "z"))}
+        page = probe.call("minecraft_scan_blocks", {**arguments, "max_blocks": 4096})
+        if page.get("next_offset") is None:
+            blocks.update(((row["x"], row["y"], row["z"]), row["block_id"]) for row in page["blocks"])
+            return
+        axis = max(range(3), key=lambda a: high[a] - low[a])
+        if low[axis] == high[axis]:
+            raise RuntimeError("buildings-qa scan truncated a single cell")
+        middle = (low[axis] + high[axis]) // 2
+        lower, upper = high.copy(), low.copy()
+        lower[axis], upper[axis] = middle, middle + 1
+        scan(low, lower)
+        scan(upper, high)
+
+    scan(list(lo), list(hi))
+    return blocks
+
+
+def _fit_orientation(probe: ProbeSteps, bp: str, level: int,
+                     origin: tuple[int, int, int]) -> int:
+    width, depth, height = _level_frame(bp, level)
+    extent = max(width, depth)
+    world = _scan_box(probe, origin, (origin[0] + extent - 1, origin[1] + height - 1,
+                                      origin[2] + extent - 1))
+    return best_turns({turns: oriented_cells(bp, level, origin, turns) for turns in range(4)}, world)
 
 
 def _state_base(text: str) -> str:
@@ -758,36 +821,44 @@ def _order_echo_retry(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
     return False
 
 
+def _project_status(probe: ProbeSteps) -> tuple[str, int] | None:
+    """(project label, level) of the settlement's active project, or None when there is none.
+
+    Read from the civil menus: Projects -> Status icon -> the Construction page, whose slot 4 is
+    the active project's `<label> L<level>` icon (ui_menus.rs project_screen)."""
+    _close_any_screen(probe)
+    probe.call("minecraft_send_chat", {"message": "settlement menu projects", "command": True})
+    projects = probe.wait(lambda s: _container_titled(s, "Projects"), "projects_menu_open",
+                          timeout_seconds=60)
+    action = next((row for row in projects["container"]["slots"] if row.get("slot") == PROJECT_STATUS_SLOT), None)
+    if action is None or action.get("name") != "Status":
+        raise RuntimeError(f"buildings-qa: Projects menu slot {PROJECT_STATUS_SLOT} is {action}, not Status")
+    probe.call("minecraft_click_container_slot", {"slot": PROJECT_STATUS_SLOT, "button": "primary",
+                                                  "timeout_seconds": probe.remaining()})
+    page = probe.wait(lambda s: _container_titled(s, "Construction"), "project_status_open",
+                      timeout_seconds=60)
+    icon = next((row for row in page["container"]["slots"] if row.get("slot") == PROJECT_ICON_SLOT), None)
+    probe.call("minecraft_close_screen", {})
+    match = re.fullmatch(r"(.+) L(\d+)", str((icon or {}).get("name") or ""))
+    return (match.group(1), int(match.group(2))) if match else None
+
+
+def _container_titled(state: dict[str, Any], prefix: str) -> bool:
+    screen = state.get("screen") or {}
+    return screen.get("class") == CONTAINER_CLASS and str(screen.get("title") or "").startswith(prefix)
+
+
 def _project_active_quiet(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
-                         level: int, upgrade_bid: int | None = None) -> bool:
-    """Admission check without emitting probe.check verdicts (for retries)."""
-    state = _send(probe, "settlement menu projects")
+                          level: int, upgrade_bid: int | None = None) -> bool:
+    """Admission check without emitting probe.check verdicts (for retries): an active project
+    of this blueprint at this level."""
     try:
-        opened = probe.wait(lambda s: s["screen"].get("class") == DIALOG_CLASS
-                            and "Projects" in str(s["screen"].get("title", "")),
-                            f"{tag}_L{level}_quietcheck")
-    except Exception:
+        status = _project_status(probe)
+    except Exception as exc:
+        sub[f"L{level}_project_status_error"] = str(exc)[:200]
         return False
-    title = opened["screen"].get("title")
-    try:
-        probe.call("minecraft_click_screen_button", {
-            "expected_screen_class": DIALOG_CLASS, "expected_title": title,
-            "button_label": "Status"})
-        probe.call("minecraft_wait_ticks", {"ticks": 20})
-        opened = probe.wait(lambda s: s["screen"].get("class") == DIALOG_CLASS
-                            and "Project status" in str(s["screen"].get("title", "")),
-                            f"{tag}_L{level}_quietstatus")
-    except Exception:
-        pass
-    body = "\n".join(str(n.get("label", "")) for n in opened.get("ui_nodes", [])
-                     if isinstance(n, dict) and str(n.get("id", "")).startswith("dialog/body"))
-    sub[f"L{level}_project_body"] = body[:400]
-    low = body.lower()
-    if "no active project" in low:
-        return False
-    if upgrade_bid is not None:
-        return f"upgrade for #{upgrade_bid}" in low or f"level {level}" in low
-    return bp in low and (f"level {level}" in low or "upgrade" in low)
+    sub[f"L{level}_project_body"] = f"{status}"
+    return status is not None and status[1] == level and PROJECT_LABEL.get(bp, bp).lower() in status[0].lower()
 
 
 def _project_active_echo(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str, level: int,
@@ -805,80 +876,19 @@ def _project_active_echo(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: s
     return active
 
 
-def _project_active(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str, level: int,
-                    upgrade_bid: int | None = None) -> bool:
-    """Confirm the Projects page shows an active project for OUR order.
-    Target-guarded: a planner-admitted project for another blueprint
-    (e.g. mason stealing the slot while we order barracks) must NOT pass —
-    that fails fast as wrong_project_admitted instead of burning the poll
-    budget waiting for a cert that can never come."""
-    state = _send(probe, "settlement menu projects")
-    opened = probe.wait(lambda s: s["screen"].get("class") == DIALOG_CLASS
-                        and "Projects" in str(s["screen"].get("title", "")),
-                        f"{tag}_L{level}_projcheck")
-    # New freeze: Projects body holds only the click note; live status sits
-    # behind the Status button (TitleProjectStatus screen). Navigate there.
-    title = opened["screen"].get("title")
-    try:
-        probe.call("minecraft_click_screen_button", {
-            "expected_screen_class": DIALOG_CLASS, "expected_title": title,
-            "button_label": "Status"})
-        probe.call("minecraft_wait_ticks", {"ticks": 20})
-        opened = probe.wait(lambda s: s["screen"].get("class") == DIALOG_CLASS
-                            and "Project status" in str(s["screen"].get("title", "")),
-                            f"{tag}_L{level}_statuscheck")
-    except Exception:
-        pass
-    body = "\n".join(str(n.get("label", "")) for n in opened.get("ui_nodes", [])
-                     if isinstance(n, dict) and str(n.get("id", "")).startswith("dialog/body"))
-    sub[f"L{level}_project_body"] = body[:400]
-    low = body.lower()
-    if "no active project" in low:
-        probe.check(f"{tag}_L{level}_project", False)
-        return False
-    if upgrade_bid is not None:
-        want = f"upgrade for #{upgrade_bid}" in low or f"level {level}" in low
-    else:
-        want = bp in low and ("level 1" in low or f"level {level}" in low)
-    if not want:
-        _verdict(sub, f"L{level}_project", "FAIL",
-                 f"wrong_project_admitted: want {bp} L{level}, body={body[:200]}")
-    probe.check(f"{tag}_L{level}_project", want)
-    return want
-
-
 def _project_idle_state(probe: ProbeSteps, level: int) -> str:
-    """Projects Status state without emitting checks: 'idle' (no active
-    project), 'superseded' (active project targets a HIGHER level than ours —
-    ours certified and the planner moved on), else 'building'."""
-    import re as _re
+    """Project state without emitting checks: 'idle' (no active project),
+    'superseded' (active project targets a HIGHER level than ours — ours
+    certified and the planner moved on), else 'building'."""
     try:
-        state = _send(probe, "settlement menu projects")
-        opened = probe.wait(lambda s: s["screen"].get("class") == DIALOG_CLASS
-                            and "Projects" in str(s["screen"].get("title", "")),
-                            "project_idle_open")
-        title = opened["screen"].get("title")
-        try:
-            probe.call("minecraft_click_screen_button", {
-                "expected_screen_class": DIALOG_CLASS, "expected_title": title,
-                "button_label": "Status"})
-            probe.call("minecraft_wait_ticks", {"ticks": 20})
-            opened = probe.wait(lambda s: s["screen"].get("class") == DIALOG_CLASS
-                                and "Project status" in str(s["screen"].get("title", "")),
-                                "project_idle_status")
-        except Exception:
-            pass
-        body = "\n".join(str(n.get("label", "")) for n in opened.get("ui_nodes", [])
-                         if isinstance(n, dict) and str(n.get("id", "")).startswith("dialog/body"))
-        low = body.lower()
-        if "no active project" in low or "complete" in low:
-            return "idle"
-        m = _re.search(r"level\s+(\d+)", low)
-        if m and int(m.group(1)) > level:
-            return "superseded"
-        return "building"
+        status = _project_status(probe)
     except Exception:
         return "building"
+    if status is None:
+        return "idle"
+    return "superseded" if status[1] > level else "building"
+
+
 def _wait_certified_origin_here(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
                                 level: int, ctx: ProfileContext,
                                 artifact: Path) -> tuple[int, int, int] | None:
@@ -1705,12 +1715,14 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
                   tag: str, settlement: str, chest: tuple[int, int, int]) -> None:
     """Block-by-block blueprint match + entrance/light/hostiles + function."""
     data = _load_blueprints()[bp]
-    cells = expected_cells(bp, level, origin)
+    turns = _fit_orientation(probe, bp, level, origin)
+    sub[f"L{level}_rotation"] = turns
+    cells = oriented_cells(bp, level, origin, turns)
     # L+1 upgrade clear stage: the planner auto-starts L+1 the moment L1
     # certifies (1.5x fund covers it) and clears removed cells before this
     # verify reads. Accept air-where-removed and already-upgraded cells;
     # L+1 verification itself stays strict.
-    cells_next = expected_cells(bp, level + 1, origin) if level < LEVELS[bp] else {}
+    cells_next = oriented_cells(bp, level + 1, origin, turns) if level < LEVELS[bp] else {}
     mismatches: list[str] = []
     checked = 0
     for pos, want in cells.items():
@@ -1768,10 +1780,17 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
         match_ok = not mismatches
     sub[f"L{level}_blockmatch"] = {"checked": checked, "mismatches": mismatches[:12]}
     _verdict(sub, f"L{level}_blockmatch", "PASS" if match_ok else "FAIL",
-             f"{checked} cells, {len(mismatches)} mismatches", f"origin {list(origin)} rot 0")
+             f"{checked} cells, {len(mismatches)} mismatches", f"origin {list(origin)} rot {turns}")
     probe.check(f"{tag}_L{level}_blocks", match_ok)
     entrance = data["levels"][level - 1]["entrance"]
-    ex, ey, ez = origin[0] + entrance[0], origin[1] + entrance[1], origin[2] + entrance[2]
+    width, depth, height = _level_frame(bp, level)
+
+    def world_xz(x: int, z: int) -> tuple[int, int]:
+        rx, rz = _rotate_blueprint_xz(x, z, width, depth, turns)
+        return origin[0] + rx, origin[2] + rz
+
+    ex, ez = world_xz(entrance[0], entrance[2])
+    ey = origin[1] + entrance[1]
     probe.fixture(f"tp @s {ex + 0.5} {ey + 1.0} {ez + 0.5}")
     probe.wait(lambda s: abs(float(s["player"]["x"]) - (ex + 0.5)) < 2.5,
                f"{tag}_L{level}_enter")
@@ -1787,10 +1806,8 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
     # Lighting at centre interior; solid fortifications (wall/tower) author
     # mass at the centre by design — probe the first authored air cell
     # instead, else the oracle fails a correct build.
-    size = (len(data["levels"][level - 1]["layers"][0][0]),
-            len(data["levels"][level - 1]["layers"]),
-            len(data["levels"][level - 1]["layers"][0]))
-    cx, cy, cz = origin[0] + size[0] // 2, origin[1] + 1, origin[2] + size[2] // 2
+    cx, cz = world_xz(width // 2, depth // 2)
+    cy = origin[1] + 1
     if _block_id(_read(probe, (cx, cy, cz))) not in ("minecraft:air", None):
         # cells == expected_cells skips '.' (air is the default); scan raw
         # layers for authored air. Top-down: ground walkways under a solid
@@ -1800,7 +1817,7 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
             for _z, _row in enumerate(layers[_y]):
                 for _x, _ch in enumerate(_row):
                     if _ch == ".":
-                        cx, cy, cz = origin[0] + _x, origin[1] + _y, origin[2] + _z
+                        (cx, cz), cy = world_xz(_x, _z), origin[1] + _y
                         break
                 else:
                     continue
@@ -1823,13 +1840,15 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
         dom = probe.call("minecraft_list_entities",
                          {"radius": 128, "limit": 128, "entity_type": hostile})
         ents.extend(dom.get("entities", dom.get("visible_entities", [])))
-    hi = (origin[0] + size[0] - 1, origin[1] + size[1] - 1, origin[2] + size[2] - 1)
+    corners = [world_xz(x, z) for x in (0, width - 1) for z in (0, depth - 1)]
+    lo = (min(x for x, _ in corners), origin[1], min(z for _, z in corners))
+    hi = (max(x for x, _ in corners), origin[1] + height - 1, max(z for _, z in corners))
     inside = [e for e in ents if isinstance(e, dict)
               and str(e.get("entity_type", "")) in
               ("minecraft:zombie", "minecraft:skeleton", "minecraft:spider", "minecraft:creeper")
-              and origin[0] <= float(e.get("x", -1e9)) <= hi[0]
-              and origin[1] <= float(e.get("y", -1e9)) <= hi[1]
-              and origin[2] <= float(e.get("z", -1e9)) <= hi[2]]
+              and lo[0] <= float(e.get("x", -1e9)) <= hi[0]
+              and lo[1] <= float(e.get("y", -1e9)) <= hi[1]
+              and lo[2] <= float(e.get("z", -1e9)) <= hi[2]]
     probe.check(f"{tag}_L{level}_no_hostiles", not inside)
     _verdict(sub, f"L{level}_no_hostiles", "PASS" if not inside else "FAIL",
              f"{len(inside)} hostiles inside")
