@@ -57,6 +57,11 @@ memory slots and a GO after the runner dropped both; deleted 2026-11-07).
 # Commits    none (leave the diff and its SHA-256) | local commits on the branch
 # Limits     only what differs from the standing rules: wall budget, whether
 #            subagents are allowed
+# Waiting    after a command goes to the background (async, or automatic after
+#            60 s), never call `wait` again and never poll; with no other work,
+#            end the turn without a tool call: the result arrives by itself
+#            (owner, 2026-11-13: two workers burnt 38 and 41 empty wait turns,
+#            about 12 M tokens each, in one hour)
 # Deliver    the result template below
 ```
 
