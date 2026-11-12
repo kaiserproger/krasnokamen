@@ -1,0 +1,45 @@
+{
+  "id": "ISSUE-1-25",
+  "verdict": "promoted",
+  "fix_commit": "patch:40f8383c27571409b89c202d9f47a4a636b765818e46987640a027055c870381",
+  "fix_commit_full": "patch:40f8383c27571409b89c202d9f47a4a636b765818e46987640a027055c870381",
+  "promoted_at": "2026-11-12T15:56:19+00:00",
+  "tree_head": "4335c4dd21cb6dac26704160fdd897e6c5373cec",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "40f8383c27571409b89c202d9f47a4a636b765818e46987640a027055c870381",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/construction.rs",
+    "crates/mc-core/src/settlements/ui.rs",
+    "crates/mc-core/src/settlements/ui_map.rs",
+    "crates/mc-core/src/settlements/ui_menus.rs",
+    "crates/mc-core/src/settlements/ui_text.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "harness:settlement-map-qa:localized_text": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run settlement-map-qa --client java --windowed --timeout-seconds 3600 -- --language ru_ru exited 1; see /run/media/kaiserroman/games/solaris-work/wt/SettlementMapVerdicts/.analysis/validation/20261112T152339-ledger-promote-81d3kpia/regressions-client-1.log"
+    }
+  },
+  "restored": {
+    "harness:settlement-map-qa:localized_text": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T155135-settlement-map-qa-xbbnggib/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/SettlementMapVerdicts/.analysis/validation/20261112T134314-settlement-map-qa-vj_ufqq9/result.json",
+    "tree_head": "4335c4dd21cb6dac26704160fdd897e6c5373cec",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "3668744edf2ff8cf49efe766ad40eef18e5679e70459603e3de01544b328838c",
+    "covers": [
+      "harness:settlement-map-qa:localized_text"
+    ],
+    "profile": "settlement-map-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/SettlementMapVerdicts/.analysis/validation/20261112T152339-ledger-promote-81d3kpia"
+}
