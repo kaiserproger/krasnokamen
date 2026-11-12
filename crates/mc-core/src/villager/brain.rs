@@ -568,6 +568,48 @@ fn clear_step(state: &TickState, begin: [f64; 3], end: [f64; 3], width: f64, hei
     )
 }
 
+/// Vanilla `VillageBoundRandomStroll`: inside the village (within one chunk
+/// section of a village POI section) a strolling resident steps at random;
+/// outside it walks back toward the village. The resident's own POIs (meeting
+/// point, home, job site) stand in for vanilla's POI-section village. Sections
+/// compare horizontally only, so a resident in a mine below them still
+/// strolls instead of standing still. `random` is the in-village step, at most
+/// 6 blocks (Manhattan); the step home is as long. Without any POI the stroll
+/// is random, as in vanilla away from villages.
+fn village_bound_stroll(
+    origin: BlockPos,
+    random: (i32, i32),
+    anchors: [Option<BlockPos>; 3],
+) -> BlockPos {
+    let section = |pos: BlockPos| (pos.x >> 4, pos.z >> 4);
+    let (sx, sz) = section(origin);
+    let mut nearest: Option<(BlockPos, u32)> = None;
+    for anchor in anchors.into_iter().flatten() {
+        let (ax, az) = section(anchor);
+        if sx.abs_diff(ax) <= 1 && sz.abs_diff(az) <= 1 {
+            nearest = None;
+            break;
+        }
+        let far = origin.x.abs_diff(anchor.x) + origin.z.abs_diff(anchor.z);
+        if nearest.is_none_or(|(_, best)| far < best) {
+            nearest = Some((anchor, far));
+        }
+    }
+    let (dx, dz) = match nearest {
+        // Outside the village: at least one section away, so `far` > 6.
+        Some((anchor, far)) => (
+            (i64::from(anchor.x - origin.x) * 6 / i64::from(far)) as i32,
+            (i64::from(anchor.z - origin.z) * 6 / i64::from(far)) as i32,
+        ),
+        None => random,
+    };
+    BlockPos {
+        x: origin.x + dx,
+        y: origin.y,
+        z: origin.z + dz,
+    }
+}
+
 fn wander_to(
     state: &mut TickState,
     slot: EntitySlot,
@@ -1212,19 +1254,20 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                             seed ^= seed >> 30;
                             seed = seed.wrapping_mul(0xBF58476D1CE4E5B9);
                             seed ^= seed >> 27;
-                            // Strolls remain bounded from the current cell,
-                            // including Work already within workstation reach.
+                            // Strolls step at most 6 blocks from the current
+                            // cell, including Work already within workstation
+                            // reach, and stay bound to the village.
                             let origin = at(pos);
                             let range = if v.activity == Activity::Work { 5 } else { 13 };
                             let dx = (seed % range) as i32 - range as i32 / 2;
                             let remaining = 6 - dx.abs();
                             let dz = (((seed >> 16) % range) as i32 - range as i32 / 2)
                                 .clamp(-remaining, remaining);
-                            Some(BlockPos {
-                                x: origin.x + dx,
-                                y: origin.y,
-                                z: origin.z + dz,
-                            })
+                            Some(village_bound_stroll(
+                                origin,
+                                (dx, dz),
+                                [meeting_point, home, job_site],
+                            ))
                         } else {
                             v.navigation_target
                         }

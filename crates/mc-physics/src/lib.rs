@@ -1780,7 +1780,8 @@ fn horizontal_distance_squared(delta: Vec3) -> f64 {
     delta.x * delta.x + delta.z * delta.z
 }
 
-fn body_overlaps_fluid<S: BlockSampler>(body: EntityBody, sampler: &S) -> bool {
+/// Whether any block cell the body's box covers holds a fluid.
+pub fn body_overlaps_fluid<S: BlockSampler>(body: EntityBody, sampler: &S) -> bool {
     let min_y = floor_i32(body.position.y);
     let max_y = floor_i32(body.position.y + body.aabb.height);
     let half = body.aabb.half_width;
@@ -1800,7 +1801,7 @@ fn body_overlaps_fluid<S: BlockSampler>(body: EntityBody, sampler: &S) -> bool {
 
 /// Common terrestrial mobs use vanilla's 0.4-block fluid jump threshold.
 /// Keep the probe below the midpoint of smaller bodies so they can breathe.
-fn fluid_reaches_swim_threshold<S: BlockSampler>(body: EntityBody, sampler: &S) -> bool {
+pub fn fluid_reaches_swim_threshold<S: BlockSampler>(body: EntityBody, sampler: &S) -> bool {
     let probe_y = floor_i32(body.position.y + 0.4_f64.min(body.aabb.height * 0.5));
     sampler
         .material_at(
