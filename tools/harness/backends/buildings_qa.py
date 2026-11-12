@@ -291,7 +291,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         server_hash = hashlib.file_digest(server_executable, "sha256").hexdigest()
     evidence.update(server_address=address, server_binary_path=str(binary),
                     server_binary_sha256=server_hash, world_dir=str(artifact / "world"),
-                    seed=SEED, select=select, **evidence_keep)
+                    seed=SEED, select=list(targets), **evidence_keep)
     server = client_process = xvfb = mcp = None
     server_log = None
     server_log_path = artifact / "server.log"
