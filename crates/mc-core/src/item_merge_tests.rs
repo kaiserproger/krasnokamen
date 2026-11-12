@@ -7,6 +7,7 @@ use std::sync::Arc;
 use mc_data::{Identifier, ItemStack};
 
 use super::{item_cell, merge_amount, merge_boxes_overlap, merge_neighbours};
+use crate::boundary::EntityId;
 use crate::entities::{EntitySlot, StackRow};
 use crate::registry::CoreRegistry;
 use crate::tick::TickState;
@@ -185,6 +186,7 @@ fn seeded(registry: &Arc<CoreRegistry>, seed: u64, items: usize) -> TickState {
     state
 }
 
+/// Slot, alive, stack, age, pickup delay and published appearance stack.
 type ItemOutcome = (
     EntitySlot,
     bool,
@@ -193,8 +195,10 @@ type ItemOutcome = (
     u32,
     Option<ItemStack>,
 );
+/// Every item, the consumed slots and the `appearance_changed` order.
+type MergeOutcome = (Vec<ItemOutcome>, Vec<EntitySlot>, Vec<EntityId>);
 
-fn outcome(state: &TickState) -> (Vec<ItemOutcome>, Vec<EntitySlot>, Vec<crate::boundary::EntityId>) {
+fn outcome(state: &TickState) -> MergeOutcome {
     let items = state
         .entities
         .item_slots()
