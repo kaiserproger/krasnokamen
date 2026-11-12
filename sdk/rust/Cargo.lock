@@ -66,6 +66,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "krasnokamen-hello-plugin"
+version = "0.9.0"
+dependencies = [
+ "krasnokamen-plugin-sdk",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "krasnokamen-plugin-sdk"
+version = "0.9.0"
+dependencies = [
+ "serde",
+ "toml",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "krasnokamen-sky-creeper-plugin"
+version = "0.9.0"
+dependencies = [
+ "krasnokamen-plugin-sdk",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "leb128fmt"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -178,31 +203,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf41e0cfaf7226dca15e8197172c295a782857fcb97fad1808a166870dee75a3"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "krasnokamen-hello-plugin"
-version = "0.8.0"
-dependencies = [
- "krasnokamen-plugin-sdk",
- "wit-bindgen",
-]
-
-[[package]]
-name = "krasnokamen-plugin-sdk"
-version = "0.8.0"
-dependencies = [
- "serde",
- "toml",
- "wit-bindgen",
-]
-
-[[package]]
-name = "krasnokamen-sky-creeper-plugin"
-version = "0.8.0"
-dependencies = [
- "krasnokamen-plugin-sdk",
- "wit-bindgen",
 ]
 
 [[package]]
