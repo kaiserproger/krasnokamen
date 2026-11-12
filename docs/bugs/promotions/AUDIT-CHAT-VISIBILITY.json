@@ -1,0 +1,100 @@
+{
+  "id": "AUDIT-CHAT-VISIBILITY",
+  "verdict": "promoted",
+  "fix_commit": "patch:2de60a266139a4f23cbfced3a9883825ea631ea136a20bf9099e2c0ffa1fde09",
+  "fix_commit_full": "patch:2de60a266139a4f23cbfced3a9883825ea631ea136a20bf9099e2c0ffa1fde09",
+  "promoted_at": "2026-11-11T23:55:45+00:00",
+  "tree_head": "a4710009c5713cacf5c729040953cf8c07df5e93",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "2de60a266139a4f23cbfced3a9883825ea631ea136a20bf9099e2c0ffa1fde09",
+  "reversed_files": [
+    "crates/mc-core/src/tick.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:chat_visibility_tests::say_and_private_messages_are_chat_not_system_text": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:server::view_distance_tests::edge_sent_feedback_follows_the_clients_chat_setting": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:chat_visibility_tests::a_hidden_client_cannot_chat_and_is_told_so_in_red": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:chat_visibility_tests::system_text_reaches_commands_only_clients_but_not_hidden_ones": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:chat_visibility_tests::public_chat_reaches_only_full_clients": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:chat_visibility_tests::the_setting_changes_in_place_and_resets_when_the_player_leaves": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::view_distance_tests::client_chat_setting_is_admitted_at_join_and_on_play_changes": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:dimensions::tests::rejoin_child_dimension_keeps_the_clients_chat_setting": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:chat-visibility:native-chat-visibility": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-chat-visibility --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261111T235130-ledger-promote-2yhkkv5y/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:chat_visibility_tests::say_and_private_messages_are_chat_not_system_text": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::view_distance_tests::edge_sent_feedback_follows_the_clients_chat_setting": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:chat_visibility_tests::a_hidden_client_cannot_chat_and_is_told_so_in_red": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:chat_visibility_tests::system_text_reaches_commands_only_clients_but_not_hidden_ones": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:chat_visibility_tests::public_chat_reaches_only_full_clients": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:chat_visibility_tests::the_setting_changes_in_place_and_resets_when_the_player_leaves": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::view_distance_tests::client_chat_setting_is_admitted_at_join_and_on_play_changes": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:dimensions::tests::rejoin_child_dimension_keeps_the_clients_chat_setting": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261111T233149-native-chat-visibility-co0r8fyw/result.json",
+    "tree_head": "a4710009c5713cacf5c729040953cf8c07df5e93",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "080e86c32c92b2c3855914382eb16bfa83da4a9514eaaab237b98a2d594c10f7",
+    "covers": [
+      "harness:chat-visibility:native-chat-visibility"
+    ],
+    "profile": "chat-visibility"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261111T235130-ledger-promote-2yhkkv5y"
+}

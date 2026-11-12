@@ -1580,10 +1580,11 @@ title = "datapack disable file/matrix and enable rejected; list-only dispatch."
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-ENABLE Fix patch: reversing it removes the enable/disable arms (and the in-progress guard) from datapack_management::dispatch, back to list-only dispatch."
 regression = ["cargo:mc-core:datapacks::command_tests::enable_and_disable_follow_vanilla_ordering_errors_and_results", "cargo:mc-core:datapacks::command_tests::the_saved_pack_selection_decides_which_recipes_load_after_a_restart", "cargo:mc-core:datapacks::command_tests::a_selected_pack_gone_from_disk_is_dropped_with_a_warning", "cargo:mc-core:datapacks::command_tests::a_pack_removed_while_the_server_is_down_opens_the_world_without_it", "cargo:mc-core:datapacks::command_tests::a_corrupt_saved_selection_fails_closed", "harness:datapack-reload:native-datapack-reload", "cargo:mc-core:datapacks::command_tests::unreadable_or_non_pack_folder_entries_are_skipped_at_start_and_named", "cargo:mc-core:datapacks::command_tests::a_reload_skips_a_new_broken_pack_and_applies_the_rest_but_a_broken_saved_pack_refuses_it", "cargo:mc-core:datapacks::command_tests::list_and_activation_work_beside_unreadable_entries", "cargo:mc-core:datapacks::command_tests::a_filter_the_regex_engine_refuses_is_a_pack_load_error_named_like_any_other"]
 fix_commit = "patch:c3f274721984ac395f776c096188b4dbdbe453f0ad4d35b4be1d8a8011689116"
+promotion = "docs/bugs/promotions/DATAPACK-ENABLE.json"
 
 [[bug]]
 id = "DEBUG-PROFILER"
@@ -1602,10 +1603,11 @@ title = "`/debug function <id>` and function-tag tracing are rejected because de
 area = "gameplay"
 repro = "manual"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-FUNCTION-TRACE Fix patch: reversing it turns the /debug function dispatch arm back into an unsupported-syntax result."
 regression = ["cargo:mc-core:command_debug::tests::function_trace_records_commands_results_messages_errors_and_nested_calls", "cargo:mc-core:command_debug::tests::function_tag_trace_counts_every_function_and_reports_the_multiple_key", "cargo:mc-core:command_debug::tests::function_trace_refuses_unknown_functions_low_permission_and_recursion", "cargo:mc-core:command_debug::tests::function_trace_write_failure_is_reported_not_hidden", "cargo:mc-core:command_debug::tests::function_trace_records_only_what_the_source_is_sent", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:40a6af5157a6fdb37ce21e147f3178511d2897ace09ec46fafd2a03fe92a37b3"
+promotion = "docs/bugs/promotions/DEBUG-FUNCTION-TRACE.json"
 
 [[bug]]
 id = "DATAPACK-LIST-LIVE-DISCOVERY"
@@ -1613,10 +1615,11 @@ title = "After packs are added/removed on disk, a cached-only `/datapack list` c
 area = "gameplay"
 repro = "manual"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-LIVE-DISCOVERY Fix patch: reversing it makes `/datapack list available` list only packs the selection already knows (explicitly disabled ones) instead of scanning the pack folder."
 regression = ["cargo:mc-core:datapacks::command_tests::list_sees_packs_added_and_removed_on_disk_without_a_reload", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:9294887432bfee19b741c47d64f3dd12b12c2824d4b01ffe2453ba430363062e"
+promotion = "docs/bugs/promotions/DATAPACK-LIST-LIVE-DISCOVERY.json"
 
 [[bug]]
 id = "DAMAGE-COMMAND"
@@ -1744,10 +1747,11 @@ title = "ZIP datapacks and worldgen/dimension resources are rejected, preventing
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-WORLDGEN-ZIP Fix patch: reversing it removes the .zip pack arm from the pack scan and the worldgen/dimension resource arm from add_file, so such packs are rejected again."
 regression = ["cargo:mc-core:datapacks::command_tests::zip_packs_load_functions_tags_recipes_and_refuse_unsafe_entries", "cargo:mc-core:datapacks::command_tests::an_archive_with_more_entries_than_the_resource_limit_is_refused", "cargo:mc-core:datapacks::command_tests::a_pack_with_worldgen_resources_loads_its_other_content_and_warns_once", "cargo:mc-core:datapacks::tests::worldgen_resources_are_ignored_and_unknown_resources_fail_with_explicit_error", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:7ed25fa17b8c7d7980abac39ba0e842869b4a620643e438e46635b23c5a07c73"
+promotion = "docs/bugs/promotions/DATAPACK-WORLDGEN-ZIP.json"
 
 [[bug]]
 id = "DATAPACK-WORLDGEN-OVERRIDES"
@@ -1765,10 +1769,11 @@ title = "`/list` and `/list uuids` success output ignores `send_command_feedback
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/BreakJoinRows/FINDINGS.md#F1 (javap/ListPlayersCommand.txt, ServerPlayer$3.txt) Fix patch: reversing it answers /list with feedback() instead of success_feedback(), so the reply ignores send_command_feedback again."
 regression = ["cargo:mc-edge:server::view_distance_tests::list_obeys_the_send_command_feedback_rule", "harness:chat-visibility:native-chat-visibility", "cargo:mc-core:dimensions::tests::send_command_feedback_set_from_the_nether_is_published_for_the_edge"]
 fix_commit = "patch:0eb05a69067379a145703ad813222c14d28930a0dde1529bb37252b395d7116d"
+promotion = "docs/bugs/promotions/COMMAND-FEEDBACK-LIST-IGNORES-GAMERULE.json"
 
 [[bug]]
 id = "DATAPACK-CREATE"
@@ -1776,10 +1781,11 @@ title = "`/datapack create <id> <description>` always falls through to unsupport
 area = "gameplay"
 repro = "manual"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-CREATE Fix patch: reversing it removes the create arm from datapack_management::dispatch, so `/datapack create` falls through to the usage error."
 regression = ["cargo:mc-core:datapacks::command_tests::create_writes_an_empty_directory_pack_with_a_description", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:6c685109e11e0daa60136fd4f8bfb0a436aba0fb05329897927e9f4ef779afe9"
+promotion = "docs/bugs/promotions/DATAPACK-CREATE.json"
 
 [[bug]]
 id = "DATAPACK-FEATURE-ADMISSION"
@@ -2230,10 +2236,11 @@ title = "Generic entity/storage data operations absent; existing command-block-o
 area = "gameplay"
 repro = "manual"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-MUTATION-STORAGE Fix patch: reversing it removes the storage, entity and block arms from the /data dispatch, so merge/modify/remove fall through to unsupported syntax."
 regression = ["cargo:mc-core:command_data::tests::data_storage_modify_reports_results_and_survives_reads", "cargo:mc-core:command_data::tests::data_merge_modify_and_remove_edit_a_mobs_data_and_keep_its_identity", "cargo:mc-core:command_data::tests::data_entity_edits_refuse_players_unsupported_fields_and_position_without_changing_anything", "cargo:mc-core:command_data::tests::data_entity_edit_of_a_villager_keeps_its_profession_level_and_age", "cargo:mc-core:command_data::tests::data_edits_an_item_entitys_stack_delay_age_and_gravity", "cargo:mc-core:command_data::tests::data_modify_and_merge_edit_any_block_entity_through_its_native_owner", "cargo:mc-core:command_data::tests::data_block_edits_are_refused_without_changing_anything", "cargo:mc-core:command_data::tests::data_edits_a_command_block_through_the_same_command_path", "cargo:mc-core:command_data::tests::data_edit_of_a_baby_keeps_its_hitbox_and_growing_up_restores_it", "cargo:mc-core:command_data::tests::data_edit_of_an_experience_orb_changes_its_value_and_count", "cargo:mc-core:command_data::tests::data_edit_keeps_a_zombie_villagers_cure_and_a_name_removal_clears_it", "cargo:mc-core:dimensions::tests::data_merge_entity_edits_an_entity_in_another_loaded_dimension", "cargo:mc-core:dimensions::tests::data_edits_a_block_entity_in_another_loaded_dimension", "cargo:mc-core:dimensions::tests::data_edits_an_entity_for_senders_in_the_nether_and_the_end", "cargo:mc-core:dimensions::tests::data_edit_of_a_villager_keeps_trades_gossip_inventory_and_replays_from_the_wal", "cargo:mc-core:command_data::tests::data_edit_of_one_field_keeps_love_and_persistence_the_entity_already_had", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:f3ee0db6f2ab384acbb5302aa2202e5a64216714f8e89b77ac32c859b97f65cb"
+promotion = "docs/bugs/promotions/DATA-MUTATION-STORAGE.json"
 
 [[bug]]
 id = "HAPPY-GHAST-HARNESS"
@@ -2791,10 +2798,11 @@ title = "Public StyledChat fanout lacks visible policy; `scenarios/domains/chat-
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUDIT-CHAT-VISIBILITY"
 regression = ["cargo:mc-core:chat_visibility_tests::public_chat_reaches_only_full_clients", "cargo:mc-core:chat_visibility_tests::a_hidden_client_cannot_chat_and_is_told_so_in_red", "cargo:mc-core:chat_visibility_tests::system_text_reaches_commands_only_clients_but_not_hidden_ones", "cargo:mc-core:chat_visibility_tests::say_and_private_messages_are_chat_not_system_text", "cargo:mc-core:chat_visibility_tests::the_setting_changes_in_place_and_resets_when_the_player_leaves", "cargo:mc-edge:server::view_distance_tests::client_chat_setting_is_admitted_at_join_and_on_play_changes", "cargo:mc-core:dimensions::tests::rejoin_child_dimension_keeps_the_clients_chat_setting", "harness:chat-visibility:native-chat-visibility", "cargo:mc-edge:server::view_distance_tests::edge_sent_feedback_follows_the_clients_chat_setting"]
 fix_commit = "patch:2de60a266139a4f23cbfced3a9883825ea631ea136a20bf9099e2c0ffa1fde09"
+promotion = "docs/bugs/promotions/AUDIT-CHAT-VISIBILITY.json"
 
 [[bug]]
 id = "AUDIT-SCULK"

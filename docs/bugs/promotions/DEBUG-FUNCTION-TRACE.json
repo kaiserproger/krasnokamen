@@ -1,0 +1,76 @@
+{
+  "id": "DEBUG-FUNCTION-TRACE",
+  "verdict": "promoted",
+  "fix_commit": "patch:40a6af5157a6fdb37ce21e147f3178511d2897ace09ec46fafd2a03fe92a37b3",
+  "fix_commit_full": "patch:40a6af5157a6fdb37ce21e147f3178511d2897ace09ec46fafd2a03fe92a37b3",
+  "promoted_at": "2026-11-12T01:40:28+00:00",
+  "tree_head": "a4710009c5713cacf5c729040953cf8c07df5e93",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "40a6af5157a6fdb37ce21e147f3178511d2897ace09ec46fafd2a03fe92a37b3",
+  "reversed_files": [
+    "crates/mc-core/src/command_execution.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:command_debug::tests::function_trace_write_failure_is_reported_not_hidden": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_debug::tests::function_trace_records_only_what_the_source_is_sent": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_debug::tests::function_tag_trace_counts_every_function_and_reports_the_multiple_key": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_debug::tests::function_trace_records_commands_results_messages_errors_and_nested_calls": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_debug::tests::function_trace_refuses_unknown_functions_low_permission_and_recursion": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:datapack-reload:native-datapack-reload": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-datapack-reload --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261112T013622-ledger-promote-ftoy30bt/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_debug::tests::function_trace_write_failure_is_reported_not_hidden": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_debug::tests::function_trace_records_only_what_the_source_is_sent": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_debug::tests::function_tag_trace_counts_every_function_and_reports_the_multiple_key": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_debug::tests::function_trace_records_commands_results_messages_errors_and_nested_calls": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_debug::tests::function_trace_refuses_unknown_functions_low_permission_and_recursion": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261111T233235-native-datapack-reload-qp8gofeq/result.json",
+    "tree_head": "a4710009c5713cacf5c729040953cf8c07df5e93",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "080e86c32c92b2c3855914382eb16bfa83da4a9514eaaab237b98a2d594c10f7",
+    "covers": [
+      "harness:datapack-reload:native-datapack-reload"
+    ],
+    "profile": "datapack-reload"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261112T013622-ledger-promote-ftoy30bt"
+}
