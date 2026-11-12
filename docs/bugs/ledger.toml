@@ -2395,11 +2395,12 @@ title = "Villagers leave doors open at night"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1 (some villagers leave house doors open at night); fixed by 8a1c5453 (2026-10-19: villagers open/close wooden doors on their route and close only doors they opened, never on another villager in the doorway). Vanilla 26.3 SleepInBed.start and InteractWithDoor close the doors a villager opened or passed through (javap of the local server jar). Fix patch docs/bugs/fix-patches/ISSUE-1-08.patch is the closing call at the candidate (villager/doors.rs interact); reversing it leaves every door a villager opened open"
-regression = ["cargo:mc-core:villager::brain::tests::door_tests::resident_opens_both_door_halves_and_closes_after_entering_bed_at_night", "cargo:mc-core:villager::brain::tests::door_tests::bound_bedless_nitwit_enters_occupied_house_at_night", "cargo:mc-core:villager::brain::tests::door_tests::interrupted_route_closes_only_the_door_the_resident_opened", "harness:village-qa:night_door"]
+regression = ["cargo:mc-core:villager::brain::tests::door_tests::resident_opens_both_door_halves_and_closes_after_entering_bed_at_night", "cargo:mc-core:villager::brain::tests::door_tests::bound_bedless_nitwit_enters_occupied_house_at_night", "cargo:mc-core:villager::brain::tests::door_tests::interrupted_route_closes_only_the_door_the_resident_opened", "harness:village-qa:night_door", "harness:scene-shot:native-village-night-door"]
 failing_first = "reported"
 fix_commit = "patch:ecb5306d97a64d29220b6bd0c1897411943ed19cb08bc6505f222dc882ae6083"
+promotion = "docs/bugs/promotions/ISSUE-1-08.json"
 
 [[bug]]
 id = "ISSUE-1-09"
@@ -2420,11 +2421,12 @@ title = "Villagers fail to acquire available jobs"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1 (settlement villagers should take free jobs automatically and walk there without dropping the route); fixed by 8a1c5453 (2026-10-19: bound settlements discover free job sites across their whole radius). Fix patch docs/bugs/fix-patches/ISSUE-1-10.patch is the claim route window at the candidate (settlements/allocator.rs acquire: the search window follows the settlement claim); reversing it brings back the flat 48x16 stroll window, so a free settlement job farther away is never claimed. The distant-claim fixture puts the job's nearest standing cell 52 blocks from the villager (it was 48, still inside the flat window)"
-regression = ["cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_settlement_job_is_claimed_beyond_vanilla_reach", "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_claim_keeps_walking_without_forty_tick_abandon"]
+regression = ["cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_settlement_job_is_claimed_beyond_vanilla_reach", "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_claim_keeps_walking_without_forty_tick_abandon", "harness:scene-shot:native-village-distant-job"]
 failing_first = "reported"
 fix_commit = "patch:fe58612e34bab7e5ae287f4c9d0dd604420d495b59408b7e31133a7f587aa9ee"
+promotion = "docs/bugs/promotions/ISSUE-1-10.json"
 
 [[bug]]
 id = "ISSUE-1-11"
@@ -2664,11 +2666,12 @@ title = "NPC block mutations do not reach client"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1 (comment 2026-10-19 15:55: blocks villagers changed did not reach the client); fixed by a6979209 (2026-10-19: villager commit-tail block edits are folded before the chunk snapshot is published). Fix patch docs/bugs/fix-patches/ISSUE-1-28.patch is that fold at the candidate (tick.rs publish); reversing it publishes the chunk without the villagers' commit-tail edits"
 regression = ["harness:village-qa:door_walk", "harness:village-qa:farmer_harvest", "harness:village-qa:miner_deposit", "harness:village-qa:lumberjack"]
 failing_first = "reported"
 fix_commit = "patch:b6347ae3aad17693f228d31153fe846cd59121bf85b57021678beaf241031cd7"
+promotion = "docs/bugs/promotions/ISSUE-1-28.json"
 
 [[bug]]
 id = "HUNT-REJOIN-LOCALE"
@@ -5017,11 +5020,12 @@ title = "Villagers never close a wooden door a player left open, even after walk
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Breaker finding F1 (VillageBreak2, ISSUE-1-08 break-it pass, agent-run): in a certified house the player opens the spruce door by day; at time 18000 both residents walk home through it and fall asleep, and the door stays open=true all night (server truth via execute if block; native client d5f25569, server pin 4bfacdf6391f-3f0eb5d2 = main 71d1c127; scene-shot artifacts 20261112T012120-scene-shot-1449j9i8 and 20261112T012900-scene-shot-bbujr1zg, 2/2). Every door the villagers opened themselves was shut. Vanilla 26.3 InteractWithDoor opens the previous path node's door if closed and remembers it for closing either way (javap offsets 142-166), so closeDoorsThatIHaveOpenedOrPassedThrough closes doors a villager passed through. crates/mc-core/src/villager/doors.rs remembers only doors it opened, as docs/settlements/jobs.md documents (they leave player-opened doors alone): owner decision whether to keep the documented deviation."
-regression = ["cargo:mc-core:villager::brain::tests::door_tests::interrupted_route_closes_only_the_door_the_resident_opened"]
+regression = ["cargo:mc-core:villager::brain::tests::door_tests::interrupted_route_closes_only_the_door_the_resident_opened", "harness:scene-shot:native-village-night-door"]
 failing_first = "reported"
-fix_commit = "c506b8ab"
+fix_commit = "patch:8d3d9a432564e87c614ffc59aa05029dca3dd4bbd59df325dfd03f12b527a2cc"
+promotion = "docs/bugs/promotions/VILLAGER-PLAYER-OPENED-DOOR-STAYS-OPEN.json"
 
 [[bug]]
 id = "VILLAGER-WORKSTATION-IGNORED-AFTER-WORK-HOURS"
@@ -5029,11 +5033,12 @@ title = "A jobless villager ignores a free reachable workstation from day tick 9
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Breaker finding F2 (VillageBreak2, ISSUE-1-10 break-it pass, agent-run): at time 10000 (awake, after work hours) an unbound jobless villager 51 blocks outside any settlement gets a lectern two blocks away, and a bound jobless resident's settlement certifies a librarian workshop; both stay jobless for 1200 ticks, and after time set 2500 both are librarians within 200 ticks, so the stations were valid and reachable (native client d5f25569, server pin 4bfacdf6391f-3f0eb5d2 = main 71d1c127; scene-shot artifacts 20261112T013249-scene-shot-qfcl2h4c, 20261112T013426-scene-shot-yc4y5ut8, 20261112T013520-scene-shot-dh5v6muo: unbound 3/3, bound 2/2). Vanilla 26.3 VillagerGoalPackages.getCorePackage holds AcquirePoi for POTENTIAL_JOB_SITE and AssignProfessionFromJobSite, which run whatever the schedule activity is, so an awake villager takes a free workstation at any time of day (the usual lectern reroll). crates/mc-core/src/settlements/allocator.rs acquire_pois searches jobs only while day_time is in 2000..9000, for bound and unbound villagers; docs/settlements/jobs.md documents that window: owner decision whether unbound villagers should follow vanilla."
-regression = ["cargo:mc-core:settlements::allocator::tests::jobless_villager_claims_a_free_workstation_at_any_hour"]
+regression = ["cargo:mc-core:settlements::allocator::tests::jobless_villager_claims_a_free_workstation_at_any_hour", "harness:scene-shot:native-village-late-job"]
 failing_first = "reported"
-fix_commit = "c506b8ab"
+fix_commit = "patch:156f19bd4a1453a4567d979d10712812b1f622295fca37d885097af48b2a99c0"
+promotion = "docs/bugs/promotions/VILLAGER-WORKSTATION-IGNORED-AFTER-WORK-HOURS.json"
 
 [[bug]]
 id = "NATIVE-STORE-LEASE-HELD-BY-FORKED-CHILD"
@@ -5114,11 +5119,12 @@ title = "Residents drift 60-70 blocks out of the village on untethered strolls, 
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Seed-24 civilization-seed-qa, two fresh runs. llr1bc4e (server 107ddb91): newborn f7a21a80 on the floor of a two-deep pond at (73.4,60.9,-231.4), 58 blocks from the meeting point (131,78,-217), killed by a zombie at tick 65504 (server.log line 638; receipts/CivSimSeed24/snap3/probe-baby.json). fx4gdz87 (server 7ed4d504, baby wading fix): adult nitwit 49efa776 killed by a zombie at tick 43690, activity Panic, position (61.7,58.0,-252.3), 70 blocks west of the meeting point, on dirt at y=57 under water y=58-62 (receipts/CivSimSeed24/snap5/probe-nitwit.json); routes refuse that water for an adult, so it did not arrive by a planned route. Two source findings: villager/brain.rs short_wander picks each Idle/Play/Work stroll target within +-6 of the current cell (range 13, new target every 40 ticks) with no reference to the village, so position is an unbounded random walk (vanilla VillageBoundRandomStroll keeps to village sections and walks back from outside); and no caller gives terrestrial mobs the FloatGoal/Swim upward drive mc-physics expects (entity_motion.rs Walker path; mc-physics lib.rs step_entity), so a villager that enters deep water sinks to the floor and cannot climb out. Fixed on main by 32116b00 and b7f7234c (fix patch docs/bugs/fix-patches/VILLAGER-IDLE-STROLL-UNBOUNDED-DRIFT.patch): strolls follow vanilla VillageBoundRandomStroll (random within one section of the resident's meeting point, home or job site; outside, a step back toward the nearest), and resident body motion follows vanilla Swim(0.8f) and LivingEntity.travelInWater (no full gravity in water: 0.8 vertical drag, gravity/16 sink, +0.04 blocks/tick liquid jump on 80% of ticks while deeper than the 0.4-block threshold; jumpOutOfFluid lifts a swimmer blocked by a bank), javap of the local 26.3 jar."
 failing_first = "not recorded"
-regression = ["cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_strolls_stay_bound_to_the_village_over_many_decisions", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_resident_outside_the_village_strolls_back_toward_it", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::resident_in_deep_water_swims_up_to_the_surface"]
+regression = ["cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_strolls_stay_bound_to_the_village_over_many_decisions", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_resident_outside_the_village_strolls_back_toward_it", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::resident_in_deep_water_swims_up_to_the_surface", "harness:scene-shot:native-village-idle-stroll"]
 fix_commit = "patch:85195e25eabb2e4a202ef619a549dfe7d3326abfb0045413fbf46e382934a38d"
+promotion = "docs/bugs/promotions/VILLAGER-IDLE-STROLL-UNBOUNDED-DRIFT.json"
 
 [[bug]]
 id = "PLUGIN-EVENT-BACKLOG-HALTS-WORLD"
