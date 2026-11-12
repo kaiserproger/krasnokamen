@@ -1,0 +1,16 @@
+diff --git a/crates/mc-core/src/settlements/allocator.rs b/crates/mc-core/src/settlements/allocator.rs
+index e211bf54..f3b63712 100644
+--- a/crates/mc-core/src/settlements/allocator.rs
++++ b/crates/mc-core/src/settlements/allocator.rs
+@@ -1467,8 +1467,10 @@ fn acquire_pois(state: &mut TickState, cache: &mut PoiCache) {
+                         }
+                     }
+                 }
++                // Vanilla AcquirePoi and AssignProfessionFromJobSite sit in the
++                // core package: a jobless adult claims a workstation at any
++                // hour. Only the WORK activity follows the shift.
+                 1 if v.age >= 0
+-                    && (2_000..9_000).contains(&state.day_time.rem_euclid(24_000))
+                     && !matches!(v.data.profession, Profession::Nitwit | Profession::Soldier)
+                     && v.job_site.is_none() =>
+                 {
