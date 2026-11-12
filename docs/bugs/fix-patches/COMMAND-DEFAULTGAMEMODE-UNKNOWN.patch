@@ -1,0 +1,12 @@
+diff --git a/crates/mc-core/src/commands.rs b/crates/mc-core/src/commands.rs
+index d8c5bf4..f574fe7 100644
+--- a/crates/mc-core/src/commands.rs
++++ b/crates/mc-core/src/commands.rs
+@@ -23,6 +23,7 @@ pub const ROOTS: &[(&str, u8)] = &[
+     ("settlement", 0),
+     ("trigger", 0),
+     ("gamemode", 2),
++    ("defaultgamemode", 2),
+     ("teleport", 2),
+     ("tp", 2),
+     ("execute", 2),

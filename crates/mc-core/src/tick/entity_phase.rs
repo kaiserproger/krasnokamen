@@ -1086,11 +1086,13 @@ pub(super) fn read_row(
 pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> {
     #[cfg(all(test, debug_assertions))]
     sensor_bench_tests::COUNTS.set((0, 0));
+    let pre_start = std::time::Instant::now();
     if sim {
         crate::contact_hazards::hurt_by_water(state);
         crate::enderman::tick(state);
     }
     let prep_start = std::time::Instant::now();
+    let pre_time = prep_start.duration_since(pre_start);
     state.entities.prepare_motion_hints(&state.registry);
     let unchanged_since = state.entity_phase_revision;
     state.entity_phase_revision = state.world.revision_now();
@@ -1588,9 +1590,13 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         }
     }
     state.seq_counter = seq;
-    if sim {
-        crate::item_motion::merge_neighbours(state);
-    }
+    let item_merge_start = std::time::Instant::now();
+    let merge_items = if sim {
+        crate::item_motion::merge_neighbours(state)
+    } else {
+        0
+    };
+    let item_merge_time = item_merge_start.elapsed();
     let commit_time = commit_start.elapsed();
     let post_start = std::time::Instant::now();
     // Pickup intents: players collect mature item entities in reach.
@@ -1606,13 +1612,16 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     }
     if std::env::var("MC_CORE_PHASE_LOG").is_ok() {
         eprintln!(
-            "  entity detail ms: scope={:.1} n={} prep={:.1} commit={:.1} post={:.1} rest={}",
+            "  entity detail ms: scope={:.1} n={} prep={:.1} commit={:.1} post={:.1} rest={} pre={:.1} item_merge={:.1} items={}",
             scope_time.as_secs_f64() * 1000.0,
             rows.len(),
             prep_time.as_secs_f64() * 1000.0,
             commit_time.as_secs_f64() * 1000.0,
             post_start.elapsed().as_secs_f64() * 1000.0,
             resting_count,
+            pre_time.as_secs_f64() * 1000.0,
+            item_merge_time.as_secs_f64() * 1000.0,
+            merge_items,
         );
     }
     rows.clear();

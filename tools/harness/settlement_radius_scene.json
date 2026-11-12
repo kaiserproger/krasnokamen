@@ -1,0 +1,129 @@
+{
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "tp": [
+        1000.5,
+        205,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 100
+    },
+    {
+      "cmd": "fill 990 199 990 1010 199 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 990 200 990 1010 210 1010 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        200,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "cmd": "summon minecraft:villager 1004.5 200 1000.5"
+    },
+    {
+      "cmd": "summon minecraft:villager 996.5 200 1000.5"
+    },
+    {
+      "cmd": "summon minecraft:villager 1000.5 200 1004.5"
+    },
+    {
+      "cmd": "summon minecraft:villager 1000.5 200 996.5"
+    },
+    {
+      "cmd": "summon minecraft:villager 1004.5 200 1004.5"
+    },
+    {
+      "cmd": "summon minecraft:villager 996.5 200 996.5"
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "cmd": "settlement create radiusqa 8"
+    },
+    {
+      "wait_chat": "Founded radiusqa"
+    },
+    {
+      "cmd": "settlement info radiusqa"
+    },
+    {
+      "cmd": "say radius_fence_founded"
+    },
+    {
+      "wait_chat": "radius_fence_founded"
+    },
+    {
+      "assert_chat": {
+        "name": "radius-after-founding",
+        "contains": [
+          "radius=24 members=6"
+        ],
+        "excludes": [
+          "radius=8 "
+        ]
+      }
+    },
+    {
+      "cmd": "summon minecraft:villager 1000.5 200 1000.5"
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "cmd": "settlement bind radiusqa"
+    },
+    {
+      "wait_chat": "to radiusqa."
+    },
+    {
+      "cmd": "settlement info radiusqa"
+    },
+    {
+      "cmd": "say radius_fence_bound"
+    },
+    {
+      "wait_chat": "radius_fence_bound"
+    },
+    {
+      "assert_chat": {
+        "name": "radius-after-seventh-resident",
+        "contains": [
+          "radius=28 members=7"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "shot": "radius-grown"
+    }
+  ]
+}

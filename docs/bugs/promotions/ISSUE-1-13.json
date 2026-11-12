@@ -1,0 +1,41 @@
+{
+  "id": "ISSUE-1-13",
+  "verdict": "promoted",
+  "fix_commit": "patch:08fa6042200d71e8a416fecae88b7fbdb8e758c27e1fe37faf85ae05b484b436",
+  "fix_commit_full": "patch:08fa6042200d71e8a416fecae88b7fbdb8e758c27e1fe37faf85ae05b484b436",
+  "promoted_at": "2026-11-12T07:38:53+00:00",
+  "tree_head": "8950985ad998e4ef84f1e0493f5a09b72d60f5a8",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "08fa6042200d71e8a416fecae88b7fbdb8e758c27e1fe37faf85ae05b484b436",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/allocator.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "harness:scene-shot:native-village-breeding": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-village-breeding --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/BreedingScene/.analysis/validation/20261112T072628-ledger-promote-3o13u0kn/regressions-client-1.log"
+    }
+  },
+  "restored": {
+    "harness:scene-shot:native-village-breeding": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T073534-native-village-breeding-y3pkobli/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/BreedingScene/.analysis/validation/20261112T070541-native-village-breeding-9k4dyckd/result.json",
+    "tree_head": "8950985ad998e4ef84f1e0493f5a09b72d60f5a8",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "c7fd6f6bc8083919320ca9790d4c6afd40ee02628669fc715e787b4a7bf95db6",
+    "covers": [
+      "harness:scene-shot:native-village-breeding"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/BreedingScene/.analysis/validation/20261112T072628-ledger-promote-3o13u0kn"
+}

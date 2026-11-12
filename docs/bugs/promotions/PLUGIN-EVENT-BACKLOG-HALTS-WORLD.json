@@ -1,0 +1,30 @@
+{
+  "id": "PLUGIN-EVENT-BACKLOG-HALTS-WORLD",
+  "verdict": "promoted",
+  "fix_commit": "patch:68f37e19635593f8a0504b42fb63a2f08cb8c09387c7f595d4a44ff5d22fa026",
+  "fix_commit_full": "patch:68f37e19635593f8a0504b42fb63a2f08cb8c09387c7f595d4a44ff5d22fa026",
+  "promoted_at": "2026-11-12T07:45:08+00:00",
+  "tree_head": "251e65ab7e65d4b1d259cfdd19cc74a5497c1a10",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "68f37e19635593f8a0504b42fb63a2f08cb8c09387c7f595d4a44ff5d22fa026",
+  "reversed_files": [
+    "crates/mc-core/src/plugin.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:plugin_backlog_tests::a_stalled_plugin_refuses_new_commands_instead_of_halting_the_world": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:plugin_backlog_tests::a_stalled_plugin_refuses_new_commands_instead_of_halting_the_world": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PluginBacklogHalt/.analysis/validation/20261112T074333-ledger-promote-ejfcz4oz"
+}
