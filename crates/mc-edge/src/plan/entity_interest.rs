@@ -9,7 +9,9 @@ pub(super) struct EntityInterest {
     previous: Option<mc_core::boundary::EntityViews>,
     position: Option<([u64; 2], i32)>,
     held: HashSet<(i32, i32)>,
-    ranges: HashSet<i32>,
+    /// Distinct tracking ranges of the tracked kinds (a handful): a linear probe replaces the hash of
+    /// every `changed` call (1.9 % of the fanout threads' self time, window c); order never matters.
+    ranges: Vec<i32>,
     visible: HashMap<EntityId, Order>,
     spawns: HashSet<EntityId>,
     removals: HashSet<EntityId>,
@@ -301,8 +303,9 @@ impl EntityInterest {
             let chunk = entity_chunk(entity.position);
             if viewer.loaded_chunks.contains_key(&chunk)
                 && let Some(range) = tracking_range(entity.type_id, distance)
+                && !self.ranges.contains(&range)
             {
-                self.ranges.insert(range);
+                self.ranges.push(range);
             }
             let center = entity_chunk(viewer.position);
             (chunk.0 - center.0).abs() <= distance.max(0)
