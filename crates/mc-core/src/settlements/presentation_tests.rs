@@ -222,3 +222,54 @@ fn home_job_and_bell_labels_share_entrance_and_snapshot_is_reused() {
             .all(|label| label.anchor != [6, 201, 9])
     );
 }
+
+/// Villager-heavy prepare, region 72: a label rebuild scanned every villager
+/// once per point of interest, so a tick cost `loaded POIs x all villagers`
+/// (2.8 s at 15k villagers) and the setup client never became ready. The
+/// rebuild is linear now: 6000 villagers with 6000 homes must label well
+/// inside a second (the quadratic scan needs several seconds even in release).
+#[test]
+fn label_rebuild_is_linear_in_villagers_and_points_of_interest() {
+    use crate::boundary::ChunkPos;
+    use crate::settlements::allocator::{ChunkPois, Poi, PoiKind};
+    let mut state = test_state();
+    let around = rustc_hash::FxHashMap::from_iter(
+        (-1..=1).flat_map(|x| (-1..=1).map(move |z| (ChunkPos { x, z }, 0))),
+    );
+    state.world.ensure_blocking(&around);
+    let count = 6000;
+    let mut pois = Vec::new();
+    for index in 0..count {
+        let pos = BlockPos {
+            x: index % 16,
+            y: 201 + index / 256,
+            z: (index / 16) % 16,
+        };
+        let slot = villager(&mut state, [8.5, 201.0, 8.5]);
+        state.entities.row_mut(slot).villager.as_mut().unwrap().home = Some(pos);
+        pois.push(Poi {
+            pos,
+            kind: PoiKind::Home,
+        });
+    }
+    state.villager_pois.chunks.insert(
+        ChunkPos { x: 0, z: 0 },
+        ChunkPois {
+            revision: 0,
+            queued: false,
+            pois,
+        },
+    );
+    let begin = std::time::Instant::now();
+    let labels = snapshot(&mut state);
+    let elapsed = begin.elapsed();
+    assert_eq!(labels.len(), count as usize);
+    assert!(
+        labels.iter().all(|label| label.text == "Дом · жильцов 1/1"),
+        "every home counts exactly its own resident"
+    );
+    assert!(
+        elapsed < std::time::Duration::from_secs(1),
+        "label rebuild for {count} villagers took {elapsed:?}"
+    );
+}

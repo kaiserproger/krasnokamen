@@ -2084,6 +2084,128 @@ fn villager_full_tick_scale_benchmark() {
     }
 }
 
+/// The villager-heavy profile's public-command pens (tools/coreperf/profiles.py):
+/// 1024 villagers, beds and composters per walled, roofed 83x83 pen, pens
+/// 96 blocks apart. Prints the full-tick and brain cost per window so the cost
+/// can be read against pens loaded and time of day.
+#[test]
+#[ignore = "manual dense villager pen tick profile (VILLAGER_PENS, VILLAGER_TICKS, VILLAGER_DAY_TIME)"]
+fn villager_dense_pen_tick_scale_benchmark() {
+    use crate::boundary::{ConnectionId, PlayerInput};
+    let env = |name: &str, default: i64| -> i64 {
+        std::env::var(name).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+    };
+    let pens = env("VILLAGER_PENS", 2) as i32;
+    let ticks = env("VILLAGER_TICKS", 200) as usize;
+    let day_time = env("VILLAGER_DAY_TIME", 14_000);
+    let registry = Arc::new(crate::tick_tests::full_registry());
+    let world = crate::horde_bench::flat_world(&registry);
+    let mut state = TickState::new(registry, world, 2, 512);
+    state.gamerules.insert("spawn_mobs".into(), "false".into());
+    crate::tick::run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(1),
+            uuid: uuid::Uuid::from_u128(1),
+            name: "VillagerPens".into(),
+            permission_level: 0,
+        }],
+    );
+    let origin = |pen: i32| (-800 - (pen % 5) * 96, (pen / 5) * 96);
+    for pen in 0..pens {
+        let (x, z) = origin(pen);
+        state.tickets.insert(
+            format!("villager-pen-{pen}"),
+            (
+                ChunkPos {
+                    x: (x + 32).div_euclid(16),
+                    z: (z + 32).div_euclid(16),
+                },
+                6,
+            ),
+        );
+    }
+    let (px, pz) = origin(pens - 1);
+    let player = state
+        .entities
+        .slot_of(state.connections.entity_of(ConnectionId(1)).unwrap())
+        .unwrap();
+    state
+        .entities
+        .set_pos(player, [f64::from(px) + 32.5, 64.0, f64::from(pz) + 32.5]);
+    let want = state.desired_chunks();
+    state.world.ensure_blocking(&want);
+    let stone = state.registry.states.stone;
+    let composter = block(&state, "minecraft:composter", &[]);
+    let bed_foot = block(
+        &state,
+        "minecraft:red_bed",
+        &[("part", "foot"), ("facing", "east")],
+    );
+    let bed_head = block(
+        &state,
+        "minecraft:red_bed",
+        &[("part", "head"), ("facing", "east")],
+    );
+    for pen in 0..pens {
+        let (x, z) = origin(pen);
+        for bx in x - 9..=x + 73 {
+            for bz in z - 9..=z + 73 {
+                let wall = bx == x - 9 || bx == x + 73 || bz == z - 9 || bz == z + 73;
+                if wall {
+                    for y in 64..=70 {
+                        state.world.set_block(bx, y, bz, stone);
+                    }
+                }
+                state.world.set_block(bx, 71, bz, stone);
+            }
+        }
+        for index in 0..1024 {
+            let (cx, cz) = (x + (index % 32) * 2, z + (index / 32) * 2);
+            state.world.set_block(cx, 64, cz, composter);
+            state.world.set_block(cx, 64, cz + 1, bed_foot);
+            state.world.set_block(cx + 1, 64, cz + 1, bed_head);
+            villager(
+                &mut state,
+                [f64::from(cx) + 1.5, 64.0, f64::from(cz) + 0.5],
+            );
+        }
+    }
+    state.world.fold_overlay();
+    state.day_time = day_time;
+    let mut window_tick = Vec::new();
+    let mut window_brain = Vec::new();
+    let mut window_phase = [0_u128; 7];
+    for iteration in 0..ticks {
+        let begin = std::time::Instant::now();
+        crate::tick::run_tick(&mut state, &[]);
+        window_tick.push(begin.elapsed().as_micros());
+        window_brain.push(state.villager_pois.brain_us);
+        for (sum, cost) in window_phase.iter_mut().zip(state.villager_pois.phase_us) {
+            *sum += cost;
+        }
+        if (iteration + 1) % 20 == 0 {
+            let tick_sum: u128 = window_tick.iter().sum();
+            let brain_sum: u128 = window_brain.iter().sum();
+            window_tick.sort_unstable();
+            println!(
+                "villager_pens pens={pens} villagers={} iteration={} tick_p50_us={} tick_max_us={} tick_mean_us={} brain_mean_us={} phase_mean_us={:?} day_time={}",
+                pens * 1024,
+                iteration + 1,
+                window_tick[window_tick.len() / 2],
+                window_tick[window_tick.len() - 1],
+                tick_sum / 20,
+                brain_sum / 20,
+                window_phase.map(|sum| sum / 20),
+                state.day_time,
+            );
+            window_tick.clear();
+            window_brain.clear();
+            window_phase = [0; 7];
+        }
+    }
+}
+
 #[test]
 fn poi_refresh_is_bounded_fair_and_never_offers_stale_pending_sites() {
     let registry = Arc::new(crate::tick_tests::full_registry());
