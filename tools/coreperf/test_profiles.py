@@ -95,13 +95,22 @@ class ProfilesTests(unittest.TestCase):
         plan = profiles.schedule(args, profiles.items_fixture(10))["windows"]
         self.assertEqual((plan[-1]["movement_hz"], plan[-1]["edit_hz"], plan[-1]["chat_hz"]), (20, 0, 0))
 
-    def test_items_population_is_checked_against_the_saved_snapshot(self):
+    def test_platform_items_are_checked_against_the_saved_snapshot(self):
         recipe = profiles.items_fixture(100)
-        snapshot = {"entities": {"minecraft:item": {"active": 100}}}
-        self.assertEqual(profiles.validate_items_prepared(recipe, snapshot), 100)
-        with self.assertRaisesRegex(ValueError, "holds 99 item entities"):
-            profiles.validate_items_prepared(recipe, {"entities": {"minecraft:item": {"active": 99}}})
-        self.assertEqual(profiles.validate_items_prepared(profiles.items_fixture(0), {"entities": {}}), 0)
+        def item(y):
+            return {"final_position": [1.0, y, 2.0]}
+        snapshot = {"entities": {"minecraft:item": {"active": 103, "samples": [item(200.1)] * 100 + [item(48.5)] * 3}}}
+        self.assertEqual(profiles.items_census(recipe, snapshot), {"platform": 100, "off_platform": 3})
+        short = {"entities": {"minecraft:item": {"active": 102, "samples": [item(200.1)] * 99 + [item(48.5)] * 3}}}
+        with self.assertRaisesRegex(ValueError, "holds 99 item entities on the platform"):
+            profiles.items_census(recipe, short)
+        self.assertEqual(profiles.items_census(profiles.items_fixture(0), {"entities": {}}),
+                         {"platform": 0, "off_platform": 0})
+
+    def test_items_heavy_runs_without_random_ticks(self):
+        rules = profiles.items_fixture(0)["regions"][0]["commands"]
+        self.assertIn("gamerule randomTickSpeed 0", rules)
+        self.assertNotIn("gamerule randomTickSpeed 3", rules)
 
     def test_kelp12k_names_one_preserved_world_and_the_native_100_recipe(self):
         recipe = profiles.fixture(100000, 0)
@@ -957,7 +966,8 @@ class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
         async def prepared(_args, _directory, recipe, _key, _hashes):
             return Path("/unused"), {"recipe_sha256": profiles.load.digest(recipe),
                 "cohort": {"counts": {}, "identities": {}}, "fixture_cache": {"status": "disabled"},
-                "snapshot": {"entities": {"minecraft:item": {"active": saved}}}}
+                "snapshot": {"entities": {"minecraft:item": {"active": saved,
+                    "samples": [{"final_position": [0.5, 200.1, 0.5]}] * saved}}}}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for saved in (20, 19):
@@ -979,10 +989,11 @@ class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(result["noncanonical"])
                 self.assertEqual(result["variant"], "items-heavy-sky-platform-20")
                 if saved == 20:
-                    self.assertEqual((result["status"], result["items_before"]), ("prepared", 20))
+                    self.assertEqual((result["status"], result["items_before"]),
+                                     ("prepared", {"platform": 20, "off_platform": 0}))
                     self.assertFalse(result.get("publication_evidence", False))
                 else:
-                    self.assertIn("holds 19 item entities", result["error"])
+                    self.assertIn("holds 19 item entities on the platform", result["error"])
 
 
 if __name__ == "__main__":

@@ -290,8 +290,11 @@ creative bots walk at 20 slots/s without edits or chat, and N item entities in f
 | `pile_full` | 16 full stacks (count 64) of one kind in one position, piles two blocks apart | a same-kind candidate that cannot receive anything |
 | `pile_mixed` | 16 distinct kinds, count 1, in one position | candidates of the wrong kind |
 
-Nothing merges, so the population is stationary (checked: the saved snapshot must hold exactly N
-items before and after the run). The ladder is N = 0 (platform, pad and bots only), 10,000 and 30,000;
+Nothing merges, so the platform population is stationary (checked: the saved snapshot must hold
+exactly N items above the floor before and after the run; items elsewhere, natural drops such as the
+kelp wash-out items of the seed-42 ocean east of the origin, are counted separately in the receipt and
+enter the per-tick census). Random ticks are off (`randomTickSpeed 0`) so that growth, and the
+wash-out it triggers, is not part of this benchmark. The ladder is N = 0 (platform, pad and bots only), 10,000 and 30,000;
 the maximum is 36,000 (the items must stay inside the 6-chunk item tracking range of every bot).
 The fixture cache key contains N. All summons run in the last preparation region so items age only from
 their summon to the end of preparation (an item ages 6,000 ticks active before it despawns).

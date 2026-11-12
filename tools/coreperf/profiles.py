@@ -208,8 +208,10 @@ def items_fixture(items: int) -> dict[str, Any]:
     """
     layout = items_layout(items)
     floor = ITEMS_FLOOR_Y
+    # randomTickSpeed 0: random ticks (crop, leaf and kelp growth) are not what this benchmark measures,
+    # and kelp growth in the natural ocean near the origin washes out and drops new kelp items.
     rules = ["gamerule doMobSpawning false", "gamerule doWeatherCycle false",
-             "gamerule randomTickSpeed 3", "gamerule doDaylightCycle true",
+             "gamerule randomTickSpeed 0", "gamerule doDaylightCycle true",
              "weather clear", "time set 2000", "difficulty easy", f"setworldspawn 0 {floor + 1} 0"]
     rules += [f"kill @e[type=minecraft:{kind}]" for kind in (*compare.MOB_KINDS, "villager")]
     platform = list(rules)
@@ -259,17 +261,21 @@ def items_fixture(items: int) -> dict[str, Any]:
             "official_performance_evidence": False}
 
 
-def saved_items(snapshot: dict[str, Any]) -> int:
-    """Item entities in a native snapshot: the stationary population the benchmark is read against."""
-    return snapshot.get("entities", {}).get("minecraft:item", {}).get("active", 0)
+def saved_items(snapshot: dict[str, Any], *, platform_only: bool = False) -> int:
+    """Item entities in a native snapshot; `platform_only` keeps those above the sky-platform floor."""
+    group = snapshot.get("entities", {}).get("minecraft:item", {})
+    if not platform_only:
+        return group.get("active", 0)
+    return sum(sample["final_position"][1] > ITEMS_FLOOR_Y for sample in group.get("samples", []))
 
 
-def validate_items_prepared(recipe: dict[str, Any], snapshot: dict[str, Any]) -> int:
-    saved = saved_items(snapshot)
-    if saved != recipe["items"]["requested"]:
-        raise ValueError(f"saved world holds {saved} item entities, recipe requested "
-                         f"{recipe['items']['requested']} (merged or despawned during preparation)")
-    return saved
+def items_census(recipe: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, int]:
+    """Platform items must equal the request; items elsewhere (natural drops) are reported, not counted."""
+    platform = saved_items(snapshot, platform_only=True)
+    if platform != recipe["items"]["requested"]:
+        raise ValueError(f"saved world holds {platform} item entities on the platform, recipe requested "
+                         f"{recipe['items']['requested']} (merged, despawned or lost)")
+    return {"platform": platform, "off_platform": saved_items(snapshot) - platform}
 
 
 def validate_kelp12k(key: str, prepared: dict[str, Any]) -> dict[str, Any]:
@@ -1471,11 +1477,7 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
     result["cohort_counts"] = after["counts"]
     if "items" in recipe:
         # Items age 6000 ticks active before they despawn: a shrunken population is not the benchmark.
-        survived = saved_items(snapshot)
-        result["items_after"] = {"requested": recipe["items"]["requested"], "saved": survived}
-        if survived != recipe["items"]["requested"]:
-            raise ValueError(f"items-heavy population changed during the run: {survived} saved, "
-                             f"{recipe['items']['requested']} requested (despawn or merge); shorten the windows")
+        result["items_after"] = items_census(recipe, snapshot)
     result["status"] = "smoke" if args.smoke else "measured"
     result["publication_evidence"] = (not args.smoke and "coverage" not in recipe
                                       and args.profile in CANONICAL_PROFILES)
@@ -1576,7 +1578,7 @@ async def run(args: argparse.Namespace) -> int:
         if args.profile == "native-100-kelp12k":
             result["kelp12k_world"] = validate_kelp12k(key, prepared)
         if args.profile == "items-heavy":
-            result["items_before"] = validate_items_prepared(recipe, prepared["snapshot"])
+            result["items_before"] = items_census(recipe, prepared["snapshot"])
         if recipe.get("spawn_rules"):
             result["spawn_rules_before"] = validate_spawn_rules(prepared["snapshot"], recipe["spawn_rules"])
         if recipe.get("stress", {}).get("kind") == "reactive-damage":
