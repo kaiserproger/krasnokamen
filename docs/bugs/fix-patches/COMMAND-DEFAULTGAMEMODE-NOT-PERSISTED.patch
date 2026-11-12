@@ -118,7 +118,7 @@ index 22e2ebc..a2319ba 100644
      for (uuid, player) in &root.players {
          let mut player = player.clone();
 diff --git a/crates/mc-core/src/command_execution.rs b/crates/mc-core/src/command_execution.rs
-index ec0cf334..257c5494 100644
+index a4fa95e8..6bdacc00 100644
 --- a/crates/mc-core/src/command_execution.rs
 +++ b/crates/mc-core/src/command_execution.rs
 @@ -474,11 +474,6 @@ pub(crate) fn execute(
@@ -134,7 +134,7 @@ index ec0cf334..257c5494 100644
                  state,
                  connection,
 diff --git a/crates/mc-core/src/dimensions_globals.rs b/crates/mc-core/src/dimensions_globals.rs
-index 864f81ab..7cedb631 100644
+index de37c0a6..81b87e2b 100644
 --- a/crates/mc-core/src/dimensions_globals.rs
 +++ b/crates/mc-core/src/dimensions_globals.rs
 @@ -19,7 +19,6 @@ pub(crate) enum Broadcast {
@@ -145,15 +145,15 @@ index 864f81ab..7cedb631 100644
      TeamChat {
          members: std::collections::BTreeSet<String>,
          content: mc_nbt::Tag,
-@@ -72,7 +71,6 @@ fn relay(world: &mut TickState, event: &Broadcast) {
-         Broadcast::Chat(content) => queue_each(world, || PlayerChange::StyledChat {
-             content: content.clone(),
-         }),
+@@ -92,7 +91,6 @@ fn relay(world: &mut TickState, event: &Broadcast) {
+                 );
+             }
+         }
 -        Broadcast::DefaultGameMode(mode) => world.default_game_mode = *mode,
          Broadcast::AdminChat(content) => {
              let operators: Vec<_> = world
                  .connections
-@@ -269,6 +267,13 @@ pub(crate) fn finish(
+@@ -293,6 +291,13 @@ pub(crate) fn finish(
              .dimension_globals
              .broadcasts = pending;
      }
