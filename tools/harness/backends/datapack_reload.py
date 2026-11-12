@@ -278,7 +278,9 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     says_after("disable_of_a_skipped_pack_says_not_enabled", "Round3Begin", "is not enabled!")
 
     # A selected pack whose pack.mcmeta breaks keeps running, so the listing keeps it.
-    pack_barrier("madeit_enable_reported", "datapack enable file/madeit", "file/madeit")
+    fenced("Round4Enable")
+    probe.fixture("datapack enable file/madeit")
+    says_after("madeit_enable_reported", "Round4Enable", "Enabling data pack", "file/madeit")
     (packs_dir / "madeit" / "pack.mcmeta").write_text('{"pack": {')
     fenced("Round4Begin")
     probe.fixture("datapack list enabled")
