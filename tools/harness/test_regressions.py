@@ -775,6 +775,21 @@ class LedgerToolTests(unittest.TestCase):
         self.assertEqual(ledger._worktree_parent(Path('/work/wt/LedgerTriage')), Path('/work/wt'))
         self.assertIsNone(ledger._worktree_parent(Path('/home/user/solaris')))
 
+    def test_promote_under_a_held_build_token_is_refused_before_the_control_lock(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name) / 'wt' / 'Promoter'
+        root.mkdir(parents=True)
+        with patch.dict(os.environ, {'SOLARIS_BUILD_TOKEN': '2'}):
+            with self.assertRaisesRegex(ledger.Refused, 'must not run under mem-run'):
+                with ledger._control_lock(root):
+                    pass
+        self.assertFalse((root.parent / 'ledger-control.lock').exists())
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('SOLARIS_BUILD_TOKEN', None)
+            with ledger._control_lock(root):
+                self.assertTrue((root.parent / 'ledger-control.lock').exists())
+
     def test_client_refs_are_classified_from_their_receipts(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)

@@ -199,7 +199,12 @@ A refusal prints the reason and exits 1.
 python3 -m tools.harness ledger promote ID [--client-receipt PATH] [--fix-patch PATH] [--dry-run]
 ```
 
-Heavy: run it under the owner host's `mem-run.sh`, one at a time.
+Heavy, but never wrap it in the owner host's `mem-run.sh`: it takes the
+control lock first, and each of its build stages takes its own build token
+through `mem-run.sh`. A promote started under `mem-run.sh` holds a token while
+it waits for the lock and deadlocks with a running promote whose next stage
+needs that token (2026-11-12, the host stalled for an hour); the tool refuses
+to start under a held token.
 
 ## Probing rows before assignment
 

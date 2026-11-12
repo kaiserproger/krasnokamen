@@ -426,11 +426,18 @@ def _worktree_parent(root):
 @contextlib.contextmanager
 def _control_lock(root):
     """One promotion at a time: the control worktrees have fixed paths (so cargo reuses their build
-    artifacts instead of growing the target dir by a new path per run) and the builds are heavy."""
+    artifacts instead of growing the target dir by a new path per run) and the builds are heavy.
+    Lock order is this lock, then a build token per build stage (each stage runs mem-run itself).
+    A promote started under mem-run already holds a token while it waits here, and deadlocks with
+    a running promote whose next stage waits for that token (2026-11-12, 1 h host-wide stall)."""
     parent = _worktree_parent(root)
     if parent is None:
         yield
         return
+    if os.environ.get('SOLARIS_BUILD_TOKEN'):
+        raise Refused('ledger promote must not run under mem-run (it holds build token '
+                      f"{os.environ['SOLARIS_BUILD_TOKEN']}): it takes wt/ledger-control.lock first "
+                      'and each build stage takes its own token; run it without the mem-run wrapper')
     with (parent / 'ledger-control.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         yield
