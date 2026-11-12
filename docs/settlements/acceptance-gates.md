@@ -16,6 +16,8 @@ The primary player is not an operator. In the isolated QA world, spawn protectio
 
 ## Civilization observation
 
+`civilization-seed-qa` runs seed 24 with village center (136, 70, -216) unless `VILLAGE_AUTONOMY_SEED` or `VILLAGE_AUTONOMY_CENTER` names another world, so a ledger `harness:civilization-seed-qa:<verdict>` ref (which cannot carry env, and refuses these variables) observes seed 24 with a 7200-second timeout.
+
 `civilization-seed-qa` claims a generated village as an ordinary player, certifies the founding storage, and grants the player a founding stock for transfer through the chest inventory:
 
 - 32 oak logs and 16 bread;

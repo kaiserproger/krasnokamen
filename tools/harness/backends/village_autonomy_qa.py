@@ -63,6 +63,10 @@ OWNER_ORDER_BLUEPRINT = "storage"
 # ("x,y,z"); the assignment profile pins seed 87122, center (-461,~70,350).
 SPAWN = (128, 69, 0)
 VILLAGE_CENTER = _parse_center(QA_VILLAGE, (120, 70, 7))
+# civilization-seed-qa observes seed 24 (docs/settlements/acceptance-gates.md#civilization-observation)
+# unless the operator names another seed or center, so a ledger ref, which cannot carry env, reaches it.
+CIVILIZATION_SEED = 24
+CIVILIZATION_CENTER = (136, 70, -216)
 DIALOG_CLASS = "net.minecraft.client.gui.screens.dialog.MultiButtonDialogScreen"
 
 # Storage L1 base needs (authored blueprint materials): these must arrive via
@@ -581,7 +585,10 @@ def _birth_snapshot(ctx: ProfileContext, binary: Path, expected_hash: str, artif
 
 
 def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = False) -> dict[str, Any]:
+    global SEED, VILLAGE_CENTER
     if civilization:
+        if not os.environ.get("VILLAGE_AUTONOMY_SEED") and not QA_VILLAGE:
+            SEED, VILLAGE_CENTER = CIVILIZATION_SEED, CIVILIZATION_CENTER
         from . import civilization_seed_qa
         ctx.client_evidence["verdicts"] = {**dict.fromkeys(civilization_seed_qa.STAGES, False), "all": False}
         ctx.client_evidence["verdict_limitations"] = {"births": civilization_seed_qa.BIRTHS_LIMITATION}
