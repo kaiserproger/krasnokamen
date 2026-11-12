@@ -1239,6 +1239,126 @@ pub(super) fn read_row(
     (read, needs_rare)
 }
 
+/// Dense admission of the slots `base..base + marks.len()`: every owned,
+/// non-player row in an active chunk gets its chunk's decision period;
+/// player rows and unowned rows keep their mark. Returns the number admitted
+/// and calls `admitted` for each, in slot order. Reads the store only; the
+/// result of a slot depends on nothing but that slot, so disjoint ranges are
+/// independent.
+fn dense_period_marks(
+    entities: &EntityStore,
+    world: &crate::world::ChunkWorld,
+    activation: &HashMap<(i32, i32), u64>,
+    base: usize,
+    marks: &mut [u8],
+    mut admitted: impl FnMut(EntitySlot),
+) -> usize {
+    let mut count = 0;
+    let mut previous: Option<(ChunkPos, u8)> = None;
+    for (offset, mark) in marks.iter_mut().enumerate() {
+        let slot = EntitySlot((base + offset) as u32);
+        let flags = entities.motion_flags(slot);
+        if flags & MOTION_OWNED == 0 || flags & MOTION_PLAYER != 0 {
+            continue;
+        }
+        let chunk = entities.chunk_of(slot);
+        let period = match previous {
+            Some((last, period)) if last == chunk => period,
+            _ => {
+                let period = if world.is_active_position(chunk.x, chunk.z) {
+                    activation
+                        .get(&(chunk.x, chunk.z))
+                        .copied()
+                        .unwrap_or(MOB_FAR_PERIOD) as u8
+                } else {
+                    0
+                };
+                previous = Some((chunk, period));
+                period
+            }
+        };
+        if period != 0 {
+            *mark = period;
+            count += 1;
+            admitted(slot);
+        }
+    }
+    count
+}
+
+/// [`dense_period_marks`] over every slot, split into [`PREP_CHUNK`] ranges
+/// on the worker pool when `parallel`.
+///
+/// Bottleneck: the serial pass over all 100,000 slots cost 1.6 ms of every
+/// native-100 tick before any row work started. Boundary: dense admission
+/// only (the indexed path and the per-region perf attribution stay serial);
+/// each range owns its disjoint marks. Correctness fence: every mark is a
+/// function of its own slot (the per-range chunk cache only skips repeated
+/// lookups), so any partition yields the serial marks and count; the
+/// equivalence test pins it. Removal path: pass `parallel = false`.
+fn mark_dense_admission(
+    entities: &EntityStore,
+    world: &crate::world::ChunkWorld,
+    activation: &HashMap<(i32, i32), u64>,
+    periods: &mut [u8],
+    parallel: bool,
+) -> usize {
+    if !parallel {
+        return dense_period_marks(entities, world, activation, 0, periods, |_| {});
+    }
+    use rayon::prelude::*;
+    periods
+        .par_chunks_mut(PREP_CHUNK)
+        .enumerate()
+        .map(|(chunk, marks)| {
+            dense_period_marks(
+                entities,
+                world,
+                activation,
+                chunk * PREP_CHUNK,
+                marks,
+                |_| {},
+            )
+        })
+        .sum()
+}
+
+/// The resting slots whose writeback does anything, in slot order; empties
+/// `resting`.
+///
+/// Bottleneck: almost every resting row writes nothing (quiet timers, no
+/// zombie arm change), yet the serial writeback read the body and cold row of
+/// all of them (0.6 ms per native-100 tick). Boundary: the resting writeback
+/// only; the filter is a pure read of the store and the target table, neither
+/// of which the writeback changes before it reaches a slot. Correctness fence:
+/// a dropped slot has quiet timers and `zombie_arms_update` is `None` for it,
+/// which is exactly the case where the writeback does nothing; kept slots are
+/// written serially in slot order. Removal path: write back every resting
+/// slot (identical result).
+fn resting_writeback_rows(state: &TickState, resting: &mut Vec<EntitySlot>) -> Vec<EntitySlot> {
+    if resting.len() < PARALLEL_PREP_MIN {
+        return std::mem::take(resting);
+    }
+    use rayon::prelude::*;
+    let (entities, registry, targets) = (&state.entities, &*state.registry, &state.hostile.targets);
+    let rows = resting
+        .par_iter()
+        .copied()
+        .filter(|&slot| {
+            entities.motion_flags(slot) & crate::entities::MOTION_QUIET_TIMERS == 0
+                || crate::hostile::zombie_arms_update(
+                    entities,
+                    registry,
+                    slot,
+                    targets.contains_key(&entities.body(slot).id),
+                )
+                .is_some()
+        })
+        .collect();
+    resting.clear();
+    rows
+}
+
 /// Entity phase: every simulated entity reads the snapshot and emits its own
 /// next state plus intents. Parallel by data over scoped threads; workers
 /// return owned writes applied in slot order afterwards. No locks: the only
@@ -1321,36 +1441,31 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         // Frozen (`/tick freeze`): only player bodies step; every other
         // entity keeps its position, velocity and timers.
     } else if prefer_dense_entity_admission(state) {
-        let mut previous: Option<(ChunkPos, u8)> = None;
-        for slot in state.entities.motion_slots(MOTION_OWNED) {
-            if state.entities.motion_flags(slot) & MOTION_PLAYER != 0 {
-                continue;
-            }
-            let chunk = state.entities.chunk_of(slot);
-            let period = match previous {
-                Some((last, period)) if last == chunk => period,
-                _ => {
-                    let period = if state.world.is_active_position(chunk.x, chunk.z) {
-                        activation
-                            .get(&(chunk.x, chunk.z))
-                            .copied()
-                            .unwrap_or(MOB_FAR_PERIOD) as u8
-                    } else {
-                        0
-                    };
-                    previous = Some((chunk, period));
-                    period
-                }
-            };
-            if period != 0 {
-                periods[slot.0 as usize] = period;
-                admitted += 1;
-                if let (Some(index), Some(counts)) = (perf_index, &mut perf_counts)
-                    && let Some(region) = coreperf_slot_region(index, state, slot)
-                {
-                    coreperf_region(counts, region).motion_admitted += 1;
-                }
-            }
+        if perf_index.is_some() {
+            // Per-region attribution needs the serial visit order and `state`.
+            admitted += dense_period_marks(
+                &state.entities,
+                &state.world,
+                &activation,
+                0,
+                &mut periods,
+                |slot| {
+                    if let (Some(index), Some(counts)) = (perf_index, &mut perf_counts)
+                        && let Some(region) = coreperf_slot_region(index, state, slot)
+                    {
+                        coreperf_region(counts, region).motion_admitted += 1;
+                    }
+                },
+            );
+        } else {
+            let parallel = periods.len() >= PARALLEL_PREP_MIN;
+            admitted += mark_dense_admission(
+                &state.entities,
+                &state.world,
+                &activation,
+                &mut periods,
+                parallel,
+            );
         }
     } else {
         // Preserve the indexed union and period order for old type-transition
@@ -1650,7 +1765,8 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     let mut seq = std::mem::take(&mut state.seq_counter);
     let mut intents = Vec::new();
     let physical_profiles = state.registry.item_facts.has_physical_profiles();
-    for slot in resting.drain(..) {
+    let writeback = resting_writeback_rows(state, &mut resting);
+    for slot in writeback {
         let id = state.entities.body(slot).id;
         let aggressive = state.hostile.targets.contains_key(&id);
         crate::hostile::set_zombie_aggressive(state, slot, aggressive);

@@ -1842,3 +1842,111 @@ fn rest_proof_memo_skips_repeats_and_yields_to_geometry_and_state_changes() {
     );
     assert!(!phase(&state), "a pending write defeats the memo");
 }
+
+/// Negative control: marking the ranges of the parallel split from a wrong
+/// base slot (or letting a range read another range's chunk cache) breaks the
+/// equality with the serial marks.
+#[test]
+fn parallel_dense_admission_marks_match_the_serial_marks_and_the_slot_oracle() {
+    let (mut state, player_slot) = resting_cow();
+    state.entities.set_kind(
+        player_slot,
+        EntityKind::Player {
+            connection: crate::boundary::ConnectionId(1),
+        },
+    );
+    state.world.set_active_chunks(
+        [(0, 0), (1, 0)]
+            .into_iter()
+            .map(|(x, z)| ChunkPos { x, z })
+            .collect(),
+        1,
+    );
+    let cow = state.registry.cow_type_id;
+    for index in 0..(6 * PREP_CHUNK + 777) as u32 {
+        let x = f64::from(index % 80) * 0.4;
+        let z = 8.5 + f64::from(index / 80 % 2) * 16.0;
+        state.spawn_mob(cow, [x, 101.0, z], 10.0);
+    }
+    state.entities.prepare_motion_hints(&state.registry);
+    let activation: HashMap<(i32, i32), u64> = [((0, 0), 1)].into_iter().collect();
+    let len = state.entities.len();
+    let mut expected = vec![0_u8; len];
+    for slot in state.entities.motion_slots(MOTION_OWNED) {
+        if state.entities.motion_flags(slot) & MOTION_PLAYER != 0 {
+            continue;
+        }
+        let chunk = state.entities.chunk_of(slot);
+        if state.world.is_active_position(chunk.x, chunk.z) {
+            expected[slot.0 as usize] = activation
+                .get(&(chunk.x, chunk.z))
+                .copied()
+                .unwrap_or(MOB_FAR_PERIOD) as u8;
+        }
+    }
+    let admitted = expected.iter().filter(|&&period| period != 0).count();
+    assert!(admitted > PREP_CHUNK, "{admitted}");
+    for period in [1, MOB_FAR_PERIOD as u8] {
+        assert!(expected.contains(&period), "period {period} is exercised");
+    }
+    for parallel in [false, true] {
+        let mut marks = vec![0_u8; len];
+        let count = mark_dense_admission(
+            &state.entities,
+            &state.world,
+            &activation,
+            &mut marks,
+            parallel,
+        );
+        assert_eq!(
+            (count, &marks),
+            (admitted, &expected),
+            "parallel={parallel}"
+        );
+    }
+}
+
+/// Negative control: filtering on the quiet-timer flag alone drops the zombies
+/// whose raised-arms bit is stale and this goes red.
+#[test]
+fn parallel_resting_writeback_keeps_exactly_the_rows_the_writeback_changes() {
+    let (mut state, _) = resting_cow();
+    let zombie = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap())
+        .unwrap();
+    let cow = state.registry.cow_type_id;
+    for index in 0..(PARALLEL_PREP_MIN + 500) as u32 {
+        let type_id = if index % 2 == 0 { zombie } else { cow };
+        let id = state.spawn_mob(type_id, [8.5 + f64::from(index % 8), 101.0, 8.5], 10.0);
+        let slot = state.entities.slot_of(id).unwrap();
+        if type_id == zombie && index % 3 == 0 {
+            crate::hostile::set_zombie_aggressive(&mut state, slot, true);
+        }
+        if type_id == cow && index % 5 == 1 {
+            state.entities.body_mut(slot).pickup_delay = 3;
+        }
+    }
+    state.entities.prepare_motion_hints(&state.registry);
+    let all: Vec<EntitySlot> = state.entities.slots().collect();
+    let mut resting = all.clone();
+    let rows = resting_writeback_rows(&state, &mut resting);
+    assert!(resting.is_empty());
+    let mut expected = Vec::new();
+    for &slot in &all {
+        let before = state.appearance_changed.len();
+        crate::hostile::set_zombie_aggressive(&mut state, slot, false);
+        let arms = state.appearance_changed.len() > before;
+        let timers = state.entities.motion_flags(slot) & crate::entities::MOTION_QUIET_TIMERS == 0;
+        if arms || timers {
+            expected.push(slot);
+        }
+    }
+    assert!(
+        rows.len() > 1000 && rows.len() < all.len() / 2,
+        "{}",
+        rows.len()
+    );
+    assert_eq!(rows, expected);
+}

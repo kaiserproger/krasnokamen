@@ -464,22 +464,26 @@ fn set_extra(
     }
 }
 
-/// Publish the zombie chase pose without disturbing unrelated mob-flag bits.
-pub(crate) fn set_zombie_aggressive(state: &mut TickState, slot: EntitySlot, aggressive: bool) {
-    let body = state.entities.body(slot);
+/// The mob-flags byte [`set_zombie_aggressive`] would write for this slot and
+/// the entity it belongs to, or `None` when the write is a no-op. A pure read:
+/// the resting writeback runs it in parallel to find the few rows that change.
+pub(crate) fn zombie_arms_update(
+    entities: &crate::entities::EntityStore,
+    registry: &crate::registry::CoreRegistry,
+    slot: EntitySlot,
+    aggressive: bool,
+) -> Option<(EntityId, i8)> {
+    let body = entities.body(slot);
     let EntityKind::Mob { type_id } = body.kind else {
-        return;
+        return None;
     };
-    if !state
-        .registry
+    if !registry
         .blueprint(type_id)
         .is_some_and(|blueprint| blueprint.capabilities.aggressive_arms)
     {
-        return;
+        return None;
     }
-    let id = body.id;
-    let flags = state
-        .entities
+    let flags = entities
         .row(slot)
         .appearance
         .extra
@@ -490,16 +494,23 @@ pub(crate) fn set_zombie_aggressive(state: &mut TickState, slot: EntitySlot, agg
         })
         .unwrap_or(0);
     let next = if aggressive { flags | 4 } else { flags & !4 };
-    if next != flags {
-        set_extra(
-            state,
-            slot,
-            15,
-            EntityDataValue::Byte(0),
-            EntityDataValue::Byte(next),
-        );
-        state.appearance_changed.push(id);
-    }
+    (next != flags).then_some((body.id, next))
+}
+
+/// Publish the zombie chase pose without disturbing unrelated mob-flag bits.
+pub(crate) fn set_zombie_aggressive(state: &mut TickState, slot: EntitySlot, aggressive: bool) {
+    let Some((id, next)) = zombie_arms_update(&state.entities, &state.registry, slot, aggressive)
+    else {
+        return;
+    };
+    set_extra(
+        state,
+        slot,
+        15,
+        EntityDataValue::Byte(0),
+        EntityDataValue::Byte(next),
+    );
+    state.appearance_changed.push(id);
 }
 
 // --- skeleton ---------------------------------------------------------
