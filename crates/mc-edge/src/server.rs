@@ -494,7 +494,7 @@ impl EdgeServer {
         if let Some(sender) = sender
             && sender.try_send(frame.freeze()).is_err()
         {
-            self.connections.remove(id);
+            self.connections.close(id, "command-reliable-full");
             anyhow::bail!("reliable command queue full");
         }
         Ok(())
@@ -574,7 +574,7 @@ impl EdgeServer {
             .ok_or_else(|| anyhow::anyhow!("connection closed before disconnect"))?;
         if handles.reliable_tx.try_send(frame.freeze()).is_err() {
             drop(inner);
-            self.connections.remove(id);
+            self.connections.close(id, "disconnect-reliable-full");
             anyhow::bail!("reliable command queue full");
         }
         inner.disconnect_reasons.insert(id, reason.to_string());

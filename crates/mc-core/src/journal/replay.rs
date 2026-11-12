@@ -46,6 +46,7 @@ pub struct Replay {
     pub climate: Option<crate::weather::ClimateImage>,
     pub border: crate::command_border::Border,
     pub difficulty: crate::survival::Difficulty,
+    pub default_game_mode: crate::commands::GameMode,
     pub gamerules: BTreeMap<String, String>,
     pub settlements: BTreeMap<u64, crate::settlements::SettlementRecord>,
     pub settlement_removed: BTreeSet<u64>,
@@ -649,6 +650,9 @@ pub(crate) fn apply_batch_images(
                 }
                 JournalEntry::Difficulty { value } => {
                     replay.difficulty = *value;
+                }
+                JournalEntry::DefaultGameMode { value } => {
+                    replay.default_game_mode = *value;
                 }
                 JournalEntry::Scoreboard { value } => {
                     replay.scoreboard = Some(value.clone());

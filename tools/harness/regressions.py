@@ -91,7 +91,7 @@ _WINDOWED_PROFILES = frozenset({
     'dialogs', 'admin-commands', 'chisel', 'anti-xray', 'block-log',
     'composter-chance', 'chat-visibility', 'datapack-reload', 'village-qa', 'village-autonomy-qa',
     'civilization-seed-qa', 'village-owner-order-qa', 'scene-shot',
-    'settlement-map-qa', 'claim-only-qa', 'buildings-qa', 'army-qa', 'autocraft-qa',
+    'settlement-map-qa', 'claim-only-qa', 'buildings-qa', 'army-qa', 'autocraft-qa', 'screen-share',
 })
 _AUTONOMY_VERDICTS = frozenset({
     'walk_to_village', 'ownerless_settlement', 'founding_chest_empty',
@@ -105,6 +105,21 @@ _BOOLEAN_PROFILE_VERDICTS = {
     'civilization-seed-qa': frozenset({
         'new_house', 'births', 'second_building', 'iron_smelted', 'all',
     }),
+    # backends/settlement_map_qa.py VERDICTS (a test keeps the two in step).
+    'settlement-map-qa': frozenset({
+        'bell_opens_hub', 'dashboard', 'map', 'building_order', 'shortage_icons',
+        'storage_transfer', 'project_progress', 'residents', 'resources', 'production_order',
+        'localized_text', 'all',
+    }),
+}
+# Run arguments of a profile ref: (client, args after `--`) per verdict that needs another client
+# than native, and extra harness options per profile. The native client has no language option
+# (it sends ClientInformation `en_us` fixed), so the Russian text check runs on vanilla Java.
+_PROFILE_VERDICT_RUN = {
+    ('settlement-map-qa', 'localized_text'): ('java', ['--', '--language', 'ru_ru']),
+}
+_PROFILE_RUN_OPTIONS = {
+    'settlement-map-qa': ['--timeout-seconds', '3600'],
 }
 _PROFILE_VERDICTS = {
     'village-qa': ('settlement_acceptance', frozenset({
@@ -158,8 +173,9 @@ def _profile_command(profile, verdict):
         valid = verdict in _PROFILE_VERDICTS.get(profile, (None, {'all'}))[1]
     if not valid:
         raise ValueError(f'unknown verdict {profile}:{verdict}')
+    client, tail = _PROFILE_VERDICT_RUN.get((profile, verdict), ('native', []))
     return [sys.executable, '-m', 'tools.harness', 'run', profile,
-            '--client', 'native', '--windowed']
+            '--client', client, '--windowed', *_PROFILE_RUN_OPTIONS.get(profile, []), *tail]
 
 
 def _check_command(profile, check):
@@ -231,12 +247,13 @@ def tree_build_command(tree, argv):
     """(argv, env) for a build in `tree`. For a tree other than REPO_ROOT on the owner host it goes
     through mem-run with cwd=tree and without the caller's CARGO_TARGET_DIR, so the runner gives that
     tree its own pooled slot (marks it and touches the files on a tree switch): a build must never
-    land in a slot marked for another tree."""
+    land in a slot marked for another tree. The cap is 12G: an mc-core test build peaks above 6G and
+    was OOM-killed there, which left every mc-core negative control unrunnable (2026-11-12)."""
     env = os.environ.copy()
     if not is_other_tree(tree) or not MEM_RUN.exists():
         return list(argv), env
     env.pop('CARGO_TARGET_DIR', None)
-    return [str(MEM_RUN), '-m', '6G', *argv], env
+    return [str(MEM_RUN), '-m', '12G', *argv], env
 
 
 def _built_executable(log):

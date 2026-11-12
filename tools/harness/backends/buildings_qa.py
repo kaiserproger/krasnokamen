@@ -173,7 +173,10 @@ def _echo(probe: ProbeSteps, label: str) -> dict[str, Any]:
                       f"{label}_server_echo")
 
 def _villagers(probe: ProbeSteps) -> list[dict[str, Any]]:
-    state = probe.call("minecraft_list_entities", {"radius": 128})
+    # Typed and bounded: the unfiltered 128-block census of a generated village overflows the
+    # client's 256 KiB MCP result (`result_limit_exceeded`, every buildings-qa run of 2026-11-07).
+    state = probe.call("minecraft_list_entities",
+                       {"radius": 128, "limit": 128, "entity_type": "minecraft:villager"})
     entities = state.get("entities", state.get("visible_entities", []))
     return [r for r in entities
             if isinstance(r, dict) and r.get("entity_type") == "minecraft:villager"]
@@ -288,7 +291,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         server_hash = hashlib.file_digest(server_executable, "sha256").hexdigest()
     evidence.update(server_address=address, server_binary_path=str(binary),
                     server_binary_sha256=server_hash, world_dir=str(artifact / "world"),
-                    seed=SEED, select=select, **evidence_keep)
+                    seed=SEED, select=list(targets), **evidence_keep)
     server = client_process = xvfb = mcp = None
     server_log = None
     server_log_path = artifact / "server.log"
@@ -1815,8 +1818,11 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
     probe.fixture("time set 18000")
     for _ in range(3):
         probe.call("minecraft_wait_ticks", {"ticks": 4})
-    dom = probe.call("minecraft_list_entities", {"radius": 128})
-    ents = dom.get("entities", dom.get("visible_entities", []))
+    ents = []
+    for hostile in ("minecraft:zombie", "minecraft:skeleton", "minecraft:spider", "minecraft:creeper"):
+        dom = probe.call("minecraft_list_entities",
+                         {"radius": 128, "limit": 128, "entity_type": hostile})
+        ents.extend(dom.get("entities", dom.get("visible_entities", [])))
     hi = (origin[0] + size[0] - 1, origin[1] + size[1] - 1, origin[2] + size[2] - 1)
     inside = [e for e in ents if isinstance(e, dict)
               and str(e.get("entity_type", "")) in

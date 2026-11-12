@@ -5,6 +5,9 @@ use crate::tick::TickState;
 use mc_data::{Identifier, ItemStack};
 use std::sync::Arc;
 
+/// The painting entity id: the summon command checks it in four places.
+pub(crate) const PAINTING_ID: &str = "minecraft:painting";
+
 #[derive(Clone, Debug)]
 pub(crate) struct Variant {
     pub name: Identifier,

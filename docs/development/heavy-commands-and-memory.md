@@ -115,7 +115,10 @@ to keep that from happening again without idling the machine.
   profiles, never for builds. Compare `-p` numbers only with `-p` numbers.
   `-x` is a quiet measurement window: the watchdog freezes every preemptible
   command, the runner waits for the rest to finish and holds new commands at
-  start until it ends. `-x` is about quiet, not memory.
+  start until it ends. `-x` is about quiet, not memory. A command started inside
+  an already running scope (a ledger promote's server build and gates) is not
+  held and never frozen: the window waits for its ancestor, so holding it would
+  deadlock both.
 - **Exit 75** now means one of: the slice has no cgroup, `-x` without a running
   watchdog, or no usable target dir (all existing ones busy and too little disk
   for a new one). The only other legitimate waits at start are a compile

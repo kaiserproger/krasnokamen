@@ -1,0 +1,68 @@
+{
+  "id": "SELECTOR-PREDICATE-UNSUPPORTED",
+  "verdict": "promoted",
+  "fix_commit": "patch:57f423038d585e7d4ef178f508013b198add0ee60a4eb6976878f604e53811f0",
+  "fix_commit_full": "patch:57f423038d585e7d4ef178f508013b198add0ee60a4eb6976878f604e53811f0",
+  "promoted_at": "2026-11-12T14:16:28+00:00",
+  "tree_head": "0c7f7b2a281f875c0bc3d92095c5d662a0c6e9a3",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "57f423038d585e7d4ef178f508013b198add0ee60a4eb6976878f604e53811f0",
+  "reversed_files": [
+    "crates/mc-core/src/commands.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:datapacks::command_tests::selector_predicate_selects_and_negates_datapack_predicates": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-data:advancements::tests::predicate_support_reports_conditions_that_cannot_be_evaluated": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-data:advancements::tests::selector_predicates_evaluate_scores_time_weather_and_chance_from_facts": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:datapacks::command_tests::predicates_with_conditions_the_selector_cannot_evaluate_are_refused_at_load": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:datapack-reload:native-datapack-reload": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-datapack-reload --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/B10PromoteRetry/.analysis/validation/20261112T140350-ledger-promote-0oc0tjbs/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:datapacks::command_tests::selector_predicate_selects_and_negates_datapack_predicates": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-data:advancements::tests::predicate_support_reports_conditions_that_cannot_be_evaluated": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-data:advancements::tests::selector_predicates_evaluate_scores_time_weather_and_chance_from_facts": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:datapacks::command_tests::predicates_with_conditions_the_selector_cannot_evaluate_are_refused_at_load": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/B10PromoteRetry/.analysis/validation/20261112T135306-native-datapack-reload-zropzham/result.json",
+    "tree_head": "0c7f7b2a281f875c0bc3d92095c5d662a0c6e9a3",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "3654a8b9a10b34e71ffdf9393a4e845b2defdd4eeeddabd3569988c007d93d28",
+    "covers": [
+      "harness:datapack-reload:native-datapack-reload"
+    ],
+    "profile": "datapack-reload"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/B10PromoteRetry/.analysis/validation/20261112T140350-ledger-promote-0oc0tjbs"
+}

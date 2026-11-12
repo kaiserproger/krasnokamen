@@ -1,0 +1,316 @@
+{
+ "seed": 100,
+ "server_view_distance": 6,
+ "steps": [
+  {
+   "wait_play": true
+  },
+  {
+   "cmd": "gamemode creative"
+  },
+  {
+   "tp": [
+    1000.5,
+    205,
+    1000.5,
+    0,
+    0
+   ]
+  },
+  {
+   "wait_ticks": 100
+  },
+  {
+   "cmd": "gamerule advance_time false"
+  },
+  {
+   "cmd": "gamerule spawn_mobs false"
+  },
+  {
+   "cmd": "gamerule random_tick_speed 0"
+  },
+  {
+   "cmd": "time set 3000"
+  },
+  {
+   "cmd": "fill 960 199 960 1040 199 1040 minecraft:stone"
+  },
+  {
+   "cmd": "fill 960 198 960 1040 198 1040 minecraft:stone"
+  },
+  {
+   "cmd": "fill 960 200 960 1040 204 1040 minecraft:air"
+  },
+  {
+   "cmd": "fill 1000 199 1010 1006 199 1014 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 202 1010 1006 202 1014 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 200 1010 1006 201 1010 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1014 1006 201 1014 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1010 1000 201 1014 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1006 200 1010 1006 201 1014 minecraft:cobblestone"
+  },
+  {
+   "cmd": "setblock 1006 200 1012 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1006 201 1012 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1006 200 1012 minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1006 201 1012 minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1011 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1011 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1012 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1012 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1013 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1013 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "fill 1020 199 1010 1022 199 1012 minecraft:oak_planks"
+  },
+  {
+   "cmd": "setblock 1021 200 1011 minecraft:chest"
+  },
+  {
+   "cmd": "item replace block 1021 200 1011 container.0 with minecraft:bread 16"
+  },
+  {
+   "cmd": "summon minecraft:villager 1010.5 200 1007.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1012.5 200 1007.5"
+  },
+  {
+   "tp": [
+    1012.5,
+    200,
+    1016.5,
+    0,
+    0
+   ]
+  },
+  {
+   "cmd": "settlement create breeders 32"
+  },
+  {
+   "cmd": "say vcgfence_1_created"
+  },
+  {
+   "wait_chat": "vcgfence_1_created"
+  },
+  {
+   "cmd": "settlement building certify house 1000 199 1010 1006 202 1014"
+  },
+  {
+   "cmd": "say vcgfence_2_house"
+  },
+  {
+   "wait_chat": "vcgfence_2_house"
+  },
+  {
+   "cmd": "settlement building certify storage 1020 199 1010 1022 202 1012"
+  },
+  {
+   "cmd": "say vcgfence_3_storage"
+  },
+  {
+   "wait_chat": "vcgfence_3_storage"
+  },
+  {
+   "tp": [
+    1012.5,
+    207,
+    1016.5,
+    0,
+    55
+   ]
+  },
+  {
+   "wait_ticks": 40
+  },
+  {
+   "assert_entities": {
+    "name": "breeding_start_two_adults",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "min": 2,
+    "max": 2,
+    "baby": false,
+    "box": [
+     960,
+     199,
+     960,
+     1040,
+     206,
+     1040
+    ]
+   }
+  },
+  {
+   "assert_entities": {
+    "name": "breeding_start_no_baby",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "min": 0,
+    "max": 0,
+    "baby": true,
+    "box": [
+     960,
+     199,
+     960,
+     1040,
+     206,
+     1040
+    ]
+   }
+  },
+  {
+   "shot": "breeding-start"
+  },
+  {
+   "wait_ticks": 500
+  },
+  {
+   "list_entities": {
+    "name": "breeding_t500",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 500
+  },
+  {
+   "list_entities": {
+    "name": "breeding_t1000",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 500
+  },
+  {
+   "list_entities": {
+    "name": "breeding_t1500",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 500
+  },
+  {
+   "list_entities": {
+    "name": "breeding_t2000",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 500
+  },
+  {
+   "list_entities": {
+    "name": "breeding_t2500",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 500
+  },
+  {
+   "list_entities": {
+    "name": "breeding_t3000",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "shot": "breeding-end"
+  },
+  {
+   "assert_entities": {
+    "name": "breeding_baby_born",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "min": 1,
+    "baby": true,
+    "box": [
+     960,
+     199,
+     960,
+     1040,
+     206,
+     1040
+    ]
+   }
+  },
+  {
+   "assert_entities": {
+    "name": "breeding_both_parents_alive",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "min": 2,
+    "baby": false,
+    "box": [
+     960,
+     199,
+     960,
+     1040,
+     206,
+     1040
+    ]
+   }
+  }
+ ]
+}

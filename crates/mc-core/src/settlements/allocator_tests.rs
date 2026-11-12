@@ -120,11 +120,15 @@ fn jobless_villager_claims_a_free_workstation_at_any_hour() {
         for _ in 0..60 {
             step(&mut state);
         }
+        let v = state.entities.row(slot).villager.as_ref().unwrap();
         assert_eq!(
-            state.entities.row(slot).villager.as_ref().unwrap().job_site,
+            v.job_site,
             Some(BlockPos { x: 4, y: 201, z: 4 }),
             "day time {time}"
         );
+        // The workstation is within reach: AssignProfessionFromJobSite
+        // employs the claimer at once, whatever the hour.
+        assert_eq!(v.data.profession, Profession::Farmer, "day time {time}");
     }
 }
 

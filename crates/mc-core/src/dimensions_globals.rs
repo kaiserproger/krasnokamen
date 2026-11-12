@@ -19,7 +19,6 @@ pub(crate) enum Broadcast {
     Chat(mc_nbt::Tag),
     /// Command-block output shown to operators only (vanilla `broadcastToAdmins`).
     AdminChat(mc_nbt::Tag),
-    DefaultGameMode(crate::commands::GameMode),
     TeamChat {
         members: std::collections::BTreeSet<String>,
         content: mc_nbt::Tag,
@@ -92,7 +91,6 @@ fn relay(world: &mut TickState, event: &Broadcast) {
                 );
             }
         }
-        Broadcast::DefaultGameMode(mode) => world.default_game_mode = *mode,
         Broadcast::AdminChat(content) => {
             let operators: Vec<_> = world
                 .connections
@@ -292,6 +290,13 @@ pub(crate) fn finish(
             .expect("broadcast world")
             .dimension_globals
             .broadcasts = pending;
+    }
+    // The root owns the default game mode: a command in a child world reaches the root through
+    // `swap_globals`, which leaves that child with the previous value, so every idle world is
+    // re-aligned here instead of being told by a broadcast that skips its source world.
+    let default_game_mode = state.default_game_mode;
+    for world in state.other_dimensions.values_mut() {
+        world.default_game_mode = default_game_mode;
     }
     roster(state);
     let snapshot = Arc::get_mut(&mut output.snapshot).expect("unpublished root snapshot");

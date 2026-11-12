@@ -298,6 +298,10 @@ pub enum JournalEntry {
     DatapackSelection {
         value: crate::datapacks::Selection,
     },
+    /// `/defaultgamemode` (vanilla `WorldData.GameType`); appended to preserve variant order.
+    DefaultGameMode {
+        value: crate::commands::GameMode,
+    },
 }
 
 fn deserialize_statistics_changes<'de, D: serde::Deserializer<'de>>(
@@ -878,6 +882,9 @@ pub struct CheckpointManifest {
     pub border: crate::command_border::Border,
     #[serde(default)]
     pub difficulty: crate::survival::Difficulty,
+    /// Vanilla `level.dat` `Data.GameType`: the mode a new player joins in.
+    #[serde(default)]
+    pub default_game_mode: crate::commands::GameMode,
     /// Absolute deadlines keep the scheduler clock stable across restart.
     #[serde(default)]
     pub block_ticks: crate::block_ticks::BlockTicksImage,

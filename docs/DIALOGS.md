@@ -46,7 +46,10 @@ button's `.with(..)` additions plus one entry per input, typed exactly as vanill
 `DialogBodyHandlers.PlainMessageHandler`); a `custom` click event (`id` + optional `payload`)
 arrives as the same `custom_click_action` as a button, with the payload compound as written.
 The settlement map (`settlements/ui_map.rs`) uses this: a grid of coloured `█` runs (8×8 glyph,
-9-pixel advance and line height, so square cells) with a hover per run and a click on buildings.
+9-pixel advance and line height, so square cells) with per-cell hover and typed click payloads.
+The viewport carries its centre and scale. Tooltips summarize dense cells, but a paged chooser
+exposes every overlapping building/site/street; a missing stable target is refused, never
+silently replaced by a different feature. Navigation stays on the map; its legend is separate.
 The native Solaris client follows the same handler: centered lines, `hover_event` tooltips, and a
 run's `custom` (typed payload) or `run_command` click followed by the dialog's `after_action`.
 
@@ -67,6 +70,20 @@ Registered owners: `dialog_probe` (test hook) and `settlement` (`settlements::ui
 `/settlement menu [page]`; every click re-resolves the settlement from the `s` payload entry and
 re-checks owner/operator before mutating). Keep forms compact: a vanilla dialog scrolls, but a small
 window at GUI scale 3 shows only ~240 GUI pixels, so put the buttons inside that height.
+
+Civil settlement navigation combines these compact dialogs with native icon container menus
+(`settlements/ui_menus.rs`), not a client mod or a second management authority. The hub opens
+the dashboard; it routes to buildings, projects, residents, resources and production. Dialog
+reviews separate certificate changes from real construction requests. Construction requests
+carry the reviewed target level and queued-order intent, not the changing simulation revision.
+Handlers revalidate native state/authority; storage uses native fenced transfer commits. Counters,
+material counts and reasons come from native inspection; missing inspection is shown as
+unknown/unavailable rather than a fabricated success or zero.
+
+The `settlement-map-qa` profile drives the owned graphical window. Java text checks retain
+the vanilla font pixel mask; native checks use the received renderer's exact text and visible
+bounds, without a Java font-jar dependency. Construction progress waits for independently
+observed above-ground blueprint blocks within the scenario deadline, not a fixed client-tick count.
 
 Wasm plugins do not receive dialog clicks yet (that needs a `solaris:plugin` interface change).
 

@@ -185,7 +185,7 @@ pub(crate) fn supports(state: &TickState, type_id: u32, name: &str, key: &str) -
     let living = contract
         .is_some_and(|c| c.behavior.archetype == mc_data::entity_types::EntityArchetype::Living);
     let horse = crate::taming::horse(name);
-    let is_painting = name == "minecraft:painting";
+    let is_painting = name == crate::painting::PAINTING_ID;
     let ageable = state
         .registry
         .blueprint(type_id)
@@ -247,7 +247,7 @@ fn authored_fields(
     authored: &[(String, Tag)],
 ) -> Result<Authored, CommandError> {
     let horse = crate::taming::horse(name);
-    let is_painting = name == "minecraft:painting";
+    let is_painting = name == crate::painting::PAINTING_ID;
     let mut fields = Vec::with_capacity(authored.len());
     let mut variant = None;
     for (key, value) in authored {
@@ -545,7 +545,7 @@ pub(crate) fn prepare(
     let Tag::Compound(authored) = nbt else {
         return Err(error("Summon NBT must be a compound"));
     };
-    let is_painting = name == "minecraft:painting";
+    let is_painting = name == crate::painting::PAINTING_ID;
     let (mut fields, variant) = authored_fields(state, type_id, name, authored)?;
     if is_painting {
         // Vanilla Painting defaults: facing south, the default variant.
@@ -629,7 +629,7 @@ fn decode(
     equipment_authored: bool,
     origin: Summoned,
 ) -> Result<Image, CommandError> {
-    let is_painting = name == "minecraft:painting";
+    let is_painting = name == crate::painting::PAINTING_ID;
     let uuid_authored = fields.iter().any(|(key, _)| key == "UUID");
     let base = VanillaEntity {
         id: name.into(),
