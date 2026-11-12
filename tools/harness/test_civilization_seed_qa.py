@@ -322,7 +322,7 @@ class CivilizationEvidenceTests(unittest.TestCase):
         def planner(probe, detail, chest, read_container, capture):
             capture()
             return {"buildings_now": [], "project": road, "project_ui": [
-                {"id": "dialog/body/0", "role": "text", "label": "Road · level 1 · 0/33\nSite: 158, 71, -257"},
+                {"id": "dialog/body/0", "role": "text", "label": "Road L1 · Building\n0/33\n158 71 -257"},
                 {"id": "dialog/body/1", "role": "text",
                  "label": f"Farm:\nDirt {next(dirt)}/30 — awaiting production"}]}
 
