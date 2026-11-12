@@ -15,21 +15,21 @@ WAL instead. After the first restart the scenario places a crafter and an oak sh
 stops the server cleanly and publishes one forged WAL batch (wal_forge) whose
 opaque block-entity images sit at those blocks under a foreign record id, so
 replay's id-based validator lets them through; the next start must refuse
-exactly those chunks instead of panicking in their hydration owners. The conduit takes
-the same route with a record that keeps a valid id and Target but whose `x` names the
-neighbouring block: the conduit owner demands id and position to match the record's own
-cell, while the WAL decoder and the replay validator only check the Target (WAL decoding
-and the Anvil import both refuse a repeated field, and the import takes the position from
-the record, so this record cannot come through the importer).
+exactly those two chunks instead of panicking in their hydration owners.
+
+A conduit record cannot reach hydration by any route this harness can drive: the Anvil import
+and a native load validate its Target and key it by its own position, the replay validator and
+`conduit::validate_loaded` refuse a forged one when the server starts (the world does not open,
+so a WAL image makes the same panic-free exit with or without the hydration check), and command
+writes are validated. The conduit fixture is therefore not part of this scenario.
 """
 from __future__ import annotations
 
 import re
-import struct
 from pathlib import Path
 from typing import Any, Callable
 
-from .anvil_corrupt import BYTE, COMPOUND, INT, INT_ARRAY, LIST, LONG, STRING, Edit, Tag
+from .anvil_corrupt import BYTE, COMPOUND, INT, LIST, LONG, STRING, Edit, Tag
 from .native_v2 import _block, _echo, _point
 from .wal_forge import committed_tick, network_compound, publish_opaque_batch
 from .probe_steps import ProbeSteps
@@ -53,7 +53,7 @@ def _edit(fields: dict[str, Tag]) -> Edit:
 # exported record, whether hydration must refuse the chunk, text the refusal must name.
 # Crafter and shelf records are validated by the importer through their block (mc-world test
 # block_entities_are_validated_by_their_block), so they take the WAL route (WAL_FIXTURES), and so does
-# a conduit whose record names a position other than its cell (the importer keys the record by it).
+# (a conduit record cannot reach hydration: see the module docstring).
 # A beacon record only has to be a compound; its undecodable-record panic cannot be reached, so the
 # beacon fixture is the runtime-path control: an odd but decodable record is not refused and the
 # beacon keeps running every 80 ticks.
@@ -66,14 +66,10 @@ FIXTURES: tuple[tuple[str, str, Edit, bool, str], ...] = (
 )
 
 # Blocks that take the WAL route: block, text the refusal must name, the forged record for a position.
-# The crafter and shelf records use a foreign id the replay validator does not check and a slot index
-# no owner accepts; the conduit keeps its own id and a valid Target but names the neighbouring x.
+# The records use a foreign id the replay validator does not check and a slot index no owner accepts.
 WAL_FIXTURES: tuple[tuple[str, str, Callable[[dict[str, int]], list[tuple[str, Tag]]]], ...] = (
     ("crafter", "crafter", lambda point: [("id", SIGN), ("Items", BAD_ITEMS), *_position(point)]),
     ("oak_shelf", "shelf", lambda point: [("id", SIGN), ("Items", BAD_ITEMS), *_position(point)]),
-    ("conduit", "conduit", lambda point: [("id", (STRING, "minecraft:conduit")),
-                                          ("Target", (INT_ARRAY, (INT_ARRAY, struct.pack(">4i", 1, 2, 3, 4)))),
-                                          *_position({**point, "x": point["x"] + 1})]),
 )
 
 
@@ -85,7 +81,7 @@ def _position(point: dict[str, int]) -> list[tuple[str, Tag]]:
 # the chunks within about 12 blocks of the camera are known, so a refused chunk may not touch the
 # player's chunk (a separate client finding); all stay inside the simulation distance of 4.
 OFFSETS = ((2, 0), (-2, 0), (0, 2))
-WAL_OFFSETS = ((2, 2), (-2, 2), (0, -2))
+WAL_OFFSETS = ((2, 2), (-2, 2))
 
 
 def _centres(origin: tuple[int, int, int], offsets: tuple[tuple[int, int], ...]) -> list[dict[str, int]]:
@@ -254,9 +250,11 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.check("server_keeps_ticking_after_wal_refusals", _gametime(steps, "after_wal_replay_second") > resumed + 80)
     steps.report["limits"] = [
         "jukebox and shrieker records corrupted in an exported Anvil copy and re-imported; crafter and shelf "
-        "records cannot take this route because the importer validates them by their block, and a conduit "
-        "record whose position differs from its cell cannot be built there, so those reach the server as forged opaque "
-        "images in a tick-WAL batch (wal_forge) published over a clean shutdown checkpoint",
+        "records cannot take this route because the importer validates them by their block, so they reach "
+        "the server as forged opaque images in a tick-WAL batch (wal_forge) published over a clean shutdown "
+        "checkpoint",
+        "no conduit fixture: no route this harness drives lets an undecodable conduit record reach "
+        "hydration (module docstring)",
         "the beacon record is decodable by construction: that fixture proves its runtime pass survives an "
         "odd record, not a refusal",
         "the WAL-refused chunks are refused after the second start; whether a later checkpoint declines "
