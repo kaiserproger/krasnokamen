@@ -318,6 +318,12 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and bool(value["contains"]))
         elif kind == "cmd":
             valid = isinstance(value, str) and bool(value) and not value.startswith("/")
+        elif kind == "upgrade_certified":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"kind", "level"}
+                     and isinstance(value["kind"], str)
+                     and re.fullmatch(r"[a-z_]+", value["kind"])
+                     and type(value["level"]) is int and 2 <= value["level"] <= 3)
         elif kind == "tp":
             valid = (isinstance(value, list) and len(value) == 5
                      and all(type(n) in (int, float) and math.isfinite(n) for n in value))
@@ -709,6 +715,30 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
         elif kind == "cmd":
             wait_play(probe)
             probe.call("minecraft_send_chat", {"message": value, "command": True})
+        elif kind == "upgrade_certified":
+            # Upgrade the building the `Certified <kind> #<id>` reply named, then check the reply: the
+            # id is a settlement/sequence pair, so a fixed scenario cannot spell it. `recent_chat` is
+            # the client's last 20 lines, newest first: take the one distinct id, never an order.
+            wait_play(probe)
+            certified = re.compile(rf"Certified {value['kind']} #(\d+)")
+
+            def certified_ids(state: dict[str, Any]) -> set[str]:
+                return {match.group(1) for line in state.get("recent_chat") or []
+                        if isinstance(line, str) and (match := certified.search(line))}
+
+            probe.wait(lambda state: bool(certified_ids(state)),
+                       f"{value['kind']}_certification_reply", wait_for_play=True,
+                       timeout_seconds=30)
+            ids = certified_ids(probe.observe())
+            probe.check(f"{value['kind']}_one_certified_building", len(ids) == 1)
+            (building,) = ids
+            probe.call("minecraft_send_chat",
+                       {"message": f"settlement building upgrade {building}", "command": True})
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+            reply = f"Upgraded building #{building} to level {value['level']}."
+            probe.check(f"{value['kind']}_upgraded_to_level_{value['level']}",
+                        any(isinstance(line, str) and reply in line
+                            for line in probe.observe().get("recent_chat") or []))
         elif kind == "tp":
             probe.call("minecraft_send_chat", {"message": "tp @s " + " ".join(map(str, value)), "command": True})
             probe.wait(
@@ -866,6 +896,8 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-village-late-job": "village_late_job_scene.json",
         "native-village-distant-job": "village_distant_job_scene.json",
         "native-village-breeding": "village_breeding_scene.json",
+        "native-settlement-radius-growth": "settlement_radius_scene.json",
+        "native-settlement-buildings-upgrade": "settlement_buildings_scene.json",
     }
     if ctx.scenario_id in named_fixtures:
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):

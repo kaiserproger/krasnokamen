@@ -1,0 +1,187 @@
+{
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "tp": [
+        1000.5,
+        205,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 100
+    },
+    {
+      "cmd": "fill 988 199 988 1020 199 1020 minecraft:stone"
+    },
+    {
+      "cmd": "fill 988 200 988 1020 212 1020 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        200,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "cmd": "settlement create buildqa 32"
+    },
+    {
+      "wait_chat": "Founded buildqa"
+    },
+    {
+      "cmd": "fill 1008 200 996 1012 201 996 minecraft:stone"
+    },
+    {
+      "cmd": "settlement building certify wall 1008 199 996 1012 201 996"
+    },
+    {
+      "wait_chat": "Certified wall #"
+    },
+    {
+      "assert_chat": {
+        "name": "wall-certified",
+        "contains": [
+          "Certified wall #"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "cmd": "fill 1008 200 996 1016 202 996 minecraft:stone"
+    },
+    {
+      "cmd": "settlement building certify wall 1008 199 996 1016 202 996"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "upgrade_certified": {
+        "kind": "wall",
+        "level": 2
+      }
+    },
+    {
+      "cmd": "fill 996 200 996 998 203 998 minecraft:stone"
+    },
+    {
+      "cmd": "fill 997 200 997 997 203 997 minecraft:air"
+    },
+    {
+      "cmd": "fill 996 204 996 998 204 998 minecraft:stone"
+    },
+    {
+      "cmd": "settlement building certify tower 996 199 996 998 204 998"
+    },
+    {
+      "wait_chat": "Certified tower #"
+    },
+    {
+      "assert_chat": {
+        "name": "tower-certified",
+        "contains": [
+          "Certified tower #"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "cmd": "fill 996 200 1004 1000 202 1008 minecraft:stone"
+    },
+    {
+      "cmd": "fill 997 200 1005 999 202 1007 minecraft:air"
+    },
+    {
+      "cmd": "fill 996 203 1004 1000 203 1008 minecraft:stone"
+    },
+    {
+      "cmd": "setblock 996 200 1006 minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]"
+    },
+    {
+      "cmd": "setblock 996 201 1006 minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]"
+    },
+    {
+      "cmd": "setblock 997 200 1005 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+    },
+    {
+      "cmd": "setblock 998 200 1005 minecraft:red_bed[facing=east,part=head,occupied=false]"
+    },
+    {
+      "cmd": "setblock 997 200 1007 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+    },
+    {
+      "cmd": "setblock 998 200 1007 minecraft:red_bed[facing=east,part=head,occupied=false]"
+    },
+    {
+      "cmd": "settlement building certify barracks 996 199 1004 1000 203 1008"
+    },
+    {
+      "wait_chat": "Certified barracks #"
+    },
+    {
+      "assert_chat": {
+        "name": "barracks-certified",
+        "contains": [
+          "Certified barracks #"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "cmd": "setblock 1005 200 1005 minecraft:composter"
+    },
+    {
+      "cmd": "settlement building certify farmer 1004 199 1004 1008 203 1008"
+    },
+    {
+      "wait_chat": "Certified farmer #"
+    },
+    {
+      "assert_chat": {
+        "name": "farmer-certified",
+        "contains": [
+          "Certified farmer #"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "cmd": "setblock 1007 200 1005 minecraft:composter"
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "upgrade_certified": {
+        "kind": "farmer",
+        "level": 2
+      }
+    },
+    {
+      "shot": "separate-buildings"
+    }
+  ]
+}

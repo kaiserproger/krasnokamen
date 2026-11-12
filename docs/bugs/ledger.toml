@@ -2399,9 +2399,12 @@ title = "Individual buildings and upgrades missing"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1 (build separate buildings: walls, production, military, fortification, and upgrade them); implemented by 177a1205 (2026-10-19: certified buildings by blocks, levels 1-3, `/settlement building certify|upgrade|list`, blueprints) and 18f71536 (Builder blueprint orders and upgrades, docs/settlements/construction.md#owner-build-requests). Fix patch docs/bugs/fix-patches/ISSUE-1-09.patch is the one statement that raises a certificate's level in settlements/buildings.rs `upgrade`; reversing it makes every upgrade reply `to level 1` and change nothing. The real-client scene certifies a wall, tower (fortification), barracks (military) and farmer workshop (production), expands the wall to its next level and gives the workshop a second composter, and checks `Upgraded building #<id> to level 2.` for both. Builder-built coverage gaps are the row ISSUE-1-09-BUILDERS-CANNOT-BUILD-GATES-OR-MOST-WORKSHOPS"
+regression = ["cargo:mc-core:settlements::buildings::tests::workshop_certifies_upgrades_and_caps_distinct_slots", "harness:scene-shot:native-settlement-buildings-upgrade"]
+failing_first = "not recorded"
+fix_commit = "patch:e193f9c8a608a391c69ddcfdf9d2d5ba89a0d6b243b017d61c2e58c62ec6a358"
+promotion = "docs/bugs/promotions/ISSUE-1-09.json"
 
 [[bug]]
 id = "ISSUE-1-10"
@@ -2434,9 +2437,12 @@ title = "Village radius does not expand"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1 (settlement radius grows with population); implemented by 8a1c5453 (2026-10-19: GROWTH_PER_RESIDENT = 4 in settlements/registry.rs, `grow_radii` raising the record radius to 4 blocks per resident, capped at MAX_RADIUS 256, never shrinking; docs/settlements/construction.md#natural-zones-and-radius). Fix patch docs/bugs/fix-patches/ISSUE-1-12.patch is the two `grow_radii()` calls that run it (settlements/mod.rs rebuild_counts and refresh_counts); reversing them leaves the radius at its creation value while residents join. The real-client scene founds radius 8 with six villagers inside it and reads radius=24 from `/settlement info`, then binds a seventh and reads radius=28"
+regression = ["cargo:mc-core:settlements::binding_tests::radius_grows_with_population_persists_and_never_shrinks", "harness:scene-shot:native-settlement-radius-growth"]
+failing_first = "not recorded"
+fix_commit = "patch:b47625083f6b75b19e0a4edde8b431b718480ad92327ece6249242958df06d14"
+promotion = "docs/bugs/promotions/ISSUE-1-12.json"
 
 [[bug]]
 id = "ISSUE-1-13"
@@ -2495,8 +2501,41 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
+source = "https://github.com/kaiserproger/solaris/issues/1 (ledger title: automatic settlement layout and infrastructure). Partial on main 747e2cc6, split into the rows below instead of promoting: AUTOMATIC LAYOUT exists in the planner (docs/settlements/construction.md#planning-and-streets: the planner picks storage, houses, farm, lumber camp, mine, Builder hut, barracks from 6 residents, tower from 8, wall from 10 by itself; street grid, lots in walking order, road/lamp projects; crates/mc-core/src/settlements/layout.rs, layout_tests.rs, construction_planner_tests.rs) and was seen on a real client (seed-24 civilization-seed-qa timeline: road L1, lamp L1, mason L1/L2, lumber camp, mine projects, receipts/CivSimSeed24/REPORT-2.md), but a real-client house never completed in any recorded civilization-seed-qa receipt (ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME); INFRASTRUCTURE exists as roads, paving and lamps (layout.rs) and a single wall section, with no perimeter wall, gate or well (ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL). Receipts: receipts/Issue1EvidenceE/REPORT.md"
 regression = []
+
+[[bug]]
+id = "ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME"
+title = "The settlement plans and builds storage, workshops, roads and lamps by itself on a real client, but never completed a new house or grew its population in any recorded run"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Owner expectation (issue 1, ISSUE-1-17): the settlement lays itself out and grows without the player placing every building. Planner source: docs/settlements/construction.md#planning-and-streets (houses are planned when certified house capacity is below population; the first House needs a bed: 3 wool, shears, 2 iron ingots, docs/settlements/construction.md#builders-and-supplies). Evidence: harness profile civilization-seed-qa verdict map, scanned over the 51 result.json receipts under wt/*/.analysis/validation and receipts/ on 2026-11-12: new_house true in 0, second_building true in 3, iron_smelted true in 17, births 0, all 0 (last full runs 2026-11-08/09 on older trees; the three runs of 2026-11-12 failed at start on a missing client root, no evidence). receipts/CivSimSeed24/REPORT.md and REPORT-2.md name the stalls (bed iron never smelted, the first Farm cannot be funded without seeds). Related rows: CIV-SEED24-HOUSE-BED-IRON-NEVER-SMELTED, CIV-SEED24-FARM-SEEDS-NEED-A-FARM, CIV-SEED24-STALLED-PROJECT-HOLDS-SLOT. The remaining wish of ISSUE-1-17: civilization-seed-qa `new_house` and `second_building` true on main in one run"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL"
+title = "The settlement lays at most one wall section: no enclosing perimeter, no gate and no well"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Owner expectation (issue 1, ISSUE-1-17 infrastructure; ISSUE-1-09 fortification buildings). docs/settlements/construction.md#owner-build-requests: a wall order builds a wall section with Builders, and is neither certification of player blocks nor an automatically enclosed perimeter or gate system. docs/settlements/construction.md#planning-and-streets: the planner adds one wall from 10 residents and one tower from 8 (missing kinds only) and there is no automatic water placement for a well. crates/mc-core/assets/blueprints has barracks, farm, house, lumber_camp, mason, mine, shepherd, storage, wall (2 levels), watch_tower (2 levels) and no gate blueprint; BuildingKind::Gate (crates/mc-core/src/settlements/buildings.rs) is certification-only. Remaining wish: the settlement walls itself in with gated openings at the street grid (layout.rs roads), and builds a well"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "ISSUE-1-09-BUILDERS-CANNOT-BUILD-GATES-OR-MOST-WORKSHOPS"
+title = "Builders can build only ten blueprint kinds: no gate, no armorer, butcher, cartographer, cleric, fisherman, fletcher, leatherworker, librarian, toolsmith or weaponsmith, and walls, towers and barracks stop at level 2"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Owner expectation (issue 1, ISSUE-1-09): build separate buildings (walls, production, military, fortification) and upgrade them. docs/settlements/construction.md#blueprint-files: the embedded catalog is house 1-3; storage, farm, mason, lumber_camp, mine, barracks, wall and watch_tower 1-2; shepherd 1 (crates/mc-core/assets/blueprints/*.json, read 2026-11-12: kinds barracks, farmer, house, lumber_camp, builder, mine, shepherd, storage, wall, tower). Player-built gates and every workshop kind can be certified and upgraded to level 3 (`settlement building certify|upgrade`, docs/settlements/construction.md#certification-commands), so the gap is Builder-built coverage only. Remaining wish: blueprints for gate and the other workshop kinds, and level 3 where the certificate allows it"
+regression = []
+failing_first = "not recorded"
 
 [[bug]]
 id = "ISSUE-1-18"
