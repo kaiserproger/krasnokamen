@@ -1,6 +1,6 @@
 [package]
 name = "mc-data"
-description = "Data pack loader and registry indexing (Solaris)."
+description = "Data pack loader and registry indexing (Krasnokamen)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

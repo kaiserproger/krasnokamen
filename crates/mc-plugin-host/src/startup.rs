@@ -22,8 +22,8 @@
 
 use mc_data::Identifier;
 use mc_data::item_components::{CustomItemDefinition, ItemFacts, ItemFactsTable};
-use mc_data::items::{ItemRegistry, solaris_required_items};
-use mc_data::tags::{TagsData, solaris_required_item_tags};
+use mc_data::items::{ItemRegistry, krasnokamen_required_items};
+use mc_data::tags::{TagsData, krasnokamen_required_item_tags};
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
@@ -32,15 +32,15 @@ use mc_script::{
     PluginWorldgenOreProfile, SpawnEntry, SpawnPlacement, TreeRule,
 };
 
-use crate::bindings::exports::solaris::plugin::lifecycle::{
+use crate::bindings::exports::krasnokamen::plugin::lifecycle::{
     ClayRules, ItemDefinition, PlacementRules, SpawnGroup, SpawnRules, StartupContribution,
     TreeRules,
 };
 use crate::package::LoadedPackage;
 
-static REQUIRED_ITEMS: LazyLock<ItemRegistry> = LazyLock::new(solaris_required_items);
+static REQUIRED_ITEMS: LazyLock<ItemRegistry> = LazyLock::new(krasnokamen_required_items);
 static REQUIRED_ITEM_TAGS: LazyLock<TagsData> =
-    LazyLock::new(|| solaris_required_item_tags(&REQUIRED_ITEMS));
+    LazyLock::new(|| krasnokamen_required_item_tags(&REQUIRED_ITEMS));
 
 /// A `startup-contribution` value the startup contract's own field cannot hold.
 ///

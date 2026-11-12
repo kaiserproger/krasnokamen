@@ -56,7 +56,7 @@ fn scene(
     rider: Arc<EntityAppearance>,
     own: Option<Arc<EntityAppearance>>,
 ) -> TickOutput {
-    let types = mc_data::entity_types::solaris_required_entity_types();
+    let types = mc_data::entity_types::krasnokamen_required_entity_types();
     let type_id = |name: &str| {
         types
             .id_of(&mc_data::Identifier::parse(name).unwrap())

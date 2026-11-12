@@ -4,7 +4,7 @@ use mc_protocol::frame::{Compression, try_decode_frame};
 use mc_protocol::packets::Packet;
 use std::sync::Arc;
 fn wither(health: f32, invulnerable: i32) -> EntityView {
-    let type_id = mc_data::entity_types::solaris_required_entity_types()
+    let type_id = mc_data::entity_types::krasnokamen_required_entity_types()
         .id_of(&mc_data::Identifier::parse("minecraft:wither").unwrap())
         .unwrap();
     EntityView {
@@ -83,7 +83,7 @@ fn boss_baseline_add_update_remove_and_reentry_are_reliable() {
 #[test]
 fn dragon_bossbar_uses_pink_music_fog_and_survives_death_animation() {
     let mut dragon = wither(200.0, 0);
-    dragon.type_id = mc_data::entity_types::solaris_required_entity_types()
+    dragon.type_id = mc_data::entity_types::krasnokamen_required_entity_types()
         .id_of(&mc_data::Identifier::parse("minecraft:ender_dragon").unwrap())
         .unwrap();
     let mut baseline = BossBaseline::default();

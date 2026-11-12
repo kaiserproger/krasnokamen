@@ -1,6 +1,6 @@
 """Vanilla expectations: minecraft.wiki/w/{Sculk_Sensor,Calibrated_Sculk_Sensor,
 Sculk_Catalyst,Sculk_Shrieker,Warden,Trial_Spawner,Ominous_Trial_Spawner}.
-Solaris sources: sculk.rs, vibration.rs, shrieker.rs, warden.rs, trial_spawner.rs.
+Krasnokamen sources: sculk.rs, vibration.rs, shrieker.rs, warden.rs, trial_spawner.rs.
 Timing is observed by dashboard/native publication, never wall-clock sleeps.
 """
 from tools.harness.matrix_api import Adapter

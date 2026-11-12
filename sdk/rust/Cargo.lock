@@ -181,15 +181,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "solaris-hello-plugin"
+name = "krasnokamen-hello-plugin"
 version = "0.8.0"
 dependencies = [
- "solaris-plugin-sdk",
+ "krasnokamen-plugin-sdk",
  "wit-bindgen",
 ]
 
 [[package]]
-name = "solaris-plugin-sdk"
+name = "krasnokamen-plugin-sdk"
 version = "0.8.0"
 dependencies = [
  "serde",
@@ -198,10 +198,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "solaris-sky-creeper-plugin"
+name = "krasnokamen-sky-creeper-plugin"
 version = "0.8.0"
 dependencies = [
- "solaris-plugin-sdk",
+ "krasnokamen-plugin-sdk",
  "wit-bindgen",
 ]
 

@@ -2512,7 +2512,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "solaris-fuzz"
+name = "krasnokamen-fuzz"
 version = "0.0.0"
 dependencies = [
  "arbitrary",

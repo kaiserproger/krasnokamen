@@ -19,11 +19,11 @@ pub struct VanillaEntityLootLookups {
 ///
 /// Returns the exact missing or invalid tag file.
 pub fn load_vanilla_lookups(root: &Path) -> Result<VanillaEntityLootLookups, String> {
-    let items = crate::items::solaris_required_items();
-    let tags = crate::tags::solaris_required_item_tags(&items);
-    let facts = crate::item_components::solaris_required_item_facts();
+    let items = crate::items::krasnokamen_required_items();
+    let tags = crate::tags::krasnokamen_required_item_tags(&items);
+    let facts = crate::item_components::krasnokamen_required_item_facts();
     let mut smelting = BTreeMap::new();
-    for recipe in crate::recipes::solaris_required_recipes() {
+    for recipe in crate::recipes::krasnokamen_required_recipes() {
         let RecipeKind::Smelting(cooking) = recipe.kind else {
             continue;
         };

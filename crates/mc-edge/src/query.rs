@@ -111,7 +111,7 @@ fn stat(cfg: &crate::config::EdgeConfig, count: usize, players: &[String], full:
             ("gametype", "SMP"),
             ("game_id", "MINECRAFT"),
             ("version", mc_protocol::TARGET_RELEASE),
-            ("plugins", "Solaris"),
+            ("plugins", "Krasnokamen"),
             ("map", &map),
             ("numplayers", &count),
             ("maxplayers", &max),

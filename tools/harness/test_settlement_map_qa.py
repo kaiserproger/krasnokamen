@@ -675,7 +675,7 @@ class ProductionServer:
         if label.startswith("#3 ") and title == self.page("choose_station"):
             self._menu(self.page("new_order_form"), [(0, "stick"), (1, gate.PRODUCTION_RECIPE)])
         elif label == self.page("new_order") and title == self.page("new_order_form"):
-            self.job = {"id": "ui-1", "worker": self.worker, "recipe": "solaris-settlements:" + gate.PRODUCTION_RECIPE,
+            self.job = {"id": "ui-1", "worker": self.worker, "recipe": "krasnokamen-settlements:" + gate.PRODUCTION_RECIPE,
                         "count": 8, "done": 0, "paused": None, "cancelled": False, "receipts": []}
             self._dialog(self.page("orders"))
         elif label == self.page("back") and title == self.page("orders"):

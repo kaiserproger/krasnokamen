@@ -69,10 +69,10 @@ impl Spawner {
         let potentials = data::potentials(&fields, registry)?;
         let min_delay = short(&fields, "MinSpawnDelay", 200, 1, i16::MAX)? as u64;
         let max_delay = short(&fields, "MaxSpawnDelay", 800, min_delay as i16, i16::MAX)? as u64;
-        let deadline = match field(&fields, "solaris:spawn_deadline") {
+        let deadline = match field(&fields, "krasnokamen:spawn_deadline") {
             None => None,
             Some(Tag::Long(value)) if *value >= 0 => Some(*value as u64),
-            _ => return Err("solaris:spawn_deadline: expected nonnegative Long".into()),
+            _ => return Err("krasnokamen:spawn_deadline: expected nonnegative Long".into()),
         };
         Ok(Self {
             type_id: spawn.type_id,
@@ -92,10 +92,10 @@ impl Spawner {
     fn persist(&mut self, state: &mut TickState, key: Key) {
         nbt::set(&mut self.fields, "Delay", Tag::Short(self.delay as i16));
         self.fields
-            .retain(|(name, _)| name != "solaris:spawn_deadline");
+            .retain(|(name, _)| name != "krasnokamen:spawn_deadline");
         if let Some(deadline) = self.deadline {
             self.fields
-                .push(("solaris:spawn_deadline".into(), Tag::Long(deadline as i64)));
+                .push(("krasnokamen:spawn_deadline".into(), Tag::Long(deadline as i64)));
         }
         let pos = BlockPos {
             x: key.0,

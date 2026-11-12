@@ -15,7 +15,7 @@ the monitor, the owner's consent dialog, F8).
 
 The staged copy of the shared pack's computer plugin lists the native loader
 (the shared manifest offers the monitor bundle to Fabric/NeoForge/Forge only),
-so the native clients admit the monitor and get a `solaris:screen` session.
+so the native clients admit the monitor and get a `krasnokamen:screen` session.
 """
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def validate_args(ctx: ProfileContext) -> float:
 
 def computer_plugin_source() -> Path:
     """The shared live pack's computer plugin (never edited: each run stages its own copy)."""
-    work = Path(os.environ.get("SOLARIS_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
+    work = Path(os.environ.get("KRASNOKAMEN_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
     return work / "scenarios" / "live-plugins" / "computer"
 
 
@@ -136,7 +136,7 @@ class Clients:
         plugins = artifact / "plugins"
         plugins.mkdir()
         self.ctx.client_evidence["computer_plugin"] = stage_computer_plugin(computer_plugin_source(), plugins)
-        vanilla = os.environ.get("SOLARIS_SERVER_VANILLA_DATA_DIR", "data/vanilla")
+        vanilla = os.environ.get("KRASNOKAMEN_SERVER_VANILLA_DATA_DIR", "data/vanilla")
         source = (runtime.REPO_ROOT / "playable.toml").read_text()
         token = 'vanilla_data_dir = "data/vanilla"'
         if source.count(token) != 1:
@@ -164,7 +164,7 @@ class Clients:
         sub.artifact_dir.mkdir()
         xvfb, display, _ = runtime.start_xvfb(sub.artifact_dir)
         self.cleanup.append(lambda: runtime.stop_process(xvfb))
-        settings_path = sub.artifact_dir / "xdg" / "solaris-client" / "client-settings.json"
+        settings_path = sub.artifact_dir / "xdg" / "krasnokamen-client" / "client-settings.json"
         settings_path.parent.mkdir(parents=True)
         template = client_template()
         for entry in CLIENT_CONTENT_DIRS:
@@ -173,7 +173,7 @@ class Clients:
                                                           target_is_directory=(template / entry).is_dir())
         settings_path.write_text(json.dumps({"fov": 70, "desktop_computer": True}, indent=2) + "\n")
         overrides = {"XDG_DATA_HOME": str(settings_path.parent.parent),
-                     "SOLARIS_CLIENT_SETTINGS": str(settings_path), **env}
+                     "KRASNOKAMEN_CLIENT_SETTINGS": str(settings_path), **env}
         saved = {key: os.environ.get(key) for key in overrides}
         os.environ.update(overrides)
         try:
@@ -201,9 +201,9 @@ class Clients:
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
-    if not override or not os.environ.get("SOLARIS_CLIENT_BINARY"):
-        raise RuntimeError("screen-share requires prebuilt SOLARIS_SERVER_BINARY and SOLARIS_CLIENT_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
+    if not override or not os.environ.get("KRASNOKAMEN_CLIENT_BINARY"):
+        raise RuntimeError("screen-share requires prebuilt KRASNOKAMEN_SERVER_BINARY and KRASNOKAMEN_CLIENT_BINARY")
     binary = Path(override).expanduser().resolve()
     if not binary.is_file():
         raise RuntimeError(f"missing server binary: {binary}")
@@ -214,7 +214,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     reports: dict[str, Any] = {}
     try:
         address = clients.server()
-        owner = clients.native(OWNER, address, {"SOLARIS_SCREEN_TEST_SOURCE": "video:900"})
+        owner = clients.native(OWNER, address, {"KRASNOKAMEN_SCREEN_TEST_SOURCE": "video:900"})
         viewer = clients.native(VIEWER, address, {})
         reports.update({OWNER: owner.report, VIEWER: viewer.report})
         scenario(owner, viewer)

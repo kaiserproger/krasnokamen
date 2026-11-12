@@ -17,7 +17,7 @@ fn every_builtin_component_id_matches_the_26_1_2_report_and_inverse() {
         assert_eq!(id(&identifier), Some(protocol_id), "{entry}");
         assert_eq!(name(protocol_id), Some(entry.as_str()), "{entry}");
     }
-    assert_eq!(id(&Identifier::parse("solaris:unknown").unwrap()), None);
+    assert_eq!(id(&Identifier::parse("krasnokamen:unknown").unwrap()), None);
     assert_eq!(name(COUNT as u32), None);
     assert_eq!(name(u32::MAX), None);
 }

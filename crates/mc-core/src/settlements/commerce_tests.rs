@@ -308,8 +308,8 @@ fn fixture_in(mut state: TickState) -> Fixture {
             branch: "none".into(),
             level: 0,
             buildings: vec![
-                worksite(&treasury_site, "solaris:warehouse"),
-                worksite(&escrow_site, "solaris:warehouse"),
+                worksite(&treasury_site, "krasnokamen:warehouse"),
+                worksite(&escrow_site, "krasnokamen:warehouse"),
             ],
         },
     )

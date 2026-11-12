@@ -181,24 +181,24 @@ def _prepared_mode(argv: list[str]) -> bool:
 def _backend_env(ctx: ProfileContext) -> dict[str, str]:
     """Base env for every backend: canonical run dir for child receipts."""
     env = os.environ.copy()
-    env["SOLARIS_VALIDATION_RUN_DIR"] = str(ctx.artifact_dir)
+    env["KRASNOKAMEN_VALIDATION_RUN_DIR"] = str(ctx.artifact_dir)
     return env
 
 
 def _server_binary(ctx: ProfileContext, log_name: str = "server-build.log") -> Path:
     """Resolve a frozen candidate or build the sole server executable."""
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if override:
         binary = Path(override).expanduser().resolve()
     else:
         env = os.environ.copy()
         env.setdefault("CARGO_BUILD_JOBS", "3")
         _run_command(
-            ["cargo", "build", "--locked", "--bin", "solaris-v2", "-p", "mc-edge"],
+            ["cargo", "build", "--locked", "--bin", "krasnokamen", "-p", "mc-edge"],
             ctx, log_name, env=env, phase_name="server_start",
         )
         target = Path(env.get("CARGO_TARGET_DIR", str(REPO_ROOT / "target")))
-        binary = (target if target.is_absolute() else REPO_ROOT / target) / "debug" / "solaris-v2"
+        binary = (target if target.is_absolute() else REPO_ROOT / target) / "debug" / "krasnokamen"
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise RuntimeError(f"missing executable server binary: {binary}")
     return binary
@@ -275,9 +275,9 @@ def run_test(ctx: ProfileContext, *, full: bool = False) -> dict[str, Any]:
     env["NEXTEST_TEST_THREADS"] = env.get(
         "RUST_TEST_THREADS", env.get("NEXTEST_TEST_THREADS", "num-cpus")
     )
-    # CI sets SOLARIS_NEXTEST_PROFILE=ci (short run, slow tests filtered out)
+    # CI sets KRASNOKAMEN_NEXTEST_PROFILE=ci (short run, slow tests filtered out)
     # for `run test`; the L2 `run correctness` gate always runs the full suite.
-    profile = "default" if full else env.get("SOLARIS_NEXTEST_PROFILE", "default")
+    profile = "default" if full else env.get("KRASNOKAMEN_NEXTEST_PROFILE", "default")
     argv = [
         "cargo", "nextest", "run",
         "--profile", profile,
@@ -312,7 +312,7 @@ def run_correctness(ctx: ProfileContext) -> dict[str, Any]:
 
 
 def run_build(ctx: ProfileContext) -> dict[str, Any]:
-    argv = ["cargo", "build", "--locked", "-p", "mc-edge", "--bin", "solaris-v2"]
+    argv = ["cargo", "build", "--locked", "-p", "mc-edge", "--bin", "krasnokamen"]
     if ctx.release:
         argv.append("--release")
     return _run_command(argv, ctx, "build.log")
@@ -644,12 +644,12 @@ _REGRESSION_MODES = ("--check", "--prepare", "--run", "--validate-run")
 
 def _regression_env(ctx: ProfileContext) -> dict[str, str]:
     env = _backend_env(ctx)
-    env.setdefault("SOLARIS_REAL_CLIENT_RUN_ROOT", str(ctx.artifact_dir / "regression"))
+    env.setdefault("KRASNOKAMEN_REAL_CLIENT_RUN_ROOT", str(ctx.artifact_dir / "regression"))
     if ctx.timeout_seconds is not None:
         seconds = int(ctx.timeout_seconds)
         if seconds <= 0 or seconds != ctx.timeout_seconds:
             raise ValueError("regression, playable and replay require a positive whole-second timeout")
-        env["SOLARIS_REAL_CLIENT_TIMEOUT_SECONDS"] = str(seconds)
+        env["KRASNOKAMEN_REAL_CLIENT_TIMEOUT_SECONDS"] = str(seconds)
     return env
 
 
@@ -683,14 +683,14 @@ def run_regression(ctx: ProfileContext) -> dict[str, Any]:
 def run_playable(ctx: ProfileContext) -> dict[str, Any]:
     env = _regression_env(ctx)
     env.setdefault(
-        "SOLARIS_REAL_CLIENT_MANIFEST", "docs/playable/real-client-playable-loop.json"
+        "KRASNOKAMEN_REAL_CLIENT_MANIFEST", "docs/playable/real-client-playable-loop.json"
     )
-    env.setdefault("SOLARIS_REAL_CLIENT_SERVER_CONFIG", "playable.toml")
-    env.setdefault("SOLARIS_REAL_CLIENT_FRESH_WORLD", "1")
+    env.setdefault("KRASNOKAMEN_REAL_CLIENT_SERVER_CONFIG", "playable.toml")
+    env.setdefault("KRASNOKAMEN_REAL_CLIENT_FRESH_WORLD", "1")
     env.setdefault(
-        "SOLARIS_REAL_CLIENT_AGENT_SCENARIO", "playable-04-twenty-minute-survival-loop"
+        "KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO", "playable-04-twenty-minute-survival-loop"
     )
-    env.setdefault("SOLARIS_REAL_CLIENT_TIMEOUT_SECONDS", "1500")
+    env.setdefault("KRASNOKAMEN_REAL_CLIENT_TIMEOUT_SECONDS", "1500")
     argv = _with_backend_mode(
         ["bash", str(BACKENDS / "regression.sh")], ctx.extra_args, _REGRESSION_MODES
     )
@@ -704,18 +704,18 @@ def run_replay(ctx: ProfileContext) -> dict[str, Any]:
     # A named scenario binds its declared identity; a bare profile run keeps the
     # documented environment overrides (setdefault, not assignment).
     if ctx.manifest is not None:
-        env["SOLARIS_REAL_CLIENT_MANIFEST"] = ctx.manifest
+        env["KRASNOKAMEN_REAL_CLIENT_MANIFEST"] = ctx.manifest
     else:
         env.setdefault(
-            "SOLARIS_REAL_CLIENT_MANIFEST",
+            "KRASNOKAMEN_REAL_CLIENT_MANIFEST",
             "docs/real-client-regression/manifests/core-replay-seed-81.json",
         )
     if ctx.scenario_id is not None:
-        env["SOLARIS_REAL_CLIENT_AGENT_SCENARIO"] = ctx.scenario_id
+        env["KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO"] = ctx.scenario_id
     else:
-        env.setdefault("SOLARIS_REAL_CLIENT_AGENT_SCENARIO", "core-actions-seed-81")
-    env.setdefault("SOLARIS_REAL_CLIENT_FRESH_WORLD", "1")
-    env.setdefault("SOLARIS_REAL_CLIENT_TIMEOUT_SECONDS", "180")
+        env.setdefault("KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO", "core-actions-seed-81")
+    env.setdefault("KRASNOKAMEN_REAL_CLIENT_FRESH_WORLD", "1")
+    env.setdefault("KRASNOKAMEN_REAL_CLIENT_TIMEOUT_SECONDS", "180")
     argv = _with_backend_mode(
         ["bash", str(BACKENDS / "regression.sh")], ctx.extra_args, _REGRESSION_MODES
     )
@@ -919,7 +919,7 @@ PROFILES: dict[str, dict[str, Any]] = {
     },
     "build": {
         "scope": "rust",
-        "description": "cargo build --locked -p mc-edge --bin solaris-v2; --release selects release",
+        "description": "cargo build --locked -p mc-edge --bin krasnokamen; --release selects release",
         "run": run_build,
     },
     "java": {
@@ -1159,7 +1159,7 @@ PROFILES: dict[str, dict[str, Any]] = {
     },
     "quirk-parity": {
         "scope": "oracle",
-        "description": "Real 26.1.2 vanilla oracle vs Solaris: player-relied quirks (QC, TNT duping, update order) and farm rates; receipts under the run artifact dir",
+        "description": "Real 26.1.2 vanilla oracle vs Krasnokamen: player-relied quirks (QC, TNT duping, update order) and farm rates; receipts under the run artifact dir",
         "run": run_quirk_parity,
     },
     "catalog-load": {

@@ -1,5 +1,5 @@
 id=spawn-smoke
-title=Spawn smoke Solaris-vs-vanilla parity
+title=Spawn smoke Krasnokamen-vs-vanilla parity
 quality=stabilization
 rows=P1,Q1
 kind=cargo-ignored-test
@@ -7,4 +7,4 @@ captures=.analysis/oracle-suite/spawn-smoke/
 requires=.analysis/server.jar
 consumes=.analysis/server.jar
 success_marker=M79_ORACLE_COMPARISON_OK spawn-smoke
-description=Runs the existing non-flaky protocol harness scenario against a temp vanilla server and an in-memory Solaris server, then diffs normalized spawn/start observations.
+description=Runs the existing non-flaky protocol harness scenario against a temp vanilla server and an in-memory Krasnokamen server, then diffs normalized spawn/start observations.

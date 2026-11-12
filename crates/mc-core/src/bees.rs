@@ -37,7 +37,7 @@ impl BeeState {
             return Err("Bee: timers expected nonnegative int");
         }
         if self.pollination > 400 {
-            return Err("Bee.solaris:BeePollinationTicks: expected 0..=400");
+            return Err("Bee.krasnokamen:BeePollinationTicks: expected 0..=400");
         }
         if self.crops > 10 {
             return Err("Bee.CropsGrownSincePollination: expected 0..=10");
@@ -134,7 +134,7 @@ pub(crate) fn from_fields(fields: &[(String, Tag)]) -> Result<BeeState, CoreErro
         nectar: boolean(fields, "HasNectar")?,
         stung: boolean(fields, "HasStung")?,
         ticks_since_pollination: integer(fields, "TicksSincePollination", 0)? as u32,
-        pollination: integer(fields, "solaris:BeePollinationTicks", 0)? as u32,
+        pollination: integer(fields, "krasnokamen:BeePollinationTicks", 0)? as u32,
         cannot_enter: integer(fields, "CannotEnterHiveTicks", 0)? as u32,
         crops: integer(fields, "CropsGrownSincePollination", 0)? as u32,
         anger_end: match field(fields, "anger_end_time")? {
@@ -147,7 +147,7 @@ pub(crate) fn from_fields(fields: &[(String, Tag)]) -> Result<BeeState, CoreErro
             .transpose()?,
         ..Default::default()
     };
-    if let Some(tag) = field(fields, "solaris:BeeStingTicks")? {
+    if let Some(tag) = field(fields, "krasnokamen:BeeStingTicks")? {
         let Tag::Int(ticks) = tag else {
             return Err(fail("Bee.sting_ticks", "expected int"));
         };
@@ -184,11 +184,11 @@ pub(crate) fn to_fields(value: &BeeState) -> Vec<(String, Tag)> {
         ),
         ("anger_end_time".into(), Tag::Long(value.anger_end)),
         (
-            "solaris:BeeStingTicks".into(),
+            "krasnokamen:BeeStingTicks".into(),
             Tag::Int(value.sting_ticks as i32),
         ),
         (
-            "solaris:BeePollinationTicks".into(),
+            "krasnokamen:BeePollinationTicks".into(),
             Tag::Int(value.pollination as i32),
         ),
     ];
@@ -899,17 +899,17 @@ fn release(
     changes.entities_spawned.push(id);
 }
 fn hive_image(fields: &[(String, Tag)]) -> Result<Option<crate::journal::ReplayEntity>, CoreError> {
-    let Some(tag) = field(fields, "solaris:HiveEntity")? else {
+    let Some(tag) = field(fields, "krasnokamen:HiveEntity")? else {
         return Ok(None);
     };
     let Tag::String(json) = tag else {
         return Err(fail(
-            "Beehive.solaris:HiveEntity",
+            "Beehive.krasnokamen:HiveEntity",
             "expected entity image string",
         ));
     };
     let image: crate::journal::ReplayEntity = serde_json::from_str(json)
-        .map_err(|e| fail("Beehive.solaris:HiveEntity", &e.to_string()))?;
+        .map_err(|e| fail("Beehive.krasnokamen:HiveEntity", &e.to_string()))?;
     let bee_type = mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(image.type_id)
         .is_some_and(|c| c.name == "minecraft:bee");
     if !bee_type
@@ -922,7 +922,7 @@ fn hive_image(fields: &[(String, Tag)]) -> Result<Option<crate::journal::ReplayE
         || uuid::Uuid::parse_str(&image.uuid).is_err()
     {
         return Err(fail(
-            "Beehive.solaris:HiveEntity",
+            "Beehive.krasnokamen:HiveEntity",
             "expected live bee image",
         ));
     }
@@ -930,7 +930,7 @@ fn hive_image(fields: &[(String, Tag)]) -> Result<Option<crate::journal::ReplayE
     let vanilla = from_fields(fields)?;
     if bee.nectar != vanilla.nectar || bee.stung != vanilla.stung || bee.flower != vanilla.flower {
         return Err(fail(
-            "Beehive.solaris:HiveEntity",
+            "Beehive.krasnokamen:HiveEntity",
             "native/vanilla bee data mismatch",
         ));
     }
@@ -1289,7 +1289,7 @@ pub(crate) fn commit(state: &mut TickState, changes: &mut ChangeSet) {
             )
         });
         data.push((
-            "solaris:HiveEntity".into(),
+            "krasnokamen:HiveEntity".into(),
             Tag::String(serde_json::to_string(&image).expect("hive entity image")),
         ));
         hive.bees.push(Occupant {

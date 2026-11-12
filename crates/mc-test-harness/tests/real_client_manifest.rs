@@ -45,11 +45,11 @@ fn real_client_runner_run_fails_fast_without_graphical_display() {
         .arg(repo_root.join("tools/harness/backends/regression.sh"))
         .arg("--run")
         .env(
-            "SOLARIS_REAL_CLIENT_MANIFEST",
+            "KRASNOKAMEN_REAL_CLIENT_MANIFEST",
             repo_root.join("docs/real-client-regression/manifests/m94-regression-pack.json"),
         )
         .env(
-            "SOLARIS_REAL_CLIENT_AGENT_SCENARIO",
+            "KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO",
             "m94-02b-rejected-block-resync",
         )
         .env_remove("DISPLAY")
@@ -110,8 +110,8 @@ fn real_client_runner_rejects_a_scenario_missing_from_the_manifest() {
     let output = Command::new("bash")
         .arg(repo_root.join("tools/harness/backends/regression.sh"))
         .arg("--check")
-        .env("SOLARIS_REAL_CLIENT_MANIFEST", manifest_path)
-        .env("SOLARIS_REAL_CLIENT_AGENT_SCENARIO", "undeclared-scenario")
+        .env("KRASNOKAMEN_REAL_CLIENT_MANIFEST", manifest_path)
+        .env("KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO", "undeclared-scenario")
         .output()
         .expect("check undeclared scenario");
 
@@ -149,9 +149,9 @@ fn real_client_prepare_denies_operators_when_scenario_policy_is_unknown() {
     let output = Command::new("bash")
         .arg(repo_root.join("tools/harness/backends/regression.sh"))
         .arg("--prepare")
-        .env("SOLARIS_REAL_CLIENT_MANIFEST", manifest_path)
-        .env("SOLARIS_REAL_CLIENT_AGENT_SCENARIO", "undeclared-scenario")
-        .env("SOLARIS_REAL_CLIENT_RUN_ROOT", run_root.path())
+        .env("KRASNOKAMEN_REAL_CLIENT_MANIFEST", manifest_path)
+        .env("KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO", "undeclared-scenario")
+        .env("KRASNOKAMEN_REAL_CLIENT_RUN_ROOT", run_root.path())
         .output()
         .expect("prepare undeclared scenario");
 
@@ -220,9 +220,9 @@ fn core_replay_real_client_prepare_copies_canonical_manifest() {
         .arg("replay")
         .arg("--prepare")
         .current_dir(&repo_root)
-        .env("SOLARIS_REAL_CLIENT_RUN_ROOT", run_root.path())
+        .env("KRASNOKAMEN_REAL_CLIENT_RUN_ROOT", run_root.path())
         .env(
-            "SOLARIS_REAL_CLIENT_AGENT_SECRET",
+            "KRASNOKAMEN_REAL_CLIENT_AGENT_SECRET",
             "core-replay-test-secret",
         )
         .output()
@@ -291,7 +291,7 @@ fn playable_real_client_prepare_uses_playable_manifest_config_and_scenario() {
         .arg("playable")
         .arg("--prepare")
         .current_dir(&repo_root)
-        .env("SOLARIS_REAL_CLIENT_RUN_ROOT", run_root.path())
+        .env("KRASNOKAMEN_REAL_CLIENT_RUN_ROOT", run_root.path())
         .output()
         .expect("prepare playable real-client gate");
 
@@ -357,7 +357,7 @@ fn playable_real_client_prepare_ignores_legacy_client_command_env() {
         .arg("playable")
         .arg("--prepare")
         .current_dir(&repo_root)
-        .env("SOLARIS_REAL_CLIENT_RUN_ROOT", run_root.path())
+        .env("KRASNOKAMEN_REAL_CLIENT_RUN_ROOT", run_root.path())
         .env(&legacy_command_env, legacy_command)
         .output()
         .expect("prepare playable real-client gate with legacy command env");
@@ -398,8 +398,8 @@ fn playable_real_client_prepare_picks_free_agent_port_when_default_is_busy() {
         .arg("playable")
         .arg("--prepare")
         .current_dir(&repo_root)
-        .env("SOLARIS_REAL_CLIENT_RUN_ROOT", run_root.path())
-        .env("SOLARIS_REAL_CLIENT_AGENT_SECRET", "s_test_prepare")
+        .env("KRASNOKAMEN_REAL_CLIENT_RUN_ROOT", run_root.path())
+        .env("KRASNOKAMEN_REAL_CLIENT_AGENT_SECRET", "s_test_prepare")
         .output()
         .expect("prepare playable real-client gate");
 
@@ -439,10 +439,10 @@ fn real_client_prepare_auto_selects_secondary_gradle_runclient_adapter() {
     let output = Command::new("bash")
         .arg(&runner_path)
         .arg("--prepare")
-        .env("SOLARIS_REAL_CLIENT_RUN_ROOT", run_root.path())
-        .env("SOLARIS_REAL_CLIENT_AGENT_SECRET", "s_primary_prepare")
+        .env("KRASNOKAMEN_REAL_CLIENT_RUN_ROOT", run_root.path())
+        .env("KRASNOKAMEN_REAL_CLIENT_AGENT_SECRET", "s_primary_prepare")
         .env(
-            "SOLARIS_REAL_CLIENT_SECOND_AGENT_SECRET",
+            "KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_SECRET",
             "s_secondary_prepare",
         )
         .output()
@@ -463,8 +463,8 @@ fn real_client_prepare_auto_selects_secondary_gradle_runclient_adapter() {
             && automation_driver.contains("second_client_adapter_source=auto-gradle-runclient")
             && automation_driver
                 .contains("second_client_adapter_task=:fabric-agent:runClientAgent")
-            && automation_driver.contains("client_username=SolarisPrimary")
-            && automation_driver.contains("second_client_username=SolarisSecondary")
+            && automation_driver.contains("client_username=KrasnoPrimary")
+            && automation_driver.contains("second_client_username=KrasnoSecondary")
             && automation_driver.contains("client_game_dir=")
             && automation_driver.contains("/clients/primary")
             && automation_driver.contains("second_client_game_dir=")
@@ -509,8 +509,8 @@ fn gradle_runclient_adapter_is_the_default_real_client_launcher() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    // The Gradle adapter source lives in the sibling solaris-loader repo
-    // (SOLARIS_LOADER_ROOT, default ../solaris-loader). This test pins only
+    // The Gradle adapter source lives in the sibling krasnokamen-loader repo
+    // (KRASNOKAMEN_LOADER_ROOT, default ../solaris-loader). This test pins only
     // the observable harness contract above, never the loader's build text.
 }
 
@@ -629,7 +629,7 @@ fn m94_broad_block_row_requires_focused_phases_and_independent_evidence() {
 
     let manifest = CoreGateManifest::from_json(
         &json!({
-            "schema": "solaris.core_gate.manifest.v1",
+            "schema": "krasnokamen.core_gate.manifest.v1",
             "phases": [
                 {
                     "id": "solid-edit",
@@ -701,7 +701,7 @@ fn validate_run_rejects_missing_required_scenario_screenshots() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -735,7 +735,7 @@ fn validate_run_rejects_misspelled_client_gate() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-runreal-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -765,7 +765,7 @@ fn validate_run_rejects_legacy_client_command_adapter_metadata() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -807,7 +807,7 @@ fn validate_run_rejects_nonzero_agent_driver_exit_status() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -848,7 +848,7 @@ fn validate_run_rejects_timed_out_agent_bridge_wait() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -889,7 +889,7 @@ fn validate_run_rejects_two_client_enabled_without_secondary_bridge_ready() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -945,7 +945,7 @@ fn validate_run_rejects_two_client_observations_without_second_client_enabled() 
         })
         .to_string(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "playable-spike",
             "result": "passed",
@@ -992,7 +992,7 @@ fn validate_run_rejects_restart_observations_without_runner_restart_evidence() {
         })
         .to_string(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "playable-spike",
             "result": "passed",
@@ -1039,7 +1039,7 @@ fn validate_run_rejects_after_restart_observations_without_before_phase() {
         })
         .to_string(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "playable-spike",
             "result": "passed",
@@ -1097,7 +1097,7 @@ fn validate_run_rejects_observed_scenario_without_matching_phase_exit_status() {
         })
         .to_string(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "playable-spike",
             "result": "passed",
@@ -1133,7 +1133,7 @@ fn validate_run_rejects_wrong_observations_schema() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v0",
+            "schema": "krasnokamen.real_client_observations.v0",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -1164,7 +1164,7 @@ fn validate_run_rejects_wrong_quality_label() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "release-ready",
             "result": "passed",
@@ -1195,7 +1195,7 @@ fn validate_run_rejects_failed_observations_result() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "failed",
@@ -1231,7 +1231,7 @@ fn validate_run_rejects_passed_observations_without_scenarios() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -1273,7 +1273,7 @@ fn validate_run_accepts_the_manifest_quality_label_for_playable_gate() {
         })
         .to_string(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "playable-spike",
             "result": "passed",
@@ -1314,7 +1314,7 @@ fn validate_run_accepts_playable_save_restart_phase_observations() {
         run_dir.path(),
         &manifest,
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "playable-spike",
             "result": "passed",
@@ -1403,7 +1403,7 @@ fn validate_run_rejects_restart_after_without_explicit_reconnect_evidence() {
         run_dir.path(),
         &manifest,
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "playable-spike",
             "result": "passed",
@@ -1609,7 +1609,7 @@ fn validate_run_rejects_playable_restart_when_server_stop_is_nonzero() {
         run_dir.path(),
         &manifest,
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "playable-spike",
             "result": "passed",
@@ -1691,7 +1691,7 @@ fn validate_run_rejects_p46_after_observation_when_stop_exit_is_nonzero() {
         })
         .to_string(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "playable-spike",
             "result": "passed",
@@ -1779,9 +1779,9 @@ fn p46_prepare_never_reuses_a_colliding_run_directory() {
             .arg(repo_root.join("tools/harness/backends/regression.sh"))
             .arg("--prepare")
             .env("PATH", &path)
-            .env("SOLARIS_REAL_CLIENT_RUN_ROOT", run_root.path())
+            .env("KRASNOKAMEN_REAL_CLIENT_RUN_ROOT", run_root.path())
             .env(
-                "SOLARIS_REAL_CLIENT_AGENT_SCENARIO",
+                "KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO",
                 "playable-46-generated-ruin-cache",
             )
             .output()
@@ -1837,7 +1837,7 @@ fn validate_run_accepts_two_client_shared_chest_restart_observations() {
         run_dir.path(),
         &manifest,
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "playable-spike",
             "result": "passed",
@@ -1921,7 +1921,7 @@ fn validate_run_rejects_two_client_shared_chest_after_without_restart_evidence()
         run_dir.path(),
         &manifest,
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "playable-spike",
             "result": "passed",
@@ -1980,7 +1980,7 @@ fn validate_run_rejects_unknown_observed_scenario_id() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -2023,7 +2023,7 @@ fn validate_run_rejects_invalid_screenshot_png() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -2077,7 +2077,7 @@ fn validate_run_rejects_invalid_optional_screenshot_png() {
         })
         .to_string(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -2128,7 +2128,7 @@ fn validate_run_rejects_tiny_required_screenshot_png() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -2172,7 +2172,7 @@ fn validate_run_accepts_valid_required_screenshot_png() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -2215,7 +2215,7 @@ fn validate_run_rejects_playable_server_log_degradation_warnings() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -2258,7 +2258,7 @@ fn validate_run_accepts_subsecond_tick_budget_warnings() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -2299,7 +2299,7 @@ fn validate_run_rejects_half_second_tick_stall() {
     write_validate_run_artifacts(
         run_dir.path(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "stabilization",
             "result": "passed",
@@ -2357,7 +2357,7 @@ fn validate_run_rejects_p42_slow_chunk_crossing_windows() {
         })
         .to_string(),
         json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "playable-spike",
             "result": "passed",
@@ -2412,7 +2412,7 @@ fn repo_root() -> std::path::PathBuf {
 }
 
 /// Resolve the single run directory a `--prepare` invocation created under
-/// an isolated `SOLARIS_REAL_CLIENT_RUN_ROOT`. The harness CLI tees backend
+/// an isolated `KRASNOKAMEN_REAL_CLIENT_RUN_ROOT`. The harness CLI tees backend
 /// output into its own artifact log, so callers read the run root instead
 /// of parsing a printed run path from stdout.
 fn prepared_run_dir(run_root: &Path) -> std::path::PathBuf {
@@ -2433,9 +2433,9 @@ fn prepared_run_dir(run_root: &Path) -> std::path::PathBuf {
 
 fn legacy_primary_client_env_names() -> Vec<String> {
     vec![
-        ["SOLARIS", "REAL", "CLIENT", "COMMAND"].join("_"),
+        ["KRASNOKAMEN", "REAL", "CLIENT", "COMMAND"].join("_"),
         ["M94", "CLIENT", "COMMAND"].join("_"),
-        ["SOLARIS", "REAL", "CLIENT", "KIND"].join("_"),
+        ["KRASNOKAMEN", "REAL", "CLIENT", "KIND"].join("_"),
     ]
 }
 

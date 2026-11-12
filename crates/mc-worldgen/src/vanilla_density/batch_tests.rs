@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn batched_terrain_matches_scalar_bits_at_boundaries() {
-    let root = std::env::var_os("SOLARIS_CONTENT_CACHE")
+    let root = std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
@@ -83,7 +83,7 @@ fn batched_branches_preserve_zero_and_lazy_nan_semantics() {
 
 #[test]
 fn full_chunk_batch_matches_scalar_density_bits() {
-    let root = std::env::var_os("SOLARIS_CONTENT_CACHE")
+    let root = std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")

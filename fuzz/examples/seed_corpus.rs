@@ -14,7 +14,7 @@ use mc_protocol::packets::handshake::{Handshake, NextState};
 use mc_protocol::packets::login::{EncryptionResponse, LoginPluginResponse, LoginStart};
 use mc_protocol::packets::play::*;
 use mc_protocol::packets::{ClientInformation, CustomPayload, Packet, configuration, status};
-use solaris_fuzz::{PLAY, PRE_PLAY, selector};
+use krasnokamen_fuzz::{PLAY, PRE_PLAY, selector};
 use uuid::Uuid;
 
 struct Writer {
@@ -33,7 +33,7 @@ impl Writer {
     fn packet<P: Packet>(
         &mut self,
         target: &str,
-        table: &[solaris_fuzz::Decoder],
+        table: &[krasnokamen_fuzz::Decoder],
         name: &str,
         p: &P,
     ) {
@@ -242,7 +242,7 @@ fn main() {
         "ConfigCustomPayload",
         &configuration::ServerboundCustomPayload {
             payload: CustomPayload::Unknown {
-                channel: id("solaris:voice"),
+                channel: id("krasnokamen:voice"),
                 payload: vec![1, 2, 3],
             },
         },
@@ -331,7 +331,7 @@ fn main() {
         "ServerboundCustomPayload",
         &ServerboundCustomPayload {
             payload: CustomPayload::Unknown {
-                channel: id("solaris:lod/request"),
+                channel: id("krasnokamen:lod/request"),
                 payload: vec![0, 1, 2, 3, 4],
             },
         },

@@ -1,4 +1,4 @@
-// Shared value types of the `solaris:plugin` contract.
+// Shared value types of the `krasnokamen:plugin` contract.
 //
 // These are the values a plugin may name and receive. They carry no authority:
 // every identifier is validated by the host, and holding one never proves a

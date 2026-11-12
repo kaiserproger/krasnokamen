@@ -1,4 +1,4 @@
-//! Example Solaris plugin.
+//! Example Krasnokamen plugin.
 //!
 //! By default it is server-only and does two things a player can see: it greets a player who
 //! joins, and it answers the `/hello` command. Both are staged commands the host
@@ -43,12 +43,12 @@
 //! `settlement_ops.rs`: a player's `settlement-api` command answers exactly one
 //! native settlement operation per action against the id the query observed.
 
-use solaris_plugin_sdk::events::{
+use krasnokamen_plugin_sdk::events::{
     OperationOutcome, OperationPayload, PlayerTeleportFailure, PlayerTeleportOutcome,
     ZoneCommandOutcome,
 };
-use solaris_plugin_sdk::operation_types::OperationFailure;
-use solaris_plugin_sdk::{
+use krasnokamen_plugin_sdk::operation_types::OperationFailure;
+use krasnokamen_plugin_sdk::{
     BuildContext, BuildDecision, BuildResult, Command, Config, DamageContext, DamageDecision,
     DamageResult, Event, EventContext, Failure, InitContext, InventoryClick, LogLevel, Plugin,
     StartupContribution, StorageCasOutcome, StorageFailure, StorageGetOutcome, broadcast, commands,
@@ -807,7 +807,7 @@ impl Plugin for Hello {
             } else {
                 Vec::new()
             };
-            let _ = solaris_plugin_sdk::publish_command_permissions(&grants);
+            let _ = krasnokamen_plugin_sdk::publish_command_permissions(&grants);
             assert_ne!(self.greeting, "allow-trap-init", "candidate init trap");
         }
         match self.mode {
@@ -1346,7 +1346,7 @@ impl Plugin for Hello {
 
     fn shutdown(&mut self) -> Result<(), Failure> {
         if self.mode == Mode::PermissionProbe && self.greeting == "deny-shutdown-allow" {
-            let _ = solaris_plugin_sdk::publish_command_permissions(&["* *".to_owned()]);
+            let _ = krasnokamen_plugin_sdk::publish_command_permissions(&["* *".to_owned()]);
         }
         log(LogLevel::Info, "hello plugin stopping");
         Ok(())

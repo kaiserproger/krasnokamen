@@ -1,6 +1,6 @@
 //! A generic feature/worksite query example; gameplay acceptance belongs to plugins.
-use solaris_plugin_sdk::events::Event;
-use solaris_plugin_sdk::{
+use krasnokamen_plugin_sdk::events::Event;
+use krasnokamen_plugin_sdk::{
     Command, Config, Failure, LogLevel, check_worksite, list_features, log, query_feature,
     worksite_status,
 };

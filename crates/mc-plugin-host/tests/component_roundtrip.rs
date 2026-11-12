@@ -17,12 +17,12 @@ mod fixture;
 use std::path::PathBuf;
 
 use fixture::component_bytes;
-use mc_plugin_host::bindings::exports::solaris::plugin::events::{
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::events::{
     Event, EventContext, PlayerJoined,
 };
-use mc_plugin_host::bindings::exports::solaris::plugin::lifecycle::InitContext;
-use mc_plugin_host::bindings::solaris::plugin::commands::{Command, MessageTarget};
-use mc_plugin_host::bindings::solaris::plugin::types::Position;
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::lifecycle::InitContext;
+use mc_plugin_host::bindings::krasnokamen::plugin::commands::{Command, MessageTarget};
+use mc_plugin_host::bindings::krasnokamen::plugin::types::Position;
 use mc_plugin_host::{
     HostError, HostServices, LogLevel, PluginInstance, PluginLimits, PluginStartup, engine, linker,
 };
@@ -53,7 +53,7 @@ impl HostServices for Services {
 fn guest_module() -> PathBuf {
     let _ = component_bytes();
     let sdk = fixture::repo_root().join("sdk/rust");
-    fixture::target_directory(&sdk).join("wasm32-unknown-unknown/release/solaris_hello_plugin.wasm")
+    fixture::target_directory(&sdk).join("wasm32-unknown-unknown/release/krasnokamen_hello_plugin.wasm")
 }
 
 /// Instantiate the example plugin with `config` as its `config.toml` text.
@@ -122,7 +122,7 @@ fn a_real_component_answers_a_join_and_a_command() {
             name: "Ada".to_owned(),
         }),
         Event::CommandInvoked(
-            mc_plugin_host::bindings::exports::solaris::plugin::events::CommandInvoked {
+            mc_plugin_host::bindings::exports::krasnokamen::plugin::events::CommandInvoked {
                 player: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".to_owned(),
                 session: 7,
                 username: "Ada".to_owned(),

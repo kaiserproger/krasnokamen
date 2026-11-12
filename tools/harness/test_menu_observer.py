@@ -18,8 +18,8 @@ class MenuObserverTests(unittest.TestCase):
                     self.marker = args["message"]
             def wait(self, predicate, label):
                 lines = [self.marker] if label.endswith("_fence") else [
-                    "SOLARIS_MENU " + json.dumps(new), self.marker,
-                    "SOLARIS_MENU " + json.dumps(old),
+                    "KRASNOKAMEN_MENU " + json.dumps(new), self.marker,
+                    "KRASNOKAMEN_MENU " + json.dumps(old),
                 ]
                 state = {"recent_chat": lines}
                 assert predicate(state)

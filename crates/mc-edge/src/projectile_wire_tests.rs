@@ -10,7 +10,7 @@ fn body(packet: &PlannedPacket) -> bytes::Bytes {
 }
 
 fn type_id(name: &str) -> u32 {
-    mc_data::entity_types::solaris_required_entity_types()
+    mc_data::entity_types::krasnokamen_required_entity_types()
         .id_of(&mc_data::Identifier::parse(name).unwrap())
         .unwrap()
 }

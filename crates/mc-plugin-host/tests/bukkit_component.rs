@@ -1,11 +1,11 @@
 //! Opt-in receipt: a real upstream-API JAR converted through the ordinary WIT host.
 
-use mc_plugin_host::bindings::exports::solaris::plugin::events::{
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::events::{
     CommandInvoked, Event, EventContext, PlayerJoined,
 };
-use mc_plugin_host::bindings::exports::solaris::plugin::lifecycle::InitContext;
-use mc_plugin_host::bindings::solaris::plugin::commands::{Command, MessageTarget};
-use mc_plugin_host::bindings::solaris::plugin::types::Position;
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::lifecycle::InitContext;
+use mc_plugin_host::bindings::krasnokamen::plugin::commands::{Command, MessageTarget};
+use mc_plugin_host::bindings::krasnokamen::plugin::types::Position;
 use mc_plugin_host::package::compile_package;
 use mc_plugin_host::{
     HostServices, LogLevel, PluginInstance, PluginLimits, PluginStartup, engine, linker,
@@ -30,16 +30,16 @@ impl HostServices for Services {
     }
 
     fn plugin_id(&self) -> &str {
-        "solarisbukkithello"
+        "krasnokamenbukkithello"
     }
 }
 
 #[test]
-#[ignore = "requires SOLARIS_BUKKIT_PACKAGE and SOLARIS_BUKKIT_BLOCKS from the offline converter"]
+#[ignore = "requires KRASNOKAMEN_BUKKIT_PACKAGE and KRASNOKAMEN_BUKKIT_BLOCKS from the offline converter"]
 fn converted_jar_runs_through_existing_component_host() {
-    let path = std::env::var_os("SOLARIS_BUKKIT_PACKAGE").expect("converted fixture package");
+    let path = std::env::var_os("KRASNOKAMEN_BUKKIT_PACKAGE").expect("converted fixture package");
     let blocks =
-        std::env::var_os("SOLARIS_BUKKIT_BLOCKS").expect("matching deployment blocks report");
+        std::env::var_os("KRASNOKAMEN_BUKKIT_BLOCKS").expect("matching deployment blocks report");
     let blocks: serde_json::Value =
         serde_json::from_slice(&std::fs::read(blocks).expect("blocks report"))
             .expect("registry JSON");
@@ -69,7 +69,7 @@ fn converted_jar_runs_through_existing_component_host() {
         .init(
             "",
             InitContext {
-                plugin_id: "solarisbukkithello".to_owned(),
+                plugin_id: "krasnokamenbukkithello".to_owned(),
                 api_version: format!(
                     "{}.{}.{}",
                     version.major(),
@@ -200,7 +200,7 @@ fn converted_jar_runs_through_existing_component_host() {
         .init(
             "",
             InitContext {
-                plugin_id: "solarisbukkithello".to_owned(),
+                plugin_id: "krasnokamenbukkithello".to_owned(),
                 api_version: format!(
                     "{}.{}.{}",
                     version.major(),

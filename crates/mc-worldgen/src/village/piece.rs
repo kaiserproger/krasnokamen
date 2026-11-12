@@ -45,7 +45,7 @@
 //!
 //! - **The water flow-fill loop.** `placeInWorld`'s `toFill`/`lockedFluids`
 //!   sweep and the fluid tick `SimpleWaterloggedBlock.placeLiquid` schedules
-//!   need a fluid-tick model Solaris does not have at paste time; the
+//!   need a fluid-tick model Krasnokamen does not have at paste time; the
 //!   waterlogging *decision* is modelled (see [`waterlogged_state`]).
 //! - **`updateShapeAtEdge`/`updateFromNeighbourShapes`.** Both sit behind
 //!   `!settings.getKnownShape()`, and the jigsaw path sets `knownShape = true`.

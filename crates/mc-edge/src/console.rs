@@ -21,7 +21,7 @@ pub(crate) struct ConsoleState {
 
 impl ConsoleState {
     pub(crate) fn load(root: &std::path::Path) -> anyhow::Result<Self> {
-        // Embedded registry data (`mc_data::solaris_required_data`) has no
+        // Embedded registry data (`mc_data::krasnokamen_required_data`) has no
         // directory and no language file; console feedback keeps raw keys.
         if !root.is_dir() {
             return Ok(Self::default());

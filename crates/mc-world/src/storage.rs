@@ -14,7 +14,7 @@ pub use world_lease::{WorldRootLease, acquire_exclusive_world_root_lease};
 /// The file that carries a world directory's lease on Windows (see
 /// [`open_for_lease`]) and in [`acquire_exclusive_world_root_lease`]. It is never
 /// world data: fresh-world checks, conversions and backups skip it.
-pub const WORLD_LEASE_FILE_NAME: &str = ".solaris-world.lock";
+pub const WORLD_LEASE_FILE_NAME: &str = ".krasnokamen-world.lock";
 
 /// Open the file that carries an exclusive `try_lock` lease on `path`.
 ///

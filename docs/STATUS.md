@@ -1,6 +1,6 @@
 # Project status
 
-Where Solaris stands and what to work on next. Update this page when a release
+Where Krasnokamen stands and what to work on next. Update this page when a release
 ships, a known 1.0 gap opens or closes, or a transition opens or closes;
 day-to-day progress belongs in commits and the [bug ledger](bugs/README.md),
 not here. Last updated 2026-11-09.
@@ -33,7 +33,7 @@ A lower item moves up only when it blocks ordinary play, saves or plugins.
 The owner's open GitHub issues are the queue:
 
 ```sh
-gh issue list -R kaiserproger/solaris --author kaiserproger --state open
+gh issue list -R kaiserproger/krasnokamen --author kaiserproger --state open
 ```
 
 Known bugs, with their status and regression checks, are rows in
@@ -53,8 +53,8 @@ the counts.
 
 | Transition (old → new) | State and evidence | Done when | Owner doc |
 |---|---|---|---|
-| Harness server launch: direct `subprocess.Popen` and asyncio `Session.spawn` → `runtime.start_server` | 76 modules in `tools/harness/backends/`; 18 start the server through `runtime.start_server` (22 call sites). 7 call sites in 4 modules start `solaris-v2` with `Popen` directly (`client_probes.py` 3, `village_autonomy_qa.py` 2, `seed_review.py` 1, `native_scale.py` 1), and `catalog_load.py` (used by `catalog_spain.py`) starts it through asyncio. `runtime.start_server` is only `subprocess.Popen` (`runtime.py:317-319`): the sites share `wait_port` and `stop_process`, not a launcher. | One launch function owns start, readiness and teardown of the server, every backend calls it, and no backend runs `Popen` or `create_subprocess_exec` on the server binary. | [AGENT_TOOLING](AGENT_TOOLING.md#receipts-and-failure-diagnosis) |
-| Release-binary pinning: `regressions._release_server` and the ledger's `.analysis/ledger-builds` registry → `tools/dev/pin-release` | Three mechanisms key a release server by tree identity. `pin-release` writes immutable `<work>/pins/<sha12>[-<diff8>]/manifest.json`. `regressions._release_server` (`regressions.py:238-279`) builds its own release server per run and hard-links it as `solaris-v2-<sha256>` into the run's artifact dir. `ledger.py:415-440` (`_register_server`, `_server_built_from`) writes `.analysis/ledger-builds/<sha256>.json` with a second tree fingerprint (`tree_fingerprint`, `ledger.py:386`). `ledger probe --client` ignores `SOLARIS_SERVER_BINARY` ([bug ledger](bugs/README.md#probing-rows-before-assignment)). | `ledger probe` and `promote` take their server from `pin-release` (one pin, one manifest, one fingerprint); `_register_server`, `.analysis/ledger-builds` and the private release build are deleted; `promote` checks the pin manifest. | [tools/dev README](../tools/dev/README.md), [bug ledger](bugs/README.md#the-fixed-rule-single-home) |
+| Harness server launch: direct `subprocess.Popen` and asyncio `Session.spawn` → `runtime.start_server` | 76 modules in `tools/harness/backends/`; 18 start the server through `runtime.start_server` (22 call sites). 7 call sites in 4 modules start `krasnokamen` with `Popen` directly (`client_probes.py` 3, `village_autonomy_qa.py` 2, `seed_review.py` 1, `native_scale.py` 1), and `catalog_load.py` (used by `catalog_spain.py`) starts it through asyncio. `runtime.start_server` is only `subprocess.Popen` (`runtime.py:317-319`): the sites share `wait_port` and `stop_process`, not a launcher. | One launch function owns start, readiness and teardown of the server, every backend calls it, and no backend runs `Popen` or `create_subprocess_exec` on the server binary. | [AGENT_TOOLING](AGENT_TOOLING.md#receipts-and-failure-diagnosis) |
+| Release-binary pinning: `regressions._release_server` and the ledger's `.analysis/ledger-builds` registry → `tools/dev/pin-release` | Three mechanisms key a release server by tree identity. `pin-release` writes immutable `<work>/pins/<sha12>[-<diff8>]/manifest.json`. `regressions._release_server` (`regressions.py:238-279`) builds its own release server per run and hard-links it as `krasnokamen-<sha256>` into the run's artifact dir. `ledger.py:415-440` (`_register_server`, `_server_built_from`) writes `.analysis/ledger-builds/<sha256>.json` with a second tree fingerprint (`tree_fingerprint`, `ledger.py:386`). `ledger probe --client` ignores `KRASNOKAMEN_SERVER_BINARY` ([bug ledger](bugs/README.md#probing-rows-before-assignment)). | `ledger probe` and `promote` take their server from `pin-release` (one pin, one manifest, one fingerprint); `_register_server`, `.analysis/ledger-builds` and the private release build are deleted; `promote` checks the pin manifest. | [tools/dev README](../tools/dev/README.md), [bug ledger](bugs/README.md#the-fixed-rule-single-home) |
 | Typed block and item identity: `.path() ==` comparisons and inline `"minecraft:` literals → kinds resolved once at load (target stated in the ratchet source, owner-approved 2026-11-07) | No shared `BlockKind` or `ItemKind` exists (only module-local kinds such as `vehicles::VehicleKind`). The 2026-11-08 Main integration's code-health run measured 2617 `"minecraft:` literals and 114 `.path()` comparisons in `mc-core` production code (the vanilla mob behaviours merge ec3a463a raised the literals to 2646 on 2026-11-12), at the enforced ceilings in `crates/xtask/src/code_health/ratchet.rs`; exceeding either fails the gate. The original baselines remain 2441 literals and 88 comparisons at `c09e1391`. Pointed upper-tip states, dry and waterlogged, now resolve once in the existing startup state cache; component, tag-registry and sound names reuse their data owners. This is one local cutover, not a shared-kind implementation or completion of the transition. | A typed kind exists, new code uses it, both counts are at or below their baselines, and no new literal enters. No ADR owns this yet: write it before the first kind lands. | none; the ratchet source and [ADR 0016](decisions/0016-mob-capabilities.md) for mob types |
 | Mob behaviour chosen by type id or name → capability flags ([ADR 0016](decisions/0016-mob-capabilities.md)) | Layers 1 and 2 (plugin registration) and sensors step 1 are implemented. `mc-core` production code still has 6 `== *X_TYPE` comparisons and 9 `matches!(<name>, "minecraft:…")` tests (grep count, includes any legitimate uses). | No behaviour shared by more than one mob type is selected by comparing its id or name; each is a flag in `vanilla_capabilities`. | [ADR 0016](decisions/0016-mob-capabilities.md) |
 
@@ -92,7 +92,7 @@ decides it):
   from the one pinned facts bundle, RegistryData from the native encoder
   `mc_data::registry_network` (implemented and proven byte for byte against
   vanilla captures, not wired into `content import`), packet names from
-  Solaris tables; the singleplayer content bundle would retire. Waits on the
+  Krasnokamen tables; the singleplayer content bundle would retire. Waits on the
   owner's four questions in the ADR; the Java import and the content bundle
   are the current path, not an old side.
 
@@ -106,12 +106,12 @@ owner-declared sunset would make one):
   snapshots ([operations](OPERATING.md#client-protocol-compatibility)).
   A version bump adds a step and never sunsets existing clients. Backfill to
   1.7 is a future constraint, not an implemented compatibility claim.
-- Loader on 26.1.2 ([ADR 0010](decisions/0010-solaris-loader-contract.md),
-  "Accepted, staged implementation"; [SOLARIS_LOADER](SOLARIS_LOADER.md)): a
+- Loader on 26.1.2 ([ADR 0010](decisions/0010-krasnokamen-loader-contract.md),
+  "Accepted, staged implementation"; [KRASNOKAMEN_LOADER](KRASNOKAMEN_LOADER.md)): a
   supported surface with an open Fabric 26.1.2 blocker (`LOADER-SOUND-MIXIN`).
   The record disagrees on the target: the Loader repository's `origin/main`
   has `minecraftVersion=26.3` (`a75f107`, jars `1.0.0-rc.2`), while the owner
-  host's local `solaris-loader` `main` (`9457da3`, 4 commits behind), SOLARIS_LOADER
+  host's local `krasnokamen-loader` `main` (`9457da3`, 4 commits behind), KRASNOKAMEN_LOADER
   and the ADR's "native 26.1.2 networking APIs" say 26.1.2. Whether 26.3
   replaces 26.1.2 is the owner's decision; until then both are supported.
 
@@ -135,7 +135,7 @@ fix or an owner decision recorded in the release notes.
 | A scoreboard with about 500 or more scores disconnected every joining player (per-tick outbox cap 512) | Fixed after RC5 (`fix: batch scoreboard updates for reliable delivery`); not released yet |
 | The bug ledger is not a reliable 1.0 gate: rows fixed in code are still `open`, some fixes have no registered regression check, and `regressions-client` has not run for the RC5 cycle | Open: reconcile the ledger and run `regressions-client` before 1.0 |
 | Phantoms and pillager patrols never spawned in survival in RC5 | Fixed after RC5 (`feat(core): phantoms, patrols, ...`); not released yet |
-| The plugin API ships as `solaris:plugin@0.8.0` with no stability promise | Owner decision |
+| The plugin API ships as `krasnokamen:plugin@0.9.0` with no stability promise | Owner decision |
 | A world whose RC4 first start was stopped (database without checkpoint, no first-start marker) refuses to open forever; the world never had a player | Documented in the RC5 notes; no tool offers a fix |
 
 Unconfirmed risks from the same review, each with the check that would settle it:

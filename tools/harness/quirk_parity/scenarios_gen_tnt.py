@@ -45,10 +45,10 @@ def build_found():
     return {
         "id": "tnt-duper-found-bud", "family": "tnt-duping",
         "known_divergence": (
-            "TNT duplication is NOT reproducible in Solaris: pistons move blocks instantly (no "
+            "TNT duplication is NOT reproducible in Krasnokamen: pistons move blocks instantly (no "
             "moving_piston block / 2-tick travel), so the vanilla window in which a BUD TNT is "
             "pushed while its replaced cell is still updated does not exist. Repro (oracle "
-            "cells 0-2, settle_ticks 0): vanilla ends with 2 primed TNT from 1 built, Solaris "
+            "cells 0-2, settle_ticks 0): vanilla ends with 2 primed TNT from 1 built, Krasnokamen "
             "ignites the BUD TNT at the first update ('armed' phase tnt entity 1 vs 0) and "
             "ends with 1. Architectural (piston movement model), not a small fix."
         ),

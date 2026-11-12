@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn armor_dye_blends_and_redyes_without_losing_other_components() {
-        let items = crate::items::solaris_required_items();
+        let items = crate::items::krasnokamen_required_items();
         let mut input = std::array::from_fn(|_| ItemStack::EMPTY);
         input[4] = stack(&items, "leather_boots")
             .with_damage(7)
@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn armor_dye_accepts_all_six_targets_and_one_to_eight_dye_slots() {
-        let items = crate::items::solaris_required_items();
+        let items = crate::items::krasnokamen_required_items();
         for target in [
             "leather_boots",
             "leather_leggings",
@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn armor_dye_rejects_missing_duplicate_and_non_dye_ingredients() {
-        let items = crate::items::solaris_required_items();
+        let items = crate::items::krasnokamen_required_items();
         for ingredients in [
             vec![],
             vec!["leather_boots"],
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn armor_dye_replaces_a_removed_color_patch_instead_of_duplicating_it() {
-        let items = crate::items::solaris_required_items();
+        let items = crate::items::krasnokamen_required_items();
         let target = crate::item_nbt::stack_from_component_patch(
             &items,
             &Identifier::parse("minecraft:leather_boots").unwrap(),

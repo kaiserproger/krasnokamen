@@ -278,7 +278,7 @@ fn loom_regular_selection_and_six_layer_limit_are_authoritative() {
 #[test]
 fn loom_stripe_bottom_button_uses_configuration_registry_and_tag_order() {
     let registry = CoreRegistry::load(None).unwrap();
-    let sent = mc_data::solaris_required_data();
+    let sent = mc_data::krasnokamen_required_data();
     let patterns = sent.registry("banner_pattern").unwrap();
     let ids = &registry.tags.registries[&Identifier::parse("minecraft:banner_pattern").unwrap()]
         [&Identifier::parse("minecraft:no_item_required").unwrap()];
@@ -312,7 +312,7 @@ fn loom_stripe_bottom_button_uses_configuration_registry_and_tag_order() {
 #[test]
 fn loom_flower_pattern_item_uses_its_sent_tag_and_remains_reusable() {
     let registry = CoreRegistry::load(None).unwrap();
-    let sent = mc_data::solaris_required_data();
+    let sent = mc_data::krasnokamen_required_data();
     let patterns = sent.registry("banner_pattern").unwrap();
     let ids = &registry.tags.registries[&Identifier::parse("minecraft:banner_pattern").unwrap()]
         [&Identifier::parse("minecraft:pattern_item/flower").unwrap()];

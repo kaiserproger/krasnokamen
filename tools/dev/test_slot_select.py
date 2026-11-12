@@ -33,15 +33,15 @@ class SlotSelectTests(unittest.TestCase):
         path = self.targets / f"slot-{letter}"
         path.mkdir(exist_ok=True)
         if tree is not None:
-            (path / ".solaris-tree").write_text(f"{tree}\n")
+            (path / ".krasnokamen-tree").write_text(f"{tree}\n")
         return path
 
     def marker(self, letter: str) -> str:
-        return (self.targets / f"slot-{letter}" / ".solaris-tree").read_text().strip()
+        return (self.targets / f"slot-{letter}" / ".krasnokamen-tree").read_text().strip()
 
     def start(self, tree: Path, explicit: Path | None = None) -> subprocess.Popen:
         arg = f"CARGO_TARGET_DIR={explicit}" if explicit else ""
-        script = (f"set -euo pipefail; dir={self.locks}; SOLARIS_SLOT_TARGETS={self.targets}; SOLARIS_SLOT_MIN_FREE_GB=0; "
+        script = (f"set -euo pipefail; dir={self.locks}; KRASNOKAMEN_SLOT_TARGETS={self.targets}; KRASNOKAMEN_SLOT_MIN_FREE_GB=0; "
                   f"source {SELECT}; select_slot {arg}; echo \"target=$target\"; exec cat")
         proc = subprocess.Popen(["bash", "-c", script], cwd=tree, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, text=True)
@@ -134,7 +134,7 @@ class SlotSelectTests(unittest.TestCase):
         use = self.hold(self.locks / "a.use", fcntl.LOCK_EX)
         proc = self.start(self.tree_a, slot)
         self.assertIn("being re-marked or cleaned", proc.stderr.readline())  # A waits instead of trusting the old mark
-        (slot / ".solaris-tree").write_text(f"{self.tree_b}\n")  # B finishes its switch
+        (slot / ".krasnokamen-tree").write_text(f"{self.tree_b}\n")  # B finishes its switch
         self.release(use)
         proc.stdin.close()
         self.assertEqual(proc.wait(timeout=30), 75)

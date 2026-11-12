@@ -1,4 +1,4 @@
-//! `solaris-v2`: the v2 edge server binary.
+//! `krasnokamen`: the v2 edge server binary.
 //!
 //! Serves with `--config PATH`, with stdin commands unless `--no-console`.
 //! Offline content, backup/restore and Anvil conversion commands run before
@@ -67,7 +67,7 @@ async fn run(cli: Cli, mut cfg: mc_edge::config::EdgeConfig) -> anyhow::Result<(
     info!(
         addr = %listener.local_addr()?,
         name = %server.cfg.server.name,
-        "Solaris is listening (edge v2)"
+        "Krasnokamen is listening (edge v2)"
     );
     // Serve the state the tick pump updates (owned by the server).
     if let Some((addr, port, allowed)) = dashboard {

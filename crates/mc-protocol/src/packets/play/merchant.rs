@@ -5,7 +5,7 @@ const MAX_MERCHANT_COST_COMPONENTS: usize = 64;
 
 /// One required input of a merchant offer. Java 26.1.2 encodes this as the
 /// item registry id, a positive VarInt count, then a list of exact data
-/// components. Solaris currently supports the empty exact-component predicate
+/// components. Krasnokamen currently supports the empty exact-component predicate
 /// only; non-empty predicates reject instead of silently accepting the wrong
 /// item variant.
 #[derive(Debug, Clone, PartialEq, Eq)]

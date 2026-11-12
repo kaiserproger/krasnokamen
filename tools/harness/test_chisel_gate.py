@@ -72,15 +72,15 @@ class ChiselHelperTests(unittest.TestCase):
 
     def test_package_source_honours_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            old = os.environ.get("SOLARIS_CHISEL_PACKAGE")
-            os.environ["SOLARIS_CHISEL_PACKAGE"] = tmp
+            old = os.environ.get("KRASNOKAMEN_CHISEL_PACKAGE")
+            os.environ["KRASNOKAMEN_CHISEL_PACKAGE"] = tmp
             try:
                 self.assertEqual(chisel._package_source(), Path(tmp).resolve())
             finally:
                 if old is None:
-                    del os.environ["SOLARIS_CHISEL_PACKAGE"]
+                    del os.environ["KRASNOKAMEN_CHISEL_PACKAGE"]
                 else:
-                    os.environ["SOLARIS_CHISEL_PACKAGE"] = old
+                    os.environ["KRASNOKAMEN_CHISEL_PACKAGE"] = old
 
 
 if __name__ == "__main__":

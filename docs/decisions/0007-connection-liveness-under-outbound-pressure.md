@@ -9,8 +9,8 @@ shard or central-session implementation.
 ## Problem
 
 A real 26.1.2 client connected to a world with 5,132 injected cows kept sending
-valid movement packets but did not process Solaris's keepalive echo before the
-30-second deadline. Solaris replaced pending challenges every period on the
+valid movement packets but did not process Krasnokamen's keepalive echo before the
+30-second deadline. Krasnokamen replaced pending challenges every period on the
 first failing build, then still closed the active client after challenge
 replacement was fixed. Movement publication also used every simulation tick
 without a bounded natural mob population or a cheap way to skip unchanged

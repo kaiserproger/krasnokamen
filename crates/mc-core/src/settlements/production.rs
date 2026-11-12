@@ -256,7 +256,7 @@ fn native_building_facts(
         .and_then(|record| record.buildings.get(&id))
         .ok_or(Failure::NotFound)?;
     if building.kind.profession().is_none()
-        || reference.purpose.strip_prefix("solaris:") != Some(building.kind.name())
+        || reference.purpose.strip_prefix("krasnokamen:") != Some(building.kind.name())
     {
         return Err(Failure::NotFound);
     }

@@ -2476,7 +2476,7 @@ status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = ["harness:entities:native-v2-craft-drag", "harness:entities:native-v2-craft-drag-paced", "harness:entities:native-v2-chest-drag-disconnect"]
 failing_first = "reported"
-# Fixed in solaris-client b7c48e1c7de46c34bc6611d438edfec3f37039c5 ("fix(client): keep the cursor
+# Fixed in krasnokamen-client b7c48e1c7de46c34bc6611d438edfec3f37039c5 ("fix(client): keep the cursor
 # across menu drags"); server quick-craft code is unchanged since 1ada2ceb and kept custody with the
 # pre-fix client (receipts/CraftDrag/REPORT.md). fix_commit stays empty until the owner decides how
 # client-repo fixes are promoted (ledger promote resolves fix_commit in this repository only).
@@ -4634,7 +4634,7 @@ severity = "major"
 status = "open"
 source = "The e430 plugin-free gamerules.projectiles_can_break_blocks adapter passed both charged bow ammunition waits and the disabled-rule decorated-pot control, but the enabled-rule control expected air at (3,80,0) and observed the pot still present. Receipt: /run/media/kaiserroman/games/solaris-work/wt/LedgerMatrixB15/.analysis/validation/20261111T124021-protocol-matrix-o6c42bqi/result.json. Arrow spawn packets were received in the target block cell; exact impact face is not independently established. crates/mc-core/src/projectiles/flight.rs:906-947 has no pot handling; the gamerule occurs in command registration and metadata upgrade, not projectile execution."
 regression = ["cargo:mc-core:projectiles::flight_tests::projectile_breaks_pot_only_when_rule_enabled", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_chorus_flower_only_when_rule_enabled", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_pointed_dripstone_only_with_fast_trident", "cargo:mc-core:projectiles::flight_tests::projectile_breaks_sulfur_spike_only_with_fast_trident", "cargo:mc-core:projectiles::flight_tests::projectile_pot_break_follows_owner_and_spawn_protection", "cargo:mc-core:projectiles::flight_tests::projectile_cracks_pot_before_destroying_it", "cargo:mc-core:projectiles::flight_tests::two_shots_at_one_sherd_pot_drop_its_sherds_and_contents_once", "cargo:mc-core:projectiles::flight_tests::arrow_that_breaks_a_pot_falls_to_the_floor_and_stays_pickable", "cargo:mc-core:plugin_player::zone_protection_tests::projectiles_break_zone_blocks_only_for_admitted_shooters"]
-repro_check = "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run protocol-matrix --server-bin /run/media/kaiserroman/games/solaris-work/pins/e4304662b8f4-server-x86_64-unknown-linux-gnu-incr/solaris-v2 --vanilla-data /run/media/kaiserroman/games/solaris-work/receipts/H08Orbs/protocol-content/26.3 --subject gamerules.projectiles_can_break_blocks --port 26741 --dashboard-port 26742"
+repro_check = "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run protocol-matrix --server-bin /run/media/kaiserroman/games/solaris-work/pins/e4304662b8f4-server-x86_64-unknown-linux-gnu-incr/krasnokamen --vanilla-data /run/media/kaiserroman/games/solaris-work/receipts/H08Orbs/protocol-content/26.3 --subject gamerules.projectiles_can_break_blocks --port 26741 --dashboard-port 26742"
 failing_first = "reported"
 fix_commit = "70e5c6d6"
 

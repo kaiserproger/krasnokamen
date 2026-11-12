@@ -698,7 +698,7 @@ mod tests {
         crate::ScriptSettlementBuildingRef::new(
             "structure".into(),
             "granary-one".into(),
-            "solaris:warehouse".into(),
+            "krasnokamen:warehouse".into(),
         )
     }
 
@@ -724,7 +724,7 @@ mod tests {
             ScriptSettlementEconomyAction::ProductionStart {
                 job: "job-one".into(),
                 worker: WORKER.into(),
-                recipe: "solaris:boards".into(),
+                recipe: "krasnokamen:boards".into(),
                 count: 3,
                 building: building(),
                 station: [8, 64, 8],
@@ -915,7 +915,7 @@ mod tests {
         let mut production = ScriptSettlementProductionSnapshot::new(
             "job-one".into(),
             WORKER.into(),
-            "solaris:boards".into(),
+            "krasnokamen:boards".into(),
             "rev-one".into(),
             3,
         );

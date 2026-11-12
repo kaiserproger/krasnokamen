@@ -3,7 +3,7 @@
 These tests never launch a real client: ``runtime`` lifecycle functions and
 ``McpClient`` are faked. They pin the contract the matrix runner relies on:
 N distinct identities/game dirs, play readiness before yield, exact-address
-Loader permission confirmation, optional solaris-auth registration with
+Loader permission confirmation, optional krasnokamen-auth registration with
 secret-free receipts, N8 heap caps, failure group.json evidence, and full
 cleanup on any failure.
 """
@@ -347,7 +347,7 @@ class JavaClientsTests(unittest.TestCase):
     def test_loader_confirms_exact_server_address(self) -> None:
         self._start_patches()
         address = "10.9.8.7:25567"
-        expected_title = f"Allow Solaris content from {address}?"
+        expected_title = f"Allow Krasnokamen content from {address}?"
 
         def handler(client: FakeMcpClient, name: str, args: dict) -> dict:
             if name == "initialize":

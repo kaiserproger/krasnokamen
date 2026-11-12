@@ -8,7 +8,7 @@ evidence_scope: Specifications and blocked requirements are not runtime passes; 
 subjects:
   - id: chat.advancement_announce
     matrix_ids:
-      - pw:chat.advancement_announce/forge_solaris_loader/creative/the_end/hard/N8/slow_reader_backpressure/pause_when_empty_resume/op_4
+      - pw:chat.advancement_announce/forge_krasnokamen_loader/creative/the_end/hard/N8/slow_reader_backpressure/pause_when_empty_resume/op_4
     adapter: tools.harness.matrix_domains.chat:ADAPTERS[chat.advancement_announce]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission
@@ -67,7 +67,7 @@ subjects:
       absent Java events => cumulative_chat_history
   - id: chat.chat_validation
     matrix_ids:
-      - pw:chat.chat_validation/fabric_solaris_loader/survival/the_nether/normal/2/malformed_or_stale_packet/hot_backup_during_action/op_2
+      - pw:chat.chat_validation/fabric_krasnokamen_loader/survival/the_nether/normal/2/malformed_or_stale_packet/hot_backup_during_action/op_2
     adapter: tools.harness.matrix_domains.chat:ADAPTERS[chat.chat_validation]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission
@@ -100,7 +100,7 @@ subjects:
       absent Java events => cumulative_chat_history
   - id: chat.chat_visibility_setting
     matrix_ids:
-      - pw:chat.chat_visibility_setting/neoforge_solaris_loader/spectator/the_end/peaceful/N8/normal/crash_kill9_wal_replay/non_op_0
+      - pw:chat.chat_visibility_setting/neoforge_krasnokamen_loader/spectator/the_end/peaceful/N8/normal/crash_kill9_wal_replay/non_op_0
     adapter: tools.harness.matrix_domains.chat:ADAPTERS[chat.chat_visibility_setting]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission
@@ -214,15 +214,15 @@ subjects:
       secure: valid signed message delivered once; no disconnect
     plugin_profiles:
       changed_by:
-        - solaris-essentials
+        - krasnokamen-essentials
       vanilla: 767fbd3331effa358e238e39e2a88ed1345d5623207015671228536e53975f00
       live: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
     plugin_profile_oracle:
       vanilla: core private messaging semantics; selectors forbidden below op2
       live:
-        solaris-essentials exact-name resolution; @a produces Online player not found or ambiguous.; messages
+        krasnokamen-essentials exact-name resolution; @a produces Online player not found or ambiguous.; messages
         use [to target] and [from sender] prefixes
-      source: /run/media/kaiserroman/games/solaris-work/solaris-default-plugins/sources/solaris-essentials/src/lib.rs:450-471,607-610,636-645,853-863
+      source: /run/media/kaiserroman/games/solaris-work/solaris-default-plugins/sources/krasnokamen-essentials/src/lib.rs:450-471,607-610,636-645,853-863
     received_history_contract:
       protocol cumulative actual packets; native bounded GUI history => native_cumulative_received_chat;
       absent Java events => cumulative_chat_history

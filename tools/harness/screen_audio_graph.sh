@@ -17,23 +17,23 @@ wireplumber.profiles = {
   }
 }
 CONF
-export SOLARIS_PW_ROOT="$root"
+export KRASNOKAMEN_PW_ROOT="$root"
 # A wrapped command may nest tools/dev/mem-run.sh (a ledger control's release-server build), which reaches the
 # user's systemd manager through $XDG_RUNTIME_DIR/systemd/private: link only that directory into the private runtime.
 host_runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 if [ -d "$host_runtime/systemd" ]; then ln -s "$host_runtime/systemd" "$root/systemd"; fi
 exec dbus-run-session -- sh -c '
-  export XDG_RUNTIME_DIR="$SOLARIS_PW_ROOT" PIPEWIRE_RUNTIME_DIR="$SOLARIS_PW_ROOT" \
-    XDG_CONFIG_HOME="$SOLARIS_PW_ROOT/config" XDG_STATE_HOME="$SOLARIS_PW_ROOT/state" \
-    XDG_DATA_HOME="$SOLARIS_PW_ROOT/data" HOME="$SOLARIS_PW_ROOT/home"
+  export XDG_RUNTIME_DIR="$KRASNOKAMEN_PW_ROOT" PIPEWIRE_RUNTIME_DIR="$KRASNOKAMEN_PW_ROOT" \
+    XDG_CONFIG_HOME="$KRASNOKAMEN_PW_ROOT/config" XDG_STATE_HOME="$KRASNOKAMEN_PW_ROOT/state" \
+    XDG_DATA_HOME="$KRASNOKAMEN_PW_ROOT/data" HOME="$KRASNOKAMEN_PW_ROOT/home"
   unset DISPLAY WAYLAND_DISPLAY PIPEWIRE_NODE PULSE_SINK PULSE_SERVER PULSE_SOURCE DBUS_SYSTEM_BUS_ADDRESS
-  pipewire >"$SOLARIS_PW_ROOT/pipewire.log" 2>&1 &
+  pipewire >"$KRASNOKAMEN_PW_ROOT/pipewire.log" 2>&1 &
   pw=$!
-  wireplumber >"$SOLARIS_PW_ROOT/wireplumber.log" 2>&1 &
+  wireplumber >"$KRASNOKAMEN_PW_ROOT/wireplumber.log" 2>&1 &
   wp=$!
   stop() { kill $wp $pw 2>/dev/null; wait $wp $pw 2>/dev/null; }
-  if [ -n "${SOLARIS_AUDIO_RECEIPT_DIR:-}" ]; then
-    pipewire-pulse >"$SOLARIS_PW_ROOT/pulse.log" 2>&1 &
+  if [ -n "${KRASNOKAMEN_AUDIO_RECEIPT_DIR:-}" ]; then
+    pipewire-pulse >"$KRASNOKAMEN_PW_ROOT/pulse.log" 2>&1 &
     pulse=$!
     stop() { kill $pulse $wp $pw 2>/dev/null; wait $pulse $wp $pw 2>/dev/null; }
   fi
@@ -48,10 +48,10 @@ exec dbus-run-session -- sh -c '
     exit 3
   fi
   echo "preflight: no alsa_*/bluez_* objects in the private graph ($(printf "%s" "$dump" | grep -c "node.name") nodes)" >&2
-  if [ -n "${SOLARIS_AUDIO_RECEIPT_DIR:-}" ]; then
-    export PULSE_SERVER="unix:$SOLARIS_PW_ROOT/pulse/native" \
+  if [ -n "${KRASNOKAMEN_AUDIO_RECEIPT_DIR:-}" ]; then
+    export PULSE_SERVER="unix:$KRASNOKAMEN_PW_ROOT/pulse/native" \
       PULSE_SOURCE=agents-silent-input PULSE_SINK=agents-null ALSOFT_DRIVERS=pulse \
-      ALSA_CONFIG_PATH="$SOLARIS_PW_ROOT/alsa.conf"
+      ALSA_CONFIG_PATH="$KRASNOKAMEN_PW_ROOT/alsa.conf"
     python3 -c "from tools.harness.audio import prepare_private_audio; prepare_private_audio()" || exit $?
   fi
   status=0

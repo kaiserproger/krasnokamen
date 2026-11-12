@@ -294,7 +294,7 @@ HARNESS_SUITE = "python3 -m unittest discover -t . -s tools/harness -p 'test_*.p
 SIBLING_MARKERS = {
     "client": ("launcher", "SPECIFICATION.md"),
     "loader": ("loader-core", "settings.gradle.kts"),
-    "plugins": ("standard-pack", "solaris-towns"),
+    "plugins": ("standard-pack", "krasnokamen-towns"),
 }
 
 REVIEWER_KINDS = {

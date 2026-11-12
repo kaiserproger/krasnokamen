@@ -3,7 +3,7 @@
 //! Explicit import and fresh-start installation derive the supported release
 //! window from local licensed bundles or Mojang's size/sha1-verified downloads.
 //! Existing caches are reused offline; imports publish atomically.
-//! Derivation uses the bundle's datagen, Solaris Java extractors and an exact
+//! Derivation uses the bundle's datagen, Krasnokamen Java extractors and an exact
 //! RegistryData wire capture. A sibling staging tree is validated before
 //! publication, leaving the previous cache untouched on derivation failure.
 //!
@@ -11,7 +11,7 @@
 //! identity: `version.json`, the datagen reports, the per-state extractor
 //! reports and the captured RegistryData. The gameplay data pack (worldgen,
 //! loot, recipes, advancements, tags, structures, registry definitions) comes
-//! from [`GAMEPLAY_DATAPACK_RELEASE`], whose JSON grammar Solaris's loaders
+//! from [`GAMEPLAY_DATAPACK_RELEASE`], whose JSON grammar Krasnokamen's loaders
 //! read; its `version.json` is kept as `gameplay_version.json`. The target
 //! release's block tags (and structural block-as-item item tags) are merged
 //! into those tags so clients see the new blocks.
@@ -40,7 +40,7 @@ const VERSION_MANIFEST_URL: &str =
 /// Java major version the pinned release's bundle declares.
 const REQUIRED_JAVA_MAJOR: u32 = 25;
 
-/// The release whose `data/minecraft` data pack Solaris's gameplay loaders
+/// The release whose `data/minecraft` data pack Krasnokamen's gameplay loaders
 /// read. 26.3 rewrote the loot/predicate and worldgen grammars; every name in
 /// this pack exists in the target release's registries.
 pub const GAMEPLAY_DATAPACK_RELEASE: &str = "26.1.2";
@@ -101,7 +101,7 @@ const WORLDGEN_DIRS: &[&str] = &[
     "multi_noise_biome_source_parameter_list",
 ];
 
-/// The Java extractors Solaris compiles against the target bundle's classpath:
+/// The Java extractors Krasnokamen compiles against the target bundle's classpath:
 /// per-state facts indexed by the target release's block-state ids. Their
 /// sources are the repo's own tooling, kept in-tree rather than shelled.
 const IDENTITY_EXTRACTORS: &[JavaExtractor] = &[
@@ -229,7 +229,7 @@ fn require_target_version(version: &str) -> Result<()> {
         mc_data::protocol_versions::SUPPORTED
             .iter()
             .any(|entry| entry.release == version),
-        "Solaris supports 26.1.2 through 26.3 and cannot derive content for {}",
+        "Krasnokamen supports 26.1.2 through 26.3 and cannot derive content for {}",
         version,
     );
     Ok(())
@@ -409,7 +409,7 @@ async fn resolve_version_metadata(version: &str) -> Result<VersionMetadata> {
 
 fn http_client() -> Result<reqwest::Client> {
     reqwest::Client::builder()
-        .user_agent("solaris-content-import")
+        .user_agent("krasnokamen-content-import")
         .connect_timeout(Duration::from_secs(30))
         .timeout(Duration::from_secs(600))
         .build()
@@ -483,7 +483,7 @@ pub fn manifest_version_entry(manifest: &str, version: &str) -> Result<ManifestE
     })
 }
 
-/// Parse a version's metadata JSON into the artifacts Solaris stages.
+/// Parse a version's metadata JSON into the artifacts Krasnokamen stages.
 pub fn parse_version_metadata(body: &str) -> Result<VersionMetadata> {
     let value: serde_json::Value =
         serde_json::from_str(body).context("parsing the version metadata JSON")?;

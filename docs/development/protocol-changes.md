@@ -1,6 +1,6 @@
 # Changing the Minecraft protocol
 
-Solaris speaks canonical Java 26.3 (protocol 777) and serves every release from
+Krasnokamen speaks canonical Java 26.3 (protocol 777) and serves every release from
 26.1.2 through 26.3 (775/776/777) through adjacent per-session steps. Import
 installs all caches; a bump adds a step and keeps old versions. Read
 [ADR 0015](../decisions/0015-multiversion-protocol-translation.md) before
@@ -11,7 +11,7 @@ changing a step. Never infer packet IDs or layouts from memory.
 [ADR 0002](../decisions/0002-vanilla-protocol-metadata-as-reference.md) permits
 reading official unobfuscated jar **metadata** as protocol reference: packet
 registrations, class and field names and types, record order and constants.
-It does not permit translating Java source or copying algorithms; keep Solaris
+It does not permit translating Java source or copying algorithms; keep Krasnokamen
 identifiers independent. Never commit Mojang classes, jars or extracted data.
 Record the vanilla version, class and `javap` evidence when changing wire facts.
 
@@ -61,7 +61,7 @@ cargo run -p mc-test-harness --bin wire-probe -- \
   --scenario spawn-burst --out .analysis/protocol/vanilla.capture
 ```
 
-Use `--server-kind solaris` and a separate output for the Solaris comparison.
+Use `--server-kind krasnokamen` and a separate output for the Krasnokamen comparison.
 `--play-seconds` bounds each command-fenced Play capture. Captures only show
 packets actually observed; absence in a short capture does not establish an ID.
 A probe is not a graphical-client acceptance test. Scenario details and paired

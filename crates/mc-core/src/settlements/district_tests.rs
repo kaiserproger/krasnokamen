@@ -445,8 +445,8 @@ fn hamlet_ready_with_exact_bed_and_single_bread() {
         "none",
         0,
         vec![
-            worksite(&farm, "solaris:farm"),
-            worksite(&store, "solaris:warehouse"),
+            worksite(&farm, "krasnokamen:farm"),
+            worksite(&store, "krasnokamen:warehouse"),
         ],
     )
     .unwrap();
@@ -465,7 +465,7 @@ fn hamlet_ready_with_exact_bed_and_single_bread() {
     assert!(snap.reason.is_none());
     assert_eq!(
         snap.working,
-        vec!["solaris:farm".to_owned(), "solaris:warehouse".to_owned()]
+        vec!["krasnokamen:farm".to_owned(), "krasnokamen:warehouse".to_owned()]
     );
 
     // Acknowledged native chunks may unload; querying must not reload a bed
@@ -525,8 +525,8 @@ fn unhomed_and_shared_beds_do_not_count_as_housing() {
         "none",
         0,
         vec![
-            worksite(&farm, "solaris:farm"),
-            worksite(&store, "solaris:warehouse"),
+            worksite(&farm, "krasnokamen:farm"),
+            worksite(&store, "krasnokamen:warehouse"),
         ],
     )
     .unwrap();
@@ -580,8 +580,8 @@ fn unbound_villagers_do_not_join_population_or_housing() {
         "none",
         0,
         vec![
-            worksite(&farm, "solaris:farm"),
-            worksite(&store, "solaris:warehouse"),
+            worksite(&farm, "krasnokamen:farm"),
+            worksite(&store, "krasnokamen:warehouse"),
         ],
     )
     .unwrap();
@@ -632,8 +632,8 @@ fn village_threshold_needs_24_exact_housing_and_food() {
         "none",
         0,
         vec![
-            worksite(&farm, "solaris:farm"),
-            worksite(&store, "solaris:warehouse"),
+            worksite(&farm, "krasnokamen:farm"),
+            worksite(&store, "krasnokamen:warehouse"),
         ],
     )
     .unwrap();
@@ -701,10 +701,10 @@ fn developed_estate_level2_ready_with_working_institutions() {
         "estate",
         2,
         vec![
-            worksite(&farm, "solaris:farm"),
-            worksite(&hall, "solaris:manor_hall"),
-            worksite(&council, "solaris:town_hall"),
-            worksite(&store, "solaris:warehouse"),
+            worksite(&farm, "krasnokamen:farm"),
+            worksite(&hall, "krasnokamen:manor_hall"),
+            worksite(&council, "krasnokamen:town_hall"),
+            worksite(&store, "krasnokamen:warehouse"),
         ],
     )
     .unwrap();
@@ -724,10 +724,10 @@ fn developed_estate_level2_ready_with_working_institutions() {
     assert_eq!(
         snap.working,
         vec![
-            "solaris:farm".to_owned(),
-            "solaris:manor_hall".to_owned(),
-            "solaris:town_hall".to_owned(),
-            "solaris:warehouse".to_owned(),
+            "krasnokamen:farm".to_owned(),
+            "krasnokamen:manor_hall".to_owned(),
+            "krasnokamen:town_hall".to_owned(),
+            "krasnokamen:warehouse".to_owned(),
         ]
     );
 }
@@ -767,8 +767,8 @@ fn town_level1_missing_smithy_refuses_institution() {
         "town",
         1,
         vec![
-            worksite(&market, "solaris:market"),
-            worksite(&store, "solaris:warehouse"),
+            worksite(&market, "krasnokamen:market"),
+            worksite(&store, "krasnokamen:warehouse"),
         ],
     )
     .unwrap();
@@ -829,9 +829,9 @@ fn fortress_branch_refuses_before_developed_population() {
         "fortress",
         1,
         vec![
-            worksite(&tower, "solaris:stone_tower"),
-            worksite(&wall, "solaris:stone_wall"),
-            worksite(&store, "solaris:warehouse"),
+            worksite(&tower, "krasnokamen:stone_tower"),
+            worksite(&wall, "krasnokamen:stone_wall"),
+            worksite(&store, "krasnokamen:warehouse"),
         ],
     )
     .unwrap();
@@ -884,8 +884,8 @@ fn destroyed_entrance_loses_readiness_without_stale_ready() {
         "none",
         0,
         vec![
-            worksite(&farm, "solaris:farm"),
-            worksite(&store, "solaris:warehouse"),
+            worksite(&farm, "krasnokamen:farm"),
+            worksite(&store, "krasnokamen:warehouse"),
         ],
     )
     .unwrap();
@@ -945,8 +945,8 @@ fn destroyed_bed_loses_housing_without_stale_ready() {
         "none",
         0,
         vec![
-            worksite(&farm, "solaris:farm"),
-            worksite(&store, "solaris:warehouse"),
+            worksite(&farm, "krasnokamen:farm"),
+            worksite(&store, "krasnokamen:warehouse"),
         ],
     )
     .unwrap();
@@ -1000,8 +1000,8 @@ fn empty_and_nonfood_chest_counts_no_invented_stock() {
         "none",
         0,
         vec![
-            worksite(&farm, "solaris:farm"),
-            worksite(&store, "solaris:warehouse"),
+            worksite(&farm, "krasnokamen:farm"),
+            worksite(&store, "krasnokamen:warehouse"),
         ],
     )
     .unwrap();
@@ -1069,8 +1069,8 @@ fn plan_and_observe_change_no_entity_identity_or_count() {
         "none",
         0,
         vec![
-            worksite(&farm, "solaris:farm"),
-            worksite(&store, "solaris:warehouse"),
+            worksite(&farm, "krasnokamen:farm"),
+            worksite(&store, "krasnokamen:warehouse"),
         ],
     )
     .unwrap();
@@ -1101,7 +1101,7 @@ fn cross_owner_outside_and_double_bound_certificates_refused() {
     let near_b = town(&mut state, "beta", [24, 201, 8], 48);
     let far = town(&mut state, "gamma", [-200, 201, -200], 8);
     state.settlements.take_images();
-    let certificate = vec![worksite(&farm, "solaris:farm")];
+    let certificate = vec![worksite(&farm, "krasnokamen:farm")];
     do_plan(
         &mut state,
         near_a,
@@ -1155,7 +1155,7 @@ fn cross_owner_outside_and_double_bound_certificates_refused() {
             "owner",
             "none",
             0,
-            vec![worksite("missing-certificate", "solaris:farm")],
+            vec![worksite("missing-certificate", "krasnokamen:farm")],
         )
         .err(),
         Some(Failure::NotFound)
@@ -1191,10 +1191,10 @@ fn branch_change_and_stale_revision_fences_hold_record_still() {
         [28, 201, 4],
     );
     let id = town(&mut state, "fenced", [8, 201, 8], 48);
-    let single = vec![worksite(&farm, "solaris:farm")];
+    let single = vec![worksite(&farm, "krasnokamen:farm")];
     let pair = vec![
-        worksite(&farm, "solaris:farm"),
-        worksite(&market, "solaris:market"),
+        worksite(&farm, "krasnokamen:farm"),
+        worksite(&market, "krasnokamen:market"),
     ];
     do_plan(&mut state, id, 1, "owner", "none", 0, single.clone()).unwrap();
     assert_eq!(revision(&state, id), 2);
@@ -1241,7 +1241,7 @@ fn touched_images_carry_only_plans_and_roundtrip_without_readiness() {
         owner: "owner".into(),
         branch: "none".into(),
         level: 0,
-        buildings: vec![worksite(&farm, "solaris:farm")],
+        buildings: vec![worksite(&farm, "krasnokamen:farm")],
     };
     plan(&mut state, planned, 1, expected.clone()).unwrap();
     let images = state.settlements.take_images();
@@ -1319,8 +1319,8 @@ fn smithy_workstation_counts_as_working_institution() {
         "town",
         1,
         vec![
-            worksite(&forge, "solaris:smithy"),
-            worksite(&store, "solaris:warehouse"),
+            worksite(&forge, "krasnokamen:smithy"),
+            worksite(&store, "krasnokamen:warehouse"),
         ],
     )
     .unwrap();
@@ -1330,8 +1330,8 @@ fn smithy_workstation_counts_as_working_institution() {
     // One resident cannot carry a town branch, but the observation must show
     // the smithy as working rather than blaming the building.
     let snap = observed(&mut state, id);
-    assert!(snap.working.contains(&"solaris:smithy".to_owned()));
-    assert!(snap.working.contains(&"solaris:warehouse".to_owned()));
+    assert!(snap.working.contains(&"krasnokamen:smithy".to_owned()));
+    assert!(snap.working.contains(&"krasnokamen:warehouse".to_owned()));
     assert_eq!(snap.stage, None);
     // Break the furnace: the smithy stops working and the building is blamed.
     let air = state.registry.states.air;
@@ -1340,7 +1340,7 @@ fn smithy_workstation_counts_as_working_institution() {
         .set_block(furnace_at[0], furnace_at[1], furnace_at[2], air);
     state.world.fold_overlay();
     let snap = observed(&mut state, id);
-    assert!(!snap.working.contains(&"solaris:smithy".to_owned()));
+    assert!(!snap.working.contains(&"krasnokamen:smithy".to_owned()));
     assert!(
         snap.reason
             .as_deref()
@@ -1387,7 +1387,7 @@ fn only_a_towns_registered_furnace_workstation_is_owned_for_tending() {
         "owner",
         "none",
         0,
-        vec![worksite(&forge, "solaris:smithy")],
+        vec![worksite(&forge, "krasnokamen:smithy")],
     )
     .unwrap();
     assert!(state.settlements.get(id).unwrap().buildings.is_empty());

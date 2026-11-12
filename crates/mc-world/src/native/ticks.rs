@@ -4,8 +4,8 @@ use crate::{BlockPos, BlockRegistry, Chunk, ScheduledBlockTick, ScheduledFluidTi
 use mc_data::Identifier;
 use mc_nbt::{ListTag, Tag, tag_type};
 
-const BLOCK: &str = "SolarisNativeBlockTicksV1";
-const FLUID: &str = "SolarisNativeFluidTicksV1";
+const BLOCK: &str = "KrasnokamenNativeBlockTicksV1";
+const FLUID: &str = "KrasnokamenNativeFluidTicksV1";
 
 fn tick(pos: BlockPos, name: &Identifier, deadline: u64, priority: i32, sequence: u64) -> Tag {
     Tag::Compound(vec![

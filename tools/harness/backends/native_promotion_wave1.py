@@ -447,7 +447,7 @@ def _golem_gossip(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     for row in villagers:
         uuid_ = row["entity_uuid"]
         steps.fixture(f'data merge entity {uuid_} {{Brain:{{memories:{{"minecraft:last_slept":'
-                      f'{{value:{tick - 100}L}}}}}},"solaris:VillagerRuntime":'
+                      f'{{value:{tick - 100}L}}}}}},"krasnokamen:VillagerRuntime":'
                       f'{{last_gossip:{tick - 1}L,activity:"meet"}}}}')
 
     def summoned(_state: dict) -> bool:

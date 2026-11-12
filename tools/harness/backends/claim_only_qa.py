@@ -51,9 +51,9 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     resume_world = os.environ.get("VILLAGE_AUTONOMY_RESUME_WORLD", "")
     if not resume_world:
         raise RuntimeError("claim-only-qa requires VILLAGE_AUTONOMY_RESUME_WORLD")
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not override:
-        raise RuntimeError("claim-only-qa requires SOLARIS_SERVER_BINARY")
+        raise RuntimeError("claim-only-qa requires KRASNOKAMEN_SERVER_BINARY")
     binary = Path(override).expanduser().resolve()
     if not binary.is_file():
         raise RuntimeError(f"missing executable server binary: {binary}")
@@ -112,7 +112,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     try:
         server_log = server_log_path.open("wb")
         env = os.environ.copy()
-        env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+        env["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
         server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
         cwd=runtime.REPO_ROOT,
         stdout=server_log,

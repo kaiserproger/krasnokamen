@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn badlands_subsurface_is_terracotta_not_red_sand() {
     let blocks = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     );
     let generator = TerrainGenerator::new(42, Arc::clone(&blocks));
     for name in [
@@ -43,7 +43,7 @@ fn native_deep_cavities_are_not_dry_air() {
         return;
     }
     let blocks = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     );
     let mut generator = TerrainGenerator::new(42, blocks);
     generator.load_vanilla_worldgen(&root).unwrap();
@@ -67,7 +67,7 @@ fn native_deep_cavities_are_not_dry_air() {
 fn overworld_structure_generation_approximate_ab() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
     let blocks = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     );
     let mut generator = TerrainGenerator::new(42, blocks);
     generator.load_vanilla_worldgen(&root).unwrap();

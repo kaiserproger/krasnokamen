@@ -110,20 +110,20 @@ entity record; the WAL stores a typed appearance value at the species' metadata
 index. A corrupt checkpoint `variant` (not a string, or not an identifier)
 refuses hydration, and a WAL image whose variant value has another species' kind,
 the wrong index or an id outside the registry refuses recovery
-(`validate_entity`): only Solaris writes WAL images. A well-formed identifier
+(`validate_entity`): only Krasnokamen writes WAL images. A well-formed identifier
 that names no entry of the species' registry (a datapack variant) is ignored with
 a `unknown variant ignored` warning naming the entity, species and id, and the
-default is kept, as vanilla does; records imported by an older Solaris, which did
+default is kept, as vanilla does; records imported by an older Krasnokamen, which did
 not drop such values, still hold them and must open. An absent field is the
 vanilla default. Naturally spawned animals carry no variant and use that default
-(egg-hatched chickens keep the egg's variant); Solaris does not yet choose
+(egg-hatched chickens keep the egg's variant); Krasnokamen does not yet choose
 biome-dependent variants. Bred cow, pig and chicken calves take this parent's or
 the partner's variant by a fair coin, as `getBreedOffspring` does (javap,
 receipts/Q04CoreFix/javap). Anvil import also drops an unknown or malformed
 `variant` before the native hydrate (the game ignores it and keeps the default).
 
 On genuine first start, `Core::open` writes and fsyncs
-`<world>/.solaris-first-start`, creates `native/state.redb.new` and renames the
+`<world>/.krasnokamen-first-start`, creates `native/state.redb.new` and renames the
 committed store into place. The marker is removed after the initial checkpoint
 is durable. A remaining marker permits retrying interrupted first start; a store
 without a checkpoint or marker fails closed. Required checkpoint player records
@@ -170,7 +170,7 @@ brushable block) into a chunk refused at load: recovery needs that chunk
 resident to replay it, so it stops with the chunk's load error and the world
 does not open, nothing is checkpointed, and the WAL keeps the write until the
 stored chunk is valid again (test
-`opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal`). Solaris
+`opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal`). Krasnokamen
 has no command that repairs or removes a quarantined chunk: the operator's way
 out is an offline `restore` of the last backup (play since that backup is
 lost); the stored record stays byte-identical for inspection. Importing an

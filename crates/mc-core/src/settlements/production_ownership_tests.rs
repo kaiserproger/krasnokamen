@@ -50,7 +50,7 @@ fn exclusive_worker_roles_and_furnace_carry_refuse_native_production_start() {
         let start_request = || Request::Start {
             job: "exclusive".into(),
             worker,
-            recipe: "solaris-settlements:bread".into(),
+            recipe: "krasnokamen-settlements:bread".into(),
             count: 1,
             station: table,
             stand_at,
@@ -136,7 +136,7 @@ fn paused_debt_is_indexed_without_a_route_and_cancel_releases_only_that_job() {
         economy::Request::Production(Request::Start {
             job: "new".into(),
             worker,
-            recipe: "solaris-settlements:bread".into(),
+            recipe: "krasnokamen-settlements:bread".into(),
             count: 1,
             station: table,
             stand_at: stand,

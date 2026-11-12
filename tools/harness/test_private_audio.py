@@ -19,7 +19,7 @@ class PrivateAudioTest(unittest.TestCase):
                 run.assert_not_called()
 
     def environment(self, root):
-        return {"SOLARIS_PW_ROOT": str(root), "PIPEWIRE_RUNTIME_DIR": str(root),
+        return {"KRASNOKAMEN_PW_ROOT": str(root), "PIPEWIRE_RUNTIME_DIR": str(root),
                 "XDG_RUNTIME_DIR": str(root), "PULSE_SERVER": "unix:" + str(root / "pulse/native"),
                 "PULSE_SOURCE": "agents-silent-input", "ALSOFT_DRIVERS": "pulse"}
 

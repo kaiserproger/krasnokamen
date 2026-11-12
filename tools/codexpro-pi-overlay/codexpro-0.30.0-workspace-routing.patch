@@ -72,7 +72,7 @@
  
      registerCodexTool(config, server, "spawn_pi_qa_detached", {
          title: "Spawn Pi QA Detached",
--        description: "Launch the standardized Solaris graphical QA agent detached in an h5i box. Uses GPT-5.6 Luna by default and mandates a real graphical Minecraft client in Xvfb, the requested scenario, evidence capture, then an adversarial exploratory pass with severity-ranked criticism.",
+-        description: "Launch the standardized Krasnokamen graphical QA agent detached in an h5i box. Uses GPT-5.6 Luna by default and mandates a real graphical Minecraft client in Xvfb, the requested scenario, evidence capture, then an adversarial exploratory pass with severity-ranked criticism.",
 +        description: "Launch the standardized graphical QA agent detached in an h5i box. Address the repository either by workspace_id or directly with repo_root plus optional repo_subdir, so QA can target nested repositories without relying on cross-request workspace state. Uses zai/glm-5.3-flash by default and mandates the requested real-client/evidence protocol when the task requires it.",
          inputSchema: {
 -            workspace_id: z.string().optional().describe("Workspace id from open_workspace. Omit to use the workspace selected for this MCP session."),

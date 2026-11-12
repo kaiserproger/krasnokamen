@@ -293,7 +293,7 @@ fn malformed_source_publishes_no_destination() {
             .unwrap()
             .file_name()
             .to_string_lossy()
-            .starts_with(".solaris-conversion-")
+            .starts_with(".krasnokamen-conversion-")
     }));
 }
 
@@ -391,7 +391,7 @@ fn destination_created_during_conversion_is_never_overwritten() {
 #[test]
 fn complete_but_unpublished_native_staging_never_admits_runtime() {
     let dir = tempfile::tempdir().unwrap();
-    let staging = dir.path().join(".solaris-conversion-interrupted");
+    let staging = dir.path().join(".krasnokamen-conversion-interrupted");
     let config = crate::test_support::config(staging.clone(), 42);
     drop(crate::test_support::fixture_store(&config).unwrap());
     let before = hashes(&staging).unwrap();

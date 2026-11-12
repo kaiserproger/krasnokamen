@@ -13,17 +13,17 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
-use solaris_plugin_sdk::events::{CommandInvoked, Event, OperationOutcome, OperationPayload};
-use solaris_plugin_sdk::inventories::{
+use krasnokamen_plugin_sdk::events::{CommandInvoked, Event, OperationOutcome, OperationPayload};
+use krasnokamen_plugin_sdk::inventories::{
     InventoryEndpoint, InventoryExpectedRevision, InventoryFence, InventoryResult,
     OwnedItemTransfer,
 };
-use solaris_plugin_sdk::npcs::{
+use krasnokamen_plugin_sdk::npcs::{
     CraftReceipt, CraftWork, FollowOrder, Formation, FormationKind, HaulWork, NpcOrderResult,
     NpcResult, NpcSnapshot, Order, WorkArea, WorkAssignment, WorkOrder,
 };
-use solaris_plugin_sdk::types::{BlockPosition, Position};
-use solaris_plugin_sdk::{
+use krasnokamen_plugin_sdk::types::{BlockPosition, Position};
+use krasnokamen_plugin_sdk::{
     Command, Config, Failure, LogLevel, ack_npc_work_receipts, adopt_npc, assign_npc_work,
     cancel_npc_order, cancel_npc_work, issue_npc_order, log, message_player, query_npc_controls,
     query_npcs, query_owned_inventory, release_npc, resume_npc_work, spawn_npc, suspend_npc_work,
@@ -512,7 +512,7 @@ fn report_npc(text: &mut String, index: usize, npc: &NpcSnapshot) {
 fn report_order(
     text: &mut String,
     revision: u64,
-    members: &[solaris_plugin_sdk::npcs::OrderMemberOutcome],
+    members: &[krasnokamen_plugin_sdk::npcs::OrderMemberOutcome],
 ) {
     write!(
         text,

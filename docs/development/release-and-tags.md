@@ -8,8 +8,8 @@ explicit owner authorization. The two release reviewers and the advisor's role a
 The breaker passes before the tag and before the announcement are in the
 [break-it QA protocol](../QA_AGENT_PROTOCOL.md) "Release-candidate breaker
 pass". This page is the release procedure for the four repositories:
-`kaiserproger/solaris` (core), `solaris-client`, `solaris-loader` and
-`solaris-default-plugins`.
+`kaiserproger/krasnokamen` (core), `krasnokamen-client`, `krasnokamen-loader` and
+`krasnokamen-default-plugins`.
 
 ## Core release cut
 
@@ -39,8 +39,8 @@ pass". This page is the release procedure for the four repositories:
    This covers core tests only; the notes must not claim a macOS client or
    package run.
 3. **Siblings first.** Rebuild every shipped `plugin.wasm` against the current
-   WIT. Commit and push `solaris-default-plugins` and `solaris-loader` before
-   core, then update `SOLARIS_PLUGINS_REVISION` / `SOLARIS_LOADER_REVISION` in
+   WIT. Commit and push `krasnokamen-default-plugins` and `krasnokamen-loader` before
+   core, then update `KRASNOKAMEN_PLUGINS_REVISION` / `KRASNOKAMEN_LOADER_REVISION` in
    `.github/workflows/ci.yml`. At every RC bring each sibling's local `main` up
    to the line that ships (owner, 2026-11-07: the client's local `main` had
    fallen 150 commits behind `pauline/client-next`), and run `tools/dev/wt-gc`
@@ -50,7 +50,7 @@ pass". This page is the release procedure for the four repositories:
    `crates/mc-edge/src/content_cache.rs` (an old cache then fails at startup
    with "no vanilla content cache found": re-import) and `WORLDGEN_REVISION` in
    `crates/mc-worldgen/src/lib.rs` (startup fails with "identity mismatch: world
-   was generated with worldgen revision N": run `solaris-v2 world
+   was generated with worldgen revision N": run `krasnokamen world
    upgrade-worldgen --config <cfg>` on the stopped server; existing chunks stay
    as generated). Put both steps in the release notes; singleplayer worlds
    need the same upgrade. A content-cache change also means a new singleplayer
@@ -87,7 +87,7 @@ pass". This page is the release procedure for the four repositories:
    `.analysis/releases/<tag>/`); `gh release view <tag>` (not found when publish
    was skipped).
 2. Fix as one small commit on top of the tagged commit, only what CI needs.
-   Repin the client's `SOLARIS_REVISION` in its `release.yml` if the core
+   Repin the client's `KRASNOKAMEN_REVISION` in its `release.yml` if the core
    commit changes.
 3. Draft every step (R1 push core main, R2 retag, R3 push client main, R4
    client tag) with exact command, from/to, fast-forward proof and the current
@@ -110,7 +110,7 @@ that was already pushed and announced. Cancel a broken tag's running CI
 
 ## Client release and the singleplayer content bundle
 
-The client's singleplayer starts a local `solaris-v2`. On first Play the
+The client's singleplayer starts a local `krasnokamen`. On first Play the
 launcher downloads the pinned content bundle into
 `<data root>/servers/content/<ver>` and uses it as `vanilla_data_dir`. The
 launcher trusts the bundle by pin and `version.json`, so a bundle the new server
@@ -120,7 +120,7 @@ multiplayer gates stay green (RC2, 2026-10-31: the bundle lacked
 
 1. **Detect** before tagging client or core: diff `REQUIRED_FILES` between the
    core tags, download the pinned bundle and run
-   `<new solaris-v2> content verify --cache <extracted>/content`
+   `<new krasnokamen> content verify --cache <extracted>/content`
    (`--config` needs a full config; `--cache` is the direct form).
 2. **Republish:** start from a complete freshly imported cache; make sure the
    client's content publish script covers every top-level directory the server
@@ -128,16 +128,16 @@ multiplayer gates stay green (RC2, 2026-10-31: the bundle lacked
    older bundles stay listed; the script runs `content verify` and prints the
    pins. Upload to the static host's `/srv/static/` (see
    [test-server operations](test-server-ops.md)): copy bundle and file list,
-   back up the manifest as `solaris-content.json.pre-r<N>`, write the new one to
+   back up the manifest as `krasnokamen-content.json.pre-r<N>`, write the new one to
    a `.tmp`, `chmod a+r`, `mv` into place, and verify by downloading again.
 3. **Pin** `CONTENT_NAME`/`CONTENT_SHA256` in the launcher (`launcher/src/pins.rs`)
    and bump the client's `version` (`Cargo.toml`, `launcher/Cargo.toml`, both
-   lock entries). Bump `SOLARIS_REVISION`/`SOLARIS_PLUGINS_REVISION` in the
+   lock entries). Bump `KRASNOKAMEN_REVISION`/`KRASNOKAMEN_PLUGINS_REVISION` in the
    client's `release.yml` to the pushed core/plugin commits.
 4. **Prove singleplayer through the packaged client UI**, once on the local
    package before tagging and once on the downloaded release tarball
    (`gh release download ...`, `sha256sum -c`): package dir with
-   `solaris-client`, `solaris-launcher`, `solaris-v2` and `plugins/` (the release
+   `krasnokamen-client`, `krasnokamen-launcher`, `krasnokamen` and `plugins/` (the release
    plugin set); a data root whose `servers/content` is empty so the launcher
    really downloads; `XDG_DATA_HOME` set. Title, Singleplayer, Create New World
    twice (creating does not start it), Play Selected World,
@@ -163,8 +163,8 @@ Repository `../solaris-loader` (Gradle, Java 25), in a worktree under `<work>/wt
    `:jar` tasks. Report passed and skipped separately from the XML results.
 3. Real-client gate on all three platforms from the core repo:
    `run scenario loader-v2-settlements-smoke --platform fabric|neoforge|forge
-   --server-bin <release solaris-v2> --plugins-dir <empty dir>` with
-   `SOLARIS_LOADER_ROOT=<loader worktree>` and `SOLARIS_CLIENT_JAR=<client jar
+   --server-bin <release krasnokamen> --plugins-dir <empty dir>` with
+   `KRASNOKAMEN_LOADER_ROOT=<loader worktree>` and `KRASNOKAMEN_CLIENT_JAR=<client jar
    for the version>` (without it the Java agent fails to compile). Use
    `run scenario <id>`: the plain profile rejects `--server-bin`. Forge can time
    out downloading Mojang assets; one retry is a network retry. Look at a
@@ -173,10 +173,10 @@ Repository `../solaris-loader` (Gradle, Java 25), in a worktree under `<work>/wt
    `InvalidInjectionException`; check every `@Inject` target with `javap -p`
    against the new client jar. NeoForge sends serverbound payloads only on
    channels declared via `minecraft:register`, otherwise
-   `Payload solaris:loader/hello may not be sent to the server!`.
+   `Payload krasnokamen:loader/hello may not be sent to the server!`.
 5. Publish (authorized only): fast-forward main, annotated tag `v<ver>`, stage
    the three jars, `sha256sum ... > SHA256SUMS`, `gh release create v<ver> -R
-   kaiserproger/solaris-loader --verify-tag --prerelease --notes-file NOTES.md
+   kaiserproger/krasnokamen-loader --verify-tag --prerelease --notes-file NOTES.md
    <jars> SHA256SUMS`, then download again and `sha256sum -c`. Notes name the
    platform baselines and the minimum server version per adapter, say the Loader
    is required only when the server marks a client bundle required, and claim

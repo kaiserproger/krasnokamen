@@ -17,7 +17,7 @@ fn hand_breaking_leaves_finishes_at_the_vanilla_client_stop() {
 
 #[test]
 fn squid_has_ten_health_before_the_first_hit() {
-    let registry = mc_data::entity_types::solaris_required_entity_types();
+    let registry = mc_data::entity_types::krasnokamen_required_entity_types();
     let squid = registry
         .facts_of(&mc_data::Identifier::parse("minecraft:squid").unwrap())
         .unwrap();
@@ -27,10 +27,10 @@ fn squid_has_ten_health_before_the_first_hit() {
 
 #[test]
 fn overworld_timeline_tag_activates_the_day_cycle() {
-    let items = mc_data::items::solaris_required_items();
-    let blocks = mc_data::blocks::solaris_required_blocks_report();
-    let tags = mc_data::tags::solaris_required_client_tags(&items, &blocks);
-    let data = mc_data::solaris_required_data();
+    let items = mc_data::items::krasnokamen_required_items();
+    let blocks = mc_data::blocks::krasnokamen_required_blocks_report();
+    let tags = mc_data::tags::krasnokamen_required_client_tags(&items, &blocks);
+    let data = mc_data::krasnokamen_required_data();
     let timeline = data.registry("timeline").unwrap();
     let id = |name| mc_data::Identifier::parse(name).unwrap();
     let timeline_tags = &tags.registries[&id("minecraft:timeline")];

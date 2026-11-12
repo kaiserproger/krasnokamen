@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 fn block_transaction_oracle_json() -> Value {
     json!({
-        "schema": "solaris.block_transaction.oracle.v1",
+        "schema": "krasnokamen.block_transaction.oracle.v1",
         "id": "block-transaction-26-1-2",
         "phases": [
             {"id":"accepted-break","case":"accepted_break","sequence":1},
@@ -81,7 +81,7 @@ fn block_transaction_trace_requires_authoritative_update_before_matching_ack() {
 
 fn container_state_oracle_json() -> Value {
     json!({
-        "schema": "solaris.container_state.oracle.v1",
+        "schema": "krasnokamen.container_state.oracle.v1",
         "id": "inventory-container-26-1-2",
         "phases": [
             {"id":"chest-initial","menu":"chest","case":"chest_initial"},
@@ -190,7 +190,7 @@ fn container_state_trace_rejects_unsorted_slots_and_nonzero_reopen_baseline() {
 
 fn core_gate_manifest_json() -> Value {
     json!({
-        "schema": "solaris.core_gate.manifest.v1",
+        "schema": "krasnokamen.core_gate.manifest.v1",
         "phases": [
             {
                 "id": "solid-edit",
@@ -300,7 +300,7 @@ fn core_gate_completion_rejects_missing_declared_evidence() {
 
 fn scenario_json() -> Value {
     json!({
-        "schema": "solaris.core_replay.scenario.v1",
+        "schema": "krasnokamen.core_replay.scenario.v1",
         "id": "core-actions-seed-81",
         "seed": 81,
         "actions": [
@@ -311,7 +311,7 @@ fn scenario_json() -> Value {
         ],
         "lanes": [
             {
-                "driver": "solaris_protocol",
+                "driver": "krasnokamen_protocol",
                 "required_gates": [
                     { "id": "protocol-session", "evidence_kind": "harness" }
                 ]
@@ -336,7 +336,7 @@ fn scenario_json() -> Value {
             },
             {
                 "id": "deterministic-normalized-state",
-                "description": "Repeated Solaris runs produce the same normalized observations."
+                "description": "Repeated Krasnokamen runs produce the same normalized observations."
             }
         ]
     })
@@ -344,10 +344,10 @@ fn scenario_json() -> Value {
 
 fn result_json() -> Value {
     json!({
-        "schema": "solaris.core_replay.result.v1",
+        "schema": "krasnokamen.core_replay.result.v1",
         "scenario_id": "core-actions-seed-81",
         "seed": 81,
-        "driver": "solaris_protocol",
+        "driver": "krasnokamen_protocol",
         "outcome": "passed",
         "actions": [
             { "type": "wait_ticks", "ticks": 2 },
@@ -382,7 +382,7 @@ fn result_json() -> Value {
         ],
         "observations": [
             {
-                "subject": "solaris",
+                "subject": "krasnokamen",
                 "phase": "core-actions-seed-81",
                 "facts": [
                     { "type": "note", "key": "post_action_liveness", "value": "true" }
@@ -394,7 +394,7 @@ fn result_json() -> Value {
 
 fn concurrent_scenario_json() -> Value {
     json!({
-        "schema": "solaris.core_replay.scenario.v1",
+        "schema": "krasnokamen.core_replay.scenario.v1",
         "id": "multiplayer-transactions-seed-8102",
         "seed": 8102,
         "actions": [],
@@ -432,7 +432,7 @@ fn concurrent_scenario_json() -> Value {
         ],
         "lanes": [
             {
-                "driver": "solaris_protocol",
+                "driver": "krasnokamen_protocol",
                 "required_gates": [
                     { "id": "concurrent-protocol-session", "evidence_kind": "harness" }
                 ]
@@ -454,10 +454,10 @@ fn concurrent_scenario_json() -> Value {
 fn concurrent_result_json() -> Value {
     let scenario = concurrent_scenario_json();
     json!({
-        "schema": "solaris.core_replay.result.v1",
+        "schema": "krasnokamen.core_replay.result.v1",
         "scenario_id": "multiplayer-transactions-seed-8102",
         "seed": 8102,
-        "driver": "solaris_protocol",
+        "driver": "krasnokamen_protocol",
         "outcome": "passed",
         "actions": [],
         "concurrent_groups": scenario["concurrent_groups"].clone(),
@@ -494,7 +494,7 @@ fn concurrent_result_json() -> Value {
         ],
         "observations": [
             {
-                "subject": "solaris",
+                "subject": "krasnokamen",
                 "phase": "multiplayer-transactions-seed-8102",
                 "facts": [
                     { "type": "note", "key": "conservation", "value": "passed" }
@@ -878,7 +878,7 @@ fn checked_core_action_fixture_is_strict_and_complete() {
             .map(|lane| lane.driver)
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([
-            ReplayDriver::SolarisProtocol,
+            ReplayDriver::KrasnokamenProtocol,
             ReplayDriver::VanillaOracle,
             ReplayDriver::RealClient,
         ])
@@ -899,7 +899,7 @@ fn checked_core_action_fixture_is_strict_and_complete() {
     );
 
     let mut wrong_schema: Value = serde_json::from_str(fixture).expect("fixture JSON");
-    wrong_schema["schema"] = json!("solaris.core_replay.scenario.v2");
+    wrong_schema["schema"] = json!("krasnokamen.core_replay.scenario.v2");
     assert!(ReplayScenarioManifest::from_json(&wrong_schema.to_string()).is_err());
 
     let mut missing_seed: Value = serde_json::from_str(fixture).expect("fixture JSON");
@@ -924,7 +924,7 @@ fn checked_multiplayer_transaction_fixture_is_strict_and_complete() {
     assert_eq!(scenario.concurrent_groups.len(), 2);
     assert_eq!(scenario.state_expectations.len(), 2);
     assert_eq!(scenario.lanes.len(), 1);
-    assert_eq!(scenario.lanes[0].driver, ReplayDriver::SolarisProtocol);
+    assert_eq!(scenario.lanes[0].driver, ReplayDriver::KrasnokamenProtocol);
     assert_eq!(scenario.expected_invariants.len(), 3);
     let canonical = scenario
         .to_pretty_json()

@@ -245,7 +245,7 @@ fn vault_mid_ejection_checkpoint_retains_remaining_items_and_rewarded_uuid() {
 }
 #[test]
 fn vault_bad_rewarded_uuid_and_ejection_timer_fail_closed() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let fields = vec![(
         "server_data".into(),
         Tag::Compound(vec![("state_updating_resumes_at".into(), Tag::Long(-1))]),

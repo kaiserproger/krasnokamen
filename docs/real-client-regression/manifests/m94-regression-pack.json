@@ -3,7 +3,7 @@
   "pack_id": "m94-real-client-regression-pack",
   "quality_label": "stabilization",
   "minecraft_version": "26.1.2",
-  "server_command": "cargo run -p mc-edge --bin solaris-v2 -- --config example.toml",
+  "server_command": "cargo run -p mc-edge --bin krasnokamen -- --config example.toml",
   "client_requirement": "Normal vanilla 26.1.2 client launched through the repo-native Gradle runClient adapter; protocol harnesses do not satisfy this gate.",
   "artifact_root": ".analysis/real-client-runs",
   "automation_runner": {
@@ -18,16 +18,16 @@
       "--validate-run"
     ],
     "agent_driver": "tools/harness/backends/driver.py",
-    "agent_bridge_url_env": "SOLARIS_REAL_CLIENT_AGENT_BRIDGE_URL",
-    "agent_secret_env": "SOLARIS_REAL_CLIENT_AGENT_SECRET",
-    "agent_jar_env": "SOLARIS_REAL_CLIENT_AGENT_JAR",
-    "agent_port_env": "SOLARIS_REAL_CLIENT_AGENT_PORT",
-    "agent_scenario_env": "SOLARIS_REAL_CLIENT_AGENT_SCENARIO",
-    "agent_server_addr_env": "SOLARIS_REAL_CLIENT_SERVER_ADDR",
+    "agent_bridge_url_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_BRIDGE_URL",
+    "agent_secret_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_SECRET",
+    "agent_jar_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_JAR",
+    "agent_port_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_PORT",
+    "agent_scenario_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO",
+    "agent_server_addr_env": "KRASNOKAMEN_REAL_CLIENT_SERVER_ADDR",
     "second_client_adapter": "../solaris-loader/gradlew -p ../solaris-loader --no-configuration-cache :fabric-agent:runClientAgent",
     "second_client_adapter_source": "auto-gradle-runclient",
-    "second_agent_secret_env": "SOLARIS_REAL_CLIENT_SECOND_AGENT_SECRET",
-    "second_agent_port_env": "SOLARIS_REAL_CLIENT_SECOND_AGENT_PORT",
+    "second_agent_secret_env": "KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_SECRET",
+    "second_agent_port_env": "KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_PORT",
     "prepared_status": "prepared-owner-run",
     "passing_gate": "agent-run real-client"
   },
@@ -79,7 +79,7 @@
       "bounded_time_minutes": 12,
       "screenshots_required": true,
       "steps": [
-        "Start Solaris with the configured debug server command and record server logs from startup.",
+        "Start Krasnokamen with the configured debug server command and record server logs from startup.",
         "Connect one vanilla 26.1.2 client to 127.0.0.1:25565.",
         "Wait until the spawn area is visible and record whether missing chunks, black chunks, or lighting artifacts remain after 30 seconds.",
         "Walk, sprint, jump, and enter/leave nearby water if present; record swim feel and any rubber-banding.",
@@ -484,7 +484,7 @@
       "steps": [
         "Connect two vanilla clients and verify each can see the other join, move, and perform one block edit.",
         "Have both clients observe one shared drop, pickup, or container interaction; record whether both views converge.",
-        "Stop Solaris cleanly, restart with the same config, reconnect, and record persisted player, chunk, container, entity, and drop state for only the paths exercised.",
+        "Stop Krasnokamen cleanly, restart with the same config, reconnect, and record persisted player, chunk, container, entity, and drop state for only the paths exercised.",
         "Record any disconnect/reconnect or contention failures as M97 candidate blockers."
       ],
       "expected_observations": [
@@ -557,7 +557,7 @@
       "bounded_time_minutes": 5,
       "screenshots_required": true,
       "steps": [
-        "Start Solaris and connect the repo-native Gradle 26.1.2 client on a fresh local world.",
+        "Start Krasnokamen and connect the repo-native Gradle 26.1.2 client on a fresh local world.",
         "Use local debug setup to place an enchanting table and prepare one stone pickaxe, one lapis lazuli, and seven total XP points.",
         "Open the vanilla enchanting screen, quick-move both inputs, and click offer button zero through the real container protocol.",
         "Require a server-confirmed container state advance, Efficiency I on the pickaxe, total XP preserved at seven, level reduced from one to zero, and the enchanted tool returned to inventory."
@@ -580,7 +580,7 @@
       "bounded_time_minutes": 10,
       "screenshots_required": true,
       "steps": [
-        "Join as SolarisPrimary operator in a fresh colony-enabled world and summon two villagers.",
+        "Join as KrasnoPrimary operator in a fresh colony-enabled world and summon two villagers.",
         "Recruit worker and guard members, inspect exact status, exercise the requested indexed role/order commands, and record their exact chat outcome.",
         "Use the documented role/order syntax to continue the release path, dismiss member 2, prove status omission, then re-recruit generation 5.",
         "Move away, refresh member 2's follow order, require client-observed villager motion, and capture a screenshot.",

@@ -1,6 +1,6 @@
 [package]
 name = "mc-test-harness"
-description = "Differential / wire-capture testing infrastructure (Solaris)."
+description = "Differential / wire-capture testing infrastructure (Krasnokamen)."
 autobins = false
 version.workspace = true
 edition.workspace = true

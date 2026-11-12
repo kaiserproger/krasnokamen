@@ -110,7 +110,7 @@ fn checkpoint_sheep_preserves_color_and_sheared_until_regrowth() {
     let fields = mc_data::entity_nbt::entity_to_fields(&registry.items, record).expect("NBT");
     assert!(fields.contains(&("Color".to_owned(), mc_nbt::Tag::Byte(15))));
     assert!(fields.contains(&("Sheared".to_owned(), mc_nbt::Tag::Byte(1))));
-    let dir = std::env::temp_dir().join(format!("solaris-sheep-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("krasnokamen-sheep-{}", uuid::Uuid::new_v4()));
     mc_world::anvil::entity_regions::write_entity_regions(&dir, &registry.items, &chunks, 1)
         .expect("write checkpoint entities");
     let back = mc_world::anvil::entity_regions::read_entity_regions(&dir, &registry.items)

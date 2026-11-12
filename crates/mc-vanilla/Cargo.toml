@@ -1,6 +1,6 @@
 [package]
 name = "mc-vanilla"
-description = "Vanilla jar process control, registry capture and a minimal protocol client (Solaris)."
+description = "Vanilla jar process control, registry capture and a minimal protocol client (Krasnokamen)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -2,7 +2,7 @@ use super::*;
 use mc_world::ChunkPos;
 
 fn registry() -> BlockRegistry {
-    BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap()
+    BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap()
 }
 
 #[test]

@@ -178,25 +178,25 @@ def _loader_live_setup(ctx, env, tree) -> str | None:
     an empty plugins dir and the vanilla translation data in `tree` (26.1.2 client)."""
     loader_root = sibling_root('loader')
     if not (loader_root / 'gradlew').is_file():
-        return f'loader-live requires a Loader checkout at {loader_root} (set SOLARIS_LOADER_ROOT)'
-    env['SOLARIS_LOADER_ROOT'] = str(loader_root)
+        return f'loader-live requires a Loader checkout at {loader_root} (set KRASNOKAMEN_LOADER_ROOT)'
+    env['KRASNOKAMEN_LOADER_ROOT'] = str(loader_root)
     gradle_home = Path(env.get('GRADLE_USER_HOME') or (main_checkout().parent / 'loader-gradle-home'))
     if not gradle_home.is_dir():
         return f'loader-live requires a Gradle home at {gradle_home} (set GRADLE_USER_HOME)'
     env['GRADLE_USER_HOME'] = str(gradle_home)
     version = _loader_mc_version(loader_root)
-    if not env.get('SOLARIS_CLIENT_JAR'):
+    if not env.get('KRASNOKAMEN_CLIENT_JAR'):
         jar = gradle_home / 'caches' / 'fabric-loom' / (version or '') / 'minecraft-client.jar'
         if not jar.is_file():
-            return f'loader-live requires the cached {version} client jar at {jar} (set SOLARIS_CLIENT_JAR)'
-        env['SOLARIS_CLIENT_JAR'] = str(jar)
+            return f'loader-live requires the cached {version} client jar at {jar} (set KRASNOKAMEN_CLIENT_JAR)'
+        env['KRASNOKAMEN_CLIENT_JAR'] = str(jar)
     wrapper = REPO_ROOT / 'tools' / 'harness' / 'screen_audio_graph.sh'
     if not wrapper.is_file():
         return f'loader-live requires the private audio wrapper {wrapper}'
-    env['SOLARIS_AUDIO_RECEIPT_DIR'] = str(ctx.artifact_dir)
+    env['KRASNOKAMEN_AUDIO_RECEIPT_DIR'] = str(ctx.artifact_dir)
     plugins_dir = ctx.artifact_dir / 'loader-live-plugins'
     plugins_dir.mkdir(parents=True, exist_ok=True)
-    data_source = Path(os.environ.get('SOLARIS_VANILLA_DATA_ROOT') or (main_checkout() / 'data'))
+    data_source = Path(os.environ.get('KRASNOKAMEN_VANILLA_DATA_ROOT') or (main_checkout() / 'data'))
     for name in ('vanilla-steps', f'vanilla-{version or ""}'):
         source = data_source / name
         target = Path(tree) / 'data' / name
@@ -230,7 +230,7 @@ def _run_harness(ctx, refs, tree):
     if loader_refs:
         loader_reason = _loader_live_setup(ctx, env, tree)
         if loader_reason is None:
-            env.setdefault('SOLARIS_AUDIO_RECEIPT_DIR', str(ctx.artifact_dir))
+            env.setdefault('KRASNOKAMEN_AUDIO_RECEIPT_DIR', str(ctx.artifact_dir))
     results = {}
     for command, group in grouped.items():
         _, profile, check, is_profile = group[0]
@@ -462,7 +462,7 @@ def _control_lock(root):
     if parent is None:
         yield
         return
-    if not os.environ.get('SOLARIS_BUILD_TOKEN'):
+    if not os.environ.get('KRASNOKAMEN_BUILD_TOKEN'):
         raise Refused('ledger promote must run under mem-run (no build token held): it takes a build '
                       'token first, then wt/ledger-control.lock, and its build stages reuse that token; '
                       'run <work>/solaris/tools/dev/mem-run.sh -m 12G python3 -m tools.harness ledger promote ...')
@@ -555,7 +555,7 @@ def _register_server(sha256, tree):
 def _server_built_from(root, receipt_text, tree):
     """sha256 of the server binary a receipt names, when the tooling built it from exactly `tree`.
 
-    The scenarios run whatever SOLARIS_SERVER_BINARY names (a pinned old build, a sibling's): the
+    The scenarios run whatever KRASNOKAMEN_SERVER_BINARY names (a pinned old build, a sibling's): the
     source fingerprint of the run says nothing about that binary, so its hash must be one that
     `_run_harness` registered for this candidate."""
     registry = root / '.analysis/ledger-builds'
@@ -566,7 +566,7 @@ def _server_built_from(root, receipt_text, tree):
             named.append(build)
     if not named:
         raise Refused('client receipt names no server binary built from the candidate by the ledger tooling '
-                      '(a pinned or foreign SOLARIS_SERVER_BINARY proves nothing about this source): '
+                      '(a pinned or foreign KRASNOKAMEN_SERVER_BINARY proves nothing about this source): '
                       'run `ledger probe --client` on the candidate and use its receipt')
     for build in named:
         if (build['tree']['head'], build['tree']['sha256']) == (tree['head'], tree['sha256']):

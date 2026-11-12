@@ -609,7 +609,7 @@ pub(crate) fn epoch_for_open(
 /// non-compound roots and `validate_globals` rejects unknown domains, so a
 /// root String would fail every world's initial checkpoint.
 const EPOCH_PATH: &str = "level.dat";
-const EPOCH_FIELD: &str = "SolarisTerrainEpoch";
+const EPOCH_FIELD: &str = "KrasnokamenTerrainEpoch";
 
 /// Read the persisted epoch from the `level.dat/Data` compound in
 /// `native_globals`. Returns `None` when missing or malformed (fresh world
@@ -671,7 +671,7 @@ pub(crate) fn read_data_field(
 }
 
 /// Stage a freshly minted epoch into the in-memory `level_metadata` image
-/// under `level.dat/Data/SolarisTerrainEpoch`. No-op when the image already
+/// under `level.dat/Data/KrasnokamenTerrainEpoch`. No-op when the image already
 /// carries a valid epoch (reopened world). Called on the opening thread
 /// before any tick/journal owner exists; the subsequent initial checkpoint
 /// persists the image through the normal atomic transaction.

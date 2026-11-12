@@ -466,17 +466,17 @@ fn vanilla_encoding_difference(registry: &str, ours: &[u8], captured: &[u8]) -> 
 /// is reproduced from that release's data pack. Run once per release, e.g.
 ///
 /// ```text
-/// SOLARIS_REGISTRY_JAR=<26.3 server.jar> SOLARIS_REGISTRY_CAPTURE=data/vanilla \
+/// KRASNOKAMEN_REGISTRY_JAR=<26.3 server.jar> KRASNOKAMEN_REGISTRY_CAPTURE=data/vanilla \
 ///   cargo test -p mc-data --lib registry_network -- --ignored --nocapture
 /// ```
 #[test]
-#[ignore = "maintainer check: needs a Mojang server jar (SOLARIS_REGISTRY_JAR) and its \
-            RegistryData capture (SOLARIS_REGISTRY_CAPTURE, default data/vanilla)"]
+#[ignore = "maintainer check: needs a Mojang server jar (KRASNOKAMEN_REGISTRY_JAR) and its \
+            RegistryData capture (KRASNOKAMEN_REGISTRY_CAPTURE, default data/vanilla)"]
 fn native_payloads_match_the_vanilla_capture() {
-    let jar_path = std::env::var_os("SOLARIS_REGISTRY_JAR")
+    let jar_path = std::env::var_os("KRASNOKAMEN_REGISTRY_JAR")
         .map(PathBuf::from)
-        .expect("set SOLARIS_REGISTRY_JAR to the release's server jar (bundle or inner jar)");
-    let capture = std::env::var_os("SOLARIS_REGISTRY_CAPTURE")
+        .expect("set KRASNOKAMEN_REGISTRY_JAR to the release's server jar (bundle or inner jar)");
+    let capture = std::env::var_os("KRASNOKAMEN_REGISTRY_CAPTURE")
         .map(PathBuf::from)
         .unwrap_or_else(|| workspace().join("data/vanilla"));
     let captured = captured_payloads(&capture);

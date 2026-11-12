@@ -1038,7 +1038,7 @@ fn expired_hostile_and_tnt_cart_each_emit_one_tombstone() {
 fn entity_region_and_wal_restart_preserve_vehicle_motion_and_custody() {
     use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
     let dir =
-        std::env::temp_dir().join(format!("solaris-vehicle-restart-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("krasnokamen-vehicle-restart-{}", uuid::Uuid::new_v4()));
     let mut s = fixture();
     for x in 0..10 {
         rail(&mut s, x, 65, 0, "east_west", "rail", false);

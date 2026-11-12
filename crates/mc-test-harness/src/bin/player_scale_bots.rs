@@ -16,7 +16,7 @@
 //! `--unassisted-login` removes setup admission/creative/tp/item assistance;
 //! Unassisted clients first rendezvous, then a shared watch releases every
 //! login at `login_release.unix_ns` (distinct from the gameplay Run epoch).
-//! `--auth-password PW` answers solaris-auth's register/login prompt right after Play
+//! `--auth-password PW` answers krasnokamen-auth's register/login prompt right after Play
 //! entry (before any assistance) and waits for the plugin's unlock reply.
 //! `--verify-platform` checks five freshly decoded grass/clearance columns.
 //! Setup commands emit `fixture_commands_sent` after all writes and
@@ -258,7 +258,7 @@ struct Args {
     #[arg(
         long,
         value_parser = auth_password_parser,
-        help = "Authenticate each bot with solaris-auth (/register, else /login) right after entering Play (4-128 bytes, no whitespace)"
+        help = "Authenticate each bot with krasnokamen-auth (/register, else /login) right after entering Play (4-128 bytes, no whitespace)"
     )]
     auth_password: Option<String>,
 }
@@ -1780,7 +1780,7 @@ impl Bot {
             self.landed = true;
             return Ok(client);
         }
-        // Commands must follow the initial teleport ACK: Solaris deliberately
+        // Commands must follow the initial teleport ACK: Krasnokamen deliberately
         // rejects /tp while that initial synchronization is still unconfirmed.
         client
             .write_packet(&ServerboundClientInformation {

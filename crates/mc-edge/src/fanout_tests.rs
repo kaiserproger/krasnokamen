@@ -86,10 +86,10 @@ fn registries_fixture() -> (
 ) {
     (
         crate::chunks::test_biome_registry(&["minecraft:plains"]),
-        mc_world::BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+        mc_world::BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
             .expect("blocks build"),
-        mc_data::items::solaris_required_items(),
-        mc_data::block_entity_types::solaris_required_block_entity_types(),
+        mc_data::items::krasnokamen_required_items(),
+        mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
     )
 }
 
@@ -213,7 +213,7 @@ fn mooshroom_to_cow_fanout_removes_then_respawns_the_same_identity_for_every_vie
     use mc_core::boundary::{EntityAppearance, EntityDataValue, EntityId, EntityView};
     use mc_protocol::frame::{Compression, try_decode_frame};
     use mc_protocol::packets::play::{AddEntity, ClientboundSetEntityData, RemoveEntities};
-    let types = mc_data::entity_types::solaris_required_entity_types();
+    let types = mc_data::entity_types::krasnokamen_required_entity_types();
     let type_id = |name: &str| {
         types
             .id_of(&mc_data::Identifier::parse(name).unwrap())
@@ -359,7 +359,7 @@ fn mounted_spawn_burst_links_ride_the_world_queue_without_reliable_overflow() {
     use mc_protocol::packets::play::{
         AddEntity, ClientboundSetEntityLeash, ClientboundSetPassengers,
     };
-    let types = mc_data::entity_types::solaris_required_entity_types();
+    let types = mc_data::entity_types::krasnokamen_required_entity_types();
     let type_id = |name: &str| {
         types
             .id_of(&mc_data::Identifier::parse(name).unwrap())

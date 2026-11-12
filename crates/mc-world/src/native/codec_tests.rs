@@ -1,8 +1,8 @@
 use super::super::dictionary;
 use super::*;
 use crate::{BlockPos, BlockStateId, ChestBlockEntity, ChunkPos, ScheduledBlockTick};
-use mc_data::blocks::solaris_required_blocks_report;
-use mc_data::items::solaris_required_items;
+use mc_data::blocks::krasnokamen_required_blocks_report;
+use mc_data::items::krasnokamen_required_items;
 use redb::{Database, ReadableDatabase, ReadableTable, ReadableTableMetadata, TableDefinition};
 
 const OVERLAYS: TableDefinition<u32, &[u8]> = TableDefinition::new("test_overlays");
@@ -92,7 +92,7 @@ fn varied_base(blocks: &BlockRegistry) -> ChunkSection {
 
 #[test]
 fn sparse_dense_sparse_transitions_reopen_without_changing_effective_cells() {
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
     let air = state(&blocks, "minecraft:air");
     let stone = state(&blocks, "minecraft:stone");
     let base = varied_base(&blocks);
@@ -133,7 +133,7 @@ fn sparse_dense_sparse_transitions_reopen_without_changing_effective_cells() {
 
 #[test]
 fn all_air_replacement_survives_reopen_and_runtime_registry_reordering() {
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
     let air = state(&blocks, "minecraft:air");
     let base = ChunkSection::filled(state(&blocks, "minecraft:stone"), air);
     let effective = ChunkSection::filled(air, air);
@@ -143,7 +143,7 @@ fn all_air_replacement_survives_reopen_and_runtime_registry_reordering() {
     let bytes = save(&database, &base, &effective, &blocks);
     assert_eq!(representation(&bytes).unwrap(), Representation::Dense);
     drop(database);
-    let mut report = solaris_required_blocks_report();
+    let mut report = krasnokamen_required_blocks_report();
     let total: u32 = report.iter().map(|block| block.states.len() as u32).sum();
     for block in &mut report {
         for state in &mut block.states {
@@ -165,7 +165,7 @@ fn aborted_overlay_transaction_leaves_neither_dictionary_additions_nor_reference
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("state.redb");
     let database = database(&path);
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
     let air = state(&blocks, "minecraft:air");
     let base = ChunkSection::filled(air, air);
     let mut effective = base.clone();
@@ -219,7 +219,7 @@ fn aborted_overlay_transaction_leaves_neither_dictionary_additions_nor_reference
 fn overlay_corruption_fails_closed_instead_of_returning_baseline() {
     let temp = tempfile::tempdir().unwrap();
     let database = database(&temp.path().join("state.redb"));
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
     let air = state(&blocks, "minecraft:air");
     let base = ChunkSection::filled(air, air);
     let mut effective = base.clone();
@@ -296,8 +296,8 @@ fn overlay_corruption_fails_closed_instead_of_returning_baseline() {
 
 #[test]
 fn representation_changes_preserve_block_entities_and_scheduled_metadata() {
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
-    let items = solaris_required_items();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
+    let items = krasnokamen_required_items();
     let air = state(&blocks, "minecraft:air");
     let stone = state(&blocks, "minecraft:stone");
     let chest = state(&blocks, "minecraft:chest");
@@ -375,7 +375,7 @@ fn representation_changes_preserve_block_entities_and_scheduled_metadata() {
 
 #[test]
 fn small_compressed_savings_keep_previous_representation() {
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
     let air = state(&blocks, "minecraft:air");
     let stone = state(&blocks, "minecraft:stone");
     let base = ChunkSection::filled(air, air);
@@ -422,7 +422,7 @@ fn small_compressed_savings_keep_previous_representation() {
 
 #[test]
 fn persisted_mixed_overlay_keeps_names_and_properties_with_reordered_registry() {
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
     let air = state(&blocks, "minecraft:air");
     let stone = state(&blocks, "minecraft:stone");
     let water = state(&blocks, "minecraft:water");
@@ -435,7 +435,7 @@ fn persisted_mixed_overlay_keeps_names_and_properties_with_reordered_registry() 
     let database = database(&path);
     save(&database, &base, &effective, &blocks);
     drop(database);
-    let mut report = solaris_required_blocks_report();
+    let mut report = krasnokamen_required_blocks_report();
     let total: u32 = report.iter().map(|block| block.states.len() as u32).sum();
     for block in &mut report {
         for state in &mut block.states {
@@ -461,7 +461,7 @@ fn persisted_mixed_overlay_keeps_names_and_properties_with_reordered_registry() 
 
 #[test]
 fn inspected_origins_match_dictionary_states_and_validate_the_whole_record() {
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
     let air = state(&blocks, "minecraft:air");
     let stone = state(&blocks, "minecraft:stone");
     let base = varied_base(&blocks);
@@ -515,8 +515,8 @@ fn inspected_origins_match_dictionary_states_and_validate_the_whole_record() {
 
 #[test]
 fn native_baseline_discards_palette_history_without_mutating_capture() {
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
-    let items = solaris_required_items();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
+    let items = krasnokamen_required_items();
     let air = state(&blocks, "minecraft:air");
     let stone = state(&blocks, "minecraft:stone");
     let mut chunk = Chunk::empty(

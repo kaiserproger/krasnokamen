@@ -1,4 +1,4 @@
-package org.solaris.bukkit;
+package org.krasnokamen.bukkit;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,7 +16,7 @@ public final class RemapLogger {
         if (args.length != 2) {
             throw new IllegalArgumentException("usage: RemapLogger <input.jar> <linked.jar>");
         }
-        var mapping = new SimpleRemapper("java/util/logging/Logger", "org/solaris/bukkit/PluginLogger");
+        var mapping = new SimpleRemapper("java/util/logging/Logger", "org/krasnokamen/bukkit/PluginLogger");
         try (var input = new JarInputStream(Files.newInputStream(Path.of(args[0])));
              var output = new JarOutputStream(Files.newOutputStream(Path.of(args[1])))) {
             JarEntry entry;

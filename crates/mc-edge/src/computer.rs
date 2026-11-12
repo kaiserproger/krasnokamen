@@ -16,7 +16,7 @@ use crate::server::EdgeServer;
 
 const MAX_INPUT: usize = 4096;
 const MAX_OUTPUT: usize = 16384;
-const CHANNEL: &str = "solaris:computer";
+const CHANNEL: &str = "krasnokamen:computer";
 
 /// Explicit host-owned configuration, never supplied by a client or guest.
 #[derive(Debug, Clone, Deserialize)]

@@ -482,7 +482,7 @@ fn economy_reserved_farmer_cannot_shear() {
             "start".into(),
             "shearing-reservation".into(),
             worker.to_string(),
-            "solaris-settlements:bread".into(),
+            "krasnokamen-settlements:bread".into(),
             "1".into(),
             ((town.0 << 32) | 1).to_string(),
             "3,201,3".into(),

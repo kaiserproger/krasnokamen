@@ -35,7 +35,7 @@ fn stored_identity(dir: &std::path::Path) -> [u8; 32] {
 
 #[test]
 fn interrupted_writer_world_upgrades_and_retry_is_idempotent() {
-    const CHILD: &str = "SOLARIS_WORLDGEN_UPGRADE_CRASH_CHILD";
+    const CHILD: &str = "KRASNOKAMEN_WORLDGEN_UPGRADE_CRASH_CHILD";
     if let Some(path) = std::env::var_os(CHILD) {
         let database = redb::Database::open(path).unwrap();
         let tx = database.begin_write().unwrap();
@@ -202,7 +202,7 @@ fn older_storage_format_is_refused_with_export_import_guidance_and_not_written()
     drop_bossbars(&path);
 
     let guided = |error: &str| {
-        assert!(error.contains("older Solaris storage format"), "{error}");
+        assert!(error.contains("older Krasnokamen storage format"), "{error}");
         assert!(error.contains("world export-anvil"), "{error}");
         assert!(error.contains("world import-anvil"), "{error}");
         assert!(!error.contains("upgrade-worldgen"), "{error}");

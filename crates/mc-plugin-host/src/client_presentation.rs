@@ -32,12 +32,12 @@ use mc_script::{
     ScriptLoaderItemGrantFailure, ScriptPlayerId,
 };
 
-use crate::bindings::exports::solaris::plugin::events::{
+use crate::bindings::exports::krasnokamen::plugin::events::{
     ClientSelectionOutcome, ClientSelectionStarted, ClientViewOpened, ClientViewOutcome, Event,
     LoaderItemGrantFailure, LoaderItemGrantOutcome, LoaderItemGrantResult, LoaderViewAction,
     LoaderViewRequest, SelectionContext, ViewFailure, ViewOpened,
 };
-use crate::bindings::solaris::plugin::client_presentation::{ViewField, ViewFieldValue};
+use crate::bindings::krasnokamen::plugin::client_presentation::{ViewField, ViewFieldValue};
 
 /// The contract's event for one decided Loader observation, or `None` when this
 /// contract carries no observation of that kind.

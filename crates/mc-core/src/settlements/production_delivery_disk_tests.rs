@@ -54,7 +54,7 @@ fn fixture(config: &CoreConfig) -> Disk {
         economy::Request::Production(Request::Start {
             job: "durable".into(),
             worker,
-            recipe: "solaris-settlements:oak_planks".into(),
+            recipe: "krasnokamen-settlements:oak_planks".into(),
             count: 1,
             station: table,
             stand_at,

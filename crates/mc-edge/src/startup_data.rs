@@ -9,11 +9,11 @@ use anyhow::{Context, Result, bail};
 /// operator verification, or world/network startup can accept this cache.
 pub fn validate_startup_data(root: &Path) -> Result<()> {
     let data = load_effective_protocol_data(root)?;
-    let blocks = mc_data::blocks::solaris_required_blocks_report();
+    let blocks = mc_data::blocks::krasnokamen_required_blocks_report();
     load_effective_block_light(root, &blocks)?;
     load_effective_block_mining(root, &blocks)?;
     load_effective_block_explosion(root)?;
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let item_facts = load_effective_item_facts(root)?;
     load_effective_tags(root, &data, &items)?;
     let recipes = load_effective_recipes(root)?;
@@ -52,7 +52,7 @@ pub fn load_effective_tags(
         .with_vanilla_fuel_values(items);
     if tags.total_tags() == 0 {
         bail!(
-            "vanilla tags from {} were empty; import a complete content cache with `solaris-v2 content import`",
+            "vanilla tags from {} were empty; import a complete content cache with `krasnokamen content import`",
             vanilla_data_dir.display()
         );
     }
@@ -155,7 +155,7 @@ pub fn load_effective_loot(vanilla_data_dir: &Path) -> Result<mc_data::loot::Loo
         return Ok(tables);
     }
     bail!(
-        "vanilla loot tables from {} had no supported simple drops; import a complete content cache with `solaris-v2 content import`",
+        "vanilla loot tables from {} had no supported simple drops; import a complete content cache with `krasnokamen content import`",
         root.display()
     );
 }
@@ -193,7 +193,7 @@ pub fn load_effective_recipes(vanilla_data_dir: &Path) -> Result<Vec<mc_data::re
         .with_context(|| format!("loading vanilla recipes from {}", root.display()))?;
     if recipes_from_cache.is_empty() {
         bail!(
-            "vanilla recipes from {} had no supported recipes; import a complete content cache with `solaris-v2 content import`",
+            "vanilla recipes from {} had no supported recipes; import a complete content cache with `krasnokamen content import`",
             root.display()
         );
     }
@@ -201,7 +201,7 @@ pub fn load_effective_recipes(vanilla_data_dir: &Path) -> Result<Vec<mc_data::re
         .into_iter()
         .map(|recipe| (recipe.id.clone(), recipe))
         .collect();
-    let embedded = mc_data::recipes::solaris_required_recipes();
+    let embedded = mc_data::recipes::krasnokamen_required_recipes();
     let mut recipes = Vec::with_capacity(embedded.len() + cache_by_id.len());
     for fallback in embedded {
         let recipe = cache_by_id.remove(&fallback.id).unwrap_or(fallback);
@@ -246,7 +246,7 @@ pub fn load_effective_block_mining(
     }
     if table.version != mc_protocol::TARGET_RELEASE {
         bail!(
-            "vanilla block-mining table from {} targets {} but Solaris targets {}",
+            "vanilla block-mining table from {} targets {} but Krasnokamen targets {}",
             path.display(),
             table.version,
             mc_protocol::TARGET_RELEASE
@@ -299,7 +299,7 @@ pub fn load_effective_block_light(
     }
     if table.version != mc_protocol::TARGET_RELEASE {
         bail!(
-            "vanilla block-light table from {} targets {} but Solaris targets {}",
+            "vanilla block-light table from {} targets {} but Krasnokamen targets {}",
             path.display(),
             table.version,
             mc_protocol::TARGET_RELEASE
@@ -337,21 +337,21 @@ pub fn validate_vanilla_sidecar_version(vanilla_data_dir: &Path) -> Result<()> {
 
     if version.id != mc_protocol::TARGET_RELEASE {
         bail!(
-            "vanilla sidecar release id {:?} does not match Solaris target {:?}",
+            "vanilla sidecar release id {:?} does not match Krasnokamen target {:?}",
             version.id,
             mc_protocol::TARGET_RELEASE
         );
     }
     if version.world_version != mc_protocol::WORLD_VERSION {
         bail!(
-            "vanilla sidecar world_version {} does not match Solaris world version {}",
+            "vanilla sidecar world_version {} does not match Krasnokamen world version {}",
             version.world_version,
             mc_protocol::WORLD_VERSION
         );
     }
     if version.protocol_version != mc_protocol::PROTOCOL_VERSION {
         bail!(
-            "vanilla sidecar protocol_version {} does not match Solaris protocol version {}",
+            "vanilla sidecar protocol_version {} does not match Krasnokamen protocol version {}",
             version.protocol_version,
             mc_protocol::PROTOCOL_VERSION
         );
@@ -372,7 +372,7 @@ pub fn validate_vanilla_sidecar_version(vanilla_data_dir: &Path) -> Result<()> {
     })?;
     if gameplay.id != crate::content_import::GAMEPLAY_DATAPACK_RELEASE {
         bail!(
-            "gameplay data pack release {:?} does not match Solaris's {:?}",
+            "gameplay data pack release {:?} does not match Krasnokamen's {:?}",
             gameplay.id,
             crate::content_import::GAMEPLAY_DATAPACK_RELEASE
         );

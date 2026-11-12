@@ -42,9 +42,9 @@ subjects:
     - p.check(ctx,'nonmember does not hear group',any(f['marker']==fixture['pcm_marker'] for f in p.observe(ctx,'svc.received_frames',2)),False)
     - p.check(ctx,'former member no longer receives',len(p.observe(ctx,'svc.received_frames',1)),before)
     delegated_helpers: []
-  expected_contract: Solaris extension; no vanilla analogue
+  expected_contract: Krasnokamen extension; no vanilla analogue
   server_gap:
-  - No SVC bridge; native solaris:voice is not SVC; voice_service.rs:44-53
+  - No SVC bridge; native krasnokamen:voice is not SVC; voice_service.rs:44-53
   implementation_class: complete_adapter
   subject_oracle_text: 'reference: SVC group audio. Not served: no SVC bridge'
 - subject: voice.native_proximity_voice
@@ -83,10 +83,10 @@ subjects:
     - p.check(ctx, 'outside range silent', p.observe(ctx, 'voice.audio_count', 1), before)
     - p.check(ctx, 'cross dimension silent', p.observe(ctx, 'voice.audio_count', 1), before)
     delegated_helpers: []
-  expected_contract: Solaris extension; no vanilla analogue
+  expected_contract: Krasnokamen extension; no vanilla analogue
   server_gap: []
   implementation_class: real_but_partial
-  subject_oracle_text: 'reference: solaris:voice protocol 1 (ADR 0019): AUDIO relayed with speaker uuid, eye position
+  subject_oracle_text: 'reference: krasnokamen:voice protocol 1 (ADR 0019): AUDIO relayed with speaker uuid, eye position
     and seq to listening native clients in the same dimension within range_blocks (default 48), never to the speaker;
     nothing beyond range or across dimensions'
   remaining_oracle_clause:
@@ -110,7 +110,7 @@ subjects:
     - p.rich_action(ctx, 'voice_listen', listening, index=1)
     - p.rich_action(ctx, 'voice_send_audio', sequence=10, opus=audio['opus'])
     - p.ticks(ctx, 2)
-    - p.rich_action(ctx, 'send_custom_payload', 'solaris:voice', payload)
+    - p.rich_action(ctx, 'send_custom_payload', 'krasnokamen:voice', payload)
     - p.ticks(ctx, 2)
     authoritative_commands_in_action_order: []
   oracle:
@@ -122,7 +122,7 @@ subjects:
       \ and listening))"
     - p.check(ctx, 'malformed voice never kicks', p.observe(ctx, 'connection.phase'), 'play')
     delegated_helpers: []
-  expected_contract: Solaris extension; no vanilla analogue
+  expected_contract: Krasnokamen extension; no vanilla analogue
   server_gap: []
   additional_matrix_obligations:
     concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
@@ -155,12 +155,12 @@ subjects:
     - p.test(ctx,'nearby voice delivered',any(f['marker']==fixture['pcm_marker'] for f in near),near)
     - p.check(ctx,'outside radius voice suppressed',len(p.observe(ctx,'svc.received_frames',1)),before)
     delegated_helpers: []
-  expected_contract: Solaris extension; no vanilla analogue
+  expected_contract: Krasnokamen extension; no vanilla analogue
   server_gap:
-  - No SVC bridge; native solaris:voice is not SVC; voice_service.rs:44-53
+  - No SVC bridge; native krasnokamen:voice is not SVC; voice_service.rs:44-53
   implementation_class: complete_adapter
-  subject_oracle_text: 'reference: SVC proximity audio. Not served: Solaris has no SVC protocol bridge (its voice
-    is native solaris:voice only)'
+  subject_oracle_text: 'reference: SVC proximity audio. Not served: Krasnokamen has no SVC protocol bridge (its voice
+    is native krasnokamen:voice only)'
 - subject: voice.svc_client_join_without_server
   matrix_ids:
   - pw:voice.svc_client_join_without_server/fabric_svc/survival/overworld/hard/1/malformed_or_stale_packet/pause_when_empty_resume/op_3
@@ -184,13 +184,13 @@ subjects:
     - p.check(ctx,'voice unavailable',p.observe(ctx,'svc.connected'),False)
     - p.test(ctx,'chat independent of missing SVC',True,'server chat echo')
     delegated_helpers: []
-  expected_contract: Solaris extension; no vanilla analogue
+  expected_contract: Krasnokamen extension; no vanilla analogue
   server_gap: []
   implementation_class: complete_adapter
   subject_oracle_text: 'reference: joins and plays; SVC reports voice unavailable; no disconnect'
 - subject: voice.voice_non_native_invisible
   matrix_ids:
-  - pw:voice.voice_non_native_invisible/fabric_solaris_loader/adventure/the_end/easy/2/duplicate_login/clean_restart_mid_action/op_4
+  - pw:voice.voice_non_native_invisible/fabric_krasnokamen_loader/adventure/the_end/easy/2/duplicate_login/clean_restart_mid_action/op_4
   - pw:voice.voice_non_native_invisible/vanilla_java_26_1_2/spectator/the_end/peaceful/2/reconnect_mid_action/steady/op_2
   - pw:voice.voice_non_native_invisible/protocol_bot/adventure/overworld/normal/2/duplicate_login/crash_kill9_wal_replay/op_2
   preconditions:
@@ -210,13 +210,13 @@ subjects:
     callable: _platform.oracle
     check_calls:
     - "p.check(ctx, 'no native voice on nonnative',\n            [r for r in p.observe(ctx, 'custom_payloads') if\
-      \ r['channel'] == 'solaris:voice'], [])"
+      \ r['channel'] == 'krasnokamen:voice'], [])"
     - p.check(ctx, 'nonnative play survives', p.observe(ctx, 'connection.phase'), 'play')
     delegated_helpers: []
-  expected_contract: Solaris extension; no vanilla analogue
+  expected_contract: Krasnokamen extension; no vanilla analogue
   server_gap: []
   implementation_class: complete_adapter
-  subject_oracle_text: 'reference: they never receive solaris:voice (no VOICE_STATE, no relay); play unaffected'
+  subject_oracle_text: 'reference: they never receive krasnokamen:voice (no VOICE_STATE, no relay); play unaffected'
 receipt_policy: Index of shared Python Adapter callables, not an interpreter. Capability requests are not live pass
   evidence; consult canonical receipts and ledger.
 helper_sources: {}

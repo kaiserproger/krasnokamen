@@ -99,7 +99,7 @@ class ProfilesTests(unittest.TestCase):
             store = root / "absent-owner-host" / "pins"
             pin = root / "remote-artifacts" / "pin"
             pin.mkdir(parents=True)
-            binary = pin / "solaris-v2"
+            binary = pin / "krasnokamen"
             binary.write_bytes(b"server")
             manifest = {"repo": "core", "kind": "server",
                         "binary": str(store / "original-pin" / binary.name),
@@ -127,7 +127,7 @@ class ProfilesTests(unittest.TestCase):
             store = root / "absent-owner-host" / "pins"
             pin = root / "remote-artifacts" / "pin"
             pin.mkdir(parents=True)
-            binary = pin / "solaris-v2"
+            binary = pin / "krasnokamen"
             binary.write_bytes(b"server")
             manifest = {"repo": "core", "kind": "server", "binary": str(binary),
                         "head": "abc", "diff_sha256": "def", "command": "cargo build --release",
@@ -160,7 +160,7 @@ class ProfilesTests(unittest.TestCase):
                      "command": "cargo build --release", "target": "t",
                      "binary_sha256": profiles.load.scale.binary_sha256(binary), **extra}))
                 return binary
-            server = pin("server", "solaris-v2")
+            server = pin("server", "krasnokamen")
             bots = pin("bots", "player-scale-bots")
             args = argparse.Namespace(out=root / "out", server_bin=server, bots_bin=bots)
             with patch.object(profiles, "PIN_ROOT", store), patch.object(capacity_ladder, "rung") as rung:
@@ -178,7 +178,7 @@ class ProfilesTests(unittest.TestCase):
 
     def test_unpinned_binary_without_manifest_passes_the_soft_check(self):
         with tempfile.TemporaryDirectory() as directory:
-            binary = Path(directory) / "solaris-v2"
+            binary = Path(directory) / "krasnokamen"
             binary.write_bytes(b"x")
             profiles.load.scale.refuse_incremental_pin(binary, "server")
             (Path(directory) / "manifest.json").write_text(json.dumps({"incremental": True}))
@@ -194,7 +194,7 @@ class ProfilesTests(unittest.TestCase):
             runner.touch()
             pin = store / "pin"
             pin.mkdir(parents=True)
-            binary = pin / "solaris-v2"
+            binary = pin / "krasnokamen"
             binary.write_bytes(b"server")
             manifest = {"repo": "core", "kind": "server", "binary": str(binary),
                         "head": "abc", "diff_sha256": "def", "command": "cargo build --release",
@@ -827,7 +827,7 @@ class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
             root = Path(directory)
             for corrupt in ("none", "block", "ammo"):
                 args = argparse.Namespace(out=root / str(corrupt), profile="scale-100k-all-active",
-                    productive_npcs=None, server_bin=root / "server" / "solaris-v2",
+                    productive_npcs=None, server_bin=root / "server" / "krasnokamen",
                     bots_bin=root / "bots" / "player-scale-bots", build_receipt=root / "server" / "manifest.json",
                     vanilla_data_dir=root, mobs=10, villagers=0, damage_victims=None, map_frames=None,
                     churn_percent=None, daylight_zombies=None, wool_sheep=None, reactive_pairs=None, xp_orbs=None,

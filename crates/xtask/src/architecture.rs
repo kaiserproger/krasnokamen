@@ -24,7 +24,7 @@ const WIT_DIR: &str = "crates/mc-script/wit";
 // documentation-only: local presence is reported on stdout and never baked
 // into the compared artifact, so a fresh core checkout without siblings
 // produces byte-identical output.
-const SIBLING_REPOS: &[&str] = &["solaris-default-plugins", "solaris-loader"];
+const SIBLING_REPOS: &[&str] = &["krasnokamen-default-plugins", "krasnokamen-loader"];
 
 pub(super) fn run_architecture(check: bool) -> Result<(), i32> {
     let root = workspace_root().map_err(|err| {

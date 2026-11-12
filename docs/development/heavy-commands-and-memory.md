@@ -48,15 +48,15 @@ to keep that from happening again without idling the machine.
   on all three locks `/tmp/solaris-mem-slots/tokens/token-{1,2,3}.lock` at once
   and takes whichever frees first: no polling, no CPU while waiting, and the
   runner prints `mem-run: build tokens 1,2,3 are in use; waiting`. With
-  `SOLARIS_BUILD_LANE=background` in the runner's environment a compile waits
+  `KRASNOKAMEN_BUILD_LANE=background` in the runner's environment a compile waits
   only for tokens 1-2, so token 3 stays free for priority work (owner,
   2026-11-12: the battle video gets resources first); Main exports it for
   every agent outside the priority task. The lock
   stays at fd 9 of the runner and its scope guardian, never the command, so
   the token returns once the scope is empty: on any exit, kill or OOM. The
   `mem-run: scope` line shows `token=<n>`, `token=<n>(reused)` or
-  `token=none`. **Nesting:** the runner exports `SOLARIS_BUILD_TOKEN` and
-  `SOLARIS_BUILD_TOKEN_PID` (its own pid); a compile whose ancestor process is
+  `token=none`. **Nesting:** the runner exports `KRASNOKAMEN_BUILD_TOKEN` and
+  `KRASNOKAMEN_BUILD_TOKEN_PID` (its own pid); a compile whose ancestor process is
   that runner reuses its token, so a harness run or pin-release that runs
   `mem-run.sh ... cargo` again inside never waits for a second token (three
   outer holders would deadlock). The token is taken before the `-x` lock, so
@@ -70,9 +70,9 @@ to keep that from happening again without idling the machine.
   harness's own scope properties, so harness runs keep their canonical CPU
   budget. Preemptible builds (below) get `CPUWeight=10`, so under contention
   tests and servers win the CPU five to one and builds only slow down. A
-  command started through `scene-slot.sh` (it exports `SOLARIS_SCENE_SLOT`)
+  command started through `scene-slot.sh` (it exports `KRASNOKAMEN_SCENE_SLOT`)
   gets `CPUWeight=500`: with dozens of test scopes at 50, a gate's native
-  client fell to 6-8 TPS and missed its tick waits (2026-11-11). The runner exports `SOLARIS_HARNESS_CPU_SCOPE=1`; without it the
+  client fell to 6-8 TPS and missed its tick waits (2026-11-11). The runner exports `KRASNOKAMEN_HARNESS_CPU_SCOPE=1`; without it the
   harness re-runs itself in its own scope outside the slice and escapes the cap.
 - **`tools/dev/heavy-watchdog.py`** (user unit `solaris-heavy-watchdog`,
   started by the runner) is the only thing that pauses work. On real memory
@@ -99,9 +99,9 @@ to keep that from happening again without idling the machine.
   compilers instead of `nproc` each.
 - **Pooled target dirs.** A command that sets `CARGO_TARGET_DIR` keeps it.
   Otherwise it gets a free shared dir `<work>/targets/slot-a..slot-z`
-  (`SOLARIS_SLOT_TARGETS` overrides the root): the slot its source tree used
+  (`KRASNOKAMEN_SLOT_TARGETS` overrides the root): the slot its source tree used
   last, else any existing free slot, else a new one if `df` reports at least
-  `SOLARIS_SLOT_MIN_FREE_GB` (default 80 GiB, the free-space floor below; rounded up) free. This check does
+  `KRASNOKAMEN_SLOT_MIN_FREE_GB` (default 80 GiB, the free-space floor below; rounded up) free. This check does
   not reserve space or limit growth of existing slots. Each running command
   holds its own slot (15-40 GB once built): on 2026-11-07 agents running
   several commands in parallel created 12 slots and filled the disk, so run one
@@ -192,10 +192,10 @@ code, start the unit (agents' runner calls may restart it in between).
   `RUSTC_WRAPPER=` (uncached). Never stop, restart or reconfigure that unit, never
   start an sccache inside a scope (it would stay populated by that scope), and
   compare `sccache --show-stats` before and after instead of zeroing it. Measured
-  2026-11-11, one run: a cold debug `solaris-v2` in another tree against a warm
+  2026-11-11, one run: a cold debug `krasnokamen` in another tree against a warm
   cache took 4542 -> 3316 G instructions (`perf stat`, -27%; 213/271 Rust hits plus
   284 C hits), and populating an empty cache cost +6%. The same for a cold release
-  `solaris-v2`: 5482 -> 4707 G instructions (-14%), populating +1%. Each is one
+  `krasnokamen`: 5482 -> 4707 G instructions (-14%), populating +1%. Each is one
   measurement under those conditions, not a general speedup. Expected to help on cold or
   private target dirs, after slot rotation and after toolchain changes; a warm slot
   gains nothing. Plain
@@ -237,7 +237,7 @@ code, start the unit (agents' runner calls may restart it in between).
 
 Owner-approved response (2026-10-24), adjusted for the current runner: renice
 running rustc/cargo/java/qemu to 19, start new heavy commands with a lower
-`SOLARIS_MEM_RUN_CPU_QUOTA` (e.g. `400`), and tell agents to use
+`KRASNOKAMEN_MEM_RUN_CPU_QUOTA` (e.g. `400`), and tell agents to use
 `-m 6G nice -n 19 cargo ... -j 2`, `--test-threads 2`,
 focused `-p` crates only. For a machine-wide cap, write the owner's quota to
 `/tmp/solaris-mem-slots/cpu-quota` (e.g. `600%`, replaced atomically); the runner
@@ -260,7 +260,7 @@ cwd to the agent.
   of 11 GB on 2026-10-28), 650 MB of client content copied into every
   scene-shot receipt (now symlinked), nested `sdk/rust/target` in rsync'd
   worktrees, 66 GB of stale debug targets.
-- **Slot cleanup and rotation.** Below `SOLARIS_SLOT_MIN_FREE_GB` + 10 GiB free
+- **Slot cleanup and rotation.** Below `KRASNOKAMEN_SLOT_MIN_FREE_GB` + 10 GiB free
   (90 GiB by default), the runner (except `-x`/`-p`) invokes `slot-gc --delete`;
   failures are logged and do not stop the command. Each pass removes attributable
   dead artifacts and superseded finalized incremental sessions. If space remains
@@ -282,7 +282,7 @@ Cleanup while agents run:
   By hand, only if its agent finished, it has no tracked changes (a stray `.pyc`
   aside) and its HEAD is in a branch (`git branch --contains`). Check
   handoffs/configs for absolute paths into it first (e.g. an ALSA pkg-config
-  shim, a `SOLARIS_LOADER_ROOT`). Move its `.analysis/` to
+  shim, a `KRASNOKAMEN_LOADER_ROOT`). Move its `.analysis/` to
   `<work>/receipts/<wt>-analysis` and publish outputs to
   `<work>/release-artifacts/` (call them "built", never "published"), then
   `git worktree remove --force` and `git worktree prune`.

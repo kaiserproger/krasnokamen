@@ -1,5 +1,5 @@
 use crate::Identifier;
-use crate::blocks::solaris_required_blocks_report;
+use crate::blocks::krasnokamen_required_blocks_report;
 
 use super::{CollisionBox, vanilla_collision_shapes};
 
@@ -23,7 +23,7 @@ fn shape(state_id: u32) -> Vec<CollisionBox> {
 }
 
 fn state_id(block_name: &str, properties: &[(&str, &str)]) -> u32 {
-    let blocks = solaris_required_blocks_report();
+    let blocks = krasnokamen_required_blocks_report();
     let block = blocks
         .iter()
         .find(|block| block.id.as_str() == block_name)
@@ -44,7 +44,7 @@ fn state_identity(
     block_name: &str,
     properties: &[(&str, &str)],
 ) -> (u32, Identifier, Vec<(String, String)>) {
-    let blocks = solaris_required_blocks_report();
+    let blocks = krasnokamen_required_blocks_report();
     let block = blocks
         .iter()
         .find(|block| block.id.as_str() == block_name)
@@ -71,7 +71,7 @@ fn state_identity(
 
 #[test]
 fn oracle_table_has_exact_farmland_shape_for_every_moisture_state() {
-    let blocks = solaris_required_blocks_report();
+    let blocks = krasnokamen_required_blocks_report();
     let farmland = blocks
         .iter()
         .find(|block| block.id.as_str() == "minecraft:farmland")
@@ -167,7 +167,7 @@ fn oracle_table_keeps_closed_and_open_door_planes() {
 
 #[test]
 fn generated_and_growable_plants_never_use_full_cube_collision() {
-    let blocks = solaris_required_blocks_report();
+    let blocks = krasnokamen_required_blocks_report();
     let table = vanilla_collision_shapes();
     for block_name in [
         "minecraft:short_grass",
@@ -298,7 +298,7 @@ fn farmland_fallback_requires_exact_canonical_semantics() {
     assert!(!table.is_exact_farmland_state(&farmland, &fake_properties));
     assert!(
         !table
-            .is_exact_farmland_state(&Identifier::parse("solaris:farmland").unwrap(), &properties,)
+            .is_exact_farmland_state(&Identifier::parse("krasnokamen:farmland").unwrap(), &properties,)
     );
 }
 

@@ -33,10 +33,10 @@ pooled target dir.
   `tools/extract-vanilla-data.sh` from the local server jar.
 - **Sibling checkouts resolve from the main checkout.** In a worktree the
   harness (`tools/harness/runtime.py` `sibling_root`, and the shell runners
-  `regression.sh` and `prepare-real-client-scenario.sh`) finds `solaris-loader`,
-  `solaris-client` and `solaris-default-plugins` beside the main checkout, via
-  `git rev-parse --git-common-dir`. No `SOLARIS_*_ROOT` export is needed; set
-  `SOLARIS_LOADER_ROOT`, `SOLARIS_CLIENT_ROOT` or `SOLARIS_DEFAULT_PLUGINS_ROOT`
+  `regression.sh` and `prepare-real-client-scenario.sh`) finds `krasnokamen-loader`,
+  `krasnokamen-client` and `krasnokamen-default-plugins` beside the main checkout, via
+  `git rev-parse --git-common-dir`. No `KRASNOKAMEN_*_ROOT` export is needed; set
+  `KRASNOKAMEN_LOADER_ROOT`, `KRASNOKAMEN_CLIENT_ROOT` or `KRASNOKAMEN_DEFAULT_PLUGINS_ROOT`
   only to select another checkout.
 - Heavy outputs go under `<work>/targets/`; the runner's pooled target dirs
   handle this (see [heavy commands](heavy-commands-and-memory.md)).
@@ -84,7 +84,7 @@ no-commit slice:
   file) and wire only compiling code. One owner runs the combined
   `cargo check -p mc-edge` and announces "compiles"; others don't repeat it.
 - When the shared tree is red, run gates against a frozen server with
-  `SOLARIS_SERVER_BINARY=<frozen>` plus the client environment file of the last
+  `KRASNOKAMEN_SERVER_BINARY=<frozen>` plus the client environment file of the last
   green gate.
 - Group a broken build's errors by file and map files to owners via mtimes and
   agent transcripts. Restore a clobbered uncommitted file only from a copy
@@ -139,7 +139,7 @@ For any gate set that must describe one build (release, perf round, QA wave):
 3. Announce the pin path, binary SHA-256 and manifest. Every gate and receipt
    cites them. Never relabel a preflight package as final.
 
-The identity is the `solaris-v2` binary from `mc-edge`. Older freeze or snapshot
+The identity is the `krasnokamen` binary from `mc-edge`. Older freeze or snapshot
 recipes in external skills or notes that build or copy `mc-server` describe the
 retired v1 binary ([ADR 0014](../decisions/0014-v1-core-retirement.md)); they
 cannot produce a current acceptance identity. The release procedure is in

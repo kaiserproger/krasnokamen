@@ -172,7 +172,7 @@ fn shutdown_drains_queued_ticks_and_restores_two_players_and_block() {
 
     // The write rendezvous holds a process-global test hook. Keep it out of
     // the parent test process so unrelated parallel journals cannot block on it.
-    const CHILD: &str = "SOLARIS_SHUTDOWN_QUEUE_CHILD";
+    const CHILD: &str = "KRASNOKAMEN_SHUTDOWN_QUEUE_CHILD";
     if std::env::var_os(CHILD).is_none() {
         let full_name = concat!(
             module_path!(),
