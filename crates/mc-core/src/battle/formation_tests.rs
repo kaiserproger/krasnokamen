@@ -459,3 +459,52 @@ fn fugitives_at_an_edge_stop_where_they_met_it() {
         "a fugitive with room runs on: {free:?}"
     );
 }
+
+/// Riders pursuing a routed enemy ride onto its front point as a block, each
+/// from its own slot, and stand there spread, not in one cell: one shared
+/// point for every rider piled 15 blue horses on the notch terrace from t 280
+/// to the end of rehearsal r8. Foot pursuers keep the shared point.
+#[test]
+fn pursuing_riders_stand_round_the_enemy_point_in_their_slots() {
+    let mut runtime = FormationRuntime::default();
+    let mut horse = spec(0, 1, 0.0, 5, Order::Advance);
+    horse.frontage = 2.0;
+    add(&mut runtime, horse, 1, 20);
+    add(&mut runtime, spec(1, 1, -40.0, 5, Order::Advance), 101, 10);
+    simulate(&mut runtime, 0);
+    let enemy = [12.0, 64.0, 30.0];
+    for r in &mut runtime.regiments {
+        r.spec.order = Order::Pursue;
+        r.enemy_routing = true;
+        r.enemy = Some(enemy);
+    }
+    let foot = runtime.index[&EntityId(101)];
+    assert_eq!(runtime.destination(foot).0, enemy, "foot pursuers changed");
+    // Ride there and stand: the formation drive with its crowd separation.
+    for _ in 0..600 {
+        runtime.neighbours.rebuild(&runtime.members);
+        let drives: Vec<_> = (0..20).map(|i| steering::movement(&mut runtime, i)).collect();
+        for (member, drive) in runtime.members.iter_mut().zip(drives) {
+            for (position, velocity) in member.pos.iter_mut().zip(drive) {
+                *position += velocity * mc_physics::TICK_SECONDS;
+            }
+        }
+    }
+    let riders = &runtime.members[..20];
+    let arrived = riders
+        .iter()
+        .all(|m| mc_physics::mth::length2(m.pos[0] - enemy[0], m.pos[2] - enemy[2]) < 8.0);
+    assert!(arrived, "the riders did not reach the enemy point");
+    // The film's stacking count: riders within 2.5 blocks of one rider.
+    let stack = riders
+        .iter()
+        .map(|a| {
+            riders
+                .iter()
+                .filter(|b| mc_physics::mth::length2(a.pos[0] - b.pos[0], a.pos[2] - b.pos[2]) < 2.5)
+                .count()
+        })
+        .max()
+        .unwrap();
+    assert!(stack <= 5, "{stack} of 20 pursuing riders stand within 2.5 blocks of one");
+}
