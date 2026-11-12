@@ -3,8 +3,9 @@
 Native client, isolated world, server from KRASNOKAMEN_SERVER_BINARY (release build).
 The operator player levels a pad and certifies a storage hut (one chest) and a
 cartographer workshop (cartography table + crafting table; a cartographer never
-bakes or deposits). It binds one summoned villager and puts 3 hay blocks into
-the chest through the chest menu. Then, only through the server-driven
+bakes or deposits). It binds two summoned villagers (the planner's free street
+work makes one a Builder, which is busy for orders; the order dialog offers the
+other) and puts 3 hay blocks into the chest through the chest menu. Then, only through the server-driven
 /settlement menus (Production orders menu -> New order -> recipe icon -> order
 dialog, with the default craft count 8 and "Craft missing ingredients" set ON
 explicitly: the box is unchecked by default, so the gate clicks it):
@@ -72,6 +73,7 @@ COUNT = 8  # the order dialog's initial craft count
 CONTAINER = "net.minecraft.client.gui.screens.inventory.ContainerScreen"
 ACTION_SLOT, RECIPE_SLOTS = 52, 45  # server icon menu layout (ui_menus.rs): New order icon; recipe icons per page
 AUTO_LABEL = "Craft missing ingredients"
+RESIDENTS = 2
 CANCEL = "qa-cancel"
 CANCEL_COUNT = 4  # carry's 3 wheat + one opened hay block (9) = 12 wheat
 
@@ -290,15 +292,32 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     detail["chest_before"] = stocked
     probe.check("chest_holds_hay", stocked.get("minecraft:hay_block") == HAY)
 
+    # Two residents: the planner's free street work turns one resident into a Builder, and a Builder
+    # is busy for production orders (production.rs worker_slot). The order goes to the other one.
     before = {str(row.get("entity_uuid")) for row in _villagers(probe)}
     player = probe.observe()["player"]
-    probe.fixture(f"summon minecraft:villager {player['x']:.1f} {player['y']:.1f} {player['z']:.1f}")
-    _bwait(probe, lambda s: any(str(row.get("entity_uuid")) not in before
-                                for row in _villagers(probe)), "villager_summoned")
-    worker = next(str(row["entity_uuid"]) for row in _villagers(probe)
-                  if str(row.get("entity_uuid")) not in before)
-    probe.fixture(f"settlement bind {SETTLEMENT} {worker}")
-    detail["worker"] = worker
+    for _ in range(RESIDENTS):
+        probe.fixture(f"summon minecraft:villager {player['x']:.1f} {player['y']:.1f} {player['z']:.1f}")
+    _bwait(probe, lambda s: sum(str(row.get("entity_uuid")) not in before
+                                for row in _villagers(probe)) >= RESIDENTS, "villagers_summoned")
+    residents = [str(row["entity_uuid"]) for row in _villagers(probe)
+                 if str(row.get("entity_uuid")) not in before]
+    for resident in residents:
+        probe.fixture(f"settlement bind {SETTLEMENT} {resident}")
+    detail["residents"] = residents
+
+    def resident_for(form: dict[str, Any]) -> str:
+        """The uuid of the form's `Resident: <name>` option: the nametag of each summoned villager
+        starts with that resident's name."""
+        label = next(label for label in _labels(form) if label.startswith("Resident: "))
+        name = label.removeprefix("Resident: ")
+        tags = {str(row["entity_uuid"]): str((row.get("received_metadata") or {}).get("2", {}).get("value"))
+                for row in _villagers(probe) if str(row.get("entity_uuid")) in residents}
+        detail["resident_nametags"] = tags
+        matching = [uuid for uuid, tag in tags.items() if tag.split(" · ")[0] == name]
+        if len(matching) != 1:
+            raise RuntimeError(f"autocraft-qa: Resident {name!r} matches {matching} in {tags}")
+        return matching[0]
 
     # --- settlement menus and the order dialog only from here on ---
     def menu(title: str, label: str) -> dict[str, Any]:
@@ -322,6 +341,8 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
         form = _bwait(probe, lambda s: (s.get("screen") or {}).get("class") == DIALOG
                       and (s["screen"].get("title") or "") == "New production order",
                       f"order_dialog_{recipe}")
+        if "worker" in detail:
+            probe.check(f"same_resident_{recipe}", resident_for(form) == detail["worker"])
         auto = next((label for label in _labels(form) if label.startswith(AUTO_LABEL)), None)
         probe.check(f"autocraft_checkbox_present_{recipe}", auto is not None)
         detail.setdefault("form_labels", _labels(form))
@@ -337,6 +358,8 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
         return _readback(probe, f"settlement production {SETTLEMENT} status", "Production: jobs=")
 
     form = order_form("saddle")
+    worker = resident_for(form)
+    detail["worker"] = worker
     labels = _labels(form)
     probe.check("autocraft_checkbox_on", f"{AUTO_LABEL}: ON" in labels)
     probe.check(f"quantity_defaults_to_{COUNT}", f"Craft count: {COUNT}" in labels)
