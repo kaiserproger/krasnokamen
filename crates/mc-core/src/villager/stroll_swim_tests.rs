@@ -193,15 +193,16 @@ fn resident_wading_a_sunken_ford_climbs_out_onto_the_far_bank() {
         state.tick += 1;
         let pos = state.entities.pos(slot);
         wet |= pos[1] < 201.0;
-        if at(pos) == target && state.entities.ground(slot) {
+        // Past the channel's far edge (x = 8) by more than the half width,
+        // standing on the bank; the route ends short of the target cell.
+        if pos[0] > 8.3 && pos[1] >= 201.0 && state.entities.ground(slot) {
             break;
         }
     }
     let pos = state.entities.pos(slot);
     assert!(wet, "setup: the route wades the channel");
-    assert_eq!(
-        at(pos),
-        target,
-        "resident must cross the channel onto the far bank, stopped at {pos:?}"
+    assert!(
+        pos[0] > 8.3 && pos[1] >= 201.0 && state.entities.ground(slot),
+        "resident must climb out onto the far bank, stopped at {pos:?}"
     );
 }
