@@ -84,10 +84,10 @@
    "cmd": "setblock 1002 200 1013 minecraft:red_bed[facing=east,part=head,occupied=false]"
   },
   {
-   "cmd": "summon minecraft:villager 1008.5 200 1011.5"
+   "cmd": "summon minecraft:villager 1030.5 200 1011.5"
   },
   {
-   "cmd": "summon minecraft:villager 1008.5 200 1013.5"
+   "cmd": "summon minecraft:villager 1030.5 200 1013.5"
   },
   {
    "tp": [
@@ -138,7 +138,7 @@
     "entity_type": "minecraft:villager",
     "min": 2,
     "box": [
-     1005.2,
+     1018,
      199,
      990,
      1050,
