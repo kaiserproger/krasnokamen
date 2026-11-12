@@ -190,11 +190,12 @@ python3 -m tools.harness list
 - Navigate with bounded search and reads (grep, read, LSP); bound paths and
   output. Verbose output goes to ignored `.analysis/codex-logs/`; report
   status, failures and receipt paths.
-- Long work is event-driven. With nothing else to do, run a long command in the
-  foreground (timeout up to 3600 s); launch it async only when there is real
-  parallel work, and consume its completion once. Never poll process, status or
-  agent lists, and never call wait in a loop: each wait turn re-reads the whole
-  context (23% of fleet tokens on 2026-11-12). Never add
+- Long work is event-driven: launch once, do independent work, consume the
+  completion once. A command the tool runs in the background (async, or moved
+  there after 60 s) needs no wait: with no other work, end the turn without a
+  tool call; the job's result arrives as the next message. Never poll process,
+  status or agent lists, and never repeat wait: each wait turn re-reads the
+  whole context (23% of fleet tokens on 2026-11-12). Never add
   wall-clock sleeps in production, tests, harnesses or tools: wait for the exact
   message, packet, notification or process/world/simulation state (push, not pull).
 - Main has the owner's standing authorization to spawn subagents within the
