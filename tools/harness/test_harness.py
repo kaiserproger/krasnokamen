@@ -77,6 +77,33 @@ class ClientSettingsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 cli.resolve_client_settings("quilt")
 
+class McpLeaseRetryTests(unittest.TestCase):
+    REVOKED = {"isError": True, "structuredContent": {
+        "code": "controller_lease_revoked", "retryable": False, "stage": "automation"}}
+
+    def test_a_call_refused_by_a_revoked_lease_is_issued_once_more(self) -> None:
+        # Harness XTest input revokes the native client's writer lease while a call is in flight.
+        from .mcp import McpClient
+
+        client = McpClient("http://127.0.0.1:1/mcp", "t")
+        replies = [self.REVOKED, {"structuredContent": {"frame_id": 7}}]
+        with mock.patch.object(client, "_request", side_effect=replies) as request:
+            self.assertEqual(client.call_tool("client_capture", {"name": "x"}), {"frame_id": 7})
+        self.assertEqual(request.call_count, 2)
+
+    def test_other_errors_and_a_second_revocation_still_fail(self) -> None:
+        from .mcp import McpClient
+
+        client = McpClient("http://127.0.0.1:1/mcp", "t")
+        other = {"isError": True, "structuredContent": {"code": "controller_busy"}}
+        with mock.patch.object(client, "_request", side_effect=[other]) as request:
+            with self.assertRaisesRegex(RuntimeError, "controller_busy"):
+                client.call_tool("minecraft_send_chat", {})
+        self.assertEqual(request.call_count, 1)
+        with mock.patch.object(client, "_request", side_effect=[self.REVOKED, self.REVOKED]):
+            with self.assertRaisesRegex(RuntimeError, "controller_lease_revoked"):
+                client.call_tool("minecraft_send_chat", {})
+
 class SiblingRootTests(unittest.TestCase):
     def test_a_linked_worktree_finds_the_main_checkouts_sibling_and_the_variable_wins(self) -> None:
         # <work>/solaris (main checkout), <work>/wt/Name (git worktree), <work>/solaris-loader (sibling).
