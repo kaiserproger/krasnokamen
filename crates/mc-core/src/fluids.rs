@@ -454,7 +454,8 @@ fn new_liquid(state: &TickState, pos: BlockPos, fluid: Fluid) -> u32 {
 pub(crate) enum Flow {
     /// Air or the same fluid: write the fluid.
     Open,
-    /// A non-colliding block (grass, flowers, torches): washed away.
+    /// A block of the `washed_away_by_fluids` tag (grass, flowers, torches):
+    /// washed away.
     Wash(u32),
 }
 
@@ -467,22 +468,16 @@ pub(crate) fn flow_into(state: &TickState, pos: BlockPos, fluid: Fluid) -> Optio
     if let Some((other, level)) = fluid_at(states, block) {
         return (other == fluid && level != 0).then_some(Flow::Open);
     }
-    let entry = state.registry.blocks.by_id(mc_world::BlockStateId(block))?;
-    // A bubble column is a full water source, not a washable decoration.
-    if entry.block.id.path() == "bubble_column" {
-        return None;
-    }
-    // Material classification defaults unlisted states to solid. Use the
-    // recorded collision shape instead, but never replace a waterloggable block.
-    if entry.properties.iter().any(|(key, _)| key == "waterlogged") {
-        return None;
-    }
-    let shape = mc_data::collision_shapes::vanilla_collision_shapes().get_for_state(
-        block,
-        &entry.block.id,
-        &entry.properties,
-    )?;
-    shape.is_empty().then_some(Flow::Wash(block))
+    // Vanilla 26.3 `FlowingFluid.canHoldFluid`: only tagged blocks give way, and
+    // `LiquidBlockContainer`s (kelp, seagrass, waterloggable blocks) hold a
+    // flow back; the table already excludes them. Everything else blocks.
+    state
+        .registry
+        .washed_by_fluids
+        .get(block as usize)
+        .copied()
+        .unwrap_or(false)
+        .then_some(Flow::Wash(block))
 }
 
 /// Write `new` into `pos`, washing away whatever stood there.

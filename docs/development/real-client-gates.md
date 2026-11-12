@@ -356,15 +356,41 @@ neither `true` nor `false`). It counts the matching received entities and fails 
 `<name>_max`; the artifact keeps the same-thread `game_time` and every received row.
 The village scenes judge settlement behaviour with it, in game ticks on a frozen clock:
 `native-village-idle-stroll` (six residents dropped 40 blocks from the bell walk back
-within 32 blocks in 3000 ticks; two villagers in a 4-deep pond float up),
+within 32 blocks in 3000 ticks; two villagers dropped into a 4-deep pond float up within 100 ticks),
 `native-village-night-door` (a door the player left open reads shut after both
 residents sleep behind it at night), `native-village-late-job` (at day tick 10000 an
-unbound villager and a bound resident take a free lectern) and
-`native-village-distant-job` (a resident claims a certified workshop 72 blocks away) and
+unbound villager and a bound resident take a free lectern),
+`native-village-distant-job` (a resident claims a certified workshop 72 blocks away),
+`native-village-deep-water` (residents dropped onto the floor of 2- and 5-deep ponds, with no bank cell
+beside them, leave the water and sleep at home), `native-village-mob-doors` (residents shut behind
+poplar, copper and waxed oxidized copper doors walk to the bell and the doors read shut afterwards;
+an iron door keeps its resident in), `native-village-after-hours-job` (at Idle day tick 11000 a bound
+jobless resident walks 44 blocks to a new farmer workshop and takes the profession) and
 `native-village-breeding` (two bound adults ration bread from a certified storage and, in a
 house whose roof sits one block over its three beds, raise a baby villager the client receives
 within 3000 game ticks; the fix patch of `ISSUE-1-13` is the headroom-free spare-bed scan).
 Each runs on a sky platform with spawning and time frozen; none covers terrain routes.
+
+`upgrade_certified` (native only) takes `{"kind": "<building kind>", "level": 2|3}`:
+it waits for the newest `Certified <kind> #<id>` reply in `recent_chat`, sends
+`settlement building upgrade <id>` (a building id is a settlement and sequence
+pair, so a fixed scenario cannot spell it), waits 20 ticks and fails the named
+assertion `<kind>_upgraded_to_level_<level>` unless `Upgraded building #<id> to
+level <level>.` arrived.
+
+`native-settlement-buildings-upgrade` hand-builds a stone wall, a tower, a
+barracks with two beds and a farmer workshop with a composter inside a founded
+settlement and certifies each, expands the wall to the next level's size and
+adds a second composter, then upgrades both through `upgrade_certified`. It
+covers ISSUE-1-09 on the command path; it does not press the Buildings dialog's
+Upgrade button (`army-qa` does), build with Builders (`buildings-qa`), or cover
+gates, level 3 or the other workshop kinds.
+
+`native-settlement-radius-growth` founds a settlement of radius 8 around six
+villagers, then binds a seventh. `/settlement info` must show `radius=24
+members=6` after founding and `radius=28 members=7` after the bind (four blocks
+per resident, docs/settlements/construction.md). It reads the command reply, not
+the Settings dialog or the map territory.
 
 
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains
@@ -407,16 +433,35 @@ Each runs on a sky platform with spawning and time frozen; none covers terrain r
   normal scene actions. The harness checks the title overlay, window ownership,
   actual in-play state and integrated-server log; fixed UI coordinates are tied to
   this window size and must be checked when the Java UI changes.
-- `settlement-map-qa` reuses this lifecycle with a scripted body and judges the
-  client's own screenshots: it founds an empty town, opens its map, certifies a
-  real Storage while the map stays open (stale shot: unchanged), refreshes and
-  returns to the main page; palette pixel deltas between shots prove territory,
-  viewer and storage cells. `--client native --windowed` presses the dialog
-  buttons and drives the native pointer (`client_pointer`): a territory cell and
-  a storage cell must show tooltips, and clicking the storage must bring the
-  server's building page. `--client java --windowed` uses the pages' `/settlement
-  menu` commands (Loader MCP cannot press buttons inside a dialog's scroll body)
-  and has no pointer tool, so hovers and cell clicks are native-only.
+- `settlement-map-qa` reuses this lifecycle with a scripted body: privileged fixture
+  commands found and certify the town, then the owned window is driven by physical
+  input only. A right-click on the anchor bell opens the hub; the Settlement
+  dashboard, the map (a house cell is found by its rendered palette pixels), the
+  building page, the L2 order review and receipt, the project shortage icons and
+  material detail, the Storage page (a shift-click moves one real stack and conserves
+  it), construction progress against independently observed blocks, the Residents,
+  Resident and Household pages and Resources follow. Last, a fixture certifies a
+  workshop holding a crafting table, and the player opens Production orders, presses
+  New order, picks the `open_hay` recipe (and the workstation when asked) and confirms
+  the form with its default count; `settlement production <name> job <id>` must then
+  show the order with one of the bound residents as worker, and that resident must have
+  crafted for it (receipts), the Production orders page listing it. `--client native --windowed`
+  uses the received renderer's UI nodes; `--client java --windowed` locates labels by
+  the running vanilla version's bitmap font and takes
+  `-- --gui-scale 2|3 --language en_us|ru_ru --size 1280x720|1920x1080` (the native
+  client sends ClientInformation language `en_us` fixed and has no such options);
+  `--wrong-click` is the negative control (Help instead of Settlement).
+  The run publishes boolean `details.verdicts` whether it passes or stops (they are
+  mapped from the recorded assertions, `verdicts_from_assertions`): `bell_opens_hub`,
+  `dashboard`, `map`, `building_order`, `shortage_icons`, `storage_transfer`,
+  `project_progress`, `residents`, `resources`, `production_order`, `localized_text` (every Russian title and
+  the rendered shortage text; `ru_ru` runs only, `null` otherwise) and `all`. A verdict
+  is `false` when one of its checks failed or an earlier check already failed, and
+  `null` when the run stopped without a failed check (a lost client): the ledger reads
+  `false` as red and `null` as no evidence. A ledger ref
+  `harness:settlement-map-qa:localized_text` runs `--client java ... --language ru_ru`
+  (the receipt needs the Java prerequisites env, `receipts/BuildHost/java-prereqs.env`);
+  every other verdict runs native with `--timeout-seconds 3600`.
 
 ## Distant Horizons gate (`dh-gate`)
 

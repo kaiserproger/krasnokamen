@@ -1,0 +1,72 @@
+diff --git a/crates/mc-core/src/villager/building.rs b/crates/mc-core/src/villager/building.rs
+index cafd30ec..348fc7ec 100644
+--- a/crates/mc-core/src/villager/building.rs
++++ b/crates/mc-core/src/villager/building.rs
+@@ -77,8 +77,9 @@ fn preparation_target(
+     preparation_stand(state, slot, project.settlement, next, base)
+ }
+ 
+-/// A dry, open footing near the cell `next` from which the builder, once
+-/// arrived, is within felling reach of `base`, the cell's own footing.
++/// A dry footing near the cell `next` that the builder's body can stand on
++/// and from which, once arrived, it is within felling reach of `base`, the
++/// cell's own footing.
+ pub(super) fn preparation_stand(
+     state: &TickState,
+     slot: EntitySlot,
+@@ -90,6 +91,7 @@ pub(super) fn preparation_stand(
+     // above and three rows from a cleared pit's footing: the nearest stand to
+     // itself, out of reach, so it never moved and never advanced the cell.
+     let here = state.entities.pos(slot);
++    let body = state.entities.body(slot);
+     let mut best: Option<(f64, BlockPos)> = None;
+     for dx in -3_i32..=3 {
+         for dz in -3_i32..=3 {
+@@ -103,21 +105,28 @@ pub(super) fn preparation_stand(
+             ) else {
+                 continue;
+             };
+-            let clear = [at.y, at.y + 1].into_iter().all(|y| {
++            // Seed 24 then parked a builder for 51,000 ticks beside a pen,
++            // walking toward the top of a fence post: `footing` counts the
++            // 1.5-high fence as ground, but no body can stand on it. The stand
++            // must be a cell the navigator itself can end a route on.
++            let stands = crate::settlements::allocator::standing(
++                &state.world,
++                &state.registry,
++                at,
++                body.half_width,
++                body.height,
++            )
++            .is_some();
++            let dry = [at.y, at.y + 1].into_iter().all(|y| {
+                 state
+                     .world
+                     .physics_block_at(at.x, y, at.z)
+                     .is_some_and(|block| {
+                         state
+                             .registry
+-                            .collision_boxes
+-                            .get(block as usize)
+-                            .is_some_and(|boxes| boxes.is_empty())
+-                            && state
+-                                .registry
+-                                .blocks
+-                                .by_id(mc_world::BlockStateId(block))
+-                                .is_some_and(|definition| !definition.has_fluid())
++                            .blocks
++                            .by_id(mc_world::BlockStateId(block))
++                            .is_some_and(|definition| !definition.has_fluid())
+                     })
+             });
+             // Arrival leaves the feet within 0.3 of the centre on each axis.
+@@ -130,7 +139,8 @@ pub(super) fn preparation_stand(
+             let distance = (here[0] - f64::from(at.x) - 0.5).powi(2)
+                 + (here[1] - f64::from(at.y)).powi(2)
+                 + (here[2] - f64::from(at.z) - 0.5).powi(2);
+-            if clear && reaches && best.as_ref().is_none_or(|(known, _)| distance < *known) {
++            if stands && dry && reaches && best.as_ref().is_none_or(|(known, _)| distance < *known)
++            {
+                 best = Some((distance, at));
+             }
+         }

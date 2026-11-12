@@ -1,0 +1,50 @@
+{
+  "id": "VILLAGER-STRANDED-IN-DEEP-WATER",
+  "verdict": "promoted",
+  "fix_commit": "patch:4d472f020253b3ca0a008decab7e19629ae6b61fca359aeb69c411f3dee5135c",
+  "fix_commit_full": "patch:4d472f020253b3ca0a008decab7e19629ae6b61fca359aeb69c411f3dee5135c",
+  "promoted_at": "2026-11-12T14:24:31+00:00",
+  "tree_head": "ef6215af31ac5daf2b4c69e8aea8b7d4e4c46260",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "4d472f020253b3ca0a008decab7e19629ae6b61fca359aeb69c411f3dee5135c",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/allocator.rs",
+    "crates/mc-core/src/villager/brain/motion.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::resident_in_a_pond_with_no_adjacent_bank_swims_to_the_bank": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-village-deep-water": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-village-deep-water --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/VillageFixes3/.analysis/validation/20261112T141045-ledger-promote-pak7kxdr/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::resident_in_a_pond_with_no_adjacent_bank_swims_to_the_bank": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:native-village-deep-water": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T142230-native-village-deep-water-_91ciec6/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/VillageFixes3/.analysis/validation/20261112T140019-native-village-deep-water-plju_7c7/result.json",
+    "tree_head": "ef6215af31ac5daf2b4c69e8aea8b7d4e4c46260",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "9f84e230e3e7db7bd393c13068f83627eb4a4487a0434ca10171145ad035fe43",
+    "covers": [
+      "harness:scene-shot:native-village-deep-water"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/VillageFixes3/.analysis/validation/20261112T141045-ledger-promote-pak7kxdr"
+}

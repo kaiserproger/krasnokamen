@@ -14,7 +14,8 @@ pub(super) struct RegistryInner {
     // A Closing connection retains its slot until native/admin cleanup runs.
     pub(super) admitted: HashSet<ConnectionId>,
     pub(super) joining: HashSet<ConnectionId>,
-    pub(super) closers: HashMap<ConnectionId, tokio::sync::oneshot::Sender<()>>,
+    /// Wakes the connection owner with the reason the registry dropped it.
+    pub(super) closers: HashMap<ConnectionId, tokio::sync::oneshot::Sender<&'static str>>,
     pub(super) handles: HashMap<ConnectionId, ConnectionHandles>,
     pub(super) names: HashMap<ConnectionId, String>,
     pub(super) view_distances: HashMap<ConnectionId, i32>,
@@ -259,6 +260,11 @@ impl ConnectionRegistry {
     /// reliable changes, any join waiters (their receivers fail closed), and
     /// the stashed disconnect reason.
     pub fn remove(&self, id: ConnectionId) {
+        self.close(id, "removed");
+    }
+
+    /// [`Self::remove`] naming why: the connection owner logs `cause`.
+    pub fn close(&self, id: ConnectionId, cause: &'static str) {
         crate::vanilla_items::unmark(id);
         let closer = {
             let mut inner = self.inner.lock();
@@ -281,7 +287,7 @@ impl ConnectionRegistry {
             inner.closers.remove(&id)
         };
         if let Some(closer) = closer {
-            let _ = closer.send(());
+            let _ = closer.send(cause);
         }
     }
 

@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from tools.harness import scenarios
 from tools.harness.backends import scene_shot
 
 
@@ -367,6 +368,68 @@ class SceneShotTests(unittest.TestCase):
             scene_shot.validate_steps([step], "java")
         with self.assertRaises(ValueError):
             scene_shot.validate_steps([{"assert_chat": {"name": "x", "contains": [], "excludes": []}}], "native")
+
+    def test_upgrade_certified_upgrades_the_one_certified_id_and_checks_the_reply(self):
+        class Probe:
+            def __init__(self, reply, walls=("17179869187", "17179869187")):
+                self.reply = reply
+                self.walls = walls
+                self.sent = []
+                self.upgraded = False
+            def call(self, name, args=None):
+                if name == "minecraft_send_chat":
+                    self.sent.append(args["message"])
+                    self.upgraded = True
+                return {"in_play": True}
+            def observe(self):
+                # The client reports its last 20 lines newest first; entries may be error objects.
+                lines = [f"Certified wall #{wall} (level 1)." for wall in self.walls]
+                lines.insert(1, "Certified tower #17179869186 (level 1).")
+                lines.append({"error": "unrenderable"})
+                if self.upgraded:
+                    lines.insert(0, self.reply)
+                return {"recent_chat": lines}
+            def wait(self, predicate, label, *, wait_for_play=False, timeout_seconds=None):
+                assert predicate(self.observe())
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+            def remaining(self):
+                return 50
+        step = {"upgrade_certified": {"kind": "wall", "level": 2}}
+        ok = Probe("Upgraded building #17179869187 to level 2.")
+        scene_shot.execute(ok, Path("."), [step])
+        self.assertEqual(ok.sent, ["settlement building upgrade 17179869187"])
+        stuck = Probe("Upgraded building #17179869187 to level 1.")
+        with self.assertRaisesRegex(AssertionError, "wall_upgraded_to_level_2"):
+            scene_shot.execute(stuck, Path("."), [step])
+        ambiguous = Probe("", walls=("17179869187", "17179869188"))
+        with self.assertRaisesRegex(AssertionError, "wall_one_certified_building"):
+            scene_shot.execute(ambiguous, Path("."), [step])
+        self.assertEqual(ambiguous.sent, [])
+        for bad in ({"kind": "wall"}, {"kind": "wall", "level": 1}, {"kind": "Wall", "level": 2}):
+            with self.assertRaises(ValueError):
+                scene_shot.validate_steps([{"upgrade_certified": bad}], "native")
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([step], "java")
+
+    def test_named_settlement_scenes_are_registered_and_reject_overrides(self):
+        for name, command in (("native-settlement-radius-growth", "settlement bind radiusqa"),
+                              ("native-settlement-buildings-upgrade", "settlement building certify tower")):
+            class Context:
+                client = "native"
+                windowed = True
+                platform = None
+                scenario_id = name
+                extra_args = []
+                timeout_seconds = 180
+            with patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": ""}):
+                scenario = scene_shot.validate_scenario(Context())[0]
+                self.assertTrue(any(step.get("cmd", "").startswith(command) for step in scenario["steps"]))
+                self.assertTrue(any("assert_chat" in step for step in scenario["steps"]))
+                with self.assertRaisesRegex(ValueError, "without overrides"):
+                    scene_shot.validate_scenario(Context(), {"steps": []})
+            self.assertEqual(scenarios.SCENARIOS[name].profile, "scene-shot")
 
     def test_named_feedback_scene_rejects_overrides(self):
         class Context:
@@ -862,6 +925,7 @@ class AssertEntitiesTests(unittest.TestCase):
                     {k: v for k, v in good["assert_entities"].items() if k != "min"}):
             with self.assertRaises(ValueError):
                 scene_shot.validate_steps([{"assert_entities": bad}], "native")
-        for name in ("idle_stroll", "night_door", "late_job", "distant_job", "breeding"):
+        for name in ("idle_stroll", "night_door", "late_job", "distant_job",
+                     "deep_water", "mob_doors", "after_hours_job", "breeding"):
             scene = json.loads((scene_shot.runtime.REPO_ROOT / "tools/harness" / f"village_{name}_scene.json").read_text())
             scene_shot.validate_steps(scene["steps"], "native")

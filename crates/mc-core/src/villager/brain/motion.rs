@@ -138,7 +138,10 @@ impl MotionGeometryCache {
             }
             return point;
         }
-        let point = allocator::standing(&(state).world, &(state).registry, cell, width, height);
+        let point = allocator::standing(&(state).world, &(state).registry, cell, width, height)
+            .or_else(|| {
+                allocator::floating_stand(&(state).world, &(state).registry, cell, width, height)
+            });
         if covered {
             self.standing = Some((cell, point));
         }

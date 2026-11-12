@@ -1,0 +1,49 @@
+{
+  "id": "ISSUE-1-12",
+  "verdict": "promoted",
+  "fix_commit": "patch:b47625083f6b75b19e0a4edde8b431b718480ad92327ece6249242958df06d14",
+  "fix_commit_full": "patch:b47625083f6b75b19e0a4edde8b431b718480ad92327ece6249242958df06d14",
+  "promoted_at": "2026-11-12T11:35:26+00:00",
+  "tree_head": "36c3d3accd85030f37251d8f857a1171856db22d",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "b47625083f6b75b19e0a4edde8b431b718480ad92327ece6249242958df06d14",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/mod.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::binding_tests::radius_grows_with_population_persists_and_never_shrinks": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-settlement-radius-growth": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-settlement-radius-growth --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/Issue1EvidenceE/.analysis/validation/20261112T113206-ledger-promote-z6djdjjt/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::binding_tests::radius_grows_with_population_persists_and_never_shrinks": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:native-settlement-radius-growth": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T113503-native-settlement-radius-growth-z66juitn/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/Issue1EvidenceE/.analysis/validation/20261112T093924-native-settlement-radius-growth-0twp8v24/result.json",
+    "tree_head": "36c3d3accd85030f37251d8f857a1171856db22d",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "76f925e2fc28894d448bf47e4fb5d4343f724ece16ef37bdd3f1fbc2330fae8e",
+    "covers": [
+      "harness:scene-shot:native-settlement-radius-growth"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/Issue1EvidenceE/.analysis/validation/20261112T113206-ledger-promote-z6djdjjt"
+}

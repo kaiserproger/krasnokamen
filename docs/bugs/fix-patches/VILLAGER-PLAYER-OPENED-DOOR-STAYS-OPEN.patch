@@ -1,0 +1,13 @@
+diff --git a/crates/mc-core/src/villager/doors.rs b/crates/mc-core/src/villager/doors.rs
+index 20ab45a0..a4c5f7ee 100644
+--- a/crates/mc-core/src/villager/doors.rs
++++ b/crates/mc-core/src/villager/doors.rs
+@@ -109,7 +109,7 @@ pub(super) fn interact(
+             {
+                 continue;
+             }
+-            if let Some((lower, false)) = door(state, cell) {
++            if let Some((lower, _)) = door(state, cell) {
+                 set_open(state, lower, true, changes);
+                 if !v.opened_doors.contains(&lower) {
+                     v.opened_doors.push(lower);

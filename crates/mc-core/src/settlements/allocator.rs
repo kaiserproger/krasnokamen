@@ -668,7 +668,7 @@ fn body_clear(
                         && max[1] > f64::from(y) + b[1] + 1e-6
                         && min[2] < f64::from(z) + b[5] - 1e-6
                         && max[2] > f64::from(z) + b[2] + 1e-6
-                        && !(can_open_doors && crate::villager::doors::wooden(registry, id))
+                        && !(can_open_doors && crate::villager::doors::interactable(registry, id))
                     {
                         return false;
                     }
@@ -688,6 +688,9 @@ pub(crate) fn standing(
     standing_for_route(world, registry, cell, width, height, false)
 }
 
+/// `can_open_doors` marks the villager navigation profile: such a body opens
+/// `#mob_interactable_doors` and, like vanilla `setCanFloat`, floats over deep
+/// water (see [`floating_stand`]).
 pub(crate) fn standing_for_route(
     world: &crate::world::ChunkWorld,
     registry: &std::sync::Arc<CoreRegistry>,
@@ -705,13 +708,48 @@ pub(crate) fn standing_for_route(
             (b[0] <= 0.5 && b[3] >= 0.5 && b[2] <= 0.5 && b[5] >= 0.5 && b[4] <= 1.0)
                 .then_some(b[4])
         })
-        .max_by(f64::total_cmp)?;
+        .max_by(f64::total_cmp);
+    let Some(top) = top else {
+        return if can_open_doors {
+            floating_stand(world, registry, cell, width, height)
+        } else {
+            None
+        };
+    };
     let pos = [
         f64::from(cell.x) + 0.5,
         f64::from(cell.y - 1) + top,
         f64::from(cell.z) + 0.5,
     ];
     clear_body_for_route(world, registry, pos, width, height, can_open_doors).then_some(pos)
+}
+
+/// A swimmer's feet rest this far below the water surface (vanilla swims up
+/// until the water is shallower than its 0.4-block fluid jump threshold).
+const FLOAT_DEPTH: f64 = 0.3;
+
+/// Vanilla `setCanFloat` with `WalkNodeEvaluator`: a floating mob uses the
+/// water surface as its floor. Over water at least two blocks deep (shallower
+/// water is waded on its bed) the first row above the water is standable with
+/// the feet [`FLOAT_DEPTH`] under the surface, if the body fits there.
+pub(crate) fn floating_stand(
+    world: &crate::world::ChunkWorld,
+    registry: &std::sync::Arc<CoreRegistry>,
+    cell: BlockPos,
+    width: f64,
+    height: f64,
+) -> Option<[f64; 3]> {
+    let deep = (1..=2).all(|below| {
+        world
+            .block_at(cell.x, cell.y - below, cell.z)
+            .is_some_and(|id| registry.materials.classify(id) == mc_physics::BlockMaterial::Water)
+    });
+    let pos = [
+        f64::from(cell.x) + 0.5,
+        f64::from(cell.y) - FLOAT_DEPTH,
+        f64::from(cell.z) + 0.5,
+    ];
+    (deep && clear_body_for_route(world, registry, pos, width, height, true)).then_some(pos)
 }
 
 /// The body falls straight down the landing column from `from_y` to the

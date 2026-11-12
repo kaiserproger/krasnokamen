@@ -114,11 +114,20 @@ def _run_cargo(ctx, tests, tree):
 
 
 def _failing_verdict(receipt, profile, verdict):
+    """A failed profile run is red for `verdict` when the receipt reports it unmet, or, for a
+    verdict the profile cannot report on failure, when its own assertion failed:
+
+    - `all` of a profile without a verdict map (autocraft-qa, village-autonomy-qa);
+    - a buildings-qa `<blueprint>.<behaviour>` that never got recorded because an assertion named
+      `buildings_<blueprint>_*` aborted the run (a probe check raises before the verdict is written)."""
     try:
         regressions._profile_verdict(receipt, profile, verdict)
     except regressions.VerdictNotMet as error:
-        return error.value is not None
-    return False
+        if error.value is not None:
+            return True
+        blueprint = verdict.partition('.')[0]
+        return profile == 'buildings-qa' and (_assertion_failure(receipt) or '').startswith(f'buildings_{blueprint}_')
+    return verdict == 'all' and _assertion_failure(receipt) is not None
 
 
 # Assertion names that report a lost or late connection, not the scenario's own check.
@@ -126,22 +135,30 @@ _CONNECTION_ASSERTION = re.compile(r'(^|_)(in_play|entered_play|join(ed)?)(_|$)'
 _PRE_SCENARIO_PHASES = frozenset({'preflight', 'server_start', 'client_start', 'join'})
 
 
+def _assertion_failure(receipt):
+    """The name of the scenario assertion a failed receipt tripped, or None. Read from the
+    receipt's `error` only, never from the command line that ran it. A connection assertion
+    (`in_play`, `*_entered_play`, join) or a failure tagged before the scenario body is a flake."""
+    if not isinstance(receipt, dict):
+        return None
+    details = receipt.get('details') if isinstance(receipt.get('details'), dict) else {}
+    failure = details.get('failure') if isinstance(details.get('failure'), dict) else {}
+    if failure.get('phase') in _PRE_SCENARIO_PHASES:
+        return None
+    match = re.search(r'\bassertion failed: (\S+)', str(receipt.get('error') or ''))
+    if match is None or _CONNECTION_ASSERTION.search(match.group(1)):
+        return None
+    return match.group(1)
+
+
 def _scenario_assertion_failed(receipt, check):
     """A named-scenario ref is red when its own receipt (`details.named_scenario.id` is the
-    ref) failed on one of the scenario's assertions. Read from the receipt's `error` only,
-    never from the command line that ran it. A connection assertion (`in_play`,
-    `*_entered_play`, join) or a failure tagged before the scenario body is a flake."""
+    ref) failed on one of the scenario's assertions."""
     if not isinstance(receipt, dict):
         return False
     details = receipt.get('details') if isinstance(receipt.get('details'), dict) else {}
     named = details.get('named_scenario')
-    if not (isinstance(named, dict) and named.get('id') == check):
-        return False
-    failure = details.get('failure') if isinstance(details.get('failure'), dict) else {}
-    if failure.get('phase') in _PRE_SCENARIO_PHASES:
-        return False
-    match = re.search(r'\bassertion failed: (\S+)', str(receipt.get('error') or ''))
-    return bool(match) and not _CONNECTION_ASSERTION.search(match.group(1))
+    return isinstance(named, dict) and named.get('id') == check and _assertion_failure(receipt) is not None
 
 
 def _loader_mc_version(loader_root: Path) -> str | None:
@@ -409,13 +426,23 @@ def _split_non_test(diff, source_of):
 
 
 def _provision_data(root, tree):
-    """Give the worktree its own copy of the vanilla content cache (57 MB): a check that fails only
-    because it is missing would be a false red control. A real copy, not hard links or a symlink: a
-    check that writes in place must not change the source tree's data."""
-    source, target = root / 'data/vanilla', tree / 'data/vanilla'
-    if source.is_dir() and not target.exists():
+    """Give the worktree its own copy of every vanilla cache of `root` (data/vanilla, 461 MB, and the
+    older-release caches a Java 26.1.2 client joins through: data/vanilla-26.1.2 and the protocol steps
+    data/vanilla-steps, a relative link into data/vanilla): a check that fails only because one is
+    missing would be a false red control, or, for a Java client the server then refuses at the
+    handshake, a run that waits out its deadline (ISSUE-1-25 probe, 2026-11-12: unrunnable after 1 h).
+    A real copy, not hard links or a symlink to `root`: a check that writes in place must not change
+    the source tree's data."""
+    for source in sorted((root / 'data').glob('vanilla*')):
+        target = tree / 'data' / source.name
+        if target.exists() or target.is_symlink():
+            continue
         (tree / 'data').mkdir(exist_ok=True)
-        subprocess.run(['cp', '-a', '--', str(source), str(target)], check=True)
+        link = os.readlink(source) if source.is_symlink() else None
+        if link is not None and not os.path.isabs(link):
+            os.symlink(link, target)
+        elif source.is_dir():
+            subprocess.run(['cp', '-a', '--', str(source), str(target)], check=True)
 
 
 def _worktree_parent(root):

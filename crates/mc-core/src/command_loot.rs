@@ -62,6 +62,33 @@ pub(crate) fn parse(args: &[&str]) -> Result<LootCommand, CommandError> {
     };
     Ok(LootCommand { target, source })
 }
+/// A vanilla block loot table (`minecraft:blocks/stone`) rolled as `/loot ... loot` does: the table's
+/// block in its default state, no tool and no explosion, like vanilla's chest parameter set (no TOOL
+/// parameter, so `match_tool` fails and silk touch never applies). `None` when no block owns the table.
+fn block_table(state: &TickState, id: &Identifier) -> Option<Result<Vec<ItemStack>, String>> {
+    let block = Identifier::parse(format!(
+        "{}:{}",
+        id.namespace(),
+        id.path().strip_prefix("blocks/")?
+    ))
+    .ok()
+    .and_then(|block| state.registry.blocks.block(&block))?;
+    Some(
+        crate::block_drops::explosion_drops(
+            &crate::block_drops::BlockDropRules {
+                blocks: &state.registry.blocks,
+                loot: &state.registry.loot,
+                mining: &state.registry.mining,
+            },
+            &state.registry.item_rules(),
+            block.default.0,
+            state.tick,
+            None,
+            None,
+        )
+        .map_err(|error| error.to_string()),
+    )
+}
 fn generate(
     state: &TickState,
     executor: EntityId,
@@ -70,11 +97,10 @@ fn generate(
     match source {
         Source::Unsupported => Err("Loot mine and fish contexts are not supported".into()),
         Source::Table(id) => {
-            let table = state
-                .registry
-                .chest_loot
-                .get(id)
-                .ok_or_else(|| format!("Unknown or unsupported loot table '{id}'"))?;
+            let Some(table) = state.registry.chest_loot.get(id) else {
+                return block_table(state, id)
+                    .ok_or_else(|| format!("Unknown or unsupported loot table '{id}'"))?;
+            };
             table
                 .roll(
                     &mut mc_data::loot::chest_26_1_2::ChestRng::new(state.tick),

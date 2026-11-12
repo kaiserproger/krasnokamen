@@ -37,6 +37,7 @@ pub(super) struct CheckpointJob {
     pub(super) climate: crate::weather::ClimateImage,
     pub(super) border: crate::command_border::Border,
     pub(super) difficulty: crate::survival::Difficulty,
+    pub(super) default_game_mode: crate::commands::GameMode,
     pub(super) gamerules: std::collections::BTreeMap<String, String>,
     /// Per-record settlement rows (`settlement/<id>`) plus the shared
     /// `settlement_sequence` row. No aggregate registry blob.
@@ -225,6 +226,7 @@ pub(super) fn start_checkpoint_with_reply(
         climate: crate::weather::ClimateImage::capture(state),
         border: state.border,
         difficulty: state.difficulty,
+        default_game_mode: state.default_game_mode,
         gamerules: state
             .gamerules
             .iter()
@@ -404,6 +406,14 @@ pub(crate) fn journal_entries_for_tick(
             value: state.difficulty,
         });
         state.journaled_difficulty = Some(state.difficulty);
+    }
+    if state.dimension == crate::dimensions::Dimension::Overworld
+        && state.journaled_default_game_mode != Some(state.default_game_mode)
+    {
+        entries.push(JournalEntry::DefaultGameMode {
+            value: state.default_game_mode,
+        });
+        state.journaled_default_game_mode = Some(state.default_game_mode);
     }
     for claim in std::mem::take(&mut state.new_generated_entity_claims) {
         entries.push(JournalEntry::GeneratedEntityClaim { claim });
@@ -1042,6 +1052,7 @@ pub(super) fn commit_checkpoint(
         climate: Some(job.climate),
         border: job.border,
         difficulty: job.difficulty,
+        default_game_mode: job.default_game_mode,
         gamerules: job.gamerules.clone(),
         end_fight: None,
         raids: Some(job.raids.clone()),

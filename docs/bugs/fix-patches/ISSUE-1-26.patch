@@ -1,0 +1,17 @@
+diff --git a/crates/mc-core/src/settlements/buildings.rs b/crates/mc-core/src/settlements/buildings.rs
+--- a/crates/mc-core/src/settlements/buildings.rs
++++ b/crates/mc-core/src/settlements/buildings.rs
+@@ -345,7 +345,12 @@
+                 }
+                 if name.ends_with("_bed")
+                     && prop("part", "head")
+-                    && super::allocator::bed_has_baby_space(state, BlockPos { x, y, z })
++                    && super::allocator::bed_pair(
++                        &state.world,
++                        &state.registry,
++                        BlockPos { x, y, z },
++                    )
++                    .is_some()
+                 {
+                     beds += 1;
+                 }

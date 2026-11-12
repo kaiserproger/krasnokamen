@@ -191,7 +191,11 @@ python3 -m tools.harness list
   output. Verbose output goes to ignored `.analysis/codex-logs/`; report
   status, failures and receipt paths.
 - Long work is event-driven: launch once, do independent work, consume the
-  completion once. Never poll process, status or agent lists. Never add
+  completion once. A command the tool runs in the background (async, or moved
+  there after 60 s) needs no wait: with no other work, end the turn without a
+  tool call; the job's result arrives as the next message. Never poll process,
+  status or agent lists, and never repeat wait: each wait turn re-reads the
+  whole context (23% of fleet tokens on 2026-11-12). Never add
   wall-clock sleeps in production, tests, harnesses or tools: wait for the exact
   message, packet, notification or process/world/simulation state (push, not pull).
 - Main has the owner's standing authorization to spawn subagents within the
