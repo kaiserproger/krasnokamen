@@ -1,43 +1,47 @@
 <p align="center">
-  <img src="docs/assets/brand/solaris-logo.svg" alt="Solaris logo: a pixel-art sun" width="128">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/krasnokamen-logo-on-dark.svg">
+    <img src="docs/brand/krasnokamen-logo-on-light.svg" alt="Krasnokamen" width="560">
+  </picture>
 </p>
 
-<h1 align="center">Solaris</h1>
-
 <p align="center">
-  <b>A Minecraft: Java Edition server, rebuilt from scratch in Rust for every core.</b><br>
+  <b>An engine for large Minecraft-compatible simulations.</b><br>
+  A Minecraft: Java Edition server rebuilt from scratch in Rust.<br>
   Parallel ticks · deterministic outcomes · WAL-backed saves · sandboxed Wasm plugins
 </p>
 
 <p align="center">
-  <a href="https://github.com/kaiserproger/solaris/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/kaiserproger/solaris?include_prereleases&display_name=tag&sort=semver&style=for-the-badge&color=F5B942"></a>
-  <a href="https://github.com/kaiserproger/solaris/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/kaiserproger/solaris/ci.yml?branch=main&label=CI&style=for-the-badge"></a>
+  <sub><b>Krasnokamen 1.0.0-rc.5 «Pauline»</b> · formerly Solaris (<a href="docs/brand/README.md#formerly-solaris">why the name changed</a>)</sub>
+</p>
+
+<p align="center">
+  <a href="https://github.com/kaiserproger/krasnokamen/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/kaiserproger/krasnokamen?include_prereleases&display_name=tag&sort=semver&style=for-the-badge&color=C63A2E"></a>
+  <a href="https://github.com/kaiserproger/krasnokamen/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/kaiserproger/krasnokamen/ci.yml?branch=main&label=CI&style=for-the-badge"></a>
   <img alt="Minecraft Java 26.3" src="https://img.shields.io/badge/Minecraft_Java-26.3-62B47A?style=for-the-badge">
   <img alt="Built with Rust" src="https://img.shields.io/badge/Built_with-Rust-CE422B?style=for-the-badge&logo=rust&logoColor=white">
   <a href="#license"><img alt="MIT OR Apache-2.0" src="https://img.shields.io/badge/License-MIT_or_Apache--2.0-6A8DFF?style=for-the-badge"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/kaiserproger/solaris/releases"><b>Download</b></a> ·
+  <a href="https://github.com/kaiserproger/krasnokamen/releases"><b>Download</b></a> ·
   <a href="#quick-start"><b>Quick start</b></a> ·
   <a href="#how-it-works"><b>How it works</b></a> ·
-  <a href="#the-solaris-ecosystem"><b>Ecosystem</b></a> ·
+  <a href="#the-krasnokamen-ecosystem"><b>Ecosystem</b></a> ·
   <a href="docs/README.md"><b>Docs</b></a> ·
   <a href="CONTRIBUTING.md"><b>Contribute</b></a>
 </p>
 
-![A stylized blocky valley at sunrise under a pixel-art sun, with a river and a lit village](docs/assets/brand/solaris-banner.webp)
-
 > [!IMPORTANT]
-> **Solaris 1.0 "Pauline" is a release candidate (RC5, prerelease).** Survival,
+> **Krasnokamen 1.0 "Pauline" is a release candidate (RC5, prerelease).** Survival,
 > multiplayer, crash recovery and real-client compatibility are tested on every
 > release, and each release's notes list what was validated and what is known to
 > be unsupported. Gameplay is vanilla-like, not bit-identical, and Java mods do not
 > run. Back up worlds before trusting it with a long-running server.
 
-## What is Solaris?
+## What is Krasnokamen?
 
-Solaris is an independent Minecraft: Java Edition server written from scratch in
+Krasnokamen is an independent Minecraft: Java Edition server written from scratch in
 Rust. It is a full server, not a framework: it reimplements the game itself, from
 world generation, mobs and redstone to villages, combat and inventories. Players
 join with a **normal, unmodified Minecraft Java client**. **Version support:**
@@ -53,7 +57,7 @@ It is built for the things the vanilla server is bad at:
 <td width="50%" valign="top">
 
 **⚡ Every core, one outcome.**
-Vanilla simulates a world on essentially one thread. Solaris runs the expensive
+Vanilla simulates a world on essentially one thread. Krasnokamen runs the expensive
 per-entity work on all cores, and the result stays deterministic: the same inputs
 always produce the same world.
 
@@ -121,7 +125,7 @@ Deep dive: [architecture overview](docs/ARCHITECTURE.md) ·
 | **Multiplayer** | Many players in one world, chat, teams and scoreboards |
 | **Operators** | Console, bans and whitelist, live backups, block and container history (`/co`), RCON, Query, Velocity forwarding, anti-xray, Distant Horizons support and an optional read-only web dashboard |
 
-Solaris targets the vanilla network protocol and supports offline Anvil world
+Krasnokamen targets the vanilla network protocol and supports offline Anvil world
 import and export, with compatibility still partial. Gameplay aims to feel like
 vanilla, not to be bit-identical: exact AI timing and vanilla bugs are not
 reproduced. Map-making support is partial: directory `/function` datapacks,
@@ -139,20 +143,20 @@ trade through a settlement economy. Players claim and manage a settlement throug
 server-driven dialogs, with no client mod. Start with the
 [player guide](docs/SETTLEMENTS_GUIDE.md), or `/settlement guide` in game.
 
-## The Solaris ecosystem
+## The Krasnokamen ecosystem
 
 | Project | What it is |
 | :-- | :-- |
-| **[Solaris](https://github.com/kaiserproger/solaris)** | This repository: the server core, deterministic simulation, storage, protocol and validation tooling |
-| **[Solaris Client](https://github.com/kaiserproger/solaris-client)** | Optional native Rust client (wgpu: Vulkan, Metal, DX12) with its own launcher and singleplayer: Low/Medium/High presets (HDR, bloom, shadows, god rays, reflections), GPU-generated far terrain, proximity voice chat and screen sharing to in-world monitors |
-| **[Default Plugins](https://github.com/kaiserproger/solaris-default-plugins)** | Ready-made Wasm packages: permissions, essentials, economy, towns with natively enforced chunk claims, audit, offline-mode authentication, graves and more |
-| **[Solaris Loader](https://github.com/kaiserproger/solaris-loader)** | Optional client mod (Fabric, NeoForge, Forge) for plugins that add client-side content |
+| **[Krasnokamen](https://github.com/kaiserproger/krasnokamen)** | This repository: the server core, deterministic simulation, storage, protocol and validation tooling |
+| **[Krasnokamen Client](https://github.com/kaiserproger/krasnokamen-client)** | Optional native Rust client (wgpu: Vulkan, Metal, DX12) with its own launcher and singleplayer: Low/Medium/High presets (HDR, bloom, shadows, god rays, reflections), GPU-generated far terrain, proximity voice chat and screen sharing to in-world monitors |
+| **[Default Plugins](https://github.com/kaiserproger/krasnokamen-default-plugins)** | Ready-made Wasm packages: permissions, essentials, economy, towns with natively enforced chunk claims, audit, offline-mode authentication, graves and more |
+| **[Krasnokamen Loader](https://github.com/kaiserproger/krasnokamen-loader)** | Optional client mod (Fabric, NeoForge, Forge) for plugins that add client-side content |
 
 Vanilla clients need none of the optional pieces. Server-only plugins work with
 vanilla clients.
 
 > [!NOTE]
-> **Forge, Fabric, NeoForge and Bukkit/Paper plugins do not run on Solaris.** In
+> **Forge, Fabric, NeoForge and Bukkit/Paper plugins do not run on Krasnokamen.** In
 > All the Mods 11, 215 of 289 mods ship server-side Java and 152 rewrite Minecraft
 > internals with Mixins; there is no JVM to host them. Server features are written
 > as [Wasm plugins](docs/PLUGINS.md), in Rust with the [SDK](sdk/rust/) or any
@@ -182,7 +186,7 @@ and [benchmarks](docs/performance/BENCHMARKS.md).
 
 ## Built to be trusted
 
-Solaris is tested the way players break servers:
+Krasnokamen is tested the way players break servers:
 
 - **7,300+ Rust tests** across the workspace, plus crash and restart tests that
   kill the server mid-checkpoint and check that the world comes back whole.
@@ -209,23 +213,26 @@ this repository alone.
 | 2026-10-19 | Native Rust client and launcher |
 | 2026-10-29 | `v1.0.0-rc.1` "Pauline": Minecraft Java 26.3 |
 | 2026-11-07 | `v1.0.0-rc.5` |
+| 2026-11-12 | Renamed from Solaris to Krasnokamen ([why](docs/brand/README.md#formerly-solaris)) |
 
 </details>
 
 ## Quick start
 
 Linux x86-64 and AArch64 binaries are published on
-[GitHub Releases](https://github.com/kaiserproger/solaris/releases). You need
-`curl`, `tar`, a SHA-256 utility and **JDK 25** (used once to extract game data):
+[GitHub Releases](https://github.com/kaiserproger/krasnokamen/releases). You need
+`curl`, `tar`, a SHA-256 utility and **JDK 25** (used once to extract game data).
+rc.5 artefacts predate the rename (archive `solaris-<target>.tar.gz`, binary
+`solaris`, `SOLARIS_*` variables); the next release ships `krasnokamen-*` artefacts.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.5/install.sh \
+curl -fsSL https://raw.githubusercontent.com/kaiserproger/krasnokamen/v1.0.0-rc.5/install.sh \
   | SOLARIS_VERSION=v1.0.0-rc.5 bash
 curl -fsSLo example.toml \
-  https://raw.githubusercontent.com/kaiserproger/solaris/v1.0.0-rc.5/example.toml
+  https://raw.githubusercontent.com/kaiserproger/krasnokamen/v1.0.0-rc.5/example.toml
 ```
 
-Solaris does not ship any Mojang files. Before the first start, let it download the
+Krasnokamen does not ship any Mojang files. Before the first start, let it download the
 official server once and derive its game data from it:
 
 ```sh
@@ -241,9 +248,9 @@ Then connect a Minecraft Java 26.3 client to `127.0.0.1:25565`.
 > `[network].bind_address` and your firewall.
 
 The first start creates an empty `plugins/` directory next to the config; copy
-packages from `solaris-default-plugins` into it and restart to deploy them.
-Deploying `solaris-auth` locks every new session until the player runs
-`/register` or `/login`.
+packages from the [default plugins](https://github.com/kaiserproger/krasnokamen-default-plugins)
+at tag `v1.0.0-rc.5` into it and restart to deploy them. Deploying that release's
+`solaris-auth` locks every new session until the player runs `/register` or `/login`.
 
 To bring an existing vanilla world, stop the server and convert it once:
 
@@ -262,9 +269,9 @@ and JDK 25. Linux x86-64 builds use Clang and mold, as configured in
 [`.cargo/config.toml`](.cargo/config.toml).
 
 ```sh
-cargo build -p mc-edge --bin solaris-v2
-cargo run -p mc-edge --bin solaris-v2 -- content import --version 26.3 --download
-cargo run -p mc-edge --bin solaris-v2 -- --config example.toml
+cargo build -p mc-edge --bin krasnokamen
+cargo run -p mc-edge --bin krasnokamen -- content import --version 26.3 --download
+cargo run -p mc-edge --bin krasnokamen -- --config example.toml
 ```
 
 To use server jars you already have, replace `--download` with
@@ -274,11 +281,11 @@ To use server jars you already have, replace `--download` with
 ## FAQ
 
 **Do players need a special client?** No. The unmodified Minecraft Java 26.3
-client joins directly. The Solaris Client is an optional extra.
+client joins directly. The Krasnokamen Client is an optional extra.
 
 **Can I run my Paper plugins or Fabric mods?** No; see the note under
-[the ecosystem](#the-solaris-ecosystem). Write a Wasm plugin instead, or use a
-[default plugin](https://github.com/kaiserproger/solaris-default-plugins).
+[the ecosystem](#the-krasnokamen-ecosystem). Write a Wasm plugin instead, or use a
+[default plugin](https://github.com/kaiserproger/krasnokamen-default-plugins).
 
 **Is it production-ready?** Not yet: 1.0 is in release-candidate testing. Each
 release's notes list what was validated and what is still unsupported.
@@ -306,5 +313,5 @@ covered in the [RC1 notes](docs/releases/v1.0.0-rc.1.md)).
 Dual-licensed under [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your
 option.
 
-<sub>Solaris is unofficial and independent. It is not approved by or affiliated
+<sub>Krasnokamen is unofficial and independent. It is not approved by or affiliated
 with Mojang Studios or Microsoft. Minecraft is a trademark of Mojang AB.</sub>
