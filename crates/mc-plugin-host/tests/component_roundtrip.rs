@@ -64,7 +64,7 @@ fn guest_module() -> PathBuf {
 fn instance(config: &str, limits: PluginLimits) -> PluginInstance<Services> {
     let bytes = component_bytes();
     let engine = engine(&limits).expect("engine");
-    let compiled = mc_plugin_host::CompiledPlugin::compile(&engine, &bytes, &limits, "0.8.0")
+    let compiled = mc_plugin_host::CompiledPlugin::compile(&engine, &bytes, &limits, "0.9.0")
         .expect("compile");
     let linker = linker::<Services>(&engine).expect("linker");
     let contribution = PluginStartup::instantiate(
@@ -104,7 +104,7 @@ fn a_real_component_answers_a_join_and_a_command() {
             "greeting = \"Hi there\"\n",
             InitContext {
                 plugin_id: "hello".to_owned(),
-                api_version: "0.8.0".to_owned(),
+                api_version: "0.9.0".to_owned(),
                 world_fingerprint: String::new(),
             },
         )
@@ -180,7 +180,7 @@ fn a_raw_core_module_is_rejected_before_any_guest_code_runs() {
     let limits = PluginLimits::default();
     let engine = engine(&limits).expect("engine");
     let bytes = std::fs::read(guest_module()).expect("the guest module exists");
-    let error = match mc_plugin_host::CompiledPlugin::compile(&engine, &bytes, &limits, "0.8.0") {
+    let error = match mc_plugin_host::CompiledPlugin::compile(&engine, &bytes, &limits, "0.9.0") {
         Ok(_) => panic!("a core module must not compile as a component"),
         Err(error) => error,
     };
@@ -198,7 +198,7 @@ fn the_artifact_bound_is_enforced_before_compilation() {
     };
     let engine = engine(&limits).expect("engine");
     let error =
-        match mc_plugin_host::CompiledPlugin::compile(&engine, &[0_u8; 4096], &limits, "0.8.0") {
+        match mc_plugin_host::CompiledPlugin::compile(&engine, &[0_u8; 4096], &limits, "0.9.0") {
             Ok(_) => panic!("an oversized artifact must be refused"),
             Err(error) => error,
         };
@@ -219,7 +219,7 @@ fn a_guest_that_never_returns_is_stopped_by_its_budget() {
     let ticker =
         mc_plugin_host::EpochTicker::start(engine.clone(), std::time::Duration::from_millis(50))
             .expect("watchdog");
-    let compiled = mc_plugin_host::CompiledPlugin::compile(&engine, &bytes, &limits, "0.8.0")
+    let compiled = mc_plugin_host::CompiledPlugin::compile(&engine, &bytes, &limits, "0.9.0")
         .expect("compile");
     let linker = linker::<Services>(&engine).expect("linker");
     let config = "mode = \"spin\"\n";
@@ -237,7 +237,7 @@ fn a_guest_that_never_returns_is_stopped_by_its_budget() {
             config,
             InitContext {
                 plugin_id: "hello".to_owned(),
-                api_version: "0.8.0".to_owned(),
+                api_version: "0.9.0".to_owned(),
                 world_fingerprint: String::new(),
             },
         )
@@ -270,7 +270,7 @@ fn a_guest_that_grows_without_bound_hits_its_memory_limit() {
     let ticker =
         mc_plugin_host::EpochTicker::start(engine.clone(), std::time::Duration::from_millis(50))
             .expect("watchdog");
-    let compiled = mc_plugin_host::CompiledPlugin::compile(&engine, &bytes, &limits, "0.8.0")
+    let compiled = mc_plugin_host::CompiledPlugin::compile(&engine, &bytes, &limits, "0.9.0")
         .expect("compile");
     let linker = linker::<Services>(&engine).expect("linker");
     let config = "mode = \"grow\"\n";
@@ -287,7 +287,7 @@ fn a_guest_that_grows_without_bound_hits_its_memory_limit() {
             config,
             InitContext {
                 plugin_id: "hello".to_owned(),
-                api_version: "0.8.0".to_owned(),
+                api_version: "0.9.0".to_owned(),
                 world_fingerprint: String::new(),
             },
         )
@@ -314,7 +314,7 @@ fn a_trapped_guest_does_not_disturb_a_live_one() {
     let ticker =
         mc_plugin_host::EpochTicker::start(engine.clone(), std::time::Duration::from_millis(50))
             .expect("watchdog");
-    let compiled = mc_plugin_host::CompiledPlugin::compile(&engine, &bytes, &limits, "0.8.0")
+    let compiled = mc_plugin_host::CompiledPlugin::compile(&engine, &bytes, &limits, "0.9.0")
         .expect("compile");
     let linker = linker::<Services>(&engine).expect("linker");
     let services = || Services {
@@ -323,7 +323,7 @@ fn a_trapped_guest_does_not_disturb_a_live_one() {
     };
     let context = InitContext {
         plugin_id: "hello".to_owned(),
-        api_version: "0.8.0".to_owned(),
+        api_version: "0.9.0".to_owned(),
         world_fingerprint: String::new(),
     };
     let _ = PluginStartup::instantiate(&linker, compiled.component(), services(), limits)

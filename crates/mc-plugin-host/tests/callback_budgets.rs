@@ -28,7 +28,7 @@ impl HostServices for PausedHost {
 fn guest(limits: PluginLimits, epochs_per_import: u64) -> PluginInstance<PausedHost> {
     let engine = mc_plugin_host::engine(&limits).unwrap();
     let compiled =
-        CompiledPlugin::compile(&engine, &fixture::component_bytes(), &limits, "0.8.0").unwrap();
+        CompiledPlugin::compile(&engine, &fixture::component_bytes(), &limits, "0.9.0").unwrap();
     let linker = mc_plugin_host::linker::<PausedHost>(&engine).unwrap();
     PluginInstance::instantiate(
         &linker,
@@ -50,7 +50,7 @@ fn initialize(
         config,
         lifecycle::InitContext {
             plugin_id: "budget-test".into(),
-            api_version: "0.8.0".into(),
+            api_version: "0.9.0".into(),
             world_fingerprint: String::new(),
         },
     )
