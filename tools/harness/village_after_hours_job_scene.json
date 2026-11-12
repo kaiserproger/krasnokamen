@@ -1,0 +1,296 @@
+{
+ "seed": 100,
+ "server_view_distance": 6,
+ "steps": [
+  {
+   "wait_play": true
+  },
+  {
+   "cmd": "gamemode creative"
+  },
+  {
+   "tp": [
+    1000.5,
+    205,
+    1000.5,
+    0,
+    0
+   ]
+  },
+  {
+   "wait_ticks": 100
+  },
+  {
+   "cmd": "gamerule advance_time false"
+  },
+  {
+   "cmd": "gamerule spawn_mobs false"
+  },
+  {
+   "cmd": "gamerule random_tick_speed 0"
+  },
+  {
+   "cmd": "time set 18000"
+  },
+  {
+   "cmd": "fill 936 199 936 1064 199 1064 minecraft:stone"
+  },
+  {
+   "cmd": "fill 936 198 936 1064 198 1064 minecraft:stone"
+  },
+  {
+   "cmd": "fill 936 200 936 1064 205 1064 minecraft:air"
+  },
+  {
+   "cmd": "fill 1000 199 1000 1004 199 1004 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 203 1000 1004 203 1004 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 200 1000 1004 202 1000 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1004 1004 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1000 1000 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1004 200 1000 1004 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "setblock 1004 200 1002 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 201 1002 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 200 1002 minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1004 201 1002 minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1001 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1001 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1002 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1002 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1003 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1003 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "summon minecraft:villager 1003.5 200 1001.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1003.5 200 1002.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1003.5 200 1003.5"
+  },
+  {
+   "tp": [
+    1020.5,
+    200,
+    1008.5,
+    0,
+    0
+   ]
+  },
+  {
+   "cmd": "settlement create hoursqa 64"
+  },
+  {
+   "cmd": "say vahfence_1_created"
+  },
+  {
+   "wait_chat": "vahfence_1_created"
+  },
+  {
+   "cmd": "settlement building certify house 1000 199 1000 1004 203 1004"
+  },
+  {
+   "cmd": "say vahfence_2_house"
+  },
+  {
+   "wait_chat": "vahfence_2_house"
+  },
+  {
+   "tp": [
+    1020.5,
+    207,
+    1008.5,
+    0,
+    40
+   ]
+  },
+  {
+   "wait_ticks": 300
+  },
+  {
+   "cmd": "time set 11000"
+  },
+  {
+   "wait_ticks": 60
+  },
+  {
+   "assert_entities": {
+    "name": "hours_three_jobless_first",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "box": [
+     1000,
+     199,
+     990,
+     1040,
+     205,
+     1020
+    ],
+    "min": 3,
+    "profession": "none"
+   }
+  },
+  {
+   "cmd": "fill 1044 199 1000 1048 199 1004 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1044 203 1000 1048 203 1004 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1044 200 1000 1048 202 1000 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1044 200 1004 1048 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1044 200 1000 1044 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1048 200 1000 1048 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "setblock 1044 200 1002 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1044 201 1002 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1044 200 1002 minecraft:oak_door[facing=east,half=lower,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1044 201 1002 minecraft:oak_door[facing=east,half=upper,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1046 200 1001 minecraft:composter"
+  },
+  {
+   "cmd": "settlement building certify farmer 1044 199 1000 1048 203 1004"
+  },
+  {
+   "cmd": "say vahfence_3_workshop"
+  },
+  {
+   "wait_chat": "vahfence_3_workshop"
+  },
+  {
+   "shot": "after-hours-job-fixture"
+  },
+  {
+   "wait_ticks": 200
+  },
+  {
+   "list_entities": {
+    "name": "hours_t200",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 200
+  },
+  {
+   "list_entities": {
+    "name": "hours_t400",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 200
+  },
+  {
+   "list_entities": {
+    "name": "hours_t600",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 200
+  },
+  {
+   "list_entities": {
+    "name": "hours_t800",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 200
+  },
+  {
+   "list_entities": {
+    "name": "hours_t1000",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "shot": "after-hours-job-end"
+  },
+  {
+   "assert_entities": {
+    "name": "hours_one_farmer",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "box": [
+     936,
+     199,
+     936,
+     1064,
+     205,
+     1064
+    ],
+    "min": 1,
+    "max": 1,
+    "profession": "farmer"
+   }
+  }
+ ]
+}
