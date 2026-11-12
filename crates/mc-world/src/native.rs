@@ -299,6 +299,17 @@ impl NativeFile {
     }
 }
 
+/// The lease ends with the store. A process forked while the store was open
+/// shares this descriptor's lock until it execs (or forever, if it never
+/// does); closing our descriptor alone would leave the lock held by that copy,
+/// so a reopen right after the store closes would refuse. Unlocking releases
+/// the lock of the shared open file description for every copy at once.
+impl Drop for NativeFile {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
+    }
+}
+
 fn read_at(file: &std::fs::File, out: &mut [u8], offset: u64) -> std::io::Result<usize> {
     #[cfg(unix)]
     {

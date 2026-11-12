@@ -17,6 +17,15 @@ pub(crate) fn register_store(
     Ok(())
 }
 
+/// Whether this process still holds the native store of `config`'s world.
+pub(crate) fn store_open(config: &CoreConfig) -> bool {
+    STORES
+        .lock()
+        .unwrap()
+        .get(&config.world_dir)
+        .is_some_and(|store| store.strong_count() != 0)
+}
+
 pub(crate) fn fixture_store(config: &CoreConfig) -> Result<Arc<NativeStore>, CoreError> {
     if let Some(store) = STORES
         .lock()
