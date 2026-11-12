@@ -265,7 +265,10 @@ async fn refused_join_wakes_the_waiter_and_keeps_the_reason_for_the_play_disconn
     // The reason alone does not end the wait: a Disconnect that arrives with a Joined must
     // still deliver the join first (the pump calls `refuse_join` only without a Joined).
     registry.refuse_join(id);
-    assert!(waiter.await.is_err(), "no Joined will come: the join wait fails at once");
+    assert!(
+        waiter.await.is_err(),
+        "no Joined will come: the join wait fails at once"
+    );
     assert_eq!(
         registry.take_disconnect_reason(id).as_deref(),
         Some("You logged in from another location")

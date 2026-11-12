@@ -41,7 +41,9 @@ fn server(root: &std::path::Path, max_players: u32) -> Arc<EdgeServer> {
 }
 
 /// Real listener and connection pipeline plus the pump that routes the core's output.
-async fn listen(server: &Arc<EdgeServer>) -> (std::net::SocketAddr, Vec<tokio::task::JoinHandle<()>>) {
+async fn listen(
+    server: &Arc<EdgeServer>,
+) -> (std::net::SocketAddr, Vec<tokio::task::JoinHandle<()>>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let pump = crate::server::spawn_pump(Arc::clone(server)).unwrap();
@@ -108,7 +110,11 @@ async fn newer_login_of_the_same_account_kicks_the_session_in_play_and_reaches_p
     let (addr, tasks) = listen(&server).await;
     let mut first = enter_play(addr, "Dup").await;
     let _second = enter_play(addr, "Dup").await;
-    assert!(play_disconnect_reason(&mut first, WAIT).await.contains(REASON));
+    assert!(
+        play_disconnect_reason(&mut first, WAIT)
+            .await
+            .contains(REASON)
+    );
     server.hub.shutdown();
     tasks.into_iter().for_each(|task| task.abort());
 }
@@ -158,7 +164,9 @@ async fn full_server_refuses_a_same_account_login_before_kicking_the_session_in_
         .wait_for_frame_id_with_timeout(ConfigurationDisconnect::ID, WAIT)
         .await
         .expect("the full server refuses the login");
-    let reason = ConfigurationDisconnect::decode(&mut frame.body).unwrap().reason_nbt;
+    let reason = ConfigurationDisconnect::decode(&mut frame.body)
+        .unwrap()
+        .reason_nbt;
     assert!(String::from_utf8_lossy(&reason).contains("The server is full!"));
     assert!(
         playing

@@ -78,13 +78,20 @@ fn paused_owner_relogin_kicks_the_stale_session_and_joins() {
     });
     next_tick(&rt, &mut rx, Duration::from_secs(2)).expect("a login resumes the paused world");
     let kicked = |batches: &[(ConnectionId, Vec<crate::boundary::PlayerChange>)], id| {
-        batches.iter().filter(|(c, _)| *c == id).flat_map(|(_, q)| q).any(|change| {
-            matches!(change, crate::boundary::PlayerChange::Disconnect { reason, .. }
+        batches
+            .iter()
+            .filter(|(c, _)| *c == id)
+            .flat_map(|(_, q)| q)
+            .any(|change| {
+                matches!(change, crate::boundary::PlayerChange::Disconnect { reason, .. }
                 if reason == "You logged in from another location")
-        })
+            })
     };
     let mut drained = core.try_drain_outbox();
-    assert!(kicked(&drained, owner), "the stale paused session is kicked by the newer login");
+    assert!(
+        kicked(&drained, owner),
+        "the stale paused session is kicked by the newer login"
+    );
     core.submit(PlayerInput::Join {
         connection: relogin,
         uuid,
@@ -95,9 +102,13 @@ fn paused_owner_relogin_kicks_the_stale_session_and_joins() {
     next_tick(&rt, &mut rx, Duration::from_secs(2)).expect("joined tick");
     drained = core.try_drain_outbox();
     assert!(!kicked(&drained, relogin), "the relogin is not refused");
-    assert!(drained.iter().filter(|(c, _)| *c == relogin).flat_map(|(_, q)| q).any(|change| {
-        matches!(change, crate::boundary::PlayerChange::Joined { .. })
-    }));
+    assert!(
+        drained
+            .iter()
+            .filter(|(c, _)| *c == relogin)
+            .flat_map(|(_, q)| q)
+            .any(|change| { matches!(change, crate::boundary::PlayerChange::Joined { .. }) })
+    );
     core.shutdown();
     let _ = std::fs::remove_dir_all(dir);
 }

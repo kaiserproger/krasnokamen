@@ -218,17 +218,25 @@ async fn run_connection(
     // Vanilla `verifyLoginAndFinishConnectionSetup` runs `canPlayerLogin` (server full) before
     // `disconnectAllPlayersWithProfile`: a full server refuses a same-profile login and the
     // session in Play is not kicked.
-    if server.connections.is_full(server.cfg.server.max_players as usize)
+    if server
+        .connections
+        .is_full(server.cfg.server.max_players as usize)
         && !server.admin.sessions_for_uuid(outcome.uuid).is_empty()
         && server
             .admin
-            .admission(outcome.uuid, outcome.remote_address.or(stream_peer_ip(&peer)), true)
+            .admission(
+                outcome.uuid,
+                outcome.remote_address.or(stream_peer_ip(&peer)),
+                true,
+            )
             .is_some()
     {
         warn!(%peer, connection = id.0, name = %outcome.name, "login refused: server full, same profile in Play");
-        conn.send_packet(&mc_protocol::packets::configuration::ConfigurationDisconnect {
-            reason_nbt: crate::connection::text_component_nbt("The server is full!")?,
-        })
+        conn.send_packet(
+            &mc_protocol::packets::configuration::ConfigurationDisconnect {
+                reason_nbt: crate::connection::text_component_nbt("The server is full!")?,
+            },
+        )
         .await?;
         return Ok(());
     }

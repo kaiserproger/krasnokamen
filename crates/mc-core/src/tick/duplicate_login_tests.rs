@@ -48,18 +48,27 @@ fn hold_diamond(state: &mut TickState, connection: u64) {
         .items
         .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
         .unwrap();
-    let entity = state.connections.entity_of(ConnectionId(connection)).unwrap();
+    let entity = state
+        .connections
+        .entity_of(ConnectionId(connection))
+        .unwrap();
     state.players.get_mut(&entity).unwrap().inventory.slots[0] =
         mc_data::ItemStack::new(diamond, 3);
 }
 
 fn first_slot_count(state: &TickState, connection: u64) -> u8 {
-    let entity = state.connections.entity_of(ConnectionId(connection)).unwrap();
+    let entity = state
+        .connections
+        .entity_of(ConnectionId(connection))
+        .unwrap();
     state.players[&entity].inventory.slots[0].count as u8
 }
 
 fn in_play(state: &TickState, connection: u64) -> bool {
-    state.connections.entity_of(ConnectionId(connection)).is_some()
+    state
+        .connections
+        .entity_of(ConnectionId(connection))
+        .is_some()
 }
 
 #[test]
@@ -88,15 +97,36 @@ fn late_configuration_finisher_is_refused_and_the_player_in_play_keeps_custody()
     let entity = state.connections.entity_of(ConnectionId(8)).unwrap();
     // The first connection now finishes configuration.
     let drains = tick(&mut state, &[join(7)]);
-    assert!(kicked(&drains, 7), "the late finisher gets the duplicate-login refusal");
+    assert!(
+        kicked(&drains, 7),
+        "the late finisher gets the duplicate-login refusal"
+    );
     assert!(!in_play(&state, 7));
-    assert!(state.connections.view_distance_of(ConnectionId(7)).is_none());
+    assert!(
+        state
+            .connections
+            .view_distance_of(ConnectionId(7))
+            .is_none()
+    );
     assert!(state.connections.locale_of(ConnectionId(7)).is_none());
     assert!(!kicked(&drains, 8), "the player in Play is not kicked");
     assert_eq!(state.connections.entity_of(ConnectionId(8)), Some(entity));
-    assert_eq!(first_slot_count(&state, 8), 3, "custody stays with the player in Play");
-    assert!(state.entities.slot_of_uuid(uuid::Uuid::from_u128(PROFILE)).is_some());
-    assert!(!state.offline_players.contains_key(&uuid::Uuid::from_u128(PROFILE)));
+    assert_eq!(
+        first_slot_count(&state, 8),
+        3,
+        "custody stays with the player in Play"
+    );
+    assert!(
+        state
+            .entities
+            .slot_of_uuid(uuid::Uuid::from_u128(PROFILE))
+            .is_some()
+    );
+    assert!(
+        !state
+            .offline_players
+            .contains_key(&uuid::Uuid::from_u128(PROFILE))
+    );
 }
 
 #[test]
@@ -126,5 +156,9 @@ fn newer_login_still_kicks_a_session_already_in_play_and_takes_over_custody() {
     assert!(!kicked(&drains, 8));
     assert!(in_play(&state, 8));
     assert_eq!(first_slot_count(&state, 8), 3);
-    assert!(!state.offline_players.contains_key(&uuid::Uuid::from_u128(PROFILE)));
+    assert!(
+        !state
+            .offline_players
+            .contains_key(&uuid::Uuid::from_u128(PROFILE))
+    );
 }
