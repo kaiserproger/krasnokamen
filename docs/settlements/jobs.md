@@ -15,7 +15,7 @@ See [construction and certification](construction.md), [production](production.m
 
 ## Allocating jobs
 
-- Adults normally seek reachable work during day ticks **2000–8999**. Nitwits do not work. Unbound villagers can acquire ordinary workstations within 48 blocks; bound residents acquire only free slots in certified production buildings. Certification and upgrades make slots available to the normal allocator.
+- Jobless adults claim a reachable free workstation at any time of day, as vanilla `AcquirePoi`/`AssignProfessionFromJobSite` do; the search keeps its bounded cadence. Work itself follows the day ticks **2000–8999**. Nitwits do not work. Unbound villagers can acquire ordinary workstations within 48 blocks; bound residents acquire only free slots in certified production buildings. Certification and upgrades make slots available to the normal allocator.
 - The allocator prioritizes reachable lumberjack and miner slots over other jobs, including after storage is built. An unreachable candidate does not permanently block other choices.
 - Bound farmers, shepherds, miners, lumberjacks, builders and soldiers look for slots matching their retained profession. Traded villagers also keep their profession; other eligible adults can retarget. Destroyed or claimed workstations release a job claim, but an unloaded workstation alone does not.
 - A bound resident with an uncertified remembered job releases the claim while retaining profession and offers. The menu may report **“N workers need a certified workshop — open Buildings → Certify”**. Certify a matching building around the workstation to make its slots available; the warning also counts other jobless employed professions, not just residents from older worlds.
@@ -48,7 +48,7 @@ Builder workshops, mines and lumber camps can use a crafting table or barrel; mi
 - As in vanilla, using a bed a villager sleeps in only wakes that villager; it stays up for 100 ticks, so the next use puts the player to bed.
 - Rest takes precedence over hauling and economy travel: workers keep their carried items while going home. Visible hostiles and recent damage can cause panic; hostile sensing checks line of sight.
 - Resident routes and short walks stay in entity-simulated chunks. Villagers can wade through water at their feet, but not head-height water or lava. Blocked routes require a usable path.
-- Villagers open wooden doors along their routes, not iron or copper doors. They close doors they opened after passing, waiting for another villager occupying or approaching the doorway; they leave player-opened doors alone.
+- Villagers open wooden doors along their routes, not iron or copper doors. They close doors they opened after passing, waiting for another villager occupying or approaching the doorway; they also close a door a player left open once they have passed through it (vanilla `InteractWithDoor` remembers every door on the route).
 
 ## Miners
 

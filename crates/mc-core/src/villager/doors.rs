@@ -1,5 +1,7 @@
-//! Tick-owned wooden-door interaction. Only doors opened by this villager are
-//! remembered; a player's open door is never claimed or toggled by the brain.
+//! Tick-owned wooden-door interaction, as vanilla `InteractWithDoor`: a door on
+//! the route is opened if closed and remembered either way, so the villager
+//! closes every door it passed through, whoever opened it, once no other
+//! villager is in or approaching the doorway.
 use super::VillagerState;
 use crate::boundary::{BlockChange, BlockPos, ChangeSet};
 use crate::entities::EntitySlot;
@@ -106,7 +108,7 @@ pub(super) fn interact(
             {
                 continue;
             }
-            if let Some((lower, false)) = door(state, cell) {
+            if let Some((lower, _)) = door(state, cell) {
                 set_open(state, lower, true, changes);
                 if !v.opened_doors.contains(&lower) {
                     v.opened_doors.push(lower);
