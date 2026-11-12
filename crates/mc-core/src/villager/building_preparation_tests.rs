@@ -57,3 +57,46 @@ fn clearing_stand_on_a_hill_edge_is_within_felling_reach_of_the_pit_footing() {
         "after walking to its chosen stand {stand:?} the builder must reach footing {base:?}"
     );
 }
+
+/// Seed-24 civilization run ufgbv77d: Road L1 (structure settlement-1-732)
+/// held the only project slot at 0/33 for 51,000 ticks on its one clear cell,
+/// short grass at [158,73,-249]. Two columns west stood a pen's fence posts
+/// ([156,74,-252..-248]); client censuses show the builder parked at
+/// (156.3,75.0,-252.5), just north of the corner post and out of felling
+/// reach. The nearest stand to it was the top of the post at [156,75,-251]:
+/// `footing` counts the 1.5-high fence as ground, but no body stands on it.
+#[test]
+fn clearing_stand_is_never_the_top_of_a_fence_post() {
+    let (mut state, id, builder) = crate::settlements::construction::tests::fixture();
+    let fence = block(&state, "minecraft:oak_fence");
+    for z in 7..=11 {
+        state.world.set_block(8, 201, z, fence);
+    }
+    let next = [10, 201, 10];
+    let grass = block(&state, "minecraft:short_grass");
+    state.world.set_block(next[0], next[1], next[2], grass);
+    state.world.fold_overlay();
+    state.entities.set_pos(builder, [8.3, 201.0, 6.5]);
+    let base = crate::settlements::forestry::footing(&state, id, next).expect("cell footing");
+    assert_eq!((base.x, base.y, base.z), (10, 201, 10));
+    assert!(
+        !near(&state, builder, base, PREPARATION_REACH),
+        "the builder's parking cell is out of felling reach, as at seed 24"
+    );
+    let stand = preparation_stand(&state, builder, id, next, base).expect("a stand exists");
+    let body = state.entities.body(builder);
+    let Some(feet) = crate::settlements::allocator::standing(
+        &state.world,
+        &state.registry,
+        stand,
+        body.half_width,
+        body.height,
+    ) else {
+        panic!("the builder cannot stand on its chosen stand {stand:?} (a fence top is at y 202)");
+    };
+    state.entities.set_pos(builder, feet);
+    assert!(
+        near(&state, builder, base, PREPARATION_REACH),
+        "after walking to its chosen stand {stand:?} the builder must reach footing {base:?}"
+    );
+}
