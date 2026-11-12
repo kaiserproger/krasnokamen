@@ -23,6 +23,8 @@ pub(crate) struct Context {
     pub dimension: Dimension,
     pub eyes: bool,
     pub eye_height: f64,
+    /// The source is a command block: vanilla names it `@` and informs admins of its output.
+    pub command_block: bool,
 }
 impl Context {
     pub(crate) fn source(
@@ -45,6 +47,7 @@ impl Context {
             dimension: state.dimension,
             eyes: false,
             eye_height: eye_height(state, executor),
+            command_block: false,
         }
     }
     pub(crate) fn coordinate_origin(self, local: bool) -> [f64; 3] {
@@ -108,12 +111,17 @@ fn eye_height(state: &TickState, id: EntityId) -> f64 {
     })
 }
 fn error(state: &mut TickState, context: Context, message: impl Into<String>) {
-    state.push_player(
-        context.connection,
-        PlayerChange::Chat {
-            message: message.into(),
-        },
-    );
+    let message = message.into();
+    // Global-command failures return a vanilla lang key (`argument.entity.notfound.entity`); the
+    // client translates it, a plain chat line would show the key itself.
+    let change = if crate::command_feedback::is_translation_key(&message) {
+        PlayerChange::StyledChat {
+            content: crate::command_feedback::translated(message, Vec::new()),
+        }
+    } else {
+        PlayerChange::Chat { message }
+    };
+    state.push_player(context.connection, change);
 }
 pub(crate) fn submit(state: &mut TickState, text: &str, context: Context, changes: &mut ChangeSet) {
     if state.dimension_globals.active && !state.command_context.shared {

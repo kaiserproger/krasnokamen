@@ -316,8 +316,10 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             merge_frames(out, start);
         }
         PlayerChange::StyledChat { content, .. } => {
+            // A component is any NBT root: a bare string (`tellraw @s "text"`) and a list are
+            // valid vanilla components, so the compound-only `write_network` would drop them.
             let mut content_nbt = Vec::new();
-            if mc_nbt::write_network(&mut content_nbt, content).is_ok() {
+            if mc_nbt::write_network_value(&mut content_nbt, content).is_ok() {
                 push_reliable(
                     out,
                     conn,

@@ -23,6 +23,7 @@ pub const ROOTS: &[(&str, u8)] = &[
     ("settlement", 0),
     ("trigger", 0),
     ("gamemode", 2),
+    ("defaultgamemode", 2),
     ("teleport", 2),
     ("tp", 2),
     ("execute", 2),
@@ -308,6 +309,8 @@ pub enum Command {
         mode: GameMode,
         target: Target,
     },
+    /// `/defaultgamemode <mode>`: the mode new players join in.
+    DefaultGameMode(GameMode),
     Teleport {
         target: Target,
         destination: Destination,
@@ -454,6 +457,7 @@ pub fn parse(command: &str, operator: bool) -> Result<Command, CommandError> {
         "loot" => crate::command_loot::parse(args).map(Command::Loot),
         "settlement" => crate::settlements::commands::parse(args).map(Command::Settlement),
         "gamemode" => parse_gamemode(args),
+        "defaultgamemode" => parse_defaultgamemode(args),
         "tp" | "teleport" => parse_teleport(args),
         "give" => parse_give(args),
         "clear" => parse_clear(args),
@@ -981,6 +985,18 @@ pub(crate) fn coords(words: &[&str]) -> Option<[Coord; 3]> {
                 .then_some(coords)
         }
         _ => None,
+    }
+}
+
+fn parse_defaultgamemode(args: &[&str]) -> Result<Command, CommandError> {
+    match parse_gamemode(args) {
+        Ok(Command::GameMode {
+            mode,
+            target: Target::Executor,
+        }) if args.len() == 1 => Ok(Command::DefaultGameMode(mode)),
+        _ => Err(CommandError::Usage(
+            "defaultgamemode <survival|creative|adventure|spectator>",
+        )),
     }
 }
 
