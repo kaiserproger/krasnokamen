@@ -76,6 +76,7 @@ fn targets(
             yaw: None,
             nbt: Vec::new(),
             advancements: Vec::new(),
+            predicates: Vec::new(),
             distance: None,
             position: origin.map(Some),
             extent: [None; 3],

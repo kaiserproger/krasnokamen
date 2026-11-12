@@ -68,8 +68,9 @@ pub(crate) const HAZARD_CAMPFIRE: u8 = 0x20;
 pub(crate) const HAZARD_MAGMA: u8 = 0x40;
 pub(crate) const HAZARD_SOUL_CAMPFIRE: u8 = 0x80;
 
-/// Everything the tick reads but never writes.
-#[cfg_attr(test, derive(Clone))]
+/// Everything the tick reads but never writes. Cloned only to install a
+/// datapack reload's recipes and loot.
+#[derive(Clone)]
 pub struct CoreRegistry {
     /// Dense global block state table.
     pub blocks: Arc<BlockRegistry>,
@@ -171,6 +172,9 @@ pub struct CoreRegistry {
     pub(crate) paintings: Vec<crate::painting::Variant>,
     /// Plugin Loader blocks stored on reserved vanilla carrier states (ADR 0018).
     pub(crate) carrier_blocks: crate::carrier_blocks::CarrierBlocks,
+    /// Datapack loot predicates by `namespace:path` (selector `predicate=`);
+    /// validated at load to hold only evaluable conditions.
+    pub(crate) predicates: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 impl std::fmt::Debug for CoreRegistry {
@@ -579,6 +583,7 @@ impl CoreRegistry {
             block_tools: crate::block_tools::BlockToolTable::default(),
             paintings: crate::painting::load(root)?,
             carrier_blocks: crate::carrier_blocks::CarrierBlocks::default(),
+            predicates: std::collections::BTreeMap::new(),
         })
     }
 

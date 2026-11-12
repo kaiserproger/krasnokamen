@@ -25,6 +25,8 @@ _ARGUMENT_VALIDATORS = {
     'buildings-qa': 'buildings_qa',
     'chisel': 'chisel',
     'composter-chance': 'composter_chance',
+    'chat-visibility': 'chat_visibility',
+    'datapack-reload': 'datapack_reload',
     'dialogs': 'dialogs',
     'dh-gate': 'dh_gate',
     'claim-only-qa': 'claim_only_qa',

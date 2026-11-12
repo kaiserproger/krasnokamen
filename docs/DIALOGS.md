@@ -59,7 +59,8 @@ are ignored. Clients can send any id/payload at any time: re-validate permission
 in the tick before acting.
 
 Dialog text is server-chosen: the edge carries the client locale from `ClientInformation.language`
-into the core as `PlayerInput::SetLocale` (configuration before Join, every Play update after),
+into the core as `PlayerInput::SetLocale` (configuration before Join, every Play update after;
+the chat setting travels the same way as `PlayerInput::SetChatVisibility`),
 so `settlement` dialogs render Russian for `ru*` locales and English otherwise.
 
 Registered owners: `dialog_probe` (test hook) and `settlement` (`settlements::ui`: `/settlement` and

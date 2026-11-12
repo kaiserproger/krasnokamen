@@ -11,19 +11,13 @@ pub(super) async fn admit_native_session(
     uuid: uuid::Uuid,
     name: String,
     ip: std::net::IpAddr,
-    view_distance: u8,
-    locale: String,
+    settings: mc_core::boundary::ClientSettings,
 ) -> Result<mc_core::core::PlayerSession, mc_core::CoreError> {
     let _guard = server.operator_updates.lock().await;
     server.admin.register(id, uuid, name.clone(), ip);
-    let session = server.hub.join_session(
-        id,
-        uuid,
-        name,
-        server.admin.session_level(id),
-        view_distance,
-        locale,
-    );
+    let session = server
+        .hub
+        .join_session(id, uuid, name, server.admin.session_level(id), settings);
     if session.is_err() {
         server.admin.remove(id);
     }
@@ -309,7 +303,11 @@ async fn run_connection(
         .ok_or_else(|| anyhow::anyhow!("cannot admit player {peer}: remote IP unavailable"))?;
     lifecycle.native = Some(admit_native_session(
         &server, id, outcome.uuid, outcome.name.clone(), ip,
-        view_distance as u8, config_outcome.client_language.clone(),
+        mc_core::boundary::ClientSettings {
+            view_distance: view_distance as u8,
+            locale: config_outcome.client_language.clone(),
+            chat_visibility: config_outcome.client_chat_visibility,
+        },
     ).await.inspect_err(|error| {
         warn!(%peer, connection = id.0, stage = "join-submit", name = %outcome.name, %error, "native session refused; connection closed");
     })?);
@@ -322,6 +320,7 @@ async fn run_connection(
         &outcome.name,
         config_outcome.client_view_distance,
         &config_outcome.client_language,
+        config_outcome.client_chat_visibility,
     )
     .await
     {
@@ -366,6 +365,13 @@ async fn run_connection(
     } else {
         server.admin.session_level(id)
     };
+    let recipes = match crate::recipes::for_join(&server.hub.current_registry()) {
+        Ok(recipes) => recipes,
+        Err(error) => {
+            warn!(%peer, connection = id.0, stage = "join-burst", name = %outcome.name, %error, "connection closed");
+            return Err(error);
+        }
+    };
     if let Err(error) = crate::play::send_join_burst(crate::play::JoinBurst {
         conn: &mut conn,
         data: &server.data,
@@ -376,7 +382,7 @@ async fn run_connection(
         view_distance,
         simulation_distance,
         game_mode,
-        recipes: &server.recipes,
+        recipes: &recipes,
         op_level: burst_op_level,
         plugin_commands: server.hub.plugin_commands(),
         online_mode: server.cfg.auth.online_mode,

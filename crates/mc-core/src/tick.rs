@@ -212,6 +212,11 @@ pub struct Connections {
     /// and cleared on leave/remove. Never persisted: unnegotiated callers read
     /// English.
     locales: HashMap<ConnectionId, String>,
+    /// Transient client chat settings, keyed by live connection. Recorded on
+    /// [`PlayerInput::SetChatVisibility`](crate::boundary::PlayerInput::SetChatVisibility)
+    /// (which precedes Join), moved with the connection across dimensions,
+    /// and cleared on leave/remove. Never persisted; absent means `Full`.
+    chat_visibilities: HashMap<ConnectionId, crate::boundary::ChatVisibility>,
 }
 
 impl Connections {
@@ -271,9 +276,27 @@ impl Connections {
         self.locales.insert(connection, locale);
     }
 
+    /// The connection's chat setting; `Full` until the edge admits one.
+    #[must_use]
+    pub fn chat_visibility_of(&self, connection: ConnectionId) -> crate::boundary::ChatVisibility {
+        self.chat_visibilities
+            .get(&connection)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn set_chat_visibility(
+        &mut self,
+        connection: ConnectionId,
+        visibility: crate::boundary::ChatVisibility,
+    ) {
+        self.chat_visibilities.insert(connection, visibility);
+    }
+
     pub(crate) fn remove_by_connection(&mut self, connection: ConnectionId) -> Option<EntityId> {
         self.view_distances.remove(&connection);
         self.locales.remove(&connection);
+        self.chat_visibilities.remove(&connection);
         let entity = self.by_connection.remove(&connection)?;
         self.by_entity.remove(&entity);
         self.names.remove(&connection);
@@ -295,6 +318,9 @@ impl Connections {
         }
         if let Some(locale) = self.locales.remove(&connection) {
             destination.locales.insert(connection, locale);
+        }
+        if let Some(visibility) = self.chat_visibilities.remove(&connection) {
+            destination.chat_visibilities.insert(connection, visibility);
         }
     }
 
@@ -329,13 +355,17 @@ pub struct TickState {
     active_ticket_ranges: Vec<(ChunkPos, i32, i32)>,
     active_sim_radius: i32,
     pub registry: Arc<CoreRegistry>,
+    /// Where the core publishes the registry the tick runs on, so the edge
+    /// sees a datapack reload even when no one was online to be told.
+    pub(crate) published_registry: Option<Arc<std::sync::RwLock<Arc<CoreRegistry>>>>,
+    /// Where the core publishes `send_command_feedback`, so the edge's own command
+    /// replies (`/list`) obey the rule without reading tick state.
+    pub(crate) published_command_feedback: Option<Arc<std::sync::atomic::AtomicBool>>,
     pub(crate) datapacks: crate::datapacks::Runtime,
     pub(crate) command_context: crate::command_context::Runtime,
     pub(crate) debug_profiler: crate::DebugProfiler,
-    /// Whether a `/debug function` trace is executing (recursive traces refuse).
-    pub(crate) debug_tracing: bool,
-    /// Completed function-trace artifacts, oldest first.
-    pub(crate) debug_traces: Vec<crate::DebugTraceArtifact>,
+    /// The `/debug function` trace being recorded, if one is executing.
+    pub(crate) debug_trace: Option<crate::DebugTracer>,
     pub world: ChunkWorld,
     /// This world's dimension; other worlds share its tick owner and WAL.
     pub dimension: crate::dimensions::Dimension,
@@ -636,6 +666,8 @@ impl TickState {
             active_ticket_ranges: Vec::new(),
             active_sim_radius: -1,
             registry,
+            published_registry: None,
+            published_command_feedback: None,
             world,
             dimension: crate::dimensions::Dimension::Overworld,
             other_dimensions: Default::default(),
@@ -662,8 +694,7 @@ impl TickState {
             datapacks: Default::default(),
             command_context: Default::default(),
             debug_profiler: Default::default(),
-            debug_tracing: false,
-            debug_traces: Vec::new(),
+            debug_trace: None,
             plugins: Default::default(),
             plugin_runtime: None,
             build_queries: None,
@@ -809,12 +840,58 @@ impl TickState {
         seq
     }
 
+    /// Vanilla `ServerPlayer.acceptsChatMessages`: only a client whose chat
+    /// setting is `Full` is sent other players' chat; `System` and `Hidden`
+    /// clients are not.
+    #[must_use]
+    pub(crate) fn accepts_chat(&self, connection: ConnectionId) -> bool {
+        self.connections.chat_visibility_of(connection) == crate::boundary::ChatVisibility::Full
+    }
+
     /// Reliable per-player push. On cap overflow the queue is sealed with a
     /// terminal `Disconnect` (always last) and the connection is scheduled
     /// for Leave-equivalent removal on a later tick; further pushes are
     /// dropped so nothing can land after `Disconnect`. Overflowing text lines
     /// compact into a `TextBurst` instead (see `PlayerChange::is_text`).
     pub fn push_player(&mut self, connection: ConnectionId, change: PlayerChange) {
+        if change.is_text()
+            && let Some(trace) = &mut self.debug_trace
+            && trace.connection == connection
+        {
+            // The traced source is the trace file, not the player.
+            trace.on_message(&match &change {
+                PlayerChange::Chat { message } => message.clone(),
+                PlayerChange::StyledChat { content } => crate::command_debug::plain(content),
+                _ => String::new(),
+            });
+            return;
+        }
+        self.push_to_recipient(connection, change);
+    }
+
+    /// Text a command delivers to a player as a target (`/tellraw`, `/say`,
+    /// `/msg`), not as its source's reply: a `/debug function` trace records
+    /// only what its source is sent, so this never lands in a trace.
+    pub(crate) fn push_to_recipient(&mut self, connection: ConnectionId, change: PlayerChange) {
+        // Vanilla `ServerPlayer.acceptsSystemMessages`: a client whose chat
+        // setting is hidden gets no text at all, neither chat nor command
+        // feedback. Titles and the action bar are not text lines here.
+        if change.is_text()
+            && self.connections.chat_visibility_of(connection)
+                == crate::boundary::ChatVisibility::Hidden
+        {
+            return;
+        }
+        self.push_player_unfiltered(connection, change);
+    }
+
+    /// Like [`Self::push_player`] without the chat setting's filter: the one
+    /// message a hidden client is still sent, `chat.disabled.options`, uses it.
+    pub(crate) fn push_player_unfiltered(
+        &mut self,
+        connection: ConnectionId,
+        change: PlayerChange,
+    ) {
         if self
             .disconnects
             .iter()

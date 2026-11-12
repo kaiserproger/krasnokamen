@@ -344,6 +344,16 @@ handles!(IntRule, true:
     RESPAWN_RADIUS = "respawn_radius",
 );
 
+/// Publish `send_command_feedback` for the edge's own command replies.
+pub(crate) fn publish_command_feedback(state: &TickState) {
+    if let Some(published) = &state.published_command_feedback {
+        published.store(
+            boolean(state, BoolRule::SEND_COMMAND_FEEDBACK),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+}
+
 /// Allocation-free typed lookup; invalid persisted values use the default.
 #[must_use]
 pub fn boolean(state: &TickState, rule: BoolRule) -> bool {

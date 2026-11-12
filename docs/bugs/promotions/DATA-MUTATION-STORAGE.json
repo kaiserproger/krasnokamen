@@ -1,0 +1,164 @@
+{
+  "id": "DATA-MUTATION-STORAGE",
+  "verdict": "promoted",
+  "fix_commit": "patch:f3ee0db6f2ab384acbb5302aa2202e5a64216714f8e89b77ac32c859b97f65cb",
+  "fix_commit_full": "patch:f3ee0db6f2ab384acbb5302aa2202e5a64216714f8e89b77ac32c859b97f65cb",
+  "promoted_at": "2026-11-12T02:32:54+00:00",
+  "tree_head": "a4710009c5713cacf5c729040953cf8c07df5e93",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "f3ee0db6f2ab384acbb5302aa2202e5a64216714f8e89b77ac32c859b97f65cb",
+  "reversed_files": [
+    "crates/mc-core/src/command_data.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:command_data::tests::data_edit_keeps_a_zombie_villagers_cure_and_a_name_removal_clears_it": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_data::tests::data_edit_of_a_baby_keeps_its_hitbox_and_growing_up_restores_it": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_data::tests::data_edits_an_item_entitys_stack_delay_age_and_gravity": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_data::tests::data_merge_modify_and_remove_edit_a_mobs_data_and_keep_its_identity": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_data::tests::data_storage_modify_reports_results_and_survives_reads": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_data::tests::data_edit_of_one_field_keeps_love_and_persistence_the_entity_already_had": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_data::tests::data_entity_edit_of_a_villager_keeps_its_profession_level_and_age": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_data::tests::data_edit_of_an_experience_orb_changes_its_value_and_count": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_data::tests::data_edits_a_command_block_through_the_same_command_path": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:dimensions::tests::data_edit_of_a_villager_keeps_trades_gossip_inventory_and_replays_from_the_wal": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:dimensions::tests::data_edits_a_block_entity_in_another_loaded_dimension": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:dimensions::tests::data_edits_an_entity_for_senders_in_the_nether_and_the_end": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_data::tests::data_entity_edits_refuse_players_unsupported_fields_and_position_without_changing_anything": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_data::tests::data_modify_and_merge_edit_any_block_entity_through_its_native_owner": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_data::tests::data_block_edits_are_refused_without_changing_anything": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:dimensions::tests::data_merge_entity_edits_an_entity_in_another_loaded_dimension": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:datapack-reload:native-datapack-reload": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-datapack-reload --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261112T020143-ledger-promote-0hw_tvbx/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_data::tests::data_edit_keeps_a_zombie_villagers_cure_and_a_name_removal_clears_it": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_data::tests::data_edit_of_a_baby_keeps_its_hitbox_and_growing_up_restores_it": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_data::tests::data_edits_an_item_entitys_stack_delay_age_and_gravity": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_data::tests::data_merge_modify_and_remove_edit_a_mobs_data_and_keep_its_identity": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_data::tests::data_storage_modify_reports_results_and_survives_reads": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_data::tests::data_edit_of_one_field_keeps_love_and_persistence_the_entity_already_had": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_data::tests::data_entity_edit_of_a_villager_keeps_its_profession_level_and_age": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_data::tests::data_edit_of_an_experience_orb_changes_its_value_and_count": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_data::tests::data_edits_a_command_block_through_the_same_command_path": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:dimensions::tests::data_edit_of_a_villager_keeps_trades_gossip_inventory_and_replays_from_the_wal": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:dimensions::tests::data_edits_a_block_entity_in_another_loaded_dimension": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:dimensions::tests::data_edits_an_entity_for_senders_in_the_nether_and_the_end": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_data::tests::data_entity_edits_refuse_players_unsupported_fields_and_position_without_changing_anything": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_data::tests::data_modify_and_merge_edit_any_block_entity_through_its_native_owner": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_data::tests::data_block_edits_are_refused_without_changing_anything": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:dimensions::tests::data_merge_entity_edits_an_entity_in_another_loaded_dimension": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261111T233235-native-datapack-reload-qp8gofeq/result.json",
+    "tree_head": "a4710009c5713cacf5c729040953cf8c07df5e93",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "080e86c32c92b2c3855914382eb16bfa83da4a9514eaaab237b98a2d594c10f7",
+    "covers": [
+      "harness:datapack-reload:native-datapack-reload"
+    ],
+    "profile": "datapack-reload"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261112T020143-ledger-promote-0hw_tvbx"
+}

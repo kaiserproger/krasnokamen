@@ -1,0 +1,21 @@
+diff --git a/crates/mc-core/src/datapacks.rs b/crates/mc-core/src/datapacks.rs
+index e0f492f4..4c36d6ea 100644
+--- a/crates/mc-core/src/datapacks.rs
++++ b/crates/mc-core/src/datapacks.rs
+@@ -902,11 +902,12 @@ impl PackSet {
+                 .filter(|id| *id == "vanilla" || packs.contains_key(*id))
+                 .map(describe)
+                 .collect(),
+-            available: selection
+-                .disabled
++            available: packs
+                 .iter()
+-                .filter(|id| packs.contains_key(*id))
+-                .map(describe)
++                .filter(|(id, pack)| {
++                    !selection.enabled.contains(id) && features_enabled(&pack.metadata)
++                })
++                .map(|(id, _)| describe(id))
+                 .collect(),
+         })
+     }

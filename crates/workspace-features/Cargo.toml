@@ -37,6 +37,7 @@ memchr = { version = "2", default-features = false, features = ["alloc", "defaul
 num-traits = { version = "0.2", default-features = false, features = ["default", "i128", "libm", "std"] }
 once_cell = { version = "1", default-features = false, features = ["alloc", "default", "race", "std"] }
 rand_core = { version = "0.6", default-features = false, features = ["alloc", "getrandom", "std"] }
+regex = { version = "1", default-features = false, features = ["std", "unicode"] }
 regex-automata = { version = "0.4", default-features = false, features = ["alloc", "dfa-build", "dfa-search", "meta", "nfa-pikevm", "nfa-thompson", "std", "syntax"] }
 regex-syntax = { version = "0.8", default-features = false, features = ["default", "std", "unicode", "unicode-age", "unicode-bool", "unicode-case", "unicode-gencat", "unicode-perl", "unicode-script", "unicode-segment"] }
 semver = { version = "1", default-features = false, features = ["serde", "std"] }

@@ -1,0 +1,31 @@
+diff --git a/crates/mc-core/src/datapacks.rs b/crates/mc-core/src/datapacks.rs
+index 50d84040..4c36d6ea 100644
+--- a/crates/mc-core/src/datapacks.rs
++++ b/crates/mc-core/src/datapacks.rs
+@@ -485,7 +485,7 @@ fn scan(root: &Path, remaining: &mut usize) -> Result<Scan, String> {
+                 .push(pack.file_name().to_string_lossy().into_owned());
+             continue;
+         };
+-        if !kind.is_dir() {
++        if !kind.is_dir() && !(kind.is_file() && name.ends_with(".zip")) {
+             found.not_packs.push(name);
+             continue;
+         }
+@@ -790,6 +790,17 @@ impl PackSet {
+             .split_once('/')
+             .ok_or("Resource must be namespaced")?;
+         let (kind, resource) = tail.split_once('/').ok_or("Resource must have a type")?;
++        if matches!(kind, "worldgen" | "dimension" | "dimension_type")
++            || (kind == "tags" && resource.starts_with("worldgen/"))
++        {
++            // The native generators are Rust: these resources cannot be
++            // applied, so the rest of the pack loads and the operator is told.
++            self.ignored
++                .entry(pack.to_owned())
++                .or_default()
++                .push(relative.to_owned());
++            return Ok(());
++        }
+         if kind == "function" && resource.ends_with(".mcfunction") {
+             let id = identifier(&format!(
+                 "{namespace}:{}",

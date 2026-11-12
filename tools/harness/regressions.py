@@ -89,7 +89,7 @@ _WINDOWED_PROFILES = frozenset({
     'survival', 'inventory', 'entities', 'core-client', 'native-lifecycle',
     'logical-native', 'native-scale', 'title-connect', 'singleplayer-regressions',
     'dialogs', 'admin-commands', 'chisel', 'anti-xray', 'block-log',
-    'composter-chance', 'village-qa', 'village-autonomy-qa',
+    'composter-chance', 'chat-visibility', 'datapack-reload', 'village-qa', 'village-autonomy-qa',
     'civilization-seed-qa', 'village-owner-order-qa', 'scene-shot',
     'settlement-map-qa', 'claim-only-qa', 'buildings-qa', 'army-qa', 'autocraft-qa',
 })

@@ -1,0 +1,27 @@
+diff --git a/crates/mc-core/src/tick.rs b/crates/mc-core/src/tick.rs
+index fb014689..e627b9c0 100644
+--- a/crates/mc-core/src/tick.rs
++++ b/crates/mc-core/src/tick.rs
+@@ -838,8 +838,7 @@ impl TickState {
+     /// clients are not.
+     #[must_use]
+     pub(crate) fn accepts_chat(&self, connection: ConnectionId) -> bool {
+-        let _ = connection;
+-        true
++        self.connections.chat_visibility_of(connection) == crate::boundary::ChatVisibility::Full
+     }
+ 
+     /// Reliable per-player push. On cap overflow the queue is sealed with a
+@@ -870,6 +869,12 @@ impl TickState {
+         // Vanilla `ServerPlayer.acceptsSystemMessages`: a client whose chat
+         // setting is hidden gets no text at all, neither chat nor command
+         // feedback. Titles and the action bar are not text lines here.
++        if change.is_text()
++            && self.connections.chat_visibility_of(connection)
++                == crate::boundary::ChatVisibility::Hidden
++        {
++            return;
++        }
+         self.push_player_unfiltered(connection, change);
+     }
+ 
