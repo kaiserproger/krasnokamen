@@ -169,3 +169,6 @@ timings do not establish inhabited-settlement workload coverage.
   [worldgen evidence](../evidence/worldgen-diff/README.md).
 - Player-capacity ladder and weak-hardware/scaling/VPS matrices:
   [BENCHMARKS](../performance/BENCHMARKS.md).
+- Dropped-item cost (tens of thousands of item entities): the `native-100-kelp12k` and `items-heavy`
+  profiles, the `items ...` / `edge items:` phase-log lines and `tools/coreperf/items_table.py` are
+  described in [PROFILES](../performance/PROFILES.md#many-items-benchmarks).

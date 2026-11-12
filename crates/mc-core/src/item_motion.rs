@@ -7,7 +7,14 @@ use mc_data::inventory_semantics_26_1_2::can_stack;
 use mc_physics::mth;
 use mc_physics::{BlockMaterial, BlockSampler, EntityBody, Vec3};
 
-pub(crate) fn step<S: BlockSampler>(
+pub(crate) fn step<S: BlockSampler>(body: EntityBody, sampler: &S, no_gravity: bool) -> EntityBody {
+    let started = crate::item_perf::start();
+    let body = step_untimed(body, sampler, no_gravity);
+    crate::item_perf::finish(crate::item_perf::Part::Step, started);
+    body
+}
+
+fn step_untimed<S: BlockSampler>(
     mut body: EntityBody,
     sampler: &S,
     no_gravity: bool,
@@ -77,9 +84,15 @@ pub(crate) fn step<S: BlockSampler>(
 /// merge compatible item boxes expanded by `.5, 0, .5`. Returns how many
 /// item entities the pass examined (zero off the cadence).
 pub(crate) fn merge_neighbours(state: &mut TickState) -> usize {
+    if crate::item_perf::enabled() {
+        print_census(state);
+    }
     if !state.tick.is_multiple_of(20) {
         return 0;
     }
+    let profile = crate::item_perf::enabled();
+    let gather_start = profile.then(std::time::Instant::now);
+    let mut counters = (0u64, 0u64, 0u64);
     let mut slots = std::mem::take(&mut state.serial_entity_slots);
     slots.clear();
     slots.extend(state.entities.item_slots().filter(|slot| {
@@ -103,6 +116,7 @@ pub(crate) fn merge_neighbours(state: &mut TickState) -> usize {
     cells.clear();
     cells.extend(slots.iter().map(|slot| item_cell(state, *slot)));
     let mut runs = [(0, 0); 27];
+    let scan_start = profile.then(std::time::Instant::now);
 
     for (index, receiver) in slots.iter().copied().enumerate() {
         if !state.entities.body(receiver).alive {
@@ -129,6 +143,7 @@ pub(crate) fn merge_neighbours(state: &mut TickState) -> usize {
                         if source.0 <= receiver.0 || !state.entities.body(source).alive {
                             continue;
                         }
+                        counters.0 += 1;
                         if !merge_boxes_overlap(
                             position,
                             state.entities.pos(source),
@@ -139,11 +154,13 @@ pub(crate) fn merge_neighbours(state: &mut TickState) -> usize {
                         ) {
                             continue;
                         }
+                        counters.1 += 1;
                         let Some((moved, pickup_delay, age, source_id)) =
                             merge_amount(state, receiver, source)
                         else {
                             continue;
                         };
+                        counters.2 += 1;
                         {
                             let row = state.entities.row_mut(receiver);
                             let item = row.item.as_mut().unwrap();
@@ -183,11 +200,57 @@ pub(crate) fn merge_neighbours(state: &mut TickState) -> usize {
         }
     }
     let examined = slots.len();
+    if let (Some(gather_start), Some(scan_start)) = (gather_start, scan_start) {
+        crate::item_perf::print_merge(
+            state.tick,
+            state.dimension,
+            &crate::item_perf::MergeScan {
+                gather_sort: scan_start.duration_since(gather_start),
+                scan: scan_start.elapsed(),
+                examined,
+                candidates: counters.0,
+                overlapping: counters.1,
+                merged: counters.2,
+            },
+        );
+    }
     slots.clear();
     state.serial_entity_slots = slots;
     cells.clear();
     state.item_merge_cells = cells;
     examined
+}
+
+/// Resident item population for the `MC_CORE_PHASE_LOG` item census (diagnostic).
+fn print_census(state: &TickState) {
+    let census_start = std::time::Instant::now();
+    let mut census = crate::item_perf::Census::default();
+    for slot in state.entities.item_slots() {
+        census.items += 1;
+        let body = state.entities.body(slot);
+        if !body.alive {
+            continue;
+        }
+        census.alive += 1;
+        census.ground += u64::from(state.entities.ground(slot));
+        let v = state.entities.vel(slot);
+        census.moving += u64::from(v[0] * v[0] + v[1] * v[1] + v[2] * v[2] > 1e-6);
+        census.mature += u64::from(body.pickup_delay == 0);
+        census.stack_count += state
+            .entities
+            .row(slot)
+            .item
+            .as_ref()
+            .map_or(0, |item| u64::from(item.count.max(0) as u32));
+    }
+    if census.items > 0 || state.dimension == crate::dimensions::Dimension::Overworld {
+        crate::item_perf::print_census(
+            state.tick,
+            state.dimension,
+            &census,
+            census_start.elapsed(),
+        );
+    }
 }
 
 fn item_cell(state: &TickState, slot: EntitySlot) -> (i32, i32, i32) {

@@ -258,6 +258,79 @@ dropped trigger writes. Requested work is never substituted for observation.
   See [in-process chunk generation](#in-process-chunk-generation) for the separate
   generator benchmark; it must not be combined with these load profiles.
 
+## Many-items benchmarks
+
+Two **noncanonical** profiles measure how the tick pays for dropped-item entities. Neither fills the
+pending table above (`publication_evidence=false`, `noncanonical=true` in the receipt).
+
+### `native-100-kelp12k`: the preserved polluted native-100 world
+
+The native-100 recipe (same 100 bots, 100,000 mobs, view/simulation distance 6, so the same cache key
+under the same `data/vanilla`) run against the world that the kelp wash-out bug filled with item
+entities: **12,218 item entities** at preparation end (about 98 % kelp), growing to roughly 19,000
+by the end of a window on a server that still washes kelp. Main preserved it read-only as
+`<work>/targets/perf-fixture-cache-kelp12k`; the profile points `--fixture-cache` there by default
+and always passes `--require-cache-hit`.
+
+- The recipe never mentions kelp or items, so a fixed server loads and measures exactly this world
+  and the receipt stays comparable across the fix (B/A on one world).
+- The profile **refuses to prepare**: with no complete entry for the cache key (the recipe or the
+  registry content changed) it fails before touching the cache directory instead of silently
+  measuring a clean world. It also pins the entry: key
+  `e374422d…`, world tree hash `f07d720e…`, 12,218 saved items; a different world fails the run.
+- Item ages in the saved world are at most about 2,900; an item despawns at age 6,000 ticks active. A
+  fixed server therefore loses the preserved items during a long window (the production rate, not a
+  fault): read the resident population per tick from the `items census:` lines, never assume it.
+
+```sh
+python3 -m tools.coreperf.profiles native-100-kelp12k "${COMMON[@]}" \
+    --server-wrapper "env MC_CORE_PHASE_LOG=1"
+```
+
+### `items-heavy`: N item entities on a sky platform
+
+`python3 -m tools.coreperf.profiles items-heavy --items N [--items-bots 10] "${COMMON[@]}"` builds,
+with public commands only (no gameplay, no randomness), a stone platform at y=199 (no terrain, caves or
+natural mobs), a walled and roofed 14x14 observer pad at the origin where `--items-bots` (default 10)
+creative bots walk at 20 slots/s without edits or chat, and N item entities in four classes (30 %,
+30 %, 20 %, 20 %; the ground class takes the rounding remainder), seed 42, view/simulation distance 8:
+
+| Class | Layout | What it exercises |
+|---|---|---|
+| `ground` | two items per block cell on the floor, kinds chosen so neighbours never merge | resting items, the merge scan, tracking |
+| `water` | the same grid in a three-deep still pool (stone ring) | items that never rest: every tick moves |
+| `pile_full` | 16 full stacks (count 64) of one kind in one position, piles two blocks apart | a same-kind candidate that cannot receive anything |
+| `pile_mixed` | 16 distinct kinds, count 1, in one position | candidates of the wrong kind |
+
+Nothing merges, so the platform population is stationary (checked: the saved snapshot must hold
+exactly N items above the floor before and after the run; items elsewhere, natural drops such as the
+kelp wash-out items of the seed-42 ocean east of the origin, are counted separately in the receipt and
+enter the per-tick census). Random ticks are off (`randomTickSpeed 0`) so that growth, and the
+wash-out it triggers, is not part of this benchmark. The ladder is N = 0 (platform, pad and bots only), 10,000 and 30,000;
+the maximum is 36,000 (the items must stay inside the 6-chunk item tracking range of every bot).
+The fixture cache key contains N. All summons run in the last preparation region so items age only from
+their summon to the end of preparation (an item ages 6,000 ticks active before it despawns).
+
+### Per-item attribution (`MC_CORE_PHASE_LOG=1`, no work when unset)
+
+The server log gains, before each Overworld `phase ms:` line, the lines `items census:` (resident
+items, on ground, moving, mature, and the item step's summed rayon CPU with the clock cost per timed
+item), `items merge:` (on the 20-tick cadence: gather/sort and scan time, candidate and overlapping
+pairs, merges), `items expiry:` (items removed at age 6,000 and the removal time), `items views:` (wire
+view candidates and changed images, and how many are items), and one `edge items:` line per published
+tick (viewers, framed packets and bytes to the bots, items among the entities each viewer holds, planner
+visits, item movement/spawn/metadata packets and bytes, and the fanout phases `index_ms`, `plan_ms`,
+`fill_ms`). `python3 -m tools.coreperf.items_table --leg n0=<run> --leg n10k=<run> --leg n30k=<run>
+--leg kelp1=<run> [--md table.md]` turns the runs into the per-phase table, the clock-corrected
+per-item step and merge costs, and the least-squares slope in microseconds per item per tick of every
+column across the ladder (phases, laps, `tick outer ms:` and amortized `checkpoint capture ms:` lines,
+edge fanout), plus a within-run slope per leg. The step timer sums CPU over the rayon
+workers (not wall time); the other lines are wall time on the thread that ran them. The attribution
+costs time itself: every timed item carries one clock-read pair (`clock_ns`, subtracted from the step
+CPU), the census runs inside the entity commit (`census_ms`) and the views probe inside the views phase
+(`probe_ms`); the table reports the entity and views phases net of them, and `probe_ms` on the edge
+line is the pump-thread cost of counting pairs, kept out of `total_ms`.
+
 ## Reproduce
 
 Run from a checkout with the pinned Rust toolchain, Clang/mold, Python 3, Linux

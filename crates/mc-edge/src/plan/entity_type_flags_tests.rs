@@ -1,6 +1,6 @@
 //! `entity_type_flags` oracle: real registry ids for boss/leash/ordinary,
 //! out-of-range ids are false, and similar names never match.
-use crate::plan::entity_type_flags::{is_boss, is_leash_knot};
+use crate::plan::entity_type_flags::{is_boss, is_item, is_leash_knot};
 
 fn type_id_of(name: &str) -> u32 {
     mc_data::entity_types::krasnokamen_required_entity_types()
@@ -22,6 +22,19 @@ fn leash_knot_is_not_a_boss() {
     let id = type_id_of("minecraft:leash_knot");
     assert!(is_leash_knot(id));
     assert!(!is_boss(id));
+}
+
+#[test]
+fn only_the_item_entity_is_an_item() {
+    assert!(is_item(type_id_of("minecraft:item")));
+    for name in [
+        "minecraft:item_frame",
+        "minecraft:cow",
+        "minecraft:experience_orb",
+    ] {
+        assert!(!is_item(type_id_of(name)), "{name} is not an item entity");
+    }
+    assert!(!is_item(u32::MAX));
 }
 
 #[test]
