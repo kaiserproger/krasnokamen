@@ -61,7 +61,7 @@ def _check_port(port: int, name: str, port_range=(PORT_MIN, PORT_MAX)) -> int:
 
 
 # One fixed, machine-wide lock namespace for EVERY harness process on this
-# host. It must never be derived from any env var (SOLARIS_WORK_ROOT, TMPDIR,
+# host. It must never be derived from any env var (KRASNOKAMEN_WORK_ROOT, TMPDIR,
 # ...): two processes with different environments would otherwise use
 # different lock dirs and both be handed the same port. The harness already
 # requires Linux, so /tmp always exists; the dir is created sticky 1777 and
@@ -226,7 +226,7 @@ port = {self.port}
 
 [auth]
 online_mode = false
-require_plugin_login = {str(self.plugins_dir is not None and (self.plugins_dir / "solaris-auth").is_dir()).lower()}
+require_plugin_login = {str(self.plugins_dir is not None and (self.plugins_dir / "krasnokamen-auth").is_dir()).lower()}
 
 [dashboard]
 enabled = true

@@ -2,7 +2,7 @@
 """Read-only report of agent worktrees and release pins: wt-gc [--days 7].
 
 Owner-host tool (see tools/dev/README.md). Lists every registered worktree under
-<work>/wt/ of the four Solaris repos (age of the last change, dirty files, commits
+<work>/wt/ of the four Krasnokamen repos (age of the last change, dirty files, commits
 not in main, target size) and <work>/pins/* older than the threshold. Never
 deletes anything; for each stale worktree it prints the wt-done command.
 """

@@ -206,5 +206,5 @@
   "two-tnt-fan-end",
   "slime-tnt-carpet-end"
  ],
- "known_divergence": "Solaris and vanilla agree on the TNT outcome (moved, not primed; entity counts equal) but differ in fluid details of the destroy-list cells: vanilla leaves water[level=1] at the removed carpet/fan neighbour in 'armed' (cells 1,5) and a non-waterlogged dead_tube_coral_fan in 'fired', Solaris has no flowing water there and a waterlogged fan (flow/waterlogging tick order around the piston push). Repro: --scenario tnt-bud-push-destroy-list."
+ "known_divergence": "Krasnokamen and vanilla agree on the TNT outcome (moved, not primed; entity counts equal) but differ in fluid details of the destroy-list cells: vanilla leaves water[level=1] at the removed carpet/fan neighbour in 'armed' (cells 1,5) and a non-waterlogged dead_tube_coral_fan in 'fired', Krasnokamen has no flowing water there and a waterlogged fan (flow/waterlogging tick order around the piston push). Repro: --scenario tnt-bud-push-destroy-list."
 }

@@ -1,4 +1,4 @@
-schema: solaris-world-adapter-index/1
+schema: krasnokamen-world-adapter-index/1
 domain: weather_time
 note:
   Documentation index only; execution is the shared Python Adapter interface, not a YAML DSL. Registration is
@@ -128,7 +128,7 @@ subjects:
     server_gap_evidence: []
   - id: weather_time.no_weather_nether_end
     matrix_ids:
-      - pw:weather_time.no_weather_nether_end/fabric_solaris_loader/creative/the_nether/hard/1/malformed_or_stale_packet/crash_kill9_wal_replay/op_1
+      - pw:weather_time.no_weather_nether_end/fabric_krasnokamen_loader/creative/the_nether/hard/1/malformed_or_stale_packet/crash_kill9_wal_replay/op_1
     status: adapter_authored_not_matrix_verified
     server_evidence:
       - crates/mc-core/src/weather.rs
@@ -186,7 +186,7 @@ subjects:
     server_gap_evidence: []
   - id: weather_time.sleep_skip_night
     matrix_ids:
-      - pw:weather_time.sleep_skip_night/forge_solaris_loader/creative/overworld/peaceful/2/duplicate_login/clean_restart_mid_action/op_1
+      - pw:weather_time.sleep_skip_night/forge_krasnokamen_loader/creative/overworld/peaceful/2/duplicate_login/clean_restart_mid_action/op_1
       - tr.disconnect_x_transient_state.reconnect_mid_action:weather_time.sleep_skip_night/native_linux/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
       - tr.disconnect_x_transient_state.duplicate_login:weather_time.sleep_skip_night/protocol_bot/survival/overworld/normal/1/duplicate_login/steady/non_op_0
     status: adapter_authored_not_matrix_verified
@@ -217,7 +217,7 @@ subjects:
     server_gap_evidence: []
   - id: weather_time.sleep_refused
     matrix_ids:
-      - pw:weather_time.sleep_refused/neoforge_solaris_loader/creative/overworld/hard/2/normal/pause_when_empty_resume/non_op_0
+      - pw:weather_time.sleep_refused/neoforge_krasnokamen_loader/creative/overworld/hard/2/normal/pause_when_empty_resume/non_op_0
     status: adapter_authored_not_matrix_verified
     server_evidence:
       - crates/mc-core/src/sleep.rs

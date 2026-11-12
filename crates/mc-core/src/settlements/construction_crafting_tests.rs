@@ -222,7 +222,7 @@ fn house_l1_raw_materials_account_for_whole_recipe_batches() {
 
 #[test]
 fn installed_recipe_index_matches_every_original_scan_in_order() {
-    let root = std::env::var_os("SOLARIS_CONTENT_CACHE")
+    let root = std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
@@ -376,7 +376,7 @@ fn recipe_index_rebuild_replaces_recipe_and_tag_candidates() {
     let planks = registry.items.id_of(&id("minecraft:oak_planks")).unwrap();
     let stone = registry.items.id_of(&id("minecraft:stone")).unwrap();
     let tag = id("test:construction_index");
-    let mut recipe = mc_data::recipes::solaris_required_recipes()
+    let mut recipe = mc_data::recipes::krasnokamen_required_recipes()
         .into_iter()
         .find(|recipe| recipe.result.item == id("minecraft:oak_planks"))
         .unwrap();

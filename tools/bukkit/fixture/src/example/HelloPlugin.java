@@ -9,7 +9,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
-/** Compiled against the upstream Spigot API JAR, not Solaris' replacement types. */
+/** Compiled against the upstream Spigot API JAR, not Krasnokamen' replacement types. */
 public final class HelloPlugin extends JavaPlugin implements Listener {
     @Override public void onEnable() {
         getLogger().info("BUKKIT_ON_ENABLE");

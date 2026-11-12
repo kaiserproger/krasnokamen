@@ -100,7 +100,7 @@ mod tests {
 
     #[test]
     fn password_host_imports_are_refused_in_precommit_hooks() {
-        use crate::bindings::solaris::plugin::host::Host;
+        use crate::bindings::krasnokamen::plugin::host::Host;
         struct Services;
         impl crate::HostServices for Services {
             fn log(&mut self, _: crate::LogLevel, _: &str) {

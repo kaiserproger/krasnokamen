@@ -1,7 +1,7 @@
 """SERVER-FABRIC-SCREEN-ADMISSION real-client check through the Fabric Loader.
 
-The release server starts the `solaris:screen` service only for admitted
-loader sessions (native or Fabric). This scenario runs the real Solaris
+The release server starts the `krasnokamen:screen` service only for admitted
+loader sessions (native or Fabric). This scenario runs the real Krasnokamen
 Loader (Fabric) client against the server candidate and asserts from the
 server log that the screen service was started for that session with
 platform Fabric. On a server build where Fabric admission is reverted the

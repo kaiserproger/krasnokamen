@@ -126,13 +126,13 @@ impl Shown {
     pub(super) fn has(&self, action: &str) -> bool {
         self.actions
             .iter()
-            .any(|(_, id)| id == &format!("solaris:settlement/{action}"))
+            .any(|(_, id)| id == &format!("krasnokamen:settlement/{action}"))
     }
     fn label_of(&self, action: &str) -> &str {
         &self
             .actions
             .iter()
-            .find(|(_, id)| id == &format!("solaris:settlement/{action}"))
+            .find(|(_, id)| id == &format!("krasnokamen:settlement/{action}"))
             .unwrap()
             .0
     }
@@ -313,7 +313,7 @@ fn click(
         state,
         &[PlayerInput::DialogClick {
             connection: CONN,
-            id: format!("solaris:settlement/{action}"),
+            id: format!("krasnokamen:settlement/{action}"),
             payload: Some(Tag::Compound(entries)),
         }],
     )
@@ -617,12 +617,12 @@ fn stale_or_foreign_ids_never_panic_or_leak() {
         &[
             PlayerInput::DialogClick {
                 connection: CONN,
-                id: "solaris:settlement/buildings".into(),
+                id: "krasnokamen:settlement/buildings".into(),
                 payload: Some(Tag::Compound(vec![("s".into(), string("nope"))])),
             },
             PlayerInput::DialogClick {
                 connection: CONN,
-                id: "solaris:settlement/ghost".into(),
+                id: "krasnokamen:settlement/ghost".into(),
                 payload: None,
             },
         ],
@@ -670,7 +670,7 @@ fn certify_reports_missing_requirements_then_certifies_and_lists_with_upgrade_ne
     assert!(card.body.contains("Level 2 needs:"), "{}", card.body);
     assert!(card.body.contains("workstations 1/2"), "{}", card.body);
     let changes = press(&mut state, 6);
-    let cached = confirmation_payload(&changes, "solaris:settlement/upgrade");
+    let cached = confirmation_payload(&changes, "krasnokamen:settlement/upgrade");
     let review = last_dialog(&changes);
     assert!(review.has("upgrade"));
     assert_eq!(state.settlements.get(id).unwrap().buildings.len(), 1);
@@ -681,7 +681,7 @@ fn certify_reports_missing_requirements_then_certifies_and_lists_with_upgrade_ne
         &mut state,
         &[PlayerInput::DialogClick {
             connection: CONN,
-            id: "solaris:settlement/upgrade".into(),
+            id: "krasnokamen:settlement/upgrade".into(),
             payload: Some(cached.clone()),
         }],
     ));
@@ -696,7 +696,7 @@ fn certify_reports_missing_requirements_then_certifies_and_lists_with_upgrade_ne
         &mut state,
         &[PlayerInput::DialogClick {
             connection: CONN,
-            id: "solaris:settlement/upgrade".into(),
+            id: "krasnokamen:settlement/upgrade".into(),
             payload: Some(cached.clone()),
         }],
     ));
@@ -705,7 +705,7 @@ fn certify_reports_missing_requirements_then_certifies_and_lists_with_upgrade_ne
         &mut state,
         &[PlayerInput::DialogClick {
             connection: CONN,
-            id: "solaris:settlement/upgrade".into(),
+            id: "krasnokamen:settlement/upgrade".into(),
             payload: Some(cached),
         }],
     ));
@@ -1049,7 +1049,7 @@ fn production_autocraft_order_plans_missing_ingredients_or_says_why_not() {
         &mut state,
         id,
         "order_create",
-        &create("solaris-settlements:sugar"),
+        &create("krasnokamen-settlements:sugar"),
     ));
     assert!(
         missing.body.contains(
@@ -1062,7 +1062,7 @@ fn production_autocraft_order_plans_missing_ingredients_or_says_why_not() {
         &mut state,
         id,
         "order_create",
-        &create("solaris-settlements:hay_block"),
+        &create("krasnokamen-settlements:hay_block"),
     ));
     assert!(
         cycle
@@ -1077,7 +1077,7 @@ fn production_autocraft_order_plans_missing_ingredients_or_says_why_not() {
         &mut state,
         id,
         "order_create",
-        &create("solaris-settlements:bread"),
+        &create("krasnokamen-settlements:bread"),
     ));
     assert!(
         planned
@@ -1154,7 +1154,7 @@ fn autonomous_main_page_keeps_claim_first_and_fits_a_small_window() {
     let page = last_dialog(&command(&mut state, "settlement"));
     assert_eq!(
         page.actions.first().map(|(_, action)| action.as_str()),
-        Some("solaris:settlement/next"),
+        Some("krasnokamen:settlement/next"),
         "the primary action must not be placed below the other navigation buttons"
     );
     assert!(
@@ -1458,7 +1458,7 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
         page.body
     );
     let changes = press(&mut state, 52);
-    let cached = confirmation_payload(&changes, "solaris:settlement/project_upgrade");
+    let cached = confirmation_payload(&changes, "krasnokamen:settlement/project_upgrade");
     let review = last_dialog(&changes);
     assert!(review.has("project_upgrade") && review.has("project_estimate"));
 
@@ -1485,7 +1485,7 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
         &mut state,
         &[PlayerInput::DialogClick {
             connection: CONN,
-            id: "solaris:settlement/project_upgrade".into(),
+            id: "krasnokamen:settlement/project_upgrade".into(),
             payload: Some(cached.clone()),
         }],
     ));
@@ -1499,7 +1499,7 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
         &mut state,
         &[PlayerInput::DialogClick {
             connection: CONN,
-            id: "solaris:settlement/project_upgrade".into(),
+            id: "krasnokamen:settlement/project_upgrade".into(),
             payload: Some(cached),
         }],
     ));
@@ -2090,7 +2090,7 @@ fn reviews_ignore_simulation_revisions_but_refuse_changed_pending_orders_and_spe
         "project_order_review",
         &[("blueprint", string("house"))],
     );
-    let cached = confirmation_payload(&changes, "solaris:settlement/project_order");
+    let cached = confirmation_payload(&changes, "krasnokamen:settlement/project_order");
     assert_eq!(text(field(&cached, "pending_blueprint").unwrap()), "");
     assert_eq!(text(field(&cached, "pending_level").unwrap()), "0");
     assert_eq!(text(field(&cached, "pending_building").unwrap()), "0");
@@ -2099,7 +2099,7 @@ fn reviews_ignore_simulation_revisions_but_refuse_changed_pending_orders_and_spe
         &mut state,
         &[PlayerInput::DialogClick {
             connection: CONN,
-            id: "solaris:settlement/project_order".into(),
+            id: "krasnokamen:settlement/project_order".into(),
             payload: Some(cached.clone()),
         }],
     ));
@@ -2116,7 +2116,7 @@ fn reviews_ignore_simulation_revisions_but_refuse_changed_pending_orders_and_spe
             &mut state,
             &[PlayerInput::DialogClick {
                 connection: CONN,
-                id: "solaris:settlement/project_order".into(),
+                id: "krasnokamen:settlement/project_order".into(),
                 payload: Some(payload),
             }],
         ));

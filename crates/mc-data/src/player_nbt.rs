@@ -3,7 +3,7 @@
 //! `foodSaturationLevel`, `foodExhaustionLevel`, `Air`, `SelectedItemSlot`,
 //! `XpLevel`/`XpP`/`XpTotal`, `playerGameType`, `Inventory` list with `Slot`,
 //! `equipment` compound, item compounds via [`crate::item_nbt`]).
-//! Crate-specific extras (`active_effects`, `solaris:*`, spawn records...)
+//! Crate-specific extras (`active_effects`, `krasnokamen:*`, spawn records...)
 //! stay in their crates; only the shared subset lives here, once.
 //!
 //! Vanilla slot model (26.1.2 `ddl.java`, `cdd.java:6`, `bfm.java:134`):
@@ -11,7 +11,7 @@
 //! 0-35; hotbar 0-8, main 9-35). Armor, offhand, body and saddle ride in
 //! the `equipment` compound keyed by slot name (`cgo.java`, `cgv.java`:
 //! `mainhand`, `offhand`, `feet`, `legs`, `chest`, `head`, `body`,
-//! `saddle`), each an item compound without a `Slot` key. Solaris v2
+//! `saddle`), each an item compound without a `Slot` key. Krasnokamen v2
 //! inventory indices mirror this: 0-35 storage, 36-39 armor
 //! (feet/legs/chest/head), 40 offhand.
 
@@ -44,10 +44,10 @@ pub struct VanillaPlayer {
     /// Equipment by vanilla slot name (`feet`, `legs`, `chest`, `head`,
     /// `offhand`, `body`, `saddle`, ...). Empty stacks never encode.
     pub equipment: Vec<(String, ItemStack)>,
-    /// Cursor custody (Solaris-only; encoded as `solaris:Carried` by callers
+    /// Cursor custody (Krasnokamen-only; encoded as `krasnokamen:Carried` by callers
     /// that persist it, ignored by the vanilla codec itself).
     pub carried: ItemStack,
-    /// Crafting-grid custody (ditto, `solaris:CraftingGrid`).
+    /// Crafting-grid custody (ditto, `krasnokamen:CraftingGrid`).
     pub grid: Vec<ItemStack>,
 }
 
@@ -287,7 +287,7 @@ mod tests {
     use super::*;
 
     fn items() -> ItemRegistry {
-        crate::items::solaris_required_items()
+        crate::items::krasnokamen_required_items()
     }
 
     #[test]
@@ -329,7 +329,7 @@ mod tests {
             )],
         };
         let fields = player_to_fields(&items, &player).expect("encode");
-        // Vanilla keys present; Solaris-private keys absent.
+        // Vanilla keys present; Krasnokamen-private keys absent.
         for key in [
             "Pos",
             "Rotation",
@@ -347,7 +347,7 @@ mod tests {
         ] {
             assert!(fields.iter().any(|(name, _)| name == key), "has {key}");
         }
-        assert!(fields.iter().all(|(name, _)| !name.starts_with("solaris:")));
+        assert!(fields.iter().all(|(name, _)| !name.starts_with("krasnokamen:")));
         assert!(
             fields
                 .iter()

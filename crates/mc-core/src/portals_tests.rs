@@ -655,7 +655,7 @@ fn torn_gateway_pair_wal_replays_both_links_atomically() {
         .extend(pair_changes.blocks);
     let pair = crate::core::journal_entries_for_tick(&mut state, &output);
     let directory =
-        std::env::temp_dir().join(format!("solaris-gateway-crash-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("krasnokamen-gateway-crash-{}", uuid::Uuid::new_v4()));
     let mut writer = crate::journal::JournalWriter::open(&directory, 1).unwrap();
     writer
         .append(
@@ -778,7 +778,7 @@ fn corrupt_gateway_wal_refuses_core_recovery_with_exact_cell() {
     let mut bytes = Vec::new();
     mc_nbt::write_network(&mut bytes, &fields).unwrap();
     let directory =
-        std::env::temp_dir().join(format!("solaris-gateway-corrupt-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("krasnokamen-gateway-corrupt-{}", uuid::Uuid::new_v4()));
     let mut writer = crate::journal::JournalWriter::open(&directory, 1).unwrap();
     publish_fixture_manifest(&directory);
     writer
@@ -830,7 +830,7 @@ fn portal_state_player_and_entity_checkpoint_roundtrip() {
         .entity_life
         .portal = timer;
     let record = crate::core::player_record_for(&state, id, state.tick).unwrap();
-    let path = std::env::temp_dir().join(format!("solaris-portals-{}", uuid::Uuid::new_v4()));
+    let path = std::env::temp_dir().join(format!("krasnokamen-portals-{}", uuid::Uuid::new_v4()));
     let config = crate::CoreConfig::new(path.clone(), 42);
     crate::native_checkpoint::tests::write_player(
         &config,
@@ -946,9 +946,9 @@ fn torn_portal_transfer_wal_recovers_exactly_one_entity_owner() {
         Dimension::Nether
     );
     let transfer = crate::core::journal_entries_for_tick(&mut state, &output);
-    assert!(!transfer.iter().any(|entry| matches!(entry,crate::journal::JournalEntry::Ticket { owner,.. } if owner.starts_with("solaris:portal:"))));
+    assert!(!transfer.iter().any(|entry| matches!(entry,crate::journal::JournalEntry::Ticket { owner,.. } if owner.starts_with("krasnokamen:portal:"))));
     let directory =
-        std::env::temp_dir().join(format!("solaris-portal-crash-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("krasnokamen-portal-crash-{}", uuid::Uuid::new_v4()));
     let mut writer = crate::journal::JournalWriter::open(&directory, 1).unwrap();
     // The native manifest fixture below captures tick 1. Keep its empty WAL
     // interval separate from the newer baseline image.

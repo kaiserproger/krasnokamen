@@ -148,11 +148,11 @@ not imply the mod remains useful without them.
 
 Required local tools: JDK **17**, Python 3 with PyYAML, Maven 3.9, Binaryen **123**
 (`wasm-opt`, `wasm-merge`), Rust with `wasm32-unknown-unknown`, and the normal
-Solaris dependencies. Maven resolves the pinned TeaVM dependencies in
+Krasnokamen dependencies. Maven resolves the pinned TeaVM dependencies in
 `tools/bukkit/pom.xml`. The offline compiler toolchain is **not a sandbox**;
 convert trusted input only (compiler extensions may execute build-time code).
 The converter does not intentionally invoke the plugin lifecycle. Build the
-adapter and existing component encoder from the **same Solaris checkout**:
+adapter and existing component encoder from the **same Krasnokamen checkout**:
 
 ```sh
 cargo build --manifest-path tools/bukkit/adapter/Cargo.toml --target wasm32-unknown-unknown
@@ -161,7 +161,7 @@ python3 tools/bukkit/convert.py \
   --java-home /path/to/jdk17 --maven /path/to/mvn \
   --binaryen-bin /path/to/binaryen-version_123/bin \
   --jar /path/to/plugin.jar --blocks-report data/vanilla/reports/blocks.json \
-  --adapter tools/bukkit/adapter/target/wasm32-unknown-unknown/debug/solaris_bukkit_adapter.wasm \
+  --adapter tools/bukkit/adapter/target/wasm32-unknown-unknown/debug/krasnokamen_bukkit_adapter.wasm \
   --component-encoder target/debug/examples/plugin_component --output /tmp/converted-plugin
 ```
 
@@ -180,8 +180,8 @@ the **upstream API**, never the shim, then uses the same generic converter.
 Run the opt-in in-process host test against its output:
 
 ```sh
-SOLARIS_BUKKIT_PACKAGE=/tmp/bukkit-receipt/package \
-SOLARIS_BUKKIT_BLOCKS=data/vanilla/reports/blocks.json \
+KRASNOKAMEN_BUKKIT_PACKAGE=/tmp/bukkit-receipt/package \
+KRASNOKAMEN_BUKKIT_BLOCKS=data/vanilla/reports/blocks.json \
   cargo test -p mc-plugin-host --test bukkit_component -- --ignored
 python3 -m unittest discover -s tools/bukkit -p 'test_*.py'
 ```

@@ -425,8 +425,8 @@ fn identifier_parses_with_and_without_namespace() {
     assert_eq!(id.namespace(), "minecraft");
     assert_eq!(id.path(), "stone");
 
-    let id = Identifier::parse("solaris:musket").unwrap();
-    assert_eq!(id.namespace(), "solaris");
+    let id = Identifier::parse("krasnokamen:musket").unwrap();
+    assert_eq!(id.namespace(), "krasnokamen");
     assert_eq!(id.path(), "musket");
 
     let id = Identifier::parse("minecraft:block/oak_door").unwrap();
@@ -438,11 +438,11 @@ fn identifier_rejects_invalid_shapes() {
     for bad in [
         "",
         ":",
-        "Solaris:musket",  // uppercase namespace
-        "solaris:Musket",  // uppercase path
-        "solaris::",       // empty path
+        "Krasnokamen:musket",  // uppercase namespace
+        "krasnokamen:Musket",  // uppercase path
+        "krasnokamen::",       // empty path
         ":foo",            // empty namespace
-        "solaris:mu sket", // space in path
+        "krasnokamen:mu sket", // space in path
     ] {
         assert!(
             Identifier::parse(bad).is_err(),
@@ -453,7 +453,7 @@ fn identifier_rejects_invalid_shapes() {
 
 #[test]
 fn identifier_round_trip() {
-    let id = Identifier::parse("solaris:musket").unwrap();
+    let id = Identifier::parse("krasnokamen:musket").unwrap();
     let mut buf = Vec::new();
     buf.write_identifier(&id).unwrap();
     let mut cursor: &[u8] = &buf;

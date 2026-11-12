@@ -1,4 +1,4 @@
-package org.solaris.bukkit;
+package org.krasnokamen.bukkit;
 
 import java.io.File;
 import java.net.URL;

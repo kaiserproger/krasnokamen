@@ -101,7 +101,7 @@ impl Shown {
     fn has(&self, action: &str) -> bool {
         self.actions
             .iter()
-            .any(|(_, id)| id == &format!("solaris:settlement/{action}"))
+            .any(|(_, id)| id == &format!("krasnokamen:settlement/{action}"))
     }
 }
 
@@ -137,7 +137,7 @@ fn click(
         state,
         &[PlayerInput::DialogClick {
             connection: CONN,
-            id: format!("solaris:settlement/{action}"),
+            id: format!("krasnokamen:settlement/{action}"),
             payload: Some(Tag::Compound(entries)),
         }],
     )
@@ -401,7 +401,7 @@ fn six_soldier_roster_is_compact_and_every_soldier_reachable() {
         assert_eq!(
             page.actions
                 .iter()
-                .filter(|(_, action)| action == "solaris:settlement/army_order")
+                .filter(|(_, action)| action == "krasnokamen:settlement/army_order")
                 .count(),
             4
         );

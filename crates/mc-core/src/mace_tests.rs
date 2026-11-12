@@ -198,7 +198,7 @@ fn mace_impulse_round_trips_player_wal_and_native_checkpoint_and_clears_after_la
         &[(1, output.tick, entries)],
     );
     assert_eq!(replay.players[&uuid].current_impulse_impact_pos, impact);
-    let dir = std::env::temp_dir().join(format!("solaris-mace-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("krasnokamen-mace-{}", uuid::Uuid::new_v4()));
     let config = crate::CoreConfig::new(dir.clone(), 42);
     let read = crate::native_checkpoint::tests::roundtrip_player(
         &config,

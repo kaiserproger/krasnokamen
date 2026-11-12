@@ -29,7 +29,7 @@ struct Fixtures {
 
 static FIXTURES: LazyLock<Fixtures> = LazyLock::new(|| {
     let blocks =
-        mc_world::BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+        mc_world::BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
             .unwrap();
     let torch = blocks
         .block(&mc_data::Identifier::parse("minecraft:torch").unwrap())
@@ -66,8 +66,8 @@ static FIXTURES: LazyLock<Fixtures> = LazyLock::new(|| {
     Fixtures {
         blocks,
         biomes: crate::chunks::test_biome_registry(&["minecraft:plains"]),
-        items: mc_data::items::solaris_required_items(),
-        block_entities: mc_data::block_entity_types::solaris_required_block_entity_types(),
+        items: mc_data::items::krasnokamen_required_items(),
+        block_entities: mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
         torch: torch.0,
         dark,
         lit,

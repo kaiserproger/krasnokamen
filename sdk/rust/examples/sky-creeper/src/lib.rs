@@ -1,5 +1,5 @@
 //! Data-only native mob composition, spawned by /sky-creeper in the caller's dimension.
-use solaris_plugin_sdk::{
+use krasnokamen_plugin_sdk::{
     commands, export_plugin, Command, Config, Event, EventContext, Failure, Plugin,
     StartupContribution,
 };
@@ -38,7 +38,7 @@ impl Plugin for SkyCreeper {
                         request: "sky-creeper".into(),
                         session: command.session,
                         entity_type: "sky-creeper:sky_creeper".into(),
-                        position: solaris_plugin_sdk::types::Position {
+                        position: krasnokamen_plugin_sdk::types::Position {
                             x: command.position.x + 8.0,
                             y: command.position.y + 6.0,
                             z: command.position.z,

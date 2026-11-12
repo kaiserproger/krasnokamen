@@ -1,4 +1,4 @@
-package dev.solaris.agent.mcp;
+package dev.krasnokamen.agent.mcp;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;

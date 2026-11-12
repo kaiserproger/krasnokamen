@@ -38,13 +38,13 @@ fn production_and_builder_assignment_exclude_each_other_and_paused_debt_cannot_b
     let reference = mc_script::ScriptSettlementBuildingRef::new(
         "building".into(),
         building.0.to_string(),
-        format!("solaris:{}", kind.name()),
+        format!("krasnokamen:{}", kind.name()),
     );
     let uuid = state.entities.row(slot).uuid;
     let request = || production::Request::Start {
         job: "builder-exclusive".into(),
         worker: uuid,
-        recipe: "solaris-settlements:bread".into(),
+        recipe: "krasnokamen-settlements:bread".into(),
         count: 1,
         station: [10, 201, 10],
         stand_at: [10, 201, 11],

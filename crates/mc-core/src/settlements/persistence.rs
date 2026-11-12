@@ -215,7 +215,7 @@ pub fn checkpoint_sequence(
         .map_err(|error| CoreError::Storage(format!("native settlement: {error}")))
 }
 
-/// Refuse legacy `solaris-settlements` plugin state instead of silently
+/// Refuse legacy `krasnokamen-settlements` plugin state instead of silently
 /// wiping it. Inspects the real keys the package persists through native
 /// plugin storage (`settlement-root-v2`, `settlement-registry-v1`,
 /// `settlement-v2/*/head`, `settlement-fragment-v2/*`) and its
@@ -225,7 +225,7 @@ pub fn checkpoint_sequence(
 /// `production-v2/*`). NPC custody refuses only settlement-owned rows (see
 /// below); unrelated NPC consumers stay admitted.
 pub(crate) fn refuse_legacy_plugin_state(state: &TickState) -> Result<(), CoreError> {
-    const OWNER: &str = "solaris-settlements";
+    const OWNER: &str = "krasnokamen-settlements";
     let refused = |detail: &str| {
         CoreError::Storage(format!(
             "legacy {OWNER} plugin state present ({detail}); \

@@ -26,7 +26,7 @@ class SceneShotTests(unittest.TestCase):
                 (scene_shot.runtime.REPO_ROOT / 'playable.toml').read_text())
             ctx = scene_shot.ProfileContext(artifact, client='native', windowed=True)
             (root / 'template').mkdir()
-            env = {'SOLARIS_SERVER_BINARY': str(binary), 'XDG_DATA_HOME': str(root / 'xdg')}
+            env = {'KRASNOKAMEN_SERVER_BINARY': str(binary), 'XDG_DATA_HOME': str(root / 'xdg')}
             from tools.harness import preflight
             with patch.dict('os.environ', env), patch.object(scene_shot.runtime, 'REPO_ROOT', root), \
                     patch.object(scene_shot, 'prepare_operator_fixture'), \
@@ -49,7 +49,7 @@ class SceneShotTests(unittest.TestCase):
             binary = root / 'server'
             binary.write_bytes(b'server')
             binary.chmod(0o755)
-            env = {'SOLARIS_SERVER_BINARY': str(binary), 'XDG_DATA_HOME': str(root / 'xdg')}
+            env = {'KRASNOKAMEN_SERVER_BINARY': str(binary), 'XDG_DATA_HOME': str(root / 'xdg')}
             configs = []
             for enabled, share in ((None, None), (False, None), (True, None), (True, False), (True, True)):
                 artifact = root / f'{enabled}-{share}'

@@ -1,6 +1,6 @@
 [package]
 name = "mc-loader"
-description = "Solaris Loader client-bundle wire contract (ADR 0010)."
+description = "Krasnokamen Loader client-bundle wire contract (ADR 0010)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

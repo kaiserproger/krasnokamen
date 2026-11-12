@@ -325,7 +325,7 @@ class SiblingTests(unittest.TestCase):
 
     def test_loader_and_plugin_paths(self):
         found = gates(build(["../solaris-loader/loader-core/src/main/java/A.java",
-                             "../solaris-default-plugins/solaris-towns/plugin.toml"]))
+                             "../solaris-default-plugins/krasnokamen-towns/plugin.toml"]))
         self.assertIn("./gradlew :loader-core:test :loader-fabric:test :loader-neoforge:test :loader-forge:test", found)
         self.assertIn(f"{PY} loader-live --platform fabric", found)
         self.assertIn("python3 tools/build_standard_pack.py --core-root ../solaris --check", found)

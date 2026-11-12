@@ -1,6 +1,6 @@
 package org.bukkit;
 import org.bukkit.plugin.PluginManager;
-import org.solaris.bukkit.Runtime;
+import org.krasnokamen.bukkit.Runtime;
 public final class Bukkit {
     private Bukkit() {}
     public static Server getServer() { return Runtime.SERVER; }

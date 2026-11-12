@@ -251,7 +251,7 @@ pub(super) fn sherds(
         let item = Identifier::parse(name)
             .map_err(|_| invalid("sherds contains an invalid item identifier"))?;
         static ITEMS: std::sync::LazyLock<crate::items::ItemRegistry> =
-            std::sync::LazyLock::new(crate::items::solaris_required_items);
+            std::sync::LazyLock::new(crate::items::krasnokamen_required_items);
         if ITEMS.id_of(&item).is_none() {
             return Err(invalid("sherds contains an unknown item"));
         }

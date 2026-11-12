@@ -136,7 +136,7 @@ configure_primary_agent_bridge() {
   if [[ -n "$AGENT_BRIDGE_URL" ]]; then
     if [[ -z "$AGENT_PORT" ]]; then
       if ! AGENT_PORT="$(bridge_port_from_url "$AGENT_BRIDGE_URL")"; then
-        printf 'error: SOLARIS_REAL_CLIENT_AGENT_PORT is required when SOLARIS_REAL_CLIENT_AGENT_BRIDGE_URL has no explicit port\n' >&2
+        printf 'error: KRASNOKAMEN_REAL_CLIENT_AGENT_PORT is required when KRASNOKAMEN_REAL_CLIENT_AGENT_BRIDGE_URL has no explicit port\n' >&2
         exit 1
       fi
     fi
@@ -158,7 +158,7 @@ configure_second_agent_bridge() {
   if [[ -n "$SECOND_AGENT_BRIDGE_URL" ]]; then
     if [[ -z "$SECOND_AGENT_PORT" ]]; then
       if ! SECOND_AGENT_PORT="$(bridge_port_from_url "$SECOND_AGENT_BRIDGE_URL")"; then
-        printf 'error: SOLARIS_REAL_CLIENT_SECOND_AGENT_PORT is required when SOLARIS_REAL_CLIENT_SECOND_AGENT_BRIDGE_URL has no explicit port\n' >&2
+        printf 'error: KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_PORT is required when KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_BRIDGE_URL has no explicit port\n' >&2
         exit 1
       fi
     fi
@@ -215,13 +215,13 @@ server_config_path() {
 client_username_for_label() {
   case "$1" in
     primary)
-      printf 'SolarisPrimary\n'
+      printf 'KrasnoPrimary\n'
       ;;
     secondary)
-      printf 'SolarisSecondary\n'
+      printf 'KrasnoSecondary\n'
       ;;
     *)
-      printf 'SolarisClient\n'
+      printf 'KrasnoClient\n'
       ;;
   esac
 }
@@ -301,7 +301,7 @@ write_real_client_server_config() {
       }
     }
   ' "$source_config" > "$target_config"
-  # solaris-v2 reads config-adjacent vanilla ops.json.
+  # krasnokamen reads config-adjacent vanilla ops.json.
   python3 - "$target_config" "$operators" <<'PY'
 import hashlib
 import json
@@ -337,7 +337,7 @@ validate_second_client_config() {
     return 1
   fi
   if [[ -z "$SECOND_AGENT_SECRET" || -z "$SECOND_AGENT_BRIDGE_URL" ]]; then
-    printf 'error: second real-client mode requires SOLARIS_REAL_CLIENT_SECOND_AGENT_SECRET plus bridge URL or port\n' >&2
+    printf 'error: second real-client mode requires KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_SECRET plus bridge URL or port\n' >&2
     exit 1
   fi
   if ! gradle_runclient_adapter_available; then
@@ -399,12 +399,12 @@ write_run_templates() {
     printf 'client_adapter_sha256=%s\n' "$(printf '%s' "$AGENT_ROOT/gradlew --no-daemon --no-configuration-cache $GRADLE_RUNCLIENT_TASK" | sha256sum | cut -d ' ' -f 1)"
     printf 'client_username=%s\n' "$(client_username_for_label primary)"
     printf 'client_game_dir=%s\n' "$(client_game_dir_for_label primary)"
-    if [[ -n "${SOLARIS_SERVER_BINARY:-}" ]]; then
-      printf 'server_command=%s\n' "$SOLARIS_SERVER_BINARY --config $(server_config_path)"
-      printf 'server_binary=%s\n' "$SOLARIS_SERVER_BINARY"
-      printf 'server_binary_sha256=%s\n' "$(sha256sum -- "$SOLARIS_SERVER_BINARY" | cut -d ' ' -f 1)"
+    if [[ -n "${KRASNOKAMEN_SERVER_BINARY:-}" ]]; then
+      printf 'server_command=%s\n' "$KRASNOKAMEN_SERVER_BINARY --config $(server_config_path)"
+      printf 'server_binary=%s\n' "$KRASNOKAMEN_SERVER_BINARY"
+      printf 'server_binary_sha256=%s\n' "$(sha256sum -- "$KRASNOKAMEN_SERVER_BINARY" | cut -d ' ' -f 1)"
     else
-      printf 'server_command=%s\n' "cargo run --bin solaris-v2 -p mc-edge -- --config $(server_config_path)"
+      printf 'server_command=%s\n' "cargo run --bin krasnokamen -p mc-edge -- --config $(server_config_path)"
     fi
     printf 'server_addr=%s\n' "$SERVER_ADDR"
     printf 'client_agent_driver=%s\n' "$AGENT_DRIVER"
@@ -450,7 +450,7 @@ write_run_templates() {
 
   cat > "$run_dir/observations.json" <<EOF
 {
-  "schema": "solaris.real_client_observations.v1",
+  "schema": "krasnokamen.real_client_observations.v1",
   "client_gate": "prepared-owner-run",
   "quality_label": "$quality_label",
   "result": "not-run",

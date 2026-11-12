@@ -18,7 +18,7 @@ macro_rules! export_plugin {
             use $crate::{events as __events, lifecycle as __lifecycle, precommit as __precommit};
 
             /// The marker type the generated ABI exports stand for.
-            struct SolarisPlugin;
+            struct KrasnokamenPlugin;
 
             thread_local! {
                 static PLUGIN: RefCell<Option<$plugin>> = const { RefCell::new(None) };
@@ -34,7 +34,7 @@ macro_rules! export_plugin {
                 })
             }
 
-            impl __lifecycle::Guest for SolarisPlugin {
+            impl __lifecycle::Guest for KrasnokamenPlugin {
                 fn configure(
                     config: String,
                 ) -> Result<Option<$crate::StartupContribution>, $crate::PluginError> {
@@ -62,7 +62,7 @@ macro_rules! export_plugin {
                 }
             }
 
-            impl __events::Guest for SolarisPlugin {
+            impl __events::Guest for KrasnokamenPlugin {
                 fn on_events(
                     context: $crate::EventContext,
                     events: Vec<$crate::Event>,
@@ -78,7 +78,7 @@ macro_rules! export_plugin {
             /// instance's plugin value and returns the decision it answered: the
             /// ABI has no way to carry a command out of this phase, which is what
             /// makes a hook an answer about an effect rather than the effect.
-            impl __precommit::Guest for SolarisPlugin {
+            impl __precommit::Guest for KrasnokamenPlugin {
                 fn before_build(
                     context: $crate::BuildContext,
                 ) -> Result<$crate::BuildResult, $crate::PluginError> {
@@ -98,7 +98,7 @@ macro_rules! export_plugin {
                 }
             }
 
-            $crate::__export!(SolarisPlugin);
+            $crate::__export!(KrasnokamenPlugin);
         };
     };
 }

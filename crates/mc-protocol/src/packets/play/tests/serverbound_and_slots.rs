@@ -221,7 +221,7 @@ fn serverbound_custom_payload_brand_id_and_layout_match_local_decompiled_sources
 #[test]
 fn play_serverbound_custom_payload_rejects_oversized_unknown_body() {
     let mut buf = Vec::new();
-    buf.write_identifier(&Identifier::parse("solaris:test").unwrap())
+    buf.write_identifier(&Identifier::parse("krasnokamen:test").unwrap())
         .unwrap();
     buf.resize(buf.len() + 32_768, 0xEF);
 
@@ -539,7 +539,7 @@ fn item_stack_custom_name_component_matches_26_1_2_component_stream_codec() {
 
 #[test]
 fn item_stack_item_model_component_matches_26_1_2_registry_codec() {
-    let model = Identifier::parse("solaris_loader:loader_block").unwrap();
+    let model = Identifier::parse("krasnokamen_loader:loader_block").unwrap();
     let stack = ItemStack::new(5, 1).with_item_model(model);
     let mut buf = Vec::new();
     stack.encode(&mut buf).unwrap();

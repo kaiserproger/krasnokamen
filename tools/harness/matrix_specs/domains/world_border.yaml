@@ -77,7 +77,7 @@ subjects:
   - id: world_border.center
     matrix_ids:
       - pw:world_border.center/native_windows/spectator/overworld/peaceful/1/duplicate_login/save_all_checkpoint/op_3
-      - pw:world_border.center/forge_solaris_loader/survival/overworld/easy/1/slow_reader_backpressure/steady/console
+      - pw:world_border.center/forge_krasnokamen_loader/survival/overworld/easy/1/slow_reader_backpressure/steady/console
     adapter: tools.harness.matrix_domains.world_border:ADAPTERS[world_border.center]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission
@@ -101,7 +101,7 @@ subjects:
       require actual received block_ack_sequence
   - id: world_border.damage_buffer_warning
     matrix_ids:
-      - pw:world_border.damage_buffer_warning/neoforge_solaris_loader/creative/the_nether/easy/N8/slow_reader_backpressure/clean_restart_mid_action/non_op_0
+      - pw:world_border.damage_buffer_warning/neoforge_krasnokamen_loader/creative/the_nether/easy/N8/slow_reader_backpressure/clean_restart_mid_action/non_op_0
     adapter: tools.harness.matrix_domains.world_border:ADAPTERS[world_border.damage_buffer_warning]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission
@@ -172,7 +172,7 @@ subjects:
       require actual received block_ack_sequence
   - id: world_border.teleport_outside_clamped
     matrix_ids:
-      - pw:world_border.teleport_outside_clamped/fabric_solaris_loader/survival/the_end/normal/N8/slow_reader_backpressure/crash_kill9_wal_replay/op_1
+      - pw:world_border.teleport_outside_clamped/fabric_krasnokamen_loader/survival/the_end/normal/N8/slow_reader_backpressure/crash_kill9_wal_replay/op_1
     adapter: tools.harness.matrix_domains.world_border:ADAPTERS[world_border.teleport_outside_clamped]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission

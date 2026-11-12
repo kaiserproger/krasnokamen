@@ -1,7 +1,7 @@
 use super::*;
 use crate::Identifier;
 use crate::block_entity_types::{
-    load_block_entity_types_report, solaris_required_block_entity_types,
+    load_block_entity_types_report, krasnokamen_required_block_entity_types,
 };
 use std::collections::BTreeSet;
 
@@ -10,7 +10,7 @@ fn every_native_kind_matches_the_26_1_2_registry_exactly() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../data/vanilla/reports/registries.json");
     let report = load_block_entity_types_report(path).unwrap();
-    let registry = solaris_required_block_entity_types();
+    let registry = krasnokamen_required_block_entity_types();
     assert_eq!(BlockEntityKind::ALL.len(), report.len());
     assert_eq!(registry.len(), report.len());
     let mut ids = BTreeSet::new();

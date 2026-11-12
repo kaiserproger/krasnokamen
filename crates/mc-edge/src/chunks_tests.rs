@@ -15,13 +15,13 @@ fn items() -> ItemRegistry {
 fn reports() -> (Registry, mc_world::BlockRegistry) {
     let biomes = test_biome_registry(&["minecraft:plains"]);
     let blocks =
-        mc_world::BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+        mc_world::BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
             .expect("required blocks build");
     (biomes, blocks)
 }
 
 fn be_types() -> mc_data::block_entity_types::BlockEntityTypeRegistry {
-    mc_data::block_entity_types::solaris_required_block_entity_types()
+    mc_data::block_entity_types::krasnokamen_required_block_entity_types()
 }
 
 #[test]

@@ -4,7 +4,7 @@
 Owner-host tool (see tools/dev/README.md). The pin is identified by the tree's
 HEAD and a hash of its uncommitted changes; the same tree is built once and every
 later call prints the pinned binary. stdout carries only the final
-SOLARIS_SERVER_BINARY=<path> (or SOLARIS_CLIENT_BINARY / SOLARIS_BOTS_BINARY).
+KRASNOKAMEN_SERVER_BINARY=<path> (or KRASNOKAMEN_CLIENT_BINARY / KRASNOKAMEN_BOTS_BINARY).
 """
 
 from __future__ import annotations
@@ -25,9 +25,9 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import wtlib as w  # noqa: E402
 
 KINDS = {
-    "server": {"repo": "core", "package": "mc-edge", "bin": "solaris-v2", "env": "SOLARIS_SERVER_BINARY"},
-    "client": {"repo": "client", "package": "solaris-client", "bin": "solaris-client", "env": "SOLARIS_CLIENT_BINARY"},
-    "bots": {"repo": "core", "package": "mc-test-harness", "bin": "player-scale-bots", "env": "SOLARIS_BOTS_BINARY"},
+    "server": {"repo": "core", "package": "mc-edge", "bin": "krasnokamen", "env": "KRASNOKAMEN_SERVER_BINARY"},
+    "client": {"repo": "client", "package": "krasnokamen-client", "bin": "krasnokamen-client", "env": "KRASNOKAMEN_CLIENT_BINARY"},
+    "bots": {"repo": "core", "package": "mc-test-harness", "bin": "player-scale-bots", "env": "KRASNOKAMEN_BOTS_BINARY"},
 }
 # Everything a server or bots release build reads: Cargo workspace files, every crate, the guest SDK
 # and the Java sources mc-edge embeds with include_str! (crates/mc-edge/src/content_import.rs, the
@@ -57,11 +57,11 @@ def say(message: str) -> None:
 
 def check_tree(top: Path, kind: str) -> None:
     if kind in ("server", "bots") and not (top / "crates/mc-edge/Cargo.toml").is_file():
-        raise w.ToolError(f"{top} is not a core Solaris tree (no crates/mc-edge); use --client for the client")
+        raise w.ToolError(f"{top} is not a core Krasnokamen tree (no crates/mc-edge); use --client for the client")
     if kind == "client":
         manifest = top / "Cargo.toml"
-        if not manifest.is_file() or 'name = "solaris-client"' not in manifest.read_text():
-            raise w.ToolError(f"{top} is not a solaris-client tree; omit --client for the server")
+        if not manifest.is_file() or 'name = "krasnokamen-client"' not in manifest.read_text():
+            raise w.ToolError(f"{top} is not a krasnokamen-client tree; omit --client for the server")
 
 
 def provenance(top: Path) -> dict:
@@ -363,7 +363,7 @@ def main() -> None:
         stage = w.PINS / f".tmp-{pin_id}-{os.getpid()}"
         with open(SLOT_LOCKS / slot.name.removeprefix("slot-"), "w") as slot_lock:
             fcntl.flock(slot_lock, fcntl.LOCK_EX)  # no new owner can take the slot now
-            marker = slot / ".solaris-tree"
+            marker = slot / ".krasnokamen-tree"
             if (marker.read_text().strip() if marker.is_file() else "") != str(top):
                 # Another tree used the slot since: wait for its remaining commands (they
                 # hold the use lock shared), then make cargo see this tree's sources as

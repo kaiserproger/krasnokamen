@@ -48,7 +48,7 @@ pub fn component_bytes() -> Vec<u8> {
 
 fn build_component_bytes() -> Vec<u8> {
     let sdk = repo_root().join("sdk/rust");
-    component_bytes_from_workspace(&sdk, "solaris-hello-plugin", "solaris_hello_plugin.wasm")
+    component_bytes_from_workspace(&sdk, "krasnokamen-hello-plugin", "krasnokamen_hello_plugin.wasm")
 }
 
 /// Build an SDK-workspace test guest and encode its real core module as a

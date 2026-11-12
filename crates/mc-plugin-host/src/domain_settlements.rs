@@ -9,8 +9,8 @@
 //! Bounds stay the DTO's own: `ScriptOperationRequest::try_new` validates and
 //! canonicalizes before any owner sees the operation.
 
-use crate::bindings::exports::solaris::plugin::events as wire_events;
-use crate::bindings::solaris::plugin::settlements as wire;
+use crate::bindings::exports::krasnokamen::plugin::events as wire_events;
+use crate::bindings::krasnokamen::plugin::settlements as wire;
 use mc_script::{
     ScriptDtoError, ScriptSettlementBuildingRef, ScriptSettlementEconomyAction,
     ScriptSettlementEconomySnapshot, ScriptSettlementEmploymentSnapshot,
@@ -699,9 +699,9 @@ mod tests {
             expected_revision: 3,
             branch: "estate".into(),
             level: 1,
-            buildings: vec![district_wire_ref("solaris:warehouse")],
+            buildings: vec![district_wire_ref("krasnokamen:warehouse")],
         });
-        assert_eq!(max_text_bytes(&plan), "solaris:warehouse".len());
+        assert_eq!(max_text_bytes(&plan), "krasnokamen:warehouse".len());
         let plan = decode_action(plan).unwrap();
         plan.validate().unwrap();
         assert!(matches!(
@@ -714,7 +714,7 @@ mod tests {
             vec![mc_script::ScriptSettlementBuildingRef::new(
                 "structure".into(),
                 "granary-one".into(),
-                "solaris:warehouse".into(),
+                "krasnokamen:warehouse".into(),
             )],
         );
         observation.stage = Some("hamlet".into());
@@ -723,7 +723,7 @@ mod tests {
         observation.population = 30;
         observation.housed = 24;
         observation.food = 40;
-        observation.working = vec!["solaris:warehouse".into()];
+        observation.working = vec!["krasnokamen:warehouse".into()];
         observation.observed_tick = 7;
         observation.world_revision = 9;
         observation.validate().unwrap();
@@ -759,12 +759,12 @@ mod tests {
             (district.population, district.housed, district.food),
             (30, 24, 40)
         );
-        assert_eq!(district.working, vec!["solaris:warehouse".to_owned()]);
+        assert_eq!(district.working, vec!["krasnokamen:warehouse".to_owned()]);
         assert_eq!((district.observed_tick, district.world_revision), (7, 9));
         assert_eq!(district.buildings.len(), 1);
         assert_eq!(district.buildings[0].kind, "structure");
         assert_eq!(district.buildings[0].id, "granary-one");
-        assert_eq!(district.buildings[0].purpose, "solaris:warehouse");
+        assert_eq!(district.buildings[0].purpose, "krasnokamen:warehouse");
     }
 
     fn economy_envelope(action: wire::EconomyAction) -> wire::SettlementOperation {
@@ -920,13 +920,13 @@ mod tests {
             source_building: wire::DistrictBuildingRef {
                 kind: "structure".into(),
                 id: "granary-one".into(),
-                purpose: "solaris:warehouse".into(),
+                purpose: "krasnokamen:warehouse".into(),
             },
             source_position: wire::BlockPosition { x: 0, y: 64, z: 0 },
             destination_building: wire::DistrictBuildingRef {
                 kind: "structure".into(),
                 id: "granary-two".into(),
-                purpose: "solaris:warehouse".into(),
+                purpose: "krasnokamen:warehouse".into(),
             },
             destination_position: wire::BlockPosition {
                 x: 100,
@@ -1217,13 +1217,13 @@ mod tests {
                 source_building: wire::DistrictBuildingRef {
                     kind: "structure".into(),
                     id: "granary-one".into(),
-                    purpose: "solaris:warehouse".into(),
+                    purpose: "krasnokamen:warehouse".into(),
                 },
                 source_position: wire::BlockPosition { x: 0, y: 64, z: 0 },
                 destination_building: wire::DistrictBuildingRef {
                     kind: "structure".into(),
                     id: "granary-two".into(),
-                    purpose: "solaris:warehouse".into(),
+                    purpose: "krasnokamen:warehouse".into(),
                 },
                 destination_position: wire::BlockPosition {
                     x: 100,

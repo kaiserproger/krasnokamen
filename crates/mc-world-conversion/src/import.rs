@@ -745,12 +745,12 @@ fn admit_player(
     let Tag::Compound(fields) = &mut tag else {
         return Err(fail(format!("{path}: player is not compound")));
     };
-    fields.retain(|(key, _)| !matches!(key.as_str(), "solaris:Tick" | "SolarisUnlockedRecipes"));
+    fields.retain(|(key, _)| !matches!(key.as_str(), "krasnokamen:Tick" | "KrasnokamenUnlockedRecipes"));
     if let Some((_, Tag::Compound(book))) = fields.iter_mut().find(|(key, _)| key == "recipeBook") {
         book.retain(|(key, _)| key != "recipes");
     }
     fields.push((
-        "SolarisUnlockedRecipes".into(),
+        "KrasnokamenUnlockedRecipes".into(),
         Tag::List(mc_nbt::ListTag {
             element_type: mc_nbt::tag_type::STRING,
             elements: player
@@ -762,7 +762,7 @@ fn admit_player(
         }),
     ));
     fields.push((
-        "solaris:Tick".into(),
+        "krasnokamen:Tick".into(),
         Tag::Long(i64::try_from(tick).map_err(fail)?),
     ));
     manifest.players.insert(uuid.to_string(), tick);
@@ -1572,8 +1572,8 @@ pub(super) fn convert(
                     }
                 }
                 // An offline import starts a new native journal lineage, even
-                // when Java retained metadata from an earlier Solaris export.
-                chunk.extras.retain(|(key, _)| key != "SolarisJournalLsn");
+                // when Java retained metadata from an earlier Krasnokamen export.
+                chunk.extras.retain(|(key, _)| key != "KrasnokamenJournalLsn");
                 // The inline list was taken above: chunk_from_nbt never saw
                 // it, but drop any same-named remainder defensively so a
                 // future decoder change cannot resurrect the duplicate.
@@ -1642,7 +1642,7 @@ pub(super) fn convert(
                                     stats.regenerated_chunk_loss_tags.insert(name.clone(), 1);
                                 }
                                 stats.known_gaps.push(format!(
-                                    "PRESERVATION LOSS: {}#chunk({}, {}) status {}: field {name} omitted for empty-chunk regeneration; original stays in source, Solaris worldgen is not seed-equivalent",
+                                    "PRESERVATION LOSS: {}#chunk({}, {}) status {}: field {name} omitted for empty-chunk regeneration; original stays in source, Krasnokamen worldgen is not seed-equivalent",
                                     relative.display(), pos.x, pos.z, chunk.status,
                                 ));
                             }
@@ -2087,13 +2087,13 @@ pub(super) fn convert(
             let Tag::Compound(fields) = &mut tag else {
                 unreachable!("validated player compound")
             };
-            fields.retain(|(name, _)| name != "SolarisStatistics");
+            fields.retain(|(name, _)| name != "KrasnokamenStatistics");
             let encoded = serde_json::to_vec(&statistics)
                 .map_err(fail)?
                 .into_iter()
                 .map(|byte| byte as i8)
                 .collect();
-            fields.push(("SolarisStatistics".into(), Tag::ByteArray(encoded)));
+            fields.push(("KrasnokamenStatistics".into(), Tag::ByteArray(encoded)));
             player.record = bridge::tag_record(tick, &tag)?;
         } else {
             let mut player =
@@ -2136,9 +2136,9 @@ pub(super) fn convert(
         let Tag::Compound(fields) = &mut tag else {
             return Err(fail("player: expected compound"));
         };
-        fields.retain(|(key, _)| key != "SolarisAdvancements");
+        fields.retain(|(key, _)| key != "KrasnokamenAdvancements");
         fields.push((
-            "SolarisAdvancements".into(),
+            "KrasnokamenAdvancements".into(),
             Tag::ByteArray(
                 serde_json::to_vec(&progress)
                     .map_err(fail)?

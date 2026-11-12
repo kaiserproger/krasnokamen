@@ -209,7 +209,7 @@ pub(crate) fn block(state: &TickState, pos: BlockPos) -> Result<Tag, String> {
 
 /// Whether `key` is a native field no `data` command shows or edits.
 pub(crate) fn private_field(key: &str) -> bool {
-    key.starts_with("solaris") || key.starts_with("Solaris") || key == "DataVersion"
+    key.starts_with("krasnokamen") || key.starts_with("Krasnokamen") || key == "DataVersion"
 }
 
 pub(crate) fn text(value: impl ToString) -> Tag {

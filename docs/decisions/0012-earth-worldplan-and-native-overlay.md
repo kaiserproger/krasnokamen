@@ -9,12 +9,12 @@ this proposal does not authorize an Earth or Anvil serving fallback.
 **Scope:** Earth-like spec v3, immutable base and native overlays; future native
 adoption requires its own owner decision and acceptance.
 Historical evidence (pre-cleanup tree, commit `1ada2ce`):
-[W0 delta audit](https://github.com/kaiserproger/solaris/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w0-audit.md),
-[W1 definition/publication](https://github.com/kaiserproger/solaris/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w1.md),
-[W2 solvers/measurements](https://github.com/kaiserproger/solaris/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w2.md),
-[W3 boundary/budget/geology](https://github.com/kaiserproger/solaris/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w3.md),
-[W4 native state/recovery](https://github.com/kaiserproger/solaris/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w4.md),
-[W5 cutover/acceptance](https://github.com/kaiserproger/solaris/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w5.md).
+[W0 delta audit](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w0-audit.md),
+[W1 definition/publication](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w1.md),
+[W2 solvers/measurements](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w2.md),
+[W3 boundary/budget/geology](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w3.md),
+[W4 native state/recovery](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w4.md),
+[W5 cutover/acceptance](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w5.md).
 
 ## Context
 
@@ -169,7 +169,7 @@ claim. W4/W5 remain responsible for live pipeline admission and materialization.
 
 Use one embedded **redb database per new native world**, not a custom storage
 engine or multiple interchangeable backends. W0 pins redb 3.1.0 (MSRV 1.89,
-Solaris toolchain 1.94.1); transactions explicitly use `Durability::Immediate`.
+Krasnokamen toolchain 1.94.1); transactions explicitly use `Durability::Immediate`.
 There is one serialized writer, bounded off-thread snapshot batches and bounded
 DB cache. Runtime source mode is exclusive: no live dual Anvil/native writes.
 Anvil remains the explicit legacy backend and import/export codec.
@@ -205,7 +205,7 @@ clock authorities are unchanged; W5 wires their existing journal/save barriers.
 
 ### Durability ordering (do not strengthen the existing claim silently)
 
-Ordinary Solaris journal records use bounded write-behind: resident changes can
+Ordinary Krasnokamen journal records use bounded write-behind: resident changes can
 be published before fsync. Receipt-bearing composite operations sync before
 publication. W0 does not turn all operations into fsync-before-apply or weaken
 that contract. Before any native after-image commit:
@@ -252,7 +252,7 @@ restore it. Metadata acknowledgements cannot revive an invalidated proof, so a
 lost or late receipt cannot hide a same-LSN block mutation or revert. The existing
 owner barrier, pending-journal, captured-image and dirty-generation fences remain.
 The actual 25-chunk inhabited-time flush fell from 8.49 s to 40–43 ms, with zero
-base materializations; [W5 evidence](https://github.com/kaiserproger/solaris/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w5.md)
+base materializations; [W5 evidence](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/worldgen-w5.md)
 distinguishes measured IO from the serialization/transaction/acknowledgement upper bound.
 
 Immutable ready base handles consume the checked basin or W3 leaf water/geology
@@ -308,7 +308,7 @@ execution code. Unactivated physical-plane worlds permit read-only inspection
 but refuse offline mutations until first live activation pins the canonical
 village/loot resource profile. Activated offline mutations require that original
 profile and use the same base. First activation records canonical resource-byte
-SHA-256, deployment/content identities and chosen spawn in `solaris/world.json`.
+SHA-256, deployment/content identities and chosen spawn in `krasnokamen/world.json`.
 Reopening refuses mismatches and retains the committed admissible spawn even
 after bounds expansion; it never automatically rebases. Native startup admits
 stock vanilla village resources. Authored settlement catalogs consume admitted

@@ -2,7 +2,7 @@
 //!
 //! Wire protocol: packets, codec, encryption.
 //!
-//! Part of the Solaris engine.
+//! Part of the Krasnokamen engine.
 //!
 //! The crate is organised in layers, each building on the previous:
 //!
@@ -25,16 +25,16 @@ pub use packets::{Direction, Packet, State};
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Operator setup fence: response is queued after the viewer's world geometry debt.
-pub const SETUP_WORLD_FENCE_CHANNEL: &str = "solaris:setup_world_fence";
+pub const SETUP_WORLD_FENCE_CHANNEL: &str = "krasnokamen:setup_world_fence";
 
-/// Minecraft Java Edition wire protocol version Solaris targets.
+/// Minecraft Java Edition wire protocol version Krasnokamen targets.
 ///
 /// Locked at the start of M1 from the bundled vanilla server's
 /// `version.json` (`.analysis/server.jar`). When we follow a Mojang patch
 /// release we bump this and document the diff in an ADR.
 pub const PROTOCOL_VERSION: i32 = 777;
 
-/// The Minecraft Java Edition release Solaris is built against.
+/// The Minecraft Java Edition release Krasnokamen is built against.
 pub const TARGET_RELEASE: &str = "26.3";
 
 /// The data-pack world version that pairs with [`TARGET_RELEASE`].

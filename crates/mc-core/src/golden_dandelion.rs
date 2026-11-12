@@ -112,7 +112,7 @@ pub(crate) fn sync(row: &mut ColdRow) {
 
 pub(crate) fn from_fields(fields: &[(String, Tag)]) -> Result<AgeLock, crate::CoreError> {
     let mut state = AgeLock::default();
-    for name in ["AgeLocked", "solaris:AgeLockCooldownUntil"] {
+    for name in ["AgeLocked", "krasnokamen:AgeLockCooldownUntil"] {
         let mut entries = fields.iter().filter(|(key, _)| key == name);
         let Some((_, value)) = entries.next() else {
             continue;
@@ -124,7 +124,7 @@ pub(crate) fn from_fields(fields: &[(String, Tag)]) -> Result<AgeLock, crate::Co
         }
         match (name, value) {
             ("AgeLocked", Tag::Byte(0 | 1)) => state.locked = value == &Tag::Byte(1),
-            ("solaris:AgeLockCooldownUntil", Tag::Long(value)) if *value >= 0 => {
+            ("krasnokamen:AgeLockCooldownUntil", Tag::Long(value)) if *value >= 0 => {
                 state.cooldown_until = *value as u64
             }
             ("AgeLocked", _) => {
@@ -134,7 +134,7 @@ pub(crate) fn from_fields(fields: &[(String, Tag)]) -> Result<AgeLock, crate::Co
             }
             _ => {
                 return Err(crate::CoreError::Storage(
-                    "solaris:AgeLockCooldownUntil: expected nonnegative long".into(),
+                    "krasnokamen:AgeLockCooldownUntil: expected nonnegative long".into(),
                 ));
             }
         }

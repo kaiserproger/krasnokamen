@@ -39,7 +39,7 @@ pub const MIN_SECTION_Y: i32 = MIN_Y / SECTION_DIM as i32;
 pub const HEIGHTMAP_BITS: u8 = 9;
 /// One heightmap entry per (x, z) cell in the 16×16 chunk footprint.
 pub const HEIGHTMAP_LEN: usize = SECTION_DIM * SECTION_DIM;
-const WORLD_JOURNAL_LSN_KEY: &str = "SolarisJournalLsn";
+const WORLD_JOURNAL_LSN_KEY: &str = "KrasnokamenJournalLsn";
 /// One biome cell per 4×4×4 sub-cube; vanilla packs biomes at 1/4 the
 /// block resolution.
 pub const BIOME_DIM: usize = 4;
@@ -166,7 +166,7 @@ pub struct BlockPos {
     pub z: i32,
 }
 
-const GENERATED_ENTITIES_KEY: &str = "SolarisGeneratedEntities";
+const GENERATED_ENTITIES_KEY: &str = "KrasnokamenGeneratedEntities";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeneratedEntityMarker {

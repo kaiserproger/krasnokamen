@@ -104,8 +104,8 @@ from existing import E2E
 
 OUT = Path(__file__).resolve().parent
 SOL = Path(__file__).resolve().parents[3]
-HOME = Path(os.environ.get("SOLARIS_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
-RUN_DATA = Path(os.environ.get("SOLARIS_MATRIX_DATA", HOME / "scenarios"))
+HOME = Path(os.environ.get("KRASNOKAMEN_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
+RUN_DATA = Path(os.environ.get("KRASNOKAMEN_MATRIX_DATA", HOME / "scenarios"))
 PREFIX = {"core:": "crates/mc-core/src/", "edge:": "crates/mc-edge/src/", "script:": "crates/mc-script/src/",
           "dp:": "../solaris-default-plugins/", "ldr:": "../solaris-loader/"}
 
@@ -114,14 +114,14 @@ CLIENTS = {
     "vanilla_java_26_1_2": {"driver": "java_mcp", "desc": "Mojang Java 26.1.2 client driven by ../solaris-loader java-agent bridge MCP (profiles core-client/inventory/survival/entities/regression)"},
     "native_linux": {"driver": "native_mcp", "desc": "../solaris-client native Rust client on Linux, built-in MCP automation (src/automation, 50 tools)"},
     "native_windows": {"driver": "native_mcp", "desc": "../solaris-client on Windows x86-64 (COMPATIBILITY_MATRIX PLAT-WINDOWS); today only manual VNC (.analysis/qa-windows/vnc.sh)", "extra_caps": ["windows_mcp_lane"]},
-    "fabric_solaris_loader": {"driver": "loader_java_mcp", "desc": "Fabric + Solaris Loader (harness loader-live --platform fabric)"},
-    "neoforge_solaris_loader": {"driver": "loader_java_mcp", "desc": "NeoForge + Solaris Loader (loader-live --platform neoforge)", "extra_caps": ["loader_platform_neoforge_forge"]},
-    "forge_solaris_loader": {"driver": "loader_java_mcp", "desc": "Forge + Solaris Loader (loader-live --platform forge)", "extra_caps": ["loader_platform_neoforge_forge"]},
-    "fabric_svc": {"driver": "loader_java_mcp", "desc": "Fabric + Simple Voice Chat mod (no server-side SVC in Solaris)", "extra_caps": ["svc_client_profile"]},
+    "fabric_krasnokamen_loader": {"driver": "loader_java_mcp", "desc": "Fabric + Krasnokamen Loader (harness loader-live --platform fabric)"},
+    "neoforge_krasnokamen_loader": {"driver": "loader_java_mcp", "desc": "NeoForge + Krasnokamen Loader (loader-live --platform neoforge)", "extra_caps": ["loader_platform_neoforge_forge"]},
+    "forge_krasnokamen_loader": {"driver": "loader_java_mcp", "desc": "Forge + Krasnokamen Loader (loader-live --platform forge)", "extra_caps": ["loader_platform_neoforge_forge"]},
+    "fabric_svc": {"driver": "loader_java_mcp", "desc": "Fabric + Simple Voice Chat mod (no server-side SVC in Krasnokamen)", "extra_caps": ["svc_client_profile"]},
     "fabric_distant_horizons": {"driver": "loader_java_mcp", "desc": "Fabric/NeoForge + Distant Horizons 3.3.3 protocol 16 (harness dh-gate)"},
     "protocol_bot": {"driver": "protocol_bot", "desc": "Rust protocol bots: mc-test-harness player_scale_bots (--mechanic-spec), wire_probe, quirk_probe; plugin auth_live_check"},
 }
-LOADER_CLIENTS = ["fabric_solaris_loader", "neoforge_solaris_loader", "forge_solaris_loader", "native_linux", "native_windows", "protocol_bot"]
+LOADER_CLIENTS = ["fabric_krasnokamen_loader", "neoforge_krasnokamen_loader", "forge_krasnokamen_loader", "native_linux", "native_windows", "protocol_bot"]
 GAME_MODES = ["survival", "creative", "adventure", "spectator"]
 DIMS = ["overworld", "the_nether", "the_end"]
 DIFFS = ["peaceful", "easy", "normal", "hard"]
@@ -199,10 +199,10 @@ CAPS = {
     "plugin_deploy": ("AAAA", "--plugins-dir deployment in harness/sibling gates"),
     "loader_bundle_handshake": ("AMAA", "player_scale_bots_loader; loader-live; native Loader UI (native_queue3)"),
     "loader_view_request": ("MMAA", "minecraft_request_loader_view"),
-    "computer_channel": ("MMPM", "loader-fabric ComputerClient/ComputerScreen exist; no harness scenario; native client lacks solaris:computer"),
-    "native_screen_share": ("MMMP", "solaris:screen relay in deploy-final edge (screen.rs/screen_service.rs); native client branches implement capture/share (screen-codec, screen-audio); no MCP tools for share consent/request/answer yet; Java/Loader clients do not speak solaris:screen"),
-    "native_voice": ("MMMP", "solaris:voice relay in deploy-final edge (voice.rs/voice_service.rs); native client 'voice' branch; no MCP push-to-talk/listen tools yet; only native clients are served"),
-    "svc_voice": ("MMMM", "no Simple Voice Chat server bridge (Solaris voice is native solaris:voice) and no SVC client lane"),
+    "computer_channel": ("MMPM", "loader-fabric ComputerClient/ComputerScreen exist; no harness scenario; native client lacks krasnokamen:computer"),
+    "native_screen_share": ("MMMP", "krasnokamen:screen relay in deploy-final edge (screen.rs/screen_service.rs); native client branches implement capture/share (screen-codec, screen-audio); no MCP tools for share consent/request/answer yet; Java/Loader clients do not speak krasnokamen:screen"),
+    "native_voice": ("MMMP", "krasnokamen:voice relay in deploy-final edge (voice.rs/voice_service.rs); native client 'voice' branch; no MCP push-to-talk/listen tools yet; only native clients are served"),
+    "svc_voice": ("MMMM", "no Simple Voice Chat server bridge (Krasnokamen voice is native krasnokamen:voice) and no SVC client lane"),
     "resource_pack_prompt": ("MPPP", "client accepts/declines via screen buttons unexercised; bots lack ResourcePack status reply"),
     "transfer_follow": ("MPPP", "client follows Transfer unexercised"),
     "admin_protocol_client": ("PMMM", "status/query/rcon/msmp/dashboard clients: raw protocol tooling plausible (wire_probe status), no gate"),
@@ -220,7 +220,7 @@ CAP_NOTE = {c: v[1] for c, v in CAPS.items()}
 DRIVER_DESC = {
     "protocol_bot": "crates/mc-test-harness player_scale_bots --mechanic-spec (actions: move, chat, command, use_block, break_block(start), click_slot Pickup|QuickMove, open/close_container, attack/entity_interact, use_item, select_slot, drop_stack, respawn, reader_rate_limit); wire_probe/quirk_probe",
     "java_mcp": "../solaris-loader java-agent bridge MCP (52 minecraft_* tools) on vanilla 26.1.2",
-    "loader_java_mcp": "same java-agent MCP inside Fabric/NeoForge/Forge + Solaris Loader (harness loader-live / dh-gate)",
+    "loader_java_mcp": "same java-agent MCP inside Fabric/NeoForge/Forge + Krasnokamen Loader (harness loader-live / dh-gate)",
     "native_mcp": "../solaris-client src/automation MCP (50 minecraft_* tools), harness profiles entities/admin-commands/dialogs/...",
 }
 
@@ -346,11 +346,11 @@ PLUGIN_SENSITIVE = {
     "death_respawn.death_while_menu_open": (["graves"], "live set (graves): the dropped cursor/inventory items end in the barrel grave exactly once"),
     "death_respawn.death_while_riding": (["graves"], "live set (graves): drops go to the barrel grave"),
     "death_respawn.void_death": (["graves"], "live set (graves): no grave contents expected for void-lost items unless the plugin places one at the last safe spot; record the observed behaviour"),
-    "commands.msg": (["solaris-essentials"], "live set: solaris-essentials owns the msg root (core root not advertised); expect the plugin's private message behaviour"),
-    "chat.private_message": (["solaris-essentials"], "live set: /msg is solaris-essentials; /tell and /w stay core"),
-    "selectors.nonop_selector_msg": (["solaris-essentials"], "live set: /msg is solaris-essentials, so its selector handling for non-ops is the plugin's; /tp and /effect stay core"),
-    "session.mute_warn": (["solaris-essentials"], "live set: /msg is solaris-essentials; record whether a native mute also refuses the plugin's /msg"),
-    "session.join_fresh_spawn": (["solaris-auth"], "live set (solaris-auth): the player is locked (no build/damage/commands) until /register or /login succeeds"),
+    "commands.msg": (["krasnokamen-essentials"], "live set: krasnokamen-essentials owns the msg root (core root not advertised); expect the plugin's private message behaviour"),
+    "chat.private_message": (["krasnokamen-essentials"], "live set: /msg is krasnokamen-essentials; /tell and /w stay core"),
+    "selectors.nonop_selector_msg": (["krasnokamen-essentials"], "live set: /msg is krasnokamen-essentials, so its selector handling for non-ops is the plugin's; /tp and /effect stay core"),
+    "session.mute_warn": (["krasnokamen-essentials"], "live set: /msg is krasnokamen-essentials; record whether a native mute also refuses the plugin's /msg"),
+    "session.join_fresh_spawn": (["krasnokamen-auth"], "live set (krasnokamen-auth): the player is locked (no build/damage/commands) until /register or /login succeeds"),
 }
 PLUGIN_PROFILES = ("vanilla", "live")
 
@@ -394,7 +394,7 @@ CONSTRAINTS = [
     {"id": "C01", "kind": "invalid", "rule": "player_count == '1' and subject.mp", "reason": "multiplayer-only subject (PvP, /msg, tpa, shared observation) needs >= 2 players"},
     {"id": "C02", "kind": "invalid", "rule": "dimension not in subject.dims", "reason": "dimension-bound mechanic (End fight/gateway in the_end, nether-portal pair overworld<->nether, weather/raid patrols in overworld, anchor spawn in nether, water-evaporation in nether)"},
     {"id": "C03", "kind": "invalid", "rule": "network_condition == 'disconnect_during_menu' and not subject.menu", "reason": "no menu is open during the action"},
-    {"id": "C04", "kind": "invalid", "rule": "client_kind not in subject.clients", "reason": "client-specific surface: voice needs fabric_svc; computer terminal/desktop capture only Fabric Loader (ADR 0018, native client lacks solaris:computer); DH LOD needs DH client; Loader bundles need a Loader-capable client; protocol-mismatch/illegal-move probes need a raw protocol bot; load scenarios are protocol-bot fleets"},
+    {"id": "C04", "kind": "invalid", "rule": "client_kind not in subject.clients", "reason": "client-specific surface: voice needs fabric_svc; computer terminal/desktop capture only Fabric Loader (ADR 0018, native client lacks krasnokamen:computer); DH LOD needs DH client; Loader bundles need a Loader-capable client; protocol-mismatch/illegal-move probes need a raw protocol bot; load scenarios are protocol-bot fleets"},
     {"id": "C05", "kind": "invalid", "rule": "permission == 'console' and not subject.console", "reason": "console has no entity: it cannot perform gameplay actions, only commands"},
     {"id": "C06", "kind": "negative_oracle", "rule": "permission level < subject.op", "reason": "command refused/hidden (vanilla permission gate) — valid negative scenario"},
     {"id": "C07", "kind": "negative_oracle", "rule": "game_mode == 'spectator' and domain in interaction domains", "reason": "spectators cannot break/place/use/attack; may view container contents only"},
@@ -506,7 +506,7 @@ def check_ledger_line(obj, strict=False):
     if obj["driver"] != expected:
         return f"driver {obj['driver']!r} != {expected!r} required by the id's client_kind"
     if not re.fullmatch(r"[0-9A-Za-z._+-]{7,128}", obj["server_sha"]):
-        return "server_sha must be the solaris-v2 binary sha256 (or git sha), no spaces"
+        return "server_sha must be the krasnokamen binary sha256 (or git sha), no spaces"
     if not obj["run_dir"].startswith("/"):
         return "run_dir must be absolute"
     if not obj["ts"].endswith("Z"):
@@ -752,7 +752,7 @@ NET_ORACLE = {
     "reconnect_mid_action": "after reconnect the client receives exactly the server-committed state; the interrupted action is either fully applied or not at all; item totals across player/containers/entities unchanged except by the committed part",
     "disconnect_during_menu": "server closes the menu on Leave; carried cursor stack returns to the player inventory (dropped at feet if full) exactly once; container contents reflect only acknowledged clicks; reopening after rejoin shows the same contents",
     "duplicate_login": "vanilla 26.1.2 newcomer wins (owner requirement, BugTriage DUPLICATE-LOGIN): the existing session is disconnected ('You logged in from another location'), the new connection reaches Play with the same persisted player state; "
-                       "exactly one live player entity for the UUID, no inventory copy or loss, no join-wait timeout. Current Solaris (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait — expected to fail until ServerFixes lands",
+                       "exactly one live player entity for the UUID, no inventory copy or loss, no join-wait timeout. Current Krasnokamen (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait — expected to fail until ServerFixes lands",
     "slow_reader_backpressure": "server tick (MSPT) and other players unaffected; slow client either catches up with consistent state or is disconnected by bounded queue/timeout; no unbounded memory growth",
     "malformed_or_stale_packet": "out-of-reach/illegal/malformed input is rejected (BlockChangedAck + block update / correction teleport / protocol disconnect) without state change; a stale container state_id is applied once and followed by a full-state resync (vanilla handleContainerClick); never duplicated; server keeps running",
 }
@@ -773,10 +773,10 @@ SCENARIO_TEMPLATE = {
     "execution_path": "tools/harness (python3 -m tools.harness run ...; single cmd_run, shared lifecycle/receipts) and catalog_mixes.py for composite bot scenarios; this generator only selects/describes scenarios and validates ledger lines",
     "run_wrapper": "every run goes through /run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G <harness cmd>; no direct server launches",
     "setup": [
-        "Server: the release solaris-v2 binary (its full sha256 is the ledger server_sha) on a fresh isolated world per run; harness owns process/Xvfb lifecycle and receipts",
-        f"Plugins: [plugins].directory = {LIVE_PLUGINS} (live VPS set of 10: basic-economy, chisel, computer(id solaris), graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions, solaris-towns); copy into the run dir when a plugin writes state. "
+        "Server: the release krasnokamen binary (its full sha256 is the ledger server_sha) on a fresh isolated world per run; harness owns process/Xvfb lifecycle and receipts",
+        f"Plugins: [plugins].directory = {LIVE_PLUGINS} (live VPS set of 10: basic-economy, chisel, computer(id krasnokamen), graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions, krasnokamen-towns); copy into the run dir when a plugin writes state. "
         "Plugin-sensitive subjects (ids ending @vanilla/@live) run on the profile their id names: @live = the full set, @vanilla = the set minus the plugins that change their oracle (context.plugin_profile, steps)",
-        "Live-set effects on every scenario: solaris-auth locks each player until /register then /login (bots: --auth-password); graves takes death drops into a barrel grave; solaris-essentials owns the /msg root; chisel/computer offer optional Loader bundles",
+        "Live-set effects on every scenario: krasnokamen-auth locks each player until /register then /login (bots: --auth-password); graves takes death drops into a barrel grave; krasnokamen-essentials owns the /msg root; chisel/computer offer optional Loader bundles",
         "Ledger: every @profile line carries plugin_set = `gen_matrix.py --plugin-fingerprint <deployed plugins dir>`; --record rejects a fingerprint that is not the id's profile. "
         "Harness runners select and verify the profile with the shared helper tools/harness matrix_execution.select_plugin_profile / plugin_set_fingerprint (bots-runproto 24fcc5c1), not a lane-local convention; adapters branch on context.plugin_profile",
         "Console sets context.difficulty; connect context.player_count clients of context.client_kind through driver.kind; console grants context.permission and context.game_mode; actors stand on a prepared pad in context.dimension",
@@ -1069,9 +1069,9 @@ for s in SUBJ.values():
     for g in s.get("ai_goals", []):
         GOAL_MAP[g].append(s["id"])
 GOAL_MAP["FangLife"].append("mobs.evoker")  # evoker_fangs entity lifecycle (non-living)
-PLUGIN_MAP = {"solaris-permissions": "plugins.perm_groups_user_set", "solaris-essentials": "plugins.essentials_homes", "solaris-economy": "plugins.economy_money_pay",
-              "solaris-towns": "plugins.towns_create_info", "solaris-audit": "plugins.audit_queries", "basic-economy": "plugins.basic_economy_shop",
-              "solaris-auth": "plugins.auth_register_login", "chisel": "plugins.chisel_conversion", "graves": "plugins.graves_custody",
+PLUGIN_MAP = {"krasnokamen-permissions": "plugins.perm_groups_user_set", "krasnokamen-essentials": "plugins.essentials_homes", "krasnokamen-economy": "plugins.economy_money_pay",
+              "krasnokamen-towns": "plugins.towns_create_info", "krasnokamen-audit": "plugins.audit_queries", "basic-economy": "plugins.basic_economy_shop",
+              "krasnokamen-auth": "plugins.auth_register_login", "chisel": "plugins.chisel_conversion", "graves": "plugins.graves_custody",
               "land-claims": "plugins.plugin_startup_fail_closed", "online-roster": "plugins.plugin_startup_fail_closed", "geological-mines": "plugins.plugin_startup_fail_closed",
               "computer": "monitor.monitor_give_place_break"}
 PCMD_MAP = {"perm": "plugins.perm_groups_user_set", "sethome": "plugins.essentials_homes", "home": "plugins.essentials_homes", "delhome": "plugins.essentials_homes",
@@ -1127,8 +1127,8 @@ PRIORITY = {
     "server_lifecycle": ["crash_kill9_wal_replay", "clean_restart_mid_action", "hot_backup_during_action", "save_all_checkpoint", "pause_when_empty_resume", "steady"],
     "network_condition": ["disconnect_during_menu", "duplicate_login", "reconnect_mid_action", "malformed_or_stale_packet", "slow_reader_backpressure", "normal"],
     "player_count": ["2", "N8", "1"],
-    "client_kind": ["protocol_bot", "vanilla_java_26_1_2", "native_linux", "fabric_solaris_loader", "fabric_distant_horizons", "fabric_svc",
-                    "neoforge_solaris_loader", "forge_solaris_loader", "native_windows"],
+    "client_kind": ["protocol_bot", "vanilla_java_26_1_2", "native_linux", "fabric_krasnokamen_loader", "fabric_distant_horizons", "fabric_svc",
+                    "neoforge_krasnokamen_loader", "forge_krasnokamen_loader", "native_windows"],
     "game_mode": ["survival", "creative", "adventure", "spectator"],
     "difficulty": ["normal", "hard", "easy", "peaceful"],
     "permission": ["non_op_0", "op_4", "op_2", "op_3", "op_1", "console"],
@@ -1371,7 +1371,7 @@ LEDGER_CONTRACT = {
     "keys": {"id": "wave-1 id (<pw|bl|tr.*>:CELL) or full-set id (F:CELL); CELL ends @vanilla|@live for plugin-sensitive subjects",
              "status": "pass | fail | blocked | skipped",
              "driver": "protocol_bot | java_mcp | loader_java_mcp | native_mcp; must equal the driver of the id's client_kind",
-             "server_sha": "full sha256 of the solaris-v2 binary used (release); no spaces",
+             "server_sha": "full sha256 of the krasnokamen binary used (release); no spaces",
              "run_dir": "absolute path of the harness run artifact dir (result.json/logs)",
              "ts": "UTC ISO-8601 ending in Z",
              "note": "fail: finding + evidence path; blocked: missing capability name(s) from `capabilities`; may be empty for pass/skipped",
@@ -1386,7 +1386,7 @@ LEDGER_CONTRACT = {
     "validation": "`python3 gen_matrix.py --status` exits 1 on any invalid line (bad keys/status/driver/ts, unknown subject or constraint-violating cell)",
 }
 matrix = {
-    "schema": "solaris-scenario-matrix/2",
+    "schema": "krasnokamen-scenario-matrix/2",
     "generated": "2026-10-24",
     "generator": "tools/harness/matrix_specs/gen_matrix.py (+ subjects*.py, codegen_subjects.py, existing.py); deterministic seed 20261024",
     "repo_heads": heads,
@@ -1524,7 +1524,7 @@ subj_unit = sum(r[9] for r in dom_rows)
 subj_none = sum(r[10] for r in dom_rows)
 gap_subjects = [s for s in SUBJ.values() if s["status"] != "implemented"]
 lines = [
-    "# Solaris gameplay/server scenario matrix — summary",
+    "# Krasnokamen gameplay/server scenario matrix — summary",
     "",
     f"Generated 2026-10-24 by `tools/harness/matrix_specs/gen_matrix.py` (deterministic, seed 20261024) from code at "
     + ", ".join(f"{k}@{v}" for k, v in heads.items()) + ". Machine-readable source: `matrix.yaml`.",
@@ -1573,7 +1573,7 @@ lines += ["",
           "- `DamageKind` (crates/mc-core/src/survival.rs) has no freeze, fly_into_wall, cramming, sonic_boom, dragon_breath or stalagmite kinds; listed as `damage.vanilla_*` gap subjects.",
           "- Illusioner falls to the generic `Melee` combat policy (crates/mc-data/src/mob_behavior_26_1_2.rs combat_policy); vanilla illusioner is a ranged spellcaster.",
           "- No server-side Simple Voice Chat bridge in any crate; `fabric_svc` can only test join/compat today.",
-          "- Computer terminal exists only in Fabric Loader (loader-core ComputerProtocol, loader-fabric ComputerClient); native client has no `solaris:computer`; screen sharing to other players is excluded by ADR 0018.",
+          "- Computer terminal exists only in Fabric Loader (loader-core ComputerProtocol, loader-fabric ComputerClient); native client has no `krasnokamen:computer`; screen sharing to other players is excluded by ADR 0018.",
           "- No horse/donkey/llama inventory screen and no lectern menu in `MenuKind` / container mapping (crates/mc-core/src/tick.rs container_kind_for_state).",
           "- No spawn-protection key in server.properties support (crates/mc-edge/src/server_properties.rs).",
           "- Legacy plugin manifests land-claims/online-roster/geological-mines declare api 0.6.0 and are not deployable on 0.8 (scenario `plugins.plugin_startup_fail_closed`).",
@@ -1599,7 +1599,7 @@ lines += [f"| **total** | **{FULL['valid']:,}** | " + " | ".join(f"**{FULL['wave
           "",
           "## Ledger contract (`ledger.jsonl`)", "",
           f"- One JSON object per line with exactly the keys `{', '.join(LEDGER_KEYS)}`; append-only; the last line for an id wins.",
-          "- `status`: pass | fail | blocked | skipped. `driver` must equal the driver of the id's client_kind. `server_sha`: full sha256 of the release solaris-v2 binary. "
+          "- `status`: pass | fail | blocked | skipped. `driver` must equal the driver of the id's client_kind. `server_sha`: full sha256 of the release krasnokamen binary. "
           "`run_dir`: absolute harness run dir. `ts`: UTC ISO-8601 with `Z`. `note`: fail -> finding + evidence path; blocked -> missing capability name(s).",
           "- Write through `python3 gen_matrix.py --record --id ID --status S --driver D --server-sha SHA --run-dir DIR [--note T]` or `--record-file batch.jsonl` "
           "(validates, flock on ledger.jsonl, one O_APPEND write, fsync). Ledger lines come from harness receipts; this tool does not run scenarios.",

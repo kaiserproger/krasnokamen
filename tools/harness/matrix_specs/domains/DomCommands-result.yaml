@@ -45,7 +45,7 @@ findings:
     subject: commands.debug
     kind: source-audit gap on original binary
     evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/commands.rs:963-975
-    description: Vanilla profiler root replaced with Solaris give fixture.
+    description: Vanilla profiler root replaced with Krasnokamen give fixture.
   - id: BORDER-LERP
     subject: world_border.set_and_lerp
     kind: source-audit gap on original binary
@@ -102,7 +102,7 @@ validation:
         python3 -m unittest tools.harness.matrix_domains.test_commands.DomainContractTests.test_action_preserves_client_authority
         tools.harness.matrix_domains.test_commands.DomainContractTests.test_console_authority_and_single_boundary
         tools.harness.matrix_domains.test_commands.DomainContractTests.test_exact_list_count_and_names tools.harness.matrix_domains.test_commands.DomainContractTests.test_each_invalid_selector_error_survives_boundary
-        tools.harness.matrix_domains.test_commands.DomainContractTests.test_solaris_debug_fixture_is_not_vanilla_profiler_pass
+        tools.harness.matrix_domains.test_commands.DomainContractTests.test_krasnokamen_debug_fixture_is_not_vanilla_profiler_pass
         -v
       passed: 5
     distinct_test_methods_exercised: 21

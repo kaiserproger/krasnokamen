@@ -196,7 +196,7 @@ fn items_bundle(required: bool) -> mc_loader::LoaderManifest {
     let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     archive
         .start_file(
-            "solaris-client.json",
+            "krasnokamen-client.json",
             zip::write::SimpleFileOptions::default(),
         )
         .unwrap();
@@ -256,10 +256,10 @@ async fn read_channel_register(client: &mut Connection) {
             assert_eq!(channel.to_string(), "minecraft:register");
             let declared: Vec<&[u8]> = payload.split(|byte| *byte == 0).collect();
             for serverbound in [
-                "solaris:loader/hello",
-                "solaris:loader/request",
-                "solaris:loader/ack",
-                "solaris:loader/view_action",
+                "krasnokamen:loader/hello",
+                "krasnokamen:loader/request",
+                "krasnokamen:loader/ack",
+                "krasnokamen:loader/view_action",
             ] {
                 assert!(
                     declared.contains(&serverbound.as_bytes()),
@@ -319,7 +319,7 @@ async fn vanilla_client_completes_configuration_with_only_optional_bundles() {
     assert!(
         !channels
             .iter()
-            .any(|channel| channel == "solaris:loader/manifest"),
+            .any(|channel| channel == "krasnokamen:loader/manifest"),
         "a client that never answered the probe is never sent the manifest: {channels:?}"
     );
     client
@@ -769,7 +769,7 @@ async fn required_loader_content_refuses_a_vanilla_client_with_the_loader_messag
     );
     let reason = String::from_utf8_lossy(&reason).into_owned();
     assert!(
-        reason.contains("requires the Solaris Loader client mod"),
+        reason.contains("requires the Krasnokamen Loader client mod"),
         "{reason}"
     );
     assert!(server_task.await.unwrap().is_err());

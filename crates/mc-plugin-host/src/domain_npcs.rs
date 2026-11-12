@@ -22,8 +22,8 @@
 //! here like any other, so a plugin reads why every member was refused instead of
 //! losing the batch detail behind a bare failure.
 
-use crate::bindings::solaris::plugin::inventories as wire_inventories;
-use crate::bindings::solaris::plugin::npcs as wire;
+use crate::bindings::krasnokamen::plugin::inventories as wire_inventories;
+use crate::bindings::krasnokamen::plugin::npcs as wire;
 use mc_script::{
     ScriptBlockPosition, ScriptCombatEvent, ScriptDtoError, ScriptEngagementPolicy,
     ScriptFormation, ScriptFormationKind, ScriptHostileCategory, ScriptInventoryEndpoint,
@@ -974,7 +974,7 @@ fn control_snapshot(value: &ScriptNpcControlSnapshot) -> Option<wire::NpcControl
             .map(|target| wire::NpcTargetObservation {
                 target_ref: target.target_ref.clone(),
                 position: target.position.map(|at| {
-                    crate::bindings::solaris::plugin::types::Position {
+                    crate::bindings::krasnokamen::plugin::types::Position {
                         x: at.x(),
                         y: at.y(),
                         z: at.z(),

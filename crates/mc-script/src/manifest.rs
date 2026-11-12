@@ -161,7 +161,7 @@ impl RequiredCommandCapability<'_> {
     }
 }
 
-/// Declarative subscription to one Solaris script event name.
+/// Declarative subscription to one Krasnokamen script event name.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct ScriptEventSubscription {
@@ -187,7 +187,7 @@ pub enum ScriptPluginLoadPhase {
     PostWorld,
 }
 
-/// Relationship between this plugin and another Solaris plugin id.
+/// Relationship between this plugin and another Krasnokamen plugin id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ScriptPluginDependencyRelation {
@@ -350,7 +350,7 @@ impl ScriptPluginManifest {
         ))
     }
 
-    /// Declare interest in one Solaris-native script event name.
+    /// Declare interest in one Krasnokamen-native script event name.
     pub fn subscribe_event(mut self, event_name: impl AsRef<str>) -> Self {
         if self.preflight_error.is_some() {
             return self;
@@ -1615,7 +1615,7 @@ pub(super) fn validate_custom_payload_channel(
     channel: &str,
 ) -> Result<&str, ScriptPluginManifestError> {
     // Loader control traffic must use permission-checked typed commands.
-    if channel.len() > MAX_SCRIPT_RESOURCE_ID_BYTES || channel.starts_with("solaris:loader/") {
+    if channel.len() > MAX_SCRIPT_RESOURCE_ID_BYTES || channel.starts_with("krasnokamen:loader/") {
         return Err(ScriptPluginManifestError::InvalidCustomPayloadChannel {
             channel: channel.to_owned(),
         });

@@ -33,17 +33,17 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fixture::component_bytes;
-use mc_plugin_host::bindings::exports::solaris::plugin::events::{
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::events::{
     Event, EventContext, PlayerJoined,
 };
-use mc_plugin_host::bindings::exports::solaris::plugin::lifecycle::InitContext;
-use mc_plugin_host::bindings::solaris::plugin::commands::{
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::lifecycle::InitContext;
+use mc_plugin_host::bindings::krasnokamen::plugin::commands::{
     Command, OperationStatus, StorageBatchCas,
 };
-use mc_plugin_host::bindings::solaris::plugin::storage::{
+use mc_plugin_host::bindings::krasnokamen::plugin::storage::{
     StorageCasMutation, StorageDeleteMutation, StorageMutation,
 };
-use mc_plugin_host::bindings::solaris::plugin::{domain_operations, inventories};
+use mc_plugin_host::bindings::krasnokamen::plugin::{domain_operations, inventories};
 use mc_plugin_host::{
     AdapterError, CommandBatch, DeploymentConfig, DiscoveryMode, HostQueues, HostServices,
     LoadedPackage, LogLevel, NoSessions, PlayerSessions, PluginInstance, PluginLimits,

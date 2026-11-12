@@ -62,7 +62,7 @@ def plugin_directory(ctx: ProfileContext) -> Path:
 
 
 def prepare_operator_fixture(ctx: ProfileContext, names: list[str]) -> None:
-    """Write vanilla access lists beside the solaris-v2 config."""
+    """Write vanilla access lists beside the krasnokamen config."""
     entries = [{
         "uuid": str(uuid.UUID(bytes=hashlib.md5(f"OfflinePlayer:{name}".encode(),
                                                usedforsecurity=False).digest(), version=3)),
@@ -115,7 +115,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         if source.count(old) != 1:
             raise RuntimeError(f"expected one survival config token: {old}")
         source = source.replace(old, new, 1)
-    source = select_vanilla_data(source, os.environ.get("SOLARIS_SERVER_VANILLA_DATA_DIR"))
+    source = select_vanilla_data(source, os.environ.get("KRASNOKAMEN_SERVER_VANILLA_DATA_DIR"))
     config.write_text(source)
     prepare_operator_fixture(ctx, operators)
     evidence = ctx.client_evidence

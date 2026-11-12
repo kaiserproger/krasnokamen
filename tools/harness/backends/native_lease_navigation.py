@@ -11,7 +11,7 @@ from .probe_steps import ProbeSteps
 
 
 def _controller(client):
-    resource = client._request("resources/read", {"uri": "solaris-client://capabilities"})
+    resource = client._request("resources/read", {"uri": "krasnokamen-client://capabilities"})
     return json.loads(resource["contents"][0]["text"])["controller"]
 
 def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:

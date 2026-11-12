@@ -303,7 +303,7 @@ fn every_assigned_species_survives_checkpoint_and_core_restart() {
     use crate::config::CoreConfig;
     use crate::core::{Core, SpawnRequest};
     let dir = std::env::temp_dir().join(format!(
-        "solaris-species-{}-{}",
+        "krasnokamen-species-{}-{}",
         std::process::id(),
         uuid::Uuid::new_v4()
     ));

@@ -702,7 +702,7 @@ fn try_with_rules_reports_missing_required_block() {
 #[test]
 fn standalone_realistic_profile_rejects_missing_normal_or_deepslate_ore() {
     for missing in ["minecraft:coal_ore", "minecraft:deepslate_coal_ore"] {
-        let mut report = mc_data::blocks::solaris_required_blocks_report()
+        let mut report = mc_data::blocks::krasnokamen_required_blocks_report()
             .into_iter()
             .filter(|block| block.id.as_str() != missing)
             .collect::<Vec<_>>();
@@ -1059,7 +1059,7 @@ fn default_seed_coastline_has_bounded_steps() {
 }
 
 #[test]
-fn solaris_owned_land_biomes_form_chunk_scale_regions() {
+fn krasnokamen_owned_land_biomes_form_chunk_scale_regions() {
     let g = TerrainGenerator::new(42, tiny_registry());
     let mut stable_windows = 0usize;
 
@@ -1101,7 +1101,7 @@ fn solaris_owned_land_biomes_form_chunk_scale_regions() {
 }
 
 #[test]
-fn solaris_owned_biome_choices_do_not_track_192_block_grid_lines() {
+fn krasnokamen_owned_biome_choices_do_not_track_192_block_grid_lines() {
     const OLD_GRID_SIZE: i32 = 192;
 
     let g = TerrainGenerator::new(42, tiny_registry());
@@ -1163,7 +1163,7 @@ fn solaris_owned_biome_choices_do_not_track_192_block_grid_lines() {
 }
 
 #[test]
-fn solaris_owned_nearby_land_samples_avoid_excessive_family_flips() {
+fn krasnokamen_owned_nearby_land_samples_avoid_excessive_family_flips() {
     let g = TerrainGenerator::new(42, tiny_registry());
     let mut comparable = 0usize;
     let mut flips = 0usize;
@@ -1197,7 +1197,7 @@ fn solaris_owned_nearby_land_samples_avoid_excessive_family_flips() {
 }
 
 #[test]
-fn solaris_owned_river_masks_are_broad_when_reachable() {
+fn krasnokamen_owned_river_masks_are_broad_when_reachable() {
     let g = TerrainGenerator::new(42, tiny_registry());
 
     for wx in (-2_048..=2_048).step_by(4) {
@@ -1301,7 +1301,7 @@ fn river_biomes_only_label_carved_water_floors() {
 }
 
 #[test]
-fn solaris_owned_river_valleys_keep_continuous_water_floors() {
+fn krasnokamen_owned_river_valleys_keep_continuous_water_floors() {
     let g = TerrainGenerator::new(42, tiny_registry());
     let mut checked = 0usize;
 
@@ -1371,7 +1371,7 @@ fn solaris_owned_river_valleys_keep_continuous_water_floors() {
 }
 
 #[test]
-fn solaris_owned_local_terrain_steps_stay_bounded() {
+fn krasnokamen_owned_local_terrain_steps_stay_bounded() {
     let g = TerrainGenerator::new(42, tiny_registry());
     for wx in (-512..=512).step_by(4) {
         for wz in (-512..=512).step_by(4) {

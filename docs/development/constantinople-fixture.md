@@ -20,14 +20,14 @@ python3 -m tools.harness run constantinople -- --plan DIR --world NATIVE_WORLD \
 
 ## Offline subcommands
 
-- `census` scans a stopped native world's `solaris-v2 world export-anvil` output
+- `census` scans a stopped native world's `krasnokamen world export-anvil` output
   (`--counts-only` skips per-cell `terrain.json` for large comparison worlds).
-- `solaris-v2 --config FILE world census --source STOPPED_NATIVE --receipt OUT.json`
+- `krasnokamen --config FILE world census --source STOPPED_NATIVE --receipt OUT.json`
   counts native entity roots and passengers, villagers, stored chunks,
   settlements and persisted memberships/households directly. The config's
   seed/generation identity must match, a journal tail newer than the checkpoint
   is refused, and receipts lie outside the world.
-- `solaris-v2 --config FILE world probe --source STOPPED_NATIVE --receipt OUT.json
+- `krasnokamen --config FILE world probe --source STOPPED_NATIVE --receipt OUT.json
   --block X,Y,Z` (repeatable `--block`) reads one stopped world read-only under
   the same identity/journal-tail rules and reports each requested cell's stored
   block state and typed container slots plus every stored player inventory and

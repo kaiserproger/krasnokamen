@@ -299,7 +299,7 @@ fn server_known_pack(release: &str) -> KnownPackEntry {
 
 fn server_brand() -> String {
     format!(
-        "Solaris {} (MC {TARGET_RELEASE})",
+        "Krasnokamen {} (MC {TARGET_RELEASE})",
         env!("CARGO_PKG_VERSION")
     )
 }

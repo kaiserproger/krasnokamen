@@ -378,10 +378,10 @@ fn stored_gateway(state: &TickState, pos: BlockPos) -> Result<Gateway, String> {
         Some(Tag::Byte(1)) => true,
         _ => return Err(fail("ExactTeleport must be TAG_Byte 0/1")),
     };
-    let cooldown_until = match find("solaris:CooldownUntil")? {
+    let cooldown_until = match find("krasnokamen:CooldownUntil")? {
         None => 0,
         Some(Tag::Long(value)) if *value >= 0 => *value as u64,
-        _ => return Err(fail("solaris:CooldownUntil must be nonnegative TAG_Long")),
+        _ => return Err(fail("krasnokamen:CooldownUntil must be nonnegative TAG_Long")),
     };
     let exit = match find("exit_portal")? {
         None => None,
@@ -425,7 +425,7 @@ fn store_gateway(state: &mut TickState, pos: BlockPos, image: Gateway, journal: 
         ("Age".into(), Tag::Long(image.age)),
         ("ExactTeleport".into(), Tag::Byte(i8::from(image.exact))),
         (
-            "solaris:CooldownUntil".into(),
+            "krasnokamen:CooldownUntil".into(),
             Tag::Long(image.cooldown_until as i64),
         ),
     ];

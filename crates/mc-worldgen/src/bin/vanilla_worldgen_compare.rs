@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let root = PathBuf::from(&args[1]);
     let oracle: Value = serde_json::from_slice(&std::fs::read(&args[2])?)?;
     let blocks = Arc::new(BlockRegistry::from_report(
-        &mc_data::blocks::solaris_required_blocks_report(),
+        &mc_data::blocks::krasnokamen_required_blocks_report(),
     )?);
     let data = Arc::new(mc_data::load(&root)?);
     let tags = Arc::new(mc_data::tags::load(&root, &data)?);
@@ -74,7 +74,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let error = height - point["height"].as_i64().ok_or("point height")? as i32;
             height_errors.push(error.abs());
             if sample.biome != expected && mismatch_points.len() < 20 {
-                mismatch_points.push(json!({"x":x,"y":y,"z":z,"vanilla":expected,"solaris":sample.biome,"climate":sample.quantized,"expected_climate":expected_climate}));
+                mismatch_points.push(json!({"x":x,"y":y,"z":z,"vanilla":expected,"krasnokamen":sample.biome,"climate":sample.quantized,"expected_climate":expected_climate}));
             }
         }
         height_errors.sort_unstable();

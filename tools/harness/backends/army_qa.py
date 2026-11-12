@@ -410,13 +410,13 @@ def validate_args(ctx: ProfileContext) -> float:
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
     artifact = ctx.artifact_dir
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not override:
-        raise RuntimeError("army-qa requires SOLARIS_SERVER_BINARY (a solaris-v2 built from this tree)")
+        raise RuntimeError("army-qa requires KRASNOKAMEN_SERVER_BINARY (a krasnokamen built from this tree)")
     binary = Path(override).expanduser().resolve()
     if not binary.is_file():
         raise RuntimeError(f"missing executable server binary: {binary}")
-    plugins = os.environ.get("SOLARIS_ARMY_QA_PLUGINS")
+    plugins = os.environ.get("KRASNOKAMEN_ARMY_QA_PLUGINS")
     server_port = runtime.reserve_port()
     address = f"127.0.0.1:{server_port}"
     config = artifact / "army-qa.toml"
@@ -433,7 +433,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             raise RuntimeError(f"expected one army-qa config token: {old_tok}")
         source = source.replace(old_tok, new_tok, 1)
     config.write_text(source)
-    # Auth-gated plugins (solaris-auth: register/login) start a 60s login
+    # Auth-gated plugins (krasnokamen-auth: register/login) start a 60s login
     # timeout per connection ("Authentication timeout"). The frozen QA brief
     # says "no auth needed for QA": run with an EMPTY plugin dir, like
     # village-qa, so no login gate can fire mid-scenario.
@@ -450,7 +450,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     try:
         server_log = server_log_path.open("wb")
         env = os.environ.copy()
-        env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+        env["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
         server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                                   cwd=runtime.REPO_ROOT, stdout=server_log,
                                   stderr=subprocess.STDOUT, start_new_session=True, env=env)
@@ -1251,7 +1251,7 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext,
     detail["phase_a_done"] = True
     probe.check("phase_a_complete", True)
     _write_interim_receipt(probe, artifact, detail, "army_qa_phase_a")
-    if __import__("os").environ.get("SOLARIS_ARMY_QA_PHASE") == "A":
+    if __import__("os").environ.get("KRASNOKAMEN_ARMY_QA_PHASE") == "A":
         return
 
     # === COMBAT: entities within 4 blocks of a soldier take melee damage
@@ -1600,7 +1600,7 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext,
     detail["time_set_count"] = sum(1 for c in probe.report["fixture_commands"] if c.startswith("time set "))
     probe.check("all_army_checks_pass",
                 all(v == "PASS" for v in detail["behaviour"].values()))
-    if __import__("os").environ.get("SOLARIS_ARMY_QA_PHASE") == "B":
+    if __import__("os").environ.get("KRASNOKAMEN_ARMY_QA_PHASE") == "B":
         return
     _write_interim_receipt(probe, artifact, detail, "army_qa_full")
 
@@ -1670,10 +1670,10 @@ def _do_restart(ctx: ProfileContext, artifact: Path, address: str, config: Path,
         probe.report["restart_old_stopped"] = True
     # port-release is observed via wait_port's event loop on the new proc;
     env = os.environ.copy()
-    env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+    env["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
     log = server_log_path.open("ab")
     ctx.logs.append(str(server_log_path) + " (restart appended)")
-    binary = Path(os.environ["SOLARIS_SERVER_BINARY"]).expanduser().resolve()
+    binary = Path(os.environ["KRASNOKAMEN_SERVER_BINARY"]).expanduser().resolve()
     proc = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                      cwd=runtime.REPO_ROOT, stdout=log, stderr=subprocess.STDOUT,
                      start_new_session=True, env=env)

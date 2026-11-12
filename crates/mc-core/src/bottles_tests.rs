@@ -294,7 +294,7 @@ fn bottle_water_potion_result_survives_player_wal_and_native_checkpoint() {
             .iter()
             .any(|stack| water(stack, &state))
     );
-    let dir = std::env::temp_dir().join(format!("solaris-bottles-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("krasnokamen-bottles-{}", uuid::Uuid::new_v4()));
     let config = crate::CoreConfig::new(dir.clone(), 42);
     let restored = crate::native_checkpoint::tests::roundtrip_player(
         &config,

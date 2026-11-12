@@ -328,7 +328,7 @@ fn poi_search_finds_nearest_loaded_state() {
 
 #[test]
 fn poi_states_cover_vanilla_tables_and_head_only_beds() {
-    let report = mc_data::blocks::solaris_required_blocks_report();
+    let report = mc_data::blocks::krasnokamen_required_blocks_report();
     let blocks = BlockRegistry::from_report(&report).unwrap();
     let states = poi_states(&blocks, &[id("minecraft:meeting"), id("minecraft:home")]);
     assert!(!states.is_empty());
@@ -544,7 +544,7 @@ fn real_terrain_biome_search_uses_noise_field() {
         return;
     }
     let blocks = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     );
     let mut terrain = mc_worldgen::TerrainGenerator::new(0, blocks);
     terrain.load_vanilla_worldgen(&root).unwrap();

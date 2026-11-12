@@ -163,7 +163,7 @@ fn click(state: &mut TickState, id: SettlementId, action: &str) -> Tag {
         state,
         PlayerInput::DialogClick {
             connection: CONN,
-            id: format!("solaris:settlement/{action}"),
+            id: format!("krasnokamen:settlement/{action}"),
             payload: Some(Tag::Compound(vec![(
                 "s".to_owned(),
                 Tag::String(id.0.to_string()),
@@ -214,8 +214,8 @@ fn empty_village_shows_the_territory_disk_on_square_cells() {
             .all(|row| row.chars().count() == SIZE && row.chars().all(|c| c == GLYPH))
     );
     assert_eq!(actions(&dialog).len(), 12);
-    assert!(actions(&dialog).contains(&"solaris:settlement/map_legend".to_owned()));
-    assert!(actions(&dialog).contains(&"solaris:settlement/dashboard".to_owned()));
+    assert!(actions(&dialog).contains(&"krasnokamen:settlement/map_legend".to_owned()));
+    assert!(actions(&dialog).contains(&"krasnokamen:settlement/dashboard".to_owned()));
     assert!(
         field(&dialog, "exit_action").is_none(),
         "the navigation already contains Back; a second exit row clips it at 720p/scale 3"
@@ -231,7 +231,7 @@ fn empty_village_shows_the_territory_disk_on_square_cells() {
     assert!(legend.contains("No buildings yet."), "{legend}");
     let main = command(&mut state, "settlement menu main");
     assert_eq!(actions(&main).len(), 5);
-    assert!(actions(&main).contains(&"solaris:settlement/dashboard".to_owned()));
+    assert!(actions(&main).contains(&"krasnokamen:settlement/dashboard".to_owned()));
     state.settlements.get_mut(id).unwrap().owner = None;
     // Reads stay open on an unclaimed village.
     let map = click(&mut state, id, "map");
@@ -268,7 +268,7 @@ fn buildings_sit_on_their_footprint_cells_with_hover_and_click() {
         .expect("a house run");
     let event = field(run, "click_event").unwrap();
     assert_eq!(string(field(event, "action")), "custom");
-    assert_eq!(string(field(event, "id")), "solaris:settlement/map_pick");
+    assert_eq!(string(field(event, "id")), "krasnokamen:settlement/map_pick");
     let payload = field(event, "payload").unwrap();
     assert_eq!(string(field(payload, "s")), id.0.to_string());
     assert_eq!(string(field(payload, "bids")), house.0.to_string());
@@ -352,7 +352,7 @@ fn construction_site_covers_its_reserved_rotated_footprint() {
         .expect("a site run");
     assert_eq!(
         string(field(field(site, "click_event").unwrap(), "id")),
-        "solaris:settlement/map_pick"
+        "krasnokamen:settlement/map_pick"
     );
 }
 
@@ -575,7 +575,7 @@ fn pick_payload(state: &mut TickState, payload: Tag) -> Tag {
         state,
         PlayerInput::DialogClick {
             connection: CONN,
-            id: "solaris:settlement/map_pick".to_owned(),
+            id: "krasnokamen:settlement/map_pick".to_owned(),
             payload: Some(payload),
         },
     )
@@ -625,7 +625,7 @@ fn overlapping_cell_keeps_all_seventy_two_ids_and_refuses_replaced_features() {
             .iter()
             .filter_map(|button| {
                 let action = field(button, "action")?;
-                (string(field(action, "id")) == "solaris:settlement/buildings").then(|| {
+                (string(field(action, "id")) == "krasnokamen:settlement/buildings").then(|| {
                     string(field(field(action, "additions").unwrap(), "b"))
                         .parse::<u64>()
                         .unwrap()
@@ -668,7 +668,7 @@ fn overlapping_cell_keeps_all_seventy_two_ids_and_refuses_replaced_features() {
     assert!(
         actions(&stale)
             .iter()
-            .all(|action| action != "solaris:settlement/buildings")
+            .all(|action| action != "krasnokamen:settlement/buildings")
     );
     assert!(!format!("{stale:?}").contains(&format!("String(\"{}\")", replacement.0)));
     assert!(format!("{stale:?}").contains("no longer exists"));
@@ -775,7 +775,7 @@ fn empty_wrong_cell_does_not_open_a_nearby_building_or_start_work() {
     assert!(
         actions(&selected)
             .iter()
-            .all(|action| action == "solaris:settlement/map")
+            .all(|action| action == "krasnokamen:settlement/map")
     );
     assert!(state.settlements.get(id).unwrap().project.is_none());
     assert!(state.settlements.get(id).unwrap().pending_order.is_none());

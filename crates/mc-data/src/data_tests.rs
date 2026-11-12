@@ -206,7 +206,7 @@ fn partial_captured_payload_directory_fails_closed() {
 
 #[test]
 fn embedded_registry_index_has_no_invented_payloads() {
-    let data = solaris_required_data();
+    let data = krasnokamen_required_data();
     assert!(!data.has_full_registry_payloads());
     let registry = data.registry("dimension_type").unwrap();
     assert_eq!(
@@ -226,7 +226,7 @@ fn registry_lookup_accepts_namespaced_id() {
 
 #[test]
 fn embedded_required_registry_index_covers_known_registries() {
-    let data = solaris_required_data();
+    let data = krasnokamen_required_data();
 
     assert!(data.sidecar_root().is_none());
     assert_eq!(data.registry_count(), KNOWN_REGISTRIES.len());

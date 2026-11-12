@@ -1,4 +1,4 @@
-package org.solaris.bukkit;
+package org.krasnokamen.bukkit;
 
 import java.nio.charset.StandardCharsets;
 import org.teavm.interop.Import;
@@ -6,13 +6,13 @@ import org.teavm.interop.Import;
 /** Primitive ABI keeps Java and the WIT adapter's independent memories separate. */
 public final class Bridge {
     private Bridge() {}
-    @Import(module = "solaris", name = "output_byte")
+    @Import(module = "krasnokamen", name = "output_byte")
     private static native void outputByte(int value);
-    @Import(module = "solaris", name = "finish_output")
+    @Import(module = "krasnokamen", name = "finish_output")
     private static native void finish(int kind, long session);
-    @Import(module = "solaris", name = "input_length")
+    @Import(module = "krasnokamen", name = "input_length")
     private static native int length(int field);
-    @Import(module = "solaris", name = "input_byte")
+    @Import(module = "krasnokamen", name = "input_byte")
     private static native int inputByte(int field, int offset);
     public static String input(int field) {
         byte[] bytes = new byte[length(field)];

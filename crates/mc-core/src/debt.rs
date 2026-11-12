@@ -18,9 +18,9 @@ use crate::config::CoreError;
 use mc_world::Chunk;
 
 /// Root-extra key for the authoritative last-simulated tick.
-pub(crate) const LAST_SIM_KEY: &str = "SolarisSimLastTick";
+pub(crate) const LAST_SIM_KEY: &str = "KrasnokamenSimLastTick";
 /// Root-extra key for outstanding pre-existing catch-up debt.
-pub(crate) const REMAINING_KEY: &str = "SolarisSimDebt";
+pub(crate) const REMAINING_KEY: &str = "KrasnokamenSimDebt";
 
 /// Per-chunk runtime debt authority. Active membership is recomputed by
 /// [`crate::world::ChunkWorld::set_active_chunks`]; the WAL image separately

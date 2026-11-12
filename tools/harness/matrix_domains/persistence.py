@@ -1,7 +1,7 @@
 """Persistence contracts; unavailable lifecycle/atomic readbacks fail closed.
 
 References: https://minecraft.wiki/w/Commands/save and Player.dat_format.
-Hot backup and WAL are Solaris durability guarantees, not vanilla file formats.
+Hot backup and WAL are Krasnokamen durability guarantees, not vanilla file formats.
 """
 from __future__ import annotations
 

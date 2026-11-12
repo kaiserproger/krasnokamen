@@ -398,7 +398,7 @@ impl TickState {
                             _ => None,
                         });
                     tracing::warn!(
-                        target: "solaris::settlement",
+                        target: "krasnokamen::settlement",
                         tick = self.tick,
                         game_time = self.day_time,
                         entity = ?id,

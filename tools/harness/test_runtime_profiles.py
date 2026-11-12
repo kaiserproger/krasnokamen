@@ -110,7 +110,7 @@ class ProfileTaskTests(unittest.TestCase):
                     seen["env"] = env
                 finally:
                     handle.close()
-            self.assertEqual(seen["env"]["SOLARIS_CLIENT_MCP_USERNAME"], "SvcProfile")
+            self.assertEqual(seen["env"]["KRASNOKAMEN_CLIENT_MCP_USERNAME"], "SvcProfile")
 
     def test_vanilla_explicit_uses_direct_mojang_command(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -255,7 +255,7 @@ class ModProvisioningTests(unittest.TestCase):
                     self.assertEqual(staged_target.parent, game / "mods")
                     # Fail-closed verification runs before Gradle starts.
                     self.assertGreaterEqual(verify.call_count, 1)
-                    marker = json.loads((game / "solaris-profile.json").read_text())
+                    marker = json.loads((game / "krasnokamen-profile.json").read_text())
                     self.assertEqual(marker["client_profile"], "svc")
                     self.assertEqual(marker["platform"], "fabric")
                 finally:

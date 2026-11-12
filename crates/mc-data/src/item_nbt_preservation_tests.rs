@@ -61,7 +61,7 @@ fn assert_components_eq(left: &[(String, Tag)], right: &[(String, Tag)]) {
 
 #[test]
 fn rich_vanilla_components_survive_count_change_and_durable_serde() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let original = rich_stack_fields();
     let mut stack = stack_from_fields(&items, &original).unwrap().unwrap();
     assert_eq!(stack.custom_name.as_deref(), Some("Village heirloom"));
@@ -75,7 +75,7 @@ fn rich_vanilla_components_survive_count_change_and_durable_serde() {
 
 #[test]
 fn typed_edits_override_original_projection_without_dropping_other_components() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let original = rich_stack_fields();
     let mut stack = stack_from_fields(&items, &original).unwrap().unwrap();
     stack.damage = Some(12);
@@ -92,7 +92,7 @@ fn typed_edits_override_original_projection_without_dropping_other_components() 
 
 #[test]
 fn nested_charged_item_keeps_rich_components_when_child_count_changes() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let child = rich_stack_fields();
     let original = vec![
         ("id".into(), Tag::String("minecraft:crossbow".into())),
@@ -127,7 +127,7 @@ fn nested_charged_item_keeps_rich_components_when_child_count_changes() {
 #[test]
 fn every_typed_setter_supersedes_its_preserved_entry_at_the_same_baseline() {
     use crate::item_stack::PreservedItemComponent;
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let model = Identifier::parse("minecraft:diamond_sword").unwrap();
     let sharpness = Identifier::parse("minecraft:sharpness").unwrap();
     let mut custom_data = Vec::new();
@@ -219,7 +219,7 @@ fn editing_bare_typed_fields_does_not_allocate_an_opaque_component_carrier() {
 
 #[test]
 fn removed_component_native_nbt_rejects_corrupt_marker_with_exact_diagnostic() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     for (name, value) in [
         ("!minecraft:custom_name", Tag::String("bad marker".into())),
         ("!minecraft:not_registered", Tag::Compound(Vec::new())),
@@ -240,7 +240,7 @@ fn removed_component_native_nbt_rejects_corrupt_marker_with_exact_diagnostic() {
 
 #[test]
 fn native_removed_and_added_component_collision_is_corrupt_not_last_writer_wins() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let fields = vec![
         ("id".into(), Tag::String("minecraft:stone".into())),
         (

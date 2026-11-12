@@ -13,10 +13,10 @@ fn definition() -> WorldDefinition {
     DefinitionInput::basin_fixture(42).validate().unwrap()
 }
 fn registry() -> BlockRegistry {
-    BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap()
+    BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap()
 }
 fn items() -> ItemRegistry {
-    mc_data::items::solaris_required_items()
+    mc_data::items::krasnokamen_required_items()
 }
 fn base_bytes(chunk: &Chunk, blocks: &BlockRegistry) -> Vec<u8> {
     mc_world::anvil::chunk_to_payload_with_items_at_tick_for_position(
@@ -137,7 +137,7 @@ fn p02_bounds_expand_shrink_retains_base_coordinates_and_durable_saves() {
     edited.set_block(1, 92, 1, air).unwrap();
     edited
         .extras
-        .push(("SolarisJournalLsn".into(), mc_nbt::Tag::Long(7)));
+        .push(("KrasnokamenJournalLsn".into(), mc_nbt::Tag::Long(7)));
     world
         .store()
         .apply_snapshots(
@@ -355,10 +355,10 @@ fn committed_missing_or_corrupt_root_store_and_bounds_fail_closed() {
 
 #[test]
 fn prepare_crash_helper() {
-    let Some(root) = std::env::var_os("SOLARIS_W1_CRASH_ROOT") else {
+    let Some(root) = std::env::var_os("KRASNOKAMEN_W1_CRASH_ROOT") else {
         return;
     };
-    let phase: usize = std::env::var("SOLARIS_W1_CRASH_PHASE")
+    let phase: usize = std::env::var("KRASNOKAMEN_W1_CRASH_PHASE")
         .unwrap()
         .parse()
         .unwrap();
@@ -400,8 +400,8 @@ fn prepare_process_crash_recovers_each_durable_publication_boundary() {
                 "--nocapture",
                 "--test-threads=1",
             ])
-            .env("SOLARIS_W1_CRASH_ROOT", root.path())
-            .env("SOLARIS_W1_CRASH_PHASE", index.to_string())
+            .env("KRASNOKAMEN_W1_CRASH_ROOT", root.path())
+            .env("KRASNOKAMEN_W1_CRASH_PHASE", index.to_string())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())

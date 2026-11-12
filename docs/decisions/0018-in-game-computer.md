@@ -11,13 +11,13 @@ operator, current dimension, loaded carrier and proximity against published nati
 state. No custom block registry, inventory alias or second world store is needed.
 When disabled, iron blocks retain normal behavior.
 
-A Wasmtime plugin is preferable for gameplay, but `solaris:plugin@0.8.0`
-(`crates/mc-script/wit/`, `plugin.wit`: `package solaris:plugin@0.8.0`)
+A Wasmtime plugin is preferable for gameplay, but `krasnokamen:plugin@0.9.0`
+(`crates/mc-script/wit/`, `plugin.wit`: `package krasnokamen:plugin@0.9.0`)
 has neither arbitrary Play payload/process spawning nor a block-use callback
 (`world-events.wit` exposes `player-entity-interacted`; block interaction arrives
 only through the `before-build` precommit question). Do not extend guest authority to
 host process execution for this feature. Use a small off-by-default edge service
-and a separate `solaris:computer` Play channel. Existing Loader wire 3 is unchanged.
+and a separate `krasnokamen:computer` Play channel. Existing Loader wire 3 is unchanged.
 
 Rejected: embed a Wayland compositor (Linux-only), stream the server's desktop
 (privilege/privacy violation), or grant untrusted Loader bundles capture/input
@@ -36,7 +36,7 @@ Default backend is a built-in echo, not a shell. `command = [absolute executable
 arguments...]` is an operator-selected persistent stdin/stdout bridge; player
 input is never interpolated into argv or a shell command. `working_directory`
 is explicit. To use an agent CLI, configure its line-oriented adapter inside an
-OS/container sandbox under a dedicated unprivileged account. Solaris does not
+OS/container sandbox under a dedicated unprivileged account. Krasnokamen does not
 claim that spawning a child automatically creates a sandbox. Do not point it at
 a privileged host shell. Child stderr is not disclosed. The server-wide
 `max_processes` cap defaults to four direct bridge processes (zero disables
@@ -50,7 +50,7 @@ auth lock or deop closes the session on native publication.
 
 ## Protocol 1
 
-One Play channel `solaris:computer` in both directions. Big-endian header:
+One Play channel `krasnokamen:computer` in both directions. Big-endian header:
 `u8 version=1, u8 kind, u32 session` (nonzero, chosen by client).
 Client kinds: 0=open followed by three i32 block coordinates; 1=input followed
 by UTF-8 (at most 4096 bytes, no control characters); 2=close, no body.
@@ -85,7 +85,7 @@ capture-to-OpenGL-texture smoke on an isolated display, not the owner's desktop.
 No real-client MCP run in this work item; Muse owns subsequent block/use/session
 QA. Unit/smoke receipts do not prove in-world rendering or other operating systems.
 
-## Screen sharing (`solaris:screen`, protocol 1)
+## Screen sharing (`krasnokamen:screen`, protocol 1)
 
 Screen-sharing protocol 1 addresses `computer:monitor` rows. This is relay
 support, not a native-content compatibility claim: the current package/client
@@ -172,7 +172,7 @@ one picture per FRAME, Annex B. The server still never decodes: it only reads th
 
 Measured per viewer (2026-10-23; own server, two real windowed clients on private Xvfb displays,
 owner sharing a scripted 1280x720 test source scaled to 640x360, one granted looking viewer;
-payload bytes of the `solaris:screen` messages counted by the clients, 14-24 s windows after the
+payload bytes of the `krasnokamen:screen` messages counted by the clients, 14-24 s windows after the
 opening key frame; client repo `tools/screen_codec_live.py`, receipts kept outside the repository
 in `solaris-work/evidence/screen-codec/{jpeg,h264-v1,h264-2000000,h264-4000000}`). The
 software-rendered owner produces only about 3 to 5 new captures per second, so every
@@ -224,7 +224,7 @@ rectangle's face centre with linear distance attenuation, silent beyond 32 block
 looking range). The owner hears a nested app the same way, because its private sink is the
 app's only output.
 
-Sources, by routing rule (a capture must never contain Solaris's own playback or voice chat;
+Sources, by routing rule (a capture must never contain Krasnokamen's own playback or voice chat;
 there is no echo cancellation):
 
 - **Linux nested compositor apps**: a private PipeWire null sink per monitor (held-open `pw-cli`,
@@ -237,8 +237,8 @@ there is no echo cancellation):
   so the owner is not given a second positioned copy. Compile-checked for
   `x86_64-pc-windows-gnu`; **not executed on Windows**.
 - **Linux portal windows**: video only. The portal offers no per-window audio and the only
-  alternative is the whole-system monitor, which would loop Solaris's playback into the stream.
-- Test hook: `SOLARIS_SCREEN_AUDIO_WAV` replaces the source's audio by a looped 48 kHz 16-bit
+  alternative is the whole-system monitor, which would loop Krasnokamen's playback into the stream.
+- Test hook: `KRASNOKAMEN_SCREEN_AUDIO_WAV` replaces the source's audio by a looped 48 kHz 16-bit
   WAV through the same capture abstraction (no behaviour change when unset).
 
 ## Monitor block (carrier-backed custom block)
@@ -263,9 +263,9 @@ the old per-client `carrier_block_state_ids` negotiation and its dead
 projection/report code are removed (a non-empty ack field is refused).
 The optional first-party `computer` package now declares `computer:monitor`,
 including its custom item, gray carrier, authored model and textures. The logical
-ID uses the package-owned namespace; the old `solaris:monitor` lookup is removed,
+ID uses the package-owned namespace; the old `krasnokamen:monitor` lookup is removed,
 without an alias or an exception to owner validation. Relay channel names remain
-`solaris:screen` and `solaris:computer`.
+`krasnokamen:screen` and `krasnokamen:computer`.
 
 The genuine package and the unchanged Ruby/Sapphire fixtures passed simultaneous
 placement/rendering and custom-item break/pickup cycles on Fabric, NeoForge and

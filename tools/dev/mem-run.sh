@@ -24,7 +24,7 @@
 # CPUWeight=50), so harness runs keep their canonical CPU budget. Preemptible builds
 # get CPUWeight=10: under contention tests and servers win the CPU five to one; builds
 # only slow down. A graphical gate holding a scene slot (scene-slot.sh exports
-# SOLARIS_SCENE_SLOT) gets CPUWeight=500: with dozens of test scopes at 50 a gate's
+# KRASNOKAMEN_SCENE_SLOT) gets CPUWeight=500: with dozens of test scopes at 50 a gate's
 # client fell to 6-8 TPS and missed its tick deadlines (2026-11-11).
 # Lanes: ordinary commands run on all CPUs, at most 12G each; every cargo under
 # mem-run shares the watchdog's make-style jobserver (one token per logical CPU, via
@@ -92,17 +92,17 @@ fi
 # slot-lock.py (the scene-slot mechanism), which blocks on every token at once (no
 # polling, no CPU) and leaves the won lock at fd 9: this runner keeps it, the scope
 # guardian gets a copy (--send-locks) and the command does not, so the token returns
-# once the scope is empty, on any exit, kill or OOM. SOLARIS_BUILD_TOKEN{,_PID} name the
+# once the scope is empty, on any exit, kill or OOM. KRASNOKAMEN_BUILD_TOKEN{,_PID} name the
 # token and the runner holding it; a compile whose ancestor process is that runner
 # (harness runs and pin-release run mem-run or cargo again inside) reuses it, so outer
 # holders never wait on their own nested builds. The token is taken before the -x
 # lock: a queued compile never delays a -x window, and a -x window never waits for a
 # token while it holds that lock. Holders and waiters: tools/dev/fleet-status.
-# SOLARIS_BUILD_LANE=background (owner 2026-11-12: the battle video gets resources first):
+# KRASNOKAMEN_BUILD_LANE=background (owner 2026-11-12: the battle video gets resources first):
 # such compiles wait only for tokens 1-2, so token 3 stays free for priority work.
 build_tokens=3
 token_slots=$(seq -s, "$build_tokens")
-[ "${SOLARIS_BUILD_LANE:-}" = background ] && token_slots=$(seq -s, $((build_tokens - 1)))
+[ "${KRASNOKAMEN_BUILD_LANE:-}" = background ] && token_slots=$(seq -s, $((build_tokens - 1)))
 tool=("${cmd[@]}")
 while :; do
   # screen_audio_graph.sh (tools/harness) runs its argv inside a private PipeWire graph: look through it too,
@@ -138,8 +138,8 @@ case "${tool[0]:-}" in
       esac
     fi ;;
 esac
-token_ancestor() {  # is the runner named by SOLARIS_BUILD_TOKEN_PID an ancestor of this one?
-  local p=$PPID want=${SOLARIS_BUILD_TOKEN_PID:-}
+token_ancestor() {  # is the runner named by KRASNOKAMEN_BUILD_TOKEN_PID an ancestor of this one?
+  local p=$PPID want=${KRASNOKAMEN_BUILD_TOKEN_PID:-}
   [[ $want =~ ^[0-9]+$ ]] || return 1
   while [ "${p:-0}" -gt 1 ]; do
     [ "$p" = "$want" ] && return 0
@@ -149,13 +149,13 @@ token_ancestor() {  # is the runner named by SOLARIS_BUILD_TOKEN_PID an ancestor
 }
 token=none
 if [ "$compile" = 1 ]; then
-  if [ "${SOLARIS_BUILD_TOKEN_PID:-}" = "$$" ]; then
-    token=${SOLARIS_BUILD_TOKEN:-?}
+  if [ "${KRASNOKAMEN_BUILD_TOKEN_PID:-}" = "$$" ]; then
+    token=${KRASNOKAMEN_BUILD_TOKEN:-?}
   elif token_ancestor; then
-    token="${SOLARIS_BUILD_TOKEN:-?}(reused)"
+    token="${KRASNOKAMEN_BUILD_TOKEN:-?}(reused)"
   else
     exec python3 "$here/slot-lock.py" --dir "$dir/tokens" --name 'token-%s.lock' --slots "$token_slots" \
-      --env SOLARIS_BUILD_TOKEN --fd 9 --wait-dir "$dir/tokens/wait" \
+      --env KRASNOKAMEN_BUILD_TOKEN --fd 9 --wait-dir "$dir/tokens/wait" \
       --wait-message "mem-run: build tokens $token_slots are in use; waiting for one (holders: $here/fleet-status)" \
       -- bash "$here/${BASH_SOURCE[0]##*/}" "${args[@]}"
   fi
@@ -247,20 +247,20 @@ else
     flock 6
   fi
 fi
-# Disk floor: below SOLARIS_SLOT_MIN_FREE_GB + 10 GiB free on the targets disk, run
+# Disk floor: below KRASNOKAMEN_SLOT_MIN_FREE_GB + 10 GiB free on the targets disk, run
 # slot-gc --delete first. It takes each slot's pool lock itself (busy slots are
 # skipped), removes artifacts of removed trees and superseded incremental sessions,
 # then rotates idle slots in LRU order while still short. It never delays the command
-# by more than SOLARIS_SLOT_GC_TIMEOUT seconds (default 120) and never fails it: an
+# by more than KRASNOKAMEN_SLOT_GC_TIMEOUT seconds (default 120) and never fails it: an
 # error is printed and the command starts anyway. Not run for -x and -p, whose
 # windows are quiet measurements.
 if [ "$exclusive" = 0 ] && [ "$perf" = 0 ]; then
-  gc_root=${SOLARIS_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
-  gc_floor=$(( ${SOLARIS_SLOT_MIN_FREE_GB:-80} + 10 ))
+  gc_root=${KRASNOKAMEN_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
+  gc_floor=$(( ${KRASNOKAMEN_SLOT_MIN_FREE_GB:-80} + 10 ))
   gc_free=$(df --output=avail -BG "$gc_root" 2>/dev/null | tail -1 | tr -dc 0-9 || true)
   if [ -n "$gc_free" ] && [ "$gc_free" -lt "$gc_floor" ]; then
     echo "mem-run: ${gc_free}G free, below ${gc_floor}G (floor + 10G): running slot-gc --delete on idle slots" >&2
-    if gc_out=$(timeout "${SOLARIS_SLOT_GC_TIMEOUT:-120}" "$here/slot-gc" --delete --lock-dir "$dir" 3>&- 6>&- 9>&- 2>&1); then
+    if gc_out=$(timeout "${KRASNOKAMEN_SLOT_GC_TIMEOUT:-120}" "$here/slot-gc" --delete --lock-dir "$dir" 3>&- 6>&- 9>&- 2>&1); then
       printf '%s\n' "$gc_out" | sed 's/^/mem-run: slot-gc: /' >&2
     else
       gc_st=$?
@@ -303,9 +303,9 @@ else
 fi
 # The harness would otherwise re-run itself in its own scope outside this slice;
 # tell it it is already scoped so cargo/server/client stay under this cap.
-export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-$jobs_default}" CARGO_INCREMENTAL="$incremental" SOLARIS_HARNESS_CPU_SCOPE=1
+export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-$jobs_default}" CARGO_INCREMENTAL="$incremental" KRASNOKAMEN_HARNESS_CPU_SCOPE=1
 cores=$(lscpu -p=core,socket | grep -v '^#' | sort -u | wc -l)
-props=(-p MemoryMax="$mem" -p MemorySwapMax=1G -p CPUQuota="${SOLARIS_MEM_RUN_CPU_QUOTA:-$((cores * 100))}%" -p CPUWeight=50)
+props=(-p MemoryMax="$mem" -p MemorySwapMax=1G -p CPUQuota="${KRASNOKAMEN_MEM_RUN_CPU_QUOTA:-$((cores * 100))}%" -p CPUWeight=50)
 niceness=19
 cpu_pin=()
 # Preemptible (the watchdog may freeze it under memory pressure) only for plain
@@ -328,7 +328,7 @@ fi
 [ "$perf" = 1 ] && { niceness=0; cpu_pin=(taskset -c "$perf_cpus"); preemptible=0; props=("${props[@]/CPUWeight=50/CPUWeight=10000}"); }
 [ "$exclusive" = 1 ] && { niceness=0; cpu_pin=(); preemptible=0; }
 [ "$preemptible" = 1 ] && props=("${props[@]/CPUWeight=50/CPUWeight=10}")
-[ -n "${SOLARIS_SCENE_SLOT:-}" ] && [ "$perf" = 0 ] && props=("${props[@]/CPUWeight=*/CPUWeight=500}")
+[ -n "${KRASNOKAMEN_SCENE_SLOT:-}" ] && [ "$perf" = 0 ] && props=("${props[@]/CPUWeight=*/CPUWeight=500}")
 echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf cpus=${cpu_pin[*]:-all} slice=$slice target=$target token=$token expect=$((est_kib / 1024))MiB key='$key'" >&2
 # The wrapper registers its scope, expectation, preemptible flag and target dir with
 # the watchdog (the watchdog never freezes a command whose target dir another running
@@ -338,7 +338,7 @@ echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf 
 # The guardian is a separate user service, outside both the scope and the job's
 # process tree, so a job kill cannot kill it before it tears the scope down.
 guard_dir=$(mktemp -d "${TMPDIR:-/tmp}/solaris-mem-guard.XXXXXXXX")
-unit="solaris-mem-run-${guard_dir##*.}.scope"
+unit="krasnokamen-mem-run-${guard_dir##*.}.scope"
 mkfifo "$guard_dir/events" "$guard_dir/ready"
 if ! systemd-run --user --quiet --collect --unit="${unit%.scope}-guard" \
   python3 "$here/mem-run-guard.py" "$guard_dir" "/sys/fs/cgroup$cgroup/$unit" "$$" "$PPID" \

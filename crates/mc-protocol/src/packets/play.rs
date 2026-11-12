@@ -177,7 +177,7 @@ const MIN_BLOCK_ENTITY_BYTES: usize = 5;
 const MAX_ENTITY_DATA_VALUES: usize = 64;
 const MAX_CONTAINER_CLICK_CHANGED_SLOTS: usize = 128;
 const MAX_HASHED_STACK_COMPONENT_HASHES: usize = 256;
-/// Solaris packet-wide allocation fence for serverbound Container Click.
+/// Krasnokamen packet-wide allocation fence for serverbound Container Click.
 /// Vanilla bounds each collection independently; this additional aggregate
 /// ceiling prevents one packet from allocating tens of thousands of hashes.
 const MAX_CONTAINER_CLICK_COMPONENT_HASHES: usize = 4096;
@@ -189,7 +189,7 @@ const MAX_RECIPE_BOOK_SLOT_DEPTH: usize = 16;
 const MAX_COMMAND_LEN: usize = 32_767;
 const MAX_CHAT_MESSAGE_LEN: usize = 256;
 // The full operator tree passed 1024 nodes in RC2; matches the native
-// client's reader bound (solaris-client src/ui/commands.rs `read_tree`).
+// client's reader bound (krasnokamen-client src/ui/commands.rs `read_tree`).
 const MAX_COMMAND_NODE_COUNT: usize = 65_536;
 const MAX_COMMAND_CHILD_COUNT: usize = 1024;
 const MAX_COMMAND_SUGGESTION_LEN: usize = 32_500;

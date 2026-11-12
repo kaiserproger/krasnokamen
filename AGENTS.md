@@ -1,11 +1,11 @@
-# Agent Guide — Solaris
+# Agent Guide — Krasnokamen
 
-Solaris is a Rust Minecraft Java server serving every release from 26.1.2
+Krasnokamen is a Rust Minecraft Java server serving every release from 26.1.2
 through 26.3 (775–777), with canonical 26.3 and an adjacent protocol chain.
 Content import installs all version caches; bumps add steps and retain old clients.
 The current release candidate is 1.0.0-rc.5 "Pauline" ([status](docs/STATUS.md)).
 The binary is `mc-edge`'s
-`solaris-v2` over the native core `mc-core`; v1 is retired. `CLAUDE.md` is a
+`krasnokamen` over the native core `mc-core`; v1 is retired. `CLAUDE.md` is a
 symlink to this guide. The owner is `kaiserproger <kaisergrobe@gmail.com>`;
 never change Git configuration.
 
@@ -60,7 +60,7 @@ Code, tests, config and runtime evidence beat every document: fix the document.
    autoscaling; rare edges. A lower item moves up only when it blocks play,
    saves or plugins.
 8. Main checks the owner's open issues hourly and before a commit (workers do
-   not): `gh issue list -R kaiserproger/solaris --author kaiserproger --state open`.
+   not): `gh issue list -R kaiserproger/krasnokamen --author kaiserproger --state open`.
    Outside a `/goal` they are the work queue; inside one, add new issues to the
    goal's queue.
 
@@ -75,7 +75,7 @@ Code, tests, config and runtime evidence beat every document: fix the document.
 | saves, WAL, checkpoints, recovery | [persistence](docs/architecture/persistence.md) | [residency](docs/architecture/residency.md), [ADR 0013](docs/decisions/0013-core-model-v2.md) |
 | settlements | [settlements architecture](docs/architecture/settlements.md) | [owner decisions](docs/settlements/OWNER_DECISIONS.md), [player guide](docs/SETTLEMENTS_GUIDE.md) |
 | plugins and SDK | [plugins](docs/PLUGINS.md) | `../solaris-default-plugins` |
-| client adapters | [Solaris Loader](docs/SOLARIS_LOADER.md) | `../solaris-loader` |
+| client adapters | [Krasnokamen Loader](docs/KRASNOKAMEN_LOADER.md) | `../solaris-loader` |
 | native client, launcher, singleplayer | `../solaris-client` (its own README and AGENTS) | [client release](docs/development/release-and-tags.md#client-release-and-the-singleplayer-content-bundle), [Windows and macOS QA](docs/development/windows-and-macos-client-qa.md) |
 | tests, harness profiles | [agent tooling](docs/AGENT_TOOLING.md) | [definition of done](docs/DEFINITION_OF_DONE.md) |
 | real-client gate | [real-client gates](docs/development/real-client-gates.md) | [break-it QA protocol](docs/QA_AGENT_PROTOCOL.md) |
@@ -98,7 +98,7 @@ depend on the core, never the reverse. Other `crates/` own protocol, data, world
 worldgen, physics, plugins, Loader and tooling.
 `crates/workspace-features/` unifies third-party features for the server build and
 core tests without expanding standalone lower crates; it has no runtime API and
-must never depend on a Solaris crate.
+must never depend on a Krasnokamen crate.
 `sdk/rust/` is an independent guest SDK workspace; `tools/harness/` is canonical validation;
 `tools/dev/` holds [owner-host scripts](tools/dev/README.md). `example.toml` is
 the normal config; `playable.toml` the harness survival config.
@@ -112,10 +112,10 @@ is optional, absent in a fresh checkout, and loses to code and tracked docs;
 From the repository root (debug by default):
 
 ```sh
-cargo build -p mc-edge --bin solaris-v2
-cargo run -p mc-edge --bin solaris-v2 -- content import --version 26.3 --download
-cargo run -p mc-edge --bin solaris-v2 -- --config example.toml
-cargo build --release --locked -p mc-edge --bin solaris-v2   # real-client gates, deploys, releases
+cargo build -p mc-edge --bin krasnokamen
+cargo run -p mc-edge --bin krasnokamen -- content import --version 26.3 --download
+cargo run -p mc-edge --bin krasnokamen -- --config example.toml
+cargo build --release --locked -p mc-edge --bin krasnokamen   # real-client gates, deploys, releases
 python3 -m tools.harness list
 ```
 
@@ -238,9 +238,9 @@ python3 -m tools.harness list
   stays in the native tick and intent merge; the edge owns presentation and
   connection state. Root orchestration routes work, not domain policy;
   substantial tests go in focused sibling `*_tests.rs` modules.
-- Solaris has no released compatibility surface of its own: migrate callers and
+- Krasnokamen has no released compatibility surface of its own: migrate callers and
   delete superseded APIs, schemas, authorities, adapters, flags and fallbacks.
-  Compatibility targets are the vanilla protocol and Anvil, not old Solaris
+  Compatibility targets are the vanilla protocol and Anvil, not old Krasnokamen
   storage. Changes to architecture, authority, threading, waiting, persistence
   order or module policy update the owning ADR; a desired migration is not runtime truth.
 - Check an area's row in [open transitions](docs/STATUS.md#open-transitions)
@@ -248,7 +248,7 @@ python3 -m tools.harness list
   new transition in an area with one open; finishing one deletes the old side.
 - Debug builds by default; `--release` only for a required performance, release
   or real-client gate. Real-client gates run a release server (owner,
-  2026-10-27): pass the `--release --locked` binary as `SOLARIS_SERVER_BINARY`;
+  2026-10-27): pass the `--release --locked` binary as `KRASNOKAMEN_SERVER_BINARY`;
   a debug server drops to about 10 TPS while a joining player's chunks generate.
 - A measured narrow optimization hack documents its bottleneck, boundary,
   correctness fence, effect and removal path. Never restore operator
@@ -279,10 +279,10 @@ python3 -m tools.harness list
   `YOLO_MODE.md`, `log.log`, `opencode.json` overlays or other ignored agent or
   tool artifacts unless asked.
 - This repo owns the core Rust runtime and the canonical harness.
-  `../solaris-loader` owns Java/client scenarios (`SOLARIS_LOADER_ROOT` may
+  `../solaris-loader` owns Java/client scenarios (`KRASNOKAMEN_LOADER_ROOT` may
   override); never duplicate a client-mod source tree here.
   `../solaris-default-plugins` owns the first-party Wasmtime packages
-  (`solaris:plugin@0.8.0`), deployed via `[plugins].directory`; there is no
+  (`krasnokamen:plugin@0.9.0`), deployed via `[plugins].directory`; there is no
   compiled-in package list or `plugins.bundled` path. `../solaris-client` owns
   the native client and launcher, including singleplayer. Core production builds
   need no sibling; integration gates need the sibling they exercise. Each sibling

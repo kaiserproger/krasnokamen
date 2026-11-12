@@ -69,7 +69,7 @@ pub(super) fn run_code_health(root: Option<PathBuf>) -> Result<(), i32> {
     scan_harness_catalog_ownership(&root, &mut findings);
     scan_api_manifests(&root, &mut findings);
 
-    println!("Solaris code-health report ({})", root.display());
+    println!("Krasnokamen code-health report ({})", root.display());
     println!();
     ratchet::check(&root, &ratchet::CEILINGS, &mut findings);
 

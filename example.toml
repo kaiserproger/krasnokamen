@@ -1,6 +1,6 @@
 [server]
-name = "solaris-alpha"
-motd = "Solaris public alpha"
+name = "krasnokamen-alpha"
+motd = "Krasnokamen public alpha"
 view_distance = 8
 simulation_distance = 8
 # Vanilla `accepts-transfers`: admit players another server transferred here.
@@ -38,7 +38,7 @@ online_mode = false
 # Native session lock: new sessions stay locked (fail closed, invulnerable and
 # not targetable; only /register, /login and /changepassword run) until the auth
 # plugin calls `unlock_session`. Deploying an auth-capable plugin such as
-# `solaris-auth` turns the lock on by itself, even with `false` here; `true`
+# `krasnokamen-auth` turns the lock on by itself, even with `false` here; `true`
 # additionally refuses startup unless such a plugin is deployed.
 require_plugin_login = false
 
@@ -91,7 +91,7 @@ overworld = true
 nether = true
 
 [lod]
-# Far terrain beyond the view distance for the native Solaris client (vanilla
+# Far terrain beyond the view distance for the native Krasnokamen client (vanilla
 # clients never see it). The client keeps summaries of every chunk it received
 # and asks for tiles beyond its view distance: stored chunks answer with their
 # top block (player edits after the last stored image are not shown),
@@ -148,7 +148,7 @@ directory = "plugins"
 # do not point this directory at an existing Anvil world.
 world_dir = "world"
 # Discover an existing licensed vanilla content cache, or derive one explicitly:
-#   solaris-v2 content import --version 26.3 --download
+#   krasnokamen content import --version 26.3 --download
 # Content is never redistributed. Verify a cache with `content verify`.
 # vanilla_data_dir = "data/vanilla"
 # Console `backup` copies the running world here (see docs/OPERATING.md).
@@ -157,7 +157,7 @@ world_dir = "world"
 seed = 0
 
 [voice]
-# Proximity voice chat relay for native Solaris clients (ADR 0019). The server
+# Proximity voice chat relay for native Krasnokamen clients (ADR 0019). The server
 # only forwards Opus packets; it never decodes audio.
 enabled = true
 range_blocks = 48

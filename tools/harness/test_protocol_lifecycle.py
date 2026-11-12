@@ -25,7 +25,7 @@ from .backends.protocol_lifecycle import Blocked, PortReservation, ProtocolServe
 def _harness(tmp: str, **overrides: object) -> ProtocolServer:
     root = Path(tmp)
     kwargs: dict[str, object] = {
-        "binary": root / "solaris-v2",
+        "binary": root / "krasnokamen",
         "run_dir": root / "run",
         "port": 26111,
         "vanilla_data": root / "vanilla",
@@ -115,7 +115,7 @@ class LifecycleGuardTests(unittest.TestCase):
 
     def test_start_blocked_without_vanilla_data(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "solaris-v2").touch()
+            (Path(tmp) / "krasnokamen").touch()
             server = _harness(tmp)
             with self.assertRaises(Blocked):
                 server.start()
@@ -123,7 +123,7 @@ class LifecycleGuardTests(unittest.TestCase):
     def test_start_blocked_without_plugins_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "solaris-v2").touch()
+            (root / "krasnokamen").touch()
             (root / "vanilla").mkdir()
             server = _harness(tmp, plugins_dir=root / "missing-plugins")
             with self.assertRaises(Blocked):
@@ -194,7 +194,7 @@ class LifecycleGuardTests(unittest.TestCase):
             )
             new = SimpleNamespace(pid=13, poll=lambda: None)
             server._process = old
-            server._argv = ["solaris-v2", "--config", "cfg"]
+            server._argv = ["krasnokamen", "--config", "cfg"]
             server._log_handle = SimpleNamespace(close=lambda: None)
             with mock.patch.object(
                 lifecycle.runtime, "wait_port"
@@ -441,10 +441,10 @@ class PortLeaseTests(unittest.TestCase):
         import sys
         self.assertEqual(lifecycle.PORT_LOCK_DIR, Path("/tmp/solaris-port-locks"))
         root = str(Path(__file__).resolve().parents[2])
-        for extra in ({"SOLARIS_WORK_ROOT": "/w", "TMPDIR": "/t",
-                       "SOLARIS_PORT_LOCK_DIR": "/ignored"}, {}):
+        for extra in ({"KRASNOKAMEN_WORK_ROOT": "/w", "TMPDIR": "/t",
+                       "KRASNOKAMEN_PORT_LOCK_DIR": "/ignored"}, {}):
             env = {k: v for k, v in os.environ.items()
-                   if k not in ("SOLARIS_WORK_ROOT", "TMPDIR", "SOLARIS_PORT_LOCK_DIR")}
+                   if k not in ("KRASNOKAMEN_WORK_ROOT", "TMPDIR", "KRASNOKAMEN_PORT_LOCK_DIR")}
             env.update(extra)
             out = subprocess.run(
                 [sys.executable, "-c",
@@ -465,7 +465,7 @@ class PortLeaseTests(unittest.TestCase):
 
     def test_reservations_coordinate_across_processes_with_different_env(self) -> None:
         # Regression (red on 207b7097): the lock dir used to be derived from
-        # env, so two OS processes with different SOLARIS_WORK_ROOT/TMPDIR
+        # env, so two OS processes with different KRASNOKAMEN_WORK_ROOT/TMPDIR
         # used different lock dirs and both leased the same port. Separate
         # processes with deliberately different env holding live leases must
         # get distinct ports from the one machine-wide namespace.
@@ -481,13 +481,13 @@ class PortLeaseTests(unittest.TestCase):
             "print(int(r), flush=True); time.sleep(30)"  # hold the live lease
         ).format(root=root, base=base)
         envs = [
-            {"SOLARIS_WORK_ROOT": "/tmp/fake-root-a", "TMPDIR": "/tmp/fake-tmp-a"},  # set
+            {"KRASNOKAMEN_WORK_ROOT": "/tmp/fake-root-a", "TMPDIR": "/tmp/fake-tmp-a"},  # set
             {},  # unset
         ]
         procs = []
         for extra in envs:
             env = {k: v for k, v in os.environ.items()
-                   if k not in ("SOLARIS_WORK_ROOT", "TMPDIR", "SOLARIS_PORT_LOCK_DIR")}
+                   if k not in ("KRASNOKAMEN_WORK_ROOT", "TMPDIR", "KRASNOKAMEN_PORT_LOCK_DIR")}
             env.update(extra)
             procs.append(subprocess.Popen(
                 [sys.executable, "-c", child], env=env,

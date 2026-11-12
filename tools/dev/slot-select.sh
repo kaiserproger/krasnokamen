@@ -14,13 +14,13 @@
 # a-e are the old slot locks, so commands of the previous runner version never
 # share a dir with new ones. Existing dirs are reused before a new one is created;
 # a new dir is created only if `df` (whole GiB, rounded up) shows at least
-# SOLARIS_SLOT_MIN_FREE_GB (default 80, the owner's free-space floor) free at
+# KRASNOKAMEN_SLOT_MIN_FREE_GB (default 80, the owner's free-space floor) free at
 # selection time (after mem-run's disk-floor slot-gc, if it ran). This only stops
 # slot proliferation (12 parallel slots filled the disk on 2026-11-07); it reserves
 # nothing, and existing dirs keep growing unchecked, so it is no protection against
 # ENOSPC. Never waits for a free slot: with no usable dir the command is refused.
 #
-# Ownership of a pooled slot (<slots>/slot-<l>; its tree is <slot>/.solaris-tree):
+# Ownership of a pooled slot (<slots>/slot-<l>; its tree is <slot>/.krasnokamen-tree):
 # - Pool lock <dir>/<l>, exclusive: the command owns the slot. A picked slot is
 #   always owned; an explicit CARGO_TARGET_DIR on a pooled slot takes it when free.
 #   A held slot is shared only by a command of the same tree (pin-release's inner
@@ -32,7 +32,7 @@
 #   only when nobody holds it, so a same-tree sharer still running after its owner
 #   exited keeps the slot. slot-gc deletes only while holding pool and use locks.
 
-slot_tree() { cat "$1/.solaris-tree" 2>/dev/null; }
+slot_tree() { cat "$1/.krasnokamen-tree" 2>/dev/null; }
 
 slot_switch_tree() {  # $1 = slot dir: re-mark it for this tree (caller holds pool + use exclusively)
   if [ "$(slot_tree "$1")" != "$tree" ]; then
@@ -40,7 +40,7 @@ slot_switch_tree() {  # $1 = slot dir: re-mark it for this tree (caller holds po
       (cd "$tree" && git ls-files -z | xargs -0 -r touch -c --)
     fi
     mkdir -p "$1"
-    printf '%s\n' "$tree" >"$1/.solaris-tree"
+    printf '%s\n' "$tree" >"$1/.krasnokamen-tree"
   fi
 }
 
@@ -53,17 +53,17 @@ select_slot() {
   local w l pass free_gb min_free picked= attempt real slots_real
   target=${CARGO_TARGET_DIR:-}
   for w in "$@"; do [[ $w == CARGO_TARGET_DIR=* ]] && target=${w#CARGO_TARGET_DIR=}; done
-  slots=${SOLARIS_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
+  slots=${KRASNOKAMEN_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
   tree=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
   mkdir -p "$dir"
   if [ -z "$target" ]; then
-    min_free=${SOLARIS_SLOT_MIN_FREE_GB:-80}
+    min_free=${KRASNOKAMEN_SLOT_MIN_FREE_GB:-80}
     free_gb=$(df --output=avail -BG "$slots" 2>/dev/null | tail -1 | tr -dc 0-9)
     for pass in own existing new; do
       [ "$pass" = new ] && [ "${free_gb:-0}" -lt "$min_free" ] && break
       for l in {a..z} {a..z}{a..z}; do  # 26 one-letter slots, then two-letter ones while disk allows
         case $pass in
-          own) [ -f "$slots/slot-$l/.solaris-tree" ] && [ "$(slot_tree "$slots/slot-$l")" = "$tree" ] || continue ;;
+          own) [ -f "$slots/slot-$l/.krasnokamen-tree" ] && [ "$(slot_tree "$slots/slot-$l")" = "$tree" ] || continue ;;
           existing) [ -d "$slots/slot-$l" ] || continue ;;
           new) [ -d "$slots/slot-$l" ] && continue ;;
         esac

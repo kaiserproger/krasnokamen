@@ -37,7 +37,7 @@ fn spawn_egg_villager_and_single_debit_survive_wal_replay_and_native_restart() {
     let slot = state.entities.slot_of(id).unwrap();
     let uuid = state.entities.row(slot).uuid;
     assert!(state.entities.row(slot).villager.is_some());
-    let root = std::env::temp_dir().join(format!("solaris-spawn-egg-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("krasnokamen-spawn-egg-{}", uuid::Uuid::new_v4()));
     let entries = crate::core::journal_entries_for_tick(&mut state, &output);
     let mut writer = crate::journal::JournalWriter::open(&root, 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();

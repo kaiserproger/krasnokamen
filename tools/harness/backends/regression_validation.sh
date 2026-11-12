@@ -41,7 +41,7 @@ import sys
 from pathlib import Path
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
-EXPECTED_OBSERVATIONS_SCHEMA = "solaris.real_client_observations.v1"
+EXPECTED_OBSERVATIONS_SCHEMA = "krasnokamen.real_client_observations.v1"
 MIN_SCREENSHOT_WIDTH = 320
 MIN_SCREENSHOT_HEIGHT = 180
 
@@ -209,7 +209,7 @@ PY
 validate_automation_driver() {
   local automation_driver legacy_matches legacy_primary_env legacy_m94_env bad_status_matches bad_bridge_matches phase_status_count
   automation_driver="$1"
-  legacy_primary_env="$(printf '%s_%s_%s_%s' SOLARIS REAL CLIENT COMMAND)"
+  legacy_primary_env="$(printf '%s_%s_%s_%s' KRASNOKAMEN REAL CLIENT COMMAND)"
   legacy_m94_env="$(printf '%s_%s_%s' M94 CLIENT COMMAND)"
 
   if ! grep -Fxq 'client_kind=gradle-runclient' "$automation_driver"; then

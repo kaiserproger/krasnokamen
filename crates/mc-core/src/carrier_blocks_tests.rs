@@ -88,7 +88,7 @@ fn only_a_reserved_horizontal_carrier_with_an_installed_drop_item_is_admitted() 
     for (carrier, drop_item) in [
         ("minecraft:stone", MONITOR),
         ("minecraft:chain_command_block", MONITOR),
-        (CARRIER, "solaris:absent"),
+        (CARRIER, "krasnokamen:absent"),
     ] {
         assert!(
             CarrierBlocks::admit(

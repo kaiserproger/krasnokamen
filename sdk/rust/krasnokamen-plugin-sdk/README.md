@@ -1,7 +1,7 @@
-# Solaris Rust plugin SDK
+# Krasnokamen Rust plugin SDK
 
-This crate implements the guest side of `solaris:plugin@0.8.0`. It generates
-bindings from the WIT in the same Solaris checkout; keep SDK, WIT and server
+This crate implements the guest side of `krasnokamen:plugin@0.9.0`. It generates
+bindings from the WIT in the same Krasnokamen checkout; keep SDK, WIT and server
 versions matched. It is part of the independent `sdk/rust` workspace.
 
 - [Build your first plugin](../../../docs/plugins/QUICKSTART.md): complete Cargo

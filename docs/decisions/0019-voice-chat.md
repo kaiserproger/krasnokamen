@@ -4,9 +4,9 @@ Status: accepted design; draft implementation, real-client QA pending.
 
 ## Decision
 
-Native Solaris clients capture the microphone (push-to-talk), encode 20 ms mono
+Native Krasnokamen clients capture the microphone (push-to-talk), encode 20 ms mono
 48 kHz Opus packets (~24 kbps) and send them to the server on the Play custom
-payload channel `solaris:voice`. `mc-edge` (`voice.rs` pure relay, `voice_service.rs`
+payload channel `krasnokamen:voice`. `mc-edge` (`voice.rs` pure relay, `voice_service.rs`
 delivery) forwards each packet to the *listening* native clients that are in the
 same dimension and within `range_blocks` (default 48, eye to eye) of the
 speaker, excluding the speaker, attaching the speaker's uuid and position.

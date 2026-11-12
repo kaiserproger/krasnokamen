@@ -4,7 +4,7 @@
 **Status:** Accepted, staged implementation
 **Current wire contract:** Loader wire **3** with artifact index schema **2**
 (`crates/mc-loader/src/lib.rs`). The server plugin frontend is the Wasmtime
-component contract `solaris:plugin@0.8.0`; the Luau 0.6.0 frontend is retired
+component contract `krasnokamen:plugin@0.9.0`; the Luau 0.6.0 frontend is retired
 (see the historical note below). Neither runs guest code on the client.
 
 ## Problem
@@ -30,10 +30,10 @@ startup unless every bundle has:
 
 The server aggregates descriptors in deterministic plugin order. During the
 Minecraft Configuration state it sends Loader protocol 3 on
-`solaris:loader/manifest`. Before accepting the normal finish acknowledgement,
-it requires `solaris:loader/ack` with the same protocol, a supported platform,
+`krasnokamen:loader/manifest`. Before accepting the normal finish acknowledgement,
+it requires `krasnokamen:loader/ack` with the same protocol, a supported platform,
 a bounded loader version, every required permission, and every exact cache
-identity. When no plugin declares client content, Solaris sends no loader
+identity. When no plugin declares client content, Krasnokamen sends no loader
 payload and does not require a modded client.
 
 The Java `loader-core` module owns the matching codec and validation. Fabric,
@@ -42,11 +42,11 @@ granted permissions, and cached identities. Platform networking and lifecycle
 code must call this shared core rather than reinterpret the plugin manifest.
 
 Source ownership (2026-09-06): the complete Java/Gradle workspace lives in the
-independent sibling `solaris-loader` repository, not under the Rust core.
+independent sibling `krasnokamen-loader` repository, not under the Rust core.
 The wire protocol and shared-core/platform split are unchanged. Core retains
 server-side protocol handling and cross-repository integration scenarios;
 `python3 -m tools.harness` resolves the sibling by default, with
-`SOLARIS_LOADER_ROOT` for another checkout. A core production build does not
+`KRASNOKAMEN_LOADER_ROOT` for another checkout. A core production build does not
 require Java or a Loader checkout.
 
 Downloaded bytes remain untrusted. A missing exact identity is requested
@@ -78,7 +78,7 @@ late prompt answer, and its artifact packets cannot reach a newer connection's
 staging session.
 
 After every exact cache file passes verification, the shared core requires the
-first ZIP entry to be a closed `solaris-client.json` schema. The current
+first ZIP entry to be a closed `krasnokamen-client.json` schema. The current
 activation accepts owner-namespaced views, items, blocks, sounds and declared
 asset bytes. It rejects unknown fields and archive entries, verifies each
 asset's exact size and SHA-256, and bounds the combined immutable registry. Fabric,
@@ -92,7 +92,7 @@ same Play session. A plugin's typed view open/present/close requests cross the
 `ScriptBoundary`; the native authority checks the plugin, original session,
 activated `views` content and `present_views` permission before delivery. The
 server assigns each opened view an instance id and revision. An `open_view`
-travels on `solaris:loader/view`; updates and actions must match the live
+travels on `krasnokamen:loader/view`; updates and actions must match the live
 instance and revision. Each adapter captures the originating connection before
 queueing client-thread work and discards work for a superseded connection.
 Within one revision, the action sequence starts at one and must increase;
@@ -101,10 +101,10 @@ presentation starts a new revision and resets its sequence on both sides.
 The server checks session, owner, live revision, action and field policy before
 classifying a submission as a replay.
 
-Core adds the native `solaris-settlements` bundle only to a manifest that is
+Core adds the native `krasnokamen-settlements` bundle only to a manifest that is
 already required by a plugin bundle; it never turns a vanilla or native-client
 configuration into a Loader-required session. Its declared
-`solaris-settlements:overview` request is not a second settlement UI: after
+`krasnokamen-settlements:overview` request is not a second settlement UI: after
 the normal manifest owner/content/permission admission, native authority opens
 the same server-driven dialog as `/settlement menu`.
 
@@ -149,7 +149,7 @@ The same pack generates `sounds.json` and rejects resource collisions. No
 Java/native plugin code or frozen sound-event registry mutation is involved.
 
 `play_client_sound` and `stop_client_sound` share one admitted command and
-`solaris:loader/sound` Play channel, with Loader protocol 3. Server ownership,
+`krasnokamen:loader/sound` Play channel, with Loader protocol 3. Server ownership,
 permission and live-session checks precede ordered publication; adapters capture
 the source connection before scheduling and reject stale work. Shared playback
 resolves only activated definitions, uses native one-shot sound instances,
@@ -169,10 +169,10 @@ declare an additive `view_request_bindings` array of `{key, view}` pairs. Each
 pair uses the same key bound and namespace, and `view` must name a screen in
 that verified bundle. A key edge sends
 `{"protocol":3,"message":"view_request","request_kind":"<view>"}` on
-`solaris:loader/view_action`; the server decodes it only for that negotiated
+`krasnokamen:loader/view_action`; the server decodes it only for that negotiated
 Loader connection, resolves the screen's declared owner, and emits one targeted
 `loader.view_request` event. The core-owned settlements binding is
-`key.keyboard.c` → `solaris-settlements:overview`.
+`key.keyboard.c` → `krasnokamen-settlements:overview`.
 
 Admission requires `views`/`view_actions` content and
 `present_views`/`send_view_actions` permissions. Each reported action edge
@@ -231,18 +231,18 @@ The block-presentation slice accepts up to eight owner-namespaced block
 declarations with bounded names and owner model ids. Activation requires
 `blocks`, `register_blocks`, and the exact verified
 `assets/<namespace>/models/<path>.json`. Every platform pre-registers the same
-bounded carrier set (`solaris_loader:loader_block` through
-`solaris_loader:loader_block_7`) before registry freeze. After the verified
+bounded carrier set (`krasnokamen_loader:loader_block` through
+`krasnokamen_loader:loader_block_7`) before registry freeze. After the verified
 pack mounts, owner block ids are sorted and mapped by index to those blockstate
 and item definitions. A Loader screen renders the corresponding custom block
 through the standard block item without substituting a vanilla block or
 performing late registry mutation. The client resolves every carrier's exact
 runtime default-state id and sends the explicit owner-id-to-state
-`carrier_block_state_ids` map in its acknowledgement. Solaris independently
+`carrier_block_state_ids` map in its acknowledgement. Krasnokamen independently
 reads all owned block ids from the already size/SHA-verified plugin artifacts
 and accepts the ACK only when its identities match exactly and its carrier
 state ids are usable and distinct. The resulting mapping remains scoped to the
-acknowledged connection. Solaris registers every owner identity as a full,
+acknowledged connection. Krasnokamen registers every owner identity as a full,
 opaque, non-emitting state after the frozen vanilla range in its canonical
 server block and light tables before opening the world. Those states persist
 by owner name through the normal world format; client runtime ids never enter
@@ -252,7 +252,7 @@ Projected chunk frames bypass the cross-session prepared-frame cache, so one
 client's runtime id cannot leak to another.
 
 **Historical (removed CP-REFACTOR-070).** The Luau-era guest call
-`solaris.place_loader_block(request_id, block_id, x, y, z)` was never part of
+`krasnokamen.place_loader_block(request_id, block_id, x, y, z)` was never part of
 the current WIT contract and had no component-export producer: nothing
 constructed `ScriptCommand::PlaceLoaderBlock` from a guest request. CP-REFACTOR-070
 established the origin does not exist and deleted the dead command/result route
@@ -266,17 +266,17 @@ survival `UseItemOn` placement below.
 
 The same exact owner may call the WIT command
 `grant-loader-block-item(request, session, block, count)` for a
-player whose current Play session acknowledged that block carrier. Solaris
+player whose current Play session acknowledged that block carrier. Krasnokamen
 represents the item canonically as the known vanilla `minecraft:paper` protocol
 id plus the verified block name and its deterministic
-`minecraft:item_model = solaris_loader:loader_block[_N]` component. The session
+`minecraft:item_model = krasnokamen_loader:loader_block[_N]` component. The session
 owner merges it under the existing inventory transaction gate, persists the
 updated canonical inventory before publishing it, rejects a full inventory
 without mutation, and returns the required targeted `loader-item-grant-result`
 with the exact semantic outcome. The vanilla item registry and client runtime ids
 remain out of persistence.
 
-For `UseItemOn`, Solaris recognizes only a non-empty `minecraft:paper` stack
+For `UseItemOn`, Krasnokamen recognizes only a non-empty `minecraft:paper` stack
 with one exact bounded carrier item-model component in the current live session
 that acknowledged that owner block. It resolves that specific model to its
 canonical server state and then uses the ordinary

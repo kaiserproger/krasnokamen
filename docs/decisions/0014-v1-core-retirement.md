@@ -7,13 +7,13 @@ Source deletion does not fabricate an A/B or gameplay pass.
 
 ## Context at acceptance
 
-`solaris-v2` (`mc-edge` + `mc-core`, ADR 0013) covers native gameplay, Anvil
+`krasnokamen` (`mc-edge` + `mc-core`, ADR 0013) covers native gameplay, Anvil
 import/export, statistics, advancements and the production component host,
 including `before-build`. At acceptance v1 (`mc-server`, `mc-net`,
 `mc-simulation`, `mc-entity`, ~77k lines in `mc-net` alone) still existed.
 Keeping it duplicated plugin/Loader work, harness lifecycle, merge surface,
 test time and memory. These crates are now deleted. AGENTS.md: superseded
-Solaris APIs and authorities are deleted once callers move; there is no released
+Krasnokamen APIs and authorities are deleted once callers move; there is no released
 compatibility surface.
 
 ## Retirement inventory (2026-10-15)
@@ -23,7 +23,7 @@ compatibility surface.
 | `mc-net::loader` (Loader manifest/artifact/ack/sound wire contract) | `mc-edge` | Phase 1: moved to crate `mc-loader` (done) |
 | `mc-server::wire_client`, `mc-server::vanilla` (process, registry capture) | `mc-test-harness`; content import (production) | Phase 2: moved to crate `mc-vanilla` (done); `mc-test-harness` src no longer depends on `mc-server` |
 | `mc-entity`/`mc-simulation` fixture code | `mc-test-harness` `load_matrix_fixtures` | Phase 2: done — deleted the offline generator; `catalog-load` prepares fixtures through public v2 commands |
-| Harness profiles and sibling first-party gates | QA, gates, plugin repo | Phase 3: done — v2-only launches/builds; variant flag/environment and legacy Loader fixture branches removed; profile decisions below; sibling `run_integration.py` uses `mc-edge`/`solaris-v2` |
+| Harness profiles and sibling first-party gates | QA, gates, plugin repo | Phase 3: done — v2-only launches/builds; variant flag/environment and legacy Loader fixture branches removed; profile decisions below; sibling `run_integration.py` uses `mc-edge`/`krasnokamen` |
 | Operator CLI: content, backup/restore, console, access lists, pregeneration/world checks | server operators | Phase 4 done: content/backup/restore and stdin vanilla commands ported; operators use vanilla `ops.json` + `op`/`deop`. No legacy `--check`, `operator` subcommand, TUI/profile, `check-world` or Anvil rectangle `pregenerate` API is retained; native `world pregenerate --radius` (block radius, native store, resumable) is the v2 replacement. |
 | Earth WorldPlan (ADR 0012, world prepare/bounds) | v1 prototype/evidence | Not ported; ADR 0012 is Proposed for the native runtime. No Earth fallback is introduced. |
 | OLD baseline binary for v2-vs-old A/B | Dropped by owner 2026-10-16 | No A/B: frozen executable baselines are deleted and `tools/coreperf` runs native-v2 durability/scale only. Historical receipts remain historical evidence, not an active comparator. |
@@ -34,7 +34,7 @@ compatibility surface.
    not on `mc-net`.
 2. `mc-vanilla` owns vanilla-jar process control, registry capture and the
    minimal protocol client used by content import and the harness.
-3. Every actual harness server lifecycle uses `solaris-v2`; variant flags and
+3. Every actual harness server lifecycle uses `krasnokamen`; variant flags and
    environment selectors are removed. Utility profiles need not launch a server.
 4. The operator surface follows the explicit port/delete inventory above.
 5. Phase 5 deletes `mc-server`, `mc-net`, `mc-simulation`, `mc-entity`, their
@@ -56,7 +56,7 @@ compatibility surface.
 
 | Profile(s) | Decision |
 |---|---|
-| `build` | Port: build only `mc-edge --bin solaris-v2`, in debug or release. |
+| `build` | Port: build only `mc-edge --bin krasnokamen`, in debug or release. |
 | `core-client`, `inventory` | Port: shared Java/native client probes; delete the old Loader-fixture lifecycle. |
 | `loader-live` | Port: named scenarios require immutable `--server-bin` and `--plugins-dir`; delete the v1 fixture path. |
 | `regression`, `playable`, `replay` | Port: sole v2 launch and vanilla `ops.json`; no variant environment. |
@@ -66,12 +66,12 @@ compatibility surface.
 | `living-world-scale` | Delete: obsolete v1 entity-scale wrapper; `catalog-load`/client scenarios cover live worlds. |
 | `seed-review`, `seed-contact-sheet` | Port/retain: seed-review launches v2; contact-sheet uses the same client tooling. |
 | `installer` | Retain: installer archive/checksum self-test uses a shell fixture, never a server build or launch. |
-| `standard-pack`, `settlement-cargo` | Port: sibling runner builds and starts `solaris-v2`; no server `--check`. |
+| `standard-pack`, `settlement-cargo` | Port: sibling runner builds and starts `krasnokamen`; no server `--check`. |
 | Other client/oracle/utility profiles | Retain: shared v2 client launch paths or no server lifecycle; no variant selection. |
 
 ## Phase 5 closeout
 
-- Current composition: `mc-edge`/`solaris-v2` + `mc-core`; shared wire/tooling
+- Current composition: `mc-edge`/`krasnokamen` + `mc-core`; shared wire/tooling
   boundaries are `mc-loader` and `mc-vanilla`.
 - Old in-process load fixtures/profiles and native v1 catalog test selectors
   are removed. `catalog-load` retains public-protocol scenarios, not old

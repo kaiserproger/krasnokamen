@@ -26,7 +26,7 @@ fn durable_api_ticket_survives_checkpoint_empty_tail_restart_without_portal_tick
     for (owner, chunk) in [
         ("example:forced", crate::boundary::ChunkPos { x: 3, z: 4 }),
         (
-            "solaris:portal:test",
+            "krasnokamen:portal:test",
             crate::boundary::ChunkPos { x: 9, z: 10 },
         ),
     ] {
@@ -76,7 +76,7 @@ fn durable_api_ticket_survives_checkpoint_empty_tail_restart_without_portal_tick
     let recovered = read_manifest(&config).unwrap();
     assert_eq!(recovered.tickets.len(), 1);
     assert_eq!(recovered.tickets["example:forced"].0, [3, 4]);
-    assert!(!recovered.tickets.contains_key("solaris:portal:test"));
+    assert!(!recovered.tickets.contains_key("krasnokamen:portal:test"));
     restored.shutdown();
 }
 
@@ -114,7 +114,7 @@ fn ticket_capture_is_frozen_and_child_isolated_with_wal_override() {
             ),
         );
         world.tickets.insert(
-            "solaris:portal:transient".into(),
+            "krasnokamen:portal:transient".into(),
             (crate::boundary::ChunkPos { x: 20, z: 20 }, 0),
         );
     }

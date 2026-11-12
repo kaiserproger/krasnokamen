@@ -51,7 +51,7 @@ pub(crate) struct WhitelistEntry {
     pub name: String,
 }
 
-/// One `muted-players.json` row: Solaris-only chat mute with vanilla ban stamps.
+/// One `muted-players.json` row: Krasnokamen-only chat mute with vanilla ban stamps.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct MuteEntry {
     pub uuid: Uuid,
@@ -75,7 +75,7 @@ struct Lists {
     whitelist: Vec<WhitelistEntry>,
     /// Whether login admission enforces `whitelist.json`.
     ///
-    /// Vanilla keeps this in `server.properties`; Solaris keeps the persisted
+    /// Vanilla keeps this in `server.properties`; Krasnokamen keeps the persisted
     /// toggle in a `whitelist.enabled` file beside the list itself, so the
     /// list stays byte-compatible with vanilla.
     whitelist_enabled: bool,
@@ -691,7 +691,7 @@ mod tests {
     use super::*;
     #[test]
     fn ops_round_trip_and_banned_uuid_admission() {
-        let dir = std::env::temp_dir().join(format!("solaris-admin-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("krasnokamen-admin-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let uuid = Uuid::new_v4();
         let admin = Admin::open(&dir).unwrap();

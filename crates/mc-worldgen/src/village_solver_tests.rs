@@ -14,9 +14,9 @@ fn identifier(value: &str) -> Identifier {
     Identifier::parse(value.to_owned()).unwrap()
 }
 
-/// `<SOLARIS_CONTENT_CACHE>`, then `<workspace>/data/vanilla`.
+/// `<KRASNOKAMEN_CONTENT_CACHE>`, then `<workspace>/data/vanilla`.
 fn content_cache() -> Option<std::path::PathBuf> {
-    if let Ok(dir) = std::env::var("SOLARIS_CONTENT_CACHE") {
+    if let Ok(dir) = std::env::var("KRASNOKAMEN_CONTENT_CACHE") {
         let dir = std::path::PathBuf::from(dir);
         return dir
             .join("data")
@@ -237,11 +237,11 @@ fn desert_village_assembles_deterministically() {
     let Some(cache) = content_cache() else {
         println!(
             "SKIP desert_village_assembles_deterministically: no vanilla content cache found \
-             (set SOLARIS_CONTENT_CACHE)"
+             (set KRASNOKAMEN_CONTENT_CACHE)"
         );
         return;
     };
-    let blocks = BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+    let blocks = BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
         .expect("embedded block report");
     let closure = load_village_closure(&cache, &identifier("minecraft:villages"), &blocks)
         .expect("the village closure loads");
@@ -354,7 +354,7 @@ fn selection_retries_until_an_entry_passes_its_biome_gate() {
         println!("SKIP selection_retries_until_an_entry_passes_its_biome_gate: no cache");
         return;
     };
-    let blocks = BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+    let blocks = BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
         .expect("embedded block report");
     let closure = load_village_closure(&cache, &identifier("minecraft:villages"), &blocks)
         .expect("the village closure loads");
@@ -388,7 +388,7 @@ fn non_placement_chunks_produce_no_village() {
         println!("SKIP non_placement_chunks_produce_no_village: no vanilla content cache found");
         return;
     };
-    let blocks = BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+    let blocks = BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
         .expect("embedded block report");
     let closure = load_village_closure(&cache, &identifier("minecraft:villages"), &blocks)
         .expect("the village closure loads");
@@ -436,7 +436,7 @@ fn the_start_piece_is_anchored_on_its_named_connector() {
     use crate::village::placement::start_origin;
     use crate::village::solver::jigsaws_for;
 
-    let blocks = BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+    let blocks = BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
         .expect("embedded block report");
     let marker = blocks
         .block(&identifier("minecraft:stone"))

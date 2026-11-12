@@ -1,7 +1,7 @@
-# Operating Solaris
+# Operating Krasnokamen
 
-The server binary is `solaris-v2` (`mc-edge` over the native `mc-core`;
-release packaging may name it `solaris`). This guide is the operator reference
+The server binary is `krasnokamen` (`mc-edge` over the native `mc-core`;
+release packaging may name it `krasnokamen`). This guide is the operator reference
 for the current runtime. Each procedure has one owner page:
 
 | Topic | Owner |
@@ -9,7 +9,7 @@ for the current runtime. Each procedure has one owner page:
 | Configuration keys and defaults | [`example.toml`](../example.toml) |
 | Moving a vanilla or Paper world in, and rolling back | [MIGRATION.md](MIGRATION.md) |
 | Plugin package layout, deployment and limits | [PLUGINS.md](PLUGINS.md) |
-| Client-side Loader install | [SOLARIS_LOADER.md](SOLARIS_LOADER.md) |
+| Client-side Loader install | [KRASNOKAMEN_LOADER.md](KRASNOKAMEN_LOADER.md) |
 | What vanilla behavior is covered | [COMPATIBILITY.md](COMPATIBILITY.md) |
 
 Contents:
@@ -25,7 +25,7 @@ Contents:
 ### Running the server
 
 ```sh
-solaris-v2 --config server.toml
+krasnokamen --config server.toml
 ```
 
 `--config` defaults to `server.toml`. `--no-console` disables stdin commands
@@ -41,20 +41,20 @@ exclusive lease and refuse a running world.
 
 ### Vanilla content cache
 
-Solaris does not distribute Minecraft data. Derive a cache from your licensed
+Krasnokamen does not distribute Minecraft data. Derive a cache from your licensed
 server bundles with JDK 25 (`JAVA`/`JAVAC` may select it). A cache joins two
 releases: the **26.3** bundle supplies every protocol identity (block states,
 items, entities, the per-state light/mining/explosion/map-colour reports and
 the exact registry data the client receives); the **26.1.2** bundle supplies
 the gameplay data pack (worldgen, loot, recipes, advancements, tags,
-structures), whose JSON grammar Solaris's loaders read.
+structures), whose JSON grammar Krasnokamen's loaders read.
 
 ```sh
-solaris-v2 content import --version 26.3 --download --cache /path/to/cache
+krasnokamen content import --version 26.3 --download --cache /path/to/cache
 # or from jars you already have:
-solaris-v2 content import --from /path/to/26.3/server.jar \
+krasnokamen content import --from /path/to/26.3/server.jar \
   --gameplay-from /path/to/26.1.2/server.jar --cache /path/to/cache
-solaris-v2 content verify --cache /path/to/cache
+krasnokamen content verify --cache /path/to/cache
 ```
 
 `--version` selects canonical `26.3`; the command also installs 26.1.2 and
@@ -72,15 +72,15 @@ content, not the whole deployment. First start with no cache runs this same
 window-wide importer before opening a world or listener. Existing caches are
 reused offline; a broken existing canonical cache fails with an import instruction.
 
-Selection order: `[data].vanilla_data_dir`, `SOLARIS_CONTENT_CACHE`,
-`$XDG_DATA_HOME/solaris/content/26.3` (otherwise
-`~/.local/share/solaris/content/26.3`), then `data/vanilla` in the working
+Selection order: `[data].vanilla_data_dir`, `KRASNOKAMEN_CONTENT_CACHE`,
+`$XDG_DATA_HOME/krasnokamen/content/26.3` (otherwise
+`~/.local/share/krasnokamen/content/26.3`), then `data/vanilla` in the working
 directory and checkout ancestors. An explicit invalid override fails without
 silently choosing another source. `--cache` affects only that offline command.
 
 ### Client protocol compatibility
 
-Solaris serves **every Minecraft Java release from 26.1.2 through 26.3**:
+Krasnokamen serves **every Minecraft Java release from 26.1.2 through 26.3**:
 
 | Client release | Protocol |
 |---|---|
@@ -195,7 +195,7 @@ max_players = 20                 # concurrent Play sessions
 enable_command_block = false     # command-block execution gate
 # whitelist = true               # initial enforcement, see access control
 [data]
-# backup_dir = "/srv/solaris/backups"   # console `backup` destination
+# backup_dir = "/srv/krasnokamen/backups"   # console `backup` destination
 [block_log]                      # history behind /co
 enabled = true
 retention_days = 30              # 0 keeps records until max_records
@@ -233,7 +233,7 @@ Behavior worth knowing:
   Entering the pause performs one checkpoint; the first join resumes ticking.
   Zero or negative never pauses.
 - The native singleplayer client pauses the world while its menu is open with
-  `solaris_pause on|off`. These need an online level-four operator and exactly
+  `krasnokamen_pause on|off`. These need an online level-four operator and exactly
   one online player; a join or that operator's disconnect resumes the world.
   This differs from `/tick freeze` (below): world tick numbers do not advance.
 - `spawn_protection` (default 16) protects a square of that radius around the
@@ -324,7 +324,7 @@ in vanilla, and chunks next to an unloaded chunk are not hidden on that side.
 
 ### Far terrain (LOD)
 
-`[lod]` answers tile requests from the **native Solaris client** only (vanilla
+`[lod]` answers tile requests from the **native Krasnokamen client** only (vanilla
 clients never see it). A tile is 16×16 column samples spaced 2 to 64 blocks.
 Stored chunks answer with their top surface block (one with collision or
 holding water or lava, as vanilla's `MOTION_BLOCKING`; flowers, grass and thin
@@ -423,7 +423,7 @@ not a proof of rendered assets, and is independent of Loader bundle negotiation.
   command and chat-session metadata is bounded and decoded, but signatures and
   certificates are not verified: online login authenticates the connection's
   identity, not each message.
-- With an auth-capable plugin (for example `solaris-auth`) or
+- With an auth-capable plugin (for example `krasnokamen-auth`) or
   `[auth] require_plugin_login = true`, a pending session gets an empty,
   temporary presentation at a fresh spawn rather than the saved inventory,
   vitals, position or operator advertisement; the saved record stays untouched
@@ -439,17 +439,17 @@ not a proof of rendered assets, and is independent of Loader bundle negotiation.
 
 ### Importing `server.properties`
 
-TOML remains the canonical configuration. At startup Solaris reads
+TOML remains the canonical configuration. At startup Krasnokamen reads
 `server.properties` beside the selected `--config` TOML when present; select
 another file with `[properties] file = "migration/server.properties"` (relative
 to the TOML; an explicitly selected missing file is an error). The file is never
 rewritten and is not a second live authority: **explicit TOML leaf → imported
-supported property → Solaris default**. The reader follows Java `Properties`
+supported property → Krasnokamen default**. The reader follows Java `Properties`
 rules (comments, `=`/`:`/whitespace separators, continuations, `\uXXXX`, Latin-1
 bytes, last duplicate wins). Every unsupported key warns by name without printing
 its value; invalid supported values fail startup.
 
-| Vanilla property | Solaris TOML key |
+| Vanilla property | Krasnokamen TOML key |
 | --- | --- |
 | `motd` | `server.motd` |
 | `max-players` | `server.max_players` |
@@ -467,7 +467,7 @@ its value; invalid supported values fail startup.
 | `require-resource-pack`, `resource-pack-prompt`, `resource-pack-id` | `resource_pack.required`, `resource_pack.prompt`, `resource_pack.id` |
 
 An empty `server-ip` means `0.0.0.0`. Non-numeric seeds use Java's UTF-16 string
-hash; an empty seed keeps Solaris's default rather than a random one. Importing
+hash; an empty seed keeps Krasnokamen's default rather than a random one. Importing
 `level-name` does **not** import Anvil data: convert the stopped world
 explicitly ([MIGRATION.md](MIGRATION.md)).
 
@@ -492,7 +492,7 @@ checkpoint.
 Operators come from the vanilla `ops.json` beside the config. Access lists are
 vanilla files beside the config: `ops.json`, `banned-players.json`,
 `banned-ips.json` (temporary rows carry the vanilla `expires` stamp) and
-`whitelist.json`, plus Solaris's own `muted-players.json`. Existing vanilla
+`whitelist.json`, plus Krasnokamen's own `muted-players.json`. Existing vanilla
 files can be dropped in unchanged.
 
 - `/whitelist on|off|add|remove|list|reload` and `/banlist players|ips` need
@@ -519,7 +519,7 @@ files can be dropped in unchanged.
 
 ### Minecraft Server Management Protocol
 
-Solaris exposes the vanilla 26.1.2 management-protocol subset as JSON-RPC 2.0
+Krasnokamen exposes the vanilla 26.1.2 management-protocol subset as JSON-RPC 2.0
 over a Bearer-authenticated WebSocket (`rpc.discover`, player list/kick,
 allowlist, bans, operators, status, save, stop and system messages). It is off by
 default and refuses startup without a `bearer_token` (see the `[msmp]` keys
@@ -548,7 +548,7 @@ authenticated reverse proxy; `allow_remote` is required for non-loopback binds.
 
 ### Datapacks and command blocks
 
-Solaris loads **directory and ZIP** packs from `<world_dir>/datapacks/` at
+Krasnokamen loads **directory and ZIP** packs from `<world_dir>/datapacks/` at
 startup. Each needs `pack.mcmeta` with a `pack` object. Packs are ordered by
 directory name and the lexically later resource wins. Symlinks, ZIP entries
 that escape the archive and unimplemented resource kinds fail startup with an
@@ -601,7 +601,7 @@ a missing or truncated `pack.mcmeta`, a bad file, an unsupported resource, a `fi
 that does not parse) is skipped with a warning naming the pack and the file, and the
 rest applies, so a pack that a live `enable` refused cannot stop the next start or
 block a reload. This deliberately differs from vanilla, which enables a new pack and
-refuses to start when it fails to load (it offers `--safeMode`); Solaris has no safe
+refuses to start when it fails to load (it offers `--safeMode`); Krasnokamen has no safe
 mode. A pack the saved selection already holds that no longer loads still stops the
 start and refuses the reload (old state kept), with the same pack and file in the
 error: fix or remove the named pack and start again. A non-pack entry in the folder
@@ -626,7 +626,7 @@ function (or every function of a tag) on the calling tick and writes the trace
 server directory, beside the world folder (`[C]` command, `[R]` result,
 `[F]` function, `[E]` error, `[M]` message); `[M]` lines are what the command
 source is sent, not text that commands deliver to players (`/tellraw`, `/say`,
-`/msg`). `/debug give`/`menu` keep their Solaris fixture grammar.
+`/msg`). `/debug give`/`menu` keep their Krasnokamen fixture grammar.
 
 `@e[predicate=<id>]` selects by a datapack loot predicate
 (`data/<ns>/predicate/<path>.json`) evaluated with the candidate as `this`;
@@ -776,7 +776,7 @@ keeps existing history queryable until it expires.
 without component packages. Package layout, manifest, capabilities, Loader
 requirements, deployment rules and diagnostics are owned by
 [PLUGINS.md](PLUGINS.md); the first-party packages live in
-[solaris-default-plugins](https://github.com/kaiserproger/solaris-default-plugins).
+[krasnokamen-default-plugins](https://github.com/kaiserproger/krasnokamen-default-plugins).
 Operator-visible facts: a configured directory that does not exist is created
 empty and logged; a malformed package, duplicate id or command root, or failed
 startup refuses the whole server start; deploying an auth-capable package locks
@@ -802,9 +802,9 @@ Convert only stopped worlds; the destination must not exist, the source is left
 unchanged and a receipt is written:
 
 ```sh
-solaris-v2 --config server.toml world import-anvil \
+krasnokamen --config server.toml world import-anvil \
   --source /srv/anvil-world --destination /srv/native-world --receipt /srv/import.json
-solaris-v2 --config server.toml world export-anvil \
+krasnokamen --config server.toml world export-anvil \
   --source /srv/native-world --destination /srv/exported-world --receipt /srv/export.json
 ```
 
@@ -823,12 +823,12 @@ the converter:
 - Simulation tickets are not an offline generator (they advance simulation and
   persist ticket ownership); use [`world pregenerate`](#offline-chunk-pregeneration).
 - The headless fixture gate is `python3 -m tools.harness.anvil_interchange
-  --binary <solaris-v2> --jar <26.1.2 server-bundler.jar> --eula-file
+  --binary <krasnokamen> --jar <26.1.2 server-bundler.jar> --eula-file
   <already-accepted eula.txt> --cache <content> --output <new dir>`. It supplies
   no legal acceptance and claims no real-client coverage.
 
 A worldgen revision bump refuses existing worlds (`identity mismatch`). To keep a
-stopped world, back it up and run `solaris-v2 --config server.toml world
+stopped world, back it up and run `krasnokamen --config server.toml world
 upgrade-worldgen`: it rewrites only the stored revision (refusing any other
 difference), leaves generated chunks as they are and applies the new generator
 to chunks generated afterwards, with a hard seam at the old explored border. See
@@ -842,8 +842,8 @@ stored item entities, both read-only on a stopped world and writing a JSON
 receipt that must lie outside the world directory:
 
 ```sh
-solaris-v2 --config server.toml world census --source WORLD --receipt census.json
-solaris-v2 --config server.toml world probe --source WORLD --receipt probe.json \
+krasnokamen --config server.toml world census --source WORLD --receipt census.json
+krasnokamen --config server.toml world probe --source WORLD --receipt probe.json \
   --block X,Y,Z
 ```
 
@@ -860,8 +860,8 @@ plugin-applied registry, village plans and worldgen rules), holds the exclusive
 lease and refuses a live world. A missing world directory is created fresh.
 
 ```sh
-solaris-v2 --config server.toml world pregenerate --radius 512
-solaris-v2 --config server.toml world pregenerate --radius 256 --center=-1024,2048
+krasnokamen --config server.toml world pregenerate --radius 512
+krasnokamen --config server.toml world pregenerate --radius 256 --center=-1024,2048
 ```
 
 `--radius` is a block radius on both axes (`512` covers 65×65 chunks) and fails
@@ -884,14 +884,14 @@ These commands need the server stopped, take the exclusive lease and refuse a
 running world. Back up first.
 
 ```sh
-solaris-v2 --config server.toml world compact
-solaris-v2 --config server.toml world prune --keep-radius 4096 --dry-run
-solaris-v2 --config server.toml world prune --keep-radius 4096
-solaris-v2 --config server.toml world prune --keep-radius 2048 --center=-1024,2048 --max-inhabited-ticks 600
+krasnokamen --config server.toml world compact
+krasnokamen --config server.toml world prune --keep-radius 4096 --dry-run
+krasnokamen --config server.toml world prune --keep-radius 4096
+krasnokamen --config server.toml world prune --keep-radius 2048 --center=-1024,2048 --max-inhabited-ticks 600
 ```
 
 `world prune` forgets overworld chunks outside `--keep-radius` blocks of
-`--center` (default the world spawn) whose baseline the Solaris generator created
+`--center` (default the world spawn) whose baseline the Krasnokamen generator created
 and that still equal it: no edited block, no persistent entity row, no side-state
 difference, and an inhabited clock of at most `--max-inhabited-ticks` (default
 `0`). Everything else is kept, including every chunk imported from Anvil (the
@@ -909,9 +909,9 @@ Offline commands need the server stopped: they take the exclusive world lease,
 lock the native database and refuse live worlds.
 
 ```sh
-solaris-v2 backup --world-dir /srv/solaris/world --out /backups/world-2026-10-15
-solaris-v2 restore --from /backups/world-2026-10-15 --world-dir /srv/solaris/restored
-solaris-v2 --config restored-server.toml
+krasnokamen backup --world-dir /srv/krasnokamen/world --out /backups/world-2026-10-15
+krasnokamen restore --from /backups/world-2026-10-15 --world-dir /srv/krasnokamen/restored
+krasnokamen --config restored-server.toml
 ```
 
 A backup holds the native database, WAL/journal and other world files with a
@@ -924,7 +924,7 @@ lists separately; backups are never pruned automatically.
 Database copies read through the file handle holding the lease, including on
 Windows; they do not release the lock or reopen `state.redb` to copy it.
 Anvil conversion and census receipts use `/`-separated world-relative paths on
-every host. The Windows `.solaris-world.lock` file is coordination, not imported
+every host. The Windows `.krasnokamen-world.lock` file is coordination, not imported
 world metadata or backup contents.
 
 #### Hot backup of a running server
@@ -934,7 +934,7 @@ in-game players; refused while `backup_dir` is unset or `--no-console` is used):
 
 ```toml
 [data]
-backup_dir = "/srv/solaris/backups"
+backup_dir = "/srv/krasnokamen/backups"
 ```
 
 The server forces a native checkpoint, then its single database writer copies
@@ -945,7 +945,7 @@ but the next periodic checkpoint and generated-chunk saves wait until the copy
 finishes (WAL appends continue and dirty state stays resident). The copy is
 assembled in a hidden `.backup-<UTC>.partial` directory and renamed only after
 the manifest is durable, so a failed backup leaves nothing behind. Restore with
-`solaris-v2 restore --from <backup> --world-dir <new>`, or point `world_dir` at
+`krasnokamen restore --from <backup> --world-dir <new>`, or point `world_dir` at
 a copy of the backup directory: opening replays the WAL to tick `N`, exactly as
 crash recovery does. It covers world state only.
 

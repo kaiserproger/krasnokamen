@@ -3,7 +3,7 @@ use mc_world::{ChunkGenerator, ChunkPos};
 use std::sync::Arc;
 
 fn registry() -> BlockRegistry {
-    BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap()
+    BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap()
 }
 fn root() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")

@@ -3,7 +3,7 @@
 //! Connects to a Minecraft Java Edition server, walks the protocol
 //! through Handshake → Login → Configuration → Play (offline-mode),
 //! and dumps every received clientbound frame. Used to validate
-//! Solaris' guessed packet IDs against a real vanilla server.
+//! Krasnokamen' guessed packet IDs against a real vanilla server.
 //!
 //! Usage:
 //!   wire-probe --addr 127.0.0.1:25566 [--name probe] [--play-seconds 10]
@@ -63,7 +63,7 @@ struct Cli {
     /// Stable scenario name written into captures.
     #[arg(long, default_value = "spawn-burst")]
     scenario: String,
-    /// Server kind written into captures: vanilla, solaris, or local.
+    /// Server kind written into captures: vanilla, krasnokamen, or local.
     #[arg(long, default_value = "local")]
     server_kind: String,
     /// Optional capture output path. Use a gitignored path such as
@@ -1360,7 +1360,7 @@ async fn main() -> Result<()> {
         .duration_since(UNIX_EPOCH)
         .context("system time before Unix epoch")?
         .as_millis();
-    capture.line("# solaris-wire-capture-v1")?;
+    capture.line("# krasnokamen-wire-capture-v1")?;
     capture.line(format!("scenario={}", cli.scenario))?;
     capture.line(format!("server_kind={}", cli.server_kind))?;
     capture.line(format!("addr={}", cli.addr))?;

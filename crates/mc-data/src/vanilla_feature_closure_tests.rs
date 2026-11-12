@@ -5,7 +5,7 @@ use tempfile::TempDir;
 
 use super::*;
 
-// Synthetic Solaris-authored fixtures only: they mirror the vanilla JSON
+// Synthetic Krasnokamen-authored fixtures only: they mirror the vanilla JSON
 // shape without carrying any Mojang bytes.
 fn worldgen_dir() -> TempDir {
     let dir = TempDir::new().unwrap();

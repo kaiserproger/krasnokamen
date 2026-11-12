@@ -129,7 +129,7 @@
 +
 +    registerCodexTool(config, server, "spawn_pi_qa_detached", {
 +        title: "Spawn Pi QA Detached",
-+        description: "Launch the standardized Solaris graphical QA agent detached in an h5i box. Uses GPT-5.6 Luna by default and mandates a real graphical Minecraft client in Xvfb, the requested scenario, evidence capture, then an adversarial exploratory pass with severity-ranked criticism.",
++        description: "Launch the standardized Krasnokamen graphical QA agent detached in an h5i box. Uses GPT-5.6 Luna by default and mandates a real graphical Minecraft client in Xvfb, the requested scenario, evidence capture, then an adversarial exploratory pass with severity-ranked criticism.",
 +        inputSchema: {
 +            workspace_id: z.string().optional().describe("Workspace id from open_workspace. Omit to use the workspace selected for this MCP session."),
 +            prompt: z.string().min(1).describe("Exact feature/scenario to validate plus any acceptance criteria."),
@@ -523,7 +523,7 @@
 +  return [
 +    commonPrompt("QA/reviewer", userPrompt),
 +    "",
-+    "Mandatory Solaris graphical QA protocol:",
++    "Mandatory Krasnokamen graphical QA protocol:",
 +    "1. This is not a headless-only review. Start a real graphical Minecraft client inside Xvfb. If DISPLAY is absent, start a fresh Xvfb display in this h5i box and use it for the client.",
 +    "2. Run the exact requested scenario first. Use the repo's real-client bridge/MCP/test runner when available; do not substitute raw TCP/unit tests for the graphical gate.",
 +    "3. Capture evidence: exact commands/scenario, server log, client log, result artifact, and screenshots when visually meaningful.",

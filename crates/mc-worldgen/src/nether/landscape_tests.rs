@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 fn registry() -> Arc<BlockRegistry> {
     Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     )
 }
 

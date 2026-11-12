@@ -216,7 +216,7 @@ def _height_stats(errors: np.ndarray) -> dict:
     return {
         'columns': int(errors.size),
         'mean_abs': round(float(absolute.mean()), 3),
-        'mean_signed_solaris_minus_vanilla': round(float(errors.mean()), 3),
+        'mean_signed_krasnokamen_minus_vanilla': round(float(errors.mean()), 3),
         'rmse': round(float(np.sqrt((errors.astype(np.float64) ** 2).mean())), 3),
         'p50_abs': int(np.percentile(absolute, 50)),
         'p95_abs': int(np.percentile(absolute, 95)),
@@ -230,20 +230,20 @@ def _height_stats(errors: np.ndarray) -> dict:
 METRICS = ('name', 'no_decor', 'no_decor_state', 'terrain', 'shape')
 
 
-def compare(vanilla: Path, solaris: Path, chunk_min, chunk_max, top: int = 25):
+def compare(vanilla: Path, krasnokamen: Path, chunk_min, chunk_max, top: int = 25):
     """(JSON-ready result, maps) for the inclusive chunk rectangle.
 
     `maps` holds per-column arrays shaped (2, depth, width), index 0 vanilla and
-    1 Solaris: `surface` (top solid terrain y), `top_y`/`top_block` (highest
+    1 Krasnokamen: `surface` (top solid terrain y), `top_y`/`top_block` (highest
     non-air cell and its block name), plus `names` to decode `top_block`.
     """
     registry = Registry()
     left = load_chunks(vanilla, chunk_min, chunk_max)
-    right = load_chunks(solaris, chunk_min, chunk_max)
+    right = load_chunks(krasnokamen, chunk_min, chunk_max)
     wanted = [(x, z) for z in range(chunk_min[1], chunk_max[1] + 1)
               for x in range(chunk_min[0], chunk_max[0] + 1)]
     missing = {'vanilla': [p for p in wanted if p not in left],
-               'solaris': [p for p in wanted if p not in right]}
+               'krasnokamen': [p for p in wanted if p not in right]}
     not_full = [p for p in wanted if p in left and left[p].get('Status') != 'minecraft:full']
     if any(missing.values()):
         raise ValueError(f'comparison rectangle has missing chunks: {missing}')
@@ -260,7 +260,7 @@ def compare(vanilla: Path, solaris: Path, chunk_min, chunk_max, top: int = 25):
     surface_errors, world_surface_errors = [], []
     biome_cells = biome_match = 0
     biome_pairs: Counter = Counter()
-    starts = {'vanilla': [], 'solaris': []}
+    starts = {'vanilla': [], 'krasnokamen': []}
     width = (chunk_max[0] - chunk_min[0] + 1) * 16
     depth = (chunk_max[1] - chunk_min[1] + 1) * 16
     heightmaps = np.full((2, depth, width), MIN_Y - 1, dtype=np.int16)
@@ -271,7 +271,7 @@ def compare(vanilla: Path, solaris: Path, chunk_min, chunk_max, top: int = 25):
         vb, vbio, vstarts = decode_chunk(left[pos], registry)
         sb, sbio, sstarts = decode_chunk(right[pos], registry)
         starts['vanilla'] += [(s, *pos) for s in vstarts]
-        starts['solaris'] += [(s, *pos) for s in sstarts]
+        starts['krasnokamen'] += [(s, *pos) for s in sstarts]
         name = registry.table('name')
         vn, sn = name[vb], name[sb]
         nonair = (vn != 0) | (sn != 0)
@@ -352,23 +352,23 @@ def compare(vanilla: Path, solaris: Path, chunk_min, chunk_max, top: int = 25):
                     'shape_pct': _percent(int(row[3]), int(row[0]))}
                    for i, row in enumerate(layers) if row[0]],
         'shape_confusion': {'classes': list(CLASSES),
-                            'rows_vanilla_cols_solaris': class_confusion.tolist()},
+                            'rows_vanilla_cols_krasnokamen': class_confusion.tolist()},
         'surface_height': _height_stats(np.concatenate(surface_errors)) if chunks else {},
         'top_nonair_height': _height_stats(np.concatenate(world_surface_errors)) if chunks
         else {},
         'name_mismatch_cells': mismatches,
-        'confusion_top': [{'vanilla': names[a], 'solaris': names[b], 'cells': n,
+        'confusion_top': [{'vanilla': names[a], 'krasnokamen': names[b], 'cells': n,
                            'pct_of_mismatches': _percent(n, mismatches)}
                           for (a, b), n in pairs.most_common(top)],
         'block_counts_top_diff': sorted(
             ({'block': names[k], 'vanilla': counts_left.get(k, 0),
-              'solaris': counts_right.get(k, 0)}
+              'krasnokamen': counts_right.get(k, 0)}
              for k in set(counts_left) | set(counts_right) if k != 0),
-            key=lambda row: -abs(row['vanilla'] - row['solaris']))[:top],
+            key=lambda row: -abs(row['vanilla'] - row['krasnokamen']))[:top],
         'biome_cells': biome_cells,
         'biome_mismatch_cells': biome_cells - biome_match,
         'biome_match_pct': _percent(biome_match, biome_cells),
-        'biome_confusion_top': [{'vanilla': registry.biomes[a], 'solaris': registry.biomes[b],
+        'biome_confusion_top': [{'vanilla': registry.biomes[a], 'krasnokamen': registry.biomes[b],
                                  'cells': n} for (a, b), n in biome_pairs.most_common(10)],
         'structures': _structures(starts),
     }
@@ -377,15 +377,15 @@ def compare(vanilla: Path, solaris: Path, chunk_min, chunk_max, top: int = 25):
 
 def _structures(starts) -> dict:
     vanilla = set(starts['vanilla'])
-    solaris = set(starts['solaris'])
-    kinds = sorted({s for s, *_ in vanilla | solaris})
+    krasnokamen = set(starts['krasnokamen'])
+    kinds = sorted({s for s, *_ in vanilla | krasnokamen})
     return {
-        'vanilla_starts': len(vanilla), 'solaris_starts': len(solaris),
-        'same_type_same_chunk': len(vanilla & solaris),
+        'vanilla_starts': len(vanilla), 'krasnokamen_starts': len(krasnokamen),
+        'same_type_same_chunk': len(vanilla & krasnokamen),
         'by_type': {k: {'vanilla': sum(1 for s in vanilla if s[0] == k),
-                        'solaris': sum(1 for s in solaris if s[0] == k),
-                        'same_chunk': sum(1 for s in vanilla & solaris if s[0] == k)}
+                        'krasnokamen': sum(1 for s in krasnokamen if s[0] == k),
+                        'same_chunk': sum(1 for s in vanilla & krasnokamen if s[0] == k)}
                     for k in kinds},
         'vanilla': sorted([list(s) for s in vanilla]),
-        'solaris': sorted([list(s) for s in solaris]),
+        'krasnokamen': sorted([list(s) for s in krasnokamen]),
     }

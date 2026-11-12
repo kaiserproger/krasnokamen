@@ -367,7 +367,7 @@ fn station_for(
                         let reference = ScriptSettlementBuildingRef::new(
                             "building".to_owned(),
                             building.id.0.to_string(),
-                            format!("solaris:{}", building.kind.name()),
+                            format!("krasnokamen:{}", building.kind.name()),
                         );
                         return Ok((reference, [x, y, z], stand));
                     }

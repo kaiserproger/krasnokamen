@@ -41,7 +41,7 @@ fn custom_click_action_becomes_a_dialog_click_input_for_its_connection() {
         ("radius".into(), mc_nbt::Tag::Float(12.0)),
     ]);
     let packet = ServerboundCustomClickAction {
-        id: mc_protocol::codec::Identifier::parse("solaris:dialog_probe/submit").unwrap(),
+        id: mc_protocol::codec::Identifier::parse("krasnokamen:dialog_probe/submit").unwrap(),
         payload: Some(payload.clone()),
     };
     let mut body = Vec::new();
@@ -57,7 +57,7 @@ fn custom_click_action_becomes_a_dialog_click_input_for_its_connection() {
         inputs,
         vec![PlayerInput::DialogClick {
             connection: ConnectionId(7),
-            id: "solaris:dialog_probe/submit".into(),
+            id: "krasnokamen:dialog_probe/submit".into(),
             payload: Some(payload),
         }]
     );

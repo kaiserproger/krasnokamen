@@ -98,7 +98,7 @@ pub(crate) fn fields(timer: PortalState) -> Vec<(String, mc_nbt::Tag)> {
             mc_nbt::Tag::Int(i32::from(timer.cooldown)),
         ),
         (
-            "solaris:PortalTime".into(),
+            "krasnokamen:PortalTime".into(),
             mc_nbt::Tag::Int(timer.elapsed as i32),
         ),
     ]
@@ -111,7 +111,7 @@ pub(crate) fn from_fields(
         elapsed: 0,
         cooldown: 0,
     };
-    for key in ["PortalCooldown", "solaris:PortalTime"] {
+    for key in ["PortalCooldown", "krasnokamen:PortalTime"] {
         let entries: Vec<_> = fields.iter().filter(|(name, _)| name == key).collect();
         if entries.len() > 1 {
             return Err(crate::config::CoreError::Storage(format!(

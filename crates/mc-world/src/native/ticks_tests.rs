@@ -1,9 +1,9 @@
 use super::*;
 use crate::native::{NativeChunkSnapshot, NativeStore};
-use mc_data::{blocks::solaris_required_blocks_report, items::solaris_required_items};
+use mc_data::{blocks::krasnokamen_required_blocks_report, items::krasnokamen_required_items};
 
 fn fixtures() -> (BlockRegistry, Chunk) {
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
     let air = blocks
         .block(&Identifier::parse("minecraft:air").unwrap())
         .unwrap()
@@ -21,7 +21,7 @@ fn native_ticks_preserve_past_and_far_future_u64_deadlines_and_sequence_after_re
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.redb");
     let (blocks, base) = fixtures();
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     let mut effective = base.clone();
     let position = BlockPos {
         x: -15,
@@ -90,7 +90,7 @@ fn native_ticks_preserve_past_and_far_future_u64_deadlines_and_sequence_after_re
 #[test]
 fn full_anvil_tick_payload_stays_exact_vanilla_relative_delay_encoding() {
     let (blocks, mut chunk) = fixtures();
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     let position = BlockPos {
         x: -15,
         y: 64,
@@ -186,7 +186,7 @@ fn native_store_preserves_both_flowing_fluid_ids_after_reopen() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.redb");
     let (blocks, mut imported) = fixtures();
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     for (sequence, (name, deadline, priority)) in [
         ("minecraft:flowing_water", 91, 2),
         ("minecraft:flowing_lava", u64::MAX - 9, -2),
@@ -244,7 +244,7 @@ fn native_store_preserves_both_flowing_fluid_ids_after_reopen() {
 #[test]
 fn native_store_rejects_unknown_fluid_ids_with_list_kind_and_name() {
     let (blocks, base) = fixtures();
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     for name in ["removed:water", "minecraft:stone", "minecraft:empty"] {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("state.redb");

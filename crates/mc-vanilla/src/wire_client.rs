@@ -330,7 +330,7 @@ impl Client {
         }
     }
 
-    /// Read the fixed Play-entry prelude Solaris emits before the command tree.
+    /// Read the fixed Play-entry prelude Krasnokamen emits before the command tree.
     pub async fn read_play_login(&mut self) -> Result<LoginPlay> {
         let mut frame = self.read_frame().await?;
         if frame.id == PlayDisconnect::ID {
@@ -357,7 +357,7 @@ impl Client {
 
     /// Drive a fresh connection through the full Play-entry prelude shared by
     /// the TCP integration tests: handshake/login/configuration, the Play
-    /// login sequence, then the fixed packet prelude Solaris emits before the
+    /// login sequence, then the fixed packet prelude Krasnokamen emits before the
     /// command tree, and finally acknowledge the server's teleport.
     pub async fn connect_to_play(
         addr: SocketAddr,

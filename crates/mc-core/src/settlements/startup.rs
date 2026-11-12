@@ -9,7 +9,7 @@
 use mc_data::Identifier;
 
 /// Owner namespace for every S1 startup identity below.
-pub const OWNER: &str = "solaris-settlements";
+pub const OWNER: &str = "krasnokamen-settlements";
 
 type ItemDefinition = (
     &'static str,
@@ -26,7 +26,7 @@ type ManufacturingRecipe = (&'static str, u32, u64, &'static [(&'static str, u32
 /// weapon, equip slot, physical profile JSON.
 pub const ITEMS: [ItemDefinition; 6] = [
     (
-        "solaris-settlements:arming_sword",
+        "krasnokamen-settlements:arming_sword",
         "Arming sword",
         320,
         true,
@@ -34,7 +34,7 @@ pub const ITEMS: [ItemDefinition; 6] = [
         r#"{"attacks": [{"mode":"melee","damage_kind":"cut","base_damage_hp":5.0,"windup_ticks":6,"active_ticks":2,"recovery_ticks":10,"min_range_blocks":0.0,"reach_blocks":1.9,"stamina_cost":12.0,"shape":{"kind":"cone","half_angle_degrees":45.0},"projectile":null,"consumption":null,"brace":null,"charge":null,"two_handed":false,"wear":1}],"armor": null,"shield": null,"stamina_capacity": 100.0,"stamina_recovery_per_tick": 0.5}"#,
     ),
     (
-        "solaris-settlements:longsword",
+        "krasnokamen-settlements:longsword",
         "Longsword",
         280,
         true,
@@ -42,7 +42,7 @@ pub const ITEMS: [ItemDefinition; 6] = [
         r#"{"attacks": [{"mode":"melee","damage_kind":"cut","base_damage_hp":7.0,"windup_ticks":10,"active_ticks":3,"recovery_ticks":16,"min_range_blocks":0.0,"reach_blocks":2.8,"stamina_cost":22.0,"shape":{"kind":"cone","half_angle_degrees":55.0},"projectile":null,"consumption":null,"brace":null,"charge":null,"two_handed":true,"wear":1}],"armor": null,"shield": null,"stamina_capacity": 100.0,"stamina_recovery_per_tick": 0.5}"#,
     ),
     (
-        "solaris-settlements:spear",
+        "krasnokamen-settlements:spear",
         "Spear",
         240,
         true,
@@ -50,7 +50,7 @@ pub const ITEMS: [ItemDefinition; 6] = [
         r#"{"attacks": [{"mode":"melee","damage_kind":"pierce","base_damage_hp":5.0,"windup_ticks":8,"active_ticks":2,"recovery_ticks":14,"min_range_blocks":1.25,"reach_blocks":3.2,"stamina_cost":16.0,"shape":{"kind":"thrust","radius_blocks":0.18},"projectile":null,"consumption":null,"brace":null,"charge":null,"two_handed":true,"wear":1}],"armor": null,"shield": null,"stamina_capacity": 100.0,"stamina_recovery_per_tick": 0.5}"#,
     ),
     (
-        "solaris-settlements:war_bow",
+        "krasnokamen-settlements:war_bow",
         "War bow",
         192,
         true,
@@ -58,7 +58,7 @@ pub const ITEMS: [ItemDefinition; 6] = [
         r#"{"attacks": [{"mode":"projectile","damage_kind":"pierce","base_damage_hp":5.0,"windup_ticks":16,"active_ticks":1,"recovery_ticks":20,"min_range_blocks":4.0,"reach_blocks":24.0,"stamina_cost":18.0,"shape":{"kind":"thrust","radius_blocks":0.12},"projectile":{"carrier":"minecraft:arrow","speed_blocks_per_tick":1.5,"gravity_blocks_per_tick_squared":0.035,"collision_radius_blocks":0.12,"lifetime_ticks":160,"recoverable":true,"impulse":0.18},"consumption":{"item":"minecraft:arrow","count":1},"brace":null,"charge":null,"two_handed":true,"wear":1}],"armor": null,"shield": null,"stamina_capacity": 100.0,"stamina_recovery_per_tick": 0.5}"#,
     ),
     (
-        "solaris-settlements:mail_hauberk",
+        "krasnokamen-settlements:mail_hauberk",
         "Mail hauberk",
         480,
         false,
@@ -66,7 +66,7 @@ pub const ITEMS: [ItemDefinition; 6] = [
         r#"{"attacks": [],"armor": {"slot":"chest","coverage":[{"region":"torso","fraction":1.0},{"region":"arms","fraction":0.75},{"region":"legs","fraction":0.2}],"resistance":[{"kind":"cut","fraction":0.45},{"kind":"pierce","fraction":0.30},{"kind":"crush","fraction":0.12},{"kind":"fire","fraction":0.05},{"kind":"blast","fraction":0.10},{"kind":"hook","fraction":0.0}],"common_cap":0.60,"mass_units":8.0,"stamina_cost":2.0,"degradation":[{"remaining_fraction":0.0,"resistance_multiplier":0.2},{"remaining_fraction":0.25,"resistance_multiplier":0.6},{"remaining_fraction":1.0,"resistance_multiplier":1.0}],"wear_per_damage_hp":0.5},"shield": null,"stamina_capacity": 100.0,"stamina_recovery_per_tick": 0.5}"#,
     ),
     (
-        "solaris-settlements:pavise",
+        "krasnokamen-settlements:pavise",
         "Pavise",
         360,
         false,
@@ -79,7 +79,7 @@ pub const ITEMS: [ItemDefinition; 6] = [
 /// (`military_catalog::authored_recipes`): id, durability, duration, inputs.
 pub const MANUFACTURING_RECIPES: [ManufacturingRecipe; 6] = [
     (
-        "solaris-settlements:arming_sword",
+        "krasnokamen-settlements:arming_sword",
         320,
         320,
         &[
@@ -89,7 +89,7 @@ pub const MANUFACTURING_RECIPES: [ManufacturingRecipe; 6] = [
         ],
     ),
     (
-        "solaris-settlements:longsword",
+        "krasnokamen-settlements:longsword",
         280,
         480,
         &[
@@ -99,25 +99,25 @@ pub const MANUFACTURING_RECIPES: [ManufacturingRecipe; 6] = [
         ],
     ),
     (
-        "solaris-settlements:spear",
+        "krasnokamen-settlements:spear",
         240,
         240,
         &[("minecraft:iron_ingot", 1), ("minecraft:stick", 2)],
     ),
     (
-        "solaris-settlements:war_bow",
+        "krasnokamen-settlements:war_bow",
         192,
         360,
         &[("minecraft:stick", 3), ("minecraft:string", 3)],
     ),
     (
-        "solaris-settlements:mail_hauberk",
+        "krasnokamen-settlements:mail_hauberk",
         480,
         640,
         &[("minecraft:iron_ingot", 8), ("minecraft:leather", 2)],
     ),
     (
-        "solaris-settlements:pavise",
+        "krasnokamen-settlements:pavise",
         360,
         480,
         &[
@@ -131,7 +131,7 @@ pub const MANUFACTURING_RECIPES: [ManufacturingRecipe; 6] = [
 /// Build the six `CustomItemDefinition` values the sibling pipeline hands to
 /// `ItemFactsTable::with_custom_items`. Same conversion as
 /// `mc-plugin-host/src/startup.rs::convert_item_definition`: owned
-/// `solaris-settlements` ids, vanilla `minecraft:paper` carrier, stack 1,
+/// `krasnokamen-settlements` ids, vanilla `minecraft:paper` carrier, stack 1,
 /// physical profile parsed from the authored JSON.
 pub fn authored_items() -> Result<Vec<mc_data::item_components::CustomItemDefinition>, String> {
     let mut items = Vec::with_capacity(ITEMS.len());
@@ -280,12 +280,12 @@ mod tests {
         assert!(
             recipes
                 .iter()
-                .any(|recipe| recipe.contains("solaris-settlements:oak_planks"))
+                .any(|recipe| recipe.contains("krasnokamen-settlements:oak_planks"))
         );
         assert!(
             recipes
                 .iter()
-                .any(|recipe| recipe.contains("solaris-settlements:arming_sword_ordinary"))
+                .any(|recipe| recipe.contains("krasnokamen-settlements:arming_sword_ordinary"))
         );
     }
 
@@ -297,7 +297,7 @@ mod tests {
                 assert!(
                     output["components"]["item_model"]
                         .as_str()
-                        .is_none_or(|model| !model.starts_with("solaris-settlements:")),
+                        .is_none_or(|model| !model.starts_with("krasnokamen-settlements:")),
                     "native recipe {} still requires a retired package model",
                     recipe["id"],
                 );

@@ -7,7 +7,7 @@ from typing import Any
 
 from .probe_steps import ProbeSteps
 
-_PREFIX = "SOLARIS_MENU "
+_PREFIX = "KRASNOKAMEN_MENU "
 
 
 def observe_menu(steps: ProbeSteps, label: str, *, slots: int = 46) -> dict[str, Any]:

@@ -357,7 +357,7 @@ pub fn load_item_facts(
 }
 
 #[must_use]
-pub fn solaris_required_item_facts() -> ItemFactsTable {
+pub fn krasnokamen_required_item_facts() -> ItemFactsTable {
     let raw: BTreeMap<String, RawEmbeddedItemFacts> =
         serde_json::from_str(REQUIRED_ITEM_COMPONENTS)
             .expect("embedded required item component JSON is valid");

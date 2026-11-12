@@ -1,5 +1,5 @@
 //! Lossless conversion between generic WIT world operations and native DTOs.
-use crate::bindings::solaris::plugin::world_structures as wire;
+use crate::bindings::krasnokamen::plugin::world_structures as wire;
 use mc_script::{
     ScriptChunkAvailability, ScriptDtoError, ScriptStructureMaterial, ScriptStructureState,
     ScriptWorksiteFailure, ScriptWorksiteInteractionPoint, ScriptWorksiteRequest,

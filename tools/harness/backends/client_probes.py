@@ -31,7 +31,7 @@ def world_dir_toml(artifact: Path) -> str:
 def run_core_subset(client: Any, artifact_dir: Path, timeout: float) -> dict[str, Any]:
     with ProbeSteps(client, artifact_dir / "core-probe", timeout, "core-client-chat-subset") as steps:
         before = steps.observe()
-        marker = f"Solaris core-client MCP {uuid.uuid4().hex[:12]}"
+        marker = f"Krasnokamen core-client MCP {uuid.uuid4().hex[:12]}"
         steps.call("minecraft_send_chat", {"message": marker, "command": False})
         after = steps.wait(lambda state: any(marker in line for line in state["recent_chat"]),
                            "own_chat_echo_observed")
@@ -137,13 +137,13 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     artifact = ctx.artifact_dir
     plugin_dir = plugin_directory(ctx)
     if auth_scenario:
-        # The shipping solaris-auth package behind the native login gate; the harness copies
+        # The shipping krasnokamen-auth package behind the native login gate; the harness copies
         # the sibling checkout's package into the private plugin directory.
         root = runtime.sibling_root("plugins")
-        package = plugin_dir / "solaris-auth"
+        package = plugin_dir / "krasnokamen-auth"
         package.mkdir()
         for name in ("plugin.toml", "plugin.wasm"):
-            (package / name).write_bytes((root / "solaris-auth" / name).read_bytes())
+            (package / name).write_bytes((root / "krasnokamen-auth" / name).read_bytes())
         ctx.client_evidence["auth_package_sha256"] = hashlib.sha256(
             (package / "plugin.wasm").read_bytes()).hexdigest()
     binary = _server_binary(ctx)
@@ -180,7 +180,7 @@ online_mode = false
 directory = {json.dumps(str(plugin_dir))}
 [data]
 world_dir = {world_dir_toml(artifact)}
-vanilla_data_dir = {json.dumps(os.environ.get("SOLARIS_SERVER_VANILLA_DATA_DIR", "data/vanilla"))}
+vanilla_data_dir = {json.dumps(os.environ.get("KRASNOKAMEN_SERVER_VANILLA_DATA_DIR", "data/vanilla"))}
 seed = 81
 ''')
     prepare_operator_fixture(ctx, operators)
@@ -219,14 +219,14 @@ seed = 81
                                "java-v2-p5-shift-double-click"):
             from .shift_correction_wire import CorrectionWire
 
-            data = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"])
+            data = Path(os.environ["KRASNOKAMEN_SERVER_VANILLA_DATA_DIR"])
             report = (data.parent / "26.1.2" if ctx.client == "java" else data) / "reports" / "packets.json"
             wire_trace = CorrectionWire(port, artifact, report)
             evidence["correction_wire_trace"] = str(wire_trace.receipt_path)
         if ctx.client == "native":
             display = None
             client_address = wire_trace.address if wire_trace is not None else address
-            if (ctx.scenario_id == "native-v2-p1-signs" and os.environ.get("SOLARIS_P1_SIGN_WIRE_TRACE") == "1"
+            if (ctx.scenario_id == "native-v2-p1-signs" and os.environ.get("KRASNOKAMEN_P1_SIGN_WIRE_TRACE") == "1"
                     or ctx.scenario_id == "native-v2-p2-fishing"
                     or ctx.scenario_id in ("native-v2-p1-armor-stand", "native-v2-p1-helmet-equip",
                                           "native-v2-p1-player-observer")):
@@ -243,7 +243,7 @@ seed = 81
                 from .native_promotion_custody import PackWireReceipt
 
                 pack_receipt = PackWireReceipt(
-                    Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json", artifact)
+                    Path(os.environ["KRASNOKAMEN_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json", artifact)
                 wire_trace = light_wire.LightWireProxy(
                     port, artifact, pack_receipt.server_packet, pack_receipt.client_packet)
                 client_address = wire_trace.address
@@ -252,7 +252,7 @@ seed = 81
                                      "native-v2-p4-death-protection"):
                 from .native_p4 import DamageWireReceipt
 
-                report_path = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
+                report_path = Path(os.environ["KRASNOKAMEN_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
                 damage_receipt = DamageWireReceipt(report_path)
                 wire_trace = light_wire.LightWireProxy(port, artifact, damage_receipt.server_packet, decode_light=False)
                 client_address = wire_trace.address
@@ -260,14 +260,14 @@ seed = 81
             elif promotion_maps or ctx.scenario_id == "native-v2-banner-placement":
                 from .native_promotion_wire import PromotionWireReceipt
 
-                report_path = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
+                report_path = Path(os.environ["KRASNOKAMEN_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
                 promotion_receipt = PromotionWireReceipt(report_path, artifact)
                 wire_trace = light_wire.LightWireProxy(port, artifact, promotion_receipt.server_packet)
                 client_address = wire_trace.address
                 evidence["native_wire_trace"] = str(wire_trace.path)
             if ctx.scenario_id == "native-v2-happy-ghast-harness":
                 from .native_happy_ghast import PassengerReceipt
-                report_path = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
+                report_path = Path(os.environ["KRASNOKAMEN_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
                 ghast_receipt = PassengerReceipt(report_path, artifact)
                 wire_trace = light_wire.LightWireProxy(port, artifact, ghast_receipt.server_packet)
                 client_address = wire_trace.address
@@ -424,7 +424,7 @@ seed = 81
         else:
             client_address = wire_trace.address if wire_trace is not None else address
             if protocol_pot:
-                report = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]).parent / "26.1.2/reports/packets.json"
+                report = Path(os.environ["KRASNOKAMEN_SERVER_VANILLA_DATA_DIR"]).parent / "26.1.2/reports/packets.json"
                 wire_trace = light_wire.LightWireProxy(
                     port, artifact, client_packet_observer=java_protocol_pot.creative_packet_observer(report, artifact),
                     decode_light=False)
@@ -446,7 +446,7 @@ seed = 81
             if ctx.scenario_id == "java-v2-p5-shift-double-click":
                 agent_jar = runtime._agent_jar_path()
                 with agent_jar.open("rb") as source:
-                    evidence.update(java_client_profile="vanilla", java_version=os.environ.get("SOLARIS_JAVA_VERSION", "26.1.2"),
+                    evidence.update(java_client_profile="vanilla", java_version=os.environ.get("KRASNOKAMEN_JAVA_VERSION", "26.1.2"),
                                     java_agent_jar=str(agent_jar), java_agent_sha256=hashlib.file_digest(source, "sha256").hexdigest())
             mcp = McpClient(f"http://127.0.0.1:{mcp_port}/mcp", token, startup_timeout + 10)
             mcp.initialize()
