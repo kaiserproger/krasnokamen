@@ -663,6 +663,8 @@ pub(super) fn resolve_body_motion(
         let n = v * drag;
         if n.abs() < 0.06 { 0.0 } else { n }
     });
+    let blocked =
+        (fixed.delta.x - requested.x).abs() > 1e-7 || (fixed.delta.z - requested.z).abs() > 1e-7;
     if (fixed.delta.x - requested.x).abs() > 1e-7 {
         velocity[0] = 0.0;
         next_impulse[0] = 0.0;
@@ -683,6 +685,30 @@ pub(super) fn resolve_body_motion(
     } else {
         velocity[1] * 0.98
     };
+    // Vanilla jumpOutOfFluid: a swimmer blocked sideways climbs out (0.3
+    // blocks/tick up) when its box raised by 0.6, plus this tick's remaining
+    // vertical travel, is free of blocks and fluid.
+    if wet && blocked && !fixed.grounded {
+        let rise = 0.6 + velocity[1] * dt - fixed.delta.y;
+        let here = mc_physics::Vec3::new(new[0], new[1], new[2]);
+        let raised = mc_physics::EntityBody {
+            position: mc_physics::Vec3::new(new[0], new[1] + rise, new[2]),
+            ..body
+        };
+        if mc_physics::resolve_collision_displacement(
+            &sampler,
+            here,
+            body.aabb,
+            mc_physics::Vec3::new(0.0, rise, 0.0),
+            false,
+            0.0,
+        )
+        .is_some_and(|clear| (clear.delta.y - rise).abs() <= 1e-7)
+            && !mc_physics::body_overlaps_fluid(raised, &sampler)
+        {
+            velocity[1] = 0.3 / dt;
+        }
+    }
     Some(BodyMotion {
         position: new,
         velocity,

@@ -163,3 +163,45 @@ fn resident_in_deep_water_swims_up_to_the_surface() {
         state.entities.pos(slot)[1]
     );
 }
+
+#[test]
+fn resident_wading_a_sunken_ford_climbs_out_onto_the_far_bank() {
+    let mut state = test_state();
+    let water = block(&state, "minecraft:water", &[]);
+    // A foot-deep channel across x = 6..=7: floor at y = 199, water at y = 200,
+    // banks at y = 201 on both sides (vanilla jumpOutOfFluid lifts swimmers out).
+    for z in 0..16 {
+        for x in 6..=7 {
+            state
+                .world
+                .set_block(x, 199, z, state.registry.states.stone);
+            state.world.set_block(x, 200, z, water);
+        }
+    }
+    state.world.fold_overlay();
+    let slot = villager(&mut state, [4.5, 201.0, 8.5]);
+    let target = BlockPos {
+        x: 10,
+        y: 201,
+        z: 8,
+    };
+    let mut v = VillagerState::default();
+    let mut cache = PoiCache::default();
+    let mut wet = false;
+    for _ in 0..400 {
+        move_to(&mut state, &mut cache, slot, &mut v, Some(target), false);
+        state.tick += 1;
+        let pos = state.entities.pos(slot);
+        wet |= pos[1] < 201.0;
+        if at(pos) == target && state.entities.ground(slot) {
+            break;
+        }
+    }
+    let pos = state.entities.pos(slot);
+    assert!(wet, "setup: the route wades the channel");
+    assert_eq!(
+        at(pos),
+        target,
+        "resident must cross the channel onto the far bank, stopped at {pos:?}"
+    );
+}
