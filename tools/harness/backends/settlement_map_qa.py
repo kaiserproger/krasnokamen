@@ -23,6 +23,7 @@ from typing import Any
 
 from PIL import Image, ImageChops
 
+from .. import runtime
 from ..profiles import ProfileContext
 from . import scene_shot
 from .probe_steps import ProbeSteps
@@ -149,7 +150,11 @@ class Gui:
                 self.labels[label] = _label_bitmap(label, self.jar)
             points = _label_points(frame, self.labels[label], self.scale)
         if not points:
-            raise RuntimeError(f"visible GUI button {label!r} not found; frame={frame}")
+            # A button the page does not offer is a failed GUI check, like a title that never
+            # arrives; the verdict mapping reads it from the assertions.
+            self.probe.report["assertions"][f"GUI button {label}"] = False
+            with runtime.phase("assertion"):
+                raise RuntimeError(f"visible GUI button {label!r} not found; frame={frame}")
         # A dialog title/body may repeat the action label. Actions are below the
         # body; duplicated Back/exit actions have the same destination.
         point = max(points, key=lambda point: point[1])
@@ -219,6 +224,105 @@ TOLERANCE = 12
 # measured from the viewer marker, which is exactly one cell (`_largest_patch`).
 MIN_CELL = 8 * 8
 
+# (en_us, ru_ru) text of every page the script waits for. `_script` passes the same pairs to its
+# `label(...)`; test_settlement_map_qa checks that every pair there is listed here.
+PAGES = {
+    "hub": (f"Settlement {NAME}", f"Поселение {NAME}"),
+    "settlement": ("Settlement", "Поселение"),
+    "help": ("Help", "Помощь"),
+    "map": ("Map ·", "Карта ·"),
+    "house": ("House", "Дом"),
+    "order": ("Order construction L2", "Заказать стройку L2"),
+    "projects": ("Projects", "Стройка"),
+    "status": ("Status", "Статус"),
+    "construction": ("Construction", "Строительство"),
+    "waiting": ("waiting for materials", "не хватает материалов"),
+    "storage": ("Storage", "Склад"),
+    "residents": ("Residents", "Жители"),
+    "resident": ("Resident ·", "Житель ·"),
+    "household": ("Household", "Домохозяйство"),
+    "resources": ("Resources", "Ресурсы"),
+}
+
+# The verdicts a receipt publishes in `details.verdicts` (registered as
+# `regressions._BOOLEAN_PROFILE_VERDICTS["settlement-map-qa"]`): one per GUI stage the run
+# walks, `localized_text` (every Russian title and text check, ru_ru runs only) and `all`.
+STAGES = ("bell_opens_hub", "dashboard", "map", "building_order", "shortage_icons",
+          "storage_transfer", "project_progress", "residents", "resources")
+VERDICTS = (*STAGES, "localized_text", "all")
+
+
+def _stage_checks(language: str) -> dict[str, tuple[list[str], list[str]]]:
+    """stage -> (required assertion patterns, extra patterns whose failure also fails the stage).
+
+    Patterns are regexes that must match a whole assertion name of the run's report. The names
+    are the labels `probe.wait`/`probe.check` record in `_script`, with the page text of the
+    run's language; `Gui.button` records `GUI button <label>` only when the button is missing."""
+    ru = language == "ru_ru"
+    page = lambda key: PAGES[key][ru]
+    menu = lambda key: re.escape(f"GUI menu {page(key)}")
+    dialog = lambda key: re.escape(f"GUI dialog {page(key)}")
+    button = lambda key: re.escape(f"GUI button {page(key)}")
+    order = re.escape(page("order"))
+    return {
+        "bell_opens_hub": (["GUI bell target", dialog("hub")], ["GUI bell target before click"]),
+        "dashboard": ([menu("settlement")], [button("settlement"), button("help")]),
+        "map": (["dashboard_map_GUI", "map_viewer_rendered", "map_territory_rendered", "map_cell_GUI",
+                 r"GUI menu \#\d+ "], [rf"GUI button {re.escape(page('house'))} \#\d+ L1"]),
+        "building_order": ([rf"GUI dialog {order} \#\d+", dialog("projects")],
+                           [rf"GUI button {order} \#\d+", button("status")]),
+        "shortage_icons": ([menu("construction"), "upgrade_native_shortage_icons", dialog("waiting"),
+                            "exact_shortage_rendered"], []),
+        "storage_transfer": ([menu("storage"), r"GUI shift slot/\d+ applied",
+                              "GUI_storage_transfer_conserves_one"], [button("storage")]),
+        "project_progress": ([menu("projects"), menu("construction"), "GUI_native_progress_advanced",
+                              "GUI_progress_matches_independent_placed_blocks"], []),
+        "residents": ([menu("residents"), menu("resident"), menu("household")], []),
+        "resources": ([menu("resources")], []),
+        # The Russian run's page titles and its rendered shortage text: the checks the stages above
+        # make with `label(en, ru)` text.
+        "localized_text": ([dialog("hub"), menu("settlement"), "dashboard_map_GUI", menu("projects"),
+                            menu("construction"), menu("storage"), menu("residents"), menu("resident"),
+                            menu("household"), menu("resources"), rf"GUI dialog {order} \#\d+",
+                            dialog("projects"), dialog("waiting"), "exact_shortage_rendered"], []),
+    }
+
+
+def verdicts_from_assertions(assertions: dict[str, Any], language: str) -> dict[str, bool | None]:
+    """Map a run's recorded assertions to the published verdicts.
+
+    A verdict is True when every assertion it requires was recorded True, and False when one of
+    its assertions was recorded False. Once the run has failed a check, a verdict that never got
+    its turn is False as well: the GUI path to it is broken, so it is not met. A run that
+    recorded no failed check (a lost client or a timeout outside the checks) leaves unreached
+    verdicts None, which the ledger reads as "not evidence" and never as red. `localized_text`
+    is None on an en_us run (it has no Russian text to judge); `all` is True when every other
+    verdict that applies is True."""
+    checks = _stage_checks(language)
+
+    def hits(pattern: str) -> list[str]:
+        return [name for name in assertions if re.fullmatch(pattern, name)]
+
+    verdicts: dict[str, bool | None] = {}
+    for stage, (required, extra) in checks.items():
+        if any(assertions[name] is False for pattern in (*required, *extra) for name in hits(pattern)):
+            verdicts[stage] = False
+        elif all(hits(pattern) and all(assertions[name] is True for name in hits(pattern))
+                 for pattern in required):
+            verdicts[stage] = True
+        else:
+            verdicts[stage] = None
+    if language != "ru_ru":
+        verdicts["localized_text"] = None
+    applicable = [stage for stage in checks if stage != "localized_text" or language == "ru_ru"]
+    failed = any(verdicts[stage] is False for stage in applicable)
+    for stage in applicable:
+        if verdicts[stage] is None and failed:
+            verdicts[stage] = False
+    verdicts["all"] = (True if all(verdicts[stage] is True for stage in applicable)
+                       else False if failed else None)
+    return {name: verdicts[name] for name in VERDICTS}
+
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
     parser = argparse.ArgumentParser(prog="settlement-map-qa")
@@ -230,11 +334,20 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
     args = parser.parse_args(extra)
     if ctx.client != "java" and (args.gui_scale != 3 or args.language != "en_us" or args.size != "1280x720"):
+        # The native client sends ClientInformation language "en_us" fixed (solaris-client
+        # src/protocol/network.rs `client_information`) and has no language or size option.
         raise ValueError("civil display variants require --client java")
     settings = {"gui_scale": args.gui_scale, "language": args.language,
                 "screen_size": list(map(int, args.size.split("x")))} if ctx.client == "java" else {}
     def script(probe, artifact, steps, client):
-        return _script(probe, artifact, steps, client, args)
+        # Published whether the walk passes or stops: a receipt that failed on a GUI check says
+        # which stage it was (`ledger._failing_verdict`). Before the script starts there are none.
+        try:
+            return _script(probe, artifact, steps, client, args)
+        finally:
+            published = verdicts_from_assertions(probe.report["assertions"], args.language)
+            probe.report["verdicts"] = published
+            ctx.client_evidence["verdicts"] = published
     return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",
                                          "client_settings": settings}, script=script)
 
