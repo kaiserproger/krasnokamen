@@ -355,11 +355,16 @@ VillagerData). It counts the matching received entities and fails `<name>_min` o
 `<name>_max`; the artifact keeps the same-thread `game_time` and every received row.
 The village scenes judge settlement behaviour with it, in game ticks on a frozen clock:
 `native-village-idle-stroll` (six residents dropped 40 blocks from the bell walk back
-within 32 blocks in 3000 ticks; two villagers in a 4-deep pond float up),
+within 32 blocks in 3000 ticks; two villagers dropped into a 4-deep pond float up within 100 ticks),
 `native-village-night-door` (a door the player left open reads shut after both
 residents sleep behind it at night), `native-village-late-job` (at day tick 10000 an
-unbound villager and a bound resident take a free lectern) and
-`native-village-distant-job` (a resident claims a certified workshop 72 blocks away).
+unbound villager and a bound resident take a free lectern),
+`native-village-distant-job` (a resident claims a certified workshop 72 blocks away),
+`native-village-deep-water` (residents dropped onto the floor of 2- and 5-deep ponds, with no bank cell
+beside them, leave the water and sleep at home), `native-village-mob-doors` (residents shut behind
+poplar, copper and waxed oxidized copper doors walk to the bell and the doors read shut afterwards;
+an iron door keeps its resident in) and `native-village-after-hours-job` (at Idle day tick 11000 a bound
+jobless resident walks 44 blocks to a new farmer workshop and takes the profession).
 Each runs on a sky platform with spawning and time frozen; none covers terrain routes.
 
 

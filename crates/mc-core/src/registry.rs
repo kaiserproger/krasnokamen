@@ -141,12 +141,12 @@ pub struct CoreRegistry {
     /// state id. Water covers every level; berry only `age != 0` states and
     /// campfire only `lit == true` states, so the tick needs no properties.
     pub(crate) hazard_flags: Vec<u8>,
-    /// Dense per-state wooden-door flags indexed by global state id, built
-    /// once at load so the A* hot path needs no registry lookup or 12-way
-    /// string match. The embedded registry lacks the `wooden_doors` tag, so
-    /// the table uses the exact 12-family match in both registry modes.
-    /// Shared (`Arc`) so world constructors clone without copying the table.
-    pub(crate) wooden_doors: Arc<[bool]>,
+    /// Dense per-state flags of `#minecraft:mob_interactable_doors` (wooden and
+    /// copper doors, every state) indexed by global state id, built once at
+    /// load from the tag so the A* hot path needs no registry lookup. Both
+    /// registry modes carry the tag. Shared (`Arc`) so world constructors clone
+    /// without copying the table.
+    pub(crate) mob_interactable_doors: Arc<[bool]>,
     /// Native world-fire state, attachment, support and ignition tables.
     pub(crate) fire_states: crate::fire::FireStates,
     /// Per-state blast resistance (`reports/block_explosion.json`); absent
@@ -409,7 +409,10 @@ impl CoreRegistry {
             .max()
             .unwrap_or(0);
         let mut hazard_flags = vec![0u8; state_count];
-        let mut wooden_doors = vec![false; state_count];
+        let mut mob_interactable_doors = vec![false; state_count];
+        let door_blocks = tags
+            .raw_ids("minecraft:block", "minecraft:mob_interactable_doors")
+            .unwrap_or(&[]);
         for state in blocks.states() {
             let name = state.block.id.as_str();
             let mut flags = 0u8;
@@ -443,25 +446,9 @@ impl CoreRegistry {
                 flags |= HAZARD_MAGMA;
             }
             hazard_flags[state.id.0 as usize] = flags;
-            // Embedded tags lack `wooden_doors`; the exact 12-family match
-            // covers both registry modes (iron/copper excluded).
-            wooden_doors[state.id.0 as usize] = matches!(
-                state.block.id.path(),
-                "oak_door"
-                    | "spruce_door"
-                    | "birch_door"
-                    | "jungle_door"
-                    | "acacia_door"
-                    | "dark_oak_door"
-                    | "pale_oak_door"
-                    | "crimson_door"
-                    | "warped_door"
-                    | "mangrove_door"
-                    | "bamboo_door"
-                    | "cherry_door"
-            );
+            mob_interactable_doors[state.id.0 as usize] = door_blocks.contains(&state.block.raw_id);
         }
-        let wooden_doors: Arc<[bool]> = wooden_doors.into();
+        let mob_interactable_doors: Arc<[bool]> = mob_interactable_doors.into();
         let mut collision_boxes = vec![Box::default(); state_count];
         let outline_shapes = mc_data::outline_shapes::vanilla_outline_shapes();
         let mut outlines = vec![crate::pov_ray::OutlineState::default(); state_count];
@@ -572,7 +559,7 @@ impl CoreRegistry {
             enchantments,
             farming,
             hazard_flags,
-            wooden_doors,
+            mob_interactable_doors,
             fire_states,
             plugin_rules: None,
             plugin_ore_profile: None,
@@ -922,50 +909,76 @@ mod tests {
     }
 
     #[test]
-    fn wooden_doors_table_matches_exact_families() {
-        let registry = CoreRegistry::load(None).expect("embedded registry");
-        let mut wooden = 0usize;
+    fn mob_interactable_doors_table_follows_the_26_3_tag() {
+        // The embedded tag set and the imported 26.3 data directory (which
+        // resolves `#wooden_doors` from the data pack) agree.
+        let vanilla = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+        for registry in [
+            CoreRegistry::load(None).expect("embedded registry"),
+            CoreRegistry::load(Some(&vanilla)).expect("imported registry"),
+        ] {
+            assert_mob_interactable_doors(&registry);
+        }
+    }
+
+    fn assert_mob_interactable_doors(registry: &CoreRegistry) {
+        // 26.3 #minecraft:mob_interactable_doors: #wooden_doors (poplar included)
+        // plus the eight copper doors; the iron door is not a member.
+        let wooden = [
+            "oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "pale_oak", "crimson",
+            "warped", "mangrove", "bamboo", "cherry", "poplar",
+        ]
+        .map(|wood| format!("minecraft:{wood}_door"));
+        let copper = ["", "exposed_", "weathered_", "oxidized_"]
+            .into_iter()
+            .flat_map(|age| {
+                ["", "waxed_"].map(move |wax| format!("minecraft:{wax}{age}copper_door"))
+            });
+        let members: Vec<String> = wooden.into_iter().chain(copper).collect();
+        assert_eq!(members.len(), 21);
         for state in registry.blocks.states() {
-            let expected = matches!(
-                state.block.id.path(),
-                "oak_door"
-                    | "spruce_door"
-                    | "birch_door"
-                    | "jungle_door"
-                    | "acacia_door"
-                    | "dark_oak_door"
-                    | "pale_oak_door"
-                    | "crimson_door"
-                    | "warped_door"
-                    | "mangrove_door"
-                    | "bamboo_door"
-                    | "cherry_door"
-            );
             assert_eq!(
-                registry.wooden_doors.get(state.id.0 as usize).copied(),
-                Some(expected),
-                "wooden_doors mismatch for {}",
+                registry
+                    .mob_interactable_doors
+                    .get(state.id.0 as usize)
+                    .copied(),
+                Some(members.iter().any(|name| name == state.block.id.as_str())),
+                "mob_interactable_doors mismatch for {}",
                 state.block.id
             );
-            wooden += usize::from(expected);
         }
-        assert!(wooden > 0, "expected wooden door states in the registry");
-        // Iron/copper doors (every oxidation/wax state) stay excluded, open or
-        // closed, lower or upper.
-        for name in ["minecraft:iron_door", "minecraft:copper_door"] {
+        // Every state of a member (open or closed, lower or upper half) is
+        // flagged; the iron door stays out.
+        for name in &members {
             let id = mc_data::Identifier::parse(name).expect("door id parses");
             let block = registry.blocks.block(&id).expect("door block present");
             assert!(!block.states.is_empty(), "{name} has states");
             for state_id in &block.states {
                 assert_eq!(
-                    registry.wooden_doors.get(state_id.0 as usize).copied(),
-                    Some(false),
-                    "{name} state {} must stay excluded",
+                    registry
+                        .mob_interactable_doors
+                        .get(state_id.0 as usize)
+                        .copied(),
+                    Some(true),
+                    "{name} state {} must be interactable",
                     state_id.0
                 );
             }
         }
-        assert_eq!(registry.wooden_doors.get(usize::MAX).copied(), None);
+        let iron = mc_data::Identifier::parse("minecraft:iron_door").expect("door id parses");
+        for state_id in &registry.blocks.block(&iron).expect("iron door").states {
+            assert_eq!(
+                registry
+                    .mob_interactable_doors
+                    .get(state_id.0 as usize)
+                    .copied(),
+                Some(false)
+            );
+        }
+        assert_eq!(
+            registry.mob_interactable_doors.get(usize::MAX).copied(),
+            None
+        );
     }
     #[test]
     fn selected_root_must_supply_catalogs_even_after_a_fixture_loaded() {

@@ -846,6 +846,9 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-village-night-door": "village_night_door_scene.json",
         "native-village-late-job": "village_late_job_scene.json",
         "native-village-distant-job": "village_distant_job_scene.json",
+        "native-village-deep-water": "village_deep_water_scene.json",
+        "native-village-mob-doors": "village_mob_doors_scene.json",
+        "native-village-after-hours-job": "village_after_hours_job_scene.json",
     }
     if ctx.scenario_id in named_fixtures:
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):

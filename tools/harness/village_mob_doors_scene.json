@@ -1,0 +1,466 @@
+{
+ "seed": 100,
+ "server_view_distance": 6,
+ "steps": [
+  {
+   "wait_play": true
+  },
+  {
+   "cmd": "gamemode creative"
+  },
+  {
+   "tp": [
+    1000.5,
+    205,
+    1000.5,
+    0,
+    0
+   ]
+  },
+  {
+   "wait_ticks": 100
+  },
+  {
+   "cmd": "gamerule advance_time false"
+  },
+  {
+   "cmd": "gamerule spawn_mobs false"
+  },
+  {
+   "cmd": "gamerule random_tick_speed 0"
+  },
+  {
+   "cmd": "time set 18000"
+  },
+  {
+   "cmd": "fill 936 199 936 1064 199 1064 minecraft:stone"
+  },
+  {
+   "cmd": "fill 936 198 936 1064 198 1064 minecraft:stone"
+  },
+  {
+   "cmd": "fill 936 200 936 1064 205 1064 minecraft:air"
+  },
+  {
+   "cmd": "fill 1000 199 1000 1004 199 1004 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 203 1000 1004 203 1004 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 200 1000 1004 202 1000 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1004 1004 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1000 1000 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1004 200 1000 1004 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "setblock 1004 200 1002 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 201 1002 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 200 1002 minecraft:poplar_door[facing=west,half=lower,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1004 201 1002 minecraft:poplar_door[facing=west,half=upper,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1001 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1001 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "fill 1000 199 1008 1004 199 1012 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 203 1008 1004 203 1012 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 200 1008 1004 202 1008 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1012 1004 202 1012 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1008 1000 202 1012 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1004 200 1008 1004 202 1012 minecraft:cobblestone"
+  },
+  {
+   "cmd": "setblock 1004 200 1010 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 201 1010 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 200 1010 minecraft:copper_door[facing=west,half=lower,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1004 201 1010 minecraft:copper_door[facing=west,half=upper,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1009 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1009 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "fill 1000 199 1016 1004 199 1020 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 203 1016 1004 203 1020 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 200 1016 1004 202 1016 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1020 1004 202 1020 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1016 1000 202 1020 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1004 200 1016 1004 202 1020 minecraft:cobblestone"
+  },
+  {
+   "cmd": "setblock 1004 200 1018 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 201 1018 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 200 1018 minecraft:waxed_oxidized_copper_door[facing=west,half=lower,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1004 201 1018 minecraft:waxed_oxidized_copper_door[facing=west,half=upper,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1017 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1017 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "fill 1000 199 1024 1004 199 1028 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 203 1024 1004 203 1028 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 200 1024 1004 202 1024 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1028 1004 202 1028 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1024 1000 202 1028 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1004 200 1024 1004 202 1028 minecraft:cobblestone"
+  },
+  {
+   "cmd": "setblock 1004 200 1026 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 201 1026 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 200 1026 minecraft:iron_door[facing=west,half=lower,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1004 201 1026 minecraft:iron_door[facing=west,half=upper,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1025 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1025 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1014 200 1014 minecraft:bell[attachment=floor,facing=north]"
+  },
+  {
+   "cmd": "summon minecraft:villager 1003.5 200 1003.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1003.5 200 1011.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1003.5 200 1019.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1003.5 200 1027.5"
+  },
+  {
+   "tp": [
+    1008.5,
+    200,
+    1014.5,
+    0,
+    0
+   ]
+  },
+  {
+   "cmd": "settlement create doorqa 30"
+  },
+  {
+   "cmd": "say vmdfence_1_created"
+  },
+  {
+   "wait_chat": "vmdfence_1_created"
+  },
+  {
+   "cmd": "settlement building certify house 1000 199 1000 1004 203 1004"
+  },
+  {
+   "cmd": "settlement building certify house 1000 199 1008 1004 203 1012"
+  },
+  {
+   "cmd": "settlement building certify house 1000 199 1016 1004 203 1020"
+  },
+  {
+   "cmd": "settlement building certify house 1000 199 1024 1004 203 1028"
+  },
+  {
+   "cmd": "say vmdfence_2_certified"
+  },
+  {
+   "wait_chat": "vmdfence_2_certified"
+  },
+  {
+   "tp": [
+    1012.5,
+    208,
+    1014.5,
+    90,
+    50
+   ]
+  },
+  {
+   "wait_ticks": 300
+  },
+  {
+   "assert_entities": {
+    "name": "doors_start_inside",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "box": [
+     1001,
+     199,
+     1000,
+     1003,
+     202,
+     1028
+    ],
+    "min": 4
+   }
+  },
+  {
+   "cmd": "time set 9500"
+  },
+  {
+   "wait_ticks": 500
+  },
+  {
+   "assert_entities": {
+    "name": "doors_three_residents_out_at_the_bell",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "box": [
+     1006,
+     199,
+     1006,
+     1022,
+     202,
+     1022
+    ],
+    "min": 3,
+    "max": 3
+   }
+  },
+  {
+   "assert_entities": {
+    "name": "doors_iron_resident_shut_in",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "box": [
+     1001,
+     199,
+     1024,
+     1003,
+     202,
+     1028
+    ],
+    "min": 1
+   }
+  },
+  {
+   "cmd": "execute if block 1004 200 1002 minecraft:poplar_door[open=false] run say vmd_poplar_shut_after_passing"
+  },
+  {
+   "cmd": "execute if block 1004 200 1002 minecraft:poplar_door[open=true] run say vmd_poplar_left_open"
+  },
+  {
+   "cmd": "execute if block 1004 200 1010 minecraft:copper_door[open=false] run say vmd_copper_shut_after_passing"
+  },
+  {
+   "cmd": "execute if block 1004 200 1010 minecraft:copper_door[open=true] run say vmd_copper_left_open"
+  },
+  {
+   "cmd": "execute if block 1004 200 1018 minecraft:waxed_oxidized_copper_door[open=false] run say vmd_oxcopper_shut_after_passing"
+  },
+  {
+   "cmd": "execute if block 1004 200 1018 minecraft:waxed_oxidized_copper_door[open=true] run say vmd_oxcopper_left_open"
+  },
+  {
+   "cmd": "say vmdfence_3_meeting_checked"
+  },
+  {
+   "wait_chat": "vmdfence_3_meeting_checked"
+  },
+  {
+   "shot": "mob-doors-meeting"
+  },
+  {
+   "assert_chat": {
+    "name": "doors_closed_after_the_meeting",
+    "contains": [
+     "vmd_poplar_shut_after_passing",
+     "vmd_copper_shut_after_passing",
+     "vmd_oxcopper_shut_after_passing"
+    ],
+    "excludes": [
+     "vmd_poplar_left_open",
+     "vmd_copper_left_open",
+     "vmd_oxcopper_left_open"
+    ]
+   }
+  },
+  {
+   "cmd": "time set 18000"
+  },
+  {
+   "wait_ticks": 900
+  },
+  {
+   "assert_entities": {
+    "name": "doors_three_asleep_inside_a",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "box": [
+     1001,
+     199,
+     1000,
+     1003,
+     202,
+     1004
+    ],
+    "min": 1,
+    "max_height": 0.5
+   }
+  },
+  {
+   "assert_entities": {
+    "name": "doors_three_asleep_inside_b",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "box": [
+     1001,
+     199,
+     1008,
+     1003,
+     202,
+     1012
+    ],
+    "min": 1,
+    "max_height": 0.5
+   }
+  },
+  {
+   "assert_entities": {
+    "name": "doors_three_asleep_inside_c",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "box": [
+     1001,
+     199,
+     1016,
+     1003,
+     202,
+     1020
+    ],
+    "min": 1,
+    "max_height": 0.5
+   }
+  },
+  {
+   "cmd": "execute if block 1004 200 1002 minecraft:poplar_door[open=false] run say vmd_poplar_shut_at_night"
+  },
+  {
+   "cmd": "execute if block 1004 200 1002 minecraft:poplar_door[open=true] run say vmd_poplar_open_at_night"
+  },
+  {
+   "cmd": "execute if block 1004 200 1010 minecraft:copper_door[open=false] run say vmd_copper_shut_at_night"
+  },
+  {
+   "cmd": "execute if block 1004 200 1010 minecraft:copper_door[open=true] run say vmd_copper_open_at_night"
+  },
+  {
+   "cmd": "execute if block 1004 200 1018 minecraft:waxed_oxidized_copper_door[open=false] run say vmd_oxcopper_shut_at_night"
+  },
+  {
+   "cmd": "execute if block 1004 200 1018 minecraft:waxed_oxidized_copper_door[open=true] run say vmd_oxcopper_open_at_night"
+  },
+  {
+   "cmd": "say vmdfence_4_night_checked"
+  },
+  {
+   "wait_chat": "vmdfence_4_night_checked"
+  },
+  {
+   "shot": "mob-doors-night"
+  },
+  {
+   "assert_chat": {
+    "name": "doors_closed_at_night",
+    "contains": [
+     "vmd_poplar_shut_at_night",
+     "vmd_copper_shut_at_night",
+     "vmd_oxcopper_shut_at_night"
+    ],
+    "excludes": [
+     "vmd_poplar_open_at_night",
+     "vmd_copper_open_at_night",
+     "vmd_oxcopper_open_at_night"
+    ]
+   }
+  }
+ ]
+}

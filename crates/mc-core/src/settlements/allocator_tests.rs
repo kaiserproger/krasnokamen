@@ -120,10 +120,56 @@ fn jobless_villager_claims_a_free_workstation_at_any_hour() {
         for _ in 0..60 {
             step(&mut state);
         }
+        let v = state.entities.row(slot).villager.as_ref().unwrap();
         assert_eq!(
-            state.entities.row(slot).villager.as_ref().unwrap().job_site,
+            v.job_site,
             Some(BlockPos { x: 4, y: 201, z: 4 }),
             "day time {time}"
+        );
+        // The workstation is within reach: AssignProfessionFromJobSite
+        // employs the claimer at once, whatever the hour.
+        assert_eq!(v.data.profession, Profession::Farmer, "day time {time}");
+    }
+}
+
+/// VILLAGER-AFTER-HOURS-CLAIM-NOT-EMPLOYED: a workstation 12 blocks away,
+/// claimed after work hours. Vanilla GoToPotentialJobSite runs in the Idle
+/// package too, so the claimer walks there and is employed instead of
+/// strolling off jobless until the next work period.
+#[test]
+fn jobless_villager_walks_to_an_after_hours_claim_and_is_employed() {
+    // Idle: 10..2000 and 11000..12000.
+    for time in [1_000, 11_000, 11_500] {
+        let mut state = test_state();
+        state.day_time = time;
+        let composter = block(&state, "minecraft:composter", &[]);
+        state.world.set_block(14, 201, 4, composter);
+        state.world.fold_overlay();
+        let slot = villager(&mut state, [2.5, 201.0, 2.5]);
+        let mut employed_at = None;
+        for tick in 0..400 {
+            step(&mut state);
+            let v = state.entities.row(slot).villager.as_ref().unwrap();
+            if v.data.profession == Profession::Farmer {
+                employed_at = Some(tick);
+                break;
+            }
+        }
+        let v = state.entities.row(slot).villager.as_ref().unwrap();
+        assert_eq!(
+            v.job_site,
+            Some(BlockPos {
+                x: 14,
+                y: 201,
+                z: 4
+            }),
+            "day time {time}: the claim"
+        );
+        assert!(
+            employed_at.is_some(),
+            "day time {time}: claimed but still {:?} at {:?}",
+            v.data.profession,
+            state.entities.pos(slot)
         );
     }
 }
