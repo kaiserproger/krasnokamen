@@ -1,0 +1,41 @@
+{
+  "id": "ISSUE-1-06",
+  "verdict": "promoted",
+  "fix_commit": "patch:22765c01364fe7d4d36b37141dd85e13c087b6b6999475d9cad22aa518c10519",
+  "fix_commit_full": "patch:22765c01364fe7d4d36b37141dd85e13c087b6b6999475d9cad22aa518c10519",
+  "promoted_at": "2026-11-12T16:21:33+00:00",
+  "tree_head": "9350890b496c8e5227abd266a234390e695a83b3",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "22765c01364fe7d4d36b37141dd85e13c087b6b6999475d9cad22aa518c10519",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/ui_menus.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "harness:settlement-map-qa:production_order": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run settlement-map-qa --client native --windowed --timeout-seconds 3600 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/SettlementProductionStep/.analysis/validation/20261112T160722-ledger-promote-8ygrhrl2/regressions-client-1.log"
+    }
+  },
+  "restored": {
+    "harness:settlement-map-qa:production_order": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T161611-settlement-map-qa-cf_ie9jg/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/SettlementProductionStep/.analysis/validation/20261112T160155-settlement-map-qa-bvv3lvk3/result.json",
+    "tree_head": "9350890b496c8e5227abd266a234390e695a83b3",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "2adff908ca27b9d31bf1d7af1316d30d39af056b7fd0e2974750533098ce8630",
+    "covers": [
+      "harness:settlement-map-qa:production_order"
+    ],
+    "profile": "settlement-map-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/SettlementProductionStep/.analysis/validation/20261112T160722-ledger-promote-8ygrhrl2"
+}
