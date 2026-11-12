@@ -805,6 +805,12 @@ def _destroyed_chest_race(steps: ProbeSteps, origin: tuple[int, int, int]) -> No
     destroyed_chest_race(steps, origin)
 
 
+def _command_rows(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_command_rows import run
+
+    run(steps, origin)
+
+
 def _duplicate_login(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_duplicate_login import run
 
@@ -941,6 +947,7 @@ RUNNERS = {
     "native-v2-destroyed-chest": _destroyed_chest,
     "native-v2-destroyed-chest-race": _destroyed_chest_race,
     "native-v2-duplicate-login": _duplicate_login,
+    "native-v2-command-rows": _command_rows,
     "native-v2-corrupt-block-entities": _corrupt_block_entities,
     "native-v2-corrupt-chunk-near-camera": _corrupt_chunk_near_camera,
     "native-v2-craft-drag": _craft_drag,
