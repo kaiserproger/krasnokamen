@@ -97,3 +97,36 @@ Dry run by default. In pooled slots `<work>/targets/slot-<l>` (or the slots name
 For Main at checkpoints; no daemon. `main-guard --baseline` writes `<work>/receipts/.main-guard-baseline.json`: every modified or untracked non-ignored file under `crates/`, `sdk/` and `tools/harness/backends/` of `<work>/solaris` with a content hash. A plain `main-guard` compares against it and prints `NEW <path>` (dirty now, not in the baseline), `CHANGED <path>` (content differs from the baseline) and `GONE <path>` (dirty then, clean now: committed or reverted); exit status 1 when anything is NEW or CHANGED. Read-only: git runs with optional locks off.
 
 Tests: `python3 tools/dev/test_slot_gc.py`, `python3 tools/dev/test_slot_select.py`, `python3 tools/dev/test_registry.py`, `python3 tools/dev/test_scene_slot.py`, `python3 tools/dev/test_build_tokens.py` and `python3 tools/dev/test_task_claim.py`.
+
+## Rebrand codemod (temporary)
+
+<!-- rebrand:keep-begin -->
+`rebrand.py <repo-root> [--check]` applies the Solaris -> Krasnokamen name contract (owner decision
+2026-11-12) to the tracked text files of one repository and renames the files and directories whose
+names contain the old name. It is deterministic and idempotent, reads only `git ls-files` and its own
+rules, and does not commit or run rustfmt.
+
+- Contract: `Solaris`/`SOLARIS`/`solaris` become `Krasnokamen`/`KRASNOKAMEN`/`krasnokamen` in every
+  identifier, namespace, channel, env var and path segment; the binary `solaris-v2` becomes
+  `krasnokamen`; the WIT package `solaris:plugin@0.8.0` becomes `krasnokamen:plugin@0.9.0`; the
+  fixed offline usernames `Solaris{Primary,Secondary,Client,Mcp,Loader}` become `Krasno...` (the
+  16-character limit).
+- Kept as they are (`PROTECTED` in the script): the work root `solaris-work` and the checkout
+  directories used as host paths, `/tmp` and `/var/tmp` names, systemd unit and slice names, the test
+  VPS paths and users, brand assets. History is not rewritten: past release notes, `docs/evidence/`,
+  `docs/archive/`, promoted ledger rows, ledger `title`/`source` lines, ADR `**Status:**` lines and
+  `rebrand:keep-begin/keep-end` blocks. The root README and brand assets belong to the brand slice.
+- `--check` lists every remaining occurrence by class (host path or protected literal, history,
+  brand slice, binary file). Any `UNEXPECTED` line is a miss; the exit code is 1 then.
+- After a run, format Rust (`cargo fmt --all`; `cargo fmt --all` in `sdk/rust` too): longer names
+  move rustfmt line breaks. Not covered by the script and fixed by hand in separate commits: Cargo
+  package names and lock files, the plugin API version constant, binary fixtures (client bundle zips
+  embed the artifact index name), regenerated docs.
+
+Branch migration (a pre-rename branch onto the renamed main): merge the last pre-rename `main` into
+the branch, run `tools/dev/rebrand.py <worktree>` there, fix Rust formatting, commit the result as
+one commit, then merge the renamed `main`. Conflicts left by the merge are about renamed lines only:
+take the branch side and run the script again.
+
+The script is deleted once the video branches are merged after 2026-11-14.
+<!-- rebrand:keep-end -->
