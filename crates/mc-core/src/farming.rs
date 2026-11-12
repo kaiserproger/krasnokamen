@@ -174,6 +174,28 @@ impl FarmSections {
         self.active_revision = Some(revision);
     }
 
+    /// Eligibility of every section of `chunk`, bit per section index.
+    fn compute(farming: &FarmStates, chunk: &Chunk) -> u32 {
+        debug_assert_eq!(chunk.sections.len(), chunk.geometry().section_count());
+        chunk
+            .sections
+            .iter()
+            .enumerate()
+            .fold(0, |mask, (index, section)| {
+                mask | (u32::from(farming.section_ticks(section)) << index)
+            })
+    }
+
+    /// The cached eligibility of `pos` when it was computed at `revision`.
+    fn cached(&self, pos: ChunkPos, revision: u64) -> Option<u32> {
+        self.chunks
+            .get(&pos)
+            .filter(|(cached, _)| *cached == revision)
+            .map(|(_, mask)| *mask)
+    }
+
+    /// Serial reference lookup used by the cache and equivalence tests.
+    #[cfg(test)]
     fn mask(&mut self, farming: &FarmStates, chunk: &Chunk, revision: u64) -> u32 {
         let pos = ChunkPos {
             x: chunk.pos.x,
@@ -181,15 +203,7 @@ impl FarmSections {
         };
         let cached = self.chunks.entry(pos).or_insert((u64::MAX, 0));
         if cached.0 != revision {
-            debug_assert_eq!(chunk.sections.len(), chunk.geometry().section_count());
-            let mask = chunk
-                .sections
-                .iter()
-                .enumerate()
-                .fold(0, |mask, (index, section)| {
-                    mask | (u32::from(farming.section_ticks(section)) << index)
-                });
-            *cached = (revision, mask);
+            *cached = (revision, Self::compute(farming, chunk));
         }
         cached.1
     }
@@ -675,7 +689,7 @@ pub fn run(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>, spawned: &m
     }
 }
 
-/// Below this many ticking chunks the rayon hand-off costs more than the loop.
+/// Below this many active chunks the rayon hand-off costs more than the loop.
 /// Serial sampling costs ~0.5 us per ordinary chunk (~6 us when every section
 /// ticks; 625 such chunks: 3.7 ms serial, 1.2 ms on the pool). A release
 /// real-client run with 81 chunks spent ~42 ms waiting for woken pool workers
@@ -691,11 +705,21 @@ struct Hit {
     roll: u64,
 }
 
+/// One chunk's sampled hits and, when its eligibility cache entry was stale,
+/// the recomputed `(chunk, revision, mask)`.
+type Visit = (Vec<Hit>, Option<(ChunkPos, u64, u32)>);
+
 /// `speed` random cells of every section that can tick, and what each does.
 ///
-/// Drawing coordinates and classifying the sampled block are pure reads of the
-/// world, so they run per chunk on the pool; `tick_cell` then runs serially over
-/// the hits in the original chunk/section/sample order.
+/// Bottleneck: the serial pass that looked up every active chunk, its
+/// revision and its cached eligibility (three hash probes per chunk, about
+/// 5,400 chunks on native-100) before the parallel draw. Boundary: looking up
+/// the chunk and its eligibility, drawing coordinates and classifying the
+/// sampled block are pure reads of the world, so one pass per chunk does them
+/// on the pool; stale eligibility entries are computed there and written back
+/// serially, and `tick_cell` then runs serially over the hits in the original
+/// chunk/section/sample order. Effect: the per-chunk probes leave the tick
+/// thread. Removal: build the `(chunk, mask)` work list serially again.
 fn sample(state: &mut TickState, speed: u32, min_parallel: usize) -> Vec<Change> {
     let mut changes = Vec::new();
     if speed == 0 {
@@ -704,19 +728,7 @@ fn sample(state: &mut TickState, speed: u32, min_parallel: usize) -> Vec<Change>
     state.farm_sections.refresh_active(&state.world);
     let farming = &state.registry.farming;
     let world = &state.world;
-    let mut work: Vec<(&Chunk, u32)> = Vec::with_capacity(state.farm_sections.active_chunks.len());
-    for active in 0..state.farm_sections.active_chunks.len() {
-        let pos = state.farm_sections.active_chunks[active];
-        let chunk = world.chunk(pos).expect("cached active resident chunk");
-        let ticking = state.farm_sections.mask(
-            farming,
-            chunk,
-            world.chunk_revision(chunk.pos.x, chunk.pos.z),
-        );
-        if ticking != 0 {
-            work.push((chunk, ticking));
-        }
-    }
+    let sections = &state.farm_sections;
     // Only chunks with pending overlay edits need the overlay-aware read;
     // elsewhere it returns exactly the committed section cell.
     let overlay_chunks: FxHashSet<(i32, i32)> = world
@@ -724,20 +736,37 @@ fn sample(state: &mut TickState, speed: u32, min_parallel: usize) -> Vec<Change>
         .map(|((x, _, z), _)| (x.div_euclid(16), z.div_euclid(16)))
         .collect();
     let (seed, tick) = (world.seed() as u64, state.tick);
-    let hits_of = |&(chunk, ticking): &(&Chunk, u32)| {
+    let visit = |pos: &ChunkPos| -> Visit {
+        let chunk = world.chunk(*pos).expect("cached active resident chunk");
+        let revision = world.chunk_revision(pos.x, pos.z);
+        let (ticking, fresh) = match sections.cached(*pos, revision) {
+            Some(mask) => (mask, None),
+            None => {
+                let mask = FarmSections::compute(farming, chunk);
+                (mask, Some((*pos, revision, mask)))
+            }
+        };
         let mut hits = Vec::new();
-        let overlay = overlay_chunks.contains(&(chunk.pos.x, chunk.pos.z));
-        sample_chunk(
-            world, farming, overlay, seed, tick, speed, chunk, ticking, &mut hits,
-        );
-        hits
+        if ticking != 0 {
+            let overlay = overlay_chunks.contains(&(pos.x, pos.z));
+            sample_chunk(
+                world, farming, overlay, seed, tick, speed, chunk, ticking, &mut hits,
+            );
+        }
+        (hits, fresh)
     };
-    let hits: Vec<Vec<Hit>> = if work.len() >= min_parallel {
-        work.par_iter().with_min_len(16).map(hits_of).collect()
+    let active = &sections.active_chunks;
+    let visited: Vec<Visit> = if active.len() >= min_parallel {
+        active.par_iter().with_min_len(16).map(visit).collect()
     } else {
-        work.iter().map(hits_of).collect()
+        active.iter().map(visit).collect()
     };
-    for Hit { at, id, kind, roll } in hits.into_iter().flatten() {
+    for (_, fresh) in &visited {
+        if let Some((pos, revision, mask)) = fresh {
+            state.farm_sections.chunks.insert(*pos, (*revision, *mask));
+        }
+    }
+    for Hit { at, id, kind, roll } in visited.into_iter().flat_map(|(hits, _)| hits) {
         tick_cell(state, at, id, kind, &mut Roll::new(roll), &mut changes);
     }
     changes
