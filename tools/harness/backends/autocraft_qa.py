@@ -19,8 +19,9 @@ explicitly: the box is unchecked by default, so the gate clicks it):
 The real villager then walks to storage and to the table. Owner readbacks
 (`/settlement production autocraft job|carry`) prove ui-1-1 makes its 3 crafts
 first. The server restarts between the steps, and the chain resumes without
-duplicate receipts. The carry ends with exactly 8 bread and 3 wheat, and the
-chest holds no hay. Re-ordering id ui-1 by command is refused.
+duplicate receipts. Crafting counts before delivery, so the gate waits for the order's
+output delivery: the carry then holds only the 3 leftover wheat, the chest holds exactly
+8 bread and no hay. Re-ordering id ui-1 by command is refused.
 
 Then, by owner command with one more stored hay block, order qa-cancel
 (bread x4) plans "open_hay x1 -> bread x4". Once its dependency qa-cancel-1
@@ -119,6 +120,7 @@ def job_state(line: str) -> dict[str, Any]:
     return {"id": job["id"], "recipe": job["recipe"], "count": job["count"], "done": job["done"],
             "order": job.get("order"), "after": job.get("after"),
             "cancelled": job["cancelled"], "paused": job.get("paused"),
+            "delivery_complete": job.get("delivery_complete"),
             "receipts": len(job.get("receipts", []))}
 
 
@@ -251,6 +253,18 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
                 raise RuntimeError(f"autocraft-qa WEDGED: {name} stuck at {state}")
             # Dialogs are closed here, so the client clock runs: wait on game
             # ticks, not wall-clock sleeps.
+            probe.call("minecraft_wait_ticks", {"ticks": 40})
+
+    def wait_delivered(name: str, limit: float) -> dict[str, Any]:
+        """Crafting is counted before delivery (production.md): the last portion's output is still owed
+        until the worker walks to storage and the transfer commits."""
+        deadline = time.monotonic() + limit
+        while True:
+            state = job(name)
+            if state["delivery_complete"] or state["cancelled"]:
+                return state
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"autocraft-qa WEDGED: {name} output not delivered, {state}")
             probe.call("minecraft_wait_ticks", {"ticks": 40})
 
     rooted = _bwait(probe, lambda s: isinstance((s.get("player") or {}).get("x"), float),
@@ -427,15 +441,20 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     product = wait_done("ui-1", COUNT, 600.0)
     detail["product_done"] = product
     probe.check("product_crafted_exactly", product["done"] == COUNT and product["receipts"] == COUNT)
+    delivered = wait_delivered("ui-1", 300.0)
+    detail["product_delivered"] = delivered
+    probe.check("product_output_delivered", delivered["delivery_complete"] is True)
     carried = carry_counts(_readback(probe, f"settlement production {SETTLEMENT} carry {worker}",
                                      '"worker"'))
     detail["carry_after"] = carried
-    probe.check("carry_holds_exact_output",
-                carried.get("minecraft:bread") == COUNT
-                and carried.get("minecraft:wheat") == HAY * 9 - COUNT * 3
+    # Each portion's bread went to storage; the carry keeps only the unconsumed wheat.
+    probe.check("carry_holds_leftover_wheat_only",
+                carried.get("minecraft:wheat") == HAY * 9 - COUNT * 3
+                and "minecraft:bread" not in carried
                 and "minecraft:hay_block" not in carried)
     after = _chest_totals(_open_chest(probe, chest))
     detail["chest_after"] = after
+    probe.check("storage_holds_exact_output", after.get("minecraft:bread") == COUNT)
     probe.check("storage_hay_consumed_once", "minecraft:hay_block" not in after)
 
     again = _readback(probe, f"settlement production {SETTLEMENT} order ui-1 {worker} "
