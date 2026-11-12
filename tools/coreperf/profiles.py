@@ -162,8 +162,10 @@ def items_layout(items: int) -> dict[str, Any]:
     `ground` and `water` hold two items per block cell of mutually non-mergeable kinds; the two pile
     classes stack 16 items in one position per pile, either one kind in full stacks (stackable but
     saturated, so the merge scan finds a same-kind candidate and moves nothing) or 16 distinct kinds
-    (never stackable). Piles sit two blocks apart. Nothing in the layout merges, so the resident
-    item count is stationary and the per-item cost is read from a constant population.
+    (never stackable). Piles sit two blocks apart. Nothing in the layout merges, and the observers
+    cannot reach it: the deck over the whole platform (see `items_fixture`) keeps them eight blocks
+    above the items, so the resident item count is stationary and the per-item cost is read from a
+    constant population.
     """
     if not 0 <= items <= ITEMS_MAX:
         raise ValueError(f"items must be within 0..{ITEMS_MAX}")
@@ -190,12 +192,21 @@ def items_layout(items: int) -> dict[str, Any]:
 def items_fixture(items: int) -> dict[str, Any]:
     """`items` item entities on a sky platform, summoned by public commands in the last region.
 
-    Region `platform` writes the rules, a stone floor at y=199 (clearing y=200..204 above it), the
-    walled and roofed observer pad at the origin and the pool; region `items` clears the loot the
-    rules' kills dropped, then only summons, so every
+    Region `platform` writes the rules, a stone floor at y=199 (clearing y=200..204 above it), a stone
+    deck at y=207 over the whole platform, the walled and roofed observer pad at the origin and the
+    pool; region `items` clears the loot the rules' kills dropped, then only summons, so every
     item ages from its summon to the end of preparation alone (an item despawns at age 6000 and
     ages only while a player keeps its chunk active). Positions are deterministic functions of the
     index: no randomness, no gameplay.
+
+    The deck is what keeps the census true. A bot lands on the surface with the longest straight
+    runway nearest its anchor, whatever the pad walls are; without a deck that is the open platform,
+    where the 10 bots walked over the items and picked them up. Window d, N10k, per item identity
+    between the prepared and the final snapshot: 1,853 of 10,000 items gone (1,605 ground, 194 mixed
+    pile, 54 full pile, none of the 3,000 water items); the 6,085 item count the platform lost is
+    exactly what the player inventories gained beyond their starting 64 dirt each, and the merge scan
+    reported 60 merges in all. On the deck the bots walk at
+    y=208, outside the item pickup box.
     """
     layout = items_layout(items)
     floor = ITEMS_FLOOR_Y
@@ -210,6 +221,7 @@ def items_fixture(items: int) -> dict[str, Any]:
         for z0, z1 in ((-90, -1), (0, 90)):
             platform.append(f"fill {x0} {floor} {z0} {x1} {floor} {z1} minecraft:stone")
             platform += [f"fill {x0} {y} {z0} {x1} {y} {z1} minecraft:air" for y in range(floor + 1, floor + 6)]
+            platform.append(f"fill {x0} {floor + 8} {z0} {x1} {floor + 8} {z1} minecraft:stone")
     # Observer pad: 18x18 footprint, two-block walls, 14x14x7 interior, roof at floor+8.
     platform += [f"fill -9 {floor + 1} -9 8 {floor + 8} 8 minecraft:stone",
                  f"fill -7 {floor + 1} -7 6 {floor + 7} 6 minecraft:air"]

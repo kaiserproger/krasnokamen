@@ -79,6 +79,19 @@ class ProfilesTests(unittest.TestCase):
                 if xb - xa < .75 and xb != xa:
                     self.assertNotEqual(ka, kb)
 
+    def test_observer_deck_covers_the_whole_platform_above_the_items(self):
+        # The bots land on the highest surface with the longest runway: a deck over every quadrant keeps
+        # them above the item pickup box (window d: without it they vacuumed 18.5% of N10k).
+        recipe = profiles.items_fixture(10000)
+        floor = profiles.ITEMS_FLOOR_Y
+        deck = [c.split() for c in recipe["regions"][0]["commands"]
+                if c.startswith("fill ") and c.split()[2] == str(floor + 8) and c.split()[5] == str(floor + 8)
+                and c.endswith("minecraft:stone")]
+        self.assertEqual(sorted((int(c[1]), int(c[4]), int(c[3]), int(c[6])) for c in deck),
+                         [(-90, -1, -90, -1), (-90, -1, 0, 90), (0, 90, -90, -1), (0, 90, 0, 90)])
+        for command in recipe["regions"][1]["commands"][1:]:
+            self.assertLess(float(command.split()[3]), floor + 8 - 1)
+
     def test_pile_classes_are_full_stacks_and_distinct_kinds(self):
         recipe = profiles.items_fixture(1000)
         spec = recipe["items"]["layout"]

@@ -277,9 +277,10 @@ interval of 20 ticks in the planner); almost all of the roughly 44,000 packets p
 
 `python3 -m tools.coreperf.profiles items-heavy --items N [--items-bots 10] "${COMMON[@]}"` builds,
 with public commands only (no gameplay, no randomness), a stone platform at y=199 (no terrain, caves or
-natural mobs), a walled and roofed 14x14 observer pad at the origin where `--items-bots` (default 10)
-creative bots walk at 20 slots/s without edits or chat, and N item entities in four classes (30 %,
-30 %, 20 %, 20 %; the ground class takes the rounding remainder), seed 42, view/simulation distance 8:
+natural mobs) under a stone deck at y=207, a walled and roofed 14x14 observer pad at the origin where
+`--items-bots` (default 10) creative bots land and walk at 20 slots/s without edits or chat, and N item
+entities in four classes (30 %, 30 %, 20 %, 20 %; the ground class takes the rounding remainder),
+seed 42, view/simulation distance 8:
 
 | Class | Layout | What it exercises |
 |---|---|---|
@@ -288,14 +289,19 @@ creative bots walk at 20 slots/s without edits or chat, and N item entities in f
 | `pile_full` | 16 full stacks (count 64) of one kind in one position, piles two blocks apart | a same-kind candidate that cannot receive anything |
 | `pile_mixed` | 16 distinct kinds, count 1, in one position | candidates of the wrong kind |
 
-Nothing merges, so the platform population is stationary (checked: the saved snapshot must hold
-exactly N items above the floor before and after the run; items elsewhere, natural drops such as the
-kelp wash-out items of the seed-42 ocean east of the origin, are counted separately in the receipt and
-enter the per-tick census). Random ticks are off (`randomTickSpeed 0`) so that growth, and the
-wash-out it triggers, is not part of this benchmark. The ladder is N = 0 (platform, pad and bots only), 10,000 and 30,000;
-the maximum is 36,000 (the items must stay inside the 6-chunk item tracking range of every bot).
-The fixture cache key contains N. All summons run in the last preparation region so items age only from
-their summon to the end of preparation (an item ages 6,000 ticks active before it despawns).
+Nothing merges and nothing is picked up, so the platform population is stationary (checked: the saved
+snapshot must hold exactly N items above the floor before and after the run; items elsewhere, natural
+drops such as the kelp wash-out items of the seed-42 ocean east of the origin, are counted separately
+in the receipt and enter the per-tick census). The deck is what keeps the bots off the items: a bot
+lands on the highest surface with the longest straight runway nearest its anchor, so with no deck the
+10 bots landed on the open platform, walked over the items and moved 1,853 of 10,000 into their
+inventories during the first window-d legs (the failed census; the water class lost nothing and the
+merge scan counted 60 merges). On the deck they walk at y=208, outside the pickup box. Random ticks
+are off (`randomTickSpeed 0`) so that growth, and the wash-out it triggers, is not part of this
+benchmark. The ladder is N = 0 (platform, pad and bots only), 10,000 and 30,000; the maximum is 36,000
+(the items must stay inside the 6-chunk item tracking range of every bot). The fixture cache key
+contains N. All summons run in the last preparation region so items age only from their summon to the
+end of preparation (an item ages 6,000 ticks active before it despawns).
 
 ### Per-item attribution (`MC_CORE_PHASE_LOG=1`, no work when unset)
 
