@@ -220,6 +220,13 @@ impl Drop for CrashChild {
 }
 
 fn kill_at(directory: &std::path::Path, boundary: &str) {
+    // The child must take the store's lease: no parent owner is still open.
+    // (A sibling spawn forked earlier may still hold the descriptor until it
+    // execs; closing the store releases the lock for that copy too.)
+    assert!(
+        !crate::native_checkpoint::tests::store_open(&config(directory)),
+        "the parent still holds the native store at {boundary}"
+    );
     let mut child = CrashChild(
         std::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact", CHILD, "--ignored", "--nocapture"])

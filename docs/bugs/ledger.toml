@@ -4910,3 +4910,25 @@ status = "open"
 source = "Breaker finding F2 (VillageBreak2, ISSUE-1-10 break-it pass, agent-run): at time 10000 (awake, after work hours) an unbound jobless villager 51 blocks outside any settlement gets a lectern two blocks away, and a bound jobless resident's settlement certifies a librarian workshop; both stay jobless for 1200 ticks, and after time set 2500 both are librarians within 200 ticks, so the stations were valid and reachable (native client d5f25569, server pin 4bfacdf6391f-3f0eb5d2 = main 71d1c127; scene-shot artifacts 20261112T013249-scene-shot-qfcl2h4c, 20261112T013426-scene-shot-yc4y5ut8, 20261112T013520-scene-shot-dh5v6muo: unbound 3/3, bound 2/2). Vanilla 26.3 VillagerGoalPackages.getCorePackage holds AcquirePoi for POTENTIAL_JOB_SITE and AssignProfessionFromJobSite, which run whatever the schedule activity is, so an awake villager takes a free workstation at any time of day (the usual lectern reroll). crates/mc-core/src/settlements/allocator.rs acquire_pois searches jobs only while day_time is in 2000..9000, for bound and unbound villagers; docs/settlements/jobs.md documents that window: owner decision whether unbound villagers should follow vanilla."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "NATIVE-STORE-LEASE-HELD-BY-FORKED-CHILD"
+title = "Closing a native store leaves its lock held while any process forked during its lifetime has not yet exec'd, so an immediate reopen refuses with \"Database already open\""
+area = "gameplay"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "CrashTestLock 2026-11-12 (receipts/CrashTestLock/REPORT.md). Main's full `cargo test --no-fail-fast -p mc-core --lib` on 0d777899 under load (receipts/MainMerges/0d777899-core-edge-lib.log:800, 4089): core::persistence_crash_tests::sigkill_during_wal_write_ignores_only_unpublished_tail, second case (wal_before_fsync): the re-executed crash child failed `recover_dimension_state` with Storage(\"native database: Database already open. Cannot acquire lock.\") on a directory that only the parent's baseline() had opened and closed. Cause: mc-world native.rs NativeFile::acquire takes the lease with File::try_lock (flock), whose lock belongs to the open file description. Every Command::spawn elsewhere in the process copies that descriptor into the forked child until its exec closes it (CLOEXEC), so dropping the store did not release the lock while a sibling spawn was between fork and exec. No parent thread holds the store after baseline() (ChunkLoader joins its workers; the baseline path starts no other thread; kill_at now asserts it). Fix: NativeFile unlocks on drop, which releases the lock for every copy of the description. Same exposure, not fixed here: redb's own read-only open (shared lock) in NativeReadOnlyStore."
+regression = ["cargo:mc-world:native::tests::closed_store_releases_its_lease_while_a_forked_child_holds_the_descriptor"]
+failing_first = "reported"
+fix_commit = "4d4e3ce73bc129f32737628821edffe8a0dd15c3"
+
+[[bug]]
+id = "SETTLEMENT-FOREST-WORKER-DETACHED-HOLDS-STORE"
+title = "The settlement forest evidence worker is a detached thread that keeps the world's native store open after its TickState drops"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "CrashTestLock 2026-11-12, code reading only (not the cause of the crash-test flake, whose fixture never starts this worker): settlements/forestry.rs:126 spawns `settlement-forest` with a clone of the world's Arc<ChunkSource> (which owns the Arc<NativeStore>) and keeps no JoinHandle. When the TickState drops, the worker exits only after its current chunk generation finishes and its next recv fails, so the store (and its lease) can outlive the world; a reopen in the same process right after a stop can refuse with \"Database already open\". Fix direction: keep the JoinHandle in forestry::Cache and on drop close the request channel and join."
+regression = []
