@@ -11,6 +11,16 @@ from .native_v2 import _block, _echo, _give, _point, _set
 from .probe_steps import ProbeSteps, item_count
 
 
+def _revive_if_dead(steps: ProbeSteps, label: str) -> None:
+    """Respawn a player a mob killed: instant health cannot heal the dead, so a later wait for
+    full health on the death screen would never resolve."""
+    if steps.observe()["player"]["health"] > 0:
+        return
+    steps.call("minecraft_respawn", {"timeout_seconds": steps.remaining()})
+    steps.wait(lambda s: (s["player"]["health"] or 0) > 0 and not s["screen"]["open"], label,
+               wait_for_play=True, timeout_seconds=30)
+
+
 def _strike(steps: ProbeSteps, ident: dict, row: dict) -> None:
     """Approach, aim and attack once, retrying when a moving mob slipped out of reach or view."""
     for _ in range(30):
@@ -273,6 +283,7 @@ def _golem(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture("gamerule natural_health_regeneration false")
     drops: dict[str, float] = {}
     def measure(diff: str) -> float:
+        _revive_if_dead(steps, f"{diff}_player_respawned")
         steps.fixture(f"difficulty {diff}")
         steps.fixture("effect give @s minecraft:instant_health 1 5 true")
         steps.wait(lambda s: s["player"]["health"] == 20, f"{diff}_player_healthy", timeout_seconds=20)

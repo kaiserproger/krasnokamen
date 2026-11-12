@@ -8,6 +8,8 @@ from typing import Any, Callable
 
 from .. import runtime
 
+CLIENT_STATE_EVENT_EXPIRED = "client state event did not arrive"
+
 
 class ProbeSteps:
     def __init__(self, client: Any, artifact_dir: Path, timeout: float, scenario: str) -> None:
@@ -80,9 +82,17 @@ class ProbeSteps:
                     # Below the tool's 0.1 s minimum: re-check until the deadline names the label.
                     if remaining < 0.1:
                         continue
-                self.call("minecraft_wait_for_state_change", {
-                    "observed_version": state["state_version"], "timeout_seconds": remaining,
-                })
+                try:
+                    self.call("minecraft_wait_for_state_change", {
+                        "observed_version": state["state_version"], "timeout_seconds": remaining,
+                    })
+                except RuntimeError as error:
+                    # The client reports "no state change inside this window" as a tool error.
+                    # That is a normal outcome for an idle client (a dead player, an open
+                    # screen): the predicate and the deadline above own the verdict, so
+                    # re-observe and let the label name a timeout. Any other error is fatal.
+                    if CLIENT_STATE_EVENT_EXPIRED not in str(error):
+                        raise
         except TimeoutError as error:
             self.report["assertions"][label] = False
             runtime.tag_failure(error, "assertion")

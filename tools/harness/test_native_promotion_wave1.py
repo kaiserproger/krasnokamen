@@ -175,6 +175,23 @@ class Wave1Tests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "spawner_spawned_configured_cow_on_peaceful"):
                 wave1._spawner_egg(steps, (0, 0, 0))
 
+    def test_dead_player_is_respawned_before_the_next_golem_reading(self):
+        dead = Steps(health=0.0, screen_open=True,
+                     screen_class="net.minecraft.client.gui.screens.DeathScreen")
+        original_observe = dead.observe
+
+        def observe(**kwargs):
+            state = original_observe(**kwargs)
+            if not dead.screen_open:
+                state["player"]["health"] = 20.0
+            return state
+        dead.observe = observe
+        wave1._revive_if_dead(dead, "normal_player_respawned")
+        self.assertEqual([name for name, _ in dead.calls], ["minecraft_respawn"])
+        alive = Steps(health=20.0)
+        wave1._revive_if_dead(alive, "normal_player_respawned")
+        self.assertEqual(alive.calls, [])
+
     def test_run_rejects_unknown_kind_and_headless(self):
         with self.assertRaisesRegex(ValueError, "unknown wave-1"):
             wave1.run(Steps(), (0, 0, 0), "nope")
