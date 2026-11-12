@@ -200,7 +200,8 @@ def items_fixture(items: int) -> dict[str, Any]:
     """`items` item entities on a sky platform, summoned by public commands in the last region.
 
     Region `platform` writes the rules, a stone floor at y=199 (clearing y=200..204 above it), the
-    walled and roofed observer pad at the origin and the pool; region `items` only summons, so every
+    walled and roofed observer pad at the origin and the pool; region `items` clears the loot the
+    rules' kills dropped, then only summons, so every
     item ages from its summon to the end of preparation alone (an item despawns at age 6000 and
     ages only while a player keeps its chunk active). Positions are deterministic functions of the
     index: no randomness, no gameplay.
@@ -231,7 +232,8 @@ def items_fixture(items: int) -> dict[str, Any]:
         return (f"summon minecraft:item {round(x, 3)} {round(y, 3)} {round(z, 3)} "
                 f"{{Item:{{id:'{kind}',count:{count}}}}}")
 
-    commands: list[str] = []
+    # Killing the natural mobs in the platform region dropped loot: clear it before the exact count.
+    commands: list[str] = ["kill @e[type=minecraft:item]"]
     for name, y in (("ground", floor + 1.1), ("water", floor + 2.0)):
         spec = layout[name]
         for index in range(spec["count"]):

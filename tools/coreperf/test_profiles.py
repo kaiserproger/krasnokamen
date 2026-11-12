@@ -61,6 +61,8 @@ class ProfilesTests(unittest.TestCase):
                 self.assertLessEqual(max(abs(x), abs(z)), profiles.ITEMS_RANGE)
                 self.assertGreater(y, profiles.ITEMS_FLOOR_Y)
             self.assertFalse(any(c.startswith("summon") for c in recipe["regions"][0]["commands"]))
+            # Loot dropped by the rules' kills would inflate the saved item count: cleared first.
+            self.assertEqual(recipe["regions"][1]["commands"][0], "kill @e[type=minecraft:item]")
         with self.assertRaisesRegex(ValueError, "items must be within"):
             profiles.items_fixture(profiles.ITEMS_MAX + 1)
 
@@ -68,7 +70,7 @@ class ProfilesTests(unittest.TestCase):
         # Merging would shrink the population; positions closer than .75 on x (and same z) must differ in kind.
         recipe = profiles.items_fixture(3000)
         rows = {}
-        for command in recipe["regions"][1]["commands"]:
+        for command in recipe["regions"][1]["commands"][1:]:
             parts = command.split()  # summon minecraft:item X Y Z {Item:{id:'..',count:N}}
             rows.setdefault((float(parts[3]), float(parts[4])), []).append((float(parts[2]), parts[5]))
         for items in rows.values():
@@ -80,7 +82,7 @@ class ProfilesTests(unittest.TestCase):
     def test_pile_classes_are_full_stacks_and_distinct_kinds(self):
         recipe = profiles.items_fixture(1000)
         spec = recipe["items"]["layout"]
-        summons = [c for c in recipe["regions"][1]["commands"]]
+        summons = [c for c in recipe["regions"][1]["commands"] if c.startswith("summon ")]
         full = summons[spec["ground"]["count"] + spec["water"]["count"]:][:spec["pile_full"]["count"]]
         mixed = summons[-spec["pile_mixed"]["count"]:]
         self.assertTrue(all("count:64" in c for c in full))
