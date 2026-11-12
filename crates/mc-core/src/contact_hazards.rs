@@ -52,11 +52,15 @@ pub(crate) fn take_work_counts() -> [usize; 5] {
 /// the memo even when sneaking, frost-walker, or stationary-berry rules would
 /// suppress the damage intent. A hit bypasses geometric reads only; retained
 /// burn timers still decay below.
+///
+/// `cauldron` maps every block state to `[kind, level]` (kind 0 for non
+/// cauldron states), built once from the registry on the first pass.
 #[derive(Default)]
 pub(crate) struct Scratch {
     pub(crate) hazard: crate::world::SectionMatchCache,
     pub(crate) suffocation: crate::world::SectionMatchCache,
     pub(crate) negative: Vec<Option<crate::world::ContactStamp<2>>>,
+    cauldron: Vec<[u8; 2]>,
 }
 
 /// Set the retained timer and publish only the shared burning bit.
@@ -269,28 +273,162 @@ fn quiet_proof(
     (quiet, (!quiet).then_some(cells))
 }
 
-/// Work left after the cold-free geometric classifier.
-enum ContactWork {
+/// What the pure classifier leaves for the serial owner on one row.
+#[derive(Default)]
+struct ContactWork {
+    /// The exact serial scan ([`scan_row`]) is required.
+    scan: bool,
+    /// Quiet row with a live burn timer or burning bit: only `retained_burn`.
+    burn: bool,
+    /// The feet sit in a cauldron's interior and the cell holds a cauldron.
+    cauldron: bool,
+    /// Attribution for [`take_work_counts`]; rows with no work are never listed otherwise.
+    #[cfg(test)]
+    quiet: bool,
+    #[cfg(test)]
+    sampled: bool,
+}
+
+/// Geometric verdict of the cold-free classifier for a living row.
+enum Verdict {
     Scan,
     Quiet,
 }
 
-/// Pure body/position classifier. Quiet survivors need only the serial
-/// appearance/burn check: appearance has a single owner in the cold column.
+/// Cauldron kind codes in [`Scratch::cauldron`].
+const CAULDRON_WATER: u8 = 1;
+const CAULDRON_POWDER_SNOW: u8 = 2;
+const CAULDRON_LAVA: u8 = 3;
+
+/// `[kind, level]` for every block state; kind 0 is not a cauldron.
+fn cauldron_table(state: &TickState) -> Vec<[u8; 2]> {
+    (0..state.registry.hazard_flags.len() as u32)
+        .map(|id| {
+            let Some(block) = state.registry.blocks.by_id(mc_world::BlockStateId(id)) else {
+                return [0, 0];
+            };
+            let kind = match block.block.id.path() {
+                "water_cauldron" => CAULDRON_WATER,
+                "powder_snow_cauldron" => CAULDRON_POWDER_SNOW,
+                "lava_cauldron" => CAULDRON_LAVA,
+                _ => return [0, 0],
+            };
+            let level = block
+                .properties
+                .iter()
+                .find(|(key, _)| key == "level")
+                .and_then(|(_, value)| value.parse::<u8>().ok())
+                .unwrap_or(0);
+            [kind, level]
+        })
+        .collect()
+}
+
+/// The feet cell of a living, alive mob or player whose feet are inside a
+/// cauldron's interior box (not the rim or wall); the block is read later.
+#[inline]
+fn cauldron_cell(body: &crate::entities::Body, pos: [f64; 3]) -> Option<(i32, i32, i32)> {
+    if !body.alive
+        || !matches!(
+            body.kind,
+            crate::entities::EntityKind::Mob { .. } | crate::entities::EntityKind::Player { .. }
+        )
+    {
+        return None;
+    }
+    let fx = pos[0] - pos[0].floor();
+    let fz = pos[2] - pos[2].floor();
+    if fx < 0.125 || fx > 0.875 || fz < 0.125 || fz > 0.875 {
+        return None;
+    }
+    let cell = (
+        pos[0].floor() as i32,
+        pos[1].floor() as i32,
+        pos[2].floor() as i32,
+    );
+    // Feet must be within the cauldron's height, not standing on top.
+    if pos[1] - (cell.1 as f64) >= 1.0 || pos[1] - (cell.1 as f64) < 0.0 {
+        return None;
+    }
+    Some(cell)
+}
+
+/// Pure per-row classifier. Quiet survivors only need `retained_burn`, and
+/// only while a burn timer or the burning bit is live: both are read here, on
+/// the pool, so the serial owner never touches the cold row of a cold mob. A
+/// cauldron under the feet is found here too; no block write of this pass
+/// turns a non-cauldron cell into one, so the serial pass need only revisit
+/// the flagged rows and re-read their live state.
 fn classify_row(
-    bodies: &[crate::entities::Body],
-    positions: &[[f64; 3]],
-    world: &crate::world::ChunkWorld,
-    hazard: &crate::world::SectionMatchCache,
-    border: crate::command_border::Border,
+    pass: &Pass,
     index: usize,
     stamp: &mut Option<crate::world::ContactStamp<2>>,
 ) -> Option<ContactWork> {
-    let row = &bodies[index];
+    let entities = pass.entities;
+    let body = &entities.bodies()[index];
+    let mut work = ContactWork::default();
+    if let Some(cell) = cauldron_cell(body, entities.positions()[index]) {
+        #[cfg(test)]
+        {
+            work.sampled = true;
+        }
+        work.cauldron = pass
+            .world
+            .block_at(cell.0, cell.1, cell.2)
+            .is_some_and(|id| pass.cauldrons.get(id as usize).is_some_and(|c| c[0] != 0));
+    }
+    match classify_contact(pass, index, stamp) {
+        None => {}
+        Some(Verdict::Scan) => work.scan = true,
+        Some(Verdict::Quiet) => {
+            #[cfg(test)]
+            {
+                work.quiet = true;
+            }
+            work.burn = body.burn_ticks != 0
+                || entities
+                    .row(crate::entities::EntitySlot(index as u32))
+                    .appearance
+                    .shared_flags
+                    & 1
+                    != 0;
+        }
+    }
+    let any = work.scan || work.burn || work.cauldron;
+    #[cfg(test)]
+    let any = any || work.quiet || work.sampled;
+    any.then_some(work)
+}
+
+/// Read-only inputs shared by every row of one classification pass.
+struct Pass<'a> {
+    entities: &'a crate::entities::EntityStore,
+    world: &'a crate::world::ChunkWorld,
+    registry: &'a crate::registry::CoreRegistry,
+    hazard: &'a crate::world::SectionMatchCache,
+    cauldrons: &'a [[u8; 2]],
+    border: crate::command_border::Border,
+}
+
+/// Body/position part of the classifier: scan, quiet, or neither.
+///
+/// A mob without a valid proof (new, moved to other cells, or its chunk
+/// changed) is proven quiet here when no section covering its body cells,
+/// foot-support cell or eye cell holds a hazard or suffocating state: the
+/// same palette gates the serial scan applies, which would then find nothing,
+/// bank this exact stamp and only run `retained_burn`. Rows whose sections do
+/// hold such a state keep the exact serial scan.
+fn classify_contact(
+    pass: &Pass,
+    index: usize,
+    stamp: &mut Option<crate::world::ContactStamp<2>>,
+) -> Option<Verdict> {
+    let (entities, world, hazard) = (pass.entities, pass.world, pass.hazard);
+    let row = &entities.bodies()[index];
     let type_id = match row.kind {
         crate::entities::EntityKind::Mob { type_id } => type_id,
         crate::entities::EntityKind::Player { .. } | crate::entities::EntityKind::Item { .. } => {
-            return Some(ContactWork::Scan);
+            return Some(Verdict::Scan);
         }
         _ => {
             *stamp = None;
@@ -306,7 +444,7 @@ fn classify_row(
         *stamp = None;
         return None;
     }
-    let pos = positions[index];
+    let pos = entities.positions()[index];
     let shape = [row.half_width, row.height];
     let previous = stamp.as_ref().filter(|stamp| stamp.entity == row.id);
     let foot_xz = if let Some(stamp) = previous
@@ -321,28 +459,58 @@ fn classify_row(
         *stamp = None;
         return None;
     }
+    let border = pass.border;
     if border.damage_per_block > 0.0
         && (pos[0] - border.center_x)
             .abs()
             .max((pos[2] - border.center_z).abs())
             > border.size * 0.5 + border.safe_zone
     {
-        return Some(ContactWork::Scan);
+        return Some(Verdict::Scan);
     }
-    let quiet = stamp
+    let (quiet, computed) = stamp
         .as_mut()
         .filter(|stamp| stamp.entity == row.id)
-        .is_some_and(|stamp| quiet_proof(world, hazard, stamp, pos, shape, foot_xz).0);
-    Some(if quiet {
-        ContactWork::Quiet
-    } else {
-        ContactWork::Scan
-    })
+        .map_or((false, None), |stamp| {
+            quiet_proof(world, hazard, stamp, pos, shape, foot_xz)
+        });
+    if quiet {
+        return Some(Verdict::Quiet);
+    }
+    let (min, max, probes) = computed.unwrap_or_else(|| contact_cells(pos, shape, foot_xz));
+    let [support, eye] = probes;
+    let flags = &pass.registry.hazard_flags;
+    // Same boxes and predicates as `scan_row`'s gates.
+    let clear = !world.may_hold_matching_state_shared(
+        (eye[0], eye[1], eye[2]),
+        (eye[0], eye[1], eye[2]),
+        hazard,
+        |seen| pass.registry.light.suffocating(seen.0) == Some(true),
+    ) && !world.may_hold_matching_state_shared(
+        (min.0, support[1], min.2),
+        max,
+        hazard,
+        |seen| flags.get(seen.0 as usize).copied().unwrap_or(0) != 0,
+    );
+    if !clear {
+        return Some(Verdict::Scan);
+    }
+    *stamp = Some(crate::world::ContactStamp {
+        entity: row.id,
+        position: pos,
+        shape,
+        min,
+        max,
+        probes,
+        revision: world.revision_now(),
+    });
+    Some(Verdict::Quiet)
 }
 
 /// Classify every row on the pool (pure reads), then run the exact serial
 /// scan, in row order, only for rows that need it, so intent, fire and
-/// appearance sequences match the all-serial pass.
+/// appearance sequences match the all-serial pass. Cauldron contact follows
+/// all scans, as before, over the rows the classifier flagged.
 pub(crate) fn run_with(state: &mut TickState, intents: &mut Vec<Intent>, min_parallel: usize) {
     // Take the reused predicate caches out of tick state (restored at the end
     // so capacity survives across ticks); reset once for this read-only pass.
@@ -350,53 +518,127 @@ pub(crate) fn run_with(state: &mut TickState, intents: &mut Vec<Intent>, min_par
     let mut scratch = std::mem::take(&mut state.contact_hazards_scratch);
     scratch.hazard.reset(&state.world);
     scratch.suffocation.reset(&state.world);
+    if scratch.cauldron.is_empty() {
+        scratch.cauldron = cauldron_table(state);
+    }
     let rows = state.entities.len();
+    let phase_start = std::env::var_os("MC_CORE_PHASE_LOG")
+        .is_some()
+        .then(std::time::Instant::now);
     #[cfg(test)]
     count_work(0, rows);
     if scratch.negative.len() < rows {
         scratch.negative.resize(rows, None);
     }
     let pending = {
-        let (world, hazard) = (&state.world, &scratch.hazard);
-        let bodies = state.entities.bodies();
-        let positions = state.entities.positions();
+        let pass = Pass {
+            entities: &state.entities,
+            world: &state.world,
+            registry: &state.registry,
+            hazard: &scratch.hazard,
+            cauldrons: &scratch.cauldron,
+            border: state.border,
+        };
         classify_rows(
             &mut scratch.negative[..rows],
             min_parallel,
-            |index, stamp| {
-                classify_row(bodies, positions, world, hazard, state.border, index, stamp)
-            },
+            |index, stamp| classify_row(&pass, index, stamp),
         )
     };
+    let classified = std::time::Instant::now();
     // This pass cannot spawn/remove rows; indexing avoids an ID snapshot.
     for &(index, ref work) in pending.iter().flatten() {
-        match work {
-            ContactWork::Scan => {
-                #[cfg(test)]
-                count_work(1, 1);
-                scan_row(state, &mut scratch, intents, index as usize);
-            }
-            ContactWork::Quiet => {
-                #[cfg(test)]
-                count_work(2, 1);
-                retained_burn(
-                    state,
-                    crate::entities::EntitySlot(index),
-                    false,
-                    false,
-                    intents,
-                );
-            }
+        #[cfg(test)]
+        if work.quiet {
+            count_work(2, 1);
+        }
+        if work.scan {
+            #[cfg(test)]
+            count_work(1, 1);
+            scan_row(state, &mut scratch, intents, index as usize);
+        } else if work.burn {
+            retained_burn(
+                state,
+                crate::entities::EntitySlot(index),
+                false,
+                false,
+                intents,
+            );
+        }
+    }
+    for &(index, ref work) in pending.iter().flatten() {
+        #[cfg(test)]
+        if work.sampled {
+            count_work(4, 1);
+        }
+        if work.cauldron {
+            cauldron_row(
+                state,
+                &scratch.cauldron,
+                crate::entities::EntitySlot(index),
+                intents,
+            );
         }
     }
     state.contact_hazards_scratch = scratch;
-    cauldron_contact(state, intents);
+    if let Some(started) = phase_start
+        && rows > 1000
+    {
+        let (scans, burns, cauldrons) = pending.iter().flatten().fold((0, 0, 0), |sum, (_, w)| {
+            (
+                sum.0 + usize::from(w.scan),
+                sum.1 + usize::from(!w.scan && w.burn),
+                sum.2 + usize::from(w.cauldron),
+            )
+        });
+        eprintln!(
+            "  contact detail ms: rows={rows} classify={:.2} serial={:.2} total={:.2} scans={scans} burns={burns} cauldrons={cauldrons}",
+            (classified - started).as_secs_f64() * 1000.0,
+            classified.elapsed().as_secs_f64() * 1000.0,
+            started.elapsed().as_secs_f64() * 1000.0,
+        );
+    }
 }
 
-/// Vanilla cauldron contents contact: a burning living entity inside a
-/// water cauldron is extinguished (one level debited); powder snow melts one
-/// level into water; a living entity inside lava is burned and ignited.
-/// Only the interior counts, not touching the exterior wall.
+/// Vanilla cauldron contents contact for one flagged row: a burning living
+/// entity inside a water cauldron is extinguished (one level debited); powder
+/// snow melts one level into water; a living entity inside lava is burned and
+/// ignited. Only the interior counts, not touching the exterior wall. The
+/// block is re-read live: an earlier row of this pass may have debited it.
+fn cauldron_row(
+    state: &mut TickState,
+    cauldrons: &[[u8; 2]],
+    slot: crate::entities::EntitySlot,
+    intents: &mut Vec<Intent>,
+) {
+    let body = state.entities.body(slot);
+    let Some(cell) = cauldron_cell(body, state.entities.pos(slot)) else {
+        return;
+    };
+    let Some(current) = state.world.block_at(cell.0, cell.1, cell.2) else {
+        return;
+    };
+    let [kind, level] = cauldrons.get(current as usize).copied().unwrap_or([0, 0]);
+    let id = body.id;
+    match kind {
+        CAULDRON_WATER | CAULDRON_POWDER_SNOW if level > 0 && body.burn_ticks > 0 => {
+            let (body, row) = state.entities.parts_mut(slot);
+            body.burn_ticks = 0;
+            Arc::make_mut(&mut row.appearance).shared_flags &= !1;
+            state.appearance_changed.push(id);
+            lower_cauldron(state, cell, current, level, kind == CAULDRON_POWDER_SNOW);
+        }
+        CAULDRON_LAVA => {
+            damage(state, id, DamageKind::Lava, 4.0, intents);
+            ignite(state, id, 300);
+        }
+        _ => {}
+    }
+}
+
+/// The pre-split cauldron pass over every row, by block name. Differential
+/// tests compare it against the flagged-row pass.
+#[cfg(test)]
 pub(crate) fn cauldron_contact(state: &mut TickState, intents: &mut Vec<Intent>) {
     let count = state.entities.len();
     for index in 0..count {
