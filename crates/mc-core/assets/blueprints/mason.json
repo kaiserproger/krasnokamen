@@ -37,7 +37,7 @@
       "entrance": [3, 1, 4],
       "layers": [
         ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", ".........", ".........", ".........", "........."],
-        ["LCCCCCCCL", "CP.P...fC", "C.......C", "CP.....cC", "LCCoCCCCL", "p.......p", "pCC...CCp", "p.......p", "pppDppppp"],
+        ["LCCCCCCCL", "CP.P.f..C", "C.......C", "CP...c..C", "LCCoCCCCL", "p.......p", "pCC...CCp", "p.......p", "pppDppppp"],
         ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL", ".........", ".C.....C.", ".........", "t.......t"],
         ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "SSSSSSSSS", ".........", ".........", ".........", "........."],
         [".........", "xxxxxxxxx", "X.......X", "SSSSSSSSS", ".........", ".........", ".........", ".........", "........."],

@@ -35,6 +35,9 @@ def native_schema(binary: Path, windowed: bool) -> dict[str, dict] | None:
     Older pinned clients stay valid gate subjects (negative controls, released-client
     checks); they refuse the subcommand with `unknown_command: mcp-schema` and the
     client itself still validates every call at run time. Any other failure fails closed.
+
+    Optional native census arguments (entity_type and cursor) come from this exact
+    binary, not the Loader's catalog. Never merge the two clients' capabilities.
     """
     try:
         result = subprocess.run([str(binary), 'mcp-schema'], capture_output=True, text=True,
@@ -65,7 +68,8 @@ def loader_schema(loader: Path) -> dict[str, dict]:
         if len(matches) != 1:
             raise ValueError('cannot identify Loader Gson version')
         version = matches[0]
-        gradle = Path(os.environ.get('GRADLE_USER_HOME', Path.home() / '.gradle'))
+        from . import runtime
+        gradle = runtime.ensure_loader_gradle_home(loader)
         jars = sorted((gradle / 'caches/modules-2/files-2.1/com.google.code.gson/gson' / version)
                       .glob(f'*/gson-{version}.jar'))
         if not jars:

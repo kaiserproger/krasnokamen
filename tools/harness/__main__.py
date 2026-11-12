@@ -19,7 +19,9 @@ import argparse
 import contextlib
 import datetime
 import json
+import math
 import os
+import signal
 import shutil
 import subprocess
 import sys
@@ -29,12 +31,11 @@ from pathlib import Path
 from typing import Any
 
 from .profiles import LOADER_PLATFORMS, ProfileContext, list_profiles
-from .runtime import AGENT_ROOT, REPO_ROOT, USERNAME_RE, port_open
+from .runtime import REPO_ROOT, USERNAME_RE, port_open, sibling_root
 
 ARTIFACT_ROOT = Path(os.environ.get("SOLARIS_VALIDATION_ROOT", REPO_ROOT / ".analysis" / "validation"))
 
 CLIENT_DEFAULT_PORT = 39095
-CLIENT_DEFAULT_GAME_DIR = AGENT_ROOT / "fabric-agent" / "run-mcp"
 CLIENT_DEFAULT_USERNAME = "SolarisMcp"
 LOADER_DEFAULT_USERNAME = "SolarisLoader"
 
@@ -59,7 +60,7 @@ def resolve_client_settings(platform: str | None) -> dict[str, Any]:
     default_game_dir = (
         str(REPO_ROOT / ".analysis" / "minecraft-loader-mcp" / platform)
         if platform is not None
-        else str(CLIENT_DEFAULT_GAME_DIR)
+        else str(sibling_root("loader") / "fabric-agent" / "run-mcp")
     )
     raw_game_dir = os.environ.get("SOLARIS_CLIENT_MCP_GAME_DIR", default_game_dir)
     game_dir = (
@@ -117,13 +118,14 @@ def client_check_commands(
 ) -> list[list[str]]:
     game_dir = str(settings["game_dir"])
     username = str(settings["username"])
+    loader = sibling_root("loader")
     if platform is None:
         return [
             [
-                str(AGENT_ROOT / "gradlew"),
+                str(loader / "gradlew"),
                 "--no-configuration-cache",
                 "-p",
-                str(AGENT_ROOT),
+                str(loader),
                 f"-Psolaris.clientMcp.gameDir={game_dir}",
                 f"-Psolaris.clientMcp.username={username}",
                 ":fabric-agent:validateClientMcpRunProperties",
@@ -134,21 +136,21 @@ def client_check_commands(
         ]
     return [
         [
-            str(AGENT_ROOT / "gradlew"),
+            str(loader / "gradlew"),
             "--no-configuration-cache",
             "-p",
-            str(AGENT_ROOT),
+            str(loader),
             f"-Psolaris.clientMcp.gameDir={game_dir}",
             f"-Psolaris.clientMcp.username={username}",
             ":validateLoaderClientMcpRunProperties",
             ":java-agent:jar",
         ],
         [
-            str(AGENT_ROOT / "gradlew"),
+            str(loader / "gradlew"),
             "--no-configuration-cache",
             "--dry-run",
             "-p",
-            str(AGENT_ROOT),
+            str(loader),
             f"-Psolaris.clientMcp.gameDir={game_dir}",
             f"-Psolaris.clientMcp.username={username}",
             f":loader-{platform}:runClientMcp",
@@ -162,11 +164,12 @@ def client_launch_command(
     game_dir = str(settings["game_dir"])
     username = str(settings["username"])
     task = ":fabric-agent:runClientMcp" if platform is None else f":loader-{platform}:runClientMcp"
+    loader = sibling_root("loader")
     return [
-        str(AGENT_ROOT / "gradlew"),
+        str(loader / "gradlew"),
         "--no-configuration-cache",
         "-p",
-        str(AGENT_ROOT),
+        str(loader),
         f"-Psolaris.clientMcp.gameDir={game_dir}",
         f"-Psolaris.clientMcp.username={username}",
         task,
@@ -179,7 +182,7 @@ def run_client(platform: str | None, check: bool) -> int:
     except (RuntimeError, ValueError) as error:
         print(f"harness client: {error}", file=sys.stderr)
         return 2
-    gradlew = AGENT_ROOT / "gradlew"
+    gradlew = sibling_root("loader") / "gradlew"
     if not (gradlew.is_file() and os.access(gradlew, os.X_OK)):
         print(f"harness client: missing executable Gradle wrapper: {gradlew}",
               file=sys.stderr)
@@ -395,7 +398,7 @@ def cmd_run(argv: list[str]) -> int:
                         details["server_pin"] = pin
                     except (OSError, ValueError, TypeError) as exc:
                         details["server_pin_error"] = str(exc)
-        if status == "failed":
+        if status in {"failed", "timeout"}:
             code = (child_failure.returncode if child_failure is not None
                     else details.get("startup_child_exit"))
             failure_logs = list(logs)
@@ -437,7 +440,7 @@ def cmd_run(argv: list[str]) -> int:
         if profile == "native-matrix":
             from .backends.native_matrix import record_receipt
             record_receipt(receipt, artifact_dir / "result.json")
-        outcome = {"passed": "PASS", "failed": "FAIL",
+        outcome = {"passed": "PASS", "failed": "FAIL", "timeout": "TIMEOUT",
                    "prepared": "PREPARED", "interrupted": "INTERRUPTED"}[status]
         print(
             f"[harness] {outcome} profile={profile} "
@@ -474,6 +477,7 @@ def cmd_run(argv: list[str]) -> int:
         extra_args=extra,
         release=release,
         timeout_seconds=timeout_seconds,
+        stage_timeout_seconds=timeout_seconds,
         platform=platform,
         scenario_id=None if scenario is None else scenario.scenario_id,
         manifest=None if scenario is None else scenario.manifest,
@@ -483,15 +487,27 @@ def cmd_run(argv: list[str]) -> int:
         windowed=args.windowed,
         server_bin=args.server_bin,
     )
+    interrupted_signal = signal.SIGINT
+    def terminate(signum: int, frame: Any) -> None:
+        nonlocal interrupted_signal
+        interrupted_signal = signum
+        raise KeyboardInterrupt(signal.Signals(signum).name)
+
+    previous_handlers = {sig: signal.signal(sig, terminate)
+                         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
     try:
+        if timeout_seconds is not None and (not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
+            raise ValueError("--timeout-seconds must be finite and positive")
         if ctx.server_bin is not None and profile not in {"loader-live", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}:
             raise ValueError("--server-bin is supported only by loader-live or matrix profiles")
         if (ctx.plugins_dir is not None and client != "native"
                 and ctx.scenario_id != "java-v2-p5-towns" and profile not in {"loader-live", "graves", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}):
             raise ValueError("--plugins-dir requires native gameplay, java-v2-p5-towns, loader-live, graves or matrix profiles")
-        if ctx.windowed and client != "native" and not (client == "java" and profile in {"scene-shot", "settlement-map-qa"}):
-            raise ValueError("--windowed requires --client native (or --client java for scene-shot and settlement-map-qa)")
-        if client == "native" and profile not in {"survival", "inventory", "entities", "core-client", "native-lifecycle", "logical-native", "native-scale", "native-matrix", "title-connect", "singleplayer-regressions", "weak-first-view", "dialogs", "admin-commands", "chisel", "anti-xray", "block-log", "composter-chance", "village-qa", "village-autonomy-qa", "civilization-seed-qa", "village-owner-order-qa", "scene-shot", "settlement-map-qa", "claim-only-qa", "buildings-qa", "army-qa", "autocraft-qa"}:
+        if (ctx.windowed and client != "native"
+                and not (client == "java" and (profile in {"scene-shot", "settlement-map-qa"}
+                                               or ctx.scenario_id == "java-v2-p5-shift-double-click"))):
+            raise ValueError("--windowed requires native, a supported Java graphical profile, or java-v2-p5-shift-double-click")
+        if client == "native" and profile not in {"survival", "inventory", "entities", "core-client", "native-lifecycle", "logical-native", "native-scale", "native-matrix", "title-connect", "singleplayer-regressions", "weak-first-view", "dialogs", "admin-commands", "chisel", "anti-xray", "block-log", "composter-chance", "chat-visibility", "datapack-reload", "village-qa", "village-autonomy-qa", "civilization-seed-qa", "village-owner-order-qa", "scene-shot", "settlement-map-qa", "claim-only-qa", "buildings-qa", "army-qa", "autocraft-qa"}:
             raise RuntimeError(
                 f"profile {profile!r} is not enabled for native; "
                 "supported shared Python minecraft_* profiles: survival, inventory, entities, core-client subset, native-lifecycle, logical-native, native-scale. "
@@ -503,8 +519,10 @@ def cmd_run(argv: list[str]) -> int:
             failure_phase = "unknown"
             details = spec["run"](ctx)
     except KeyboardInterrupt:
-        return finish("interrupted", spec["scope"], {}, "interrupted by user",
-                      artifact_dir, 130, ctx)
+        return finish("interrupted", spec["scope"], {}, f"received {signal.Signals(interrupted_signal).name}",
+                      artifact_dir, 128 + interrupted_signal, ctx)
+    except subprocess.TimeoutExpired as error:
+        return finish("timeout", spec["scope"], {}, str(error), artifact_dir, 1, ctx)
     except Exception as error:
         from .runtime import child_exit, observed_phase
         child_failure = child_exit(error)
@@ -512,6 +530,9 @@ def cmd_run(argv: list[str]) -> int:
         if observed != "unknown":
             failure_phase = observed
         return finish("failed", spec["scope"], {}, str(error), artifact_dir, 1, ctx)
+    finally:
+        for sig, handler in previous_handlers.items():
+            signal.signal(sig, handler)
     if scenario is not None and isinstance(details, dict):
         if scenario.tests:
             evidence_text = scenario_catalog.log_text(ctx)
@@ -726,15 +747,13 @@ def _exec_in_scope(profile: str | None) -> int | None:
     environment = dict(os.environ, **{CPU_SCOPE_ENV: "1"})
     print(
         f"[harness] scope CPUQuota={quota} MemoryHigh={os.environ.get(MEMORY_HIGH_ENV, DEFAULT_MEMORY_HIGH)} "
-        f"MemoryMax={memory_max}"
+        f"MemoryMax={memory_max}", flush=True
     )
-    completed = subprocess.run(
-        command,
-        cwd=REPO_ROOT,
-        env=environment,
-        check=False,
-    )
-    return completed.returncode
+    # Replace the wrapper so signals sent to the harness reach the scoped run,
+    # rather than killing a parent that is merely waiting for it.
+    os.chdir(REPO_ROOT)
+    os.execvpe(command[0], command, environment)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

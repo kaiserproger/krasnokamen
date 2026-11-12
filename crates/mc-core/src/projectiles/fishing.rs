@@ -225,7 +225,8 @@ fn reel(state: &mut TickState, actor: EntityId, held_slot: usize, rod: &ItemStac
         static FISH_TAG: std::sync::LazyLock<(mc_data::Identifier, mc_data::Identifier)> =
             std::sync::LazyLock::new(|| {
                 (
-                    mc_data::Identifier::parse("minecraft:item").expect("static registry"),
+                    mc_data::Identifier::parse(mc_data::tags::ITEM_REGISTRY)
+                        .expect("static registry"),
                     mc_data::Identifier::parse("minecraft:fishes").expect("static fish tag"),
                 )
             });

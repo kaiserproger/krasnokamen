@@ -421,10 +421,11 @@ pub(super) fn accepts(
         .as_ref()
         .is_some_and(|name| identity == Some(name.as_str()));
     let tag = input.tag.as_ref().is_some_and(|name| {
-        world
-            .registry
-            .tags
-            .contains_raw_id("minecraft:item", name.as_str(), stack.item_id as i32)
+        world.registry.tags.contains_raw_id(
+            mc_data::tags::ITEM_REGISTRY,
+            name.as_str(),
+            stack.item_id as i32,
+        )
     });
     item || tag
         || input
@@ -433,7 +434,7 @@ pub(super) fn accepts(
             .any(|alternative| match alternative {
                 WorkRecipeAlternative::Item(name) => identity == Some(name.as_str()),
                 WorkRecipeAlternative::Tag(name) => world.registry.tags.contains_raw_id(
-                    "minecraft:item",
+                    mc_data::tags::ITEM_REGISTRY,
                     name.as_str(),
                     stack.item_id as i32,
                 ),

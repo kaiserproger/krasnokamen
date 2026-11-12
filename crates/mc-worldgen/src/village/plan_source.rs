@@ -367,6 +367,28 @@ impl VillagePlanSet {
             .collect()
     }
 
+    /// Adult headroom at the entrance and approach, including the porch columns
+    /// beside their centreline: an authored door can be offset from its jigsaw.
+    pub(crate) fn entrance_headroom(&self, pos: BlockPos) -> bool {
+        self.plans.iter().any(|plan| {
+            plan.entrance_terrain_caps
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .any(|&[step, approach]| {
+                    let x = i64::from(pos.x) - i64::from(step.x);
+                    let z = i64::from(pos.z) - i64::from(step.z);
+                    let y = i64::from(pos.y) - i64::from(step.y);
+                    let dx = i64::from(approach.x) - i64::from(step.x);
+                    let dz = i64::from(approach.z) - i64::from(step.z);
+                    (dx != 0 || dz != 0)
+                        && (1..=3).contains(&y)
+                        && (0..=1).contains(&(x * dx + z * dz))
+                        && (-1..=1).contains(&(x * dz - z * dx))
+                })
+        })
+    }
+
     /// The analogue's offset for one column: `surface_y` moved toward the rigid
     /// pieces' `box.minY() + groundLevelDelta` of every plan reaching it, summed
     /// before rounding and clamped to `min_y + 1 ..= max_y - 1`.

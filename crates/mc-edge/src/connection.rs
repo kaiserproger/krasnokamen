@@ -264,13 +264,31 @@ impl Connection {
     /// [`Connection::read_frame_play`] (no read deadline; client silence is
     /// governed by keepalive, not by a read timeout).
     pub async fn read_frame_in(&mut self, state: State) -> anyhow::Result<RawFrame> {
-        loop {
-            let frame = tokio::time::timeout(
-                PRE_PLAY_READ_TIMEOUT,
-                read_frame_inner(&mut self.reader, &mut self.buf, self.compression),
-            )
+        self.read_pre_play_frame(Some(PRE_PLAY_READ_TIMEOUT), state)
             .await
-            .map_err(|_| anyhow::anyhow!("read timed out in {state:?}"))??;
+    }
+
+    /// Like [`Connection::read_frame_in`] without the per-read deadline, for a caller
+    /// that bounds the wait itself (Loader negotiation: one total deadline plus
+    /// keepalives). Cancel-safe: partial frames stay in the connection's buffer, so a
+    /// caller may drop this future (for example in a `select!`) and read again.
+    pub(crate) async fn read_frame_in_untimed(&mut self, state: State) -> anyhow::Result<RawFrame> {
+        self.read_pre_play_frame(None, state).await
+    }
+
+    async fn read_pre_play_frame(
+        &mut self,
+        timeout: Option<Duration>,
+        state: State,
+    ) -> anyhow::Result<RawFrame> {
+        loop {
+            let read = read_frame_inner(&mut self.reader, &mut self.buf, self.compression);
+            let frame = match timeout {
+                Some(timeout) => tokio::time::timeout(timeout, read)
+                    .await
+                    .map_err(|_| anyhow::anyhow!("read timed out in {state:?}"))??,
+                None => read.await?,
+            };
             self.budget.record(&frame)?;
             match &mut self.translation {
                 None => return Ok(frame),

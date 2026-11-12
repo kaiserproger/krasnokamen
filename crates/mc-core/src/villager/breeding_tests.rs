@@ -27,7 +27,7 @@ fn typical_village(state: &mut TickState) {
         )
         .unwrap();
     for (x, z) in [(3, 2), (7, 2), (3, 13), (7, 13), (11, 13), (11, 2)] {
-        bed(state, x, z);
+        roofed_bed(state, x, z);
     }
     let composter = block(state, "minecraft:composter", &[]);
     state.world.set_block(12, 201, 8, composter);
@@ -77,6 +77,10 @@ fn typical_village(state: &mut TickState) {
 }
 
 fn stored_food_village(beds: usize) -> (TickState, [EntitySlot; 2], u32) {
+    stored_food_village_roofed(beds, true)
+}
+
+fn stored_food_village_roofed(beds: usize, roofed: bool) -> (TickState, [EntitySlot; 2], u32) {
     let mut state = test_state();
     state.day_time = 3000;
     let settlement = state
@@ -89,8 +93,14 @@ fn stored_food_village(beds: usize) -> (TickState, [EntitySlot; 2], u32) {
             crate::settlements::commands::DEFAULT_RADIUS,
         )
         .unwrap();
+    // Residents claim only roofed beds (they shelter instead of sleeping in
+    // the open), so each bed gets a roof block clear of breeding headroom.
+    let stone = state.registry.states.stone;
     for (x, z) in [(3, 3), (7, 3), (11, 3)].into_iter().take(beds) {
         bed(&mut state, x, z);
+        if roofed {
+            state.world.set_block(x, 205, z, stone);
+        }
     }
     let chest = block(&state, "minecraft:chest", &[]);
     state.world.set_block(8, 201, 8, chest);
@@ -119,6 +129,27 @@ fn stored_food_village(beds: usize) -> (TickState, [EntitySlot; 2], u32) {
     (state, parents, bread)
 }
 
+/// Settlement policy: a resident's home is a roofed bed (it shelters instead of
+/// sleeping in the open), and rations follow the home. A settlement whose only
+/// beds stand in the open gives its residents no home, so no stored rations
+/// and no births, while the same village with roofed beds breeds.
+#[test]
+fn open_air_only_settlement_gives_residents_no_home_rations_or_births() {
+    let (mut state, parents, bread) = stored_food_village_roofed(3, false);
+    for _ in 0..6_000 {
+        step(&mut state);
+    }
+    assert_eq!(population(&state), 2, "no birth without a roofed bed");
+    for slot in parents {
+        assert_eq!(
+            state.entities.row(slot).villager.as_ref().unwrap().home,
+            None
+        );
+        assert_eq!(food_count(&state, slot, bread), 0, "no ration drawn");
+    }
+    assert_eq!(state.block_entities[&(8, 201, 8)].slots[0].count, 6);
+}
+
 #[test]
 fn bound_workers_breed_from_real_bootstrap_chest_food() {
     let (mut state, parents, bread) = stored_food_village(3);
@@ -138,6 +169,103 @@ fn bound_workers_breed_from_real_bootstrap_chest_food() {
         "no birth with three beds and six stored loaves; chest={:?}, parents={:?}",
         state.block_entities[&(8, 201, 8)].slots[0],
         parents.map(|slot| state.entities.row(slot).villager.as_ref().unwrap())
+    );
+}
+
+/// The seed-24 builder could see the new house's bed near its site, but not
+/// from the founding chest. Rechecking the local bed scan on arrival turned
+/// the ration trip back into work before any bread could enter carry.
+#[test]
+fn ration_trip_completes_when_storage_is_beyond_the_spare_bed_scan() {
+    let mut state = test_state();
+    let chunks = (0..5)
+        .map(|x| (crate::boundary::ChunkPos { x, z: 0 }, 0))
+        .collect();
+    state.world.ensure_blocking(&chunks);
+    for x in 0..5 {
+        state.tickets.insert(
+            format!("ration-trip-{x}"),
+            (crate::boundary::ChunkPos { x, z: 0 }, 0),
+        );
+    }
+    state.refresh_active_chunks(0);
+    for x in 0..80 {
+        for z in 0..16 {
+            state
+                .world
+                .set_block(x, 200, z, state.registry.states.stone);
+            for y in 201..206 {
+                state.world.set_block(x, y, z, state.registry.states.air);
+            }
+        }
+    }
+    let home = bed(&mut state, 44, 3);
+    let spare = bed(&mut state, 70, 3);
+    // Residents claim only roofed beds; roof both clear of breeding headroom.
+    for head in [home, spare] {
+        state
+            .world
+            .set_block(head.x, 205, head.z, state.registry.states.stone);
+    }
+    let settlement = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "ration-trip".into(),
+            "owner".into(),
+            [40, 201, 8],
+            96,
+        )
+        .unwrap();
+    let chest = block(&state, "minecraft:chest", &[]);
+    let bread = item(&state, "minecraft:bread");
+    let logs = item(&state, "minecraft:birch_log");
+    state.world.set_block(8, 201, 8, chest);
+    let mut slots = vec![ItemStack::EMPTY; 27];
+    slots[0] = ItemStack::new(bread, 6);
+    state.block_entities.insert(
+        (8, 201, 8),
+        crate::tick::BlockEntityState {
+            slots,
+            furnace: None,
+        },
+    );
+    state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .bootstrap_storage = Some([8, 201, 8]);
+    let slot = villager(&mut state, [40.5, 201.0, 8.5]);
+    let entity = state.entities.body(slot).id;
+    crate::settlements::bind(&mut state, settlement, entity).unwrap();
+    let resident = state.entities.row_mut(slot).villager.as_mut().unwrap();
+    resident.home = Some(home);
+    resident.inventory[0] = Some(ItemStack::new(logs, 32));
+    state.day_time = 3000;
+    state.world.fold_overlay();
+    for _ in 0..1_200 {
+        step(&mut state);
+        if food_count(&state, slot, bread) == 3 {
+            assert!(distance(state.entities.pos(slot), centre(spare)) > 48.0 * 48.0);
+            assert_eq!(state.block_entities[&(8, 201, 8)].slots[0].count, 3);
+            assert_eq!(food_count(&state, slot, logs), 32);
+            assert!(
+                state
+                    .entities
+                    .row(slot)
+                    .villager
+                    .as_ref()
+                    .unwrap()
+                    .ration_target
+                    .is_none()
+            );
+            return;
+        }
+    }
+    panic!(
+        "admitted ration trip never withdrew real bread: pos={:?}, resident={:?}",
+        state.entities.pos(slot),
+        state.entities.row(slot).villager
     );
 }
 

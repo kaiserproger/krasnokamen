@@ -1,14 +1,14 @@
 # Heavy commands, memory and disk on the shared machine
 
 The rules (which commands go through the runner, which `-m` cap to use,
-`env RUSTC_WRAPPER=`, when `-p`/`-x` are allowed) live in
+the sccache wrapper, when `-p`/`-x` are allowed) live in
 [AGENTS.md](../../AGENTS.md) "Build and validation" and the harness's own
 cgroup bounds in [AGENT_TOOLING.md](../AGENT_TOOLING.md) "Resource bounds".
 This page explains how the runner works, how to diagnose it and what went
 wrong before.
 
 The runner's requirements and fresh-machine setup (systemd user scope, cgroup
-v2, `/tmp/solaris-mem-slots`, CPUs 8-11 for the `-p` lane, Landlock for the
+v2, `/tmp/solaris-mem-slots`, the last four CPUs for the `-p` lane, Landlock for the
 instrumentation guard) are in [`tools/dev/README.md`](../../tools/dev/README.md).
 Other scripts there: `scene-slot.sh` (graphical gate slots, see
 [real-client gates](real-client-gates.md#3-environment-block)),
@@ -28,16 +28,51 @@ to keep that from happening again without idling the machine.
 
 `tools/dev/mem-run.sh [-x] [-p] [-m SIZE] <command...>` (flags in this order):
 
-- **No slots, no admission queue** (owner, 2026-10-28). Every command starts
-  at once in its own transient systemd user scope inside
+- **No memory slots, no admission queue** (owner, 2026-10-28). Every command
+  starts at once in its own transient systemd user scope inside
   `solaris-heavy.slice` (slice `MemoryMax=25G`, `MemorySwapMax=2G`,
   no `MemoryHigh`, no `CPUQuota`). Default cap is `-m 8G`; above 12G without
-  `-x` the request is lowered to 12G.
-- **Killed jobs:** an independent guardian kills the job's scope and holds its locks until the scope is empty.
+  `-x` the request is lowered to 12G. The one exception is a compile command,
+  which first waits for a build token (next item).
+- **Build tokens** (owner, 2026-11-11): at most three compile commands run
+  host-wide; the fleet's "3 concurrent builders" is enforced here, not by
+  convention. Compile is decided once from argv, after leading
+  `env`/`nice`/`ionice`/`timeout` words: `cargo` with any subcommand except
+  `fmt`, `fetch`, `tree`, `metadata`, `clean`, `update` and similar, `gradle`
+  and `gradlew`, `pin-release`, harness `run build|clippy|code-health|
+  correctness|test|regressions|regressions-client|java|standard-pack` and
+  harness `ledger probe|promote`. Running built binaries, gates and servers
+  takes no token and starts while all three are held; a build hidden inside
+  `sh -c` is not seen. A compile re-execs the runner under
+  `tools/dev/slot-lock.py` (the same helper as `scene-slot.sh`), which blocks
+  on all three locks `/tmp/solaris-mem-slots/tokens/token-{1,2,3}.lock` at once
+  and takes whichever frees first: no polling, no CPU while waiting, and the
+  runner prints `mem-run: build tokens 1,2,3 are in use; waiting`. With
+  `SOLARIS_BUILD_LANE=background` in the runner's environment a compile waits
+  only for tokens 1-2, so token 3 stays free for priority work (owner,
+  2026-11-12: the battle video gets resources first); Main exports it for
+  every agent outside the priority task. The lock
+  stays at fd 9 of the runner and its scope guardian, never the command, so
+  the token returns once the scope is empty: on any exit, kill or OOM. The
+  `mem-run: scope` line shows `token=<n>`, `token=<n>(reused)` or
+  `token=none`. **Nesting:** the runner exports `SOLARIS_BUILD_TOKEN` and
+  `SOLARIS_BUILD_TOKEN_PID` (its own pid); a compile whose ancestor process is
+  that runner reuses its token, so a harness run or pin-release that runs
+  `mem-run.sh ... cargo` again inside never waits for a second token (three
+  outer holders would deadlock). The token is taken before the `-x` lock, so
+  queued compiles never delay a `-x` window; a `-p` compile holds its token
+  while it queues for the perf lane. Holders, their command and tree, and the
+  waiters: `tools/dev/fleet-status`. Tests:
+  `python3 tools/dev/test_build_tokens.py`.
+- **Killed jobs:** an independent guardian kills the job's scope and holds its locks (slot locks and the build token) until the scope is empty.
 - **Scope properties.** `MemoryMax=<cap>`, `MemorySwapMax=1G`,
   `CPUQuota=<physical cores x 100>%`, `CPUWeight=50`, `nice 19`. These are the
   harness's own scope properties, so harness runs keep their canonical CPU
-  budget. The runner exports `SOLARIS_HARNESS_CPU_SCOPE=1`; without it the
+  budget. Preemptible builds (below) get `CPUWeight=10`, so under contention
+  tests and servers win the CPU five to one and builds only slow down. A
+  command started through `scene-slot.sh` (it exports `SOLARIS_SCENE_SLOT`)
+  gets `CPUWeight=500`: with dozens of test scopes at 50, a gate's native
+  client fell to 6-8 TPS and missed its tick waits (2026-11-11). The runner exports `SOLARIS_HARNESS_CPU_SCOPE=1`; without it the
   harness re-runs itself in its own scope outside the slice and escapes the cap.
 - **`tools/dev/heavy-watchdog.py`** (user unit `solaris-heavy-watchdog`,
   started by the runner) is the only thing that pauses work. On real memory
@@ -46,9 +81,14 @@ to keep that from happening again without idling the machine.
   killed). Preemptible is decided once from argv: plain `cargo
   build/check/clippy/doc/fetch` and `cargo test/bench --no-run`. Tests, harness
   runs, servers and clients are never frozen, so their timeouts stay honest;
-  the oldest running command is never frozen. When commands exit it thaws
-  frozen ones oldest first while their expected growth fits `MemAvailable`
-  minus a 4 GiB reserve.
+  the oldest running command is never frozen. Room is the smaller of
+  `MemAvailable` and the slice cap minus its unreclaimable memory (tmpfs, dirty
+  and writeback pages count; clean page cache that builds leave in the slice is
+  dropped by the kernel at the cap and does not), each minus a 4 GiB reserve. A
+  PSI or `MemoryMax` event freezes only while room is negative. When commands
+  exit it thaws frozen ones oldest first while their expected growth fits the
+  room. A watchdog restart while builds run keeps the shared jobserver as it is.
+  Tests: `python3 tools/dev/test_heavy_watchdog.py`.
 - **Expected peaks are measured.** Every successful command appends its scope's
   `memory.peak` to `/tmp/solaris-mem-slots/peaks` under an argv signature
   (paths and leading `env` words removed). The next run expects 1.25 x the
@@ -70,16 +110,17 @@ to keep that from happening again without idling the machine.
   in [lessons](lessons.md)).
 - **Incremental** compilation is forced on for debug/test builds and off for
   `--release`/`--profile`. Measured once: cold `mc-core --tests` 26m48s to 19m07s.
-- **Lanes.** `-p` is the perf lane: one at a time (perf lock), pinned to CPUs
-  8-11 with `CPUWeight=10000`, nice 0, never frozen; for A/B benches and
+- **Lanes.** `-p` is the perf lane: one at a time (perf lock), pinned to the
+  last four CPUs with `CPUWeight=10000`, nice 0, never frozen; for A/B benches and
   profiles, never for builds. Compare `-p` numbers only with `-p` numbers.
   `-x` is a quiet measurement window: the watchdog freezes every preemptible
   command, the runner waits for the rest to finish and holds new commands at
   start until it ends. `-x` is about quiet, not memory.
 - **Exit 75** now means one of: the slice has no cgroup, `-x` without a running
   watchdog, or no usable target dir (all existing ones busy and too little disk
-  for a new one). The only other legitimate wait at start is a
-  `-p` command queued on the serialized perf lane (`flock $dir/perf`); anything else is a regression.
+  for a new one). The only other legitimate waits at start are a compile
+  command waiting for a build token and a `-p` command queued on the
+  serialized perf lane (`flock $dir/perf`); anything else is a regression.
 - The runner prints one `mem-run: scope ...` line (props, lane, target, expected
   peak, signature). Copy it into receipts.
 - **One Cargo environment per tree.** Run Cargo only through the runner and keep
@@ -93,19 +134,24 @@ to keep that from happening again without idling the machine.
 
 Answer with counts from one pass over `/proc` and the cgroup tree; never poll.
 
-1. **Waiting before start.** `bash` processes whose argv contains `mem-run.sh`
-   and that are not the inner `bash -c` wrapper. A child `flock` means a lock
-   wait; legitimate ones are `exclusive.lock` while a `-x` window runs and the
-   perf-lane lock for queued `-p` commands. Never kill a queued `-p` run.
+1. **Waiting before start.** `tools/dev/fleet-status` lists the build-token
+   and scene-slot holders and waiters. Otherwise: `bash` processes whose argv
+   contains `mem-run.sh` and that are not the inner `bash -c` wrapper. A child
+   `flock` means a lock wait; legitimate ones are `exclusive.lock` while a `-x`
+   window runs and the perf-lane lock for queued `-p` commands; a
+   `slot-lock.py` process is a compile waiting for a token. Never kill a
+   queued `-p` run.
 2. **Running and frozen.** Slice cgroup:
    `systemctl --user show solaris-heavy.slice -p ControlGroup --value`. Per
    `*.scope`: `cgroup.freeze` (1 = requested), `cgroup.events` (`frozen 1` =
    confirmed), `memory.current`, comms in `cgroup.procs`. Reasons:
    `journalctl --user -u solaris-heavy-watchdog -o cat -n 20`.
-3. **CPU cap.** Slice `cpu.max` must be `max`; check `nr_throttled` vs
-   `nr_periods` in `cpu.stat`. Runtime drop-ins live under
-   `/run/user/<uid>/systemd/user.control/solaris-heavy.slice.d/`; clear a cap
-   with `systemctl --user set-property --runtime solaris-heavy.slice CPUQuota=`.
+3. **CPU cap.** Slice `cpu.max` is `max` unless the owner pinned a quota in
+   `/tmp/solaris-mem-slots/cpu-quota` (one line such as `600%`; the runner
+   applies it on every call and clears any other slice quota). Check
+   `nr_throttled` vs `nr_periods` in `cpu.stat`. Runtime drop-ins live under
+   `/run/user/<uid>/systemd/user.control/solaris-heavy.slice.d/`; remove the
+   owner cap by deleting that file and running any `mem-run` command.
    Host `/proc/pressure/cpu` near 80% while `vmstat` shows >40% idle means a cap
    or pinning, not load.
 4. **Pinning.** `Cpus_allowed_list` of cargo/rustc; widen live with
@@ -136,10 +182,34 @@ code, start the unit (agents' runner calls may restart it in between).
   `/proc/self/cgroup` to a file; a bash smoke test proves nothing.
 - Never set `MemoryHigh` on the slice: reclaim pressure is what systemd-oomd
   kills on, and it picks the largest units (terminal, agent host).
-- The global `~/.cargo` sccache wrapper compiles outside the cap; that is why
-  every Cargo command is `env RUSTC_WRAPPER=`. An sccache daemon first started
-  inside a scope keeps that scope populated forever; start it outside
-  (`systemd-run --user --scope --slice=app.slice sccache --start-server`).
+- sccache: the runner exports `RUSTC_WRAPPER=tools/dev/sccache.sh` and
+  `SCCACHE_CLIENT_SIDE=1` when the user unit `solaris-sccache.service` (app.slice,
+  `client_side_mode`: the daemon only fronts the cache, every compile runs in the
+  caller's scope) is active and `~/.cargo/bin/sccache` exists, else
+  `RUSTC_WRAPPER=` (uncached). Never stop, restart or reconfigure that unit, never
+  start an sccache inside a scope (it would stay populated by that scope), and
+  compare `sccache --show-stats` before and after instead of zeroing it. Measured
+  2026-11-11, one run: a cold debug `solaris-v2` in another tree against a warm
+  cache took 4542 -> 3316 G instructions (`perf stat`, -27%; 213/271 Rust hits plus
+  284 C hits), and populating an empty cache cost +6%. The same for a cold release
+  `solaris-v2`: 5482 -> 4707 G instructions (-14%), populating +1%. Each is one
+  measurement under those conditions, not a general speedup. Expected to help on cold or
+  private target dirs, after slot rotation and after toolchain changes; a warm slot
+  gains nothing. Plain
+  `RUSTC_WRAPPER=sccache` is wrong here: sccache hashes every `CARGO_*` variable
+  into Rust keys and the runner's per-slot `CARGO_TARGET_DIR` made every key
+  differ (0 hits across slots), it refuses `CARGO_INCREMENTAL=1` (which the runner
+  sets for debug builds), and a wrapper not named `sccache` leaves C/C++ build
+  scripts (aws-lc-sys, zstd-sys) uncached. `sccache.sh` unsets those two variables
+  (cargo passes their effect to rustc as arguments) and keeps the stem `sccache`.
+- Incremental (`CARGO_INCREMENTAL`) is set by the runner from the argv: 1 for
+  debug/test builds and for `--release` builds in the normal lane, 0 in `-p`/`-x`
+  lanes and for any `--profile` build. One re-pin measurement (2026-11-11) used
+  less CPU with incremental, but host load was not recorded for the full-build
+  runs, so only the direction is plausible, not the size. It needs about 2.4 GB
+  more per slot and uses more codegen units, so its binary can run slower: take
+  performance binaries from `pin-release --no-incremental` or
+  `env CARGO_INCREMENTAL=0 cargo build --release`.
 - rust-analyzer (about 5 GB, agents auto-start it) and the agent host (about
   4 GB) sit outside the slice. Killing rust-analyzer, leaked Minecraft clients
   and idle Gradle daemons is safe.
@@ -165,11 +235,13 @@ code, start the unit (agents' runner calls may restart it in between).
 Owner-approved response (2026-10-24), adjusted for the current runner: renice
 running rustc/cargo/java/qemu to 19, start new heavy commands with a lower
 `SOLARIS_MEM_RUN_CPU_QUOTA` (e.g. `400`), and tell agents to use
-`-m 6G nice -n 19 env RUSTC_WRAPPER= cargo ... -j 2`, `--test-threads 2`,
-focused `-p` crates only. A slice-level `CPUQuota` does not hold: the runner
-clears it on every call (a forgotten one held every heavy command to 2 CPUs
-from 2026-10-26 to 2026-10-28). Find rustc processes outside the slice
-(`/proc/<pid>/cgroup`) and trace their cwd to the agent.
+`-m 6G nice -n 19 cargo ... -j 2`, `--test-threads 2`,
+focused `-p` crates only. For a machine-wide cap, write the owner's quota to
+`/tmp/solaris-mem-slots/cpu-quota` (e.g. `600%`, replaced atomically); the runner
+clears any slice `CPUQuota` not set through that file (a forgotten one held every
+heavy command to 2 CPUs from 2026-10-26 to 2026-10-28).
+Find rustc processes outside the slice (`/proc/<pid>/cgroup`) and trace their
+cwd to the agent.
 
 ## Disk
 
@@ -234,6 +306,7 @@ Cleanup while agents run:
 | 2026-10-16 | 25G slice, 3 slots x 8G, `-p` on CPUs 8-11, `-x` acceptance only with Main GO | 20+ agents waited 10+ minutes in admission; admission summed caps of every populated scope, not real usage |
 | 2026-10-28 | no slots or queue; watchdog freezer; shared jobserver; measured peaks | current |
 | 2026-11-04 | pooled target dirs with per-tree marker and touch on switch | current; fixes false greens |
+| 2026-11-11 | three build tokens for compile commands (`slot-lock.py`), reused by nested compiles | current; the 3-builder limit was convention only and the fleet still ran more |
 
 Skills or prompts that mention slots, "3 x 5G", "-m 5G", exit 75 as a memory
 refusal, or CPU 2/3 windows are obsolete; AGENTS.md and this page win.

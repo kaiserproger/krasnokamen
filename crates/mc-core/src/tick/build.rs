@@ -795,3 +795,18 @@ pub(crate) fn obstructed(state: &TickState, pos: BlockPos) -> bool {
     }
     false
 }
+
+/// Post-write consequences shared by the tick block phase and the shared
+/// command-commit boundary, so the two cannot drift: item components staged
+/// by accepted placements, the monster-spawner index, and hanging entities
+/// (item frames, paintings) whose support a write removed.
+pub(crate) fn post_write_consequences(
+    state: &mut TickState,
+    writes: &[(BlockPos, u32)],
+    spawned: &mut Vec<EntityId>,
+) {
+    crate::block_entity_defaults::commit_item_components(state);
+    crate::monster_spawner::after_blocks(state, writes);
+    crate::item_frame::blocks_changed(state, writes, spawned);
+    crate::painting::blocks_changed(state, writes, spawned);
+}

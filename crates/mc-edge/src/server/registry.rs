@@ -23,6 +23,9 @@ pub(super) struct RegistryInner {
     /// Client locale last admitted to the core (`ClientInformation.language`);
     /// deduplicates Play updates and is cleared on disconnect.
     pub(super) locales: HashMap<ConnectionId, String>,
+    /// Chat setting last admitted to the core (`ClientInformation.chat_visibility`);
+    /// deduplicates Play updates and is cleared on disconnect.
+    pub(super) chat_visibilities: HashMap<ConnectionId, mc_core::boundary::ChatVisibility>,
     pub(super) roster_dirty: bool,
     // Join state and its waiters share the queue registry's atomic removal.
     pub(super) pending_joins: HashMap<ConnectionId, JoinedSpawn>,
@@ -72,6 +75,11 @@ impl ConnectionRegistry {
         refusal
     }
 
+    /// Whether every player slot is taken, counting joining connections like [`admit`](Self::admit).
+    pub(super) fn is_full(&self, maximum: usize) -> bool {
+        self.inner.lock().admitted.len() >= maximum
+    }
+
     #[cfg(test)]
     pub(super) fn joining_id(&self) -> ConnectionId {
         let id = self.alloc_id();
@@ -96,6 +104,16 @@ impl ConnectionRegistry {
         );
         inner.handles.insert(id, handles);
         Ok(inner.pending_reliable.remove(&id).unwrap_or_default())
+    }
+
+    /// The chat setting last admitted for this connection; Full while none is known.
+    pub(crate) fn chat_visibility(&self, id: ConnectionId) -> mc_core::boundary::ChatVisibility {
+        self.inner
+            .lock()
+            .chat_visibilities
+            .get(&id)
+            .copied()
+            .unwrap_or(mc_core::boundary::ChatVisibility::Full)
     }
 
     /// Read actual mpsc occupied-or-reserved slots only on telemetry requests.
@@ -208,6 +226,13 @@ impl ConnectionRegistry {
         }
     }
 
+    /// The core refused this connection's Join (no `Joined` will come, e.g. a duplicate
+    /// login): fail its join waiters now. The connection owner then reads the stashed
+    /// disconnect reason and sends it, instead of waiting out the join deadline.
+    pub fn refuse_join(&self, id: ConnectionId) {
+        self.inner.lock().join_waiters.remove(&id);
+    }
+
     /// Take a stashed core-ordered disconnect reason, if the pump routed one.
     pub fn take_disconnect_reason(&self, id: ConnectionId) -> Option<String> {
         self.inner.lock().disconnect_reasons.remove(&id)
@@ -252,6 +277,7 @@ impl ConnectionRegistry {
                 self.setup_fences_pending.store(false, Ordering::Release);
             }
             inner.locales.remove(&id);
+            inner.chat_visibilities.remove(&id);
             inner.closers.remove(&id)
         };
         if let Some(closer) = closer {

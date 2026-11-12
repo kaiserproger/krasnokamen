@@ -53,11 +53,29 @@ def _nextest_listing(text):
     raise ValueError('nextest did not produce a test listing')
 
 
+def _loader_live_command(scenario):
+    """argv template for one loader-live scenario ref. `{server_bin}` and `{plugins_dir}`
+    are substituted by ledger._run_harness once the tree's release server is built; the
+    scenario must be a registered graphical loader-live entry (fail-closed otherwise)."""
+    from . import scenarios
+
+    entry = scenarios.SCENARIOS.get(scenario)
+    if entry is None or entry.profile != 'loader-live' or entry.evidence != 'graphical':
+        raise ValueError(f'unknown runnable scenario loader-live:{scenario}')
+    return [sys.executable, '-m', 'tools.harness', 'run', 'scenario', scenario,
+            '--platform', LOADER_LIVE_PLATFORM, '--server-bin', '{server_bin}',
+            '--plugins-dir', '{plugins_dir}', '--timeout-seconds', '420']
+
+
 def _client_command(profile, scenario):
     from . import scenarios
 
     entry = scenarios.SCENARIOS.get(scenario)
-    if entry is None or entry.profile != profile or entry.evidence not in ('graphical', 'tcp', 'native') or profile in ('loader-live', 'dh-gate'):
+    if entry is None or entry.profile != profile or entry.evidence not in ('graphical', 'tcp', 'native'):
+        raise ValueError(f'unknown runnable scenario {profile}:{scenario}')
+    if profile == 'loader-live':
+        return _loader_live_command(scenario)
+    if profile == 'dh-gate':
         raise ValueError(f'unknown runnable scenario {profile}:{scenario}')
     argv = [sys.executable, '-m', 'tools.harness', 'run', 'scenario', scenario]
     if scenario.startswith('native-'):
@@ -71,7 +89,7 @@ _WINDOWED_PROFILES = frozenset({
     'survival', 'inventory', 'entities', 'core-client', 'native-lifecycle',
     'logical-native', 'native-scale', 'title-connect', 'singleplayer-regressions',
     'dialogs', 'admin-commands', 'chisel', 'anti-xray', 'block-log',
-    'composter-chance', 'village-qa', 'village-autonomy-qa',
+    'composter-chance', 'chat-visibility', 'datapack-reload', 'village-qa', 'village-autonomy-qa',
     'civilization-seed-qa', 'village-owner-order-qa', 'scene-shot',
     'settlement-map-qa', 'claim-only-qa', 'buildings-qa', 'army-qa', 'autocraft-qa',
 })
@@ -90,7 +108,7 @@ _BOOLEAN_PROFILE_VERDICTS = {
 }
 _PROFILE_VERDICTS = {
     'village-qa': ('settlement_acceptance', frozenset({
-        'door_walk', 'sleep_return', 'farmer_harvest', 'miner_deposit', 'lumberjack',
+        'door_walk', 'sleep_return', 'night_door', 'farmer_harvest', 'miner_deposit', 'lumberjack',
     })),
     'village-autonomy-qa': ('autonomy_acceptance', _AUTONOMY_VERDICTS),
     'claim-only-qa': ('claim_acceptance', frozenset({
@@ -201,6 +219,8 @@ def _failed_ids(text, cargo):
 
 
 MEM_RUN = Path(os.environ.get('SOLARIS_MEM_RUN', '/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh'))
+LOADER_LIVE_PLATFORM = 'fabric'
+
 
 
 def is_other_tree(tree):
@@ -216,7 +236,7 @@ def tree_build_command(tree, argv):
     if not is_other_tree(tree) or not MEM_RUN.exists():
         return list(argv), env
     env.pop('CARGO_TARGET_DIR', None)
-    return [str(MEM_RUN), '-m', '6G', 'env', 'RUSTC_WRAPPER=', *argv], env
+    return [str(MEM_RUN), '-m', '6G', *argv], env
 
 
 def _built_executable(log):

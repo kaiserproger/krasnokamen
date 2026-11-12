@@ -14,7 +14,7 @@ fn input_dimension(state: &TickState, input: &PlayerInput) -> Dimension {
             return dimension;
         }
     }
-    if let PlayerInput::Join { uuid, .. } = input {
+    if let PlayerInput::Join { uuid, .. } | PlayerInput::ProfileLogin { uuid, .. } = input {
         for world in
             std::iter::once(state).chain(state.other_dimensions.values().map(|world| &**world))
         {
@@ -39,6 +39,12 @@ pub(crate) fn swap_globals(root: &mut TickState, world: &mut TickState) {
     std::mem::swap(&mut root.plugin_players, &mut world.plugin_players);
     std::mem::swap(&mut root.gamerules, &mut world.gamerules);
     std::mem::swap(&mut root.gamerules_dirty, &mut world.gamerules_dirty);
+    // The published `send_command_feedback` cell follows the rules: a rule set from a child
+    // world publishes the same flag the edge reads.
+    std::mem::swap(
+        &mut root.published_command_feedback,
+        &mut world.published_command_feedback,
+    );
     std::mem::swap(&mut root.scoreboard, &mut world.scoreboard);
     std::mem::swap(&mut root.command_storage, &mut world.command_storage);
     std::mem::swap(
@@ -187,6 +193,7 @@ pub(crate) fn run_tick(
             {
                 let view = state.connections.view_distance_of(*connection);
                 let locale = state.connections.locale_of(*connection).map(str::to_owned);
+                let chat = state.connections.chat_visibility_of(*connection);
                 state.connections.remove_by_connection(*connection);
                 if let Some(view) = view {
                     world.connections.set_view_distance(*connection, view);
@@ -194,6 +201,7 @@ pub(crate) fn run_tick(
                 if let Some(locale) = locale {
                     world.connections.set_locale(*connection, locale);
                 }
+                world.connections.set_chat_visibility(*connection, chat);
             }
         }
         let (child_output, mut child_drains, child_times) = crate::tick::run_dimension_tick(

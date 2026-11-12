@@ -18,6 +18,8 @@ pub use checkpoint::{
 };
 pub use maintenance::{NativePruneReport, NativePruneRequest};
 #[cfg(test)]
+mod backup_tests;
+#[cfg(test)]
 mod checkpoint_tests;
 #[cfg(test)]
 mod pack_tests;
@@ -126,6 +128,7 @@ pub struct NativeRecordCounts {
 pub struct NativeStore {
     database: Database,
     identity: [u8; 32],
+    file: std::sync::Arc<std::fs::File>,
 }
 
 pub struct NativeReadOnlyStore {
@@ -279,11 +282,121 @@ fn resolve_base(
     }
     Ok(chunk)
 }
+/// The redb backend and backup reader share the same file handle: Windows
+/// denies reads through a second handle while the database lease is held.
+#[derive(Debug)]
+struct NativeFile(std::sync::Arc<std::fs::File>);
+
+impl NativeFile {
+    fn acquire(file: std::fs::File) -> Result<Self, NativeError> {
+        file.try_lock().map_err(|error| match error {
+            std::fs::TryLockError::WouldBlock => {
+                NativeError::Database(redb::DatabaseError::DatabaseAlreadyOpen.into())
+            }
+            std::fs::TryLockError::Error(error) => NativeError::Io(error),
+        })?;
+        Ok(Self(std::sync::Arc::new(file)))
+    }
+}
+
+/// The lease ends with the store. A process forked while the store was open
+/// shares this descriptor's lock until it execs (or forever, if it never
+/// does); closing our descriptor alone would leave the lock held by that copy,
+/// so a reopen right after the store closes would refuse. Unlocking releases
+/// the lock of the shared open file description for every copy at once.
+impl Drop for NativeFile {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
+    }
+}
+
+fn read_at(file: &std::fs::File, out: &mut [u8], offset: u64) -> std::io::Result<usize> {
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::FileExt::read_at(file, out, offset)
+    }
+    #[cfg(windows)]
+    {
+        std::os::windows::fs::FileExt::seek_read(file, out, offset)
+    }
+}
+
+impl redb::StorageBackend for NativeFile {
+    fn len(&self) -> std::io::Result<u64> {
+        Ok(self.0.metadata()?.len())
+    }
+
+    fn read(&self, mut offset: u64, mut out: &mut [u8]) -> std::io::Result<()> {
+        while !out.is_empty() {
+            match read_at(&self.0, out, offset) {
+                Ok(0) => return Err(std::io::ErrorKind::UnexpectedEof.into()),
+                Ok(count) => {
+                    offset += count as u64;
+                    out = &mut out[count..];
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(())
+    }
+
+    fn write(&self, mut offset: u64, mut bytes: &[u8]) -> std::io::Result<()> {
+        while !bytes.is_empty() {
+            #[cfg(unix)]
+            let result = std::os::unix::fs::FileExt::write_at(&*self.0, bytes, offset);
+            #[cfg(windows)]
+            let result = std::os::windows::fs::FileExt::seek_write(&*self.0, bytes, offset);
+            match result {
+                Ok(0) => return Err(std::io::ErrorKind::WriteZero.into()),
+                Ok(count) => {
+                    offset += count as u64;
+                    bytes = &bytes[count..];
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(())
+    }
+
+    fn set_len(&self, len: u64) -> std::io::Result<()> {
+        self.0.set_len(len)
+    }
+
+    fn sync_data(&self) -> std::io::Result<()> {
+        self.0.sync_data()
+    }
+}
+
+struct NativeSnapshotReader<'a> {
+    file: &'a std::fs::File,
+    offset: u64,
+}
+
+impl std::io::Read for NativeSnapshotReader<'_> {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        let count = read_at(self.file, out, self.offset)?;
+        self.offset += count as u64;
+        Ok(count)
+    }
+}
 
 impl NativeStore {
     #[must_use]
     pub fn identity(&self) -> [u8; 32] {
         self.identity
+    }
+
+    /// Read durable database bytes through its lease-holding handle.
+    /// The caller must serialize the entire read with all database writes and
+    /// use it only after an Immediate commit, with no write transaction open.
+    /// Read transactions may continue; each snapshot reader has its own cursor.
+    pub fn snapshot_reader(&self) -> impl std::io::Read + '_ {
+        NativeSnapshotReader {
+            file: &self.file,
+            offset: 0,
+        }
     }
 
     /// Creates only a new database; the owning prepare operation publishes the
@@ -305,9 +418,11 @@ impl NativeStore {
             .write(true)
             .create_new(true)
             .open(path)?;
+        let backend = NativeFile::acquire(file)?;
+        let file = std::sync::Arc::clone(&backend.0);
         let database = db(Database::builder()
             .set_cache_size(cache_bytes)
-            .create_file(file))?;
+            .create_with_backend(backend))?;
         let mut transaction = db(database.begin_write())?;
         db(transaction.set_durability(Durability::Immediate))?;
         {
@@ -326,7 +441,11 @@ impl NativeStore {
         }
         db(transaction.commit())?;
         crate::atomic_file::sync_parent_dir(path)?;
-        Ok(Self { database, identity })
+        Ok(Self {
+            database,
+            identity,
+            file,
+        })
     }
 
     /// Does not create a missing database or accept a different base identity.
@@ -342,12 +461,27 @@ impl NativeStore {
         if cache_bytes == 0 {
             return Err(NativeError::Invalid("database cache must be positive"));
         }
-        let database = db(Database::builder().set_cache_size(cache_bytes).open(path))?;
+        let backend = NativeFile::acquire(OpenOptions::new().read(true).write(true).open(path)?)?;
+        if backend.0.metadata()?.len() == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "empty native database",
+            )
+            .into());
+        }
+        let file = std::sync::Arc::clone(&backend.0);
+        let database = db(Database::builder()
+            .set_cache_size(cache_bytes)
+            .create_with_backend(backend))?;
         {
             let transaction = db(database.begin_read())?;
             validate_header(&transaction, identity)?;
         }
-        Ok(Self { database, identity })
+        Ok(Self {
+            database,
+            identity,
+            file,
+        })
     }
 
     /// Offline inspection never opens the database for writing or repairs it.

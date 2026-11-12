@@ -47,6 +47,20 @@ pub struct ClientPrefs {
     pub view_distance: i8,
     /// `ClientInformation.language`, e.g. `en_us` or `ru_ru`; empty until sent.
     pub language: String,
+    /// `ClientInformation.chat_visibility`.
+    pub chat_visibility: mc_core::boundary::ChatVisibility,
+}
+
+/// The core's name for the wire chat setting.
+pub(crate) fn chat_visibility(
+    wire: mc_protocol::packets::ChatVisibility,
+) -> mc_core::boundary::ChatVisibility {
+    use mc_core::boundary::ChatVisibility;
+    match wire {
+        mc_protocol::packets::ChatVisibility::Full => ChatVisibility::Full,
+        mc_protocol::packets::ChatVisibility::System => ChatVisibility::System,
+        mc_protocol::packets::ChatVisibility::Hidden => ChatVisibility::Hidden,
+    }
 }
 
 impl Default for ClientPrefs {
@@ -54,6 +68,7 @@ impl Default for ClientPrefs {
         Self {
             view_distance: 8,
             language: String::new(),
+            chat_visibility: mc_core::boundary::ChatVisibility::Full,
         }
     }
 }
@@ -65,6 +80,9 @@ pub struct ConfigOutcome {
     pub client_view_distance: i8,
     /// Client locale carried to the core so settlement dialogs match it.
     pub client_language: String,
+    /// The client's chat setting, admitted to the core before Join so the
+    /// first chat or system message already follows it.
+    pub client_chat_visibility: mc_core::boundary::ChatVisibility,
     /// Bound only after the client accepted exact verified package identities.
     pub loader_session: Option<mc_loader::LoaderSession>,
 }
@@ -92,16 +110,15 @@ pub async fn handle_configuration(
     })
     .await?;
 
-    // Loader content first declares its serverbound channels. Optional-only content
-    // then asks whether the client speaks the Loader before known-pack negotiation,
-    // so its hello (sent while handling the probe) is read ahead of its known-pack
-    // reply.
+    // Loader content first declares its serverbound channels, then asks whether the
+    // client speaks the Loader before known-pack negotiation, so its hello (sent while
+    // handling the probe) is read ahead of its known-pack reply. Required content
+    // probes too: negotiation keeps a Loader client alive through a long stall, but
+    // refuses a client that is not one after `LOADER_HELLO_TIMEOUT`.
     let mut loader_hello = false;
     if loader_manifest.is_some() {
         crate::plugin_loader::send_channel_register(conn).await?;
-        if !loader_required {
-            crate::plugin_loader::send_probe(conn).await?;
-        }
+        crate::plugin_loader::send_probe(conn).await?;
     }
 
     // Advertise the endpoint's own known pack, not any intermediate step.
@@ -221,7 +238,7 @@ pub async fn handle_configuration(
     // the probe; everyone else joins without Loader content.
     let loader_session = match loader_manifest {
         Some(manifest) if loader_required || loader_hello => {
-            Some(crate::plugin_loader::negotiate(conn, manifest, &mut prefs).await?)
+            Some(crate::plugin_loader::negotiate(conn, manifest, &mut prefs, loader_hello).await?)
         }
         _ => None,
     };
@@ -253,6 +270,7 @@ pub async fn handle_configuration(
     Ok(ConfigOutcome {
         client_view_distance: prefs.view_distance,
         client_language: prefs.language,
+        client_chat_visibility: prefs.chat_visibility,
         loader_session,
     })
 }
@@ -310,6 +328,7 @@ pub(crate) fn note_ignored(prefs: &mut ClientPrefs, id: i32, body: Bytes) -> any
         let info = decode_exact::<ServerboundClientInformation>(id, body)?.information;
         prefs.view_distance = info.view_distance;
         prefs.language = info.language;
+        prefs.chat_visibility = chat_visibility(info.chat_visibility);
         return Ok(true);
     }
     if id == ServerboundCustomPayload::ID {

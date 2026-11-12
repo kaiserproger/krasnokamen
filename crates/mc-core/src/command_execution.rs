@@ -79,8 +79,59 @@ pub(crate) fn success_feedback(
     key: &str,
     arguments: Vec<Tag>,
 ) {
+    if state
+        .command_context
+        .current
+        .is_some_and(|context| context.command_block)
+    {
+        inform_admins(state, key, &arguments);
+    }
     if accepts_success(state, connection) {
         feedback(state, connection, key, arguments);
+    }
+}
+
+/// Vanilla `CommandSourceStack.broadcastToAdmins`: a command block with `commandBlockOutput` on shows
+/// its success text to every operator as gray italic `[@: ...]`, but only while
+/// `sendCommandFeedback` is on (javap `CommandSourceStack.broadcastToAdmins`,
+/// `BaseCommandBlock$CloseableCommandBlockSource.shouldInformAdmins`).
+fn inform_admins(state: &mut TickState, key: &str, arguments: &[Tag]) {
+    use crate::command_rules::{BoolRule, boolean};
+    if !boolean(state, BoolRule::SEND_COMMAND_FEEDBACK)
+        || !boolean(state, BoolRule::COMMAND_BLOCK_OUTPUT)
+    {
+        return;
+    }
+    let Tag::Compound(mut fields) = translated(
+        "chat.type.admin",
+        vec![
+            entity_name(state, crate::command_console::EXECUTOR),
+            translated(key, arguments.to_vec()),
+        ],
+    ) else {
+        unreachable!("translated builds a compound")
+    };
+    fields.push(("color".into(), Tag::String("gray".into())));
+    fields.push(("italic".into(), Tag::Byte(1)));
+    let content = Tag::Compound(fields);
+    let operators: Vec<_> = state
+        .connections
+        .all_connections()
+        .filter(|connection| state.plugin_players.is_operator(*connection))
+        .collect();
+    for connection in operators {
+        state.push_player(
+            connection,
+            PlayerChange::StyledChat {
+                content: content.clone(),
+            },
+        );
+    }
+    if state.dimension_globals.active {
+        state
+            .dimension_globals
+            .broadcasts
+            .push(crate::dimensions::globals::Broadcast::AdminChat(content));
     }
 }
 
@@ -101,7 +152,7 @@ pub(crate) fn error(state: &mut TickState, connection: ConnectionId, message: im
     );
 }
 
-fn entity_type_name(state: &TickState, entity: EntityId) -> Option<&'static str> {
+pub(crate) fn entity_type_name(state: &TickState, entity: EntityId) -> Option<&'static str> {
     let body = state.entities.body(state.entities.slot_of(entity)?);
     match body.kind {
         EntityKind::Player { .. } => Some("minecraft:player"),
@@ -161,7 +212,12 @@ fn plain_entity_name(state: &TickState, entity: EntityId) -> String {
 
 pub(crate) fn entity_name(state: &TickState, entity: EntityId) -> Tag {
     if entity == crate::command_console::EXECUTOR {
-        return text("Server");
+        // Vanilla `BaseCommandBlock` names its source `@`; the console is `Server`.
+        let block = state
+            .command_context
+            .current
+            .is_some_and(|context| context.command_block);
+        return text(if block { "@" } else { "Server" });
     }
     if let Some(name) = state.connections.name_of(entity) {
         return text(name);
@@ -416,6 +472,23 @@ pub(crate) fn execute(
                 Success(changed)
             };
         }
+        Command::DefaultGameMode(mode) => {
+            state.default_game_mode = *mode;
+            if state.dimension_globals.active {
+                state.dimension_globals.broadcasts.push(
+                    crate::dimensions::globals::Broadcast::DefaultGameMode(*mode),
+                );
+            }
+            success_feedback(
+                state,
+                connection,
+                "commands.defaultgamemode.success",
+                vec![mode_name(*mode)],
+            );
+            // Vanilla returns the number of players it forced into the mode: none without
+            // `force-gamemode`, which Solaris does not have.
+            return Success(0);
+        }
         Command::Give {
             target,
             item,
@@ -584,14 +657,14 @@ pub(crate) fn execute(
             crate::tick::apply_player_effects(state, connection, executor, effects, changes);
         }
         Command::DebugStart => {
-            return crate::command_debug::start(state, connection, executor, command);
+            return crate::command_debug::start(state, connection);
         }
         Command::DebugStop => {
-            return crate::command_debug::stop(state, connection, executor, command);
+            return crate::command_debug::stop(state, connection);
         }
         Command::DebugFunction { name } => {
             return crate::command_debug::trace_function(
-                state, connection, executor, name, command,
+                state, connection, executor, name, changes,
             );
         }
         Command::Teleport {
@@ -751,7 +824,10 @@ pub(crate) fn execute(
             return Success(1);
         }
         Command::TimeQuery(query) => {
-            let value = query.value(state.tick_control.game_ticks(state.tick), state.day_time);
+            // Inputs run before the frame number advances; a held frame has
+            // already counted itself, so read the age the last frame published.
+            let frame = state.tick + u64::from(!state.tick_control.runs_normally());
+            let value = query.value(state.tick_control.game_ticks(frame), state.day_time);
             success_feedback(state, connection, "commands.time.query", vec![text(value)]);
             return Success((value % i64::from(i32::MAX)) as i32);
         }
@@ -826,6 +902,7 @@ pub(crate) fn execute(
             {
                 state.gamerules.insert(name.clone(), value.clone());
                 state.gamerules_dirty = true;
+                crate::command_rules::publish_command_feedback(state);
             }
             let value = state
                 .gamerules
@@ -922,20 +999,8 @@ pub(crate) fn execute(
                         return Failed;
                     }
                 };
-                let id = crate::tick::spawn_item_entity(state, at, item.stack);
-                if let Some(slot) = state.entities.slot_of(id) {
-                    crate::entity_controls::set_no_gravity(state, slot, item.no_gravity);
-                    state.entities.row_mut(slot).controls.invulnerable = item.invulnerable;
-                    if let Some(delay) = item.pickup_delay {
-                        state.entities.body_mut(slot).pickup_delay = delay;
-                    }
-                    if let Some(age) = item.age {
-                        state.entities.row_mut(slot).age = age;
-                    }
-                    if let Some(motion) = item.motion {
-                        state.entities.set_vel(slot, motion.map(|v| v * 20.0));
-                    }
-                }
+                let id = crate::tick::spawn_item_entity(state, at, item.stack.clone());
+                crate::command_summon::apply_item(state, id, item);
                 changes.entities_spawned.push(id);
                 success_feedback(
                     state,
@@ -957,8 +1022,7 @@ pub(crate) fn execute(
                 .registry
                 .blueprint(type_id)
                 .map_or(20.0, |blueprint| blueprint.params.max_health);
-            let id = state.spawn_mob(type_id, at, health);
-            crate::command_summon::apply(state, id, image);
+            let id = crate::command_summon::spawn(state, type_id, at, health, image);
             changes.entities_spawned.push(id);
             success_feedback(
                 state,
@@ -1070,16 +1134,20 @@ pub(crate) fn execute(
             };
             let content = translated(key, vec![name, message]);
             if connection == crate::command_console::CONNECTION {
-                state.push_player(
+                state.push_to_recipient(
                     connection,
                     PlayerChange::StyledChat {
                         content: content.clone(),
                     },
                 );
             }
-            let connections: Vec<_> = state.connections.all_connections().collect();
+            let connections: Vec<_> = state
+                .connections
+                .all_connections()
+                .filter(|recipient| state.accepts_chat(*recipient))
+                .collect();
             for connection in connections {
-                state.push_player(
+                state.push_to_recipient(
                     connection,
                     PlayerChange::StyledChat {
                         content: content.clone(),
@@ -1090,7 +1158,7 @@ pub(crate) fn execute(
                 state
                     .dimension_globals
                     .broadcasts
-                    .push(crate::dimensions::globals::Broadcast::Chat(content));
+                    .push(crate::dimensions::globals::Broadcast::PlayerChat(content));
             }
             return Success(1);
         }
@@ -1130,6 +1198,12 @@ pub(crate) fn execute(
                 text(message)
             };
             for recipient in recipients {
+                // Every copy is chat (vanilla TeamMsgCommand sends the sender's with
+                // TEAM_MSG_COMMAND_OUTGOING), so only `Full` clients are sent one, the
+                // sender included, as with `/msg`.
+                if !state.accepts_chat(recipient) {
+                    continue;
+                }
                 feedback(
                     state,
                     recipient,
@@ -1181,20 +1255,31 @@ pub(crate) fn execute(
                 text(message)
             };
             for target in targets {
-                if let Some(recipient) = state.connections.entity_connection(target) {
-                    feedback(
-                        state,
+                if let Some(recipient) = state
+                    .connections
+                    .entity_connection(target)
+                    .filter(|recipient| state.accepts_chat(*recipient))
+                {
+                    state.push_to_recipient(
                         recipient,
-                        "commands.message.display.incoming",
-                        vec![entity_name(state, executor), message.clone()],
+                        PlayerChange::StyledChat {
+                            content: translated(
+                                "commands.message.display.incoming",
+                                vec![entity_name(state, executor), message.clone()],
+                            ),
+                        },
                     );
                 }
-                feedback(
-                    state,
-                    connection,
-                    "commands.message.display.outgoing",
-                    vec![entity_name(state, target), message.clone()],
-                );
+                // The sender's copy is chat too (MSG_COMMAND_OUTGOING): a
+                // commands-only client is not sent it.
+                if state.accepts_chat(connection) {
+                    feedback(
+                        state,
+                        connection,
+                        "commands.message.display.outgoing",
+                        vec![entity_name(state, target), message.clone()],
+                    );
+                }
             }
         }
         Command::TellRaw { target, message } => {

@@ -1,0 +1,19 @@
+diff --git a/crates/mc-core/src/shelf.rs b/crates/mc-core/src/shelf.rs
+index c20bfaee..559efe23 100644
+--- a/crates/mc-core/src/shelf.rs
++++ b/crates/mc-core/src/shelf.rs
+@@ -204,12 +204,12 @@ pub(crate) fn decode_chunk(
+         }
+         let fail = |error: &dyn std::fmt::Display| format!("shelf {pos:?}: {error}");
+         let Tag::Compound(fields) =
+-            mc_nbt::read_network(&mut bytes.as_slice()).expect("validated shelf NBT")
++            mc_nbt::read_network(&mut bytes.as_slice()).map_err(|e| fail(&e))?
+         else {
+             return Err(fail(&"expected compound"));
+         };
+         let (_, slots) = mc_data::storage_blocks::decode_shelf(&fields, &registry.items)
+-            .expect("validated shelf fields");
++            .map_err(|e| fail(&e))?;
+         decoded.push((key(*pos), slots));
+     }
+     Ok(decoded)

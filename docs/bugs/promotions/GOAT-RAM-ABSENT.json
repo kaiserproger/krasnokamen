@@ -1,0 +1,52 @@
+{
+  "id": "GOAT-RAM-ABSENT",
+  "verdict": "promoted",
+  "fix_commit": "patch:26f4b8aa95c2742a1ee15df7e88bef9c3d1cd6284af8074bad7950bfb0b9fffb",
+  "fix_commit_full": "patch:26f4b8aa95c2742a1ee15df7e88bef9c3d1cd6284af8074bad7950bfb0b9fffb",
+  "promoted_at": "2026-11-11T21:58:51+00:00",
+  "tree_head": "0ea7a8f4e3d9e840e92332e34f9f4f9469b6472f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "26f4b8aa95c2742a1ee15df7e88bef9c3d1cd6284af8074bad7950bfb0b9fffb",
+  "reversed_files": [
+    "crates/mc-core/src/tick.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:mob_lanes::tests::goat_ram_into_stone_drops_one_horn_with_instrument_and_updates_metadata": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:mob_lanes::tests::goat_rams_a_nearby_living_target": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-goat-ram": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-goat-ram --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/A1MobsCommandsGate/.analysis/validation/20261111T215235-ledger-promote-q59lh4q5/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:mob_lanes::tests::goat_ram_into_stone_drops_one_horn_with_instrument_and_updates_metadata": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:mob_lanes::tests::goat_rams_a_nearby_living_target": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/A1MobsCommandsGate/.analysis/validation/20261111T210330-native-v2-goat-ram-gw_sg_4h/result.json",
+    "tree_head": "0ea7a8f4e3d9e840e92332e34f9f4f9469b6472f",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "4b5069bc16e9099f1a5378bf96f8a096aedfcfac27cc2cb4d4ac5ea498ac7f45",
+    "covers": [
+      "harness:entities:native-v2-goat-ram"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/A1MobsCommandsGate/.analysis/validation/20261111T215235-ledger-promote-q59lh4q5"
+}

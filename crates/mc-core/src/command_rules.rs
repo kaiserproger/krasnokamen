@@ -302,6 +302,7 @@ handles!(BoolRule, false:
     ADVANCE_WEATHER = "advance_weather",
     ALLOW_ENTERING_NETHER_USING_PORTALS = "allow_entering_nether_using_portals",
     BLOCK_DROPS = "block_drops",
+    COMMAND_BLOCK_OUTPUT = "command_block_output",
     DROWNING_DAMAGE = "drowning_damage",
     ENDER_PEARLS_VANISH_ON_DEATH = "ender_pearls_vanish_on_death",
     ENTITY_DROPS = "entity_drops",
@@ -314,6 +315,7 @@ handles!(BoolRule, false:
     MOB_EXPLOSION_DROP_DECAY = "mob_explosion_drop_decay",
     MOB_GRIEFING = "mob_griefing",
     NATURAL_HEALTH_REGENERATION = "natural_health_regeneration",
+    PROJECTILES_CAN_BREAK_BLOCKS = "projectiles_can_break_blocks",
     PVP = "pvp",
     RAIDS = "raids",
     SEND_COMMAND_FEEDBACK = "send_command_feedback",
@@ -341,6 +343,16 @@ handles!(IntRule, true:
     RANDOM_TICK_SPEED = "random_tick_speed",
     RESPAWN_RADIUS = "respawn_radius",
 );
+
+/// Publish `send_command_feedback` for the edge's own command replies.
+pub(crate) fn publish_command_feedback(state: &TickState) {
+    if let Some(published) = &state.published_command_feedback {
+        published.store(
+            boolean(state, BoolRule::SEND_COMMAND_FEEDBACK),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+}
 
 /// Allocation-free typed lookup; invalid persisted values use the default.
 #[must_use]

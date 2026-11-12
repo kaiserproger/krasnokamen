@@ -80,6 +80,37 @@ class MatrixTest(unittest.TestCase):
             self.assertEqual(path.parent, Path(directory))
             self.assertLess(len(path.name), 255)
 
+    def test_server_instance_leases_both_ports_under_flock(self):
+        # Regression: java-matrix servers used hardcoded 26200/26201, then
+        # bind-probe-and-close reservations that raced (concurrent callers
+        # could be handed the same port; the loser's clients joined the
+        # winner's server and the auth ack never arrived). Both ports must be
+        # cross-process flock leases in the driver's own range.
+        with tempfile.TemporaryDirectory() as directory:
+            args = SimpleNamespace(
+                server_bin=Path("/bin/true"), plugins_dir=Path(directory),
+                data_dir=Path(directory), timeout_seconds=30,
+                context=SimpleNamespace(commands=[], cwds=[], exits=[], logs=[]),
+            )
+            game = matrix.PortReservation(26250, Path(directory) / "26250.lock", -1)
+            dash = matrix.PortReservation(26251, Path(directory) / "26251.lock", -1)
+            with patch.object(matrix, "copy_plugins", return_value=[]), \
+                    patch.object(matrix, "prepare_access"), \
+                    patch.object(matrix, "ProtocolServer") as server_cls, \
+                    patch.object(matrix, "reserve_matrix_port", side_effect=[game, dash]) as reserve:
+                server = server_cls.return_value
+                server._process = None
+                server.running = False
+                with matrix.server_instance(args, Path(directory) / "server", 1, input_log=True):
+                    self.assertEqual(server.config_overrides, {'server': {'input_log': True}})
+                    kwargs = server_cls.call_args.kwargs
+            self.assertIs(kwargs["port"], game)
+            self.assertIs(kwargs["dashboard_port"], dash)
+            self.assertEqual(kwargs["port_range"], matrix.PORT_RANGE)
+            self.assertEqual(reserve.call_args_list[0].kwargs, {"port_range": matrix.PORT_RANGE})
+            self.assertEqual(reserve.call_args_list[1].kwargs,
+                             {"exclude": game, "port_range": matrix.PORT_RANGE})
+
 
 if __name__ == "__main__":
     unittest.main()

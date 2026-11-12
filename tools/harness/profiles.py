@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import os
 import runpy
+import select
+import signal
 import subprocess
 import sys
 import time
@@ -18,10 +20,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from .runtime import AGENT_ROOT, REPO_ROOT, ChildExited, PHASES, start_xvfb, stop_process, tag_failure
+from .runtime import REPO_ROOT, ChildExited, PHASES, sibling_root, start_xvfb, stop_process, tag_failure
 
 BACKENDS = REPO_ROOT / "tools" / "harness" / "backends"
-DEFAULT_PLUGINS_ROOT = REPO_ROOT.parent / "solaris-default-plugins"
 
 
 
@@ -36,6 +37,7 @@ class ProfileContext:
     extra_args: list[str] = field(default_factory=list)
     release: bool = False
     timeout_seconds: float | None = None
+    stage_timeout_seconds: float | None = None
     platform: str | None = None
     # A named scenario's identity, set by `cmd_run` when the catalog entry
     # declares it. `None` keeps every profile's own default/override semantics.
@@ -54,6 +56,45 @@ class ProfileContext:
     windowed: bool = False
     # loader-live can exercise an immutable v2 candidate without building it.
     server_bin: Path | None = None
+
+
+def _kill_stage_tree(proc: subprocess.Popen[Any]) -> None:
+    """Freeze and kill descendants, including those in separate sessions."""
+    pending = [proc.pid]
+    descriptors: list[int] = []
+    try:
+        while pending:
+            pid = pending.pop()
+            try:
+                fd = os.pidfd_open(pid)
+            except ProcessLookupError:
+                continue
+            descriptors.append(fd)
+            try:
+                signal.pidfd_send_signal(fd, signal.SIGSTOP)
+            except ProcessLookupError:
+                continue
+            for children in Path(f"/proc/{pid}/task").glob("*/children"):
+                try:
+                    pending.extend(int(child) for child in children.read_text().split())
+                except FileNotFoundError:
+                    pass
+        for fd in reversed(descriptors):
+            try:
+                signal.pidfd_send_signal(fd, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.wait()
+        for fd in descriptors:
+            if not select.select([fd], [], [], 5)[0]:
+                raise RuntimeError("stage descendant did not exit after SIGKILL")
+    finally:
+        for fd in descriptors:
+            os.close(fd)
 
 
 def _run_command(
@@ -94,9 +135,9 @@ def _run_command(
                 flush=True,
             )
             try:
-                returncode = proc.wait()
+                returncode = proc.wait(timeout=ctx.stage_timeout_seconds)
             except BaseException:
-                stop_process(proc, interrupt=True)
+                _kill_stage_tree(proc)
                 raise
     finally:
         if proc is not None:
@@ -278,9 +319,10 @@ def run_build(ctx: ProfileContext) -> dict[str, Any]:
 
 
 def run_java(ctx: ProfileContext) -> dict[str, Any]:
+    loader = sibling_root("loader")
     return _run_command(
         [
-            str(AGENT_ROOT / "gradlew"),
+            str(loader / "gradlew"),
             "--no-daemon",
             "--console=plain",
             "--continue",
@@ -293,7 +335,7 @@ def run_java(ctx: ProfileContext) -> dict[str, Any]:
         ],
         ctx,
         "java.log",
-        cwd=AGENT_ROOT,
+        cwd=loader,
     )
 
 
@@ -305,9 +347,7 @@ def run_fixture_check(ctx: ProfileContext) -> dict[str, Any]:
     )
 
 def _run_first_party_gate(ctx: ProfileContext, profile: str) -> dict[str, Any]:
-    plugins_root = Path(
-        os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", str(DEFAULT_PLUGINS_ROOT))
-    )
+    plugins_root = sibling_root("plugins")
     argv = [
         sys.executable,
         str(plugins_root / "tools" / "run_integration.py"),
@@ -390,6 +430,20 @@ def run_composter_chance(ctx: ProfileContext) -> dict[str, Any]:
     from .backends import composter_chance
 
     return composter_chance.run(ctx)
+
+
+def run_chat_visibility(ctx: ProfileContext) -> dict[str, Any]:
+    """Graphical chat-visibility gate: a proxy sets the real client's chat mode, the client shows what the server sent."""
+    from .backends import chat_visibility
+
+    return chat_visibility.run(ctx)
+
+
+def run_datapack_reload(ctx: ProfileContext) -> dict[str, Any]:
+    """Graphical datapack hot-reload recipe gate (enable and disable without a restart)."""
+    from .backends import datapack_reload
+
+    return datapack_reload.run(ctx)
 
 
 def run_block_log(ctx: ProfileContext) -> dict[str, Any]:
@@ -552,11 +606,13 @@ def run_loader_live(ctx: ProfileContext) -> dict[str, Any]:
         from .loader_settlements import run
 
         scenario = {"run": run}
+    elif ctx.scenario_id == "loader-fabric-screen-admission":
+        from .loader_screen_admission import run
+
+        scenario = {"run": run}
     elif ctx.scenario_id is not None:
         # Named first-party scenarios normally live beside their sibling package.
-        plugins_root = Path(
-            os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", str(DEFAULT_PLUGINS_ROOT))
-        )
+        plugins_root = sibling_root("plugins")
         scenario = runpy.run_path(str(plugins_root / "tools" / f"{ctx.scenario_id}.py"))
     result = loader.run(
         platform, timeout, ctx.artifact_dir, scenario,
@@ -970,6 +1026,16 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Native player loads wheat seeds into a hopper; observe individual debits and composter levels",
         "run": run_composter_chance,
     },
+    "chat-visibility": {
+        "scope": "real-client",
+        "description": "Native player behind a proxy that sets its chat mode: full, commands-only and hidden clients, and a hidden client joining into the Nether, hear only what the server sends them",
+        "run": run_chat_visibility,
+    },
+    "datapack-reload": {
+        "scope": "real-client",
+        "description": "Native player crafts before, during and after a live /datapack enable and disable; the output slot follows the reloaded recipe without a restart",
+        "run": run_datapack_reload,
+    },
     "block-log": {
         "scope": "real-client",
         "description": "Block-log gate: grief (break/place/steal/break chest), /co lookup + rollback restores blocks and chest contents exactly, restart keeps history, /co restore re-applies (native --client, windowed for screenshots)",
@@ -1157,6 +1223,8 @@ PROFILE_PREREQUISITES = {
     "admin-commands": _NATIVE,
     "anti-xray": _NATIVE,
     "composter-chance": _NATIVE,
+    "chat-visibility": _NATIVE,
+    "datapack-reload": _NATIVE,
     "block-log": _NATIVE,
     "chisel": _NATIVE,
     "core-client": _SHARED_BUILD,

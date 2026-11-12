@@ -1795,10 +1795,9 @@ pub(super) fn convert(
                 .directory(Path::new(""))
                 .join("data/minecraft")
                 .join(name);
-            let key = canonical
-                .to_str()
+            let key = mc_data::resource_path::slash_relative(Path::new(""), &canonical)
                 .ok_or_else(|| fail("non-UTF8 saved-data path"))?;
-            if let Some(tag) = metadata.get(key) {
+            if let Some(tag) = metadata.get(&key) {
                 if fight {
                     if dimension != Dimension::End {
                         return Err(fail(format!("{key}: dragon fight outside End")));
@@ -1852,6 +1851,7 @@ pub(super) fn convert(
             .expect("dimension collected");
         for (&(x, z), chunk) in chunks.iter_mut() {
             for (index, entity) in chunk.entities.iter_mut().enumerate() {
+                mc_core::native_checkpoint::drop_ignored_variant(entity);
                 if let Some(raids) = image(&mut manifest, dimension).raids.as_mut() {
                     mc_core::raids::hydrate_native_entity(raids, entity).map_err(|error| {
                         let path = source

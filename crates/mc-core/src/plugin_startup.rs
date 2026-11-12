@@ -183,7 +183,7 @@ pub fn apply(
                 .map(|(_, recipe)| recipe.id.clone()),
         )
         .collect();
-    registry.refresh_iron_smelting();
+    registry.refresh_recipe_indexes();
     Ok(())
 }
 

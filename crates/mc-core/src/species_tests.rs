@@ -266,7 +266,7 @@ fn loaded_food_tags_drive_breeding_but_not_horse_healing_food() {
     let horse = type_id(&registry, "horse");
     let horse_food = registry.blueprint(horse).unwrap().breed_food.clone();
     let tags = mc_data::tags::TagsData::from_registries(std::collections::BTreeMap::from([(
-        mc_data::Identifier::parse("minecraft:item").unwrap(),
+        mc_data::Identifier::parse(mc_data::tags::ITEM_REGISTRY).unwrap(),
         std::collections::BTreeMap::from([
             (
                 mc_data::Identifier::parse("minecraft:cow_food").unwrap(),

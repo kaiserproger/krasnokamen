@@ -38,12 +38,6 @@ _PUBLIC_DESCRIPTOR_FIELDS = (
 )
 
 
-def _client_root() -> Path:
-    return Path(
-        os.environ.get("SOLARIS_CLIENT_ROOT", runtime.REPO_ROOT.parent / "solaris-client")
-    ).expanduser().resolve()
-
-
 def _record_binary(ctx: ProfileContext, binary: Path) -> None:
     evidence = ctx.client_evidence
     path = str(binary)
@@ -65,7 +59,7 @@ def _record_binary(ctx: ProfileContext, binary: Path) -> None:
 def resolve_binary(ctx: ProfileContext) -> Path:
     """Resolve an override or build the missing default debug executable once."""
     evidence = ctx.client_evidence
-    root = _client_root()
+    root = runtime.sibling_root("client")
     override = os.environ.get("SOLARIS_CLIENT_BINARY")
     binary = Path(override).expanduser() if override else Path("target/debug/solaris-client")
     if not binary.is_absolute():
@@ -218,7 +212,7 @@ def start(
             raise ValueError("native client startup timeout must be positive")
         if username is not None and not runtime.USERNAME_RE.fullmatch(username):
             raise ValueError("native client username must contain 1-16 ASCII letters, digits or underscores")
-        root = _client_root()
+        root = runtime.sibling_root("client")
         evidence["root"] = str(root)
         if not root.is_dir():
             raise RuntimeError(f"native client root is missing: {root}; set SOLARIS_CLIENT_ROOT")
@@ -280,6 +274,11 @@ def start(
             "--runtime-dir", str(runtime_dir),
             "--artifact-dir", str(artifact_dir),
         ]
+        if ctx.scenario_id in {"native-v2-shift-double-click", "native-v2-shift-components",
+                               "native-v2-shift-chest-correction"}:
+            # A 320x240 GUI remains legible at scale 1 while minimizing
+            # llvmpipe latency for the sub-250ms correction gesture.
+            argv.extend(["--width", "320", "--height", "240"])
         # Subscribe before Popen so even immediate descriptor publication cannot
         # race the watch. A pidfd is attached as soon as the child exists.
         selector, notify_fd, _ = runtime._require_event_fds(None, runtime_dir)

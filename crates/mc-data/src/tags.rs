@@ -39,8 +39,20 @@ const WATER_RAW_ID: i32 = 2;
 const FLOWING_LAVA_RAW_ID: i32 = 3;
 const LAVA_RAW_ID: i32 = 4;
 
+/// Item registry shared by tag admission, recipes and registry reports.
+pub const ITEM_REGISTRY: &str = "minecraft:item";
+
 /// Built-in effect registry shared by tag admission and gameplay lookups.
 pub const MOB_EFFECT_REGISTRY: &str = "minecraft:mob_effect";
+
+/// Entity type registry, for gameplay tag lookups by entity type raw id.
+pub const ENTITY_TYPE_REGISTRY: &str = "minecraft:entity_type";
+
+/// Block registry, for gameplay tag lookups by block raw id.
+pub const BLOCK_REGISTRY: &str = "minecraft:block";
+
+/// Entity types whose block hits may break blocks (`Projectile.mayBreak`).
+pub const IMPACT_PROJECTILES: &str = "minecraft:impact_projectiles";
 
 /// `(tags/<fs subpath>, "minecraft:<registry id>")` pairs the loader
 /// knows about. We deliberately limit the set to registries the
@@ -70,7 +82,7 @@ const TAG_ROOTS: &[(&str, &str)] = &[
     ("fluid", "minecraft:fluid"),
     ("game_event", "minecraft:game_event"),
     ("instrument", "minecraft:instrument"),
-    ("item", "minecraft:item"),
+    ("item", ITEM_REGISTRY),
     ("mob_effect", MOB_EFFECT_REGISTRY),
     ("painting_variant", "minecraft:painting_variant"),
     ("point_of_interest_type", "minecraft:point_of_interest_type"),
@@ -174,7 +186,7 @@ const REQUIRED_CLIENT_FALLBACK_TAGS: &[(&str, &[&str])] = &[
         ],
     ),
     (
-        "minecraft:item",
+        ITEM_REGISTRY,
         &[
             "minecraft:enchantable/armor",
             "minecraft:enchantable/bow",
@@ -260,6 +272,20 @@ const INCORRECT_FOR_STONE_OR_COPPER_TOOL: &[&str] = &[
 ];
 
 const REQUIRED_BLOCK_TAGS: &[(&str, &[&str])] = &[
+    (
+        "minecraft:sniffer_diggable_block",
+        &[
+            "minecraft:dirt",
+            "minecraft:coarse_dirt",
+            "minecraft:rooted_dirt",
+            "minecraft:mud",
+            "minecraft:muddy_mangrove_roots",
+            "minecraft:moss_block",
+            "minecraft:pale_moss_block",
+            "minecraft:grass_block",
+            "minecraft:podzol",
+        ],
+    ),
     (
         "minecraft:snaps_goat_horn",
         &[
@@ -1429,7 +1455,7 @@ mod lookup_tests {
 pub fn solaris_required_item_tags(items: &ItemRegistry) -> TagsData {
     let tags: BTreeMap<String, Vec<String>> = serde_json::from_str(REQUIRED_ITEM_TAGS)
         .expect("embedded required item tags JSON is valid");
-    let item_registry = Identifier::parse("minecraft:item").expect("static registry id");
+    let item_registry = Identifier::parse(ITEM_REGISTRY).expect("static registry id");
     let mut item_tags = BTreeMap::new();
     for (tag, entries) in tags {
         let ids: Vec<_> = entries

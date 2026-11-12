@@ -1184,6 +1184,9 @@ mod tests {
     #[test]
     fn visibility_capture_is_one_shot_per_dashboard_lifetime() {
         let state = test_state();
+        state
+            .coreperf_visibility_requested
+            .store(0, Ordering::Release);
         assert!(
             state
                 .coreperf_visibility_requested

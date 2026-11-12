@@ -77,6 +77,54 @@ class ClientSettingsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 cli.resolve_client_settings("quilt")
 
+class McpLeaseRetryTests(unittest.TestCase):
+    REVOKED = {"isError": True, "structuredContent": {
+        "code": "controller_lease_revoked", "retryable": False, "stage": "automation"}}
+
+    def test_a_call_refused_by_a_revoked_lease_is_issued_once_more(self) -> None:
+        # Harness XTest input revokes the native client's writer lease while a call is in flight.
+        from .mcp import McpClient
+
+        client = McpClient("http://127.0.0.1:1/mcp", "t")
+        replies = [self.REVOKED, {"structuredContent": {"frame_id": 7}}]
+        with mock.patch.object(client, "_request", side_effect=replies) as request:
+            self.assertEqual(client.call_tool("client_capture", {"name": "x"}), {"frame_id": 7})
+        self.assertEqual(request.call_count, 2)
+
+    def test_other_errors_and_a_second_revocation_still_fail(self) -> None:
+        from .mcp import McpClient
+
+        client = McpClient("http://127.0.0.1:1/mcp", "t")
+        other = {"isError": True, "structuredContent": {"code": "controller_busy"}}
+        with mock.patch.object(client, "_request", side_effect=[other]) as request:
+            with self.assertRaisesRegex(RuntimeError, "controller_busy"):
+                client.call_tool("minecraft_send_chat", {})
+        self.assertEqual(request.call_count, 1)
+        with mock.patch.object(client, "_request", side_effect=[self.REVOKED, self.REVOKED]):
+            with self.assertRaisesRegex(RuntimeError, "controller_lease_revoked"):
+                client.call_tool("minecraft_send_chat", {})
+
+class SiblingRootTests(unittest.TestCase):
+    def test_a_linked_worktree_finds_the_main_checkouts_sibling_and_the_variable_wins(self) -> None:
+        # <work>/solaris (main checkout), <work>/wt/Name (git worktree), <work>/solaris-loader (sibling).
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp).resolve()
+            main, worktree, loader = work / "solaris", work / "wt" / "Name", work / "solaris-loader"
+            loader.mkdir()
+            git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "init.defaultBranch=main"]
+            subprocess.run([*git, "init", "-q", str(main)], check=True)
+            subprocess.run([*git, "-C", str(main), "commit", "-q", "--allow-empty", "-m", "base"], check=True)
+            subprocess.run([*git, "-C", str(main), "worktree", "add", "-q", "-b", "wt/Name", str(worktree)],
+                           check=True)
+            unset = {key: value for key, value in os.environ.items() if key not in runtime.SIBLING_ENV.values()}
+            with mock.patch.dict(os.environ, unset, clear=True):
+                self.assertEqual(runtime.sibling_root("loader", worktree), loader)
+                self.assertEqual(runtime.sibling_root("loader", main), loader)
+            other = work / "other-loader"
+            with mock.patch.dict(os.environ, {"SOLARIS_LOADER_ROOT": str(other)}):
+                self.assertEqual(runtime.sibling_root("loader", worktree), other)
+
+
 class DriverLabelTests(unittest.TestCase):
     def test_missing_manifest_defaults_to_draft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -179,7 +227,7 @@ class RunTestPolicyTests(unittest.TestCase):
                 with mock.patch.object(cli, "_default_cpu_quota", return_value="600%"):
                     with mock.patch.object(cli, "_available_bytes", return_value=16 * 1024**3):
                         with mock.patch.object(cli, "_scope_command", return_value=["scope"]) as scope:
-                            with mock.patch.object(cli.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
+                            with mock.patch.object(cli.os, "execvpe"):
                                 with contextlib.redirect_stdout(io.StringIO()):
                                     self.assertEqual(cli._exec_in_scope(profile), 0)
                 scope.assert_called_once_with("600%", expected)
@@ -197,7 +245,7 @@ class RunTestPolicyTests(unittest.TestCase):
                 with mock.patch.dict(os.environ, {cli.MEMORY_MAX_ENV: "8G"}):
                     with mock.patch.object(cli, "_available_bytes", return_value=16 * 1024**3):
                         with mock.patch.object(cli, "_scope_command", return_value=["scope"]) as scope:
-                            with mock.patch.object(cli.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
+                            with mock.patch.object(cli.os, "execvpe"):
                                 with contextlib.redirect_stdout(io.StringIO()):
                                     self.assertEqual(cli._exec_in_scope("correctness"), 0)
                         scope.assert_called_once_with("600%", "8G")
@@ -235,6 +283,17 @@ class RunTestPolicyTests(unittest.TestCase):
 
 
 class ReceiptContractTests(unittest.TestCase):
+    def test_test_stage_deadline_is_only_set_by_explicit_option(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            contexts = []
+            spec = {"scope": "harness", "prerequisites": profiles._NONE,
+                    "run": lambda ctx: contexts.append(ctx.stage_timeout_seconds) or {}}
+            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):
+                with mock.patch.dict(profiles.PROFILES, {"test": spec}):
+                    self.assertEqual(cli.cmd_run(["test"]), 0)
+                    self.assertEqual(cli.cmd_run(["test", "--timeout-seconds", "7"]), 0)
+            self.assertEqual(contexts, [None, 7.0])
+
     def test_unknown_profile_never_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):
@@ -720,6 +779,94 @@ class ReadinessCleanupTests(unittest.TestCase):
                     self.assertEqual(process.wait(timeout=10), 3)
                 finally:
                     runtime.stop_process(process)
+
+    def test_wait_port_does_not_accept_a_foreign_listener(self) -> None:
+        # Regression: a concurrent/stale server holding the port made wait_port
+        # return success for a child that never bound it, so clients joined the
+        # wrong server (java-matrix auth ack missing, "logged in from another
+        # location"). Readiness must be the child's own LISTEN socket.
+        port = runtime.reserve_port()
+        holder_source = (
+            "import signal,socket,sys; "
+            "listener=socket.socket(); "
+            "listener.bind(('127.0.0.1',int(sys.argv[1]))); "
+            "listener.listen(); print('foreign ready',flush=True); signal.pause()"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "child.log"
+            with log_path.open("wb") as log:
+                holder = subprocess.Popen(
+                    [sys.executable, "-c", holder_source, str(port)],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                child = subprocess.Popen(
+                    [sys.executable, "-c", "import signal; signal.pause()"],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                try:
+                    runtime.wait_port(port, 10.0, holder, log_path=log_path)  # holder owns it
+                    self.assertTrue(runtime.port_open(port))  # the foreign listener accepts
+                    with self.assertRaises(RuntimeError) as raised:
+                        runtime.wait_port(port, 3.0, child, log_path=log_path)
+                    self.assertIn("did not become ready", str(raised.exception))
+                    self.assertIsNone(child.poll())
+                finally:
+                    runtime.stop_process(holder)
+                    runtime.stop_process(child)
+
+    def test_wait_port_child_exit_wins_over_foreign_listener(self) -> None:
+        port = runtime.reserve_port()
+        holder_source = (
+            "import signal,socket,sys; "
+            "listener=socket.socket(); "
+            "listener.bind(('127.0.0.1',int(sys.argv[1]))); "
+            "listener.listen(); signal.pause()"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "child.log"
+            with log_path.open("wb") as log:
+                holder = subprocess.Popen(
+                    [sys.executable, "-c", holder_source, str(port)],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                child = subprocess.Popen(
+                    [sys.executable, "-c", "import time; time.sleep(0.5); raise SystemExit(3)"],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                try:
+                    with self.assertRaises(runtime.ChildExited):
+                        runtime.wait_port(port, 10.0, child, log_path=log_path)
+                finally:
+                    runtime.stop_process(holder)
+                    runtime.stop_process(child)
+
+    def test_wait_port_accepts_a_descendant_listener(self) -> None:
+        # Loader clients are forked by Gradle's JavaExec: the MCP listener
+        # belongs to a child of the spawned process and must count as ready.
+        port = runtime.reserve_port()
+        binder = (
+            "import signal,socket,sys; "
+            "listener=socket.socket(); "
+            "listener.bind(('127.0.0.1',int(sys.argv[1]))); "
+            "listener.listen(); print('bound',flush=True); signal.pause()"
+        )
+        parent_source = (
+            "import signal,subprocess,sys; "
+            f"subprocess.Popen([sys.executable,'-c',{binder!r},str(sys.argv[1])]); "
+            "print('parent ready',flush=True); signal.pause()"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "parent.log"
+            with log_path.open("wb") as log:
+                parent = subprocess.Popen(
+                    [sys.executable, "-c", parent_source, str(port)],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                try:
+                    runtime.wait_port(port, 10.0, parent, log_path=log_path)
+                    self.assertIsNone(parent.poll())
+                finally:
+                    runtime.stop_process(parent)
 
     def test_xvfb_closed_display_announcement_stops_process_before_fallback(self) -> None:
         popen = subprocess.Popen

@@ -46,6 +46,7 @@ pub struct EntityLifeState {
     pub frog_pregnant: bool,
     #[serde(skip)]
     pub frog_spawn_target: Option<[i32; 3]>,
+    pub sniffer: Option<Box<crate::sniffer::Sniffer>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -261,7 +262,7 @@ pub fn make_child(state: &mut TickState, id: EntityId) {
 
 /// Rebuild retained species appearance when a checkpoint/replay row is restored.
 pub fn restore_appearance(body: &crate::entities::Body, row: &mut ColdRow) {
-    row.entity_life.mounted = row.entity_life.mount.rider.is_some();
+    row.entity_life.mounted = !row.entity_life.mount.riders.is_empty();
     let EntityKind::Mob { type_id } = body.kind else {
         return;
     };
@@ -296,6 +297,40 @@ pub fn restore_appearance(body: &crate::entities::Body, row: &mut ColdRow) {
             crate::boundary::EntityDataValue::Boolean(row.entity_life.charged_lightning),
         ));
     }
+}
+
+/// The variant a calf of `type_id` inherits from `actor` or `partner`, if the
+/// parent the coin picks has one; a parent on the species default passes none.
+fn inherited_variant(
+    state: &TickState,
+    actor: EntityId,
+    partner: EntityId,
+    type_id: u32,
+) -> Option<(u8, crate::boundary::EntityDataValue)> {
+    let name = &state.registry.blueprint(type_id)?.name;
+    let (index, _) = crate::blueprint::variant_data(name, 0)?;
+    let (low, high) = if actor < partner {
+        (actor, partner)
+    } else {
+        (partner, actor)
+    };
+    let seed = (low.0 as i64 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ (high.0 as i64 as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
+        ^ state.tick.wrapping_mul(0x1656_67B1_9E37_79F9);
+    let from = if seed.rotate_left(41) & 1 == 0 {
+        low
+    } else {
+        high
+    };
+    let slot = state.entities.slot_of(from)?;
+    state
+        .entities
+        .row(slot)
+        .appearance
+        .extra
+        .iter()
+        .find(|(at, _)| *at == index)
+        .cloned()
 }
 
 pub fn breed(
@@ -351,6 +386,9 @@ pub fn breed(
                 }
             })
         });
+    // Vanilla getBreedOffspring: the calf takes this parent's or the partner's
+    // variant, chosen by a fair coin (cow, pig and chicken alike).
+    let variant = inherited_variant(state, actor, partner, type_id);
     // Only a retained love cause credits the player; the breeding actors are mobs.
     let advancement_breeding = [actor, partner].into_iter().find_map(|parent| {
         let slot = state.entities.slot_of(parent)?;
@@ -405,6 +443,7 @@ pub fn breed(
         health,
         taming: crate::taming::inherit(state, actor, partner, type_id),
         wool,
+        variant,
         advancement_breeding,
     });
     if let Some(player) = breeder.and_then(|id| state.players.get_mut(&id)) {
@@ -1046,6 +1085,9 @@ pub fn to_fields(life: &EntityLifeState, love: u32) -> Vec<(String, mc_nbt::Tag)
             "stew_effects".into(),
             mc_data::item_stack::encode_stew_effects(&life.stew_effects),
         ));
+    }
+    if let Some(sniffer) = &life.sniffer {
+        fields.extend(crate::sniffer::to_fields(sniffer));
     }
     fields.extend(crate::mounts::persistence::to_fields(life));
     fields.extend(crate::portals::fields(life.portal));

@@ -16,6 +16,7 @@ pub(super) fn refuse_input(state: &mut TickState, input: &PlayerInput) -> bool {
         | PlayerInput::SpawnProtectionOperators { .. }
         | PlayerInput::SetViewDistance { .. }
         | PlayerInput::SetLocale { .. }
+        | PlayerInput::SetChatVisibility { .. }
         | PlayerInput::ConfirmTeleport { .. }
         | PlayerInput::BuildResync { .. }
         | PlayerInput::BuildPreviewFence { .. } => return false,
@@ -146,7 +147,7 @@ pub(crate) fn unlock_session(state: &mut TickState, connection: ConnectionId) {
                 }
             };
         state.entities.row_mut(slot).loot.attributes = attributes;
-        let mut player = super::hydrate_player(connection, Some(&record));
+        let mut player = super::hydrate_player(connection, Some(&record), state.default_game_mode);
         player.inventory_menu.carried = record.carried;
         player.inventory_menu.grid = record.grid;
         player.inventory_menu.grid.resize(

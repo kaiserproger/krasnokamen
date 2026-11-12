@@ -189,7 +189,9 @@ pub(super) fn configured_viewer(
         .get(&connection)
         .copied();
     viewer.dimension_type_ids = server.wire.dimension_type_ids;
-    viewer.advancements = Arc::clone(&server.recipes.advancements);
+    if let Some(packets) = crate::recipes::packets_for(&server.hub.current_registry()) {
+        viewer.advancements = Arc::clone(&packets.advancements);
+    }
     viewer
 }
 
@@ -236,6 +238,15 @@ pub(super) fn route_outbox(
                 server
                     .connections
                     .stash_disconnect_reason(connection, reason.clone());
+                // A Disconnect without a Joined in the same ordered list is a refused Join
+                // (e.g. duplicate login): wake the connection's join wait so it can send
+                // the reason instead of waiting out the join deadline.
+                if !changes
+                    .iter()
+                    .any(|change| matches!(change, mc_core::boundary::PlayerChange::Joined { .. }))
+                {
+                    server.connections.refuse_join(connection);
+                }
                 break;
             }
         }
@@ -476,6 +487,7 @@ pub(super) async fn wait_for_join(
     _name: &str,
     client_view_distance: i8,
     client_language: &str,
+    chat_visibility: mc_core::boundary::ChatVisibility,
 ) -> anyhow::Result<JoinedSpawn> {
     {
         let mut inner = server.connections.inner.lock();
@@ -486,6 +498,7 @@ pub(super) async fn wait_for_join(
         // Already submitted before Join: remember it so the first Play
         // ClientInformation does not repeat the same locale.
         inner.locales.insert(id, client_language.to_owned());
+        inner.chat_visibilities.insert(id, chat_visibility);
     }
     // Fast path: Joined arrived before we registered interest.
     if let Some(joined) = server.connections.take_join(id) {

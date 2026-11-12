@@ -2030,6 +2030,7 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
 }
 
 /// One needed blueprint kind whose level-one bill the settlement cannot fund.
+#[derive(Debug)]
 pub(crate) struct WaitingKind {
     pub(crate) blueprint: String,
     /// Unfunded bill entries, in bill order.
@@ -2037,6 +2038,7 @@ pub(crate) struct WaitingKind {
 }
 
 /// One unfunded bill entry of [`WaitingKind`].
+#[derive(Debug)]
 pub(crate) struct WaitingNeed {
     pub(crate) item: String,
     pub(crate) have: u64,
@@ -2128,8 +2130,10 @@ fn gatherer_demand(
 }
 
 /// Current bounded construction target, before subtracting the iron pipeline.
-/// A pending owner order takes priority, then an active project, then the
-/// largest single autonomous candidate (not the sum of speculative builds).
+/// A pending owner order takes priority. Otherwise the larger of the active
+/// project and the largest single autonomous candidate (not the sum of
+/// speculative builds): a funded project must not starve the iron for an
+/// unfunded priority house it was admitted ahead of, as `wool_demand` agrees.
 pub(crate) fn iron_demand(
     state: &TickState,
     id: SettlementId,
@@ -2171,8 +2175,8 @@ pub(crate) fn iron_demand(
             .and_then(|level| selected_bed_bill(state, id, &level.materials, &images))
             .map_or(0, |bill| demand(&bill));
     }
-    if let Some(project) = &record.project {
-        return executor::status(state, id, &project.structure)
+    let active = record.project.as_ref().map_or(0, |project| {
+        executor::status(state, id, &project.structure)
             .ok()
             .map_or(0, |snapshot| {
                 let bill: Vec<_> = snapshot
@@ -2185,16 +2189,15 @@ pub(crate) fn iron_demand(
                     })
                     .collect();
                 demand(&bill)
-            });
-    }
+            })
+    });
     let catalog = blueprints::all(&state.registry);
     candidate_kinds(state, record, &images)
         .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
         .filter_map(|blueprint| blueprint.level(1))
         .filter_map(|level| selected_bed_bill(state, id, &level.materials, &images))
         .map(|bill| demand(&bill))
-        .max()
-        .unwrap_or(0)
+        .fold(active, u32::max)
 }
 
 /// A current construction bill still needs wool, directly or through a bed.

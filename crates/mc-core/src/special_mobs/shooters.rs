@@ -6,7 +6,7 @@ pub(crate) fn run(
     intents: &mut Vec<Intent>,
     id: EntityId,
     kind: GoalKind,
-    targets: &[(EntityId, [f64; 3])],
+    targets: &crate::target_grid::TargetGrid<'_>,
     attack: &mut Attack,
 ) {
     let Some(slot) = state.entities.slot_of(id) else {
@@ -26,7 +26,10 @@ pub(crate) fn run(
         if state.tick >= attack.deadline {
             if attack.stage == 2 {
                 if state.entities.ground(slot)
-                    && let Some((_, at)) = targets.iter().find(|(id, _)| Some(*id) == attack.target)
+                    && let Some((_, at)) = targets
+                        .table()
+                        .iter()
+                        .find(|(id, _)| Some(*id) == attack.target)
                 {
                     // Swept walker physics resolves the recovery jump next tick.
                     let pos = state.entities.pos(slot);
@@ -58,7 +61,7 @@ pub(crate) fn run(
         GoalKind::HomingShot => 20.0,
         _ => f64::from(state.entities.row(slot).sight_range),
     };
-    let found = target(state, slot, targets, range);
+    let found = target_in(state, slot, targets, range);
     if kind == GoalKind::HomingShot {
         metadata(
             state,
@@ -365,7 +368,7 @@ fn drink(
     id: EntityId,
     slot: EntitySlot,
     attack: &mut Attack,
-    targets: &[(EntityId, [f64; 3])],
+    targets: &crate::target_grid::TargetGrid<'_>,
 ) -> bool {
     if let Some(potion) = attack.drink {
         if state.tick >= attack.deadline {
@@ -410,8 +413,11 @@ fn drink(
         Some(Potion::Healing)
     } else if !row.active_effects.has(EffectId::Speed)
         && targets
-            .iter()
-            .any(|(_, at)| distance_sq(pos, *at) > 121.0 && distance_sq(pos, *at) < 256.0)
+            .nearest(pos, 16.0, |(_, at)| {
+                let distance = distance_sq(pos, *at);
+                (distance > 121.0 && distance < 256.0).then_some(distance)
+            })
+            .is_some()
     {
         Some(Potion::Swiftness)
     } else {

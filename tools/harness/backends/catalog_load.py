@@ -1352,6 +1352,10 @@ async def run(args: argparse.Namespace) -> int:
             for name, binary in binaries.items():
                 if binary is None or not binary.is_file() or not os.access(binary, os.X_OK):
                     raise ClassifiedFailure("INFRA_BLOCKED", f"missing/nonexecutable explicit release {name} binary: {binary}")
+                try:
+                    scale.refuse_incremental_pin(binary, name)
+                except ValueError as error:
+                    raise ClassifiedFailure("INFRA_BLOCKED", str(error)) from error
             receipt["binaries"] = {name: {"path": str(binary), "sha256": scale.binary_sha256(binary)} for name, binary in binaries.items()}
             receipt["registry_hashes"] = tree_hash(args.vanilla_data_dir)
             fixture = await prepare(args, directory / "prepare", recipe)

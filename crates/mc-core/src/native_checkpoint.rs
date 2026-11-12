@@ -9,6 +9,17 @@ use mc_world::native::{
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+/// Anvil import keeps vanilla tolerance for `variant`: the game ignores a
+/// malformed or unknown value and keeps the species default, so the importer
+/// drops such a field and never stores it. (The native hydrate also tolerates
+/// an unknown entry, for records an older importer stored; it fails closed on
+/// a malformed one.)
+pub fn drop_ignored_variant(record: &mut mc_data::entity_nbt::VanillaEntity) {
+    if crate::core::variant_from_vanilla_entity(record).is_err() {
+        record.extra_fields.retain(|(key, _)| key != "variant");
+    }
+}
+
 /// Hydrate one native entity compound without filesystem access.
 pub fn hydrate_entity(
     registry: &crate::registry::CoreRegistry,
@@ -92,6 +103,7 @@ pub fn hydrate_entity(
             .any(|goal| goal.kind == crate::blueprint::GoalKind::Breed)
     });
     let mut appearance = appearance_from_vanilla_entity(&record);
+    crate::core::native_variant(&record, &mut appearance).map_err(invalid)?;
     crate::end_fight::native_appearance(&record, &mut appearance).map_err(invalid)?;
     crate::item_frame::native_appearance(&record, &mut appearance)?;
     crate::painting::native_appearance(&record, &mut appearance, registry)?;
@@ -680,6 +692,7 @@ pub fn recover_with_reader(
             end_fight: image.end_fight.clone(),
             wandering_trader: image.wandering_trader,
             scheduled_functions: image.scheduled_functions.clone(),
+            datapack_selection: image.datapack_selection.clone(),
             generated_entity_claims: image.generated_entity_claims.clone(),
             tickets: image.tickets.clone(),
             block_ticks: image.block_ticks.clone(),
@@ -979,6 +992,9 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
         image
             .scheduled_functions
             .clone_from(&replay.scheduled_functions);
+        image
+            .datapack_selection
+            .clone_from(&replay.datapack_selection);
         image.end_fight = replay.end_fight.clone();
         let memory = crate::world::ChunkWorld::new(
             world.config.seed,

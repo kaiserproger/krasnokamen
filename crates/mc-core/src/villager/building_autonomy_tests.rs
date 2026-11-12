@@ -710,16 +710,39 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
             .unwrap()
     });
     let mut observed = [false; 4];
-    for _ in 0..20_000 {
-        state.tick += 20;
-        state.day_time = (state.tick as i64 + 3000).rem_euclid(24_000);
-        state.tick_budget.reset(state.tick);
-        let mut changes = ChangeSet::default();
-        crate::settlements::autonomy::tick(&mut state, &mut changes);
-        crate::settlements::tick(&mut state, &mut changes);
-        super::brain::tick(&mut state, &mut changes);
-        let residents: Vec<_> = crate::settlements::construction::residents(&state, id).collect();
-        for slot in residents {
+    let planks = state
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:oak_planks").unwrap())
+        .unwrap()
+        .default
+        .0;
+    let mut published_construction = false;
+    let mut residents = Vec::new();
+    crate::settlements::construction_crafting::reset_scan_stats();
+    // Include the real root's renewable resource growth rather than ticking
+    // only settlement and brain systems. Closure is deterministic at tick
+    // 72,901 on this fixture; the bound leaves room without a wall clock.
+    state.day_time = 3000;
+    for _ in 0..80_000 {
+        let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+        // Deterministic work budget for the whole run (closure uses about
+        // 20,000 full proofs and 870,000 recipe candidates). Disabling the
+        // recipe index, dependency admission or the funding memo exceeds it.
+        let work = crate::settlements::construction_crafting::scan_stats();
+        assert!(
+            work.funding_calls <= 30_000 && work.recipes_scanned <= 1_500_000,
+            "construction funding work exceeded its budget at tick {}: {work:?}",
+            state.tick
+        );
+        published_construction |= output
+            .changes
+            .blocks
+            .iter()
+            .any(|change| change.state == planks);
+        residents.clear();
+        residents.extend(crate::settlements::construction::residents(&state, id));
+        for &slot in &residents {
             let next = state
                 .entities
                 .row(slot)
@@ -739,8 +762,6 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
                 }
             }
         }
-        // Match the real root tick's block commit boundary before POI refresh.
-        state.world.fold_overlay();
         for (index, item) in items.iter().enumerate() {
             observed[index] |= state.block_entities.values().any(|container| {
                 container
@@ -771,8 +792,8 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
             }
             assert!(record.owner.is_none());
             assert!(
-                !state.plugin_block_writes.is_empty(),
-                "canonical structure executor journals construction"
+                published_construction,
+                "canonical structure executor publishes construction block changes"
             );
             assert!(state.entities.slots().any(|slot| {
                 state.entities.row(slot).villager.as_ref().is_some_and(|v| {
@@ -805,7 +826,9 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
         })
         .collect();
     panic!(
-        "autonomous closure failed: sources={observed:?}; projects={:?}\nstock={stock:?}\nminers={miners:?}\nroles={:?}",
+        "autonomous closure failed: tick={} day={} sources={observed:?}; projects={:?}\nstock={stock:?}\nminers={miners:?}\nroles={:?}",
+        state.tick,
+        state.day_time,
         crate::settlements::construction::project_status(&state, id),
         crate::settlements::construction::residents(&state, id)
             .map(|slot| {

@@ -1,0 +1,13 @@
+diff --git a/crates/mc-edge/src/server.rs b/crates/mc-edge/src/server.rs
+index e2f8722e..ee2bda63 100644
+--- a/crates/mc-edge/src/server.rs
++++ b/crates/mc-edge/src/server.rs
+@@ -841,7 +841,7 @@ impl EdgeServer {
+                 self.feedback(id, "Incorrect argument for command")?;
+             } else {
+                 let names = self.admin.roster(option.is_some());
+-                self.feedback(
++                self.success_feedback(
+                     id,
+                     &format!(
+                         "There are {} of a max of {} players online: {}",

@@ -24,7 +24,6 @@ pub mod block_ticks;
 pub(crate) mod block_tools;
 #[cfg(test)]
 mod block_tools_tests;
-pub mod blocks;
 pub mod blueprint;
 #[cfg(test)]
 mod blueprint_family_tests;
@@ -64,7 +63,7 @@ mod command_particle;
 mod command_sound;
 mod command_storage;
 mod command_tag;
-pub(crate) use command_debug::{Profiler as DebugProfiler, TraceArtifact as DebugTraceArtifact};
+pub(crate) use command_debug::{Profiler as DebugProfiler, Tracer as DebugTracer};
 #[cfg(test)]
 mod command_difficulty_tests;
 pub mod command_enchant;
@@ -162,6 +161,7 @@ pub mod mounts;
 pub mod native_checkpoint;
 pub mod natural_spawn;
 mod omens;
+mod parrot;
 mod physical_attacks;
 mod physical_defense;
 mod piglin;
@@ -198,10 +198,12 @@ mod shulker;
 mod signs;
 mod singleplayer_pause;
 pub mod sleep;
+mod sniffer;
 mod spawn_egg;
 pub mod special_mobs;
 pub mod species;
 mod statistics;
+mod strider;
 pub mod survival;
 pub mod taming;
 mod target_grid;
@@ -222,6 +224,8 @@ pub mod world;
 
 #[cfg(test)]
 mod blueprint_tests;
+#[cfg(test)]
+mod chat_visibility_tests;
 #[cfg(test)]
 mod core_tests;
 #[cfg(test)]
@@ -262,6 +266,8 @@ mod species_tests;
 mod target_grid_tests;
 #[cfg(test)]
 mod tick_tests;
+#[cfg(test)]
+mod vanilla_mob_behavior_tests;
 #[cfg(test)]
 mod view_negotiation_tests;
 

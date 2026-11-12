@@ -1,6 +1,11 @@
 use super::*;
 use crate::boundary::{ChangeSet, ConnectionId, PlayerChange, PlayerInput};
 
+#[path = "command_summon_variant_disk_tests.rs"]
+mod variant_disk_tests;
+#[path = "command_summon_variant_refusal_tests.rs"]
+mod variant_refusal_tests;
+
 fn summon(kind: &str, nbt: &str) -> (TickState, EntityId) {
     let (mut state, actor, _) = crate::hostile_tests::setup(8.0);
     let parsed = crate::commands::parse(&format!("summon {kind} ~ ~ ~ {nbt}"), true).unwrap();
@@ -14,6 +19,126 @@ fn summon(kind: &str, nbt: &str) -> (TickState, EntityId) {
     );
     let id = changes.entities_spawned[0];
     (state, id)
+}
+
+#[test]
+fn experience_orb_summon_preserves_native_value_count_kind_and_checkpoint() {
+    for (nbt, expected) in [
+        ("{Value:5s,Count:4,Motion:[0d,0d,0d]}", (5, 4)),
+        ("{Value:7s}", (7, 1)),
+        ("", (0, 1)),
+        ("{}", (0, 1)),
+        ("{Value:-1s}", (-1, 1)),
+        ("{Value:32767s}", (32767, 1)),
+        ("{Value:-32768s}", (-32768, 1)),
+    ] {
+        let (state, id) = summon("experience_orb", nbt);
+        let slot = state.entities.slot_of(id).unwrap();
+        let body = state.entities.body(slot);
+        let row = state.entities.row(slot);
+        assert_eq!(
+            state.entities.experience_orbs().collect::<Vec<_>>(),
+            vec![id]
+        );
+        assert!(
+            state
+                .entities
+                .bodies()
+                .iter()
+                .all(|body| !matches!(body.kind, crate::entities::EntityKind::Mob { .. })),
+            "{nbt}: not a mob row"
+        );
+        assert!(matches!(
+            body.kind,
+            crate::entities::EntityKind::ExperienceOrb { .. }
+        ));
+        assert_eq!(row.appearance.experience_orb, Some(expected));
+        assert_eq!(body.movement, crate::blueprint::MovementClass::Item);
+        assert_eq!((body.half_width, body.height), (0.25, 0.5));
+        let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+        let native = chunks
+            .values()
+            .flat_map(|chunk| &chunk.entities)
+            .find(|entity| entity.uuid == row.uuid)
+            .unwrap();
+        assert_eq!(native.experience_orb, Some(expected));
+        let fields = mc_data::entity_nbt::entity_to_fields(&state.registry.items, native).unwrap();
+        assert!(fields.contains(&("Value".into(), Tag::Short(expected.0 as i16))));
+        assert!(fields.contains(&("Count".into(), Tag::Int(expected.1))));
+        let root = std::env::temp_dir().join(format!(
+            "solaris-summon-signed-orb-{}",
+            uuid::Uuid::new_v4()
+        ));
+        mc_world::anvil::write_entity_regions(&root, &state.registry.items, &chunks, 0).unwrap();
+        let reopened = mc_world::anvil::read_entity_regions(&root, &state.registry.items).unwrap();
+        let restored = reopened
+            .values()
+            .flat_map(|chunk| &chunk.entities)
+            .find(|entity| entity.uuid == row.uuid)
+            .unwrap();
+        assert_eq!(
+            restored.experience_orb,
+            Some(expected),
+            "{nbt}: disk round-trip"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[test]
+fn experience_orb_summon_enters_native_pickup_processing() {
+    let (mut state, id) = summon("experience_orb", "{Value:5s,Count:4}");
+    let player = *state.players.keys().next().unwrap();
+    crate::experience_orbs::run(&mut state, &mut ChangeSet::default(), &mut Vec::new());
+    assert_eq!(state.players[&player].vitals.experience.total, 5);
+    let slot = state.entities.slot_of(id).expect("three pickups remain");
+    assert_eq!(
+        state.entities.row(slot).appearance.experience_orb,
+        Some((5, 3))
+    );
+}
+
+#[test]
+fn negative_experience_orb_pickup_preserves_xp_and_native_mending_damage() {
+    for (nbt, expected_damage) in [
+        ("{Value:-1s}", None),
+        ("{Value:-1s}", Some(20)),
+        ("{Value:-32768s}", Some(20)),
+    ] {
+        let (mut state, id) = summon("experience_orb", nbt);
+        let player = *state.players.keys().next().unwrap();
+        let actor = state.players.get_mut(&player).unwrap();
+        actor.vitals.experience.add_points(10);
+        let before = actor.vitals.experience;
+        if expected_damage.is_some() {
+            actor.inventory.slots[0] = crate::command_items::ItemArgument::parse(
+                r#"minecraft:diamond_pickaxe[damage=20,enchantments={"minecraft:mending":1}]"#,
+            )
+            .unwrap()
+            .stack(&state.registry.items)
+            .unwrap();
+        }
+        let mut changes = ChangeSet::default();
+        crate::experience_orbs::run(&mut state, &mut changes, &mut Vec::new());
+        assert_eq!(state.players[&player].vitals.experience, before, "{nbt}");
+        assert_eq!(
+            state.players[&player].inventory.slots[0].damage,
+            expected_damage
+        );
+        assert!(state.entities.slot_of(id).is_none());
+        assert_eq!(changes.entities_removed, vec![id]);
+    }
+}
+
+#[test]
+fn experience_orb_summon_rejects_invalid_or_misapplied_fields_before_allocation() {
+    let mut state = rejected_tag_fixture();
+    for value in ["0", "-1", "1.5f", "'bad'"] {
+        rejected_tag_in_state(&mut state, "experience_orb", "Count", value);
+    }
+    rejected_tag_in_state(&mut state, "experience_orb", "Value", "'bad'");
+    rejected_tag_in_state(&mut state, "cow", "Value", "5s");
+    rejected_tag_in_state(&mut state, "cow", "Count", "4");
 }
 
 #[test]
@@ -96,6 +221,10 @@ fn invulnerable_is_applied() {
 fn summon_no_gravity_and_invulnerable_are_effective_and_persistent() {
     let (mut state, id) = summon("cow", "{NoGravity:1b,Invulnerable:1b,NoAI:1b}");
     let slot = state.entities.slot_of(id).unwrap();
+    assert!(state.entities.row(slot).controls.no_gravity);
+    assert!(state.entities.row(slot).opaque_entity_fields.is_empty());
+    let target = crate::commands::target_of("@e[type=minecraft:cow,nbt={NoGravity:1b}]").unwrap();
+    assert!(crate::command_execution::resolve_target(&state, id, &target).contains(&id));
     let metadata = |state: &TickState| {
         state
             .entities
@@ -882,4 +1011,86 @@ fn villager_summon_keeps_its_authored_profession_and_rejects_bad_data() {
     assert_eq!(data.level, 2);
     rejected_tag_reaches_sender("villager", "VillagerData", "{profession:'minecraft:bogus'}");
     rejected_tag_reaches_sender("cow", "VillagerData", "{profession:'minecraft:farmer'}");
+}
+
+#[test]
+fn climate_variant_summons_publish_and_checkpoint_typed_variants() {
+    for (kind, registry, index, variants) in [
+        (
+            "chicken",
+            "chicken_variant",
+            18,
+            &["temperate", "cold", "warm"][..],
+        ),
+        ("cow", "cow_variant", 18, &["temperate", "cold", "warm"][..]),
+        ("pig", "pig_variant", 19, &["temperate", "cold", "warm"][..]),
+        (
+            "zombie_nautilus",
+            "zombie_nautilus_variant",
+            21,
+            &["temperate", "warm"][..],
+        ),
+    ] {
+        for variant in variants {
+            let name = format!("minecraft:{variant}");
+            let variant_id = mc_data::required_registry_entry_id(
+                registry,
+                &mc_data::Identifier::parse(name.as_str()).unwrap(),
+            )
+            .unwrap();
+            let expected = match kind {
+                "chicken" => EntityDataValue::ChickenVariant(variant_id),
+                "cow" => EntityDataValue::CowVariant(variant_id),
+                "pig" => EntityDataValue::PigVariant(variant_id),
+                _ => EntityDataValue::ZombieNautilusVariant(variant_id),
+            };
+            let ages: &[i32] = if kind == "zombie_nautilus" {
+                &[0]
+            } else {
+                &[0, -24000]
+            };
+            for age in ages {
+                let (state, id) = summon(kind, &format!("{{variant:'{name}',Age:{age}}}"));
+                let slot = state.entities.slot_of(id).unwrap();
+                let row = state.entities.row(slot);
+                assert!(
+                    row.appearance.extra.contains(&(index, expected.clone())),
+                    "{kind}/{variant}"
+                );
+                assert_eq!(row.appearance.baby, *age < 0, "{kind}/{variant}");
+                assert!(state.appearance_changed.contains(&id));
+                let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+                let native = chunks
+                    .values()
+                    .flat_map(|chunk| &chunk.entities)
+                    .find(|record| record.uuid == row.uuid)
+                    .unwrap();
+                assert!(
+                    native
+                        .extra_fields
+                        .contains(&("variant".into(), Tag::String(name.clone())))
+                );
+                let mut imported = crate::core::appearance_from_vanilla_entity(native);
+                crate::core::native_variant(native, &mut imported).unwrap();
+                let image: crate::journal::EntityAppearanceImage =
+                    serde_json::from_slice(&serde_json::to_vec(&imported).unwrap()).unwrap();
+                assert!(
+                    image.extra.contains(&(index, (&expected).into())),
+                    "{kind}/{variant}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn climate_variant_summons_reject_wrong_registry_and_type_before_allocation() {
+    let mut state = rejected_tag_fixture();
+    for kind in ["cow", "pig", "chicken", "zombie_nautilus"] {
+        for value in ["1", "'minecraft:not_a_variant'", "'bad:UPPERCASE'"] {
+            rejected_tag_in_state(&mut state, kind, "variant", value);
+        }
+    }
+    rejected_tag_in_state(&mut state, "zombie_nautilus", "variant", "'minecraft:cold'");
+    rejected_tag_in_state(&mut state, "sheep", "variant", "'minecraft:warm'");
 }

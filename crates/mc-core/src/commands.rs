@@ -23,6 +23,7 @@ pub const ROOTS: &[(&str, u8)] = &[
     ("settlement", 0),
     ("trigger", 0),
     ("gamemode", 2),
+    ("defaultgamemode", 2),
     ("teleport", 2),
     ("tp", 2),
     ("execute", 2),
@@ -157,6 +158,9 @@ pub struct Selector {
     pub nbt: Vec<(mc_nbt::Tag, bool)>,
     /// Advancement filters (`advancements={id=true}`).
     pub advancements: Vec<(String, bool)>,
+    /// Loot-predicate filters (`predicate=<id>` / `predicate=!<id>`) by
+    /// canonical identifier, resolved against the datapack predicates.
+    pub predicates: Vec<(String, bool)>,
     pub distance: Option<(Option<f64>, Option<f64>)>,
     /// Absolute selector-origin overrides (`x`, `y`, `z`).
     pub position: [Option<f64>; 3],
@@ -308,6 +312,8 @@ pub enum Command {
         mode: GameMode,
         target: Target,
     },
+    /// `/defaultgamemode <mode>`: the mode new players join in.
+    DefaultGameMode(GameMode),
     Teleport {
         target: Target,
         destination: Destination,
@@ -454,6 +460,7 @@ pub fn parse(command: &str, operator: bool) -> Result<Command, CommandError> {
         "loot" => crate::command_loot::parse(args).map(Command::Loot),
         "settlement" => crate::settlements::commands::parse(args).map(Command::Settlement),
         "gamemode" => parse_gamemode(args),
+        "defaultgamemode" => parse_defaultgamemode(args),
         "tp" | "teleport" => parse_teleport(args),
         "give" => parse_give(args),
         "clear" => parse_clear(args),
@@ -621,6 +628,7 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
         yaw: None,
         nbt: Vec::new(),
         advancements: Vec::new(),
+        predicates: Vec::new(),
         distance: None,
         position: [None; 3],
         extent: [None; 3],
@@ -823,9 +831,15 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
                 selector.nbt.push((nbt, negated));
             }
             "predicate" => {
-                return Err(CommandError::Message(
-                    "unsupported selector option 'predicate'".into(),
-                ));
+                let negated = value.starts_with('!');
+                let id = value.strip_prefix('!').unwrap_or(value);
+                let id = if id.contains(':') {
+                    id.to_owned()
+                } else {
+                    format!("minecraft:{id}")
+                };
+                let id = Identifier::parse(id).map_err(|_| invalid())?;
+                selector.predicates.push((id.as_str().to_owned(), negated));
             }
             "advancements" => {
                 let body = value
@@ -981,6 +995,18 @@ pub(crate) fn coords(words: &[&str]) -> Option<[Coord; 3]> {
                 .then_some(coords)
         }
         _ => None,
+    }
+}
+
+fn parse_defaultgamemode(args: &[&str]) -> Result<Command, CommandError> {
+    match parse_gamemode(args) {
+        Ok(Command::GameMode {
+            mode,
+            target: Target::Executor,
+        }) if args.len() == 1 => Ok(Command::DefaultGameMode(mode)),
+        _ => Err(CommandError::Usage(
+            "defaultgamemode <survival|creative|adventure|spectator>",
+        )),
     }
 }
 

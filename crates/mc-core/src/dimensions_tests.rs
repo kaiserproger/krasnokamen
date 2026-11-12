@@ -370,6 +370,20 @@ fn translation(change: &PlayerChange, key: &str) -> bool {
         if fields.iter().any(|(name, value)| name == "translate" && value == &mc_nbt::Tag::String(key.into())))
 }
 
+/// Gamerules are server-wide: a rule set by a player in the Nether reaches the edge's cell too.
+#[test]
+fn send_command_feedback_set_from_the_nether_is_published_for_the_edge() {
+    let (mut state, _, bob) = worlds();
+    let published = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    state.published_command_feedback = Some(std::sync::Arc::clone(&published));
+    let shown = || published.load(std::sync::atomic::Ordering::Relaxed);
+    assert_eq!(travel::locate(&state, bob).unwrap().0, Dimension::Nether);
+    command(&mut state, 2, "gamerule send_command_feedback false");
+    assert!(!shown());
+    command(&mut state, 2, "gamerule send_command_feedback true");
+    assert!(shown());
+}
+
 #[test]
 fn dimensional_teleport_success_obeys_player_feedback_rule() {
     let (mut state, alice, _) = worlds();
@@ -1360,11 +1374,19 @@ fn duplicate_login_kicks_the_old_session_and_hands_over_inventory_without_duplic
     let (_, drains, _) = crate::tick::run_tick(
         &mut state,
         &[
+            PlayerInput::ProfileLogin {
+                connection: ConnectionId(3),
+                uuid: uuid::Uuid::from_u128(1),
+            },
             PlayerInput::Join {
                 connection: ConnectionId(3),
                 uuid: uuid::Uuid::from_u128(1),
                 name: "Alice".into(),
                 permission_level: 0,
+            },
+            PlayerInput::ProfileLogin {
+                connection: ConnectionId(4),
+                uuid: uuid::Uuid::from_u128(2),
             },
             PlayerInput::Join {
                 connection: ConnectionId(4),
@@ -1372,11 +1394,19 @@ fn duplicate_login_kicks_the_old_session_and_hands_over_inventory_without_duplic
                 name: "Bob".into(),
                 permission_level: 0,
             },
+            PlayerInput::ProfileLogin {
+                connection: ConnectionId(5),
+                uuid: uuid::Uuid::from_u128(5),
+            },
             PlayerInput::Join {
                 connection: ConnectionId(5),
                 uuid: uuid::Uuid::from_u128(5),
                 name: "Fresh".into(),
                 permission_level: 0,
+            },
+            PlayerInput::ProfileLogin {
+                connection: ConnectionId(6),
+                uuid: uuid::Uuid::from_u128(5),
             },
             PlayerInput::Join {
                 connection: ConnectionId(6),
@@ -2429,4 +2459,291 @@ fn rejoin_child_dimension_keeps_initial_client_locale() {
         );
         assert_eq!(state.connections.locale_of(connection), None);
     }
+}
+
+fn nether_cow(state: &TickState) -> (crate::entities::EntitySlot, uuid::Uuid) {
+    let nether = &state.other_dimensions[&Dimension::Nether];
+    let slot = nether
+        .entities
+        .slots()
+        .find(|slot| {
+            crate::command_execution::entity_type_name(nether, nether.entities.body(*slot).id)
+                == Some("minecraft:cow")
+        })
+        .expect("the nether cow");
+    (slot, nether.entities.row(slot).uuid)
+}
+
+#[test]
+fn data_merge_entity_edits_an_entity_in_another_loaded_dimension() {
+    let (mut state, _, _) = worlds();
+    command(
+        &mut state,
+        1,
+        "execute in the_nether run summon minecraft:cow 8 150 8 {Health:9f}",
+    );
+    let (slot, uuid) = nether_cow(&state);
+    assert_eq!(
+        state.other_dimensions[&Dimension::Nether]
+            .entities
+            .row(slot)
+            .health,
+        9.0
+    );
+    let (_, drains) = command(
+        &mut state,
+        1,
+        &format!("data merge entity {uuid} {{Health:5f,NoAI:1b}}"),
+    );
+    let said = format!("{drains:?}");
+    let nether = &state.other_dimensions[&Dimension::Nether];
+    assert_eq!(nether.entities.row(slot).health, 5.0, "{said}");
+    assert!(
+        nether
+            .appearance_changed
+            .contains(&nether.entities.body(slot).id),
+        "the edit must reach the owning world's WAL"
+    );
+    assert!(
+        state.entities.slots().all(|slot| {
+            crate::command_execution::entity_type_name(&state, state.entities.body(slot).id)
+                != Some("minecraft:cow")
+        }),
+        "the entity stays in its own dimension"
+    );
+    let (_, drains) = command(&mut state, 1, &format!("data get entity {uuid} Health"));
+    assert!(format!("{drains:?}").contains("5.0"), "{drains:?}");
+    // The same edit through `execute in` takes the swapped-world route.
+    command(
+        &mut state,
+        1,
+        "execute in the_nether run data modify entity @e[type=minecraft:cow,limit=1] Health set value 3f",
+    );
+    assert_eq!(
+        state.other_dimensions[&Dimension::Nether]
+            .entities
+            .row(slot)
+            .health,
+        3.0
+    );
+}
+
+#[test]
+fn data_edits_a_block_entity_in_another_loaded_dimension() {
+    let (mut state, _, _) = worlds();
+    command(
+        &mut state,
+        1,
+        "execute in the_nether run setblock 8 151 8 minecraft:chest",
+    );
+    let (_, drains) = command(
+        &mut state,
+        1,
+        "execute in the_nether run data modify block 8 151 8 Items set value [{Slot:1b,id:'minecraft:stone',count:4}]",
+    );
+    let nether = &state.other_dimensions[&Dimension::Nether];
+    assert_eq!(
+        nether.block_entities[&(8, 151, 8)].slots[1].count,
+        4,
+        "{drains:?}"
+    );
+    assert!(
+        !state.block_entities.contains_key(&(8, 151, 8)),
+        "the overworld at the same coordinates is untouched"
+    );
+}
+
+#[test]
+fn rejoin_child_dimension_keeps_the_clients_chat_setting() {
+    use crate::boundary::ChatVisibility;
+    for (dimension, split) in [
+        (Dimension::Nether, false),
+        (Dimension::Nether, true),
+        (Dimension::End, false),
+        (Dimension::End, true),
+    ] {
+        let (mut state, _, bob) = worlds();
+        if dimension == Dimension::End {
+            command(&mut state, 1, "execute in the_end run tp Bob 8 150 8");
+            assert_eq!(travel::locate(&state, bob).unwrap().0, dimension);
+        }
+        crate::tick::run_tick(
+            &mut state,
+            &[PlayerInput::Leave {
+                connection: ConnectionId(2),
+            }],
+        );
+        let connection = ConnectionId(4);
+        let metadata = PlayerInput::SetChatVisibility {
+            connection,
+            visibility: ChatVisibility::Hidden,
+        };
+        let join = PlayerInput::Join {
+            connection,
+            uuid: uuid::Uuid::from_u128(2),
+            name: "Bob".into(),
+            permission_level: 0,
+        };
+        if split {
+            crate::tick::run_tick(&mut state, std::slice::from_ref(&metadata));
+            crate::tick::run_tick(&mut state, &[join]);
+        } else {
+            crate::tick::run_tick(&mut state, &[metadata, join]);
+        }
+        let child = &state.other_dimensions[&dimension];
+        assert!(child.connections.entity_of(connection).is_some());
+        assert_eq!(
+            child.connections.chat_visibility_of(connection),
+            ChatVisibility::Hidden,
+            "dimension={dimension:?}, split={split}"
+        );
+        // The overworld sender's public chat does not reach him in his own world.
+        let (_, drains) = command(&mut state, 1, "say zzchat42");
+        let heard: String = drains
+            .iter()
+            .filter(|(id, _)| *id == connection)
+            .map(|(_, changes)| format!("{changes:?}"))
+            .collect();
+        assert!(!heard.contains("zzchat42"), "{heard}");
+        let others: String = drains
+            .iter()
+            .filter(|(id, _)| *id == ConnectionId(1))
+            .map(|(_, changes)| format!("{changes:?}"))
+            .collect();
+        assert!(
+            others.contains("zzchat42"),
+            "the sender still hears it: {others}"
+        );
+    }
+}
+
+#[test]
+fn data_edits_an_entity_for_senders_in_the_nether_and_the_end() {
+    for (dimension, sender) in [(Dimension::Nether, 2), (Dimension::End, 1)] {
+        let (mut state, alice, bob) = worlds();
+        if dimension == Dimension::End {
+            command(&mut state, 1, "execute in the_end run tp @s 8 150 8");
+            assert_eq!(travel::locate(&state, alice).unwrap().0, dimension);
+        } else {
+            assert_eq!(travel::locate(&state, bob).unwrap().0, dimension);
+        }
+        command(&mut state, sender, "summon minecraft:cow ~ ~ ~ {Health:9f}");
+        let world = &state.other_dimensions[&dimension];
+        let slot = world
+            .entities
+            .slots()
+            .find(|slot| {
+                crate::command_execution::entity_type_name(world, world.entities.body(*slot).id)
+                    == Some("minecraft:cow")
+            })
+            .expect("the cow lives in the sender's world");
+        let (_, drains) = command(
+            &mut state,
+            sender,
+            "data merge entity @e[type=minecraft:cow,limit=1] {Health:4f}",
+        );
+        let world = &state.other_dimensions[&dimension];
+        assert_eq!(
+            world.entities.row(slot).health,
+            4.0,
+            "{dimension:?}: {drains:?}"
+        );
+    }
+}
+
+#[test]
+fn data_edit_of_a_villager_keeps_trades_gossip_inventory_and_replays_from_the_wal() {
+    use crate::villager::{Gossip, VillagerTradeOffer};
+    let (mut state, _, _) = worlds();
+    let (_, summoned) = command(
+        &mut state,
+        1,
+        "summon minecraft:villager 9 150 9 {VillagerData:{type:'minecraft:plains',profession:'minecraft:farmer',level:3}}",
+    );
+    drop(summoned);
+    let slot = state
+        .entities
+        .slots()
+        .find(|slot| {
+            crate::command_execution::entity_type_name(&state, state.entities.body(*slot).id)
+                == Some("minecraft:villager")
+        })
+        .expect("the villager");
+    let id = state.entities.body(slot).id;
+    let stack = |name: &str, count: i32| {
+        mc_data::ItemStack::new(
+            state
+                .registry
+                .items
+                .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
+                .unwrap(),
+            count,
+        )
+    };
+    let (emerald, bread, wheat) = (stack("emerald", 2), stack("bread", 3), stack("wheat", 5));
+    let villager = state.entities.row_mut(slot).villager.as_mut().unwrap();
+    villager.offers.push(VillagerTradeOffer {
+        cost_a: emerald,
+        cost_b: None,
+        result: bread,
+        uses: 1,
+        max_uses: 12,
+        reward_exp: true,
+        xp: 5,
+        special_price: -2,
+        demand: 3,
+        price_multiplier: 0.05,
+    });
+    villager.gossips.push(Gossip {
+        target: uuid::Uuid::from_u128(77),
+        kind: "major_positive".into(),
+        value: 30,
+    });
+    villager.xp = 55;
+    villager.last_restock = 4321;
+    villager.inventory[0] = Some(wheat);
+    let before = state.entities.row(slot).villager.clone().unwrap();
+
+    // An unrelated edit, through the real command path and tick.
+    let (output, drains) = command(
+        &mut state,
+        1,
+        "data merge entity @e[type=minecraft:villager,limit=1] {CustomName:'\"Vic\"'}",
+    );
+    let after = state.entities.row(slot).villager.clone().unwrap();
+    assert_eq!(after.offers, before.offers, "{drains:?}");
+    assert_eq!(after.gossips, before.gossips);
+    assert_eq!(after.xp, before.xp);
+    assert_eq!(after.last_restock, before.last_restock);
+    assert_eq!(after.inventory, before.inventory);
+    assert_eq!(after.data, before.data);
+    assert_eq!(
+        state.entities.row(slot).appearance.custom_name.as_deref(),
+        Some("\"Vic\"")
+    );
+
+    // Editing a villager field keeps the trades it did not touch.
+    command(
+        &mut state,
+        1,
+        "data modify entity @e[type=minecraft:villager,limit=1] VillagerData.level set value 4",
+    );
+    let leveled = state.entities.row(slot).villager.clone().unwrap();
+    assert_eq!(leveled.data.level, 4);
+    assert_eq!(leveled.offers, before.offers);
+    assert_eq!(leveled.gossips, before.gossips);
+    assert_eq!(leveled.inventory, before.inventory);
+
+    // What the WAL stores for the edited tick replays to the same villager.
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let replay = crate::journal::replay_batches(Default::default(), &[(1, output.tick, entries)]);
+    let replayed = replay
+        .entities
+        .get(&id.0)
+        .and_then(|entity| entity.villager.as_ref())
+        .expect("the edit journals the villager's image");
+    assert_eq!(replayed.offers, before.offers);
+    assert_eq!(replayed.gossips, before.gossips);
+    assert_eq!(replayed.xp, 55);
+    assert_eq!(replayed.inventory, before.inventory);
 }

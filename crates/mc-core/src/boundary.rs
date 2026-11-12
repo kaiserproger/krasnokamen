@@ -30,6 +30,27 @@ pub struct EntityId(pub i32);
 )]
 pub struct ConnectionId(pub u64);
 
+/// The client's chat setting: which text the server may send it (vanilla
+/// `ChatVisiblity`). `System` is "commands only": no player chat, but command
+/// feedback and other system messages; `Hidden` receives neither.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub enum ChatVisibility {
+    #[default]
+    Full,
+    System,
+    Hidden,
+}
+
+/// The client settings admitted together with a player's Join.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientSettings {
+    pub view_distance: u8,
+    pub locale: String,
+    pub chat_visibility: ChatVisibility,
+}
+
 /// One player action decoded by the edge.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum PlayerInput {
@@ -41,6 +62,15 @@ pub enum PlayerInput {
         name: String,
         /// Actual edge-authorized permission snapshot of the authenticated UUID.
         permission_level: u8,
+    },
+    /// Edge notification that this connection's login finished, before its configuration
+    /// (vanilla `disconnectAllPlayersWithProfile`): the newer login kicks every session of
+    /// the profile already in Play with the duplicate-login reason. A session still in
+    /// configuration is not in Play and is not kicked; when its configuration ends,
+    /// [`PlayerInput::Join`] refuses it instead of replacing the player in Play.
+    ProfileLogin {
+        connection: ConnectionId,
+        uuid: Uuid,
     },
     /// Trusted edge notification after the connection accepted a Loader bind.
     PluginClientReady { connection: ConnectionId },
@@ -73,6 +103,15 @@ pub enum PlayerInput {
     SetLocale {
         connection: ConnectionId,
         locale: String,
+    },
+    /// Trusted edge snapshot of the client's chat setting
+    /// (`ClientInformation.chat_visibility`). Recorded before
+    /// [`PlayerInput::Join`] from the configuration phase and re-sent on every
+    /// Play ClientInformation that changes it: transient per-connection
+    /// state, cleared on [`PlayerInput::Leave`].
+    SetChatVisibility {
+        connection: ConnectionId,
+        visibility: ChatVisibility,
     },
     /// Connection closed for any reason; the core saves and removes the player.
     Leave { connection: ConnectionId },
@@ -367,10 +406,12 @@ impl PlayerInput {
             Self::ConsoleCommand(_) => crate::command_console::CONNECTION,
             Self::Join { connection, .. }
             | Self::PluginClientReady { connection }
+            | Self::ProfileLogin { connection, .. }
             | Self::LoaderViewRequest { connection, .. }
             | Self::PermissionLevel { connection, .. }
             | Self::SetViewDistance { connection, .. }
             | Self::SetLocale { connection, .. }
+            | Self::SetChatVisibility { connection, .. }
             | Self::Leave { connection }
             | Self::Move { connection, .. }
             | Self::MoveRotation { connection, .. }
@@ -495,6 +536,8 @@ pub struct CorePerfTick {
     pub xp_orbs_processed: u64,
     /// Active XP-orb bodies processed by their owner, by fixture region.
     pub xp_orbs_by_region: std::collections::HashMap<usize, u64>,
+    /// Total XP represented by active orb bodies processed in each fixture region.
+    pub xp_value_by_region: std::collections::HashMap<usize, i64>,
     /// Distinct fixture victims with accepted positive damage, by fixture region.
     pub damage_victims_by_region: std::collections::HashMap<usize, u64>,
     /// Accepted reactive damage pieces against fixture entities, by region.
@@ -681,6 +724,7 @@ pub enum EntityDataValue {
     Boolean(bool),
     WeatheringCopper(u8),
     CopperGolemState(u8),
+    SnifferState(u8),
     Direction(u8),
     PaintingVariant(u32),
     String(String),
@@ -699,6 +743,9 @@ pub enum EntityDataValue {
         level: i32,
     },
     ChickenVariant(u32),
+    CowVariant(u32),
+    PigVariant(u32),
+    ZombieNautilusVariant(u32),
 }
 
 /// Everything that changed in one tick, in commit order within each list.
@@ -836,6 +883,31 @@ pub enum BossBarChange {
     Properties(u8),
 }
 
+/// The registry a datapack reload installed, shared by every connection's
+/// [`PlayerChange::RecipesReloaded`].
+#[derive(Clone)]
+pub struct RegistryReload {
+    pub registry: Arc<crate::registry::CoreRegistry>,
+}
+impl RegistryReload {
+    #[must_use]
+    pub fn new(registry: Arc<crate::registry::CoreRegistry>) -> Self {
+        Self { registry }
+    }
+}
+impl std::fmt::Debug for RegistryReload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RegistryReload")
+            .field("recipes", &self.registry.recipes.len())
+            .finish()
+    }
+}
+impl PartialEq for RegistryReload {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.registry, &other.registry)
+    }
+}
+
 /// Reliable results for the connection identified by the enclosing outbox queue key.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlayerChange {
@@ -849,6 +921,12 @@ pub enum PlayerChange {
     },
     AdvancementsTab {
         tab: Option<String>,
+    },
+    /// A datapack reload replaced the registry's recipes. The edge announces
+    /// the new recipes to this client; the player's recipe book follows as
+    /// [`PlayerChange::RecipesUnlocked`] with `replace`.
+    RecipesReloaded {
+        reload: RegistryReload,
     },
     RecipesUnlocked {
         recipes: Vec<String>,

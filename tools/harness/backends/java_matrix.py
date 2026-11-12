@@ -21,7 +21,7 @@ from ..java_clients import client_group
 from ..java_matrix_client import JavaMatrixClient
 from ..matrix_api import MatrixContext, MissingCapability, load_adapter
 from ..matrix_execution import copy_plugins, plugin_set_fingerprint, prepare_access, run_subject, select_plugin_profile
-from .protocol_lifecycle import Blocked, ProtocolServer
+from .protocol_lifecycle import Blocked, PortReservation, ProtocolServer, reserve_matrix_port
 
 JAVA_KINDS = frozenset({"vanilla_java_26_1_2", "fabric_solaris_loader", "fabric_svc",
                         "fabric_distant_horizons", "neoforge_solaris_loader", "forge_solaris_loader"})
@@ -77,18 +77,27 @@ def receipt_dir(root: Path, scenario_id: str) -> Path:
 @contextmanager
 def server_instance(args: argparse.Namespace, directory: Path, count: int,
                     permission: str = "non_op_0", lifecycle: str = "steady",
-                    excluded_plugins: set[str] | None = None):
-    """Reuse the shared release-server primitive on this driver's own 262xx ports."""
+                    excluded_plugins: set[str] | None = None, input_log: bool = False):
+    """Reuse the shared release-server primitive; both ports are cross-process
+    flock leases in this driver's own 262xx range (never hardcoded, never
+    bind-probe-and-close): concurrent runs on the shared host can never be
+    handed the same port, and the leases live until the instance's final
+    close(), surviving stop/restart (clients cache server.port).
+    """
     directory.mkdir(parents=True, exist_ok=True)
     plugin_dir = directory / "plugins"
     enabled_plugins = copy_plugins(args.plugins_dir, plugin_dir, excluded_plugins or set())
     prepare_access(directory, [f"JMatrix{index:02d}" for index in range(count)], permission)
-    server = ProtocolServer(binary=args.server_bin, run_dir=directory, port=26200,
-                            dashboard_port=26201, port_range=PORT_RANGE,
+    port = reserve_matrix_port(port_range=PORT_RANGE)
+    server = ProtocolServer(binary=args.server_bin, run_dir=directory, port=port,
+                            dashboard_port=reserve_matrix_port(exclude=port, port_range=PORT_RANGE),
+                            port_range=PORT_RANGE,
                             vanilla_data=args.data_dir, seed=81, plugins_dir=plugin_dir,
                             server_name="RunJava", pause_when_empty_seconds=1 if lifecycle == "pause_when_empty_resume" else 0,
                             startup_timeout_seconds=args.timeout_seconds)
     server.enabled_plugins = enabled_plugins
+    if input_log:
+        server.config_overrides = {'server': {'input_log': True}}
     index = len(args.context.commands)
     args.context.commands.append([str(args.server_bin), "--config", str(server.config_path)])
     args.context.cwds.append(str(Path(__file__).resolve().parents[3]))
@@ -101,6 +110,7 @@ def server_instance(args: argparse.Namespace, directory: Path, count: int,
         process = server._process
         if server.running:
             server.stop()
+        server.close()  # release the port leases at instance teardown
         args.context.exits[index] = process.returncode if process is not None else None
 
 
@@ -145,7 +155,8 @@ def run_cell(args: argparse.Namespace, row: dict[str, Any], directory: Path) -> 
             row, args.plugin_profiles, adapter_exclusions=adapter.exclude_plugins,
             requested_exclusions=getattr(args, "exclude_plugin", []))
         with server_instance(args, directory / "server", count, factors["permission"],
-                             factors["server_lifecycle"], excluded_plugins=excluded) as server:
+                             factors["server_lifecycle"], excluded_plugins=excluded,
+                             input_log=row.get("origin") == "triple:dupe:destroy_during_interaction") as server:
             actual = plugin_set_fingerprint(server.plugins_dir)
             if expected is not None and actual != expected:
                 raise MissingCapability(f"plugin_set_mismatch:expected {expected}; actual {actual}")

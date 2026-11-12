@@ -12,6 +12,11 @@ from .backends import village_autonomy_qa as qa
 from .backends import probe_steps
 
 
+def setUpModule() -> None:
+    # .analysis/ is gitignored, so a fresh checkout or worktree lacks it.
+    (qa.runtime.REPO_ROOT / ".analysis").mkdir(exist_ok=True)
+
+
 class VillageAutonomyQaTests(unittest.TestCase):
     def test_walk_uses_path_planner_for_the_final_loaded_leg(self) -> None:
         probe = Mock()
@@ -774,6 +779,58 @@ class RotatedBlueprintObservationTests(unittest.TestCase):
             ), (True, True))
         self.assertEqual(detail["further_building"]["id"], 2)
         self.assertEqual(detail["autonomous_upgrade"]["level"], 2)
+
+
+class UpgradeSpeciesObservationTests(unittest.TestCase):
+    """Run 20261111T161835-nemkmfug: Storage L1 in birch, its L2 upgrade in acacia."""
+
+    RECORD = {"id": 4294967304, "kind": "storage", "level": 2, "min": [121, 69, -2], "max": [129, 72, 2]}
+
+    @staticmethod
+    def upgraded_storage():
+        """Client cells of the authored Storage L2: cells the upgrade left
+        unchanged keep the L1 project's birch, cells it placed are acacia."""
+        blueprint = next(b for b in qa._authored_blueprints() if b["kind"] == "storage")
+        lower, upper = (level["layers"] for level in blueprint["levels"])
+        cells = []
+        for y, layer in enumerate(upper):
+            for z, row in enumerate(layer):
+                for x, symbol in enumerate(row):
+                    if symbol == ".":
+                        continue
+                    kept = y < len(lower) and z < len(lower[y]) and x < len(lower[y][z]) and lower[y][z][x] == symbol
+                    block, _, properties = blueprint["palette"][symbol].partition("[")
+                    if block.startswith("oak_"):
+                        block = ("birch" if kept else "acacia") + block.removeprefix("oak")
+                    cells.append({
+                        "x": 121 + x, "y": 69 + y, "z": -2 + z, "block_id": f"minecraft:{block}",
+                        "properties": dict(part.split("=") for part in properties.rstrip("]").split(","))
+                        if properties else {},
+                    })
+        return blueprint, cells
+
+    def test_upgrade_keeps_the_earlier_level_species_in_cells_it_did_not_place(self):
+        blueprint, cells = self.upgraded_storage()
+        probe = Mock()
+        probe.call.return_value = {"blocks": cells}
+        detail = {}
+        self.assertTrue(qa._observe_blueprint(probe, detail, dict(self.RECORD), blueprint, "upgraded"))
+        result = detail["client_blocks"]["upgraded"]
+        self.assertEqual((result["mismatch_count"], result["matching_rotations"]), (0, [0]))
+        self.assertEqual(result["wood_species"], "L1 birch, L2 acacia")
+
+    def test_each_level_project_still_needs_one_species(self):
+        for kept, placed in (("birch", "acacia"), ("acacia", "birch")):
+            with self.subTest(changed=kept):
+                blueprint, cells = self.upgraded_storage()
+                # The last cell of one level's project in the other project's wood.
+                cell = [cell for cell in cells if cell["block_id"].startswith(f"minecraft:{kept}_")][-1]
+                cell["block_id"] = cell["block_id"].replace(kept, placed)
+                probe = Mock()
+                probe.call.return_value = {"blocks": cells}
+                detail = {}
+                self.assertFalse(qa._observe_blueprint(probe, detail, dict(self.RECORD), blueprint, "mixed"))
+                self.assertEqual(detail["client_blocks"]["mixed"]["mismatch_count"], 1)
 
 
 class OwnerOrderScenarioTests(unittest.TestCase):

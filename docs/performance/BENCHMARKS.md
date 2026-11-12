@@ -47,11 +47,12 @@ the governor is recorded.
 Build and pin once (the bench never builds), as in
 [PROFILES.md](PROFILES.md#build-once-and-retain-provenance). Profile workloads
 require `pin-release` manifests for the server and bots from the same source tree;
-un-pinned release binaries and hand-written build receipts are rejected.
+un-pinned release binaries, incremental pins (build with `--no-incremental`) and
+hand-written build receipts are rejected.
 
 ```sh
-export "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /absolute/core/tree)"
-export "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /absolute/core/tree --bots)"
+export "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /absolute/core/tree --no-incremental)"
+export "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /absolute/core/tree --bots --no-incremental)"
 python3 -m tools.bench weak-hw --server-bin "$SOLARIS_SERVER_BINARY" --bots-bin "$SOLARIS_BOTS_BINARY"
 ```
 

@@ -22,6 +22,31 @@ class SchemaTests(unittest.TestCase):
             old.chmod(0o755)
             self.assertIsNone(mcp_schema.native_schema(old, True))
 
+    def test_native_census_extensions_come_from_selected_binary(self):
+        properties = {
+            'radius': {'type': 'number', 'minimum': 1, 'maximum': 128},
+            'limit': {'type': 'integer', 'minimum': 1, 'maximum': 512},
+            'entity_type': {'type': 'string', 'minLength': 1, 'maxLength': 128},
+            'cursor': {'type': 'string', 'minLength': 0, 'maxLength': 20},
+        }
+        schema = {'type': 'object', 'properties': properties, 'additionalProperties': False}
+        tool = {'name': 'minecraft_list_entities', 'inputSchema': schema}
+        exported = json.dumps({'tools': [tool], 'headless_tools': [tool]})
+        result = mock.Mock(returncode=0, stdout=exported, stderr='')
+        with mock.patch.object(mcp_schema.subprocess, 'run', return_value=result):
+            for windowed in (False, True):
+                selected = mcp_schema.native_schema(Path('/selected/native-client'), windowed)
+                mcp_schema.validate(selected['minecraft_list_entities'], {
+                    'radius': 128, 'limit': 16, 'entity_type': 'minecraft:villager', 'cursor': '',
+                })
+                with self.assertRaises(mcp_schema.SchemaError):
+                    mcp_schema.validate(selected['minecraft_list_entities'], {'entity_type': ''})
+        older = {'type': 'object', 'properties': {
+            key: value for key, value in properties.items() if key not in ('entity_type', 'cursor')
+        }, 'additionalProperties': False}
+        with self.assertRaises(mcp_schema.SchemaError):
+            mcp_schema.validate(older, {'radius': 128, 'limit': 16, 'cursor': ''})
+
     def test_autocraft_literal_is_checked_before_game_launch(self):
         schema = {'type': 'object', 'properties': {
             'ticks': {'type': 'integer', 'minimum': 1, 'maximum': 255}},

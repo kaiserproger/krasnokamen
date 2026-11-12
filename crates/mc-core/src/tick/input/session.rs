@@ -41,6 +41,18 @@ pub(in crate::tick) fn set_locale(
     state.connections.set_locale(*connection, locale.clone());
 }
 
+/// Pre-Join friendly like the locale: the edge records the chat setting
+/// before Join and every Play ClientInformation that changes it updates it
+/// in place, so the next chat or system message already follows it.
+pub(in crate::tick) fn set_chat_visibility(
+    state: &mut TickState,
+    (connection, visibility): (&ConnectionId, &crate::boundary::ChatVisibility),
+) {
+    state
+        .connections
+        .set_chat_visibility(*connection, *visibility);
+}
+
 /// Vanilla's yellow `multiplayer.player.joined` / `multiplayer.player.left`
 /// announcement, delivered reliably to every joined connection and relayed
 /// across local dimensions.
@@ -85,24 +97,29 @@ pub(crate) fn announce_player(
 /// Vanilla `multiplayer.disconnect.duplicate_login`.
 const DUPLICATE_LOGIN: &str = "You logged in from another location";
 
-pub(in crate::tick) fn join(
+/// The connection already in Play for `uuid`. An unverified plugin-login claimant
+/// neither kicks nor is refused by a verified session; authentication arbitrates those.
+fn session_in_play(state: &TickState, uuid: &uuid::Uuid) -> Option<ConnectionId> {
+    if state.require_plugin_login {
+        return None;
+    }
+    state
+        .connections
+        .uuids
+        .iter()
+        .find_map(|(other, joined)| (joined == uuid).then_some(*other))
+}
+
+/// Vanilla `verifyLoginAndFinishConnectionSetup` → `disconnectAllPlayersWithProfile`: the
+/// newer login wins over a session already in Play. The incumbent's ordinary Leave capture
+/// (menus closed, image saved) runs here, so its inventory moves rather than copies.
+pub(in crate::tick) fn profile_login(
     state: &mut TickState,
-    (connection, uuid, name, permission_level): (&ConnectionId, &uuid::Uuid, &String, &u8),
+    (connection, uuid): (&ConnectionId, &uuid::Uuid),
     changes: &mut ChangeSet,
 ) {
-    if state.connections.by_connection.contains_key(connection) {
-        return;
-    }
-    // Vanilla duplicate login: the newer login wins. The incumbent's ordinary
-    // Leave capture (menus closed, image saved) is restored below, so its
-    // inventory moves rather than copies. An unverified plugin-login claimant
-    // never kicks a verified session; authentication arbitrates those.
-    if !state.require_plugin_login
-        && let Some(incumbent) = state
-            .connections
-            .uuids
-            .iter()
-            .find_map(|(other, joined)| (joined == uuid).then_some(*other))
+    if let Some(incumbent) = session_in_play(state, uuid)
+        && incumbent != *connection
     {
         leave(state, &incumbent, changes);
         state.push_player(
@@ -113,6 +130,37 @@ pub(in crate::tick) fn join(
         );
         state.disconnects.push((incumbent, state.tick));
     }
+}
+
+/// Refuse a connection that never joined: send the reason and drop the view-distance and
+/// locale rows the edge recorded for it before `Join` (routing moved them into this world),
+/// so a refused connection leaves nothing behind.
+fn refuse_join(state: &mut TickState, connection: &ConnectionId, reason: &str) {
+    state.connections.remove_by_connection(*connection);
+    state.push_player(
+        *connection,
+        PlayerChange::Disconnect {
+            reason: reason.to_owned(),
+        },
+    );
+    state.disconnects.push((*connection, state.tick));
+}
+
+pub(in crate::tick) fn join(
+    state: &mut TickState,
+    (connection, uuid, name, permission_level): (&ConnectionId, &uuid::Uuid, &String, &u8),
+    changes: &mut ChangeSet,
+) {
+    if state.connections.by_connection.contains_key(connection) {
+        return;
+    }
+    // Vanilla `handleConfigurationFinished`: a connection that finishes configuration while
+    // the profile is already in Play is refused; the player in Play and its custody stay
+    // untouched. A newer login already kicked its incumbent in `profile_login`.
+    if session_in_play(state, uuid).is_some() {
+        refuse_join(state, connection, DUPLICATE_LOGIN);
+        return;
+    }
     if state.entities.slot_of_uuid(*uuid).is_some()
         || state
             .connections
@@ -120,13 +168,7 @@ pub(in crate::tick) fn join(
             .iter()
             .any(|(incumbent, joined)| joined == uuid && !state.session_locked(*incumbent))
     {
-        state.push_player(
-            *connection,
-            PlayerChange::Disconnect {
-                reason: "UUID is already joined".to_owned(),
-            },
-        );
-        state.disconnects.push((*connection, state.tick));
+        refuse_join(state, connection, "UUID is already joined");
         return;
     }
     let id = state.entities.alloc_id();
@@ -213,9 +255,10 @@ pub(in crate::tick) fn join(
     state
         .connections
         .insert(*connection, id, *uuid, name.clone());
-    state
-        .players
-        .insert(id, hydrate_player(*connection, offline.as_ref()));
+    state.players.insert(
+        id,
+        hydrate_player(*connection, offline.as_ref(), state.default_game_mode),
+    );
     if state.require_plugin_login {
         state.locked_sessions.insert(*connection);
         // Empty, nonpersistent authentication presentation.

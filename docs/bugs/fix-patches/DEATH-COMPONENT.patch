@@ -1,0 +1,108 @@
+diff --git a/crates/mc-core/src/tick/death_message.rs b/crates/mc-core/src/tick/death_message.rs
+--- a/crates/mc-core/src/tick/death_message.rs
++++ b/crates/mc-core/src/tick/death_message.rs
+@@ -11,26 +11,85 @@
+     kind: DamageKind,
+     source: Option<DamageSource>,
+ ) -> Tag {
+-    let name = state.connections.name_of(victim).unwrap_or("Player");
+-    let cause = match kind {
+-        DamageKind::Void => "fell out of the world into the void",
+-        DamageKind::Fall => "hit the ground too hard",
+-        DamageKind::Drowning => "drowned",
+-        DamageKind::Starvation => "starved to death",
+-        DamageKind::Lava => "tried to swim in lava",
+-        DamageKind::OnFire | DamageKind::InFire => "burned to death",
+-        DamageKind::Explosion => "blew up",
+-        DamageKind::Suffocation => "suffocated in a wall",
+-        DamageKind::Projectile => "was shot",
+-        DamageKind::Melee => "was slain",
+-        _ => "died",
++    // `special_mobs::damage` submits mob attacks as a projectile the mob owns
++    // itself, which `statistics::attacker` treats as no attacker. The death
++    // message still names that mob; without it "death.attack.mob" reaches the
++    // client with one argument for a two-argument template and the client
++    // drops the session.
++    let attacker = crate::statistics::attacker(source).or(match source {
++        Some(DamageSource::Projectile {
++            projectile, owner, ..
++        }) if projectile == owner => Some(owner),
++        _ => None,
++    });
++    let type_name = kind.type_name(
++        source,
++        attacker.is_some_and(|id| state.players.contains_key(&id)),
++    );
++    // message_id values from the pinned 26.1.2 damage_type data.
++    let message_id = match type_name
++        .strip_prefix("minecraft:")
++        .expect("vanilla damage identity")
++    {
++        "generic_kill" => "genericKill",
++        "out_of_world" => "outOfWorld",
++        "in_wall" => "inWall",
++        "in_fire" | "campfire" => "inFire",
++        "on_fire" => "onFire",
++        "hot_floor" => "hotFloor",
++        "sweet_berry_bush" => "sweetBerryBush",
++        "falling_anvil" => "anvil",
++        "falling_stalactite" => "fallingStalactite",
++        "lightning_bolt" => "lightningBolt",
++        "fly_into_wall" => "flyIntoWall",
++        "indirect_magic" => "indirectMagic",
++        "dragon_breath" => "dragonBreath",
++        "outside_border" => "outsideBorder",
++        "player_attack" => "player",
++        "mob_attack" => "mob",
++        name => name,
+     };
+-    Tag::String(
+-        match crate::statistics::attacker(source).and_then(|killer| state.connections.name_of(killer)) {
+-            Some(attacker) => format!("{name} {cause} by {attacker}"),
+-            None => format!("{name} {cause}"),
+-        },
+-    )
++    let mut arguments = vec![crate::command_execution::entity_name(state, victim)];
++    let mut key = format!("death.attack.{message_id}");
++    if let Some(attacker) = attacker {
++        arguments.push(crate::command_execution::entity_name(state, attacker));
++        let weapon = state
++            .players
++            .get(&attacker)
++            .map(|player| &player.inventory.slots[usize::from(player.inventory.selected.min(8))])
++            .or_else(|| {
++                state
++                    .entities
++                    .slot_of_any(attacker)
++                    .and_then(|slot| state.entities.row(slot).appearance.equipment[0].as_ref())
++            });
++        if let Some(name) = weapon
++            .filter(|stack| !stack.is_empty())
++            .and_then(|stack| stack.custom_name.as_deref())
++        {
++            key.push_str(".item");
++            arguments.push(crate::scoreboard::component(name));
++        }
++    } else if let Some(attacker) = state
++        .entities
++        .slot_of_any(victim)
++        .and_then(|slot| state.entities.row(slot).loot.player_credit.as_ref())
++        .filter(|credit| state.tick.saturating_sub(credit.tick) < 100)
++        .map(|credit| EntityId(credit.id))
++    {
++        key.push_str(".player");
++        arguments.push(crate::command_execution::entity_name(state, attacker));
++    }
++    Tag::Compound(vec![
++        ("translate".into(), Tag::String(key)),
++        (
++            "with".into(),
++            Tag::List(ListTag {
++                element_type: mc_nbt::tag_type::COMPOUND,
++                elements: arguments,
++            }),
++        ),
++    ])
+ }
+ 
+ pub(super) fn broadcast(state: &mut TickState, victim: EntityId, content: Tag) {

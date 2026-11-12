@@ -1,0 +1,32 @@
+{
+  "id": "MAP-FRAME-MARKER-RECOVERY-LIMIT",
+  "verdict": "promoted",
+  "fix_commit": "78fe5e3a",
+  "fix_commit_full": "78fe5e3a0f2a72f5f68135a6065f1278644e881b",
+  "promoted_at": "2026-11-12T01:14:26+00:00",
+  "tree_head": "78fe5e3a0f2a72f5f68135a6065f1278644e881b",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/maps.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/maps/tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:tick_tests::maps_tests::more_than_256_retained_frame_markers_checkpoint_and_recover": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick_tests::maps_tests::more_than_256_retained_frame_markers_checkpoint_and_recover": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/BlockerRows/.analysis/validation/20261112T002946-ledger-promote-ifa4pmly"
+}

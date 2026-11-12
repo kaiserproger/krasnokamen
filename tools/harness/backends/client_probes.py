@@ -22,6 +22,11 @@ from .probe_steps import ProbeSteps
 
 CORE_TOOLS = frozenset({"minecraft_observe", "minecraft_wait_for_state_change", "minecraft_send_chat"})
 
+def world_dir_toml(artifact: Path) -> str:
+    """Quote the absolute world path even when receipts live outside the repository."""
+    return json.dumps(str(artifact / "world"))
+
+
 
 def run_core_subset(client: Any, artifact_dir: Path, timeout: float) -> dict[str, Any]:
     with ProbeSteps(client, artifact_dir / "core-probe", timeout, "core-client-chat-subset") as steps:
@@ -73,7 +78,9 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
                        else 600.0 if ctx.scenario_id in (native_light.SCENARIO_ID,
                                                         "native-v2-radius-full-view",
                                                         "native-v2-p4-damage",
-                                                        "native-v2-automation-storage")
+                                                        "native-v2-team-deaths",
+                                                        "native-v2-automation-storage",
+                                                        "native-v2-lease-navigation")
                        else 1200.0 if ctx.scenario_id == "native-v2-settlement-storage"
                        else 900.0 if ctx.scenario_id in ("native-v2-destroyed-chest-race",
                                                          "native-v2-corrupt-block-entities",
@@ -95,9 +102,14 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     promotion_maps = (ctx.scenario_id or "").startswith("native-v2-map-")
     promotion_actor = ctx.scenario_id in (
         "native-v2-map-inventory-player-markers", "native-v2-map-pumpkin-hiding")
+    if ctx.scenario_id in ("native-v2-ledger-painting", "native-v2-ledger-axe", "native-v2-ledger-sponge",
+                           "native-v2-ledger-setblock-snbt", "native-v2-ledger-crafting-pickup"):
+        required = required | {"client_capture", "minecraft_look_at_block"}
     if ctx.scenario_id == "native-v2-cursor-close":
         required = required | {"minecraft_open_inventory", "client_capture"}
-    if ctx.scenario_id in ("native-v2-craft-drag", "native-v2-craft-drag-paced"):
+    if ctx.scenario_id in ("native-v2-craft-drag", "native-v2-craft-drag-paced",
+                           "native-v2-shift-double-click", "native-v2-shift-components",
+                           "native-v2-shift-chest-correction"):
         required = required | {"minecraft_open_inventory", "client_capture"}
     if ctx.scenario_id == "native-v2-chest-drag-disconnect":
         required = required | {"minecraft_connect", "minecraft_wait_for_no_visible_item", "client_capture"}
@@ -105,20 +117,26 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         required = required | {"client_capture"}
     if ctx.scenario_id == "native-v2-custody-mount-export":
         required = required | {"minecraft_approach_entity", "minecraft_interact_entity", "client_capture"}
+    if ctx.scenario_id == "native-v2-lease-navigation":
+        required = required | {"minecraft_approach_entity", "minecraft_navigate_to_block", "client_capture"}
     if ctx.scenario_id == "native-v2-duplicate-login":
         required = required | {"minecraft_connect"}
     if p5_scenario:
         required = java_p5.REQUIRED_TOOLS
     if protocol_pot:
         required = java_protocol_pot.REQUIRED_TOOLS
-    if ctx.scenario_id in ("java-v2-p5-craft-drag", "java-v2-p5-craft-drag-paced"):
+    if ctx.scenario_id in ("java-v2-p5-craft-drag", "java-v2-p5-craft-drag-paced",
+                           "java-v2-p5-shift-double-click"):
         required = required | {"minecraft_open_inventory"}
+    if ctx.scenario_id in ("native-v2-shift-double-click", "native-v2-shift-chest-correction",
+                           "java-v2-p5-shift-double-click"):
+        required = required | {"minecraft_wait_for_container_slot"}
     artifact = ctx.artifact_dir
     plugin_dir = plugin_directory(ctx)
     if auth_scenario:
         # The shipping solaris-auth package behind the native login gate; the harness copies
         # the sibling checkout's package into the private plugin directory.
-        root = Path(os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", runtime.REPO_ROOT.parent / "solaris-default-plugins"))
+        root = runtime.sibling_root("plugins")
         package = plugin_dir / "solaris-auth"
         package.mkdir()
         for name in ("plugin.toml", "plugin.wasm"):
@@ -156,7 +174,7 @@ online_mode = false
 {auth_setting}[plugins]
 directory = {json.dumps(str(plugin_dir))}
 [data]
-world_dir = "{(artifact / "world").relative_to(runtime.REPO_ROOT).as_posix()}"
+world_dir = {world_dir_toml(artifact)}
 vanilla_data_dir = {json.dumps(os.environ.get("SOLARIS_SERVER_VANILLA_DATA_DIR", "data/vanilla"))}
 seed = 81
 ''')
@@ -179,17 +197,30 @@ seed = 81
     peer_process = peer_mcp = peer_log = None
     peer_evidence: dict[str, Any] = {}
     server_log = client_log = display_log = None
+    ghast_peers: list[tuple[Any, Any, Any, dict[str, Any]]] = []
     try:
         server_log_path = artifact / "server.log"
         server_log = server_log_path.open("wb")
-        server = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],
-                                  cwd=runtime.REPO_ROOT, stdout=server_log,
-                                  stderr=subprocess.STDOUT, start_new_session=True)
+        console_shutdown = ctx.scenario_id == "native-v2-console-shutdown"
+        command = [str(binary), "--config", str(config)]
+        if not console_shutdown:
+            command.append("--no-console")
+        server = subprocess.Popen(command, cwd=runtime.REPO_ROOT, stdout=server_log,
+                                  stderr=subprocess.STDOUT, start_new_session=True,
+                                  stdin=subprocess.PIPE if console_shutdown else None)
         ctx.logs.append(str(server_log_path))
         runtime.wait_port(port, startup_timeout, server, log_path=server_log_path)
+        if ctx.scenario_id in ("native-v2-shift-double-click", "native-v2-shift-chest-correction",
+                               "java-v2-p5-shift-double-click"):
+            from .shift_correction_wire import CorrectionWire
+
+            data = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"])
+            report = (data.parent / "26.1.2" if ctx.client == "java" else data) / "reports" / "packets.json"
+            wire_trace = CorrectionWire(port, artifact, report)
+            evidence["correction_wire_trace"] = str(wire_trace.receipt_path)
         if ctx.client == "native":
             display = None
-            client_address = address
+            client_address = wire_trace.address if wire_trace is not None else address
             if (ctx.scenario_id == "native-v2-p1-signs" and os.environ.get("SOLARIS_P1_SIGN_WIRE_TRACE") == "1"
                     or ctx.scenario_id == "native-v2-p2-fishing"
                     or ctx.scenario_id in ("native-v2-p1-armor-stand", "native-v2-p1-helmet-equip",
@@ -212,7 +243,8 @@ seed = 81
                     port, artifact, pack_receipt.server_packet, pack_receipt.client_packet)
                 client_address = wire_trace.address
                 evidence["native_wire_trace"] = str(pack_receipt.path)
-            elif ctx.scenario_id == "native-v2-p4-damage":
+            elif ctx.scenario_id in ("native-v2-p4-damage", "native-v2-p4-identities",
+                                     "native-v2-p4-death-protection"):
                 from .native_p4 import DamageWireReceipt
 
                 report_path = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
@@ -228,12 +260,41 @@ seed = 81
                 wire_trace = light_wire.LightWireProxy(port, artifact, promotion_receipt.server_packet)
                 client_address = wire_trace.address
                 evidence["native_wire_trace"] = str(wire_trace.path)
+            if ctx.scenario_id == "native-v2-happy-ghast-harness":
+                from .native_happy_ghast import PassengerReceipt
+                report_path = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
+                ghast_receipt = PassengerReceipt(report_path, artifact)
+                wire_trace = light_wire.LightWireProxy(port, artifact, ghast_receipt.server_packet)
+                client_address = wire_trace.address
             if ctx.windowed:
                 xvfb, display, display_log = runtime.start_xvfb(artifact)
                 ctx.logs.append(str(artifact / "xvfb.log"))
             client_process, client_log, mcp = native_client.start(
                 ctx, native_client.resolve_binary(ctx), client_address, username, startup_timeout,
                 display=display)
+            if ctx.scenario_id == "native-v2-happy-ghast-harness":
+                def ghast_snapshot():
+                    if wire_trace.errors:
+                        raise RuntimeError(f"happy ghast wire errors: {wire_trace.errors}")
+                    return wire_trace.query(ghast_receipt.snapshot)
+
+                def start_ghast_riders():
+                    clients = []
+                    for index in range(2, 6):
+                        peer_data: dict[str, Any] = {}
+                        peer_ctx = replace(ctx, artifact_dir=artifact / f"ghast-rider-{index}",
+                                           client_evidence=peer_data, windowed=False)
+                        process, log, client = native_client.start(
+                            peer_ctx, native_client.resolve_binary(peer_ctx), address,
+                            f"GhastRider{index}", startup_timeout)
+                        ghast_peers.append((process, log, client, peer_data))
+                        client.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
+                        clients.append(client)
+                    evidence["ghast_rider_clients"] = [data for _, _, _, data in ghast_peers]
+                    return clients
+
+                mcp.happy_ghast_passengers = ghast_snapshot
+                mcp.start_ghast_riders = start_ghast_riders
             if promotion_maps or ctx.scenario_id == "native-v2-banner-placement":
                 def promotion_snapshot() -> dict[str, Any]:
                     if wire_trace.errors:
@@ -241,7 +302,8 @@ seed = 81
                     return wire_trace.query(promotion_receipt.snapshot)
 
                 mcp.promotion_wire_receipt = promotion_snapshot
-            if ctx.scenario_id == "native-v2-p4-damage":
+            if ctx.scenario_id in ("native-v2-p4-damage", "native-v2-p4-identities",
+                                   "native-v2-p4-death-protection"):
                 def damage_snapshot() -> list[dict[str, Any]]:
                     if wire_trace.errors:
                         raise RuntimeError(f"damage wire errors: {wire_trace.errors}")
@@ -269,6 +331,19 @@ seed = 81
                 peer_mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
                 mcp.p1_observer = (peer_mcp, display, client_process.pid, peer_process.pid)
                 mcp.p1_wire_trace = wire_trace
+                from . import native_focus
+
+                native_focus.acquire(display, client_process.pid, startup_timeout)
+            if ctx.scenario_id == "native-v2-team-deaths":
+                # A second windowed client on the same display: each client renders its own chat.
+                peer_ctx = replace(ctx, artifact_dir=artifact / "death-peer", client_evidence=peer_evidence)
+                evidence["death_peer_client"] = peer_evidence
+                peer_process, peer_log, peer_mcp = native_client.start(
+                    peer_ctx, native_client.resolve_binary(peer_ctx), client_address, "DeathPeer",
+                    startup_timeout, display=display)
+                peer_mcp.request_timeout_seconds = 130.0
+                peer_mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
+                mcp.death_peer = (peer_mcp, display, client_process.pid, peer_process.pid)
                 from . import native_focus
 
                 native_focus.acquire(display, client_process.pid, startup_timeout)
@@ -328,7 +403,7 @@ seed = 81
 
                     evidence["window_focus"] = native_focus.acquire(display, client_process.pid, startup_timeout)
         else:
-            client_address = address
+            client_address = wire_trace.address if wire_trace is not None else address
             if protocol_pot:
                 report = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]).parent / "26.1.2/reports/packets.json"
                 wire_trace = light_wire.LightWireProxy(
@@ -346,11 +421,21 @@ seed = 81
                     "simulationDistance:5\nmaxFps:30\npauseOnLostFocus:false\n")
             client_process, client_log = runtime.start_client(
                 game_dir=artifact / "game", log_path=artifact / "client.log", token=token,
-                mcp_port=mcp_port, username=username, display=display)
+                mcp_port=mcp_port, username=username, display=display,
+                client_profile="vanilla" if ctx.scenario_id == "java-v2-p5-shift-double-click" else None,
+                window_size=(640, 480) if ctx.scenario_id == "java-v2-p5-shift-double-click" else None)
+            if ctx.scenario_id == "java-v2-p5-shift-double-click":
+                agent_jar = runtime._agent_jar_path()
+                with agent_jar.open("rb") as source:
+                    evidence.update(java_client_profile="vanilla", java_version=os.environ.get("SOLARIS_JAVA_VERSION", "26.1.2"),
+                                    java_agent_jar=str(agent_jar), java_agent_sha256=hashlib.file_digest(source, "sha256").hexdigest())
             mcp = McpClient(f"http://127.0.0.1:{mcp_port}/mcp", token, startup_timeout + 10)
             mcp.initialize()
             ctx.logs.extend([str(artifact / "client.log"), str(artifact / "xvfb.log")])
         mcp.request_timeout_seconds = 130.0
+        if ctx.scenario_id in ("native-v2-shift-double-click", "native-v2-shift-chest-correction",
+                               "java-v2-p5-shift-double-click"):
+            mcp.correction_wire = wire_trace
         tools = mcp.list_tools()
         evidence["available_tools"] = sorted(tool["name"] for tool in tools)
         require_tools(tools, required | {"minecraft_wait_for_play", "minecraft_disconnect"}, kind)
@@ -443,13 +528,25 @@ seed = 81
             mcp.server_log_path = server_log_path
             if (ctx.scenario_id in native_p4.RESTART_SCENARIOS
                     or ctx.scenario_id in (native_light.SCENARIO_ID, "native-v2-end-restart",
+                                           "native-v2-console-shutdown",
                                            "native-v2-custody-mount-export",
                                            "native-v2-corrupt-block-entities",
                                            "native-v2-corrupt-chunk-near-camera")):
                 def restart_server(remaining: float) -> str:
                     nonlocal server, server_log
                     old_pid = server.pid
-                    runtime.stop_process(server)
+                    if console_shutdown:
+                        start = server_log_path.stat().st_size
+                        assert server.stdin is not None
+                        server.stdin.write(b"stop\n")
+                        server.stdin.flush()
+                        server.wait(timeout=remaining)
+                        server_log.flush()
+                        with server_log_path.open("rb") as log:
+                            log.seek(start)
+                            mcp.console_shutdown_log = log.read().decode("utf-8", errors="replace")
+                    else:
+                        runtime.stop_process(server)
                     if server.returncode != 0:
                         raise RuntimeError(f"P4 server did not stop cleanly: {server.returncode}")
                     server_log.close()
@@ -481,7 +578,7 @@ seed = 81
                     mcp.promotion_mount_export_reimport = export_reimport
             result = native_v2.run(mcp, artifact, timeout, ctx.scenario_id)
         elif p5_scenario:
-            from . import java_craft_drag
+            from . import java_craft_drag, shift_matrix
 
             runners = {
                 "java-v2-p5-towns": java_p5.run_towns,
@@ -489,6 +586,7 @@ seed = 81
                 "java-v2-p5-cursor": java_p5.run_cursor,
                 "java-v2-p5-craft-drag": java_craft_drag.run,
                 "java-v2-p5-craft-drag-paced": java_craft_drag.run_paced,
+                "java-v2-p5-shift-double-click": shift_matrix.run_java,
             }
             result = runners[ctx.scenario_id](mcp, artifact, timeout)
         elif kind == "entities":
@@ -515,6 +613,15 @@ seed = 81
                 evidence["peak_client_rss_kib"] = rss
             if cpu is not None:
                 evidence["client_cpu"] = cpu
+        for process, log, client, data in ghast_peers:
+            try:
+                client.close()
+            except Exception:
+                pass
+            finally:
+                runtime.stop_process(process)
+                ctx.exits[data["command_index"]] = process.returncode
+                log.close()
         if peer_mcp is not None:
             try:
                 peer_mcp.close()

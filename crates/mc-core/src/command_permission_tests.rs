@@ -168,11 +168,19 @@ fn nested_function_inherits_permission_without_escalating_or_lowering_it() {
             "debug function test:outer",
         ] {
             console(&mut state, "tick unfreeze");
+            state.day_time = 0;
             player(&mut state, level, text);
-            assert_eq!(state.day_time, 321, "the function ran its level2 leaf");
+            // Vanilla `/debug` needs level 3, so a level 2 source is refused
+            // before any function runs.
+            let allowed = level >= 3 || !text.starts_with("debug");
+            assert_eq!(
+                state.day_time == 321,
+                allowed,
+                "the function ran its level2 leaf for source level {level}: {text}"
+            );
             assert_eq!(
                 state.tick_control.frozen(),
-                level >= 3,
+                allowed && level >= 3,
                 "source level {level}: {text}"
             );
             assert!(state.command_context.current.is_none());

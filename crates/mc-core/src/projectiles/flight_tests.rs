@@ -620,6 +620,11 @@ fn flaming_arrow_relights_dry_but_not_waterlogged_campfire() {
         )
         .unwrap();
         super::flight::run(&mut state, &mut Vec::new(), std::iter::once(id));
+        let slot = state
+            .entities
+            .slot_of(id)
+            .expect("CampfireBlock.onProjectileHit leaves the arrow to stick");
+        assert!(state.entities.row(slot).projectile.as_ref().unwrap().stuck);
         let current = state.world.block_at(x, y, z).unwrap();
         let block = state
             .registry
@@ -666,7 +671,11 @@ fn burning_arrow_primes_exact_tnt_cell_once_on_negative_axis_impact() {
     .unwrap();
     let mut intents = Vec::new();
     super::flight::run(&mut state, &mut intents, std::iter::once(id));
-    assert!(state.entities.slot_of(id).is_none());
+    let slot = state
+        .entities
+        .slot_of(id)
+        .expect("TntBlock.onProjectileHit leaves the arrow to stick");
+    assert!(state.entities.row(slot).projectile.as_ref().unwrap().stuck);
     assert_eq!(
         state.world.block_at(target.x, target.y, target.z),
         Some(state.registry.states.air)
@@ -944,4 +953,934 @@ fn target_block_emits_power_when_shot() {
         crate::redstone::output(&state, target_pos, neighbor) > 0,
         "shot target block must emit redstone power"
     );
+}
+
+/// Vanilla AbstractArrow.onHitBlock retracts a stuck arrow/trident by
+/// signum(deltaMovement)*0.05 per axis (26.3 javap), so the stored position is
+/// in the air cell in front of the block face, not on the face itself.
+#[test]
+fn stuck_arrow_and_trident_retract_from_the_block_face_like_vanilla() {
+    for kind in [ProjectileKind::Arrow, ProjectileKind::Trident] {
+        let (mut state, _player, centre) = setup();
+        let wall_z = centre[2] as i32 + 5;
+        for y in 200..=205 {
+            for x in -2..=2 {
+                state
+                    .world
+                    .set_block(centre[0] as i32 + x, y, wall_z, state.registry.states.stone);
+            }
+        }
+        state.world.fold_overlay();
+        let origin = [centre[0], 202.0, centre[2] + 1.0];
+        let item = if kind == ProjectileKind::Trident {
+            "minecraft:trident"
+        } else {
+            "minecraft:arrow"
+        };
+        let stack = ItemStack::new(
+            state
+                .registry
+                .items
+                .id_of(&Identifier::parse(item).unwrap())
+                .unwrap(),
+            1,
+        );
+        let record = ProjectileState::new(kind, None, stack);
+        let id = launch(&mut state, record, origin, [0.0, 0.0, 3.0]).unwrap();
+        for _ in 0..10 {
+            run_tick(&mut state, &[]);
+        }
+        let slot = state.entities.slot_of(id).expect("projectile still there");
+        assert!(
+            state.entities.row(slot).projectile.as_ref().unwrap().stuck,
+            "{kind:?} stuck"
+        );
+        assert_eq!(state.entities.vel(slot), [0.0; 3], "{kind:?} stopped");
+        let pos = state.entities.pos(slot);
+        let face = f64::from(wall_z);
+        assert!(
+            (pos[2] - (face - 0.05)).abs() < 1e-9,
+            "{kind:?} stuck z must be the face minus 0.05: pos={pos:?} face={face}"
+        );
+        assert!(
+            pos[2] < face,
+            "{kind:?} stuck position is in the air cell in front of the wall: {pos:?}"
+        );
+        // Java Math.signum(0) == 0: the zero-velocity x axis is not retracted.
+        assert!(
+            (pos[0] - origin[0]).abs() < 1e-9,
+            "{kind:?} stuck x unchanged: pos={pos:?} origin={origin:?}"
+        );
+    }
+}
+
+fn default_block(state: &TickState, name: &str) -> u32 {
+    state
+        .registry
+        .blocks
+        .block(&Identifier::parse(name).unwrap())
+        .unwrap()
+        .default
+        .0
+}
+
+fn with_property(state: &TickState, block: u32, key: &str, value: &str) -> u32 {
+    let current = state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(block))
+        .unwrap();
+    let mut properties = current.properties.clone();
+    properties.iter_mut().find(|(k, _)| k == key).unwrap().1 = value.to_owned();
+    state
+        .registry
+        .blocks
+        .by_name_and_props(&current.block.id, &properties)
+        .unwrap()
+        .0
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Shooter {
+    Player(crate::commands::GameMode),
+    Skeleton,
+    Nobody,
+}
+
+fn shooter_uuid(
+    state: &mut TickState,
+    player: EntityId,
+    centre: [f64; 3],
+    shooter: Shooter,
+) -> Option<uuid::Uuid> {
+    let id = match shooter {
+        Shooter::Player(mode) => {
+            state.players.get_mut(&player).unwrap().game_mode = mode;
+            player
+        }
+        Shooter::Skeleton => {
+            let skeleton = state
+                .registry
+                .entity_types
+                .id_of(&Identifier::parse("minecraft:skeleton").unwrap())
+                .unwrap();
+            state.spawn_mob(skeleton, [centre[0], centre[1], centre[2] - 4.0], 20.0)
+        }
+        Shooter::Nobody => return None,
+    };
+    Some(state.entities.row(state.entities.slot_of(id).unwrap()).uuid)
+}
+
+/// The required-content test registry carries no entity type tags; a server
+/// loads 26.3 `data/minecraft/tags/entity_type/impact_projectiles.json`.
+pub(crate) fn vanilla_impact_projectiles(state: &mut TickState) {
+    let members = [
+        "minecraft:arrow",
+        "minecraft:spectral_arrow",
+        "minecraft:firework_rocket",
+        "minecraft:snowball",
+        "minecraft:fireball",
+        "minecraft:small_fireball",
+        "minecraft:egg",
+        "minecraft:trident",
+        "minecraft:dragon_fireball",
+        "minecraft:wither_skull",
+        "minecraft:wind_charge",
+        "minecraft:breeze_wind_charge",
+    ]
+    .map(|name| {
+        state
+            .registry
+            .entity_types
+            .id_of(&Identifier::parse(name).unwrap())
+            .unwrap() as i32
+    });
+    Arc::make_mut(&mut Arc::make_mut(&mut state.registry).tags)
+        .registries
+        .entry(Identifier::parse(mc_data::tags::ENTITY_TYPE_REGISTRY).unwrap())
+        .or_default()
+        .insert(
+            Identifier::parse(mc_data::tags::IMPACT_PROJECTILES).unwrap(),
+            members.to_vec(),
+        );
+}
+
+/// Fires `record` along +x, 0.25 above the floor of `block` (below a
+/// campfire's top), from 0.75 blocks (0.1 for a shot of at most 0.6 blocks per
+/// tick) in front of it, placed clear of the player two cells ahead of the
+/// centre, and returns the block's cell.
+fn shoot_block(
+    state: &mut TickState,
+    centre: [f64; 3],
+    block: u32,
+    record: ProjectileState,
+    speed: f64,
+) -> crate::boundary::BlockPos {
+    vanilla_impact_projectiles(state);
+    let pos = crate::boundary::BlockPos {
+        x: centre[0].floor() as i32 + 2,
+        y: centre[1] as i32,
+        z: centre[2].floor() as i32,
+    };
+    state.world.set_block(pos.x, pos.y, pos.z, block);
+    let gap = if speed > 0.6 { 0.75 } else { 0.1 };
+    let id = launch(
+        state,
+        record,
+        [f64::from(pos.x) - gap, centre[1] + 0.25, centre[2]],
+        [speed, 0.0, 0.0],
+    )
+    .unwrap();
+    super::flight::run(state, &mut Vec::new(), std::iter::once(id));
+    pos
+}
+
+/// Survival-player shots: `(kind, speed, projectiles_can_break_blocks, breaks)`.
+fn impact_break_cases(name: &str, cases: &[(ProjectileKind, f64, bool, bool)]) {
+    for &(kind, speed, enabled, breaks) in cases {
+        let (mut state, player, centre) = setup();
+        state
+            .gamerules
+            .insert("projectiles_can_break_blocks".into(), enabled.to_string());
+        let block = default_block(&state, name);
+        let owner = state
+            .entities
+            .row(state.entities.slot_of(player).unwrap())
+            .uuid;
+        let record = ProjectileState::new(kind, Some(owner), arrow_stack(&state));
+        let pos = shoot_block(&mut state, centre, block, record, speed);
+        assert_eq!(
+            state.world.block_at(pos.x, pos.y, pos.z) == Some(state.registry.states.air),
+            breaks,
+            "{name} {kind:?} speed={speed} enabled={enabled}"
+        );
+    }
+}
+
+#[test]
+fn projectile_breaks_pot_only_when_rule_enabled() {
+    impact_break_cases(
+        "minecraft:decorated_pot",
+        &[
+            (ProjectileKind::Arrow, 3.0, true, true),
+            (ProjectileKind::Arrow, 3.0, false, false),
+            // Not in the impact_projectiles entity tag.
+            (ProjectileKind::EnderPearl, 3.0, true, false),
+        ],
+    );
+}
+
+#[test]
+fn projectile_breaks_chorus_flower_only_when_rule_enabled() {
+    impact_break_cases(
+        "minecraft:chorus_flower",
+        &[
+            (ProjectileKind::Snowball, 3.0, true, true),
+            (ProjectileKind::Snowball, 3.0, false, false),
+        ],
+    );
+}
+
+#[test]
+fn projectile_breaks_pointed_dripstone_only_with_fast_trident() {
+    impact_break_cases(
+        "minecraft:pointed_dripstone",
+        &[
+            (ProjectileKind::Trident, 3.0, true, true),
+            (ProjectileKind::Trident, 0.6, true, false),
+            (ProjectileKind::Arrow, 3.0, true, false),
+            (ProjectileKind::Trident, 3.0, false, false),
+        ],
+    );
+}
+
+#[test]
+fn projectile_breaks_sulfur_spike_only_with_fast_trident() {
+    impact_break_cases(
+        "minecraft:sulfur_spike",
+        &[
+            (ProjectileKind::Trident, 3.0, true, true),
+            (ProjectileKind::Trident, 0.6, true, false),
+            (ProjectileKind::Trident, 3.0, false, false),
+        ],
+    );
+}
+
+/// `Projectile.mayBreak` passes only an ownerless or non-adventure player
+/// shot; `mayInteract` refuses a player under spawn protection.
+#[test]
+fn projectile_pot_break_follows_owner_and_spawn_protection() {
+    use crate::commands::GameMode;
+    for (shooter, protected, breaks) in [
+        (Shooter::Nobody, false, true),
+        (Shooter::Player(GameMode::Survival), false, true),
+        (Shooter::Player(GameMode::Survival), true, false),
+        (Shooter::Player(GameMode::Adventure), false, false),
+        (Shooter::Skeleton, false, false),
+    ] {
+        let (mut state, player, centre) = setup();
+        state.gamerules.insert("mob_griefing".into(), "true".into());
+        if protected {
+            state.spawn_protection = 256;
+            state.spawn_operators.insert(uuid::Uuid::new_v4());
+        }
+        let owner = shooter_uuid(&mut state, player, centre, shooter);
+        let record = ProjectileState::new(ProjectileKind::Arrow, owner, arrow_stack(&state));
+        let pot = default_block(&state, "minecraft:decorated_pot");
+        let pos = shoot_block(&mut state, centre, pot, record, 3.0);
+        assert_eq!(
+            state.world.block_at(pos.x, pos.y, pos.z) == Some(state.registry.states.air),
+            breaks,
+            "{shooter:?} protected={protected}"
+        );
+    }
+}
+
+/// DecoratedPotBlock cracks before `destroyBlock`: cracked loot, the 2001
+/// break event with the cracked state, and a waterlogged pot leaves water.
+#[test]
+fn projectile_cracks_pot_before_destroying_it() {
+    for waterlogged in ["false", "true"] {
+        let (mut state, player, centre) = setup();
+        let owner = state
+            .entities
+            .row(state.entities.slot_of(player).unwrap())
+            .uuid;
+        let record = ProjectileState::new(ProjectileKind::Arrow, Some(owner), arrow_stack(&state));
+        let pot = default_block(&state, "minecraft:decorated_pot");
+        let pot = with_property(&state, pot, "waterlogged", waterlogged);
+        let cracked = with_property(&state, pot, "cracked", "true");
+        let pos = shoot_block(&mut state, centre, pot, record, 3.0);
+        let left = if waterlogged == "true" {
+            state.registry.states.water
+        } else {
+            state.registry.states.air
+        };
+        assert_eq!(state.world.block_at(pos.x, pos.y, pos.z), Some(left));
+        assert_eq!(
+            state
+                .merge_command_broken
+                .iter()
+                .map(|(at, broken, _)| (*at, *broken))
+                .collect::<Vec<_>>(),
+            [(pos, cracked)]
+        );
+        let pot_item = state
+            .registry
+            .items
+            .id_of(&Identifier::parse("minecraft:decorated_pot").unwrap())
+            .unwrap();
+        assert!(
+            state.merge_command_broken[0]
+                .2
+                .iter()
+                .all(|drop| drop.item_id != pot_item),
+            "a cracked pot drops sherds, never itself"
+        );
+        assert!(state.outbox[&ConnectionId(1)].iter().any(|change| matches!(
+            change,
+            crate::boundary::PlayerChange::ProjectileLevelEvent { position, event: 2001, data }
+                if *position == pos && *data == cracked as i32
+        )));
+    }
+}
+
+/// Places an intact decorated pot two cells ahead of `centre` whose block
+/// entity carries four decorations (two sherds, two bricks) and holds three
+/// diamonds, under the vanilla loot tables; returns its cell and state.
+fn sherd_pot(state: &mut TickState, centre: [f64; 3]) -> (crate::boundary::BlockPos, u32) {
+    let vanilla = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    state.registry = Arc::new(CoreRegistry::load(Some(&vanilla)).unwrap());
+    vanilla_impact_projectiles(state);
+    let pos = crate::boundary::BlockPos {
+        x: centre[0].floor() as i32 + 2,
+        y: centre[1] as i32,
+        z: centre[2].floor() as i32,
+    };
+    let pot = default_block(state, "minecraft:decorated_pot");
+    state.world.set_block(pos.x, pos.y, pos.z, pot);
+    let sherds = [
+        "minecraft:angler_pottery_sherd",
+        "minecraft:brick",
+        "minecraft:archer_pottery_sherd",
+        "minecraft:brick",
+    ];
+    let mut bytes = Vec::new();
+    mc_nbt::write_network(
+        &mut bytes,
+        &mc_nbt::Tag::Compound(vec![
+            (
+                "id".into(),
+                mc_nbt::Tag::String("minecraft:decorated_pot".into()),
+            ),
+            ("x".into(), mc_nbt::Tag::Int(pos.x)),
+            ("y".into(), mc_nbt::Tag::Int(pos.y)),
+            ("z".into(), mc_nbt::Tag::Int(pos.z)),
+            (
+                "sherds".into(),
+                mc_nbt::Tag::List(mc_nbt::ListTag {
+                    element_type: mc_nbt::tag_type::STRING,
+                    elements: sherds
+                        .iter()
+                        .map(|name| mc_nbt::Tag::String((*name).into()))
+                        .collect(),
+                }),
+            ),
+        ]),
+    )
+    .unwrap();
+    state.world.set_opaque_block_entity(pos, Some(bytes));
+    state.world.fold_overlay();
+    let diamond = item(state, "minecraft:diamond");
+    state.block_entities.insert(
+        (pos.x, pos.y, pos.z),
+        crate::tick::BlockEntityState {
+            slots: vec![ItemStack::new(diamond, 3)],
+            furnace: None,
+        },
+    );
+    (pos, pot)
+}
+
+fn item(state: &TickState, name: &str) -> u32 {
+    state
+        .registry
+        .items
+        .id_of(&Identifier::parse(name).unwrap())
+        .unwrap()
+}
+
+/// Two arrows strike one sherd-decorated pot in the same tick: one accepted
+/// break, and the commit spills its sherds and stored stack exactly once.
+#[test]
+fn two_shots_at_one_sherd_pot_drop_its_sherds_and_contents_once() {
+    let (mut state, player, centre) = setup();
+    let owner = state
+        .entities
+        .row(state.entities.slot_of(player).unwrap())
+        .uuid;
+    let (pos, pot) = sherd_pot(&mut state, centre);
+    let shots: Vec<_> = [-0.2, 0.2]
+        .into_iter()
+        .map(|dz| {
+            let record =
+                ProjectileState::new(ProjectileKind::Arrow, Some(owner), arrow_stack(&state));
+            launch(
+                &mut state,
+                record,
+                [f64::from(pos.x) - 0.75, centre[1] + 0.25, centre[2] + dz],
+                [3.0, 0.0, 0.0],
+            )
+            .unwrap()
+        })
+        .collect();
+    super::flight::run(&mut state, &mut Vec::new(), shots.iter().copied());
+    let cracked = with_property(&state, pot, "cracked", "true");
+    assert_eq!(
+        state
+            .merge_command_broken
+            .iter()
+            .map(|(at, broken, _)| (*at, *broken))
+            .collect::<Vec<_>>(),
+        [(pos, cracked)],
+        "the second shot finds no pot to break again"
+    );
+    let (_, _, spawned, _) = state.commit_merge_effects();
+    let mut drops: Vec<(u32, i32)> = spawned
+        .iter()
+        .filter_map(|id| state.entities.slot_of(*id))
+        .filter_map(|slot| state.entities.row(slot).item.as_ref())
+        .map(|row| (row.item_id, row.count))
+        .collect();
+    drops.sort_unstable();
+    let mut expected = vec![
+        (item(&state, "minecraft:angler_pottery_sherd"), 1),
+        (item(&state, "minecraft:brick"), 1),
+        (item(&state, "minecraft:archer_pottery_sherd"), 1),
+        (item(&state, "minecraft:brick"), 1),
+        (item(&state, "minecraft:diamond"), 3),
+    ];
+    expected.sort_unstable();
+    assert_eq!(drops, expected);
+    assert!(state.merge_command_broken.is_empty());
+    assert!(!state.block_entities.contains_key(&(pos.x, pos.y, pos.z)));
+    assert!(
+        state.commit_merge_effects().2.is_empty(),
+        "a consumed break is never replayed by a later commit"
+    );
+}
+
+/// The arrow that broke a pot sticks in front of the pot's face; with that
+/// support gone it falls (`AbstractArrow.shouldFall`), sticks in the floor
+/// below and its shooter can still pick it up.
+#[test]
+fn arrow_that_breaks_a_pot_falls_to_the_floor_and_stays_pickable() {
+    let (mut state, player, centre) = setup();
+    let owner = state
+        .entities
+        .row(state.entities.slot_of(player).unwrap())
+        .uuid;
+    let mut record = ProjectileState::new(ProjectileKind::Arrow, Some(owner), arrow_stack(&state));
+    record.pickup = true;
+    let (pos, _) = sherd_pot(&mut state, centre);
+    let id = launch(
+        &mut state,
+        record,
+        [f64::from(pos.x) - 0.75, centre[1] + 0.25, centre[2]],
+        [3.0, 0.0, 0.0],
+    )
+    .unwrap();
+    super::flight::run(&mut state, &mut Vec::new(), std::iter::once(id));
+    assert_eq!(state.merge_command_broken.len(), 1);
+    state.commit_merge_effects();
+    let slot = state
+        .entities
+        .slot_of(id)
+        .expect("the arrow survives the break");
+    let arrow = state.entities.row(slot).projectile.as_ref().unwrap();
+    assert!(arrow.stuck && arrow.pickup);
+    let hit = state.entities.pos(slot);
+    let player_slot = state.entities.slot_of(player).unwrap();
+    state
+        .entities
+        .set_pos(player_slot, [centre[0] - 6.0, centre[1], centre[2]]);
+    let stuck = |state: &TickState| {
+        let row = state.entities.row(state.entities.slot_of(id).unwrap());
+        let in_ground = row.appearance.extra.contains(&(
+            super::ARROW_IN_GROUND_INDEX,
+            crate::boundary::EntityDataValue::Boolean(true),
+        ));
+        let stuck = row.projectile.as_ref().unwrap().stuck;
+        assert_eq!(
+            stuck, in_ground,
+            "the synced in-ground flag follows the arrow"
+        );
+        stuck
+    };
+    run_tick(&mut state, &[]);
+    assert!(!stuck(&state), "without support the arrow starts falling");
+    assert_eq!(
+        state.entities.pos(state.entities.slot_of(id).unwrap()),
+        hit,
+        "it starts moving only on the next tick"
+    );
+    for _ in 0..40 {
+        if stuck(&state) {
+            break;
+        }
+        run_tick(&mut state, &[]);
+    }
+    assert!(stuck(&state), "the arrow lands on the floor");
+    let landed = state.entities.pos(state.entities.slot_of(id).unwrap());
+    assert_eq!([landed[0], landed[2]], [hit[0], hit[2]]);
+    assert!(
+        (landed[1] - (centre[1] + 0.05)).abs() < 1.0e-9,
+        "{landed:?}"
+    );
+    state.entities.set_pos(player_slot, landed);
+    run_tick(&mut state, &[]);
+    assert!(state.entities.slot_of(id).is_none());
+    let arrows = item(&state, "minecraft:arrow");
+    assert_eq!(
+        state.players[&player]
+            .inventory
+            .slots
+            .iter()
+            .filter(|stack| stack.item_id == arrows)
+            .map(|stack| stack.count)
+            .sum::<i32>(),
+        1
+    );
+}
+
+/// TntBlock and CampfireBlock need `Projectile.mayInteract`: a mob's burning
+/// arrow ignites only while `mob_griefing` is on.
+#[test]
+fn burning_mob_arrow_ignites_only_with_mob_griefing() {
+    for griefing in [false, true] {
+        for block in ["minecraft:tnt", "minecraft:campfire"] {
+            let (mut state, player, centre) = setup();
+            state
+                .gamerules
+                .insert("mob_griefing".into(), griefing.to_string());
+            let owner = shooter_uuid(&mut state, player, centre, Shooter::Skeleton);
+            let mut record =
+                ProjectileState::new(ProjectileKind::Arrow, owner, arrow_stack(&state));
+            record.flame = true;
+            let mut target = default_block(&state, block);
+            if block == "minecraft:campfire" {
+                target = with_property(&state, target, "lit", "false");
+            }
+            let pos = shoot_block(&mut state, centre, target, record, 3.0);
+            assert_eq!(
+                state.world.block_at(pos.x, pos.y, pos.z) != Some(target),
+                griefing,
+                "{block} mob_griefing={griefing}"
+            );
+        }
+    }
+}
+
+/// The player's arrow, flying +x at 3 blocks per tick into the cell two ahead
+/// of `centre`, `height` above its floor; returns the cell and the arrow.
+fn shoot_cell(
+    state: &mut TickState,
+    player: EntityId,
+    centre: [f64; 3],
+    block: u32,
+    height: f64,
+    flame: bool,
+) -> (crate::boundary::BlockPos, EntityId) {
+    let owner = state
+        .entities
+        .row(state.entities.slot_of(player).unwrap())
+        .uuid;
+    let mut record = ProjectileState::new(ProjectileKind::Arrow, Some(owner), arrow_stack(state));
+    record.flame = flame;
+    let pos = crate::boundary::BlockPos {
+        x: centre[0].floor() as i32 + 2,
+        y: centre[1] as i32,
+        z: centre[2].floor() as i32,
+    };
+    state.world.set_block(pos.x, pos.y, pos.z, block);
+    let id = launch(
+        state,
+        record,
+        [
+            f64::from(pos.x) - 0.75,
+            f64::from(pos.y) + height,
+            centre[2],
+        ],
+        [3.0, 0.0, 0.0],
+    )
+    .unwrap();
+    super::flight::run(state, &mut Vec::new(), std::iter::once(id));
+    (pos, id)
+}
+
+/// `BellBlock.onProjectileHit` -> `onHit(.., true)`: a floor bell rings only on
+/// a side along its facing axis and no higher than 0.8124 above the cell
+/// floor (`isProperHit`); a ring sends block event 1 with the struck face
+/// (west = 4) and the bell sound, and counts `bell_ring` for the player.
+#[test]
+fn arrow_rings_a_floor_bell_only_on_a_proper_hit() {
+    for (facing, height, rings) in [
+        ("east", 0.25, true),
+        ("north", 0.25, false),
+        ("east", 0.9, false),
+    ] {
+        let (mut state, player, centre) = setup();
+        let bell = default_block(&state, "minecraft:bell");
+        let bell = with_property(&state, bell, "facing", facing);
+        let (pos, _) = shoot_cell(&mut state, player, centre, bell, height, false);
+        let changes = state
+            .outbox
+            .get(&ConnectionId(1))
+            .map_or(&[][..], Vec::as_slice);
+        assert_eq!(
+            changes.iter().any(|change| matches!(
+                change,
+                crate::boundary::PlayerChange::BlockEvent { position, action: 1, parameter: 4, .. }
+                    if *position == pos
+            )),
+            rings,
+            "{facing} {height}"
+        );
+        assert_eq!(
+            changes.iter().any(|change| matches!(
+                change,
+                crate::boundary::PlayerChange::BellRung { position } if *position == pos
+            )),
+            rings
+        );
+        assert_eq!(
+            state.players[&player]
+                .statistics
+                .get_custom(mc_data::statistics::CustomStat::BellRing),
+            i32::from(rings)
+        );
+    }
+}
+
+/// `AbstractCandleBlock.onProjectileHit`: a burning projectile lights an unlit
+/// dry candle or an unlit candle cake; a wet candle or a cold arrow does not.
+#[test]
+fn burning_arrow_lights_dry_candles_and_candle_cakes() {
+    for (name, waterlogged, flame, lights) in [
+        ("minecraft:candle", false, true, true),
+        ("minecraft:red_candle", false, true, true),
+        ("minecraft:candle", true, true, false),
+        ("minecraft:candle", false, false, false),
+        ("minecraft:candle_cake", false, true, true),
+        ("minecraft:lime_candle_cake", false, false, false),
+    ] {
+        let (mut state, player, centre) = setup();
+        let mut block = default_block(&state, name);
+        if waterlogged {
+            block = with_property(&state, block, "waterlogged", "true");
+        }
+        let (pos, _) = shoot_cell(&mut state, player, centre, block, 0.25, flame);
+        let now = state.world.block_at(pos.x, pos.y, pos.z).unwrap();
+        assert_eq!(
+            crate::farming::prop(&state.registry.blocks, now, "lit"),
+            Some(if lights { "true" } else { "false" }),
+            "{name} waterlogged={waterlogged} flame={flame}"
+        );
+    }
+}
+
+/// `AbstractHurtingProjectile.tick` sets a small fireball on fire before it
+/// resolves its hit (`shouldBurn`), so it lights a candle like a burning
+/// arrow; a wind charge, which opts out of burning, does not.
+#[test]
+fn small_fireball_lights_a_candle_but_a_wind_charge_does_not() {
+    for (kind, lights) in [
+        (ProjectileKind::SmallFireball, true),
+        (ProjectileKind::WindCharge, false),
+    ] {
+        let (mut state, player, centre) = setup();
+        let owner = state
+            .entities
+            .row(state.entities.slot_of(player).unwrap())
+            .uuid;
+        let pos = crate::boundary::BlockPos {
+            x: centre[0].floor() as i32 + 2,
+            y: centre[1] as i32,
+            z: centre[2].floor() as i32,
+        };
+        let candle = default_block(&state, "minecraft:candle");
+        state.world.set_block(pos.x, pos.y, pos.z, candle);
+        let id = launch(
+            &mut state,
+            ProjectileState::new(kind, Some(owner), ItemStack::EMPTY),
+            [f64::from(pos.x) - 0.75, f64::from(pos.y) + 0.25, centre[2]],
+            [3.0, 0.0, 0.0],
+        )
+        .unwrap();
+        super::flight::run(&mut state, &mut Vec::new(), std::iter::once(id));
+        let now = state.world.block_at(pos.x, pos.y, pos.z).unwrap();
+        assert_eq!(
+            crate::farming::prop(&state.registry.blocks, now, "lit"),
+            Some(if lights { "true" } else { "false" }),
+            "{kind:?}"
+        );
+    }
+}
+
+/// `AmethystBlock.onProjectileHit` (and its bud, cluster and budding
+/// subclasses): one chime, BLOCKS, volume 1, pitch `0.5 + nextFloat * 1.2`.
+#[test]
+fn projectile_chimes_amethyst_once() {
+    for (name, chimes) in [
+        ("minecraft:amethyst_block", true),
+        ("minecraft:budding_amethyst", true),
+        ("minecraft:amethyst_cluster", true),
+        ("minecraft:large_amethyst_bud", true),
+        ("minecraft:stone", false),
+    ] {
+        let (mut state, player, centre) = setup();
+        let block = default_block(&state, name);
+        let (pos, _) = shoot_cell(&mut state, player, centre, block, 0.25, false);
+        let chimes_heard: Vec<_> = state
+            .outbox
+            .get(&ConnectionId(1))
+            .map_or(&[][..], Vec::as_slice)
+            .iter()
+            .filter_map(|change| match change {
+                crate::boundary::PlayerChange::CommandSound {
+                    sound,
+                    source,
+                    position,
+                    volume,
+                    pitch,
+                    ..
+                } if sound.as_str() == "minecraft:block.amethyst_block.chime" => {
+                    Some((*source, *position, *volume, *pitch))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(chimes_heard.len(), usize::from(chimes), "{name}");
+        if let Some((source, position, volume, pitch)) = chimes_heard.first() {
+            assert_eq!(*source, 4);
+            assert_eq!(*position, [pos.x * 8 + 4, pos.y * 8 + 4, pos.z * 8 + 4]);
+            assert_eq!(*volume, 1.0);
+            assert!((0.5..1.7).contains(pitch), "{pitch}");
+        }
+    }
+}
+
+/// `BigDripleafBlock.onProjectileHit`: the leaf tilts fully at once (tilt-down
+/// sound) and its scheduled tick levels it 100 ticks later.
+#[test]
+fn projectile_tilts_big_dripleaf_until_its_tick_levels_it() {
+    let (mut state, player, centre) = setup();
+    let leaf = default_block(&state, "minecraft:big_dripleaf");
+    let (pos, _) = shoot_cell(&mut state, player, centre, leaf, 0.8, false);
+    let tilt = |state: &TickState| {
+        crate::farming::prop(
+            &state.registry.blocks,
+            state.world.block_at(pos.x, pos.y, pos.z).unwrap(),
+            "tilt",
+        )
+        .unwrap()
+        .to_owned()
+    };
+    assert_eq!(tilt(&state), "full");
+    assert!(state.outbox[&ConnectionId(1)].iter().any(|change| matches!(
+        change,
+        crate::boundary::PlayerChange::CommandSound { sound, .. }
+            if sound.as_str() == "minecraft:block.big_dripleaf.tilt_down"
+    )));
+    let hit = state.tick;
+    while tilt(&state) == "full" {
+        assert!(state.tick < hit + 200, "the leaf levels");
+        run_tick(&mut state, &[]);
+    }
+    assert_eq!(tilt(&state), "none");
+    // Shot between ticks at `hit`: the tick scheduled for `hit + 100` runs in
+    // the `run_tick` that starts at that tick and ends at `hit + 101`.
+    assert_eq!(state.tick, hit + 101);
+}
+
+/// `Level.destroyBlock` emits BLOCK_DESTROY at the broken cell: a sensor
+/// nearer the pot than the impact point selects it over PROJECTILE_LAND.
+#[test]
+fn projectile_pot_break_emits_block_destroy() {
+    let (mut state, player, centre) = setup();
+    vanilla_impact_projectiles(&mut state);
+    let sensor = crate::boundary::BlockPos {
+        x: centre[0].floor() as i32 + 5,
+        y: centre[1] as i32,
+        z: centre[2].floor() as i32,
+    };
+    let id = default_block(&state, "minecraft:sculk_sensor");
+    state.world.set_block(sensor.x, sensor.y, sensor.z, id);
+    crate::sculk::changed(&mut state, sensor);
+    let pot = default_block(&state, "minecraft:decorated_pot");
+    let (pos, _) = shoot_cell(&mut state, player, centre, pot, 0.25, false);
+    assert_eq!(
+        state.world.block_at(pos.x, pos.y, pos.z),
+        Some(state.registry.states.air)
+    );
+    let pending = crate::vibration::pending(&state, sensor).expect("the sensor heard the shot");
+    assert_eq!(
+        pending.vibration.event,
+        crate::vibration::GameEvent::BlockDestroy
+    );
+    assert_eq!(pending.vibration.pos, crate::vibration::centre(pos));
+}
+
+/// `ServerLevel.mayInteract` also needs the cell inside the world border: a
+/// player's burning arrow primes TNT only within it.
+#[test]
+fn player_arrow_primes_tnt_only_inside_the_world_border() {
+    for inside in [true, false] {
+        let (mut state, player, centre) = setup();
+        if !inside {
+            state.border.center_x = centre[0] - 10.0;
+            state.border.size = 10.0;
+            state.border.lerp_target = 10.0;
+        }
+        let tnt = default_block(&state, "minecraft:tnt");
+        let (pos, _) = shoot_cell(&mut state, player, centre, tnt, 0.25, true);
+        assert_eq!(
+            state.world.block_at(pos.x, pos.y, pos.z) != Some(tnt),
+            inside,
+            "inside={inside}"
+        );
+    }
+}
+
+/// An arrow stack carrying `can_break: {blocks: <block>}`.
+fn arrow_breaking(state: &TickState, block: &str) -> ItemStack {
+    let fields = vec![
+        (
+            "id".to_owned(),
+            mc_nbt::Tag::String("minecraft:arrow".into()),
+        ),
+        ("count".to_owned(), mc_nbt::Tag::Int(1)),
+        (
+            "components".to_owned(),
+            mc_nbt::Tag::Compound(vec![(
+                "minecraft:can_break".to_owned(),
+                mc_nbt::Tag::Compound(vec![(
+                    "blocks".to_owned(),
+                    mc_nbt::Tag::String(block.into()),
+                )]),
+            )]),
+        ),
+    ];
+    mc_data::item_nbt::stack_from_fields(&state.registry.items, &fields)
+        .unwrap()
+        .unwrap()
+}
+
+/// `canBreakBlockInAdventureMode`: an adventure player's or a mob's arrow breaks
+/// a pot only when the arrow's `can_break` admits it.
+#[test]
+fn adventure_and_mob_arrows_break_pots_only_through_can_break() {
+    use crate::commands::GameMode;
+    for (shooter, predicate, breaks) in [
+        (Shooter::Player(GameMode::Adventure), None, false),
+        (
+            Shooter::Player(GameMode::Adventure),
+            Some("minecraft:stone"),
+            false,
+        ),
+        (
+            Shooter::Player(GameMode::Adventure),
+            Some("minecraft:decorated_pot"),
+            true,
+        ),
+        (Shooter::Skeleton, Some("minecraft:decorated_pot"), true),
+        (Shooter::Skeleton, Some("minecraft:stone"), false),
+    ] {
+        let (mut state, player, centre) = setup();
+        state.gamerules.insert("mob_griefing".into(), "true".into());
+        let owner = shooter_uuid(&mut state, player, centre, shooter);
+        let stack = predicate.map_or_else(
+            || arrow_stack(&state),
+            |block| arrow_breaking(&state, block),
+        );
+        let record = ProjectileState::new(ProjectileKind::Arrow, owner, stack);
+        let pot = default_block(&state, "minecraft:decorated_pot");
+        let pos = shoot_block(&mut state, centre, pot, record, 3.0);
+        assert_eq!(
+            state.world.block_at(pos.x, pos.y, pos.z) == Some(state.registry.states.air),
+            breaks,
+            "{shooter:?} {predicate:?}"
+        );
+    }
+}
+
+/// `TntBlock.prime`: an adventure player's burning arrow primes TNT only when
+/// the arrow's `can_break` admits the TNT.
+#[test]
+fn adventure_burning_arrow_primes_tnt_only_through_can_break() {
+    for (predicate, primes) in [
+        (None, false),
+        (Some("minecraft:stone"), false),
+        (Some("minecraft:tnt"), true),
+    ] {
+        let (mut state, player, centre) = setup();
+        state.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Adventure;
+        let owner = state
+            .entities
+            .row(state.entities.slot_of(player).unwrap())
+            .uuid;
+        let stack = predicate.map_or_else(
+            || arrow_stack(&state),
+            |block| arrow_breaking(&state, block),
+        );
+        let mut record = ProjectileState::new(ProjectileKind::Arrow, Some(owner), stack);
+        record.flame = true;
+        let tnt = default_block(&state, "minecraft:tnt");
+        let pos = shoot_block(&mut state, centre, tnt, record, 3.0);
+        assert_eq!(
+            state.world.block_at(pos.x, pos.y, pos.z) != Some(tnt),
+            primes,
+            "{predicate:?}"
+        );
+    }
 }

@@ -312,18 +312,22 @@ fn custom_recipe_and_block_loot_override_builtins() {
 }
 
 #[test]
-fn worldgen_and_unknown_resources_fail_with_explicit_error() {
+fn worldgen_resources_are_ignored_and_unknown_resources_fail_with_explicit_error() {
     let directory = tempfile::tempdir().unwrap();
     pack(
         directory.path(),
         "a",
         &[("test/worldgen/biome/a.json", "{}")],
     );
+    let loaded = PackSet::load(directory.path(), Selection::default()).unwrap();
+    assert_eq!(loaded.ignored["file/a"], ["test/worldgen/biome/a.json"]);
+    let unknown = tempfile::tempdir().unwrap();
+    pack(unknown.path(), "b", &[("test/advancement/a.json", "{}")]);
     assert!(
-        PackSet::load(directory.path(), Selection::default())
+        PackSet::load(unknown.path(), Selection::default())
             .err()
             .unwrap()
-            .contains("Worldgen datapacks are not supported")
+            .contains("Unsupported datapack resource")
     );
 }
 

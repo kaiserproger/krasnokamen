@@ -1,0 +1,52 @@
+{
+  "id": "DAMAGE-IDENTITIES",
+  "verdict": "promoted",
+  "fix_commit": "patch:183e48e731519935714fca91fb2a3e6dd04d79c5322dc47402de905db4530296",
+  "fix_commit_full": "patch:183e48e731519935714fca91fb2a3e6dd04d79c5322dc47402de905db4530296",
+  "promoted_at": "2026-11-11T21:15:42+00:00",
+  "tree_head": "b729bb2b5367400e63f2778315bacb79574507f2",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "183e48e731519935714fca91fb2a3e6dd04d79c5322dc47402de905db4530296",
+  "reversed_files": [
+    "crates/mc-core/src/special_mobs/mod.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:warden::tests::angered_warden_sonic_attack_retains_damage_identity": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_damage::tests::named_damage_identities_reach_committed_events": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:entities:native-v2-p4-identities": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-p4-identities --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/LedgerPromoteB02/.analysis/validation/20261111T211119-ledger-promote-1ad3akc2/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:warden::tests::angered_warden_sonic_attack_retains_damage_identity": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_damage::tests::named_damage_identities_reach_committed_events": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/LedgerPromoteB02/.analysis/validation/20261111T202203-native-v2-p4-identities-w_o5_q7k/result.json",
+    "tree_head": "b729bb2b5367400e63f2778315bacb79574507f2",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "bbea2915250f26f04c8d83e3128cdf444fda1ee70df3951c642ffb64df22e857",
+    "covers": [
+      "harness:entities:native-v2-p4-identities"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/LedgerPromoteB02/.analysis/validation/20261111T211119-ledger-promote-1ad3akc2"
+}

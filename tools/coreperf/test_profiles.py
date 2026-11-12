@@ -121,6 +121,70 @@ class ProfilesTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     profiles.pinned_binary(binary, "server")
 
+    def test_incremental_pin_is_refused_but_pre_field_and_full_pins_pass(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = root / "absent-owner-host" / "pins"
+            pin = root / "remote-artifacts" / "pin"
+            pin.mkdir(parents=True)
+            binary = pin / "solaris-v2"
+            binary.write_bytes(b"server")
+            manifest = {"repo": "core", "kind": "server", "binary": str(binary),
+                        "head": "abc", "diff_sha256": "def", "command": "cargo build --release",
+                        "target": "test-target", "binary_sha256": profiles.load.scale.binary_sha256(binary)}
+            receipt = pin / "manifest.json"
+            with patch.object(profiles, "PIN_ROOT", store):
+                for recorded, accepted in ((None, True), (False, True), (True, False)):
+                    with self.subTest(incremental=recorded):
+                        receipt.write_text(json.dumps(manifest if recorded is None else dict(manifest, incremental=recorded)))
+                        if accepted:
+                            profiles.pinned_binary(binary, "server")
+                        else:
+                            with self.assertRaisesRegex(ValueError, "incremental"):
+                                profiles.pinned_binary(binary, "server")
+
+    def test_capacity_ladder_refuses_incremental_or_mismatched_pins_before_any_rung(self):
+        import asyncio
+        from tools.coreperf import capacity_ladder
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = root / "absent-owner-host" / "pins"
+            def pin(kind, name, *, head="abc", **extra):
+                folder = root / kind
+                folder.mkdir()
+                binary = folder / name
+                binary.write_bytes(kind.encode())
+                binary.chmod(0o755)
+                (folder / "manifest.json").write_text(json.dumps(
+                    {"repo": "core", "kind": kind, "binary": str(binary), "head": head, "diff_sha256": "def",
+                     "command": "cargo build --release", "target": "t",
+                     "binary_sha256": profiles.load.scale.binary_sha256(binary), **extra}))
+                return binary
+            server = pin("server", "solaris-v2")
+            bots = pin("bots", "player-scale-bots")
+            args = argparse.Namespace(out=root / "out", server_bin=server, bots_bin=bots)
+            with patch.object(profiles, "PIN_ROOT", store), patch.object(capacity_ladder, "rung") as rung:
+                (server.parent / "manifest.json").write_text(json.dumps(
+                    dict(json.loads((server.parent / "manifest.json").read_text()), incremental=True)))
+                args.out = root / "out1"
+                with self.assertRaisesRegex(SystemExit, "incremental"):
+                    asyncio.run(capacity_ladder.main_async(args))
+                (server.parent / "manifest.json").write_text(json.dumps(
+                    dict(json.loads((server.parent / "manifest.json").read_text()), incremental=False, head="other")))
+                args.out = root / "out2"
+                with self.assertRaisesRegex(SystemExit, "different source trees"):
+                    asyncio.run(capacity_ladder.main_async(args))
+                rung.assert_not_called()
+
+    def test_unpinned_binary_without_manifest_passes_the_soft_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "solaris-v2"
+            binary.write_bytes(b"x")
+            profiles.load.scale.refuse_incremental_pin(binary, "server")
+            (Path(directory) / "manifest.json").write_text(json.dumps({"incremental": True}))
+            with self.assertRaisesRegex(ValueError, "incremental"):
+                profiles.load.scale.refuse_incremental_pin(binary, "server")
+
     def test_owner_host_requires_pin_store_and_exact_manifest_path(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -216,6 +280,9 @@ class ProfilesTests(unittest.TestCase):
         rows[-1]["projectile_candidates"] = 2
         sample = {"tick": 3, "coreperf": {"tick": 3, "resident_entities": 90, "regions": rows}}
         self.assertEqual(profiles.validate_scale_sample(armed, sample)["projectiles"], 2)
+        rows[-1]["projectile_candidates"] = True
+        with self.assertRaisesRegex(ValueError, "projectile owner"):
+            profiles.validate_scale_sample(armed, sample)
         del rows[-1]["projectile_candidates"]
         with self.assertRaisesRegex(ValueError, "projectile owner"):
             profiles.validate_scale_sample(armed, sample)
@@ -231,20 +298,39 @@ class ProfilesTests(unittest.TestCase):
                 for i, row in enumerate(recipe["coverage"])]
         sample = {"tick": 3, "coreperf": {"tick": 3, "resident_entities": 90,
                   "xp_orbs_processed": 9, "xp_orbs_by_region": {str(recipe["stress"]["regions"][0]): 7},
+                  "xp_value_by_region": {str(recipe["stress"]["regions"][0]): 10},
                   "regions": rows}}
         self.assertEqual(profiles.validate_scale_sample(recipe, sample)["xp_orbs"], 7)
         del sample["coreperf"]["xp_orbs_processed"]
         with self.assertRaisesRegex(ValueError, "XP-orb owner"):
             profiles.validate_scale_sample(recipe, sample)
 
-    def test_full_xp_controls_share_bank_geometry(self):
-        recipe = profiles.scale_fixture(10, "all-active")
+    def test_zero_xp_control_has_only_an_observer_region(self):
+        recipe = profiles.scale_fixture(10, "all-active", active_override=0)
+        before = len(recipe["regions"])
         profiles.add_xp_fixture(recipe, 0, smoke=False)
-        self.assertEqual(recipe["stress"]["dispenser_capacity"], 100000)
-        self.assertEqual(len(recipe["stress"]["regions"]), 100)
-        self.assertEqual(len(recipe["stress"]["commands"]), 200)
-        self.assertEqual(sum("minecraft:dispenser[" in c
-                             for r in recipe["regions"] for c in r["commands"]), 100000)
+        self.assertEqual(len(recipe["regions"]), before + 1)
+        self.assertEqual(recipe["stress"]["dispenser_capacity"], 0)
+        self.assertEqual(recipe["stress"]["regions"], [])
+        self.assertEqual(recipe["stress"]["commands"], [])
+        self.assertFalse(recipe.get("expected_blocks"))
+        index = recipe["stress"]["observer_region"]
+        row = {"region": index, "active_chunks": 16, "motion_admitted": 0,
+               "motion_full": 0, "motion_resting": 0}
+        sample = {"tick": 1, "coreperf": {"tick": 1, "resident_entities": 11,
+                  "regions": [row], "xp_orbs_processed": 0, "xp_orbs_by_region": {}, "xp_value_by_region": {}}}
+        observed = profiles.validate_scale_sample(recipe, sample)
+        self.assertEqual((observed["xp_orbs"], observed["active"]), (0, 0))
+        row["active_chunks"] = 15
+        with self.assertRaisesRegex(ValueError, "active chunk coverage"):
+            profiles.validate_scale_sample(recipe, sample)
+        row["active_chunks"] = 16
+        sample["coreperf"]["xp_orbs_processed"] = 1
+        with self.assertRaisesRegex(ValueError, "zero XP control"):
+            profiles.validate_scale_sample(recipe, sample)
+        del sample["coreperf"]["xp_orbs_by_region"]
+        with self.assertRaisesRegex(ValueError, "XP-orb owner"):
+            profiles.validate_scale_sample(recipe, sample)
 
     def test_brewing_fixture_uses_chests_and_public_item_placement(self):
         recipe = profiles.scale_fixture(80, "all-active")
@@ -265,9 +351,44 @@ class ProfilesTests(unittest.TestCase):
                   "brewing_active_by_region": {region: 2},
                   "brewing_progressing_by_region": {region: 2}}}
         self.assertEqual(profiles.validate_scale_sample(recipe, sample)["brewing_progressing"], 2)
+        sample["coreperf"]["brewing_progressing_by_region"][region] = True
+        with self.assertRaisesRegex(ValueError, "invalid brewing owner counters"):
+            profiles.validate_scale_sample(recipe, sample)
+        sample["coreperf"]["brewing_progressing_by_region"][region] = 2
         sample["coreperf"]["brewing_discovery_by_region"][region] = 7
         with self.assertRaisesRegex(ValueError, "below requested containers"):
             profiles.validate_scale_sample(recipe, sample)
+
+    def test_mutating_workload_commands_are_fenced_after_passive_warmup(self):
+        args = argparse.Namespace(profile="scale-100k-all-active", mobs=80,
+                                  warmup_seconds=2, measure_seconds=5)
+        for kind in ("brewing-containers", "churn"):
+            recipe = {"stress": {"kind": kind, "pulse_interval_ms": 500, "commands": ["a", "b"]}}
+            warmup, measured = profiles.schedule(args, recipe)["windows"]
+            self.assertNotIn("commands", warmup)
+            self.assertTrue(measured["command_fence"])
+            self.assertEqual(measured["commands"], ["a", "b"])
+
+    def test_churn_measurement_ends_after_a_complete_replacement_cycle(self):
+        recipe = {"stress": {"kind": "churn", "pulse_interval_ms": 500,
+                             "commands": ["summon-pig", "kill-cow", "summon-cow", "kill-pig"]}}
+        for seconds in (5, 120):
+            args = argparse.Namespace(profile="scale-100k-all-active", mobs=80,
+                                      warmup_seconds=2, measure_seconds=seconds)
+            window = profiles.schedule(args, recipe)["windows"][1]
+            slots = (window["duration_ms"] - 1) // window["command_interval_ms"]
+            self.assertGreater(slots, 0)
+            self.assertEqual(slots % len(window["commands"]), 0)
+
+    def test_one_bottle_smoke_pulses_early_enough_to_observe_yield(self):
+        recipe = profiles.scale_fixture(10, "all-active", active_override=0)
+        profiles.add_xp_fixture(recipe, 1, smoke=True, players=100, locality="spread")
+        self.assertEqual(recipe["stress"]["pulse_interval_ms"], 1500)
+        args = argparse.Namespace(profile="scale-100k-all-active", mobs=10, smoke=True,
+                                  warmup_seconds=2, measure_seconds=5)
+        warmup, measurement = profiles.schedule(args, recipe)["windows"]
+        self.assertNotIn("commands", warmup)
+        self.assertEqual(measurement["command_interval_ms"], 1500)
 
     def test_productive_workers_require_real_distinct_farm_cell_changes(self):
         recipe = profiles.scale_fixture(78, "all-active")
@@ -294,11 +415,12 @@ class ProfilesTests(unittest.TestCase):
             profiles.validate_scale_sample(recipe, sample)
 
     def test_damage_fixture_requires_accepted_distinct_owner_victims(self):
-        recipe = profiles.scale_fixture(78, "all-active", without_cows=True)
+        recipe = profiles.scale_fixture(78, "all-active", excluded_kinds=("cow",))
         profiles.add_damage_fixture(recipe, 2, smoke=True)
         self.assertEqual(recipe["population"]["resident_requested"], 80)
         self.assertEqual(recipe["expected"]["minecraft:cow"], 2)
-        self.assertTrue(all("execute as" in c for c in recipe["stress"]["commands"]))
+        self.assertTrue(all("execute as" in c and "nbt={CustomName:" in c
+                            for c in recipe["stress"]["commands"]))
         rows = [{"region": i, "active_chunks": 16, "motion_admitted": row["resident"],
                  "motion_full": 0, "motion_resting": row["resident"], "projectile_candidates": 0}
                 for i, row in enumerate(recipe["coverage"])]
@@ -311,7 +433,7 @@ class ProfilesTests(unittest.TestCase):
             profiles.validate_scale_sample(recipe, sample)
 
     def test_all_residents_can_be_damage_targets_without_empty_world_setup(self):
-        recipe = profiles.scale_fixture(0, "all-active", without_cows=True)
+        recipe = profiles.scale_fixture(0, "all-active", excluded_kinds=("cow",))
         profiles.add_damage_fixture(recipe, 2, smoke=True)
         self.assertEqual(recipe["population"]["resident_requested"], 2)
         self.assertTrue(any(command.startswith("gamerule doMobSpawning")
@@ -426,6 +548,193 @@ class ProfilesTests(unittest.TestCase):
             profiles.visibility_summary(samples, rows, 200, 300)
 
 
+    def test_xp_players_and_locality_are_independent_of_cold_residents(self):
+        for players in (1, 100, 1000):
+            for locality in ("compact", "spread"):
+                recipe = profiles.scale_fixture(80, "all-active", active_override=0)
+                profiles.add_xp_fixture(recipe, 1, smoke=True, players=players, locality=locality)
+                stress = recipe["stress"]
+                self.assertEqual(len(stress["anchors"]), players)
+                centers = {(x//16, z//16) for x, z in stress["anchors"]}
+                self.assertEqual(len(centers), 1 if locality == "compact" else min(16, players))
+                self.assertEqual(recipe["population"]["active_requested"], 0)
+                self.assertEqual(len(stress["regions"]), 1)
+                self.assertEqual(len(recipe["expected_blocks"]), 4)
+                rows = []
+                for x, z in stress["anchors"]:
+                    center = [x//16, z//16]
+                    rows.append({"initial_chunk_center": center, "final_chunk_center": center,
+                                 "chunk_center_transitions": 0})
+                proof = {"mechanics": {"players": rows}}
+                self.assertEqual(profiles.validate_xp_observers(stress, proof)["players"], players)
+                rows[0]["final_chunk_center"] = [999, 999]
+                with self.assertRaisesRegex(ValueError, "observer"):
+                    profiles.validate_xp_observers(stress, proof)
+                rows.pop()
+                with self.assertRaisesRegex(ValueError, "locality evidence"):
+                    profiles.validate_xp_observers(stress, proof)
+
+    def test_xp_zero_observers_requires_cold_zero_orb_control(self):
+        recipe = profiles.scale_fixture(10, "all-active", active_override=0)
+        profiles.add_xp_fixture(recipe, 0, smoke=True, players=0)
+        self.assertFalse(any(row["active"] for row in recipe["coverage"]))
+        self.assertEqual(recipe["stress"]["anchors"], [])
+        sample = {"tick": 2, "coreperf": {"tick": 2, "resident_entities": 10,
+                  "regions": [], "xp_orbs_processed": 0, "xp_orbs_by_region": {}, "xp_value_by_region": {}}}
+        self.assertEqual(profiles.validate_scale_sample(recipe, sample)["active"], 0)
+        with self.assertRaisesRegex(ValueError, "invalid XP workload"):
+            profiles.add_xp_fixture(profiles.scale_fixture(10, "all-active", active_override=0),
+                                    1, smoke=True, players=0)
+
+    def test_full_xp_banks_are_compact_and_preserve_offered_counts(self):
+        for count in (10000, 100000):
+            recipe = profiles.scale_fixture(10, "all-active", active_override=0)
+            profiles.add_xp_fixture(recipe, count, smoke=False)
+            stress = recipe["stress"]
+            self.assertEqual(stress["dispenser_capacity"], 100000)
+            self.assertEqual(len(stress["regions"]), 1)
+            self.assertEqual(len(stress["commands"]), 52)
+            self.assertEqual(len(recipe["expected_blocks"]), 100000)
+            self.assertEqual(sum(row["item"] == "minecraft:experience_bottle"
+                                 for row in recipe["expected_blocks"]), count)
+            positions = [tuple(row["position"]) for row in recipe["expected_blocks"]]
+            self.assertEqual(len(set(positions)), 100000)
+            self.assertLess(max(position[1] for position in positions), 320)
+            self.assertEqual(sum("minecraft:experience_bottle 64" in command
+                                 for command in recipe["regions"][-1]["commands"]), count)
+
+    def test_exact_cohort_tick_rejects_missing_and_wrong_counts(self):
+        samples = [{"tick": 10, "xp_orbs": 2}, {"tick": 11, "xp_orbs": 1}]
+        self.assertEqual(profiles.exact_cohort_tick(samples, "xp_orbs", 1), 11)
+        for bad, count in ((samples, 3), (samples, 0), ([], 0), ([{"tick": 1}], 0)):
+            with self.subTest(bad=bad, count=count), self.assertRaises(ValueError):
+                profiles.exact_cohort_tick(bad, "xp_orbs", count)
+        self.assertEqual(profiles.exact_cohort_tick([{"tick": 12, "xp_orbs": 0}], "xp_orbs", 0), 12)
+
+    def test_bottle_yield_uses_orb_value_and_count_not_bottle_count(self):
+        samples = [{"tick": 1, "xp_orbs": 0, "xp_value": 0},
+                   {"tick": 2, "xp_orbs": 2, "xp_value": 10}]
+        self.assertEqual(profiles.xp_bottle_cohort_tick(samples, 1), 2)
+        for sample in ({"tick": 1, "xp_orbs": 1, "xp_value": 2},
+                       {"tick": 1, "xp_orbs": 4, "xp_value": 10},
+                       {"tick": 1, "xp_orbs": 1, "xp_value": 12},
+                       {"tick": 1, "xp_orbs": 1}):
+            with self.subTest(sample=sample), self.assertRaises(ValueError):
+                profiles.xp_bottle_cohort_tick([sample], 1)
+        self.assertEqual(profiles.xp_bottle_cohort_tick([samples[0]], 0), 1)
+
+    def test_saved_fixture_block_census_rejects_wrong_or_missing_blocks(self):
+        recipe = {"expected_blocks": [{"position": [1, 2, 3], "block": "minecraft:chest"}]}
+        snapshot = {"blocks": {"fixture-0": {"position": [1, 2, 3],
+                    "final": {"name": "minecraft:chest"}}}}
+        self.assertEqual(profiles.validate_fixture_blocks(recipe, snapshot),
+                         {"blocks": {"minecraft:chest": 1}, "loaded_sources": {}})
+        snapshot["blocks"]["fixture-0"]["final"]["name"] = "minecraft:stone"
+        with self.assertRaisesRegex(ValueError, "differs"):
+            profiles.validate_fixture_blocks(recipe, snapshot)
+        snapshot["blocks"].clear()
+        with self.assertRaisesRegex(ValueError, "count"):
+            profiles.validate_fixture_blocks(recipe, snapshot)
+        recipe["expected_blocks"].append(recipe["expected_blocks"][0])
+        with self.assertRaisesRegex(ValueError, "duplicated"):
+            profiles.fixture_block_spec(recipe)
+        recipe = {"expected_blocks": [{"position": [1, 2, 3], "block": "minecraft:dispenser",
+                                       "item": "minecraft:arrow", "count": 64}]}
+        slots = [{"name": "minecraft:arrow", "count": 64}] + [{"name": "minecraft:air", "count": 0} for _ in range(8)]
+        snapshot = {"blocks": {"fixture-0": {"position": [1, 2, 3], "final": {"name": "minecraft:dispenser"}}},
+                    "containers": {"fixture-container-0": {"position": [1, 2, 3], "final": slots}}}
+        self.assertEqual(profiles.validate_fixture_blocks(recipe, snapshot),
+                         {"blocks": {"minecraft:dispenser": 1}, "loaded_sources": {"minecraft:arrow": 1}})
+        slots[0]["count"] = 63
+        with self.assertRaisesRegex(ValueError, "ammunition"):
+            profiles.validate_fixture_blocks(recipe, snapshot)
+
+    def test_saved_spawn_rule_state_rejects_missing_or_wrong_values(self):
+        snapshot = {"globals": {"checkpoint": {"payload": {"gamerules": {
+            "spawn_mobs": "true", "spawn_monsters": "false"}}}}}
+        expected = {"spawn_mobs": True, "spawn_monsters": False}
+        self.assertEqual(profiles.validate_spawn_rules(snapshot, expected), expected)
+        snapshot["globals"]["checkpoint"]["payload"]["gamerules"]["spawn_mobs"] = "false"
+        with self.assertRaisesRegex(ValueError, "differs"):
+            profiles.validate_spawn_rules(snapshot, expected)
+        del snapshot["globals"]["checkpoint"]["payload"]["gamerules"]
+        with self.assertRaisesRegex(ValueError, "missing saved spawn-rule"):
+            profiles.validate_spawn_rules(snapshot, expected)
+
+    def test_natural_cohort_requires_saved_sheared_and_burning_states(self):
+        for kind, animal, field, before in (("wool-sheep", "sheep", "Sheared", True),
+                                             ("daylight-zombies", "zombie", "Fire", False)):
+            stress = {"kind": kind, "requested_count": 1}
+            row = {"active": True, "payload": {"CustomName": profiles.compare.COHORT_NAME, field: 1}}
+            snapshot = {"entities": {f"minecraft:{animal}": {"samples": [row]}}}
+            self.assertEqual(profiles.validate_natural_snapshot(stress, snapshot, before=before)["positive_state"], 1)
+            row["payload"][field] = 0
+            with self.assertRaisesRegex(ValueError, "state differs"):
+                profiles.validate_natural_snapshot(stress, snapshot, before=before)
+            row["active"] = False
+            with self.assertRaisesRegex(ValueError, "count"):
+                profiles.validate_natural_snapshot(stress, snapshot, before=before)
+
+    def test_reactive_pairs_require_saved_thorns_and_source_tick_work(self):
+        recipe = profiles.scale_fixture(10, "all-active", excluded_kinds=("sheep", "zombie"))
+        profiles.add_reactive_fixture(recipe, 1)
+        self.assertEqual(recipe["population"]["resident_requested"], 12)
+        self.assertEqual(recipe["expected"]["minecraft:iron_golem"], 1)
+        armor = {"id": "minecraft:diamond_chestplate", "components": {
+            "minecraft:enchantments": {"minecraft:thorns": 10}}}
+        row = {"active": True, "payload": {"CustomName": profiles.compare.COHORT_NAME,
+               "equipment": {"chest": armor}}}
+        snapshot = {"entities": {"minecraft:zombie": {"samples": [row]}}}
+        self.assertEqual(profiles.validate_reactive_equipment(snapshot, 1), 1)
+        self.assertEqual(profiles.validate_reactive_samples(recipe["stress"], [{"damage_reactive": 1}]), 1)
+        rows = [{"region": i, "active_chunks": len(coverage["chunks"]),
+                 "motion_admitted": coverage["resident"], "motion_full": coverage["resident"],
+                 "motion_resting": 0, "projectile_candidates": 0}
+                for i, coverage in enumerate(recipe["coverage"])]
+        region = str(recipe["stress"]["regions"][0])
+        sample = {"tick": 1, "coreperf": {"tick": 1, "resident_entities": 12, "regions": rows,
+                  "damage_victims_by_region": {region: 1}, "damage_reactive_by_region": {region: 1}}}
+        self.assertEqual(profiles.validate_scale_sample(recipe, sample)["damage_reactive"], 1)
+        del sample["coreperf"]["damage_reactive_by_region"]
+        with self.assertRaisesRegex(ValueError, "damage owner"):
+            profiles.validate_scale_sample(recipe, sample)
+        armor["components"]["minecraft:enchantments"]["minecraft:thorns"] = 0
+        with self.assertRaisesRegex(ValueError, "thorns"):
+            profiles.validate_reactive_equipment(snapshot, 1)
+        with self.assertRaisesRegex(ValueError, "below"):
+            profiles.validate_reactive_samples(recipe["stress"], [{"damage_reactive": 0}])
+        with self.assertRaisesRegex(ValueError, "missing"):
+            profiles.validate_reactive_samples(recipe["stress"], [])
+
+    def test_churn_bounds_and_saved_identity_turnover(self):
+        recipe = profiles.scale_fixture(99, "all-active", excluded_kinds=("cow", "pig"))
+        profiles.add_churn_fixture(recipe, 1, 1)
+        before = {"counts": recipe["expected"], "identities": {}}
+        snapshot = {"entities": {}}
+        for kind, count in recipe["expected"].items():
+            for index in range(count):
+                identity = f"{kind}-{index}"
+                before["identities"][identity] = {"kind": kind}
+                final_kind = "minecraft:pig" if kind == "minecraft:cow" else kind
+                final_id = "replacement" if kind == "minecraft:cow" else identity
+                snapshot["entities"].setdefault(final_kind, {"samples": []})["samples"].append({
+                    "uuid": final_id, "active": True, "final_position": [0, 64, 0],
+                    "payload": {"CustomName": profiles.compare.COHORT_NAME}})
+        _, proof = profiles.validate_churn_cohort(recipe, before, snapshot)
+        self.assertEqual(proof["replaced_min"], 1)
+        snapshot["entities"]["minecraft:pig"]["samples"][0]["uuid"] = "minecraft:cow-0"
+        with self.assertRaisesRegex(ValueError, "turn over"):
+            profiles.validate_churn_cohort(recipe, before, snapshot)
+        rows = [{"region": i, "active_chunks": len(row["chunks"]),
+                 "motion_admitted": row["resident"], "motion_full": row["resident"],
+                 "motion_resting": 0, "projectile_candidates": 0}
+                for i, row in enumerate(recipe["coverage"])]
+        rows[-1]["motion_admitted"] = rows[-1]["motion_full"] = 3
+        with self.assertRaisesRegex(ValueError, "transition bounds"):
+            profiles.validate_scale_sample(recipe, {"tick": 1, "coreperf": {
+                "tick": 1, "resident_entities": 102, "regions": rows}})
+
+
 class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
     async def test_waits_for_first_pushed_tick_instead_of_sampling_an_empty_ring(self):
         class Session:
@@ -491,6 +800,54 @@ class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
                 result = json.loads((args.out / "result.json").read_text())
                 self.assertEqual(result["status"], "failed")
                 self.assertIn("productive-npcs unavailable", result["error"])
+
+
+    async def test_public_prepare_receipt_rejects_wrong_saved_fixture_blocks(self):
+        async def prepared(_args, _directory, recipe, _key, _hashes):
+            identities = {f"{kind}-{i}": {"kind": kind} for kind, count in recipe["expected"].items()
+                          for i in range(count)}
+            return Path("/unused"), {"recipe_sha256": profiles.load.digest(recipe),
+                "cohort": {"counts": recipe["expected"], "identities": identities},
+                "fixture_cache": {"status": "disabled"},
+                "snapshot": {"entities": {kind: {"active": count}
+                                           for kind, count in recipe["expected"].items()}}}
+        async def observed(_args, _directory, _world, _config, spec):
+            if corrupt == "block":
+                return {"blocks": {}}
+            result = {"blocks": {row["name"]: {"position": row["position"],
+                      "final": {"name": "minecraft:dispenser"}} for row in spec["blocks"]},
+                      "containers": {row["name"]: {"position": row["position"],
+                      "final": [{"name": "minecraft:air", "count": 0} for _ in range(9)]}
+                      for row in spec["containers"]}}
+            if corrupt == "ammo":
+                result["containers"]["fixture-container-0"]["final"][0] = {"name": "minecraft:arrow", "count": 1}
+            return result
+        manifest = {"head": "base", "diff_sha256": "diff", "binary_sha256": "sha"}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for corrupt in ("none", "block", "ammo"):
+                args = argparse.Namespace(out=root / str(corrupt), profile="scale-100k-all-active",
+                    productive_npcs=None, server_bin=root / "server" / "solaris-v2",
+                    bots_bin=root / "bots" / "player-scale-bots", build_receipt=root / "server" / "manifest.json",
+                    vanilla_data_dir=root, mobs=10, villagers=0, damage_victims=None, map_frames=None,
+                    churn_percent=None, daylight_zombies=None, wool_sheep=None, reactive_pairs=None, xp_orbs=None,
+                    spawn_mobs=None, spawn_monsters=None,
+                    xp_players=None, xp_locality=None, projectiles=0, containers=None, smoke=True,
+                    prepare_only=True, readiness_seconds=1800)
+                with patch.object(profiles, "host_receipt", return_value={}), \
+                     patch.object(profiles, "pinned_binary", return_value=manifest), \
+                     patch.object(profiles.load, "tree_hash", return_value={"sha256": "registry"}), \
+                     patch.object(profiles.compare, "fixture_cache_key", return_value="fixture"), \
+                     patch.object(profiles.compare, "prepare", new=prepared), \
+                     patch.object(profiles.load, "native_snapshot", new=observed):
+                    status = await profiles.run(args)
+                result = json.loads((args.out / "result.json").read_text())
+                self.assertEqual(status, int(corrupt != "none"))
+                self.assertEqual(result["status"], "prepared" if corrupt == "none" else "failed")
+                if corrupt == "block":
+                    self.assertIn("saved fixture block count", result["error"])
+                if corrupt == "ammo":
+                    self.assertIn("saved fixture ammunition", result["error"])
 
 
 if __name__ == "__main__":

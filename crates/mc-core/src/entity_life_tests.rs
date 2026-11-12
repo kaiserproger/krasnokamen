@@ -567,6 +567,54 @@ fn sheep_offspring_inherits_recipe_mixed_wool_without_sheared_bit() {
 }
 
 #[test]
+fn bred_calf_takes_one_parents_variant_by_coin_like_vanilla() {
+    // Cow/Pig/Chicken.getBreedOffspring (javap, receipts/Q04CoreFix/javap):
+    // the calf copies this parent's or the partner's variant by nextBoolean.
+    for (kind, variant) in [("cow", "cold"), ("pig", "warm"), ("chicken", "cold")] {
+        let (mut state, _, pos) = fixture();
+        let name = format!("minecraft:{kind}");
+        let id = mc_data::required_registry_entry_id(
+            &format!("{kind}_variant"),
+            &mc_data::Identifier::parse(format!("minecraft:{variant}")).unwrap(),
+        )
+        .unwrap();
+        let (index, value) = crate::blueprint::variant_data(&name, id).unwrap();
+        let mut seen = [false; 2];
+        for tick in 0..64u64 {
+            state.tick = tick;
+            let a = spawn(&mut state, kind, pos);
+            let b = spawn(&mut state, kind, pos);
+            let slot = state.entities.slot_of(a).unwrap();
+            Arc::make_mut(&mut state.entities.row_mut(slot).appearance)
+                .extra
+                .push((index, value.clone()));
+            let type_id = match body(&state, a).kind {
+                EntityKind::Mob { type_id } => type_id,
+                _ => unreachable!(),
+            };
+            entity_life::breed(&mut state, a, b, pos, type_id);
+            let (_, _, born, _) = state.commit_merge_effects();
+            let child = born
+                .into_iter()
+                .find(|id| row(&state, *id).entity_life.child_ticks > 0)
+                .unwrap();
+            let inherited: Vec<_> = row(&state, child)
+                .appearance
+                .extra
+                .iter()
+                .filter(|(at, _)| *at == index)
+                .collect();
+            match inherited.as_slice() {
+                [] => seen[0] = true,
+                [(_, got)] if *got == value => seen[1] = true,
+                other => panic!("{kind}: unexpected child variant {other:?}"),
+            }
+        }
+        assert_eq!(seen, [true, true], "{kind}: both coin outcomes occur");
+    }
+}
+
+#[test]
 fn breeding_without_a_love_cause_does_not_credit_nearby_player() {
     let (mut state, player, pos) = fixture();
     let a = spawn(&mut state, "rabbit", pos);

@@ -82,6 +82,7 @@ fn selector_empty_tag_command_path() {
     );
     let cow = state.spawn_mob(state.registry.cow_type_id, [2.0, 60.0, 2.0], 10.0);
     let slot = state.entities.slot_of(cow).unwrap();
+    crate::entity_controls::set_no_gravity(&mut state, slot, true);
     mc_nbt::write_named(
         &mut state.entities.row_mut(slot).opaque_entity_fields,
         "",
@@ -94,7 +95,6 @@ fn selector_empty_tag_command_path() {
                 }),
             ),
             ("Silent".into(), mc_nbt::Tag::Byte(1)),
-            ("NoGravity".into(), mc_nbt::Tag::Byte(1)),
         ]),
     )
     .unwrap();
@@ -109,6 +109,18 @@ fn selector_empty_tag_command_path() {
         "execute if entity @e[type=minecraft:cow,tag=] run time add 10",
     );
     assert_eq!(state.day_time, 3);
+    crate::entity_controls::set_no_gravity(&mut state, slot, false);
+    command(
+        &mut state,
+        entity,
+        "execute if entity @e[type=minecraft:cow,tag=probe,nbt={Silent:1b,NoGravity:1b}] run time add 100",
+    );
+    command(
+        &mut state,
+        entity,
+        "execute if entity @e[type=minecraft:cow,tag=probe,nbt={Silent:1b,NoGravity:0b}] run time add 4",
+    );
+    assert_eq!(state.day_time, 7);
 }
 
 #[test]
@@ -502,4 +514,83 @@ fn nested_execute_budget_and_permissions_fail_closed() {
     assert_eq!(state.day_time, 0);
     assert!(state.command_context.current.is_none());
     assert_eq!(state.command_context.depth, 0);
+}
+
+#[test]
+fn global_command_failure_reaches_the_player_as_a_translatable_key() {
+    // `kill` with no match fails with the lang key `argument.entity.notfound.entity`; sent as plain
+    // chat the player saw the raw key instead of "No entity was found".
+    let (mut state, entity) = fixture();
+    state.command_context.shared = true;
+    let connection = state.connections.entity_connection(entity).unwrap();
+    let context = Context::source(&state, connection, entity, 2);
+    run(
+        &mut state,
+        "kill @e[type=minecraft:cow,distance=..0]",
+        context,
+        &mut ChangeSet::default(),
+    );
+    let lines = state.outbox.get(&connection).expect("failure feedback");
+    assert!(
+        lines.iter().any(|change| matches!(change, PlayerChange::StyledChat { content }
+            if *content == crate::command_feedback::translated("argument.entity.notfound.entity", Vec::new()))),
+        "{lines:?}"
+    );
+    assert!(
+        !lines
+            .iter()
+            .any(|change| matches!(change, PlayerChange::Chat { .. }))
+    );
+}
+
+#[test]
+fn defaultgamemode_sets_the_mode_new_players_join_in() {
+    // Vanilla `DefaultGameModeCommands.setMode`: `MinecraftServer.setDefaultGameType`, then
+    // `commands.defaultgamemode.success` with the long mode name.
+    let (mut state, entity) = fixture();
+    let connection = state.connections.entity_connection(entity).unwrap();
+    let context = Context::source(&state, connection, entity, 2);
+    run(
+        &mut state,
+        "defaultgamemode creative",
+        context,
+        &mut ChangeSet::default(),
+    );
+    assert_eq!(state.default_game_mode, crate::commands::GameMode::Creative);
+    let lines = state.outbox.get(&connection).expect("feedback");
+    assert!(lines.iter().any(
+        |change| matches!(change, PlayerChange::StyledChat { content }
+        if *content == crate::command_feedback::translated(
+            "commands.defaultgamemode.success",
+            vec![crate::command_feedback::translated("gameMode.creative", Vec::new())]))
+    ));
+    let joined = crate::tick::run_tick(
+        &mut state,
+        &[crate::boundary::PlayerInput::Join {
+            connection: ConnectionId(7),
+            uuid: uuid::Uuid::new_v4(),
+            name: "newcomer".to_owned(),
+            permission_level: 0,
+        }],
+    );
+    let _ = joined;
+    let newcomer = state
+        .connections
+        .entity_of(ConnectionId(7))
+        .expect("joined");
+    assert_eq!(
+        state.players[&newcomer].game_mode,
+        crate::commands::GameMode::Creative
+    );
+    // Not an operator command.
+    state.default_game_mode = crate::commands::GameMode::Survival;
+    let mut player = Context::source(&state, connection, entity, 0);
+    player.permission = 0;
+    run(
+        &mut state,
+        "defaultgamemode adventure",
+        player,
+        &mut ChangeSet::default(),
+    );
+    assert_eq!(state.default_game_mode, crate::commands::GameMode::Survival);
 }

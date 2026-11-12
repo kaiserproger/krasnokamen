@@ -11,7 +11,7 @@ import sys
 
 if sys.argv[1] == '--send-locks':
     fds = array.array('i')
-    for fd in (3, 6, 7, 8):
+    for fd in (3, 6, 7, 8, 9):  # -x/shared lock, perf lane, slot pool + use locks, build token
         try:
             os.fstat(fd)
         except OSError:
@@ -48,7 +48,7 @@ try:
         if any(key.fileobj == listener for key, _ in events):
             conn, _ = listener.accept()
             with conn:
-                _, ancillary, _, _ = conn.recvmsg(1, socket.CMSG_SPACE(4 * array.array('i').itemsize))
+                _, ancillary, _, _ = conn.recvmsg(1, socket.CMSG_SPACE(5 * array.array('i').itemsize))
                 for level, kind, data in ancillary:
                     if level == socket.SOL_SOCKET and kind == socket.SCM_RIGHTS:
                         fds = array.array('i')
@@ -57,10 +57,13 @@ try:
                 conn.sendall(b'1')
             selector.unregister(listener)
             listener.close()
+        done = False
         if any(key.fd == fifo for key, _ in events):
-            if b'done\n' in os.read(fifo, 4096) and not caller_dead:
-                break
-        if any(key.fd in (wrapper_fd, caller_fd) for key, _ in events):
+            done = b'done\n' in os.read(fifo, 4096) and not caller_dead
+        if done:
+            # Hold the slot locks until the wrapper exits and the scope empties.
+            select.select([wrapper_fd, caller_fd], [], [])
+        if done or any(key.fd in (wrapper_fd, caller_fd) for key, _ in events):
             # Prevent a surviving launcher from creating the scope after our check.
             try:
                 signal.pidfd_send_signal(wrapper_fd, signal.SIGKILL)

@@ -23,7 +23,7 @@ import tempfile
 import tomllib
 
 from . import regressions
-from .runtime import REPO_ROOT
+from .runtime import REPO_ROOT, main_checkout, sibling_root
 
 GREEN, RED, UNRUNNABLE, NEEDS_CLIENT = 'green', 'red', 'unrunnable', 'needs-real-client'
 ARTIFACT_ROOT = REPO_ROOT / '.analysis' / 'validation'
@@ -121,6 +121,76 @@ def _failing_verdict(receipt, profile, verdict):
     return False
 
 
+# Assertion names that report a lost or late connection, not the scenario's own check.
+_CONNECTION_ASSERTION = re.compile(r'(^|_)(in_play|entered_play|join(ed)?)(_|$)')
+_PRE_SCENARIO_PHASES = frozenset({'preflight', 'server_start', 'client_start', 'join'})
+
+
+def _scenario_assertion_failed(receipt, check):
+    """A named-scenario ref is red when its own receipt (`details.named_scenario.id` is the
+    ref) failed on one of the scenario's assertions. Read from the receipt's `error` only,
+    never from the command line that ran it. A connection assertion (`in_play`,
+    `*_entered_play`, join) or a failure tagged before the scenario body is a flake."""
+    if not isinstance(receipt, dict):
+        return False
+    details = receipt.get('details') if isinstance(receipt.get('details'), dict) else {}
+    named = details.get('named_scenario')
+    if not (isinstance(named, dict) and named.get('id') == check):
+        return False
+    failure = details.get('failure') if isinstance(details.get('failure'), dict) else {}
+    if failure.get('phase') in _PRE_SCENARIO_PHASES:
+        return False
+    match = re.search(r'\bassertion failed: (\S+)', str(receipt.get('error') or ''))
+    return bool(match) and not _CONNECTION_ASSERTION.search(match.group(1))
+
+
+def _loader_mc_version(loader_root: Path) -> str | None:
+    """The Minecraft version the Loader checkout builds its client against."""
+    properties = loader_root / 'gradle.properties'
+    if not properties.is_file():
+        return None
+    match = re.search(r'^minecraftVersion=(\S+)$', properties.read_text(), re.M)
+    return match.group(1) if match else None
+
+
+def _loader_live_setup(ctx, env, tree) -> str | None:
+    """Prepare env/placeholders for loader-live refs; return a fail-closed reason or None.
+
+    loader-live launches the real Loader client through Gradle under a private audio
+    graph, so it needs the loader checkout, the Gradle home with the cached client jar,
+    an empty plugins dir and the vanilla translation data in `tree` (26.1.2 client)."""
+    loader_root = sibling_root('loader')
+    if not (loader_root / 'gradlew').is_file():
+        return f'loader-live requires a Loader checkout at {loader_root} (set SOLARIS_LOADER_ROOT)'
+    env['SOLARIS_LOADER_ROOT'] = str(loader_root)
+    gradle_home = Path(env.get('GRADLE_USER_HOME') or (main_checkout().parent / 'loader-gradle-home'))
+    if not gradle_home.is_dir():
+        return f'loader-live requires a Gradle home at {gradle_home} (set GRADLE_USER_HOME)'
+    env['GRADLE_USER_HOME'] = str(gradle_home)
+    version = _loader_mc_version(loader_root)
+    if not env.get('SOLARIS_CLIENT_JAR'):
+        jar = gradle_home / 'caches' / 'fabric-loom' / (version or '') / 'minecraft-client.jar'
+        if not jar.is_file():
+            return f'loader-live requires the cached {version} client jar at {jar} (set SOLARIS_CLIENT_JAR)'
+        env['SOLARIS_CLIENT_JAR'] = str(jar)
+    wrapper = REPO_ROOT / 'tools' / 'harness' / 'screen_audio_graph.sh'
+    if not wrapper.is_file():
+        return f'loader-live requires the private audio wrapper {wrapper}'
+    env['SOLARIS_AUDIO_RECEIPT_DIR'] = str(ctx.artifact_dir)
+    plugins_dir = ctx.artifact_dir / 'loader-live-plugins'
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    data_source = Path(os.environ.get('SOLARIS_VANILLA_DATA_ROOT') or (main_checkout() / 'data'))
+    for name in ('vanilla-steps', f'vanilla-{version or ""}'):
+        source = data_source / name
+        target = Path(tree) / 'data' / name
+        if target.exists():
+            continue
+        if not source.is_dir():
+            return f'loader-live requires {source} (vanilla translation data for the Loader client)'
+        subprocess.run(['cp', '-a', '--', str(source), str(target)], check=True)
+    return None
+
+
 def _run_harness(ctx, refs, tree):
     """Run real-client refs in `tree` -> {ref: (state, detail, receipt path or None)}."""
     from . import profiles
@@ -138,14 +208,34 @@ def _run_harness(ctx, refs, tree):
         _, profile, check = ref.split(':', 2)
         command, is_profile = regressions._check_command(profile, check)
         grouped[tuple(command)].append((ref, profile, check, is_profile))
+    loader_refs = {ref for group in grouped.values() for ref, profile, _, _ in group if profile == 'loader-live'}
+    loader_reason = None
+    if loader_refs:
+        loader_reason = _loader_live_setup(ctx, env, tree)
+        if loader_reason is None:
+            env.setdefault('SOLARIS_AUDIO_RECEIPT_DIR', str(ctx.artifact_dir))
     results = {}
     for command, group in grouped.items():
         _, profile, check, is_profile = group[0]
+        command = list(command)
+        if profile == 'loader-live':
+            if loader_reason is not None:
+                results.update({ref: (UNRUNNABLE, loader_reason, None) for ref, *_ in group})
+                continue
+            wrapper = REPO_ROOT / 'tools' / 'harness' / 'screen_audio_graph.sh'
+            plugins_dir = ctx.artifact_dir / 'loader-live-plugins'
+            command = [str(wrapper)] + [
+                str(binary) if part == '{server_bin}' else str(plugins_dir) if part == '{plugins_dir}' else part
+                for part in command
+            ]
         try:
             receipt, path = regressions._client_receipt(ctx, profiles, command, env, profile, check, is_profile, cwd=tree)
         except regressions.ReceiptNotPassed as error:
             for ref, profile, check, is_profile in group:
-                red = error.status == 'failed' and is_profile and _failing_verdict(error.receipt, profile, check)
+                red = error.status == 'failed' and (
+                    (is_profile and _failing_verdict(error.receipt, profile, check))
+                    or (not is_profile and _scenario_assertion_failed(error.receipt, check))
+                )
                 results[ref] = (RED if red else UNRUNNABLE, str(error), None)
             continue
         except Exception as error:
@@ -276,6 +366,8 @@ def _split_non_test(diff, source_of):
             continue
         lines = chunk.splitlines(keepends=True)
         match = re.match(r'diff --git a/(.+) b/(.+)$', lines[0].rstrip('\n'))
+        if match is None:
+            raise Refused(f'fix patch has an unparseable diff header (expected `diff --git a/<path> b/<path>`): {lines[0].rstrip()!r}')
         path = match.group(2)
         starts = [i for i, text in enumerate(lines) if text.startswith('@@ ')]
         if not starts:
@@ -293,6 +385,11 @@ def _split_non_test(diff, source_of):
             found = _CFG_TEST_MOD.search(source)
             if found:
                 threshold = source.count('\n', 0, found.start()) + 1
+            if threshold is not None and threshold > 1 and any(
+                    text.startswith('new file mode') for text in header):
+                # A file the fix commit adds is one hunk: reversing it deletes the file and
+                # its inline test module together, so there is no boundary to straddle.
+                threshold = None
         kept = []
         for hunk in hunks:
             changed = _hunk_changed_lines(hunk)
@@ -329,11 +426,19 @@ def _worktree_parent(root):
 @contextlib.contextmanager
 def _control_lock(root):
     """One promotion at a time: the control worktrees have fixed paths (so cargo reuses their build
-    artifacts instead of growing the target dir by a new path per run) and the builds are heavy."""
+    artifacts instead of growing the target dir by a new path per run) and the builds are heavy.
+    Lock order is a build token, then this lock: the promote runs under mem-run (the owner host's
+    memory cap and token), and every build stage's own mem-run reuses that ancestor token. A promote
+    that took this lock without a token deadlocked with promotes holding tokens while they waited
+    here, because its next stage needed one of their tokens (2026-11-12, 1 h host-wide stall)."""
     parent = _worktree_parent(root)
     if parent is None:
         yield
         return
+    if not os.environ.get('SOLARIS_BUILD_TOKEN'):
+        raise Refused('ledger promote must run under mem-run (no build token held): it takes a build '
+                      'token first, then wt/ledger-control.lock, and its build stages reuse that token; '
+                      'run <work>/solaris/tools/dev/mem-run.sh -m 12G python3 -m tools.harness ledger promote ...')
     with (parent / 'ledger-control.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         yield

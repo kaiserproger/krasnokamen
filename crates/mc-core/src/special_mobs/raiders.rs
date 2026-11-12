@@ -75,10 +75,113 @@ pub(crate) fn initialize(state: &mut TickState, slot: EntitySlot, type_id: u32) 
             Some(mc_data::ItemStack::new(bow, 1));
     }
 }
+/// Vanilla `NearestAttackableTargetGoal` default `randomInterval`
+/// (`reducedTickDelay(10)`): an unengaged raider searches with probability
+/// 1/10 per tick (javap `NearestAttackableTargetGoal.canUse`).
+pub(crate) const SEARCH_INTERVAL: u64 = 10;
+/// Vanilla `TargetGoal.unseenMemoryTicks`: a held target out of sight for more
+/// than this many ticks is dropped (javap `TargetGoal.canContinueToUse`).
+const UNSEEN_MEMORY_TICKS: u32 = 60;
+
+/// The target a raider keeps between ticks (vanilla `Mob.getTarget`).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct HeldTarget {
+    pub(crate) target: EntityId,
+    /// Consecutive ticks without line of sight (vanilla `unseenTicks`).
+    unseen: u32,
+}
+
+/// Whether a slot is something raiders attack: a live survival/adventure
+/// player, a villager that is not converting, or an iron golem.
+fn candidate(state: &TickState, s: EntitySlot) -> bool {
+    let row = state.entities.row(s);
+    let body = state.entities.body(s);
+    if !body.alive || row.health <= 0.0 {
+        return false;
+    }
+    match body.kind {
+        EntityKind::Player { .. } => state.players.get(&body.id).is_some_and(|p| {
+            !p.creative() && !p.spectator() && !state.session_locked(p.connection)
+        }),
+        EntityKind::Mob { type_id } => {
+            row.villager
+                .as_ref()
+                .is_some_and(|v| v.conversion_time.is_none())
+                || mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id)
+                    .is_some_and(|c| c.name == "minecraft:iron_golem")
+        }
+        _ => false,
+    }
+}
+
+/// Deterministic stand-in for `mob.getRandom().nextInt(SEARCH_INTERVAL) == 0`.
+fn search_due(state: &TickState, id: EntityId) -> bool {
+    let mut x = (state.world.seed() as u64)
+        ^ state.tick.wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ (id.0 as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x ^= x >> 30;
+    x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x ^= x >> 27;
+    x = x.wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^= x >> 31;
+    x.is_multiple_of(SEARCH_INTERVAL)
+}
+
+/// One tick of the raider target policy, vanilla-shaped: a held target stays
+/// while it is a valid candidate within `range` (follow range) and not unseen
+/// for more than [`UNSEEN_MEMORY_TICKS`]; losing it ends the goal and the next
+/// search waits for the 1-in-[`SEARCH_INTERVAL`] roll. Only an unengaged raider
+/// that wins the roll scans for the nearest visible candidate. Returns the
+/// target with its current position and the memory to keep.
+fn choose_target(
+    state: &TickState,
+    id: EntityId,
+    slot: EntitySlot,
+    held: Option<HeldTarget>,
+    targets: &crate::target_grid::TargetGrid,
+    range: f64,
+) -> (Option<(EntityId, [f64; 3])>, Option<HeldTarget>) {
+    if let Some(held) = held {
+        let pos = state.entities.pos(slot);
+        let kept = state
+            .entities
+            .slot_of(held.target)
+            .filter(|&target| candidate(state, target))
+            .map(|target| state.entities.pos(target))
+            .filter(|at| distance_sq(pos, *at) <= range * range);
+        let Some(at) = kept else {
+            return (None, None);
+        };
+        let unseen = if visible(state, slot, at) {
+            0
+        } else {
+            held.unseen + 1
+        };
+        if unseen > UNSEEN_MEMORY_TICKS {
+            return (None, None);
+        }
+        let target = held.target;
+        return (Some((target, at)), Some(HeldTarget { target, unseen }));
+    }
+    if !search_due(state, id) {
+        return (None, None);
+    }
+    match target_in(state, slot, targets, range) {
+        Some(found) => (
+            Some(found),
+            Some(HeldTarget {
+                target: found.0,
+                unseen: 0,
+            }),
+        ),
+        None => (None, None),
+    }
+}
+
 pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
     // Admission is the exact raider type-membership list (`owns` classifier
     // over `EntityKind::Mob`); only the dynamic alive filter stays per slot.
-    // The target scan below is intentionally untouched.
+    // Targets follow `choose_target`: held between ticks, searched on cadence.
     let ids: Vec<_> = state
         .entities
         .mob_slots_matching(|type_id| owns(EntityKind::Mob { type_id }))
@@ -88,35 +191,20 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
             row.alive.then_some(row.id)
         })
         .collect();
+    let entities = &state.entities;
+    state
+        .hostile
+        .native
+        .raider_targets
+        .retain(|id, _| entities.slot_of(*id).is_some());
     if ids.is_empty() {
         return;
     }
     let targets: Vec<_> = state
         .entities
         .slots()
-        .filter_map(|s| {
-            let row = state.entities.row(s);
-            let target = match state.entities.body(s).kind {
-                EntityKind::Player { .. } => state
-                    .players
-                    .get(&state.entities.body(s).id)
-                    .is_some_and(|p| {
-                        !p.creative() && !p.spectator() && !state.session_locked(p.connection)
-                    }),
-                EntityKind::Mob { type_id } => {
-                    row.villager
-                        .as_ref()
-                        .is_some_and(|v| v.conversion_time.is_none())
-                        || mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(
-                            type_id,
-                        )
-                        .is_some_and(|c| c.name == "minecraft:iron_golem")
-                }
-                _ => false,
-            };
-            (state.entities.body(s).alive && row.health > 0.0 && target)
-                .then_some((state.entities.body(s).id, state.entities.pos(s)))
-        })
+        .filter(|&s| candidate(state, s))
+        .map(|s| (state.entities.body(s).id, state.entities.pos(s)))
         .collect();
     let grid = crate::target_grid::TargetGrid::for_consumers(&targets, ids.len());
     for id in ids {
@@ -139,7 +227,25 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
         };
         let raider = classify(type_id).unwrap();
         let pos = state.entities.pos(slot);
-        let target = target_in(state, slot, &grid, 64.0);
+        let (target, held) = choose_target(
+            state,
+            id,
+            slot,
+            state.hostile.native.raider_targets.get(&id).copied(),
+            &grid,
+            f64::from(row.sight_range),
+        );
+        // A held target is chased from memory, but attacked only in sight
+        // (vanilla `MeleeAttackGoal.canPerformAttack` -> `Sensing.hasLineOfSight`).
+        let seen = held.is_some_and(|held| held.unseen == 0);
+        match held {
+            Some(held) => {
+                state.hostile.native.raider_targets.insert(id, held);
+            }
+            None => {
+                state.hostile.native.raider_targets.remove(&id);
+            }
+        }
         let ranged = raider.ranged();
         let destination = target.map(|(_, p)| p).or_else(|| {
             state
@@ -226,10 +332,10 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
         state.entities.body_mut(slot).attack_cooldown =
             state.entities.body(slot).attack_cooldown.saturating_sub(1);
         if let Some(kind) = state.registry.blueprint(type_id).and_then(goal) {
-            super::run(state, intents, id, kind, &targets);
+            super::run(state, intents, id, kind, &grid);
         } else if raider == Raider::Illusioner {
-            illusioner(state, id, slot, &grid);
-        } else if let Some((victim, at)) = target {
+            illusioner(state, id, slot, target.filter(|_| seen));
+        } else if let Some((victim, at)) = target.filter(|_| seen) {
             let reach = state.entities.body(slot).half_width + 1.5;
             if distance_sq(pos, at) < reach * reach
                 && state.entities.body(slot).attack_cooldown == 0
@@ -269,9 +375,10 @@ fn illusioner(
     state: &mut TickState,
     id: EntityId,
     slot: EntitySlot,
-    targets: &crate::target_grid::TargetGrid,
+    target: Option<(EntityId, [f64; 3])>,
 ) {
-    let Some((victim, at)) = target_in(state, slot, targets, 16.0) else {
+    let pos = state.entities.pos(slot);
+    let Some((victim, at)) = target.filter(|(_, at)| distance_sq(pos, *at) <= 16.0 * 16.0) else {
         return;
     };
     let mut attack = state.hostile.native.attacks.remove(&id).unwrap_or_default();

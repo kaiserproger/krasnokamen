@@ -813,3 +813,60 @@ fn using_an_empty_map_sends_the_filled_map_slot_to_the_player() {
         "client must be told hotbar slot 0 now holds the filled map: {sent:?}"
     );
 }
+
+/// MAP-FRAME-MARKER-RECOVERY-LIMIT: vanilla's `MapItemSavedData.frameMarkers` is an uncapped map
+/// keyed by frame position (javap `MapItemSavedData.tickCarriedBy` puts without a count check;
+/// only the banner/decoration tracking has the 256 limit), so a world with more than 256 item
+/// frames showing one map is valid and must checkpoint and recover.
+#[test]
+fn more_than_256_retained_frame_markers_checkpoint_and_recover() {
+    let mut state = test_state();
+    let player = join(&mut state, 1, "mapper");
+    state.config_view_distance = 1;
+    let slot = state.entities.slot_of(player).unwrap();
+    state.entities.set_pos(slot, [8.0, 65.0, 8.0]);
+    let id = state
+        .maps
+        .allocate(SavedMap::new([0, 0], 0, Dimension::Overworld).unwrap())
+        .unwrap();
+    let map = crate::maps::filled_map(&state, id).unwrap();
+    // 16 columns x 17 rows of distinct frame blocks, each against its own stone wall.
+    let mut frames = 0;
+    for z in 0..17 {
+        for x in (-7..=23).step_by(2) {
+            state
+                .world
+                .set_block(x + 1, 65, z, state.registry.states.stone);
+            state.world.set_block(x, 65, z, state.registry.states.air);
+        }
+    }
+    state.world.fold_overlay();
+    for z in 0..17 {
+        for x in (-7..=23).step_by(2) {
+            crate::item_frame::spawn(
+                &mut state,
+                crate::boundary::BlockPos { x, y: 65, z },
+                4,
+                false,
+                map.clone(),
+            )
+            .expect("supported frame");
+            frames += 1;
+        }
+    }
+    assert!(frames > 256);
+    state.tick = 10;
+    crate::maps::tick(&mut state);
+    let retained = state.maps.records[&id].frame_markers.len();
+    assert!(
+        retained > 256,
+        "live path retained {retained} frame markers"
+    );
+    let mut globals = std::collections::BTreeMap::new();
+    crate::maps::checkpoint(&state.maps.records, state.tick, &mut globals).unwrap();
+    let recovered = crate::maps::recover(&globals).expect("a save valid in vanilla must recover");
+    assert_eq!(
+        recovered[&id].frame_markers,
+        state.maps.records[&id].frame_markers
+    );
+}

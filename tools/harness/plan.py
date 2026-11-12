@@ -31,6 +31,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from .runtime import SIBLING_NAMES, sibling_root
+
 # ------------------------------------------------------------------ sources
 
 AGENTS_VALIDATION = "AGENTS.md#build-and-validation"
@@ -209,6 +211,11 @@ AREAS = (
          "tools/harness/profiles.py (block-log)"),
     Area("composter", ("crates/mc-core/src/composter*",), ("profile:composter-chance",),
          "tools/harness/profiles.py (composter-chance)"),
+    Area("chat-visibility", ("crates/mc-core/src/chat_visibility*", "crates/mc-core/src/dimensions_tick.rs"),
+         ("profile:chat-visibility",), "tools/harness/profiles.py (chat-visibility)"),
+    Area("datapacks", ("crates/mc-core/src/datapacks*", "crates/mc-core/src/datapack_*",
+                       "crates/mc-edge/src/recipes*"), ("profile:datapack-reload",),
+         "tools/harness/profiles.py (datapack-reload)"),
     Area("containers-custody", CUSTODY_GLOBS,
          ("profile:inventory", "scenario:native-v2-destroyed-chest", "scenario:native-v2-cursor-close"),
          "docs/bugs/README.md#native-promotion-probes"),
@@ -237,7 +244,7 @@ VARIABLE_PROFILES = {
 # must stay inside the native allow-list in tools/harness/__main__.py (tested).
 NATIVE_WINDOWED = frozenset({
     "admin-commands", "anti-xray", "army-qa", "autocraft-qa", "block-log", "buildings-qa",
-    "chisel", "civilization-seed-qa", "claim-only-qa", "composter-chance", "dialogs",
+    "chisel", "civilization-seed-qa", "chat-visibility", "claim-only-qa", "composter-chance", "datapack-reload", "dialogs",
     "entities", "inventory", "native-lifecycle", "scene-shot", "settlement-map-qa",
     "singleplayer-regressions", "survival", "title-connect", "village-autonomy-qa",
     "village-owner-order-qa", "village-qa",
@@ -256,7 +263,9 @@ BACKEND_PROFILES: dict[str, tuple[str, ...]] = {
     "civilization_seed_qa": ("civilization-seed-qa",),
     "claim_only_qa": ("claim-only-qa",),
     "client_probes": ("core-client", "inventory", "entities", "native-lifecycle"),
+    "chat_visibility": ("chat-visibility",),
     "composter_chance": ("composter-chance",),
+    "datapack_reload": ("datapack-reload",),
     "dh_gate": ("dh-gate",),
     "dialogs": ("dialogs",),
     "gameplay": ("survival",),
@@ -279,9 +288,6 @@ PROTOCOL_EDGE_FILTERS = ("wire", "decode", "translation")
 CUSTODY_FILTERS = ("conservation", "custody")
 SCENARIO_COLLAPSE = 3  # more matching scenarios than this: run their profile instead
 HARNESS_SUITE = "python3 -m unittest discover -t . -s tools/harness -p 'test_*.py'"
-SIBLING_NAMES = {"client": "solaris-client", "loader": "solaris-loader", "plugins": "solaris-default-plugins"}
-SIBLING_ENV = {"client": "SOLARIS_CLIENT_ROOT", "loader": "SOLARIS_LOADER_ROOT",
-               "plugins": "SOLARIS_DEFAULT_PLUGINS_ROOT"}
 SIBLING_MARKERS = {
     "client": ("launcher", "SPECIFICATION.md"),
     "loader": ("loader-core", "settings.gradle.kts"),
@@ -465,13 +471,7 @@ def repo_kind(root: Path) -> str:
 
 
 def sibling_roots(root: Path) -> dict[str, Path]:
-    roots = {}
-    for kind, name in SIBLING_NAMES.items():
-        env = os.environ.get(SIBLING_ENV[kind])
-        candidates = [Path(env)] if env else []
-        candidates += [root.parent / name, root.parent.parent / name]
-        roots[kind] = next((c for c in candidates if c.is_dir()), root.parent / name)
-    return roots
+    return {kind: sibling_root(kind, root) for kind in SIBLING_NAMES}
 
 
 def locate(path: str, root: Path, own: str, siblings: dict[str, Path]) -> Changed:

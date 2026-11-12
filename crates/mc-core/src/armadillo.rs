@@ -45,6 +45,32 @@ pub(crate) fn is_armadillo(state: &TickState, type_id: u32) -> bool {
         .is_some_and(|b| b.name == "minecraft:armadillo")
 }
 
+/// Spider's avoidance predicate is `!Armadillo.isScared`, not the curled state.
+pub(crate) fn flee_target(
+    entities: &crate::entities::EntityStore,
+    at: [f64; 3],
+) -> Option<[f64; 3]> {
+    let type_id = crate::piglin::type_id_of("minecraft:armadillo")?;
+    entities
+        .mob_slots(type_id)
+        .filter(|slot| {
+            entities.body(*slot).alive
+                && !entities
+                    .row(*slot)
+                    .entity_life
+                    .armadillo
+                    .as_ref()
+                    .is_some_and(|a| a.rolled)
+        })
+        .filter_map(|slot| {
+            let pos = entities.pos(slot);
+            let distance: f64 = at.into_iter().zip(pos).map(|(a, b)| (a - b).powi(2)).sum();
+            (distance < 36.0).then_some((distance, entities.body(slot).id, pos))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
+        .map(|(_, _, pos)| [2.0 * at[0] - pos[0], at[1], 2.0 * at[2] - pos[2]])
+}
+
 fn threat_near(state: &TickState, self_slot: EntitySlot, at: [f64; 3]) -> bool {
     // Armadillo.isScaredBy (26.1.2): 7x2x7 box around self; undead entity
     // types, the last player/mob that hurt the armadillo, or a sprinting
@@ -54,53 +80,83 @@ fn threat_near(state: &TickState, self_slot: EntitySlot, at: [f64; 3]) -> bool {
         .row(self_slot)
         .last_player_hit
         .map(|(attacker, _)| attacker);
-    for index in 0..state.entities.len() as u32 {
-        let slot = EntitySlot(index);
-        if slot == self_slot {
-            continue;
-        }
-        let body = state.entities.body(slot);
-        if !body.alive {
-            continue;
-        }
-        let pos = state.entities.pos(slot);
-        if (pos[0] - at[0]).abs() > SCARE_DISTANCE
-            || (pos[1] - at[1]).abs() > SCARE_DISTANCE_V
-            || (pos[2] - at[2]).abs() > SCARE_DISTANCE
-        {
-            continue;
-        }
-        match body.kind {
-            EntityKind::Mob { type_id } => {
-                // Engine's undead marker is the inverted_healing capability
-                // (vanilla EntityTypeTags.UNDEAD members are exactly the
-                // inverted-healing mobs); the embedded test registry carries
-                // no undead tag, so the capability is the portable check.
-                if state
-                    .registry
-                    .blueprint(type_id)
-                    .is_some_and(|b| b.capabilities.inverted_healing)
-                {
-                    return true;
-                }
-                if hurt_by.is_some_and(|attacker| attacker == body.id) {
-                    return true;
-                }
+    let min_x = ((at[0] - SCARE_DISTANCE).floor() as i32).div_euclid(16);
+    let max_x = ((at[0] + SCARE_DISTANCE).floor() as i32).div_euclid(16);
+    let min_z = ((at[2] - SCARE_DISTANCE).floor() as i32).div_euclid(16);
+    let max_z = ((at[2] + SCARE_DISTANCE).floor() as i32).div_euclid(16);
+    for x in min_x..=max_x {
+        for z in min_z..=max_z {
+            let chunk = crate::boundary::ChunkPos { x, z };
+            // Both existing chunk lanes together cover every entity kind.
+            let residents = state.entities.villager_chunks().get(&chunk);
+            let sensors = state.entities.brain_sensor_chunks().get(&chunk);
+            if residents
+                .into_iter()
+                .flatten()
+                .chain(sensors.into_iter().flatten())
+                .filter_map(|&id| state.entities.slot_of(id))
+                .any(|slot| scares(state, self_slot, at, hurt_by, slot))
+            {
+                return true;
             }
-            EntityKind::Player { .. } => {
-                let id = body.id;
-                if hurt_by.is_some_and(|attacker| attacker == id) {
-                    return true;
-                }
-                let passenger = state.entities.row(slot).entity_life.vehicle.is_some();
-                if state.players.get(&id).is_some_and(|p| {
-                    !p.spectator() && (p.sprinting || passenger) && !p.vitals.is_dead()
-                }) {
-                    return true;
-                }
-            }
-            _ => {}
         }
+    }
+    false
+}
+
+fn scares(
+    state: &TickState,
+    self_slot: EntitySlot,
+    at: [f64; 3],
+    hurt_by: Option<EntityId>,
+    slot: EntitySlot,
+) -> bool {
+    #[cfg(test)]
+    spatial_tests::VISITS.with(|visits| visits.set(visits.get() + 1));
+    if slot == self_slot {
+        return false;
+    }
+    let body = state.entities.body(slot);
+    if !body.alive {
+        return false;
+    }
+    let pos = state.entities.pos(slot);
+    if (pos[0] - at[0]).abs() > SCARE_DISTANCE
+        || (pos[1] - at[1]).abs() > SCARE_DISTANCE_V
+        || (pos[2] - at[2]).abs() > SCARE_DISTANCE
+    {
+        return false;
+    }
+    match body.kind {
+        EntityKind::Mob { type_id } => {
+            // Engine's undead marker is the inverted_healing capability
+            // (vanilla EntityTypeTags.UNDEAD members are exactly the
+            // inverted-healing mobs); the embedded test registry carries
+            // no undead tag, so the capability is the portable check.
+            if state
+                .registry
+                .blueprint(type_id)
+                .is_some_and(|b| b.capabilities.inverted_healing)
+            {
+                return true;
+            }
+            if hurt_by.is_some_and(|attacker| attacker == body.id) {
+                return true;
+            }
+        }
+        EntityKind::Player { .. } => {
+            let id = body.id;
+            if hurt_by.is_some_and(|attacker| attacker == id) {
+                return true;
+            }
+            let passenger = state.entities.row(slot).entity_life.vehicle.is_some();
+            if state.players.get(&id).is_some_and(|p| {
+                !p.spectator() && (p.sprinting || passenger) && !p.vitals.is_dead()
+            }) {
+                return true;
+            }
+        }
+        _ => {}
     }
     false
 }
@@ -114,13 +170,12 @@ pub(crate) fn run(state: &mut TickState) {
 
 fn run_interval(state: &mut TickState) {
     let mut drops: Vec<([f64; 3], ItemStack)> = Vec::new();
-    for index in 0..state.entities.len() as u32 {
-        let slot = EntitySlot(index);
+    let armadillos = state
+        .entities
+        .mob_slots_matching(|type_id| is_armadillo(state, type_id));
+    for slot in armadillos {
         let body = state.entities.body(slot);
-        let EntityKind::Mob { type_id } = body.kind else {
-            continue;
-        };
-        if !body.alive || !is_armadillo(state, type_id) {
+        if !body.alive {
             continue;
         }
         let at = state.entities.pos(slot);
@@ -250,3 +305,7 @@ pub(crate) fn interact(
     state.push_player(connection, contents);
     true
 }
+
+#[cfg(test)]
+#[path = "armadillo_spatial_tests.rs"]
+mod spatial_tests;

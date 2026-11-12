@@ -1,0 +1,11 @@
+diff --git a/crates/mc-core/src/tick/damage.rs b/crates/mc-core/src/tick/damage.rs
+--- a/crates/mc-core/src/tick/damage.rs
++++ b/crates/mc-core/src/tick/damage.rs
+@@ -1069,6 +1069,7 @@
+                 ),
+             );
+         }
++        crate::axolotl::hurt(self, slot, piece);
+         crate::entity_loot::accepted_hit(self, slot, piece.source);
+         if let Some(attacker) = crate::plugin::damage_attacker(piece.source) {
+             crate::hostile::retaliate(self, slot, attacker);

@@ -1,0 +1,17 @@
+diff --git a/crates/mc-core/src/command_execution.rs b/crates/mc-core/src/command_execution.rs
+index 451d425a..690e0b99 100644
+--- a/crates/mc-core/src/command_execution.rs
++++ b/crates/mc-core/src/command_execution.rs
+@@ -584,10 +584,10 @@ pub(crate) fn execute(
+             crate::tick::apply_player_effects(state, connection, executor, effects, changes);
+         }
+         Command::DebugStart => {
+-            return CommandResult::Unavailable;
++            return crate::command_debug::start(state, connection);
+         }
+         Command::DebugStop => {
+-            return CommandResult::Unavailable;
++            return crate::command_debug::stop(state, connection);
+         }
+         Command::DebugFunction { name } => {
+             return crate::command_debug::trace_function(

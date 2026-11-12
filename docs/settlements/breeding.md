@@ -8,7 +8,7 @@ See [jobs](jobs.md), [construction](construction.md), and [production](productio
 
 Each parent must be an adult, awake, not panicking, and willing: at least 12 available food points. Bread is worth 4 points; carrots, potatoes and beetroot are worth 1 each; wheat itself is worth none. Food reserved for production is not available for breeding. Players can also drop food for villagers to pick up.
 
-A birth needs an unclaimed, reachable bed with space for a baby, within the settlement's housing scope. A parent's own bed cannot be the spare bed. Villagers can share food with nearby villagers who are short; sharing also respects production reservations.
+A birth needs an unclaimed, reachable, complete bed (both halves; no headroom is required, as in vanilla `VillagerMakeLove.takeVacantBed`), within the settlement's housing scope. A parent's own bed cannot be the spare bed. For settlement residents both the home bed and the spare bed must be roofed (solid collision anywhere above the bed head): residents shelter instead of sleeping in the open, so they never claim an open-air bed. Stored-food rations go only to residents with a home bed, so a settlement whose beds all stand in the open draws no rations and has no births. Unbound villagers keep vanilla open-air beds. Villagers can share food with nearby villagers who are short; sharing also respects production reservations.
 
 Ration and spare-bed searches have their own 40-tick cadence. A search that exhausts the shared path budget cannot immediately repeat on every tick and starve the resident's work or delivery route.
 

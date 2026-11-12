@@ -1,0 +1,87 @@
+{
+  "id": "ISSUE-1-11",
+  "verdict": "promoted",
+  "fix_commit": "patch:507ed17d6f5bb12a60a201b1fe8160c4c2d9bec8b4a3941aba16f7905ba8a1ba",
+  "fix_commit_full": "patch:507ed17d6f5bb12a60a201b1fe8160c4c2d9bec8b4a3941aba16f7905ba8a1ba",
+  "promoted_at": "2026-11-11T22:08:12+00:00",
+  "tree_head": "b2a72b32b20460cd7f7647891285c1ccd7ebc9b1",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "507ed17d6f5bb12a60a201b1fe8160c4c2d9bec8b4a3941aba16f7905ba8a1ba",
+  "reversed_files": [
+    "crates/mc-core/src/villager/brain.rs",
+    "crates/mc-core/src/settlements/allocator.rs",
+    "crates/mc-core/src/villager/mining.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:villager::sleep_return_tests::allocator_job_loss_reaches_the_client_villager_data_at_once": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::mining_tests::hostile_sealed_in_a_cave_under_the_quarry_does_not_stop_the_miner": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::mining_tests::hostile_sealed_in_rock_outside_the_quarry_does_not_stop_the_miner": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::sleep_return_tests::idle_lumberjack_walks_back_to_its_job_site_at_work_time": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::mining_tests::alternate_lane_starts_on_a_floor_at_the_top_of_the_bounds": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::sleep_return_tests::woken_bound_resident_stands_up_and_returns_to_its_job_site": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:village-qa:sleep_return": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261111T220318-village-qa-q5dz70do/result.json"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:villager::sleep_return_tests::allocator_job_loss_reaches_the_client_villager_data_at_once": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::mining_tests::hostile_sealed_in_a_cave_under_the_quarry_does_not_stop_the_miner": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::mining_tests::hostile_sealed_in_rock_outside_the_quarry_does_not_stop_the_miner": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::sleep_return_tests::idle_lumberjack_walks_back_to_its_job_site_at_work_time": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::mining_tests::alternate_lane_starts_on_a_floor_at_the_top_of_the_bounds": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::sleep_return_tests::woken_bound_resident_stands_up_and_returns_to_its_job_site": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/PromoteIssue1x11/.analysis/validation/20261111T214955-village-qa-h4egxycr/result.json",
+    "tree_head": "b2a72b32b20460cd7f7647891285c1ccd7ebc9b1",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "19e6b4e90e9ac3f4b21684a57f49df86317b1076ad507382c4011a6e6e739591",
+    "covers": [
+      "harness:village-qa:sleep_return"
+    ],
+    "profile": "village-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteIssue1x11/.analysis/validation/20261111T215526-ledger-promote-od5m4v6f"
+}

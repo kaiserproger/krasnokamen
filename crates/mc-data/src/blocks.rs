@@ -16,6 +16,10 @@ use crate::Identifier;
 /// Canonical identity used to resolve the pointed-dripstone state family.
 pub const POINTED_DRIPSTONE: &str = "minecraft:pointed_dripstone";
 
+/// Canonical identity of the big dripleaf head, whose tilt projectile hits
+/// and scheduled ticks drive.
+pub const BIG_DRIPLEAF: &str = "minecraft:big_dripleaf";
+
 const REQUIRED_BLOCKS: &str = include_str!("../data/required_blocks.json");
 
 /// One block entry from `blocks.json`.

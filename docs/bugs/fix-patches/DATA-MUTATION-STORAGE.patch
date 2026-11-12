@@ -1,0 +1,20 @@
+diff --git a/crates/mc-core/src/command_data.rs b/crates/mc-core/src/command_data.rs
+index 02508936..6493dacf 100644
+--- a/crates/mc-core/src/command_data.rs
++++ b/crates/mc-core/src/command_data.rs
+@@ -366,6 +366,15 @@ pub(crate) fn command(
+         .current
+         .unwrap_or_else(|| Context::source(state, connection, executor, 2));
+     match (words.get(1).copied(), words.get(2).copied()) {
++        (Some("get" | "merge" | "modify" | "remove"), Some("storage")) => {
++            return crate::command_storage::command(state, context, input);
++        }
++        (Some("merge" | "modify" | "remove"), Some("entity")) => {
++            return entity::command(state, context, input);
++        }
++        (Some("merge" | "modify" | "remove"), Some("block")) => {
++            return block::command(state, context, input);
++        }
+         (Some("get"), _) => {}
+         _ => {
+             state.push_player(

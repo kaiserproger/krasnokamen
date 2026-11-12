@@ -1,0 +1,18 @@
+diff --git a/crates/mc-core/src/tick/players.rs b/crates/mc-core/src/tick/players.rs
+--- a/crates/mc-core/src/tick/players.rs
++++ b/crates/mc-core/src/tick/players.rs
+@@ -254,7 +254,13 @@ pub(super) fn apply_inputs<'a>(
+                 slot,
+                 selected_index,
+             } => input::inventory::select_bundle_item(state, (*connection, *slot, *selected_index)),
+-            PlayerInput::PickItemFromBlock { .. } | PlayerInput::PickItemFromEntity { .. } => {}
++            PlayerInput::PickItemFromBlock {
++                connection,
++                position,
++            } => input::inventory::pick_item_from_block(state, (connection, position), changes),
++            PlayerInput::PickItemFromEntity { connection, target } => {
++                input::inventory::pick_item_from_entity(state, (connection, target), changes)
++            }
+             PlayerInput::Dig {
+                 connection,
+                 position,

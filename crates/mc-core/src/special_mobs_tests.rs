@@ -38,7 +38,13 @@ fn advance(
         .map(|slot| vec![(player, state.entities.pos(slot))])
         .unwrap_or_default();
     let mut intents = Vec::new();
-    run(state, &mut intents, id, kind, &targets);
+    run(
+        state,
+        &mut intents,
+        id,
+        kind,
+        &crate::target_grid::TargetGrid::linear(&targets),
+    );
     intents
 }
 fn missiles(state: &TickState, kind: ProjectileKind) -> Vec<EntityId> {

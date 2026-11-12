@@ -1,0 +1,24 @@
+diff --git a/crates/mc-core/src/settlements/allocator.rs b/crates/mc-core/src/settlements/allocator.rs
+index 2985cbf2..e211bf54 100644
+--- a/crates/mc-core/src/settlements/allocator.rs
++++ b/crates/mc-core/src/settlements/allocator.rs
+@@ -1217,9 +1217,17 @@ fn acquire(
+             cursor.wrapping_add(attempt + 1);
+         let mut path = std::mem::take(&mut cache.candidate_path);
+         // Disjoint field borrows: route search reads world/registry while
+-        // charging the shared budget pool.
++        // charging the shared budget pool. The search window follows the
++        // settlement claim, not the flat 48-block stroll window.
+         let tick_now = state.tick;
+-        let (horizontal, vertical) = (48, 16);
++        let from = at(pos);
++        let horizontal = from
++            .x
++            .abs_diff(poi.pos.x)
++            .max(from.z.abs_diff(poi.pos.z))
++            .saturating_add(8)
++            .clamp(48, 512);
++        let vertical = from.y.abs_diff(poi.pos.y).saturating_add(4).clamp(16, 512);
+         let mut ctx = RouteCtx {
+             world: &state.world,
+             registry: &state.registry,

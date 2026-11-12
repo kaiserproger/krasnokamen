@@ -1,5 +1,5 @@
 //! Event-driven command blocks. Opaque NBT and scheduled ticks are native WAL owners.
-use crate::boundary::{BlockPos, ChangeSet, ChunkPos, ConnectionId, EntityId, PlayerChange};
+use crate::boundary::{BlockPos, ChangeSet, ChunkPos, EntityId};
 use crate::tick::TickState;
 use mc_nbt::Tag;
 use mc_world::{BlockStateId, ScheduledBlockTick};
@@ -122,6 +122,21 @@ pub(crate) fn changed(state: &mut TickState, pos: BlockPos) {
         save(state, pos, fields);
     }
     if !chain && ((powered && !old) || (repeating && (auto || powered))) {
+        schedule(state, pos);
+    }
+}
+/// Vanilla `CommandBlockEntity.setAutomatic(true)`, reached from `loadAdditional`: an `auto` block that
+/// is not powered schedules its first tick when its entity is loaded (`/setblock`, `/fill`, `/clone`
+/// with NBT). True when the image about to be installed asks for that.
+pub(crate) fn wakes_on_load(fields: &[(String, Tag)]) -> bool {
+    flag(fields, "auto") && !flag(fields, "powered")
+}
+/// The scheduling half of [`wakes_on_load`], run once the image is installed: the neighbour updates that
+/// `changed` answers come before the install, so without this a placed `auto:1b` block never ran.
+pub(crate) fn loaded(state: &mut TickState, pos: BlockPos) {
+    if state.enable_command_block
+        && kind(state, pos).is_some_and(|kind| kind != "chain_command_block")
+    {
         schedule(state, pos);
     }
 }
@@ -263,12 +278,13 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
                             pos.y as f64 + 0.5,
                             pos.z as f64 + 0.5,
                         ]);
-                        let context = crate::command_context::Context::source(
+                        let mut context = crate::command_context::Context::source(
                             state,
                             crate::command_console::CONNECTION,
                             crate::command_console::EXECUTOR,
                             2,
                         );
+                        context.command_block = true;
                         let successes = crate::command_context::run(
                             state,
                             command.trim_start_matches('/'),
@@ -305,91 +321,49 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
     state.command_blocks_due = due;
 }
 
-/// Restricted /data merge block surface; other NBT owners are never bypassed.
-pub(crate) fn data(
+/// Apply a `data` edit (`previous` public image to `edited`) to the command
+/// block at `pos`. Only `Command` and `auto` are authorable; any other changed
+/// field refuses the whole edit and leaves the block untouched.
+pub(crate) fn edit(
     state: &mut TickState,
-    connection: ConnectionId,
-    executor: EntityId,
-    text: &str,
-) -> crate::command_execution::CommandResult {
-    let result = (|| -> Result<String, String> {
-        let mut words = text.split_whitespace();
-        words.next();
-        let mode = words.next().ok_or("Expected merge")?;
-        if mode != "merge" || words.next() != Some("block") {
-            return Err(
-                "Supported writes: data merge block <x> <y> <z> <compound> (command blocks only)"
-                    .into(),
-            );
-        }
-        let coords = [
-            words.next().ok_or("Missing x")?,
-            words.next().ok_or("Missing y")?,
-            words.next().ok_or("Missing z")?,
-        ];
-        let parsed = crate::commands::coords(&coords).ok_or("Invalid coordinates")?;
-        let (origin, rotation) =
-            crate::command_console::pose(state, executor).ok_or("Missing command source")?;
-        let [x, y, z] = crate::command_context::resolve_coords(state, parsed, origin, rotation);
-        if [x, y, z]
-            .iter()
-            .any(|value| !value.is_finite() || *value < i32::MIN as f64 || *value > i32::MAX as f64)
-        {
-            return Err("Invalid coordinates".into());
-        }
-        let pos = BlockPos {
-            x: x.floor() as i32,
-            y: y.floor() as i32,
-            z: z.floor() as i32,
-        };
-        if kind(state, pos).is_none() {
-            return Err("Data editing currently supports command blocks only".into());
-        }
-        let mut fields = read(state, pos)?;
-        let raw = &text[text.find('{').ok_or("Expected NBT compound")?..];
-        let Tag::Compound(patch) = crate::command_snbt::parse(raw).map_err(str::to_owned)? else {
-            return Err("Expected NBT compound".into());
-        };
-        for (index, (key, value)) in patch.iter().enumerate() {
-            if patch[..index].iter().any(|(old, _)| old == key) {
-                return Err("Duplicate NBT field".into());
-            }
-            match (key.as_str(), value) {
-                ("Command", Tag::String(value)) if value.len() <= 32767 => {}
-                ("auto", Tag::Byte(0 | 1)) => {}
-                _ => return Err(format!("Unsupported command block field {key}")),
-            }
-        }
-        if !patch.iter().any(|(key, value)| {
-            fields
-                .iter()
-                .find(|(name, _)| name == key)
-                .is_none_or(|(_, old)| old != value)
-        }) {
-            return Err("The target block's data did not change".into());
-        }
-        let old_auto = flag(&fields, "auto");
-        for (key, value) in patch {
-            put(&mut fields, &key, value);
-        }
-        let start = !old_auto && flag(&fields, "auto") && kind(state, pos) == Some("command_block");
-        save(state, pos, fields);
-        changed(state, pos);
-        if state.enable_command_block && start {
-            schedule(state, pos);
-        }
-        Ok("Command block data updated".into())
-    })();
-    let (message, outcome) = match result {
-        Ok(message) => (message, crate::command_execution::CommandResult::Success(1)),
-        Err(message) => (message, crate::command_execution::CommandResult::Failed),
-    };
-    if outcome == crate::command_execution::CommandResult::Failed
-        || crate::command_execution::accepts_success(state, connection)
-    {
-        state.push_player(connection, PlayerChange::Chat { message });
+    pos: BlockPos,
+    previous: &[(String, Tag)],
+    edited: &[(String, Tag)],
+) -> Result<(), String> {
+    if kind(state, pos).is_none() {
+        return Err("The target block is not a command block".into());
     }
-    outcome
+    let mut fields = read(state, pos)?;
+    let old_auto = flag(&fields, "auto");
+    let identity = |key: &str| matches!(key, "id" | "x" | "y" | "z");
+    let unsupported = |key: &str| format!("Unsupported command block field {key}");
+    for (key, value) in edited {
+        if identity(key) || previous.iter().any(|(k, v)| k == key && v == value) {
+            continue;
+        }
+        match (key.as_str(), value) {
+            ("Command", Tag::String(text)) if text.len() <= 32767 => {}
+            ("auto", Tag::Byte(0 | 1)) => {}
+            _ => return Err(unsupported(key)),
+        }
+        put(&mut fields, key, value.clone());
+    }
+    for (key, _) in previous {
+        if identity(key) || edited.iter().any(|(k, _)| k == key) {
+            continue;
+        }
+        if !matches!(key.as_str(), "Command" | "auto") {
+            return Err(unsupported(key));
+        }
+        fields.retain(|(name, _)| name != key);
+    }
+    let start = !old_auto && flag(&fields, "auto") && kind(state, pos) == Some("command_block");
+    save(state, pos, fields);
+    changed(state, pos);
+    if state.enable_command_block && start {
+        schedule(state, pos);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

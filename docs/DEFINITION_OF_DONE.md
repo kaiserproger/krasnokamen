@@ -48,7 +48,7 @@ relevant:
 ### Owner-host-only preflight
 
 Oracle and graphical gates additionally need artifacts that exist only on the
-owner's workstation (git-ignored, never shipped in the repository). A
+owner host (git-ignored, never shipped in the repository). A
 contributor without them reports the affected gate as `blocked` or `degraded`,
 never as a pass:
 

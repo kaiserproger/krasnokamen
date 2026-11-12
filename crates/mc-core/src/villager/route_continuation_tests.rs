@@ -37,8 +37,10 @@ fn distant_state() -> TickState {
 fn distant_claim_fixture() -> (TickState, EntitySlot, BlockPos) {
     let mut state = distant_state();
     state.day_time = 3000;
+    // Issue #1 (ISSUE-1-10): the nearest standing cell (x=60) lies 52 blocks
+    // from the villager, clear of the flat 48-block stroll window.
     let job = BlockPos {
-        x: 57,
+        x: 61,
         y: 201,
         z: 8,
     };
@@ -62,7 +64,7 @@ fn distant_claim_fixture() -> (TickState, EntitySlot, BlockPos) {
         &mut state,
         town,
         crate::settlements::buildings::BuildingKind::Workshop(Profession::Farmer),
-        mc_script::ScriptWorldBounds::new([56, 200, 7], [58, 203, 9]).unwrap(),
+        mc_script::ScriptWorldBounds::new([60, 200, 7], [62, 203, 9]).unwrap(),
     )
     .unwrap();
     state
@@ -166,6 +168,51 @@ fn due_replan_search_failure_keeps_valid_progress_route() {
     assert!(
         v.navigation_repath_at > state.tick,
         "live routes must not force an overdue brain wake every tick"
+    );
+}
+
+#[test]
+fn progressing_route_is_kept_at_due_check_without_a_new_search() {
+    // Issue #1 (ISSUE-1-05): the 40-tick check keeps a route the villager is
+    // still walking; only a stalled or pushed villager replans.
+    let mut state = test_state();
+    let start = [8.5, 201.0, 8.5];
+    let slot = villager(&mut state, start);
+    let target = BlockPos {
+        x: 11,
+        y: 201,
+        z: 8,
+    };
+    let mut v = VillagerState::default();
+    let mut cache = PoiCache::default();
+    move_to(&mut state, &mut cache, slot, &mut v, Some(target), false);
+    let walking = v.navigation_path.clone();
+    let next = centre(*walking.last().expect("setup must produce a route"));
+    // Half way to the next cell: closer than when the route was captured.
+    state.entities.set_pos(
+        slot,
+        [
+            (start[0] + next[0]) / 2.0,
+            start[1],
+            (start[2] + next[2]) / 2.0,
+        ],
+    );
+    state.tick = v.navigation_repath_at;
+    set_node_allowance(&mut state, 64);
+    let before = state
+        .tick_budget
+        .allowance(state.dimension, Consumer::Brain, Kind::PathNode);
+    move_to(&mut state, &mut cache, slot, &mut v, Some(target), false);
+    assert_eq!(
+        v.navigation_path, walking,
+        "a progressing route must be kept"
+    );
+    assert_eq!(
+        state
+            .tick_budget
+            .allowance(state.dimension, Consumer::Brain, Kind::PathNode),
+        before,
+        "a progressing route must not be searched again at the due check"
     );
 }
 

@@ -36,9 +36,9 @@ failing_first = "not recorded"
   referenced key must be exactly `true`. The `all` key denotes the whole
   profile; when no boolean verdict map exists, `all` requires a passing
   profile receipt. Legacy profiles expose their existing `PASS` behaviour
-  maps: `village-qa` has `door_walk`, `sleep_return`, `farmer_harvest`,
-  `miner_deposit`, and `lumberjack`; autonomy, claim and army expose their
-  named behaviours. `buildings-qa` uses `<blueprint>.<behaviour>`, for
+  maps: `village-qa` has `door_walk`, `sleep_return`, `night_door`,
+  `farmer_harvest`, `miner_deposit`, and `lumberjack`; autonomy, claim and
+  army expose their named behaviours. `buildings-qa` uses `<blueprint>.<behaviour>`, for
   example `wall.L1_built`. Partial or resumed profile overrides are rejected.
   A passing profile is evidence only for symptoms its assertions actually cover.
 - `repro_check` is optional: a nonempty string or list of nonempty strings for
@@ -59,7 +59,14 @@ an exact test; `harness:<profile>:<scenario>` names an existing runnable
 scenario. A profile verdict runs that profile once for all rows citing it:
 the child receipt must pass and the named behaviour must be true in its
 boolean verdict map, or `PASS` in its legacy behaviour map. Unknown profiles
-and verdicts fail validation.
+and verdicts fail validation. `harness:loader-live:<scenario>` is valid for
+graphical `loader-live` scenarios: the runner executes them exactly as the
+loader-live gate does (Fabric platform, the tree's own built release server
+via `--server-bin`, an empty `--plugins-dir`, the private audio wrapper, and
+the Loader checkout/Gradle home/client jar from `SOLARIS_LOADER_ROOT`,
+`GRADLE_USER_HOME` and `SOLARIS_CLIENT_JAR`), records the harness Xvfb
+display in the receipt, and fails closed (unrunnable, never green) when any
+of those are missing or the scenario is not a registered loader-live entry.
 `regressions-client` builds its own release server (a known exception to the
 `pin-release` rule, listed in [open transitions](../STATUS.md#open-transitions))
 in the enclosing runner's pooled target, then hard-links it (copies if it
@@ -163,8 +170,12 @@ worker, runs the negative control.
    only when the failed receipt carries an explicitly failing verdict for that
    profile check; a timeout, a client that never reached play (`in_play`), a
    missing prerequisite or any failure without a negative verdict is
-   unrunnable and cannot be a control. Scenario refs have no such verdict, so a
-   row's control needs a cargo ref or a profile verdict ref. Control worktrees
+   unrunnable and cannot be a control. A scenario ref has no verdict map; it is
+   red only when the failed receipt's `details.named_scenario.id` is the ref and
+   its own `error` reads `<id> assertion failed: <name>` (never the argv of the
+   child), with `<name>` not a connection check (`in_play`, `*_entered_play`,
+   join) and the failure not tagged before the scenario body (`join`, start-up
+   phases). Any other failure, a timeout or a join flake never counts. Control worktrees
    are temporary `git worktree`s beside the other worktrees (`<work>/wt/`),
    one promotion at a time (a lock), at fixed paths (`ledger-control-candidate`,
    `ledger-control-fix`). Every cargo build or test for such a tree runs through
@@ -188,7 +199,14 @@ A refusal prints the reason and exits 1.
 python3 -m tools.harness ledger promote ID [--client-receipt PATH] [--fix-patch PATH] [--dry-run]
 ```
 
-Heavy: run it under the owner host's `mem-run.sh`, one at a time.
+Heavy: on the owner host run it under `mem-run.sh` (`mem-run.sh -m 12G python3
+-m tools.harness ledger promote ...`), which caps its memory and gives it a
+build token. Lock order is that token, then the control lock; each build stage
+runs `mem-run.sh` again and reuses the promote's token, so a promote waiting for
+the lock never holds a token a running promote's stage needs. A promote that
+took the lock without a token deadlocked with wrapped promotes waiting for it
+(2026-11-12, the host stalled for an hour); the tool refuses to start in a
+worktree under `<work>/wt/` without a held token.
 
 ## Probing rows before assignment
 
@@ -236,6 +254,12 @@ establish exhaustive coverage of every nested value or every real-client path.
 ## Native promotion probes
 
 The `entities` profile includes windowed native-client probes:
+
+- `native-v2-lease-navigation`: in a private operator-built fixture, a 120-second
+  native action retains its controller, a cancelled writer is replaced without
+  losing the replacement's held input, and navigation starts at a supported edge
+  and traverses an open door from an offset pose. Cancellation scheduling is
+  nondeterministic; deterministic owner-fence ordering remains a client unit test.
 
 - `native-v2-end-restart`: enter the End on hard difficulty, identify the live
   dragon, switch to peaceful, save and restart, then require the same player,
@@ -287,10 +311,78 @@ The `entities` profile includes windowed native-client probes:
   block-entity NBT; the actual patterned and plain banners are captured for review.
 - `native-v2-snow-golem-shear`: ordinary shears clear the same golem's received
   pumpkin flag, reveal its face and yield one carved-pumpkin pickup.
+- `native-v2-peaceful-removal`: creates a zombie and cow with natural spawning
+  disabled, switches to peaceful and checks that the same zombie disappears
+  while the same cow remains. A graphical receipt and negative control are
+  required before this scenario can support promotion.
+- `native-v2-command-score-store`: checks generic damage, main-hand totem and
+  custom death protection, writable death/player/total kill counters and a swap,
+  stored result/success for give, clear and failed clear, and inventory counts.
+  A graphical receipt and negative control are required before promotion.
+- `native-v2-happy-ghast-harness`: an ordinary survival harness debit admits the
+  graphical player and three independent native peers; a fifth peer is refused.
+  Received passenger packets prove distinct seats and independent dismount.
+  The public NBT view hides `solaris:` keys, so the refusal is fenced by the
+  fourth rider's later dismount in the same ordered passenger stream: no
+  passenger event before it may carry a fifth id. The focused native
+  checkpoint regression separately checks harness/rider custody on disk.
+- `native-v2-mob-metadata-spot`: one frog, strider, camel and sniffer stand in
+  frame on a private pad, a small slime is then eaten by the frog; the client
+  must stay in play and its log must carry no decode failure (sniffer state is
+  accessor 18; frog tongue, strider cold and camel dash are 19).
+- `native-v2-p4-identities`: seven named `/damage` identities must reach the
+  actual client's damage stream with health loss, followed by a lever-provoked
+  warden's sonic attack through a preplaced wall, death screen and respawn. Command cases prove identity
+  admission/emission, not freeze, wall-collision or cramming mechanics.
+- `native-v2-p4-death-protection`: a held stick with nonempty custom consume
+  actions saves the holder at one health, consumes one item, clears a preexisting
+  slowness effect and applies authored speed without ordinary totem effects. The full P4 damage
+  scenario still includes this check and the separate physical-source probes.
+- `native-v2-team-deaths`: two windowed native clients (victim in team `red`,
+  peer in team `blue`) read the chat their own client renders for a player
+  `/kill` ("was killed", generic_kill rather than out_of_world), a zombie kill
+  ("was slain by Zombie", the vanilla translation component rather than plain
+  English text) and one death per `deathMessageVisibility` value (`always`,
+  `never`, `hideForOtherTeams`, `hideForOwnTeam`); the victim's death screen
+  is asserted by class and a retained capture, its message text is not exposed
+  by the client observation.
+- `native-v2-automation-storage`: the sculk latch section tests ordinary and
+  calibrated sensors at multiple distances, including a rejected frequency.
+  Comparators face their input: east toward the sensor for frequency readout,
+  south toward the cake for calibration. Downward bulbs retain each pulse;
+  the perpendicular bulb is a negative geometry control. The fixture supplies
+  solid support beneath every component, removes ambient mobs and disables
+  natural spawning so unrelated footsteps cannot toggle the latches. First
+  bulbs must be unlit before the note is powered. The latch fixture runs
+  unfrozen so scheduled comparator updates keep their ordinary timing; the
+  preceding sensor probe observes active, then inactive (the ten-tick
+  cooldown is asserted by the Rust sculk tests, not sampled by the client).
 - `native-v2-map-*`: separate frame waypoint, banner removal/locked
   toggle, inventory clone tracking, pumpkin hiding, terrain shading and Nether
   terrain repros. Read-only receipts reconstruct the graphical viewer's exact
   map packets; screenshots still require review, especially marker visibility.
+- `native-v2-input-menus`: physical number/F/Q/Ctrl-Q keys and sub-tick pointer
+  edges in survival and creative inventory. Server snapshots check the source,
+  reopened destination and survival carried stack. Creative cursors are local:
+  captures must show the held stack, then its exact count must survive placement
+  and reopening.
+- `native-v2-input-pick`: physical middle-click and gameplay F in both modes;
+  block/entity picking must not create free items in survival.
+- `native-v2-input-camera`: frozen-world teleport and F1 hide/restore, checking
+  captured camera and HUD pixels while the local client loop continues.
+  `admin-commands` checks frozen/stepped server game time, not a stopped client
+  clock: native input and rendering must keep running while the world is frozen.
+- `native-v2-input-sand`: `/setblock` airborne sand in a frozen world becomes a
+  rendered entity after `/tick step`, and the server holds it between steps:
+  `data get entity … Pos` read in successive server ticks must stop changing
+  (a server that keeps dropping it never does). The client predicts gravity
+  between received position updates, then the sand lands and clears its source.
+  Vanilla resends a moved falling block every 20 server ticks even while frozen,
+  so the gate runs one tick per second, starts on a received update and steps
+  twice in one command: the predicted position must equal vanilla's two-tick
+  fall and the drawn pose must lie on that path, below the received one.
+  Received, predicted and presented positions are distinct observations; only
+  the captured frame and its reviewed pixels prove drawing.
 - Axolotl play-dead and potion custom-impact probes are unregistered prototypes;
   they cannot be run from the harness, and `AXOLOTL-PLAY-DEAD` and
   `POTION-CUSTOM-PAYLOAD` stay open.

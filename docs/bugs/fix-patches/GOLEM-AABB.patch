@@ -1,0 +1,14 @@
+diff --git a/crates/mc-core/src/villager/brain/social.rs b/crates/mc-core/src/villager/brain/social.rs
+--- a/crates/mc-core/src/villager/brain/social.rs
++++ b/crates/mc-core/src/villager/brain/social.rs
+@@ -847,9 +847,7 @@
+             .pos(s)
+             .iter()
+             .zip(pos)
+-            .map(|(a, b)| (a - b).powi(2))
+-            .sum::<f64>()
+-            <= 256.0
++            .all(|(a, b)| (a - b).abs() <= 16.0)
+     })
+ }
+ pub(super) fn golems(state: &mut TickState, cache: &mut PoiCache, changes: &mut ChangeSet) {

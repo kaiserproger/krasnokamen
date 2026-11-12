@@ -1,8 +1,9 @@
 use super::*;
+use crate::boundary::{ChatVisibility, ClientSettings};
 
 #[test]
 fn session_cleanup_has_reserved_capacity_and_preserves_fifo() {
-    let (sender, mut receiver) = mpsc_channel(4);
+    let (sender, mut receiver) = mpsc_channel(5);
     let connection = ConnectionId(101);
     let session = PlayerSession::admit(
         &sender,
@@ -10,8 +11,11 @@ fn session_cleanup_has_reserved_capacity_and_preserves_fifo() {
         uuid::Uuid::from_u128(101),
         "Session".to_owned(),
         0,
-        4,
-        "ru_ru".into(),
+        ClientSettings {
+            view_distance: 4,
+            locale: "ru_ru".into(),
+            chat_visibility: ChatVisibility::Hidden,
+        },
     )
     .unwrap();
     assert!(
@@ -21,9 +25,12 @@ fn session_cleanup_has_reserved_capacity_and_preserves_fifo() {
         matches!(receiver.try_recv().unwrap(), PlayerInput::SetLocale { connection: id, locale } if id == connection && locale == "ru_ru")
     );
     assert!(
+        matches!(receiver.try_recv().unwrap(), PlayerInput::SetChatVisibility { connection: id, visibility: ChatVisibility::Hidden } if id == connection)
+    );
+    assert!(
         matches!(receiver.try_recv().unwrap(), PlayerInput::Join { connection: id, .. } if id == connection)
     );
-    for _ in 0..3 {
+    for _ in 0..4 {
         sender
             .try_send(PlayerInput::SelectSlot {
                 connection,
@@ -40,7 +47,7 @@ fn session_cleanup_has_reserved_capacity_and_preserves_fifo() {
             .is_err()
     );
     drop(session);
-    for _ in 0..3 {
+    for _ in 0..4 {
         assert!(matches!(
             receiver.try_recv().unwrap(),
             PlayerInput::SelectSlot { slot: 2, .. }
@@ -54,7 +61,7 @@ fn session_cleanup_has_reserved_capacity_and_preserves_fifo() {
 
 #[test]
 fn failed_session_admission_emits_no_partial_join() {
-    let (sender, mut receiver) = mpsc_channel(4);
+    let (sender, mut receiver) = mpsc_channel(5);
     sender
         .try_send(PlayerInput::SelectSlot {
             connection: ConnectionId(1),
@@ -68,8 +75,11 @@ fn failed_session_admission_emits_no_partial_join() {
             uuid::Uuid::nil(),
             "Full".into(),
             0,
-            2,
-            "en_us".into()
+            ClientSettings {
+                view_distance: 2,
+                locale: "en_us".into(),
+                chat_visibility: ChatVisibility::Full
+            }
         ),
         Err(CoreError::InputFull)
     ));
@@ -86,8 +96,11 @@ fn failed_session_admission_emits_no_partial_join() {
             uuid::Uuid::nil(),
             "Stopped".into(),
             0,
-            2,
-            "en_us".into()
+            ClientSettings {
+                view_distance: 2,
+                locale: "en_us".into(),
+                chat_visibility: ChatVisibility::Full
+            }
         ),
         Err(CoreError::TickStopped)
     ));
@@ -105,24 +118,46 @@ fn session_drop_preserves_new_same_uuid_owner() {
     let uuid = uuid::Uuid::from_u128(101);
     let old_id = ConnectionId(101);
     let new_id = ConnectionId(102);
-    let old =
-        PlayerSession::admit(&sender, old_id, uuid, "Saved".into(), 0, 2, "en_us".into()).unwrap();
+    let old = PlayerSession::admit(
+        &sender,
+        old_id,
+        uuid,
+        "Saved".into(),
+        0,
+        ClientSettings {
+            view_distance: 2,
+            locale: "en_us".into(),
+            chat_visibility: ChatVisibility::Full,
+        },
+    )
+    .unwrap();
     let inputs: Vec<_> = std::iter::from_fn(|| receiver.try_recv().ok()).collect();
     run_tick(&mut state, &inputs);
     let old_entity = state.connections.entity_of(old_id).unwrap();
 
-    let next =
-        PlayerSession::admit(&sender, new_id, uuid, "Saved".into(), 0, 4, "ru_ru".into()).unwrap();
+    let next = PlayerSession::admit(
+        &sender,
+        new_id,
+        uuid,
+        "Saved".into(),
+        0,
+        ClientSettings {
+            view_distance: 4,
+            locale: "ru_ru".into(),
+            chat_visibility: ChatVisibility::Full,
+        },
+    )
+    .unwrap();
     // The new Join is already queued when the old owner finally drops.
     drop(old);
     let inputs: Vec<_> = std::iter::from_fn(|| receiver.try_recv().ok()).collect();
-    assert_eq!(inputs.len(), 4);
+    assert_eq!(inputs.len(), 5);
     assert!(
-        matches!(inputs[2], PlayerInput::Join { connection, uuid: joined, .. }
+        matches!(inputs[3], PlayerInput::Join { connection, uuid: joined, .. }
         if connection == new_id && joined == uuid)
     );
-    assert!(matches!(inputs[3], PlayerInput::Leave { connection } if connection == old_id));
-    let (_, joined, _) = run_tick(&mut state, &inputs[..3]);
+    assert!(matches!(inputs[4], PlayerInput::Leave { connection } if connection == old_id));
+    let (_, joined, _) = run_tick(&mut state, &inputs[..4]);
     assert!(joined.iter().any(|(id, changes)| {
         *id == new_id
             && changes
@@ -184,7 +219,17 @@ fn session_drop_allows_immediate_rejoin_with_saved_inventory() {
         .id_of(&mc_data::Identifier::parse("minecraft:stone").unwrap())
         .unwrap();
     let session = core
-        .join_session(connection, uuid, "Saved".into(), 4, 2, "en_us".into())
+        .join_session(
+            connection,
+            uuid,
+            "Saved".into(),
+            4,
+            ClientSettings {
+                view_distance: 2,
+                locale: "en_us".into(),
+                chat_visibility: ChatVisibility::Full,
+            },
+        )
         .unwrap();
     let mut joined = false;
     for _ in 0..20 {
@@ -262,7 +307,17 @@ fn session_drop_allows_immediate_rejoin_with_saved_inventory() {
     drop(ordinary_credit);
     let rejoined = ConnectionId(102);
     let next = core
-        .join_session(rejoined, uuid, "Saved".into(), 4, 2, "en_us".into())
+        .join_session(
+            rejoined,
+            uuid,
+            "Saved".into(),
+            4,
+            ClientSettings {
+                view_distance: 2,
+                locale: "en_us".into(),
+                chat_visibility: ChatVisibility::Full,
+            },
+        )
         .unwrap();
     let mut restored = false;
     for _ in 0..20 {

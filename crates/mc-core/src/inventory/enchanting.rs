@@ -45,7 +45,7 @@ impl ItemSet {
             && let Some(members) = rules
                 .tags
                 .registries
-                .get("minecraft:item")
+                .get(mc_data::tags::ITEM_REGISTRY)
                 .and_then(|tags| tags.get(tag))
             && !members.is_empty()
         {

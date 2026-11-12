@@ -171,6 +171,34 @@ fn upgrade_levels_are_diffs_that_clear_replaced_cells() {
     assert!(l2.blocks.len() < l1.blocks.len() + 400);
 }
 
+/// Structure writes refuse a stocked container, so a level may grow around
+/// the previous level's containers but never replace or remove one.
+#[test]
+fn upgrade_levels_keep_previous_containers() {
+    let state = test_state();
+    let raw = |second: &str, width: u8| {
+        serde_json::from_str::<RawBlueprint>(&format!(
+            r#"{{"id": "crate", "kind": "storage",
+                "palette": {{"C": "chest[facing=south]", "b": "barrel[facing=up]", "p": "cobblestone"}},
+                "levels": [
+                    {{"cert": [1, 1, 1], "entrance": [0, 0, 0], "layers": [["C"]]}},
+                    {{"cert": [{width}, 1, 1], "entrance": [0, 0, 0], "layers": [["{second}"]]}}
+                ]}}"#
+        ))
+        .unwrap()
+    };
+    assert!(load_blueprint(&state.registry, raw("Cp", 2)).is_ok());
+    for second in ["pp", "bp", ".p"] {
+        let error = load_blueprint(&state.registry, raw(second, 2))
+            .err()
+            .unwrap_or_else(|| panic!("{second} replaced the chest"));
+        assert!(
+            error.contains("level 2: replaces the level 1 container at 0,0,0"),
+            "{error}"
+        );
+    }
+}
+
 #[test]
 fn rotation_turns_facing_swaps_extent_and_keeps_levels_nested() {
     let state = test_state();

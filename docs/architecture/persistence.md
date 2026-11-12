@@ -19,6 +19,12 @@ idle-despawn-counter changes alone are checkpoint-durable only. An entity
 crossing chunks emits a full image. Do not claim exact per-tick mob motion
 recovery.
 
+Block-log records in `JournalEntry::BlockLog` and the native `block_log` table
+carry the committing server tick. Records from before tick capture have an
+unknown tick, not a reconstructed value; tick-based checks must reject them.
+After replay, block-log WAL deltas remain queued for native-table upsert before
+the next checkpoint can prune their batches, including rollback marks.
+
 Journal admission uses a 128-item FIFO and a 256 MiB estimated in-flight
 append budget; an oversized batch can enter alone. A full queue blocks the
 tick, not discard or reorder accepted work. A failed writer halts the core.
@@ -31,7 +37,11 @@ The default capture interval is 1,200 ticks (`CoreConfig.checkpoint_every_ticks`
 The tick freezes owned images; only one checkpoint is in flight. Before opening
 checkpoint writes the writer gates and fsyncs WAL coverage through the captured
 tick. A single immediate redb transaction commits all dimensions and participating
-domains at that tick. Only after durable commit may it publish the committed
+domains at that tick. Block-log rows are the exception: their own immediate
+transaction upserts the queued rows and drops rows below the retention floor
+before that commit, so a crash between the two leaves the table ahead of the
+manifest while the WAL that replays the same rows idempotently is still durable.
+Only after durable commit may it publish the committed
 tick, acknowledge captured revisions and prune wholly covered WAL batches.
 A pre-commit failure publishes and prunes nothing; a post-commit lost ACK or
 failed prune leaves a recoverable checkpoint and possibly redundant WAL. Dirty
@@ -93,6 +103,24 @@ records. A WAL-recovered pose is reconciled with the live target on the first
 admitted hostile evaluation after restart, and a changed appearance is
 journaled as usual. A checkpoint-only restart instead reconstructs the default
 pose and the hostile tick derives it again from live targeting.
+
+Cow, pig, chicken and zombie-nautilus variants (from `/summon ... {variant:...}`)
+are persisted. The checkpoint stores the vanilla string `variant` field of the
+entity record; the WAL stores a typed appearance value at the species' metadata
+index. A corrupt checkpoint `variant` (not a string, or not an identifier)
+refuses hydration, and a WAL image whose variant value has another species' kind,
+the wrong index or an id outside the registry refuses recovery
+(`validate_entity`): only Solaris writes WAL images. A well-formed identifier
+that names no entry of the species' registry (a datapack variant) is ignored with
+a `unknown variant ignored` warning naming the entity, species and id, and the
+default is kept, as vanilla does; records imported by an older Solaris, which did
+not drop such values, still hold them and must open. An absent field is the
+vanilla default. Naturally spawned animals carry no variant and use that default
+(egg-hatched chickens keep the egg's variant); Solaris does not yet choose
+biome-dependent variants. Bred cow, pig and chicken calves take this parent's or
+the partner's variant by a fair coin, as `getBreedOffspring` does (javap,
+receipts/Q04CoreFix/javap). Anvil import also drops an unknown or malformed
+`variant` before the native hydrate (the game ignores it and keeps the default).
 
 On genuine first start, `Core::open` writes and fsyncs
 `<world>/.solaris-first-start`, creates `native/state.redb.new` and renames the

@@ -260,8 +260,8 @@ pub struct EdgeServer {
     pub tick_stats: Arc<TickStats>,
     /// Network counters backing `/stats network`.
     pub net_counters: Arc<NetCounters>,
-    /// Join-burst recipe packets, built once from the core's recipe list.
-    pub recipes: crate::recipes::RecipePackets,
+    /// Join-burst recipe packets: built from the core's recipe list at start
+    /// and replaced when a datapack reload changes it.
     pub(crate) admin: crate::admin::Admin,
     pub(crate) console_state: crate::console::ConsoleState,
     stop: tokio::sync::watch::Sender<bool>,
@@ -375,7 +375,7 @@ impl EdgeServer {
             items: mc_data::items::solaris_required_items(),
             block_entity_types: mc_data::block_entity_types::solaris_required_block_entity_types(),
         };
-        let recipes = crate::recipes::RecipePackets::new(hub.registry())?;
+        crate::recipes::for_join(&hub.current_registry())?;
         let admin = crate::admin::Admin::open(&cfg.server_dir)?;
         anyhow::ensure!(
             hub.submit(PlayerInput::SpawnProtectionOperators {
@@ -453,7 +453,6 @@ impl EdgeServer {
             computer_processes,
             screens: Default::default(),
             voice,
-            recipes,
             hub,
             data,
             tags,
@@ -501,9 +500,22 @@ impl EdgeServer {
         Ok(())
     }
 
+    /// A command's success reply: shown to the console always, to a player only
+    /// while `send_command_feedback` is on (vanilla `sendSuccess`/`acceptsSuccess`).
+    fn success_feedback(&self, id: ConnectionId, text: &str) -> anyhow::Result<()> {
+        if id != mc_core::command_console::CONNECTION && !self.hub.command_feedback_enabled() {
+            return Ok(());
+        }
+        self.feedback(id, text)
+    }
+
     fn feedback(&self, id: ConnectionId, text: &str) -> anyhow::Result<()> {
         if id == mc_core::command_console::CONNECTION {
             self.console_state.feedback(text);
+            return Ok(());
+        }
+        // Vanilla's ServerPlayer.acceptsSystemMessages: a Hidden client gets no text lines.
+        if self.connections.chat_visibility(id) == mc_core::boundary::ChatVisibility::Hidden {
             return Ok(());
         }
         let mut content_nbt = Vec::new();
@@ -634,7 +646,7 @@ impl EdgeServer {
                 targets.len()
             )
         };
-        self.feedback(id, &message)
+        self.success_feedback(id, &message)
     }
 
     async fn handle_edge_frame(
@@ -703,6 +715,8 @@ impl EdgeServer {
                 );
                 registry.view_distances.insert(id, view_distance);
             }
+            let chat_visibility =
+                crate::configuration::chat_visibility(request.information.chat_visibility);
             let locale = request.information.language;
             if registry.locales.get(&id) != Some(&locale) {
                 anyhow::ensure!(
@@ -713,6 +727,16 @@ impl EdgeServer {
                     "locale admission queue is full"
                 );
                 registry.locales.insert(id, locale);
+            }
+            if registry.chat_visibilities.get(&id) != Some(&chat_visibility) {
+                anyhow::ensure!(
+                    self.hub.submit(PlayerInput::SetChatVisibility {
+                        connection: id,
+                        visibility: chat_visibility,
+                    }),
+                    "chat setting admission queue is full"
+                );
+                registry.chat_visibilities.insert(id, chat_visibility);
             }
             return Ok(true);
         }
@@ -817,7 +841,7 @@ impl EdgeServer {
                 self.feedback(id, "Incorrect argument for command")?;
             } else {
                 let names = self.admin.roster(option.is_some());
-                self.feedback(
+                self.success_feedback(
                     id,
                     &format!(
                         "There are {} of a max of {} players online: {}",
@@ -836,7 +860,7 @@ impl EdgeServer {
                 permission_level,
                 self.hub.plugin_commands(),
             ) {
-                Ok(usages) => self.feedback(id, &usages.join("\n"))?,
+                Ok(usages) => self.success_feedback(id, &usages.join("\n"))?,
                 Err(error) => self.feedback(id, &error)?,
             }
             return Ok(true);
@@ -912,7 +936,7 @@ impl EdgeServer {
             if target.is_some() {
                 self.feedback(id, "Incorrect argument for command")?;
             } else {
-                self.feedback(id, "Stopping the server")?;
+                self.success_feedback(id, "Stopping the server")?;
                 self.stop.send_replace(true);
             }
             return Ok(true);
@@ -921,17 +945,14 @@ impl EdgeServer {
             if target.is_some_and(|arg| arg != "flush") || !reason.is_empty() {
                 self.feedback(id, "Incorrect argument for command")?;
             } else {
-                self.feedback(id, "Saving the game (this may take a moment!)")?;
+                self.success_feedback(id, "Saving the game (this may take a moment!)")?;
                 let hub = Arc::clone(&self.hub);
                 let saved = tokio::task::spawn_blocking(move || hub.checkpoint()).await?;
-                self.feedback(
-                    id,
-                    if saved {
-                        "Saved the game"
-                    } else {
-                        "Failed to save the game"
-                    },
-                )?;
+                if saved {
+                    self.success_feedback(id, "Saved the game")?;
+                } else {
+                    self.feedback(id, "Failed to save the game")?;
+                }
             }
             return Ok(true);
         }
@@ -1055,7 +1076,7 @@ impl EdgeServer {
                 let expiry = duration.map_or_else(String::new, |value| {
                     format!(" (expires in {}s)", value.as_secs())
                 });
-                self.feedback(
+                self.success_feedback(
                     id,
                     &format!("Command {root} completed for {target}{expiry}"),
                 )?;
@@ -1231,7 +1252,7 @@ impl EdgeServer {
                     Some(duration) => format!(" (expires in {}s)", duration.as_secs()),
                     None => String::new(),
                 };
-                self.feedback(
+                self.success_feedback(
                     id,
                     &format!("Command {root} completed for {target}{expiry}"),
                 )?
@@ -1253,18 +1274,18 @@ impl EdgeServer {
         match (sub, rest) {
             (Some("on"), []) => {
                 self.admin.set_whitelist(true)?;
-                self.feedback(id, "Whitelist is now turned on")
+                self.success_feedback(id, "Whitelist is now turned on")
             }
             (Some("off"), []) => {
                 self.admin.set_whitelist(false)?;
-                self.feedback(id, "Whitelist is now turned off")
+                self.success_feedback(id, "Whitelist is now turned off")
             }
             (Some("list"), []) => {
                 let names = self.admin.whitelist_names();
                 if names.is_empty() {
-                    self.feedback(id, "There are no whitelisted players")
+                    self.success_feedback(id, "There are no whitelisted players")
                 } else {
-                    self.feedback(
+                    self.success_feedback(
                         id,
                         &format!(
                             "There are {} whitelisted player(s): {}",
@@ -1276,7 +1297,7 @@ impl EdgeServer {
             }
             (Some("reload"), []) => {
                 self.admin.reload_whitelist()?;
-                self.feedback(id, "Reloaded the whitelist")
+                self.success_feedback(id, "Reloaded the whitelist")
             }
             (Some("add"), [target]) => {
                 let profile = self
@@ -1292,14 +1313,14 @@ impl EdgeServer {
                     return self.feedback(id, "No player was found");
                 };
                 if self.admin.whitelist_add(uuid, &name)? {
-                    self.feedback(id, &format!("Added {name} to the whitelist"))
+                    self.success_feedback(id, &format!("Added {name} to the whitelist"))
                 } else {
                     self.feedback(id, "That player is already whitelisted")
                 }
             }
             (Some("remove"), [target]) => {
                 if self.admin.whitelist_remove(target)? {
-                    self.feedback(id, &format!("Removed {target} from the whitelist"))
+                    self.success_feedback(id, &format!("Removed {target} from the whitelist"))
                 } else {
                     self.feedback(id, "Nothing changed. The player is not whitelisted")
                 }
@@ -1314,19 +1335,19 @@ impl EdgeServer {
         let (players, ips) = self.admin.bans();
         match words {
             ["players"] => {
-                self.feedback(
+                self.success_feedback(
                     id,
                     &format!("There are {} total banned players:", players.len()),
                 )?;
                 for line in players {
-                    self.feedback(id, &line)?;
+                    self.success_feedback(id, &line)?;
                 }
                 Ok(())
             }
             ["ips"] => {
-                self.feedback(id, &format!("There are {} total banned IPs:", ips.len()))?;
+                self.success_feedback(id, &format!("There are {} total banned IPs:", ips.len()))?;
                 for line in ips {
-                    self.feedback(id, &line)?;
+                    self.success_feedback(id, &line)?;
                 }
                 Ok(())
             }
@@ -1602,7 +1623,7 @@ pub fn core_config(cfg: &EdgeConfig) -> mc_core::config::CoreConfig {
         villager_farming: cfg.mob_griefing.villager_farming,
         sheep_grazing: cfg.mob_griefing.sheep_grazing,
     };
-    core.block_log = mc_core::block_log::Settings {
+    core.block_log = mc_core::config::BlockLogSettings {
         enabled: cfg.block_log.enabled,
         retention_secs: u64::from(cfg.block_log.retention_days) * 24 * 60 * 60,
         max_records: cfg.block_log.max_records,
@@ -1722,6 +1743,10 @@ mod transfer_tests;
 #[cfg(test)]
 #[path = "server_leave_tests.rs"]
 mod leave_tests;
+
+#[cfg(test)]
+#[path = "server_duplicate_login_tests.rs"]
+mod duplicate_login_tests;
 
 #[cfg(test)]
 #[path = "server_protocol_admission_tests.rs"]

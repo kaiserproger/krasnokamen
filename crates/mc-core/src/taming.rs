@@ -65,7 +65,7 @@ pub(crate) fn food(state: &TickState, food: Option<crate::blueprint::MobFood>, i
     static TAGS: std::sync::LazyLock<(mc_data::Identifier, [mc_data::Identifier; 8])> =
         std::sync::LazyLock::new(|| {
             (
-                mc_data::Identifier::parse("minecraft:item").expect("static registry"),
+                mc_data::Identifier::parse(mc_data::tags::ITEM_REGISTRY).expect("static registry"),
                 [
                     "wolf", "cat", "parrot", "horse", "llama", "pig", "strider", "camel",
                 ]
@@ -196,17 +196,20 @@ pub(crate) fn action(
     }
     None
 }
-pub(crate) fn roll(row: &mut ColdRow, bound: u32) -> u32 {
-    row.entity_life.taming.rolls = row.entity_life.taming.rolls.wrapping_add(1);
-    let mut seed = row.uuid.as_u128() as u64
-        ^ row
-            .entity_life
-            .taming
-            .rolls
-            .wrapping_mul(0x9E3779B97F4A7C15);
+fn mix(uuid: u128, counter: u64, bound: u32) -> u32 {
+    let mut seed = uuid as u64 ^ counter.wrapping_mul(0x9E3779B97F4A7C15);
     seed = (seed ^ (seed >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
     seed = (seed ^ (seed >> 27)).wrapping_mul(0x94D049BB133111EB);
     ((seed ^ (seed >> 31)) % u64::from(bound)) as u32
+}
+/// Persisted roll: advances `taming.rolls`, so it is a durable entity change.
+pub(crate) fn roll(row: &mut ColdRow, bound: u32) -> u32 {
+    row.entity_life.taming.rolls = row.entity_life.taming.rolls.wrapping_add(1);
+    mix(row.uuid.as_u128(), row.entity_life.taming.rolls, bound)
+}
+/// Per-tick ambient roll keyed by the world tick; reads the row, writes nothing.
+pub(crate) fn roll_at(row: &ColdRow, tick: u64, bound: u32) -> u32 {
+    mix(row.uuid.as_u128(), tick, bound)
 }
 fn max_health(state: &TickState, body: &crate::entities::Body, row: &ColdRow) -> f32 {
     let base = crate::mounts::type_id(body)
@@ -441,7 +444,7 @@ fn trusted_image<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Ve
 }
 pub(crate) fn suppress_ai(row: &ColdRow) -> bool {
     row.entity_life.sitting
-        || row.entity_life.mount.rider.is_some()
+        || !row.entity_life.mount.riders.is_empty()
         || row.entity_life.leash.is_some()
 }
 pub(crate) fn excluded_sweep(row: &ColdRow) -> bool {

@@ -1,0 +1,238 @@
+diff --git a/crates/mc-core/src/entity_motion.rs b/crates/mc-core/src/entity_motion.rs
+index 7716a4fd..b3789522 100644
+--- a/crates/mc-core/src/entity_motion.rs
++++ b/crates/mc-core/src/entity_motion.rs
+@@ -39,7 +39,7 @@ pub(crate) struct MotionResult {
+     pub wall_climbing: bool,
+ }
+ 
+-fn unit(id: i32, epoch: u64) -> f64 {
++pub(crate) fn unit(id: i32, epoch: u64) -> f64 {
+     let mut hash = (id as u64)
+         .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+         .wrapping_add(epoch.wrapping_mul(0xBF58_476D_1CE4_E5B9));
+diff --git a/crates/mc-core/src/villager/brain.rs b/crates/mc-core/src/villager/brain.rs
+index f0b20640..f4bddcb4 100644
+--- a/crates/mc-core/src/villager/brain.rs
++++ b/crates/mc-core/src/villager/brain.rs
+@@ -568,6 +568,48 @@ fn clear_step(state: &TickState, begin: [f64; 3], end: [f64; 3], width: f64, hei
+     )
+ }
+ 
++/// Vanilla `VillageBoundRandomStroll`: inside the village (within one chunk
++/// section of a village POI section) a strolling resident steps at random;
++/// outside it walks back toward the village. The resident's own POIs (meeting
++/// point, home, job site) stand in for vanilla's POI-section village. Sections
++/// compare horizontally only, so a resident in a mine below them still
++/// strolls instead of standing still. `random` is the in-village step, at most
++/// 6 blocks (Manhattan); the step home is as long. Without any POI the stroll
++/// is random, as in vanilla away from villages.
++fn village_bound_stroll(
++    origin: BlockPos,
++    random: (i32, i32),
++    anchors: [Option<BlockPos>; 3],
++) -> BlockPos {
++    let section = |pos: BlockPos| (pos.x >> 4, pos.z >> 4);
++    let (sx, sz) = section(origin);
++    let mut nearest: Option<(BlockPos, u32)> = None;
++    for anchor in anchors.into_iter().flatten() {
++        let (ax, az) = section(anchor);
++        if sx.abs_diff(ax) <= 1 && sz.abs_diff(az) <= 1 {
++            nearest = None;
++            break;
++        }
++        let far = origin.x.abs_diff(anchor.x) + origin.z.abs_diff(anchor.z);
++        if nearest.is_none_or(|(_, best)| far < best) {
++            nearest = Some((anchor, far));
++        }
++    }
++    let (dx, dz) = match nearest {
++        // Outside the village: at least one section away, so `far` > 6.
++        Some((anchor, far)) => (
++            (i64::from(anchor.x - origin.x) * 6 / i64::from(far)) as i32,
++            (i64::from(anchor.z - origin.z) * 6 / i64::from(far)) as i32,
++        ),
++        None => random,
++    };
++    BlockPos {
++        x: origin.x + dx,
++        y: origin.y,
++        z: origin.z + dz,
++    }
++}
++
+ fn wander_to(
+     state: &mut TickState,
+     slot: EntitySlot,
+@@ -1212,19 +1254,20 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
+                             seed ^= seed >> 30;
+                             seed = seed.wrapping_mul(0xBF58476D1CE4E5B9);
+                             seed ^= seed >> 27;
+-                            // Strolls remain bounded from the current cell,
+-                            // including Work already within workstation reach.
++                            // Strolls step at most 6 blocks from the current
++                            // cell, including Work already within workstation
++                            // reach, and stay bound to the village.
+                             let origin = at(pos);
+                             let range = if v.activity == Activity::Work { 5 } else { 13 };
+                             let dx = (seed % range) as i32 - range as i32 / 2;
+                             let remaining = 6 - dx.abs();
+                             let dz = (((seed >> 16) % range) as i32 - range as i32 / 2)
+                                 .clamp(-remaining, remaining);
+-                            Some(BlockPos {
+-                                x: origin.x + dx,
+-                                y: origin.y,
+-                                z: origin.z + dz,
+-                            })
++                            Some(village_bound_stroll(
++                                origin,
++                                (dx, dz),
++                                [meeting_point, home, job_site],
++                            ))
+                         } else {
+                             v.navigation_target
+                         }
+diff --git a/crates/mc-core/src/villager/brain/motion.rs b/crates/mc-core/src/villager/brain/motion.rs
+index 4c0286c4..24f806e6 100644
+--- a/crates/mc-core/src/villager/brain/motion.rs
++++ b/crates/mc-core/src/villager/brain/motion.rs
+@@ -525,7 +525,8 @@ pub(super) fn move_skipped(
+         && !has_next
+         && state.entities.ground(slot)
+         && state.entities.vel(slot) == [0.0; 3]
+-        && state.entities.horizontal_impulse(slot) == [0.0; 2];
++        && state.entities.horizontal_impulse(slot) == [0.0; 2]
++        && !immersion(state, slot).1;
+     let motion = if still {
+         None
+     } else {
+@@ -538,6 +539,39 @@ pub(super) fn move_skipped(
+     apply_body_motion(state, slot, motion);
+ }
+ 
++/// Vanilla villagers carry `Swim(0.8f)` in their core package: while the water
++/// is deeper than the 0.4-block fluid jump threshold they jump in liquid
++/// (+0.04 blocks/tick) on 80% of ticks. Immersed bodies do not fall: they keep
++/// 0.8 of their vertical speed per tick and sink by gravity/16
++/// (`LivingEntity.travelInWater`).
++const SWIM_CHANCE: f64 = 0.8;
++const SWIM_JUMP_BLOCKS_PER_SECOND: f64 = 0.04 / mc_physics::TICK_SECONDS;
++const WATER_VERTICAL_DRAG: f64 = 0.8;
++
++/// (body overlaps fluid, fluid deeper than the swim jump threshold).
++fn immersion(state: &TickState, slot: EntitySlot) -> (bool, bool) {
++    let pos = state.entities.pos(slot);
++    let body = state.entities.body(slot);
++    let body = mc_physics::EntityBody {
++        position: mc_physics::Vec3::new(pos[0], pos[1], pos[2]),
++        velocity: mc_physics::Vec3::ZERO,
++        aabb: mc_physics::Aabb {
++            half_width: body.half_width,
++            height: body.height,
++        },
++        on_ground: false,
++    };
++    let live = TickSampler {
++        world: &state.world,
++        registry: &state.registry,
++    };
++    let wet = mc_physics::body_overlaps_fluid(body, &live);
++    (
++        wet,
++        wet && mc_physics::fluid_reaches_swim_threshold(body, &live),
++    )
++}
++
+ #[derive(Debug, PartialEq)]
+ pub(super) struct BodyMotion {
+     pub(super) position: [f64; 3],
+@@ -565,10 +599,15 @@ pub(super) fn resolve_body_motion(
+     );
+     let mut velocity = state.entities.vel(slot);
+     let dt = mc_physics::TICK_SECONDS;
+-    if !state.entities.row(slot).controls.no_gravity {
++    let gravity = !state.entities.row(slot).controls.no_gravity;
++    let (wet, deep) = immersion(state, slot);
++    if gravity && !wet {
+         velocity[1] = (velocity[1] - mc_physics::GRAVITY_BLOCKS_PER_SECOND_SQUARED * dt)
+             .max(mc_physics::TERMINAL_VELOCITY_BLOCKS_PER_SECOND);
+     }
++    if deep && crate::entity_motion::unit(body.id.0, state.tick) < SWIM_CHANCE {
++        velocity[1] += SWIM_JUMP_BLOCKS_PER_SECOND;
++    }
+     let mut horizontal = [0.0; 2];
+     if let Some(next) = next {
+         let dx = next[0] - pos[0];
+@@ -624,6 +663,8 @@ pub(super) fn resolve_body_motion(
+         let n = v * drag;
+         if n.abs() < 0.06 { 0.0 } else { n }
+     });
++    let blocked =
++        (fixed.delta.x - requested.x).abs() > 1e-7 || (fixed.delta.z - requested.z).abs() > 1e-7;
+     if (fixed.delta.x - requested.x).abs() > 1e-7 {
+         velocity[0] = 0.0;
+         next_impulse[0] = 0.0;
+@@ -634,9 +675,40 @@ pub(super) fn resolve_body_motion(
+     }
+     velocity[1] = if fixed.grounded || (fixed.delta.y - requested.y).abs() > 1e-7 {
+         0.0
++    } else if wet {
++        velocity[1] * WATER_VERTICAL_DRAG
++            - if gravity {
++                mc_physics::WATER_SINK_BLOCKS_PER_SECOND_SQUARED * dt
++            } else {
++                0.0
++            }
+     } else {
+         velocity[1] * 0.98
+     };
++    // Vanilla jumpOutOfFluid: a swimmer blocked sideways climbs out (0.3
++    // blocks/tick up) when its box raised by 0.6, plus this tick's remaining
++    // vertical travel, is free of blocks and fluid.
++    if wet && blocked && !fixed.grounded {
++        let rise = 0.6 + velocity[1] * dt - fixed.delta.y;
++        let here = mc_physics::Vec3::new(new[0], new[1], new[2]);
++        let raised = mc_physics::EntityBody {
++            position: mc_physics::Vec3::new(new[0], new[1] + rise, new[2]),
++            ..body
++        };
++        if mc_physics::resolve_collision_displacement(
++            &sampler,
++            here,
++            body.aabb,
++            mc_physics::Vec3::new(0.0, rise, 0.0),
++            false,
++            0.0,
++        )
++        .is_some_and(|clear| (clear.delta.y - rise).abs() <= 1e-7)
++            && !mc_physics::body_overlaps_fluid(raised, &sampler)
++        {
++            velocity[1] = 0.3 / dt;
++        }
++    }
+     Some(BodyMotion {
+         position: new,
+         velocity,
+diff --git a/crates/mc-physics/src/lib.rs b/crates/mc-physics/src/lib.rs
+index 39633c64..ba97df5d 100644
+--- a/crates/mc-physics/src/lib.rs
++++ b/crates/mc-physics/src/lib.rs
+@@ -1780,7 +1780,8 @@ fn horizontal_distance_squared(delta: Vec3) -> f64 {
+     delta.x * delta.x + delta.z * delta.z
+ }
+ 
+-fn body_overlaps_fluid<S: BlockSampler>(body: EntityBody, sampler: &S) -> bool {
++/// Whether any block cell the body's box covers holds a fluid.
++pub fn body_overlaps_fluid<S: BlockSampler>(body: EntityBody, sampler: &S) -> bool {
+     let min_y = floor_i32(body.position.y);
+     let max_y = floor_i32(body.position.y + body.aabb.height);
+     let half = body.aabb.half_width;
+@@ -1800,7 +1801,7 @@ fn body_overlaps_fluid<S: BlockSampler>(body: EntityBody, sampler: &S) -> bool {
+ 
+ /// Common terrestrial mobs use vanilla's 0.4-block fluid jump threshold.
+ /// Keep the probe below the midpoint of smaller bodies so they can breathe.
+-fn fluid_reaches_swim_threshold<S: BlockSampler>(body: EntityBody, sampler: &S) -> bool {
++pub fn fluid_reaches_swim_threshold<S: BlockSampler>(body: EntityBody, sampler: &S) -> bool {
+     let probe_y = floor_i32(body.position.y + 0.4_f64.min(body.aabb.height * 0.5));
+     sampler
+         .material_at(

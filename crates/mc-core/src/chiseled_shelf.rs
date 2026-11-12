@@ -32,7 +32,7 @@ fn prop<'a>(block: &'a mc_world::BlockState, name: &str) -> Option<&'a str> {
 fn accepts(state: &TickState, stack: &ItemStack) -> bool {
     !stack.is_empty()
         && state.registry.tags.contains_raw_id(
-            "minecraft:item",
+            mc_data::tags::ITEM_REGISTRY,
             "minecraft:bookshelf_books",
             stack.item_id as i32,
         )

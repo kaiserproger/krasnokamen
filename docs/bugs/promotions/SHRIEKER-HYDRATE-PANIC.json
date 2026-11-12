@@ -1,0 +1,53 @@
+{
+  "id": "SHRIEKER-HYDRATE-PANIC",
+  "verdict": "promoted",
+  "fix_commit": "patch:34e03a31bb87400103032020267781c98c9ebb79740915acbe303611c27552b9",
+  "fix_commit_full": "patch:34e03a31bb87400103032020267781c98c9ebb79740915acbe303611c27552b9",
+  "promoted_at": "2026-11-12T05:28:21+00:00",
+  "tree_head": "912759b78f69b7a3324d1776f5198087325c2801",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "34e03a31bb87400103032020267781c98c9ebb79740915acbe303611c27552b9",
+  "reversed_files": [
+    "crates/mc-core/src/shrieker.rs",
+    "crates/mc-core/src/tick/hydration.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-corrupt-block-entities": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-corrupt-block-entities --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/BlockerRows/.analysis/validation/20261112T052610-ledger-promote-avz3uxh7/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/BlockerRows/.analysis/validation/20261112T051707-native-v2-corrupt-block-entities-ob8nhrvc/result.json",
+    "tree_head": "912759b78f69b7a3324d1776f5198087325c2801",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "9f7ccd07ad19d21bde302e55c0f4e062e37437725fc14a4e52c71e4db2a6bf52",
+    "covers": [
+      "harness:entities:native-v2-corrupt-block-entities"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/BlockerRows/.analysis/validation/20261112T052610-ledger-promote-avz3uxh7"
+}

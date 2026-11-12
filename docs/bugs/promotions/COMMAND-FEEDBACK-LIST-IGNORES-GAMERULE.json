@@ -1,0 +1,52 @@
+{
+  "id": "COMMAND-FEEDBACK-LIST-IGNORES-GAMERULE",
+  "verdict": "promoted",
+  "fix_commit": "patch:0eb05a69067379a145703ad813222c14d28930a0dde1529bb37252b395d7116d",
+  "fix_commit_full": "patch:0eb05a69067379a145703ad813222c14d28930a0dde1529bb37252b395d7116d",
+  "promoted_at": "2026-11-11T23:46:58+00:00",
+  "tree_head": "a4710009c5713cacf5c729040953cf8c07df5e93",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "0eb05a69067379a145703ad813222c14d28930a0dde1529bb37252b395d7116d",
+  "reversed_files": [
+    "crates/mc-edge/src/server.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:server::view_distance_tests::list_obeys_the_send_command_feedback_rule": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:dimensions::tests::send_command_feedback_set_from_the_nether_is_published_for_the_edge": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:chat-visibility:native-chat-visibility": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-chat-visibility --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261111T234100-ledger-promote-kfrw4hft/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:server::view_distance_tests::list_obeys_the_send_command_feedback_rule": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:dimensions::tests::send_command_feedback_set_from_the_nether_is_published_for_the_edge": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261111T233149-native-chat-visibility-co0r8fyw/result.json",
+    "tree_head": "a4710009c5713cacf5c729040953cf8c07df5e93",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "080e86c32c92b2c3855914382eb16bfa83da4a9514eaaab237b98a2d594c10f7",
+    "covers": [
+      "harness:chat-visibility:native-chat-visibility"
+    ],
+    "profile": "chat-visibility"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261111T234100-ledger-promote-kfrw4hft"
+}

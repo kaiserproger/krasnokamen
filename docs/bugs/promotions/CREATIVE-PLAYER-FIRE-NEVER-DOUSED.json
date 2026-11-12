@@ -1,0 +1,49 @@
+{
+  "id": "CREATIVE-PLAYER-FIRE-NEVER-DOUSED",
+  "verdict": "promoted",
+  "fix_commit": "da9bca085da0c0c542cac42f95f38b373849bd99",
+  "fix_commit_full": "da9bca085da0c0c542cac42f95f38b373849bd99",
+  "promoted_at": "2026-11-11T23:40:59+00:00",
+  "tree_head": "b6e946c132354808ac376bc2edfb901cd772a821",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/contact_hazards.rs",
+    "crates/mc-core/src/tick/death_message.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/contact_hazards_tests.rs",
+    "crates/mc-core/src/projectiles/payloads_tests.rs",
+    "crates/mc-core/src/tick/combat_parity_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:tick_tests::contact_hazards_tests::creative_player_burn_clock_runs_and_water_douses_it": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-p4-damage": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-p4-damage --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/HarnessRowsPromote/.analysis/validation/20261111T233308-ledger-promote-qyjmokr9/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick_tests::contact_hazards_tests::creative_player_burn_clock_runs_and_water_douses_it": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/HarnessRowsPromote/.analysis/validation/20261111T225436-native-v2-p4-damage-_mq50695/result.json",
+    "tree_head": "b6e946c132354808ac376bc2edfb901cd772a821",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "7636c277ce9e2e86025c07c2d150486b4192c9ffa2fd0835c4edf6c307419f18",
+    "covers": [
+      "harness:entities:native-v2-p4-damage"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/HarnessRowsPromote/.analysis/validation/20261111T233308-ledger-promote-qyjmokr9"
+}

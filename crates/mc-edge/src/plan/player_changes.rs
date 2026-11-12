@@ -133,6 +133,13 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                 tab: tab.as_ref().and_then(|id| Identifier::parse(id).ok()),
             },
         ),
+        PlayerChange::RecipesReloaded { reload } => {
+            if let Some(packets) = crate::recipes::packets_for(&reload.registry) {
+                // The recipe book entries that follow come from these recipes.
+                viewer.advancements = std::sync::Arc::clone(&packets.advancements);
+                push_reliable(out, conn, &packets.update);
+            }
+        }
         PlayerChange::RecipesUnlocked {
             recipes, replace, ..
         } => {
@@ -261,7 +268,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                 let previous = viewer.player_profiles.insert(player.entity, player.uuid);
                 if previous != Some(player.uuid)
                     && player.entity != viewer.entity_id
-                    && viewer.tracked_entities.remove(&player.entity).is_some()
+                    && viewer.untrack(player.entity)
                 {
                     // A provisional auth body was not a trusted player profile.
                     // Remove its old client object before respawning with the
@@ -316,8 +323,10 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             merge_frames(out, start);
         }
         PlayerChange::StyledChat { content, .. } => {
+            // A component is any NBT root: a bare string (`tellraw @s "text"`) and a list are
+            // valid vanilla components, so the compound-only `write_network` would drop them.
             let mut content_nbt = Vec::new();
-            if mc_nbt::write_network(&mut content_nbt, content).is_ok() {
+            if mc_nbt::write_network_value(&mut content_nbt, content).is_ok() {
                 push_reliable(
                     out,
                     conn,
@@ -968,7 +977,7 @@ fn plan_respawn(respawn: &Respawn, viewer: &mut ViewerState, out: &mut Vec<Plann
         viewer.loaded_chunks.clear();
         viewer.chunk_sync = None;
         viewer.chunk_repairs.clear();
-        viewer.tracked_entities.clear();
+        viewer.untrack_all();
         viewer.seats.clear();
         viewer.entity_tick = None;
         viewer.pending_blocks.clear();

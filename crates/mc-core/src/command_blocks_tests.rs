@@ -1,4 +1,5 @@
 use super::*;
+use crate::boundary::{ConnectionId, PlayerChange};
 
 fn fixture() -> TickState {
     let (mut state, _, _) = crate::hostile_tests::setup(8.0);
@@ -236,6 +237,155 @@ fn repeating_auto_uses_durable_ticks_and_disable_gate() {
     state.enable_command_block = false;
     advance(&mut state);
     assert_eq!(state.day_time, 2);
+}
+#[test]
+fn setblock_with_auto_runs_the_command_block_but_a_powered_or_chain_one_waits() {
+    // Vanilla `CommandBlockEntity.loadAdditional` -> `setAutomatic(true)` -> `scheduleTick()`.
+    let mut state = fixture();
+    let connection = crate::command_console::CONNECTION;
+    for (name, nbt, ran) in [
+        (
+            "command_block",
+            "Command:\"setblock 0 61 0 minecraft:diamond_block\",auto:1b",
+            true,
+        ),
+        (
+            "repeating_command_block",
+            "Command:\"setblock 0 61 0 minecraft:diamond_block\",auto:1b",
+            true,
+        ),
+        (
+            "command_block",
+            "Command:\"setblock 0 61 0 minecraft:diamond_block\",auto:0b",
+            false,
+        ),
+        (
+            "chain_command_block",
+            "Command:\"setblock 0 61 0 minecraft:diamond_block\",auto:1b",
+            false,
+        ),
+    ] {
+        crate::command_console::execute(
+            &mut state,
+            connection,
+            "setblock 0 61 0 minecraft:air",
+            2,
+            &mut ChangeSet::default(),
+        );
+        crate::tick::run_tick(&mut state, &[]);
+        crate::command_console::execute(
+            &mut state,
+            connection,
+            &format!("setblock 0 60 0 minecraft:{name}[facing=east]{{{nbt}}}"),
+            2,
+            &mut ChangeSet::default(),
+        );
+        for _ in 0..4 {
+            crate::tick::run_tick(&mut state, &[]);
+        }
+        let id = state.world.block_at(0, 61, 0).unwrap();
+        let ran_now = state
+            .registry
+            .blocks
+            .by_id(BlockStateId(id))
+            .unwrap()
+            .block
+            .id
+            .path()
+            == "diamond_block";
+        assert_eq!(ran_now, ran, "{name} {nbt}");
+        crate::command_console::execute(
+            &mut state,
+            connection,
+            "setblock 0 60 0 minecraft:air",
+            2,
+            &mut ChangeSet::default(),
+        );
+        crate::tick::run_tick(&mut state, &[]);
+    }
+}
+fn first_argument_text(content: &Tag) -> Option<&str> {
+    let Tag::Compound(fields) = content else {
+        return None;
+    };
+    let Some(Tag::List(with)) = mc_data::item_nbt::field(fields, "with") else {
+        return None;
+    };
+    let Some(Tag::Compound(first)) = with.elements.first() else {
+        return None;
+    };
+    match mc_data::item_nbt::field(first, "text") {
+        Some(Tag::String(text)) => Some(text),
+        _ => None,
+    }
+}
+fn lines_of(state: &TickState, connection: ConnectionId, key: &str) -> Vec<Tag> {
+    state
+        .outbox
+        .get(&connection)
+        .into_iter()
+        .flatten()
+        .filter_map(|change| match change {
+            PlayerChange::StyledChat {
+                content: Tag::Compound(fields),
+            } if mc_data::item_nbt::field(fields, "translate")
+                == Some(&Tag::String(key.into())) =>
+            {
+                Some(Tag::Compound(fields.clone()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+#[test]
+fn command_block_is_named_at_and_informs_operators_of_its_output() {
+    // Vanilla `BaseCommandBlock` names its source `@` and `CommandSourceStack.broadcastToAdmins`
+    // sends operators gray italic `chat.type.admin` while `sendCommandFeedback` and
+    // `commandBlockOutput` are on.
+    let mut state = fixture();
+    let operator = ConnectionId(1);
+    state.plugin_players.observe_permission(operator, 2);
+    let say = place(&mut state, 0, "command_block", "say hi", true);
+    let time = place(&mut state, 2, "command_block", "time set 4100", true);
+    for pos in [say, time] {
+        schedule(&mut state, pos);
+    }
+    advance(&mut state);
+    let announcements = lines_of(&state, operator, "chat.type.announcement");
+    assert_eq!(announcements.len(), 1);
+    assert_eq!(first_argument_text(&announcements[0]), Some("@"));
+    let admin = lines_of(&state, operator, "chat.type.admin");
+    assert_eq!(
+        admin.len(),
+        1,
+        "one admin line for `time set`, none for `say`"
+    );
+    assert_eq!(first_argument_text(&admin[0]), Some("@"));
+    let Tag::Compound(fields) = &admin[0] else {
+        unreachable!()
+    };
+    assert_eq!(
+        mc_data::item_nbt::field(fields, "color"),
+        Some(&Tag::String("gray".into()))
+    );
+    assert_eq!(
+        mc_data::item_nbt::field(fields, "italic"),
+        Some(&Tag::Byte(1))
+    );
+    // sendCommandFeedback off: nothing is broadcast; the console stays "Server".
+    state.outbox.clear();
+    crate::command_console::execute(
+        &mut state,
+        crate::command_console::CONNECTION,
+        "gamerule send_command_feedback false",
+        2,
+        &mut ChangeSet::default(),
+    );
+    state.outbox.clear();
+    schedule(&mut state, time);
+    state.tick += 2;
+    advance(&mut state);
+    assert!(lines_of(&state, operator, "chat.type.admin").is_empty());
 }
 #[test]
 fn data_merge_admits_only_supported_fields_and_requires_operator() {

@@ -1,3 +1,6 @@
+#[path = "live_capture_tests.rs"]
+mod live_capture;
+
 use mc_core::dimensions::Dimension;
 use mc_core::native_checkpoint as bridge;
 use mc_data::{Identifier, ItemStack};

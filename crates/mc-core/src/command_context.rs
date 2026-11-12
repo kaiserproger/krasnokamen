@@ -23,6 +23,8 @@ pub(crate) struct Context {
     pub dimension: Dimension,
     pub eyes: bool,
     pub eye_height: f64,
+    /// The source is a command block: vanilla names it `@` and informs admins of its output.
+    pub command_block: bool,
 }
 impl Context {
     pub(crate) fn source(
@@ -45,6 +47,7 @@ impl Context {
             dimension: state.dimension,
             eyes: false,
             eye_height: eye_height(state, executor),
+            command_block: false,
         }
     }
     pub(crate) fn coordinate_origin(self, local: bool) -> [f64; 3] {
@@ -85,6 +88,9 @@ pub(crate) struct Runtime {
     /// Per-selection random draws this tick; each `@r`/`sort=random`
     /// evaluation advances it so repeated same-tick evaluations draw again.
     pub(crate) random_draws: std::cell::Cell<u64>,
+    /// Result of the last command that finished (0 when it failed), for the
+    /// `/debug function` trace.
+    pub(crate) last_result: i32,
 }
 fn eye_height(state: &TickState, id: EntityId) -> f64 {
     state.entities.slot_of_any(id).map_or(0.0, |slot| {
@@ -108,12 +114,23 @@ fn eye_height(state: &TickState, id: EntityId) -> f64 {
     })
 }
 fn error(state: &mut TickState, context: Context, message: impl Into<String>) {
-    state.push_player(
-        context.connection,
-        PlayerChange::Chat {
-            message: message.into(),
-        },
-    );
+    let message = message.into();
+    if let Some(trace) = &mut state.debug_trace
+        && trace.connection == context.connection
+    {
+        trace.on_error(&message);
+        return;
+    }
+    // Global-command failures return a vanilla lang key (`argument.entity.notfound.entity`); the
+    // client translates it, a plain chat line would show the key itself.
+    let change = if crate::command_feedback::is_translation_key(&message) {
+        PlayerChange::StyledChat {
+            content: crate::command_feedback::translated(message, Vec::new()),
+        }
+    } else {
+        PlayerChange::Chat { message }
+    };
+    state.push_player(context.connection, change);
 }
 pub(crate) fn submit(state: &mut TickState, text: &str, context: Context, changes: &mut ChangeSet) {
     if state.dimension_globals.active && !state.command_context.shared {
@@ -676,6 +693,7 @@ pub(crate) fn run(
             }
         };
         if let Some((success, value)) = outcome {
+            state.command_context.last_result = if success { value } else { 0 };
             if success {
                 successes = successes.saturating_add(1);
             }

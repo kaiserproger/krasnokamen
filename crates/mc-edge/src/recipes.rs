@@ -38,6 +38,63 @@ impl RecipePackets {
     }
 }
 
+/// Packets built per registry still alive (the core's current one and, until
+/// the last connection lets go, the one before it), and the newest build that
+/// succeeded.
+#[derive(Default)]
+struct Built {
+    by_registry: Vec<(
+        std::sync::Weak<mc_core::registry::CoreRegistry>,
+        Option<std::sync::Arc<RecipePackets>>,
+    )>,
+    last_ok: Option<std::sync::Arc<RecipePackets>>,
+}
+static BUILT: parking_lot::Mutex<Built> = parking_lot::Mutex::new(Built {
+    by_registry: Vec::new(),
+    last_ok: None,
+});
+
+/// The packets for `registry`, built by the first caller that asks and shared
+/// by every connection after it: the joiners and the announcement of a
+/// datapack reload both go through here, so they cannot disagree. `None` when
+/// the recipes cannot be encoded; clients then keep the recipes they have.
+pub(crate) fn packets_for(
+    registry: &std::sync::Arc<mc_core::registry::CoreRegistry>,
+) -> Option<std::sync::Arc<RecipePackets>> {
+    let mut built = BUILT.lock();
+    built
+        .by_registry
+        .retain(|(known, _)| known.strong_count() > 0);
+    if let Some((_, packets)) = built
+        .by_registry
+        .iter()
+        .find(|(known, _)| std::ptr::eq(known.as_ptr(), std::sync::Arc::as_ptr(registry)))
+    {
+        return packets.clone();
+    }
+    let packets = RecipePackets::new(registry)
+        .inspect_err(|error| tracing::warn!(%error, "recipe packets after datapack reload"))
+        .ok()
+        .map(std::sync::Arc::new);
+    if packets.is_some() {
+        built.last_ok.clone_from(&packets);
+    }
+    built
+        .by_registry
+        .push((std::sync::Arc::downgrade(registry), packets.clone()));
+    packets
+}
+
+/// What a joining player gets: the packets for the registry the world runs on
+/// now, or the newest ones that could be built.
+pub(crate) fn for_join(
+    registry: &std::sync::Arc<mc_core::registry::CoreRegistry>,
+) -> anyhow::Result<std::sync::Arc<RecipePackets>> {
+    packets_for(registry)
+        .or_else(|| BUILT.lock().last_ok.clone())
+        .ok_or_else(|| anyhow::anyhow!("the recipes cannot be encoded for a joining player"))
+}
+
 fn item_max_stack(item_facts: &ItemFactsTable, items: &ItemRegistry, stack: &ItemStack) -> i32 {
     mc_data::item_semantics_26_1_2::max_stack_for_stack(item_facts, items, stack)
 }
@@ -81,7 +138,7 @@ fn campfire_inputs(
     use mc_data::recipes::{IngredientAlternative, RecipeKind};
     let item_tags = tags
         .registries
-        .get(&Identifier::parse("minecraft:item").expect("static id"));
+        .get(&Identifier::parse(mc_data::tags::ITEM_REGISTRY).expect("static id"));
     let mut item_ids = Vec::new();
     for recipe in recipes {
         let RecipeKind::CampfireCooking(cooking) = &recipe.kind else {
@@ -422,7 +479,7 @@ mod tests {
         let chicken_id = items.id_of(&chicken).unwrap() as i32;
         let cod_id = items.id_of(&cod).unwrap() as i32;
         tags.registries
-            .entry(Identifier::parse("minecraft:item").unwrap())
+            .entry(Identifier::parse(mc_data::tags::ITEM_REGISTRY).unwrap())
             .or_default()
             .insert(tag.clone(), vec![chicken_id, cod_id, cod_id]);
         let mut recipe = recipes

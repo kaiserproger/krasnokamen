@@ -1,4 +1,5 @@
 """Lifecycle phase evidence from real shared helpers."""
+import os
 import subprocess
 import tempfile
 import unittest
@@ -90,7 +91,7 @@ class LifecyclePhases(unittest.TestCase):
             wrapper = root / 'gradlew'
             wrapper.write_text('#!/bin/sh\nexit 37\n')
             wrapper.chmod(0o755)
-            with patch.object(runtime, 'AGENT_ROOT', root), \
+            with patch.dict(os.environ, {'SOLARIS_LOADER_ROOT': str(root)}), \
                     patch('tools.harness.audio.private_audio_preflight'):
                 with self.assertRaises(runtime.ChildExited) as caught:
                     runtime.start_client(game_dir=root / 'game', log_path=root / 'java.log',

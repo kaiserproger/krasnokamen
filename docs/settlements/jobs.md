@@ -15,7 +15,7 @@ See [construction and certification](construction.md), [production](production.m
 
 ## Allocating jobs
 
-- Adults normally seek reachable work during day ticks **2000–8999**. Nitwits do not work. Unbound villagers can acquire ordinary workstations within 48 blocks; bound residents acquire only free slots in certified production buildings. Certification and upgrades make slots available to the normal allocator.
+- Jobless adults claim a reachable free workstation at any time of day, as vanilla `AcquirePoi`/`AssignProfessionFromJobSite` do; the search keeps its bounded cadence. Work itself follows the day ticks **2000–8999**. Nitwits do not work. Unbound villagers can acquire ordinary workstations within 48 blocks; bound residents acquire only free slots in certified production buildings. Certification and upgrades make slots available to the normal allocator.
 - The allocator prioritizes reachable lumberjack and miner slots over other jobs, including after storage is built. An unreachable candidate does not permanently block other choices.
 - Bound farmers, shepherds, miners, lumberjacks, builders and soldiers look for slots matching their retained profession. Traded villagers also keep their profession; other eligible adults can retarget. Destroyed or claimed workstations release a job claim, but an unloaded workstation alone does not.
 - A bound resident with an uncertified remembered job releases the claim while retaining profession and offers. The menu may report **“N workers need a certified workshop — open Buildings → Certify”**. Certify a matching building around the workstation to make its slots available; the warning also counts other jobless employed professions, not just residents from older worlds.
@@ -44,10 +44,11 @@ Builder workshops, mines and lumber camps can use a crafting table or barrel; mi
 
 ## Rest and routes
 
-- At night a bound resident with a roofed home bed can sleep there. Other resting or idle residents seek an unoccupied roofed standing place near a reachable settlement bed. Panic and soldier duty take priority.
+- At night a bound resident with a roofed home bed can sleep there. Residents claim only roofed beds as homes (and release a home whose roof is removed), so an open-air bed stays free for unbound villagers; a resident without a roofed bed draws no stored rations (see [breeding](breeding.md)). Other resting or idle residents seek an unoccupied roofed standing place near a reachable settlement bed. Panic and soldier duty take priority.
+- As in vanilla, using a bed a villager sleeps in only wakes that villager; it stays up for 100 ticks, so the next use puts the player to bed.
 - Rest takes precedence over hauling and economy travel: workers keep their carried items while going home. Visible hostiles and recent damage can cause panic; hostile sensing checks line of sight.
-- Resident routes and short walks stay in entity-simulated chunks. Villagers can wade through water at their feet, but not head-height water or lava. Blocked routes require a usable path.
-- Villagers open wooden doors along their routes, not iron or copper doors. They close doors they opened after passing, waiting for another villager occupying or approaching the doorway; they leave player-opened doors alone.
+- Resident routes and short walks stay in entity-simulated chunks. Villagers can wade through water at their feet, but not head-height water or lava. Water is wadeable only when the row above the feet is dry, so a baby, whose head is in its foot row, cannot walk onto the floor of a pond. Blocked routes require a usable path.
+- Villagers open wooden doors along their routes, not iron or copper doors. They close doors they opened after passing, waiting for another villager occupying or approaching the doorway; they also close a door a player left open once they have passed through it (vanilla `InteractWithDoor` remembers every door on the route).
 
 ## Miners
 
@@ -60,7 +61,8 @@ Builder workshops, mines and lumber camps can use a crafting table or barrel; mi
 ## Lumberjacks
 
 - Certified lumber camps assign lumberjacks. With `mob_griefing` enabled during work hours, they search simulated columns within the settlement radius for mature log trunks with natural, nonpersistent leaves, cut them and replant the matching sapling (a propagule for mangroves) if the soil and space remain suitable.
-- The saved search cursor advances and wraps; a natural camp starts its sweep at its certified grove footprint. A search attempt examines at most **128 simulated columns**. Trees in inactive chunks are not targets.
+- The saved search origin and cursor visit square rings outward from the worker, restarting nearby after each harvested trunk instead of zigzagging across the village. Failed approaches keep their search progress. A search attempt examines at most **128 simulated columns** and skips at most **1,024 inactive columns**; inactive chunks are never targets.
+- The search origin is part of the lumberjack's saved progress in villager data and checkpoint and journal images. Worlds saved without it load with no origin, so the next search starts at the worker and resets the cursor; an origin that is not two integers fails the load.
 - An unreachable tree is released after a completed failed approach, or after **2,400 working ticks** outside cutting reach, and the sweep continues. Arrival, deposit and off-shift time reset that work window.
 - Certified structures protect their footprints; only the worker's own natural lumber-camp zone permits cutting within its bounds. The crown and protections are checked again before each cut.
 - Lumberjacks return when one stack reaches 64 or the mixed load totals 64, at day end, when another log cannot fit, or when their delivery closes a construction candidate's funding gap. An already-funded candidate does not trigger a trip after each log. Full or unreachable storage retains the carry.
@@ -74,5 +76,5 @@ Labels are presentation only: they are computed from live state and never saved.
 - **Building labels** hang at a building's entrance and show the home occupancy (`Дом · жильцов n/m`), each workshop with its profession and workers (`Мастерская` or, for farmers, `Ферма`), and at the bell a summary with the settlement name, owner, resident count, working and unemployed residents. An ownerless village shows its autonomous state and the hint `/settlement create <name>`. The owner appears by current player name; if the name is unknown the saved name or UUID is shown. The chat summary shows the same words and counts.
 - Labels are visible within 48 blocks of the viewer once the chunk is loaded.
 - **Villager nameplates** read `Name · profession · activity` (activity: work, rest, meeting, stroll, play, panic, sleep). Children show `ребёнок` instead of a profession until they grow up. Generated plates follow the villager brain and are never saved as name tags; a name tag you apply is kept and shown instead.
-- A resting or idle villager can sit on a nearby roofed bottom stair with room above it. The seat is presentation only and disappears when the villager leaves or changes activity.
+- A resting or idle villager can sit on a nearby roofed bottom stair with room above it. Its physical body stays at a collision-checked position above the stair; the lower seat anchor is presentation only and disappears when the villager leaves or changes activity.
 - Label and nameplate text is Russian regardless of the client language.

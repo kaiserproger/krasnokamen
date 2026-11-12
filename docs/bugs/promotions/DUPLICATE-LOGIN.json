@@ -1,0 +1,46 @@
+{
+  "id": "DUPLICATE-LOGIN",
+  "verdict": "promoted",
+  "fix_commit": "e767ee11",
+  "fix_commit_full": "e767ee11841bd355ae983cdc8bed50e038f32ab1",
+  "promoted_at": "2026-11-11T17:02:55+00:00",
+  "tree_head": "be8e547d046047b0cee0d3be0c6a28d1da7c6290",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/tick/input/session.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/dimensions_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:dimensions::tests::duplicate_login_kicks_the_old_session_and_hands_over_inventory_without_duplicating": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-duplicate-login": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-duplicate-login --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/PromoteJoinInventory/.analysis/validation/20261111T170009-ledger-promote-3uy_tmob/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:dimensions::tests::duplicate_login_kicks_the_old_session_and_hands_over_inventory_without_duplicating": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/PromoteJoinInventory/.analysis/validation/20261111T132413-native-v2-duplicate-login-nyycjp0a/result.json",
+    "tree_head": "be8e547d046047b0cee0d3be0c6a28d1da7c6290",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "78b5422188066599b0c3bcb51a47f17608bd01acf745a91783350d91f8deace4",
+    "covers": [
+      "harness:entities:native-v2-duplicate-login"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteJoinInventory/.analysis/validation/20261111T170009-ledger-promote-3uy_tmob"
+}

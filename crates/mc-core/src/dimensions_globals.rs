@@ -17,6 +17,9 @@ pub struct RosterPlayer {
 #[derive(Debug)]
 pub(crate) enum Broadcast {
     Chat(mc_nbt::Tag),
+    /// Command-block output shown to operators only (vanilla `broadcastToAdmins`).
+    AdminChat(mc_nbt::Tag),
+    DefaultGameMode(crate::commands::GameMode),
     TeamChat {
         members: std::collections::BTreeSet<String>,
         content: mc_nbt::Tag,
@@ -36,6 +39,11 @@ pub(crate) enum Broadcast {
         steps: i32,
     },
     Weather(Weather, Option<i64>),
+    /// Another player's chat (public chat, `/say`, `/me`): only clients whose
+    /// chat setting is `Full` receive it, unlike the system text of `Chat`.
+    PlayerChat(mc_nbt::Tag),
+    /// A datapack reload's registry, for every other world to adopt.
+    Registry(Arc<crate::registry::CoreRegistry>),
 }
 
 /// Connections are not durable gameplay state; rebuilding this cache on join
@@ -57,11 +65,11 @@ fn game_mode(world: &TickState, entity: EntityId) -> Option<u8> {
 }
 
 fn queue_each(world: &mut TickState, mut change: impl FnMut() -> PlayerChange) {
-    let connections = std::mem::take(&mut world.connections);
-    for connection in connections.all_connections() {
+    // Collected first: `push_player` reads the connections' chat settings.
+    let connections: Vec<_> = world.connections.all_connections().collect();
+    for connection in connections {
         world.push_player(connection, change());
     }
-    world.connections = connections;
 }
 
 fn relay(world: &mut TickState, event: &Broadcast) {
@@ -69,6 +77,37 @@ fn relay(world: &mut TickState, event: &Broadcast) {
         Broadcast::Chat(content) => queue_each(world, || PlayerChange::StyledChat {
             content: content.clone(),
         }),
+        Broadcast::PlayerChat(content) => {
+            let recipients: Vec<_> = world
+                .connections
+                .all_connections()
+                .filter(|connection| world.accepts_chat(*connection))
+                .collect();
+            for connection in recipients {
+                world.push_player(
+                    connection,
+                    PlayerChange::StyledChat {
+                        content: content.clone(),
+                    },
+                );
+            }
+        }
+        Broadcast::DefaultGameMode(mode) => world.default_game_mode = *mode,
+        Broadcast::AdminChat(content) => {
+            let operators: Vec<_> = world
+                .connections
+                .all_connections()
+                .filter(|connection| world.plugin_players.is_operator(*connection))
+                .collect();
+            for connection in operators {
+                world.push_player(
+                    connection,
+                    PlayerChange::StyledChat {
+                        content: content.clone(),
+                    },
+                );
+            }
+        }
         Broadcast::TeamChat { members, content } => {
             let recipients: Vec<_> = world
                 .connections
@@ -81,6 +120,7 @@ fn relay(world: &mut TickState, event: &Broadcast) {
                         .and_then(|entity| world.connections.name_of(entity))
                         .is_some_and(|name| members.contains(name))
                 })
+                .filter(|connection| world.accepts_chat(*connection))
                 .collect();
             for connection in recipients {
                 world.push_player(
@@ -128,6 +168,9 @@ fn relay(world: &mut TickState, event: &Broadcast) {
         }
         Broadcast::TickingStep { steps } => {
             queue_each(world, || PlayerChange::TickingStep { steps: *steps })
+        }
+        Broadcast::Registry(registry) => {
+            crate::datapacks::adopt_registry(world, Arc::clone(registry));
         }
         Broadcast::Weather(..) => unreachable!("weather belongs to the overworld"),
     }

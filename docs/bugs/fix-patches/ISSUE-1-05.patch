@@ -1,0 +1,29 @@
+diff --git a/crates/mc-core/src/villager/brain/motion.rs b/crates/mc-core/src/villager/brain/motion.rs
+index 5b04854e..4c0286c4 100644
+--- a/crates/mc-core/src/villager/brain/motion.rs
++++ b/crates/mc-core/src/villager/brain/motion.rs
+@@ -322,7 +322,23 @@ pub(super) fn move_to(
+             v.navigation_search_failed = false;
+         }
+         unchanged = !changed;
+-        if (new_target || changed || due)
++        // Progress is observed only at due checks, never every brain step: a
++        // shorter path or a closer next cell means the villager is still
++        // walking its route. A pushed or blocked villager stalls and must
++        // replan from its actual position instead of keeping a stale route.
++        let mut stalled = false;
++        if due && !new_target && !changed && !v.navigation_path.is_empty() {
++            let next = v.navigation_path.last().copied();
++            let dist_sq = next.map(|cell| distance(pos, centre(cell))).unwrap_or(0.0);
++            stalled = !(v.navigation_path.len() < v.navigation_progress_len
++                || (next == v.navigation_progress_next && dist_sq < v.navigation_progress_dist_sq));
++            v.navigation_progress_len = v.navigation_path.len();
++            v.navigation_progress_next = next;
++            v.navigation_progress_dist_sq = dist_sq;
++        }
++        // A due route is reused only while progressing; a stalled villager
++        // replans from its current position even when the world is unchanged.
++        if (new_target || changed || (due && v.navigation_path.is_empty()) || stalled)
+             && cache.spend_path(state, Consumer::Brain)
+         {
+             let from = at(pos);

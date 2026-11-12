@@ -27,10 +27,24 @@ pub(super) struct Ceilings {
 
 pub(super) const CEILINGS: Ceilings = Ceilings {
     // Original ceilings measured on ffd52010, 2026-11-07.
-    cycle_modules: 189,
+    // Config owns block-log policy, 2026-11-09: config, debt and carrier
+    // blocks leave the cycle without moving runtime state.
+    // Settled-block orchestration is a tick child: 185 modules, 2026-11-09.
+    // Books is a pure encoding leaf: 184 modules, 2026-11-09.
+    // Merge ec3a463a (LedgerMobsB01) adds the sniffer, parrot and strider tick
+    // modules, all of which drive TickState: 187 modules, 2026-11-12.
+    cycle_modules: 187,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
-    vanilla_id_literals: 2_617,
+    // Canonical ITEM_REGISTRY cutover, 2026-11-11: measured 2598, no spare headroom.
+    // Merge ec3a463a (LedgerMobsB01) adds 29 mob-behaviour ids (armadillo,
+    // blueprint, loot, frog, mounts, parrot, sleep, sniffer, strider): 2646, 2026-11-12.
+    // Q04 climate variants, 2026-11-11: +1 (2647). The cow, pig, chicken and
+    // zombie_nautilus identifiers live once as blueprint::VARIANT_* constants
+    // that key both the registry mapping and the capture path.
+    // CivSimLanding merge of main 71d1c127, 2026-11-12: the ITEM_REGISTRY
+    // cutover and main's mob ids measure 2628 together, no spare headroom.
+    vanilla_id_literals: 2_628,
     path_equality: 114,
     panics: 5,
     merge_block_write_pushes: 17,

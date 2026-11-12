@@ -204,6 +204,22 @@ coverage. Composite dupe/same-block adapters also need their origin-specific
 oracle and `state["composite_origin_verified"] = row["origin"]`; concurrency
 alone is not proof of item conservation, world success, or observer agreement.
 
+The Java live-grave `destroy_during_interaction` lane submits a container click
+and an instant block break (vanilla's start-destroy input alone) in one
+client-thread batch. The consumed click and dig start, matched by the ids the
+click packet carried, and the two attributed block-log WAL records must agree
+on one server tick, so the break was not deferred; unknown record ticks do not
+qualify. Its survival instant-mining fixture derives the
+barrel hardness and axe speed from local vanilla reports and checks received
+haste and player state. No fixture-type item may be on the ground before the
+batch. After the menu closes, its component-sensitive census compares
+inventory and dropped entities against inventory plus grave contents before
+the batch, over the fixture item types plus any type now in the inventory;
+ambient ground drops of other types (kelp popping far below the arena) are out
+of scope. It excludes the newly broken holder's barrel item, and normalizes
+the selected axe's legitimate durability change; the block pre-image is a
+cross-check, not custody.
+
 ## Received components, offers and chat
 
 Protocol stacks carry `components` (actual added patch keyed by namespaced
@@ -239,6 +255,11 @@ do not reset or roll over; `snapshot.generation` identifies the current socket
 generation. Authentication still examines only that generation's received
 prompts. Structured `chat_components` remains the current connection's bounded
 diagnostic view; use cumulative `events` for cross-boundary assertions.
+The Java adapter maps the agent's applied system-chat journal to `events` and
+rejects a missing or nonzero loss counter; GUI chat history is not a fence.
+Java respawn uses the agent's `minecraft_respawn` action, which waits for
+received live-player confirmation.
+
 
 Protocol `snapshot.uuid` is the UUID accepted in LoginSuccess, not the requested
 offline identity. `snapshot.entity_id` is the actual LoginPlay local entity ID.

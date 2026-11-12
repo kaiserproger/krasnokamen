@@ -69,15 +69,19 @@ source of truth is `tools/harness/__main__.py`):
   `tools/harness/__main__.py`; any other profile fails before launching a client.
   Most `list` descriptions say where native is supported.
 - `--release` only changes `build`; every other profile ignores it.
-- `--timeout-seconds N` overrides the scenario default where the backend honors
-  it (`core-client`/`inventory` 600 s, `loader-live` 600 s, `playable` 1500 s,
-  `replay` 180 s).
+- `--timeout-seconds N` sets the per-command deadline for stage commands and
+  overrides the scenario default where the backend honors it
+  (`core-client`/`inventory` 600 s, `loader-live` 600 s,
+  `playable` 1500 s, `replay` 180 s). Stage commands have no default deadline.
 
-Receipt statuses are `passed` | `failed` | `prepared` | `interrupted`. Only real
+Receipt statuses are `passed` | `failed` | `timeout` | `prepared` | `interrupted`. Only real
 completion is `passed`. `--check`/`--prepare` (and other preparation-only modes)
 report `prepared` with exit 0, never a gameplay pass. Unknown profiles,
 unlaunchable or nonzero commands, and missing scenario evidence fail closed with
 a nonzero exit. Every timeout is failure, never success.
+Timed-out stage commands and runs interrupted by SIGINT, SIGTERM or SIGHUP
+terminate their stage descendants, including separate process groups. A timeout
+writes a `timeout` receipt; a signal writes an `interrupted` receipt naming it.
 
 Real-client and functional-native runs check prerequisites before their
 profile launches: set `SOLARIS_SERVER_BINARY` to a pinned executable and, for
@@ -278,6 +282,17 @@ warped case, including a negative control that skips a consequential tick.
 `/tick sprint`, including the civilization-seed QA sprint, removes waits but
 still executes every tick.
 
+Live pause tests await `pause_when_empty_tests::wait_for_pause`, which observes
+the tick owner's test-only pause acknowledgement and drains only broadcasts
+at or before that acknowledged tick. A quiet broadcast channel is not proof
+of pause: a busy tick can exceed the old idle-gap window. Tests for continued
+simulation await a concrete number of ticks instead.
+
+Raider casting fixtures advance real ticks until the target owner records
+acquisition, bounded by `raiders::SEARCH_INTERVAL` for the fixed fixture.
+Checkpoint/WAL tests journal every intervening tick, not just the casting tick,
+and retain all spell, projectile and recovery assertions.
+
 Concurrency: `RUST_TEST_THREADS` (first priority), else `NEXTEST_TEST_THREADS`
 (default `num-cpus`), selects the gate default; nextest's `--test-threads=N`
 overrides it (place it before any `--`). Unsupported Cargo/libtest and
@@ -340,7 +355,13 @@ Select a frozen protocol row with `--matrix tools/harness/matrix_specs/matrix.ya
 `--only-id`, `--ledger`, `--run-root`. Both graphical lanes require
 `--plugins-dir` and the private hardware-free `tools/harness/screen_audio_graph.sh`
 wrapper. On the owner host wrap every run in Main's absolute
-`tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER=` invocation.
+`tools/dev/mem-run.sh -m 6G` invocation.
+
+The wrapper points `XDG_DATA_HOME` at its private graph, where the native client
+finds no content and exits before MCP is ready. Run the harness through
+`sh -c 'XDG_DATA_HOME=<client data XDG> exec python3 -m tools.harness run native-matrix ...'`
+inside the wrapper, with that XDG's `solaris-client/` symlinking the client content
+(see [real-client gates](development/real-client-gates.md)).
 
 Optional CRAP measurement: `cargo-llvm-cov` and `cargo-crap` measure line
 coverage and cyclomatic complexity per function on one source tree. Retain the
@@ -474,6 +495,15 @@ not proven by static validation.
   finished` event under the remaining scenario deadline, not the 120-second MCP
   request cap. Slow simulation is recorded in sprint TPS and `MC_CORE_PHASE_LOG`
   phase timings; neither elapsed time nor a missing completion is success.
+  Its isolated fixture uses simulation distance 6 while keeping view distance 4:
+  the village's mine must remain active beyond the presentation window. Other
+  autonomy profiles and the global playable configuration stay unchanged.
+  House milestone capture uses the received entrance door, approaches and uses
+  it ordinarily when closed, and awaits both open halves before the existing
+  exact-bed capture. It returns to the original observer afterward. A found
+  path, bed row or exterior-wall screenshot does not replace the exact bed
+  raycast and rendered capture; saved-world route proofs are not fresh-seed
+  civilization acceptance.
 - Full workflows for graphical failures: [real-client gates](development/real-client-gates.md)
   and [live-gate triage](development/live-gate-triage.md).
 
