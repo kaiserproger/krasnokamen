@@ -4202,7 +4202,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civilization-seed-qa-ufgbv77d (server pin 107ddb91, archived under receipts/CivSimLanding/analysis): every 'settlement building list' dialog shows 'Farm: ... Wheat Seeds 0/12 — needs a farm' from the first sprint to the last (transcript.json, 40 Farm entries; e.g. 'Dirt 0/30 — no miner' early and 'Dirt 16/30 — awaiting production' late, seeds 0/12 throughout). The final checkpoint (receipts/CivSimSeed24/snap4/report.json) holds six members (2 lumberjacks, 2 nitwits, builder, miner), no farmer, no Farmer workshop among seven certified buildings, and 4 bread in total; the run's bread fell 13 -> 4 by sprint 21000 and was gone by 27000 (receipts/CivSimSeed24/REPORT.md), so no second birth (missing milestone births; r5 fx4gdz87 the same: bread gone by 42000). Cause in source (21607d42): construction_availability.rs farmer_raw lists wheat_seeds, and missing_explanation reports SourceReason::Farm while caps.farm is false; the farm blueprint's wheat cells cost seeds (docs/settlements/construction.md 'wheat costs seeds'); settlement_builds.rs debit credited loot only for felled trees (forestry::tree), so short grass a builder cleared vanished without its vanilla loot (wheat seeds, 1 in 8). No other seed source exists for a settlement without a farm."
-failing_first = "Fails with only the settlement_builds.rs debit hunks reverted (receipts/CivSimSeed24/b/seed-loot-fix-hunks.patch, sha256 3217aa68): 'clearing 42 short grass stored no wheat seeds' (receipts/CivSimSeed24/b/seed-loot-negative-control.log); on the fixed tree settlements+villager+plugin_structures 876 passed, 0 failed (receipts/CivSimSeed24/b/unit-fixed.log)."
+# Negative control (d827661e): with only the settlement_builds.rs debit hunks reverted the regression fails with 'clearing 42 short grass stored no wheat seeds' (receipts/CivSimSeed24/b/seed-loot-negative-control.log; hunks sha256 3217aa68).
+failing_first = "reported"
+fix_commit = "d827661e"
 regression = ["cargo:mc-core:settlements::construction::site_tests::street_work_clearing_short_grass_stores_its_vanilla_wheat_seeds"]
 
 [[bug]]
@@ -5072,7 +5074,9 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "CrashTestLock 2026-11-12, code reading only (not the cause of the crash-test flake, whose fixture never starts this worker): settlements/forestry.rs:126 spawns `settlement-forest` with a clone of the world's Arc<ChunkSource> (which owns the Arc<NativeStore>) and keeps no JoinHandle. When the TickState drops, the worker exits only after its current chunk generation finishes and its next recv fails, so the store (and its lease) can outlive the world; a reopen in the same process right after a stop can refuse with \"Database already open\". Fix direction: keep the JoinHandle in forestry::Cache and on drop close the request channel and join."
-failing_first = "Fails with only the forestry.rs join hunks reverted (receipts/CivSimSeed24/b/forest-fix-hunks.patch, sha256 a0599ba8): 'the forest worker still holds the native store after its world dropped' at forestry_tests.rs:625 with 16 real seed-24 regenerations queued (receipts/CivSimSeed24/b/forest-negative-control.log); on the fixed tree settlements+villager+plugin_structures 876 passed, 0 failed (receipts/CivSimSeed24/b/unit-fixed.log)."
+# Negative control (d827661e): with only the forestry.rs join hunks reverted the regression fails with 'the forest worker still holds the native store after its world dropped' at forestry_tests.rs:625 (receipts/CivSimSeed24/b/forest-negative-control.log; hunks sha256 a0599ba8).
+failing_first = "not recorded"
+fix_commit = "d827661e"
 regression = ["cargo:mc-core:settlements::forestry::tests::dropping_the_world_joins_the_forest_worker_and_releases_the_native_store"]
 
 [[bug]]
