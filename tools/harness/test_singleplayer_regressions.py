@@ -8,8 +8,13 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from tools.harness import regressions, scenarios
+from tools.harness import regressions, runtime, scenarios
 from tools.harness.backends import singleplayer_regressions as sp
+
+
+def setUpModule() -> None:
+    # .analysis/ is gitignored, so a fresh checkout or worktree lacks it.
+    (runtime.REPO_ROOT / ".analysis").mkdir(exist_ok=True)
 
 
 class SingleplayerRegressionTests(unittest.TestCase):

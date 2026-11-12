@@ -12,6 +12,11 @@ from . import __main__ as cli
 from . import loader, profiles, runtime
 
 
+def setUpModule() -> None:
+    # .analysis/ is gitignored, so a fresh checkout or worktree lacks it.
+    (runtime.REPO_ROOT / ".analysis").mkdir(exist_ok=True)
+
+
 class LoaderV2Tests(unittest.TestCase):
     def test_java_clients_use_private_home_for_all_platforms(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
