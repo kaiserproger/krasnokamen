@@ -1,0 +1,38 @@
+diff --git a/crates/mc-core/src/shrieker.rs b/crates/mc-core/src/shrieker.rs
+index 844512a8..0ccafc16 100644
+--- a/crates/mc-core/src/shrieker.rs
++++ b/crates/mc-core/src/shrieker.rs
+@@ -278,12 +278,15 @@ pub(crate) fn changed(state: &mut TickState, pos: BlockPos) {
+             z: pos.z.div_euclid(16),
+         })
+         .and_then(|c| c.block_entities.get(&pos));
+-    let (mut entry, pending) = saved
+-        .map(|b| {
+-            decode(b, state.tick)
+-                .unwrap_or_else(|e| panic!("sculk_shrieker at {},{},{}: {e}", pos.x, pos.y, pos.z))
+-        })
+-        .unwrap_or_default();
++    let decoded = saved.map(|b| decode(b, state.tick)).transpose();
++    let (mut entry, pending) = match decoded {
++        Ok(decoded) => decoded.unwrap_or_default(),
++        Err(error) => {
++            let error = format!("sculk_shrieker at {},{},{}: {error}", pos.x, pos.y, pos.z);
++            crate::tick::refuse_record(state, pos, error);
++            return;
++        }
++    };
+     // Vanilla imports retain the scheduled block tick; native records retain
+     // an absolute deadline so replay never repeats the warning/spawn response.
+     if entry.shriek_until == 0 && property(state, pos, "shrieking") {
+diff --git a/crates/mc-core/src/tick/hydration.rs b/crates/mc-core/src/tick/hydration.rs
+index 7568b4f8..d6daa04b 100644
+--- a/crates/mc-core/src/tick/hydration.rs
++++ b/crates/mc-core/src/tick/hydration.rs
+@@ -66,6 +66,7 @@ fn decode(state: &TickState, chunk: &mc_world::Chunk) -> Result<Decoded, String>
+     crate::beacon::validate_chunk(state, chunk)?;
+     crate::conduit::validate_chunk(state, chunk)?;
+     crate::sculk::validate_chunk(state, chunk)?;
++    crate::shrieker::validate_chunk(state, chunk)?;
+     Ok(decoded)
+ }
+ 

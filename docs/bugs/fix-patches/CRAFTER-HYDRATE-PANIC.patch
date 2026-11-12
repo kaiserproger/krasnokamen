@@ -1,0 +1,19 @@
+diff --git a/crates/mc-core/src/crafter.rs b/crates/mc-core/src/crafter.rs
+index a3e84b37..6013de33 100644
+--- a/crates/mc-core/src/crafter.rs
++++ b/crates/mc-core/src/crafter.rs
+@@ -50,12 +50,12 @@ pub(crate) fn decode_chunk(
+         }
+         let fail = |error: &dyn std::fmt::Display| format!("crafter {pos:?}: {error}");
+         let Tag::Compound(fields) =
+-            mc_nbt::read_network(&mut bytes.as_slice()).expect("validated crafter NBT")
++            mc_nbt::read_network(&mut bytes.as_slice()).map_err(|e| fail(&e))?
+         else {
+             return Err(fail(&"expected compound"));
+         };
+         let (settings, slots) = mc_data::storage_blocks::decode_crafter(&fields, &registry.items)
+-            .expect("validated crafter fields");
++            .map_err(|e| fail(&e))?;
+         decoded.push((key, settings, slots));
+     }
+     Ok(decoded)

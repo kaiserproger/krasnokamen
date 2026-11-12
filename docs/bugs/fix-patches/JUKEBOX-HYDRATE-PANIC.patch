@@ -1,0 +1,13 @@
+diff --git a/crates/mc-core/src/tick/hydration.rs b/crates/mc-core/src/tick/hydration.rs
+index bd995743..d6daa04b 100644
+--- a/crates/mc-core/src/tick/hydration.rs
++++ b/crates/mc-core/src/tick/hydration.rs
+@@ -51,7 +51,7 @@ fn decode(state: &TickState, chunk: &mc_world::Chunk) -> Result<Decoded, String>
+         hives: crate::bees::decode_chunk(&state.hives, registry, chunk)
+             .map_err(|e| e.to_string())?,
+         jukeboxes: crate::jukebox::decode_chunk(&state.jukeboxes, registry, chunk)
+-            .unwrap_or_else(|error| panic!("resident jukebox rejected: {error}")),
++            .map_err(|e| e.to_string())?,
+         campfires: crate::campfire::decode_chunk(&state.campfires, registry, chunk)?,
+         lecterns: crate::lectern::decode_chunk(&state.lecterns, registry, chunk)?,
+         brewing: crate::brewing::decode_chunk(&state.brewing, registry, chunk)?,

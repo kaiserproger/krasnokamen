@@ -502,7 +502,22 @@ mod tests {
             record(1, serde_json::to_vec(&invalid).unwrap()),
         );
         assert!(snapshot_globals(&records).is_ok());
+        // Vanilla frameMarkers has no cap (MAP-FRAME-MARKER-RECOVERY-LIMIT): more than 256 recover.
         invalid.frame_markers = (0..257).map(|x| (x, 65, 0)).collect();
+        records.insert(
+            "map/3".into(),
+            record(1, serde_json::to_vec(&invalid).unwrap()),
+        );
+        assert!(snapshot_globals(&records).is_ok());
+        // Banner tracking stays capped at 256.
+        invalid.frame_markers.clear();
+        invalid.banners = (0..257)
+            .map(|x| mc_core::maps::Banner {
+                pos: [x, 65, 0],
+                color: "white".into(),
+                name: None,
+            })
+            .collect();
         records.insert(
             "map/3".into(),
             record(1, serde_json::to_vec(&invalid).unwrap()),

@@ -1,0 +1,60 @@
+diff --git a/crates/mc-core/src/beacon.rs b/crates/mc-core/src/beacon.rs
+index 9c345a59..1787d184 100644
+--- a/crates/mc-core/src/beacon.rs
++++ b/crates/mc-core/src/beacon.rs
+@@ -89,25 +89,25 @@ pub(crate) fn validate_chunk(state: &TickState, chunk: &mc_world::Chunk) -> Resu
+     Ok(())
+ }
+ 
++/// The stored fields, or the chunk refusal when the record is undecodable.
+ fn image(state: &mut TickState, pos: BlockPos) -> Option<Vec<(String, Tag)>> {
+-    Some(
+-        state
+-            .world
+-            .chunk(ChunkPos {
+-                x: pos.x.div_euclid(16),
+-                z: pos.z.div_euclid(16),
+-            })
+-            .and_then(|chunk| chunk.block_entities.get(&pos))
+-            .map(|bytes| {
+-                let mut reader = bytes.as_slice();
+-                let tag = mc_nbt::read_network(&mut reader).expect("loaded beacon NBT");
+-                let Tag::Compound(fields) = tag else {
+-                    panic!("beacon BE must be a compound")
+-                };
+-                fields
+-            })
+-            .unwrap_or_default(),
+-    )
++    let decoded = state
++        .world
++        .chunk(ChunkPos {
++            x: pos.x.div_euclid(16),
++            z: pos.z.div_euclid(16),
++        })
++        .and_then(|chunk| chunk.block_entities.get(&pos))
++        .map(|bytes| decode(bytes))
++        .transpose();
++    match decoded {
++        Ok(fields) => Some(fields.unwrap_or_default()),
++        Err(error) => {
++            let error = format!("beacon at {},{},{}: {error}", pos.x, pos.y, pos.z);
++            crate::tick::refuse_record(state, pos, error);
++            None
++        }
++    }
+ }
+ fn selection(fields: &[(String, Tag)], key: &str) -> Option<EffectId> {
+     fields.iter().find_map(|(name, tag)| match tag {
+diff --git a/crates/mc-core/src/tick/hydration.rs b/crates/mc-core/src/tick/hydration.rs
+index e5e5a1cb..d6daa04b 100644
+--- a/crates/mc-core/src/tick/hydration.rs
++++ b/crates/mc-core/src/tick/hydration.rs
+@@ -63,6 +63,7 @@ fn decode(state: &TickState, chunk: &mc_world::Chunk) -> Result<Decoded, String>
+             state.tick,
+         )?,
+     };
++    crate::beacon::validate_chunk(state, chunk)?;
+     crate::conduit::validate_chunk(state, chunk)?;
+     crate::sculk::validate_chunk(state, chunk)?;
+     crate::shrieker::validate_chunk(state, chunk)?;

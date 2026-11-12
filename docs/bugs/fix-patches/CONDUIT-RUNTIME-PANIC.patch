@@ -1,0 +1,31 @@
+diff --git a/crates/mc-core/src/conduit.rs b/crates/mc-core/src/conduit.rs
+index 6925ebf8..0cac7f45 100644
+--- a/crates/mc-core/src/conduit.rs
++++ b/crates/mc-core/src/conduit.rs
+@@ -275,7 +275,13 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
+         {
+             continue;
+         }
+-        let old = image(state, pos).unwrap_or_else(|err| panic!("{err}"));
++        let old = match image(state, pos) {
++            Ok(old) => old,
++            Err(error) => {
++                crate::tick::refuse_record(state, pos, error);
++                continue;
++            }
++        };
+         let size = frame_size(state, pos);
+         if size >= 16 {
+             let radius = (size / 7 * 16) as f64;
+diff --git a/crates/mc-core/src/tick/hydration.rs b/crates/mc-core/src/tick/hydration.rs
+index 6cffd8c1..d6daa04b 100644
+--- a/crates/mc-core/src/tick/hydration.rs
++++ b/crates/mc-core/src/tick/hydration.rs
+@@ -64,6 +64,7 @@ fn decode(state: &TickState, chunk: &mc_world::Chunk) -> Result<Decoded, String>
+         )?,
+     };
+     crate::beacon::validate_chunk(state, chunk)?;
++    crate::conduit::validate_chunk(state, chunk)?;
+     crate::sculk::validate_chunk(state, chunk)?;
+     crate::shrieker::validate_chunk(state, chunk)?;
+     Ok(decoded)
