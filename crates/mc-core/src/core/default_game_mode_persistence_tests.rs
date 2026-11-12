@@ -33,6 +33,15 @@ fn default_game_mode_survives_wal_restart_and_checkpoint_and_joins_new_players()
     let load =
         || recover_dimension_state(&config, crate::dimensions::Dimension::Overworld).unwrap();
     let mut state = load();
+    for dimension in [
+        crate::dimensions::Dimension::Nether,
+        crate::dimensions::Dimension::End,
+    ] {
+        state.other_dimensions.insert(
+            dimension,
+            Box::new(recover_dimension_state(&config, dimension).unwrap()),
+        );
+    }
     let operator = ConnectionId(3);
     let (output, _, _) = crate::tick::run_tick(
         &mut state,
