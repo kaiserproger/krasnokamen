@@ -108,7 +108,7 @@ _BOOLEAN_PROFILE_VERDICTS = {
 }
 _PROFILE_VERDICTS = {
     'village-qa': ('settlement_acceptance', frozenset({
-        'door_walk', 'sleep_return', 'farmer_harvest', 'miner_deposit', 'lumberjack',
+        'door_walk', 'sleep_return', 'night_door', 'farmer_harvest', 'miner_deposit', 'lumberjack',
     })),
     'village-autonomy-qa': ('autonomy_acceptance', _AUTONOMY_VERDICTS),
     'claim-only-qa': ('claim_acceptance', frozenset({

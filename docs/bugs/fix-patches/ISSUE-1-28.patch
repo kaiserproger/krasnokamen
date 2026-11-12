@@ -1,0 +1,22 @@
+diff --git a/crates/mc-core/src/tick.rs b/crates/mc-core/src/tick.rs
+index 3b957fb7..62de0d68 100644
+--- a/crates/mc-core/src/tick.rs
++++ b/crates/mc-core/src/tick.rs
+@@ -1723,6 +1723,9 @@ fn run_dimension_tick_inner<'a>(
+     // 6. Publish: chunk list + entity wire views + per-connection outbox
+     // drain. Readers hold the snapshot `Arc`; unchanged chunks share theirs.
+     let publish_start = std::time::Instant::now();
++    // Native commit-tail owners (including villager work and doors) can write
++    // after the main block fold. Publish their actual chunk afterimages, not
++    // an older chunk beside newer block deltas.
+     // Canonical structure work may run in the resident commit tail, after
+     // the early plugin-write drain. Seal those writes with debit/cursor now,
+     // using final owner post-images (a door/shape may have evolved meanwhile).
+@@ -1737,6 +1740,7 @@ fn run_dimension_tick_inner<'a>(
+                     .expect("committed native block remains loaded through tick seal"),
+             }
+         }));
++    state.world.fold_overlay();
+     let chunks = state.world.snapshot();
+     let snapshot_time = publish_start.elapsed();
+     let views_start = std::time::Instant::now();

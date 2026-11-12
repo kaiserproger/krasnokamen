@@ -1,0 +1,12 @@
+diff --git a/crates/mc-core/src/villager/doors.rs b/crates/mc-core/src/villager/doors.rs
+index 0411244d..13b76050 100644
+--- a/crates/mc-core/src/villager/doors.rs
++++ b/crates/mc-core/src/villager/doors.rs
+@@ -132,6 +132,7 @@ pub(super) fn interact(
+         if in_door || approaching || needed_by_other(state, slot, lower) {
+             return true;
+         }
++        set_open(state, lower, false, changes);
+         false
+     });
+ }
