@@ -18,7 +18,10 @@ pub(super) struct EntityInterest {
     bosses: HashSet<EntityId>,
     dirty: HashSet<EntityId>,
     ready: HashSet<EntityId>,
-    scheduled: HashMap<EntityId, u64>,
+    /// Armed movement deadline of a row, and whether movement was already pending when it was armed
+    /// (`true`: the deadline is delivery debt and stays `ready` if credit rejects it; `false`: a
+    /// speculative visit, which must behave like the per-tick visit it replaces).
+    scheduled: HashMap<EntityId, (u64, bool)>,
     due: BinaryHeap<Reverse<(u64, i32)>>,
     order: Vec<Order>,
     resume: Option<Order>,
@@ -161,12 +164,17 @@ impl EntityInterest {
                 }
                 self.due.pop();
                 let id = EntityId(id);
-                if self.scheduled.get(&id) != Some(&tick) {
+                let Some(&(at, pending)) = self.scheduled.get(&id) else {
+                    continue;
+                };
+                if at != tick {
                     continue;
                 }
                 self.scheduled.remove(&id);
                 if self.visible.contains_key(&id) && viewer.tracked_entities.contains_key(&id) {
-                    self.ready.insert(id);
+                    if pending {
+                        self.ready.insert(id);
+                    }
                     self.dirty.insert(id);
                 }
             }
@@ -235,10 +243,18 @@ impl EntityInterest {
             });
         if !interior {
             self.changed(snapshot, viewer, distance, id);
-        } else if delta.appearance_changed || delta.motion_changed {
+        } else if delta.appearance_changed {
+            self.dirty.insert(id);
+        } else if delta.motion_changed && !self.scheduled.contains_key(&id) {
             // Keep changed movement in canonical credit order even before
             // its due tick. Only completed rows may arm a deadline: arming
             // rows behind a blocked cursor would invent delivery debt.
+            // A row that already holds a deadline is visited at that tick
+            // whatever it does meanwhile, and a visit before it only
+            // re-arms the same deadline: skipping it is output-identical
+            // and spares every moving row a hash insert and a visit per
+            // tick (bottleneck: `delta`/`completed`/`entity_movement` and the
+            // dirty set were 20 % of the fanout threads' self time, window c).
             self.dirty.insert(id);
         }
     }
@@ -394,29 +410,43 @@ impl EntityInterest {
         self.ready.contains(&id)
     }
 
+    /// `entity` was visited: it leaves the visit set, and its next movement deadline is armed.
+    ///
+    /// A row visited off its due tick (`!due`) is armed for its next due tick whether or not movement
+    /// is pending yet: the visit at that tick sends what has accumulated against the client baseline,
+    /// exactly what the per-tick visits of a moving row would have found, and `delta` skips an armed
+    /// row. A row visited on its due tick that sent movement (`moved`) is armed for the following
+    /// one, since it is evidently still moving. A row that did neither is not armed: it is visited
+    /// again when it next changes. Only a deadline armed with movement already pending is delivery
+    /// debt (`ready` when it fires); the others are visits that a changing row would have made
+    /// anyway, so credit rejection at that tick leaves them exactly as the per-tick visit did.
+    /// Rows blocked by credit never complete, so they arm nothing. Fence: `entity_interest_tests`,
+    /// `armed_rows_*` there.
     pub(super) fn completed(
         &mut self,
         entity: &EntityView,
         tracked: &TrackedEntity,
         tick: u64,
         due: bool,
+        moved: bool,
     ) {
         if !self.seeded {
             return;
         }
         self.dirty.remove(&entity.id);
         self.ready.remove(&entity.id);
-        if !due
-            && (entity_movement(entity, tracked.baseline).is_some()
-                || tracked.head_yaw != pack_degrees(entity.head_yaw))
-        {
+        if !due || moved {
+            let pending = !due
+                && (entity_movement(entity, tracked.baseline).is_some()
+                    || tracked.head_yaw != pack_degrees(entity.head_yaw));
             let interval =
                 mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(entity.type_id)
                     .map_or(1, |contract| u64::from(contract.update_interval).max(1));
             let phase =
                 (tick % interval + entity.id.0.rem_euclid(interval as i32) as u64) % interval;
             let next = tick.saturating_add(interval - phase);
-            if self.scheduled.insert(entity.id, next) != Some(next) {
+            let before = self.scheduled.insert(entity.id, (next, pending));
+            if before.map(|(at, _)| at) != Some(next) {
                 self.due.push(Reverse((next, entity.id.0)));
             }
         } else {

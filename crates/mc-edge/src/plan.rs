@@ -1772,7 +1772,7 @@ fn plan_entities(
         let turned = due && tracked.head_yaw != packed_head;
         let resend = tracked.resend;
         if !stale && !resend && movement.is_none() && !turned {
-            interest.completed(entity, tracked, snapshot.tick, due);
+            interest.completed(entity, tracked, snapshot.tick, due, false);
             continue;
         }
         let update_start = out.len();
@@ -1837,13 +1837,14 @@ fn plan_entities(
             tracked.appearance = Arc::clone(&entity.appearance);
             tracked.resend = false;
         }
+        let moved = movement.is_some() || turned;
         if let Some(packet) = movement {
             tracked.baseline = packet.next;
         }
         if turned {
             tracked.head_yaw = packed_head;
         }
-        interest.completed(entity, tracked, snapshot.tick, due);
+        interest.completed(entity, tracked, snapshot.tick, due, moved);
     }
     viewer.entity_interest = interest;
 }

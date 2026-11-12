@@ -377,3 +377,114 @@ fn changed_motion_preserves_deadline_appearance_and_credit_cadence() {
     assert!(plan_entities_for(&out, &mut viewer, 32).is_empty());
     assert_eq!(viewer.tracked_entities[&id].baseline.0, [9.25, 64.0, 8.0]);
 }
+
+/// A cow that moves every tick is visited about twice per movement period (the visit that arms its
+/// deadline, then the deadline), not every tick, and still receives exactly the moves a per-tick visit
+/// would send: one per due tick, against the latest position. Once it stops, it costs one more visit.
+#[test]
+fn armed_rows_skip_intermediate_ticks_and_deliver_at_the_deadline() {
+    use mc_core::blueprint::MovementClass;
+    use mc_core::entities::{ColdFields, EntityKind, EntityStore};
+
+    let mut store = EntityStore::default();
+    let id = EntityId(10);
+    let type_id = type_id_of("minecraft:cow");
+    let interval = u64::from(
+        mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id)
+            .unwrap()
+            .update_interval,
+    );
+    let slot = store.spawn(
+        id,
+        uuid::Uuid::from_u128(10),
+        EntityKind::Mob { type_id },
+        ColdFields {
+            pos: [9.0, 64.0, 8.0],
+            vel: [0.0; 3],
+            yaw: 0.0,
+            pitch: 0.0,
+            ground: true,
+            health: 20.0,
+            breed_cooldown: 0,
+            pickup_delay: 0,
+            item: None,
+            appearance: Arc::new(EntityAppearance::default()),
+            movement: MovementClass::Walker,
+            half_width: 0.3,
+            height: 1.8,
+            speed: 0.1,
+            attack_damage: 1.0,
+            sight_range: 16.0,
+            attack_reach: 1.0,
+        },
+    );
+    let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
+    viewer.loaded_chunks.insert((0, 0), 0);
+    let mut out = output(vec![], vec![], ChangeSet::default());
+    let snapshot = Arc::get_mut(&mut out.snapshot).unwrap();
+    snapshot.entities = store.views();
+    snapshot.tick = (0..interval * 2)
+        .find(|&tick| entity_movement_due(snapshot.entities.get(id).unwrap(), tick, None))
+        .unwrap();
+    assert!(
+        !plan_entities_for(&out, &mut viewer, 32).is_empty(),
+        "spawn"
+    );
+
+    let periods = 5;
+    let mut visits = 0;
+    let mut sent = 0;
+    let mut due_ticks = 0;
+    let mut x = 9.0;
+    for _ in 0..periods * interval {
+        x += 0.2;
+        store.set_pos(slot, [x, 64.0, 8.0]);
+        let snapshot = Arc::get_mut(&mut out.snapshot).unwrap();
+        snapshot.tick += 1;
+        snapshot.entities = store.views();
+        let due = entity_movement_due(snapshot.entities.get(id).unwrap(), snapshot.tick, None);
+
+        let index = TickPlanIndex::with_previous(&out, viewer.previous_entities());
+        let mut interest = std::mem::take(&mut viewer.entity_interest);
+        let mut scratch = PlanScratch::default();
+        interest.prepare(&out.snapshot, &mut viewer, 4, &index, &mut scratch, 32);
+        visits += scratch.visible.len();
+        viewer.entity_interest = interest;
+
+        let packets = plan_entities_for(&out, &mut viewer, 32);
+        let moves = packets
+            .iter()
+            .filter(|packet| packet.id == MoveEntityPos::ID)
+            .count();
+        assert_eq!(
+            moves,
+            usize::from(due),
+            "one move per due tick, none between"
+        );
+        if due {
+            due_ticks += 1;
+            sent += moves;
+            assert_eq!(viewer.tracked_entities[&id].baseline.0, [x, 64.0, 8.0]);
+        }
+    }
+    assert_eq!(sent, due_ticks);
+    assert!(
+        visits <= 2 * periods as usize + 1,
+        "{visits} visits in {periods} periods: armed rows must not be visited between deadlines"
+    );
+
+    // Stopped: one visit may remain (the deadline armed by the last move), then none.
+    let mut after = 0;
+    for _ in 0..3 * interval {
+        let snapshot = Arc::get_mut(&mut out.snapshot).unwrap();
+        snapshot.tick += 1;
+        let index = TickPlanIndex::with_previous(&out, viewer.previous_entities());
+        let mut interest = std::mem::take(&mut viewer.entity_interest);
+        let mut scratch = PlanScratch::default();
+        interest.prepare(&out.snapshot, &mut viewer, 4, &index, &mut scratch, 32);
+        after += scratch.visible.len();
+        viewer.entity_interest = interest;
+        assert!(plan_entities_for(&out, &mut viewer, 32).is_empty());
+    }
+    assert!(after <= 1, "a stopped row was visited {after} times");
+}
