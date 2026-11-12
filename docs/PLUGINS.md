@@ -19,3 +19,18 @@ not compile their source. Vanilla clients can use server-only plugins.
 - Real packages: [solaris-default-plugins](https://github.com/kaiserproger/solaris-default-plugins).
 - [Experimental offline Bukkit/Forge converter](plugins/CONVERTER.md): a small,
   explicitly bounded subset, not general compatibility.
+
+## Slow callbacks
+
+One host thread delivers every durable event to every plugin, one callback at a
+time, and a callback may run up to its fuel or wall-clock limit. Until the host
+takes them, durable events (player commands, operation results, menu clicks,
+graves) wait in the core, bounded at 1024 entries (events, player changes and
+execution traces). While a quarter of that bound (256 entries) is waiting, the
+core refuses new plugin commands: the player is told the plugin is backed up and
+the command is not queued. A command refused this way is never delivered; the
+player retypes it. Commands are accepted again once the host catches up.
+Observations (joins, chat, block and kill events) are shed per plugin and never
+count toward this bound. If the bound itself is passed by events that cannot be
+refused (for example menu clicks), the core halts the world fail closed and
+logs the backlog by event kind under the `plugin.backlog` target.

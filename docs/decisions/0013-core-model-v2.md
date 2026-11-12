@@ -79,6 +79,13 @@ edge queues the burst's frames as one item. World fanout
 may reconcile to a newer snapshot. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
+Durable plugin events are bounded by their own queue, and one slow guest
+callback stalls every plugin's delivery. The core therefore refuses new plugin
+commands while a quarter of the queue capacity is already waiting; the world
+halts fail closed only when events that admission cannot refuse (menu clicks,
+graves, guest command results) pass the full capacity, and the halt log counts
+the backlog by event kind.
+
 Input-ordered chat proves native input handling, not geometry delivery: reliable
 traffic can overtake the world queue. The operator-only `solaris:setup_world_fence`
 request keeps one transient nonce per connection. A later publication must have
