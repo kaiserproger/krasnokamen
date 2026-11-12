@@ -566,11 +566,11 @@ SCENARIOS: dict[str, Scenario] = {
         limits="one profession; the morning control is not part of the gate",
     ),
     "native-village-distant-job": _entry(
-        id="native-village-distant-job", summary="A jobless resident claims a free workstation 58 blocks away",
+        id="native-village-distant-job", summary="A jobless resident claims a free workstation 72 blocks away",
         owner="core:harness", evidence="graphical", profile="scene-shot",
         scenario_id="native-village-distant-job", requires=("xvfb",),
         sources=("tools/harness/backends/scene_shot.py", "tools/harness/village_distant_job_scene.json"),
-        fixture="private native client; frozen day tick 3000; one resident of a radius-64 settlement, a certified librarian workshop 58 blocks away on a flat platform",
+        fixture="private native client; frozen day tick 3000; one resident of a radius-64 settlement, a certified librarian workshop 72 blocks away on a flat platform",
         proves="within 1200 game ticks the received villager shows the librarian profession",
         limits="flat platform route; one resident, one profession",
     ),
