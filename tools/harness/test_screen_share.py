@@ -6,7 +6,7 @@ from tools.harness import regressions, scenarios
 from tools.harness.backends import screen_share
 
 MANIFEST = '''id = "computer"
-api = "0.8.0"
+api = "0.9.0"
 
 [[client.bundles]]
 id = "computer-content"
