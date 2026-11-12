@@ -1,0 +1,78 @@
+diff --git a/crates/mc-core/src/registry.rs b/crates/mc-core/src/registry.rs
+index 32ed6f14..fde4d157 100644
+--- a/crates/mc-core/src/registry.rs
++++ b/crates/mc-core/src/registry.rs
+@@ -410,6 +410,9 @@ impl CoreRegistry {
+             .unwrap_or(0);
+         let mut hazard_flags = vec![0u8; state_count];
+         let mut mob_interactable_doors = vec![false; state_count];
++        let door_blocks = tags
++            .raw_ids("minecraft:block", "minecraft:mob_interactable_doors")
++            .unwrap_or(&[]);
+         for state in blocks.states() {
+             let name = state.block.id.as_str();
+             let mut flags = 0u8;
+@@ -443,23 +446,7 @@ impl CoreRegistry {
+                 flags |= HAZARD_MAGMA;
+             }
+             hazard_flags[state.id.0 as usize] = flags;
+-            // Embedded tags lack `wooden_doors`; the exact 12-family match
+-            // covers both registry modes (iron/copper excluded).
+-            mob_interactable_doors[state.id.0 as usize] = matches!(
+-                state.block.id.path(),
+-                "oak_door"
+-                    | "spruce_door"
+-                    | "birch_door"
+-                    | "jungle_door"
+-                    | "acacia_door"
+-                    | "dark_oak_door"
+-                    | "pale_oak_door"
+-                    | "crimson_door"
+-                    | "warped_door"
+-                    | "mangrove_door"
+-                    | "bamboo_door"
+-                    | "cherry_door"
+-            );
++            mob_interactable_doors[state.id.0 as usize] = door_blocks.contains(&state.block.raw_id);
+         }
+         let mob_interactable_doors: Arc<[bool]> = mob_interactable_doors.into();
+         let mut collision_boxes = vec![Box::default(); state_count];
+diff --git a/crates/mc-data/src/tags.rs b/crates/mc-data/src/tags.rs
+index 9857770e..c3066f48 100644
+--- a/crates/mc-data/src/tags.rs
++++ b/crates/mc-data/src/tags.rs
+@@ -272,6 +272,34 @@ const INCORRECT_FOR_STONE_OR_COPPER_TOOL: &[&str] = &[
+ ];
+ 
+ const REQUIRED_BLOCK_TAGS: &[(&str, &[&str])] = &[
++    // 26.3 `#minecraft:mob_interactable_doors`: `#wooden_doors` and the eight
++    // copper doors. The settlement tick derives its villager door table from it.
++    (
++        "minecraft:mob_interactable_doors",
++        &[
++            "minecraft:oak_door",
++            "minecraft:spruce_door",
++            "minecraft:birch_door",
++            "minecraft:jungle_door",
++            "minecraft:acacia_door",
++            "minecraft:dark_oak_door",
++            "minecraft:pale_oak_door",
++            "minecraft:crimson_door",
++            "minecraft:warped_door",
++            "minecraft:mangrove_door",
++            "minecraft:bamboo_door",
++            "minecraft:cherry_door",
++            "minecraft:poplar_door",
++            "minecraft:copper_door",
++            "minecraft:exposed_copper_door",
++            "minecraft:weathered_copper_door",
++            "minecraft:oxidized_copper_door",
++            "minecraft:waxed_copper_door",
++            "minecraft:waxed_exposed_copper_door",
++            "minecraft:waxed_weathered_copper_door",
++            "minecraft:waxed_oxidized_copper_door",
++        ],
++    ),
+     (
+         "minecraft:sniffer_diggable_block",
+         &[

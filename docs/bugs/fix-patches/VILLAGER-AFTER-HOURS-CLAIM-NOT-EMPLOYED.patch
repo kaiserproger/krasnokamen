@@ -1,0 +1,17 @@
+diff --git a/crates/mc-core/src/villager/brain.rs b/crates/mc-core/src/villager/brain.rs
+index 2154f0ab..a1848709 100644
+--- a/crates/mc-core/src/villager/brain.rs
++++ b/crates/mc-core/src/villager/brain.rs
+@@ -995,7 +995,11 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
+         }
+         // Reach the newly assigned workstation before running an old resource
+         // role: its independent work target must not prevent profession takeover.
+-        let awaiting_profession = v.activity == Activity::Work
++        // Vanilla GoToPotentialJobSite runs in the IDLE, WORK and PLAY packages
++        // (children never claim a job), so an after-hours claim is walked to in
++        // Idle as well, not only in the work period.
++        let awaiting_profession = v.age >= 0
++            && matches!(v.activity, Activity::Work | Activity::Idle)
+             && !matches!(v.data.profession, Profession::Builder | Profession::Soldier)
+             && !crate::settlements::allocator::traded(&v)
+             && assigned_profession.is_some_and(|profession| profession != v.data.profession);
