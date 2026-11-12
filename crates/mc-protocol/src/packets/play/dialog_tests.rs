@@ -77,8 +77,8 @@ fn custom_click_without_payload_is_id_then_length_one_tag_end() {
     };
     let mut bytes = Vec::new();
     packet.encode(&mut bytes).unwrap();
-    // string "krasnokamen:ok" (len 10), VarInt payload length 1, TAG_End.
-    let mut expected = vec![10];
+    // string "krasnokamen:ok" (len 14), VarInt payload length 1, TAG_End.
+    let mut expected = vec![14];
     expected.extend_from_slice(b"krasnokamen:ok");
     expected.extend_from_slice(&[1, 0]);
     assert_eq!(bytes, expected);

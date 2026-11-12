@@ -544,14 +544,9 @@ fn item_stack_item_model_component_matches_26_1_2_registry_codec() {
     let mut buf = Vec::new();
     stack.encode(&mut buf).unwrap();
 
-    assert_eq!(
-        buf,
-        vec![
-            0x01, 0x05, 0x01, 0x00, 0x0A, 0x1b, b's', b'o', b'l', b'a', b'r', b'i', b's', b'_',
-            b'l', b'o', b'a', b'd', b'e', b'r', b':', b'l', b'o', b'a', b'd', b'e', b'r', b'_',
-            b'b', b'l', b'o', b'c', b'k',
-        ]
-    );
+    let mut expected = vec![0x01, 0x05, 0x01, 0x00, 0x0A, 0x1f];
+    expected.extend_from_slice(b"krasnokamen_loader:loader_block");
+    assert_eq!(buf, expected);
     let mut cur: &[u8] = &buf;
     assert_eq!(ItemStack::decode(&mut cur).unwrap(), stack);
     assert!(cur.is_empty());

@@ -599,13 +599,10 @@ mod tests {
         };
         let mut buf = Vec::new();
         packet.encode(&mut buf).unwrap();
-        assert_eq!(
-            buf,
-            vec![
-                0x0c, b's', b'o', b'l', b'a', b'r', b'i', b's', b':', b't', b'e', b's', b't', 0xDE,
-                0xAD, 0xBE, 0xEF,
-            ]
-        );
+        let mut expected = vec![0x10];
+        expected.extend_from_slice(b"krasnokamen:test");
+        expected.extend_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]);
+        assert_eq!(buf, expected);
         let mut cursor: &[u8] = &buf;
         assert_eq!(
             ClientboundCustomPayload::decode(&mut cursor).unwrap(),
