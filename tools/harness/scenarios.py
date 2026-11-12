@@ -706,6 +706,16 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the client shows chat and system text in full mode, only system text in commands-only mode and neither in hidden mode, including after a hidden player leaves and rejoins in the Nether; a hidden client gets no text line at all (join tip, /help, unknown command); /list obeys send_command_feedback",
         limits="the native client has no chat setting, so the proxy stands in for it; a vanilla Java client also filters locally and cannot prove server filtering",
     ),
+    "native-screen-share-leave": _entry(
+        id="native-screen-share-leave",
+        summary="F8 before the screen owner answers withdraws the viewing request: the owner's later Allow grants nothing; an allowed request streams and F8 stops it",
+        owner="core:harness", evidence="graphical", profile="screen-share",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/screen_share.py",),
+        fixture="seed 100 isolated world; the shared pack's computer plugin staged with the native loader; two windowed native clients (owner shares the Test pattern via right-click and Return); client_screen_share request/answer/leave run the right-click, consent dialog and F8 paths",
+        proves="after the viewer's F8 the server delivers no permission answer and no frame for the cancelled request (ledger P4); an answered request delivers decoded frames; F8 stops them",
+        limits="the owner's consent dialog is not withdrawn by the server (the owner still answers it); requests and answers use the automation verb, not X input",
+    ),
     "native-datapack-reload": _entry(
         id="native-datapack-reload",
         summary="Live /datapack enable and disable change the recipe a native player crafts, with no restart",
