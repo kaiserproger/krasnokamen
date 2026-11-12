@@ -14,7 +14,7 @@ in 50 ms (p50 41.9/p95 48.9 ms, release build, 50 headless protocol clients);
 title options, post body, numbers, first-comment technical details, FAQ.
 Superseded: v1 region ownership deleted in ADR 0014 Phase 5; headline is not a
 v2 performance claim and current docs must not cite it as one.
-Replaced by: `docs/performance/PROFILES.md` (pending quiet-window v2 profiles)
+Replaced by: `docs/performance/PROFILES.md` (measured v2 profiles, 2026-11-13)
 and `docs/ARCHITECTURE.md`.
 
 ## docs/articles/region-owned-simulation.md (2026, v1 era)
