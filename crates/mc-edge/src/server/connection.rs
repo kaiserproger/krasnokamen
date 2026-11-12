@@ -97,8 +97,10 @@ pub(super) async fn handle_connection(
     let cancelled = lifecycle.cancelled.take().expect("one connection owner");
     let result = tokio::select! {
         biased;
-        _ = cancelled => {
-            warn!(%peer, connection = id.0, "connection closed by delivery policy");
+        cause = cancelled => {
+            // A dropped sender is a registry entry replaced or discarded without a reason.
+            let cause = cause.unwrap_or("closer dropped");
+            warn!(%peer, connection = id.0, cause, "connection closed by delivery policy");
             Err(anyhow::anyhow!("connection delivery stopped"))
         }
         result = run_connection(stream, Arc::clone(&server), id, peer.clone(), &mut lifecycle) => result,
@@ -981,7 +983,7 @@ pub(super) async fn play_writer(
                     .collect();
                 for (other, sender) in recipients {
                     if sender.try_send(frame.clone()).is_err() {
-                        connections.remove(other);
+                        connections.close(other, "latency-broadcast-reliable-full");
                         net_counters.reliable_drops.fetch_add(1, Ordering::Relaxed);
                     }
                 }

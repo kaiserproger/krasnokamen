@@ -170,6 +170,8 @@ pub(crate) mod plants;
 pub mod player;
 pub mod plugin;
 #[cfg(test)]
+mod plugin_backlog_tests;
+#[cfg(test)]
 mod plugin_blueprint_tests;
 mod plugin_graves;
 mod plugin_inventories;

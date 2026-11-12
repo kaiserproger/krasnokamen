@@ -71,6 +71,31 @@ class NativeV2ProbeTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "not found"):
                 nbt.corrupt_block_entities(Path(directory), {(9, 9, 9): corrupt})
 
+    def test_forged_wal_batch_follows_the_checkpoint_with_a_valid_frame(self) -> None:
+        import json
+        import struct
+        import zlib
+
+        from .backends import anvil_corrupt as nbt
+        from .backends import wal_forge
+
+        self.assertEqual(wal_forge.committed_tick(
+            "INFO checkpoint committed tick=427 total_ms=1\nINFO checkpoint committed tick=533 total_ms=2"), 533)
+        with self.assertRaisesRegex(RuntimeError, "no committed checkpoint"):
+            wal_forge.committed_tick("nothing")
+        raw = wal_forge.network_compound([("id", (nbt.STRING, "minecraft:sign")), ("x", (nbt.INT, 7))])
+        self.assertEqual(raw[:1], b"\x0a")
+        with tempfile.TemporaryDirectory() as directory:
+            path = wal_forge.publish_opaque_batch(Path(directory), 533, {(7, 64, 9): raw})
+            self.assertEqual(path.name, f"batch-{534:020}-{534:020}.bin")
+            frame = path.read_bytes()
+            magic, version, lo, hi, length, crc = struct.unpack("<IIQQII", frame[:32])
+            payload = frame[32:]
+            self.assertEqual((magic, version, lo, hi, length), (0x534F4C4A, 1, 534, 534, len(payload)))
+            self.assertEqual(crc, zlib.crc32(payload))
+            entry, = [json.loads(line) for line in payload.decode().splitlines()]
+            self.assertEqual(entry, {"OpaqueBlockEntity": {"pos": [7, 64, 9], "nbt": list(raw)}})
+
     def test_new_core_blocker_scenarios_are_runnable_catalog_entries(self) -> None:
         for name in ("native-v2-destroyed-chest-race", "native-v2-duplicate-login",
                      "native-v2-corrupt-block-entities", "native-v2-corrupt-chunk-near-camera"):

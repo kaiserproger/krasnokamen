@@ -1,0 +1,236 @@
+{
+ "seed": 100,
+ "server_view_distance": 6,
+ "steps": [
+  {
+   "wait_play": true
+  },
+  {
+   "cmd": "gamemode creative"
+  },
+  {
+   "tp": [
+    1000.5,
+    205,
+    1000.5,
+    0,
+    0
+   ]
+  },
+  {
+   "wait_ticks": 100
+  },
+  {
+   "cmd": "gamerule advance_time false"
+  },
+  {
+   "cmd": "gamerule spawn_mobs false"
+  },
+  {
+   "cmd": "gamerule random_tick_speed 0"
+  },
+  {
+   "cmd": "time set 3000"
+  },
+  {
+   "cmd": "fill 960 199 960 1040 199 1040 minecraft:stone"
+  },
+  {
+   "cmd": "fill 960 198 960 1040 198 1040 minecraft:stone"
+  },
+  {
+   "cmd": "fill 960 200 960 1040 202 1040 minecraft:air"
+  },
+  {
+   "cmd": "fill 1000 199 1010 1004 199 1014 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 203 1010 1004 203 1014 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 200 1010 1004 202 1010 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1014 1004 202 1014 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1010 1000 202 1014 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1004 200 1010 1004 202 1014 minecraft:cobblestone"
+  },
+  {
+   "cmd": "setblock 1004 200 1012 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 201 1012 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 200 1012 minecraft:spruce_door[facing=west,half=lower,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1004 201 1012 minecraft:spruce_door[facing=west,half=upper,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1011 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1011 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1013 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1013 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "summon minecraft:villager 1030.5 200 1011.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1030.5 200 1013.5"
+  },
+  {
+   "tp": [
+    1008.5,
+    200,
+    1012.5,
+    0,
+    0
+   ]
+  },
+  {
+   "cmd": "settlement create doorqa 40"
+  },
+  {
+   "cmd": "say vcgfence_1_created"
+  },
+  {
+   "wait_chat": "vcgfence_1_created"
+  },
+  {
+   "cmd": "settlement building certify house 1000 199 1010 1004 203 1014"
+  },
+  {
+   "cmd": "say vcgfence_2_certified"
+  },
+  {
+   "wait_chat": "vcgfence_2_certified"
+  },
+  {
+   "tp": [
+    1008.5,
+    205,
+    1012.5,
+    90,
+    30
+   ]
+  },
+  {
+   "wait_ticks": 30
+  },
+  {
+   "assert_entities": {
+    "name": "doors_start_outside",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "min": 2,
+    "box": [
+     1018,
+     199,
+     990,
+     1050,
+     202,
+     1035
+    ]
+   }
+  },
+  {
+   "cmd": "setblock 1004 200 1012 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 201 1012 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 200 1012 minecraft:spruce_door[facing=west,half=lower,hinge=left,open=true]"
+  },
+  {
+   "cmd": "setblock 1004 201 1012 minecraft:spruce_door[facing=west,half=upper,hinge=left,open=true]"
+  },
+  {
+   "cmd": "execute if block 1004 200 1012 minecraft:spruce_door[open=true] run say vcg_door_opened_by_player"
+  },
+  {
+   "cmd": "say vcgfence_3_player_opened"
+  },
+  {
+   "wait_chat": "vcgfence_3_player_opened"
+  },
+  {
+   "assert_chat": {
+    "name": "door_player_opened",
+    "contains": [
+     "vcg_door_opened_by_player"
+    ],
+    "excludes": []
+   }
+  },
+  {
+   "shot": "door-player-opened"
+  },
+  {
+   "cmd": "time set 18000"
+  },
+  {
+   "wait_ticks": 1500
+  },
+  {
+   "assert_entities": {
+    "name": "doors_both_asleep_inside",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "min": 2,
+    "box": [
+     1001,
+     199,
+     1010,
+     1003,
+     202,
+     1014
+    ],
+    "max_height": 0.5
+   }
+  },
+  {
+   "cmd": "execute if block 1004 200 1012 minecraft:spruce_door[open=false] run say vcg_door_shut_at_night"
+  },
+  {
+   "cmd": "execute if block 1004 200 1012 minecraft:spruce_door[open=true] run say vcg_door_open_at_night"
+  },
+  {
+   "cmd": "say vcgfence_4_night_checked"
+  },
+  {
+   "wait_chat": "vcgfence_4_night_checked"
+  },
+  {
+   "shot": "door-night"
+  },
+  {
+   "assert_chat": {
+    "name": "door_closed_after_residents_passed",
+    "contains": [
+     "vcg_door_shut_at_night"
+    ],
+    "excludes": [
+     "vcg_door_open_at_night"
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,20 @@
+diff --git a/crates/mc-core/src/settlements/mod.rs b/crates/mc-core/src/settlements/mod.rs
+index 54276f05..1634fb72 100644
+--- a/crates/mc-core/src/settlements/mod.rs
++++ b/crates/mc-core/src/settlements/mod.rs
+@@ -302,6 +302,7 @@ pub(crate) fn rebuild_counts(state: &mut TickState) {
+             );
+         }
+     }
++    state.settlements.grow_radii();
+ }
+ 
+ /// Incremental twin of [`rebuild_counts`]: refresh only the entities the
+@@ -332,6 +333,7 @@ pub(crate) fn refresh_counts(state: &mut TickState, changed: impl IntoIterator<I
+         });
+         state.settlements.update_household(entity, household, true);
+     }
++    state.settlements.grow_radii();
+ }
+ 
+ /// Run only after all dimension registries and entity columns have hydrated.

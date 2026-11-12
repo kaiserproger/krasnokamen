@@ -7,8 +7,21 @@ those chunks. The server must refuse exactly those chunks (one error each), keep
 ticking and keep serving the player; before the hydration owner, a corrupt
 jukebox or shrieker panicked the tick thread. The refused chunks must not stop
 checkpointing: the checkpoint after the refusal and the shutdown checkpoint both
-commit. Crafter, shelf, shulker box and conduit records cannot take this route:
-the importer validates them by their block and refuses the whole import.
+commit.
+
+Crafter and shelf records cannot take the Anvil route: the importer validates
+them by their block and refuses the whole import. They arrive through the tick
+WAL instead. After the first restart the scenario places a crafter and an oak shelf,
+stops the server cleanly and publishes one forged WAL batch (wal_forge) whose
+opaque block-entity images sit at those blocks under a foreign record id, so
+replay's id-based validator lets them through; the next start must refuse
+exactly those two chunks instead of panicking in their hydration owners.
+
+A conduit record cannot reach hydration by any route this harness can drive: the Anvil import
+and a native load validate its Target and key it by its own position, the replay validator and
+`conduit::validate_loaded` refuse a forged one when the server starts (the world does not open,
+so a WAL image makes the same panic-free exit with or without the hydration check), and command
+writes are validated. The conduit fixture is therefore not part of this scenario.
 """
 from __future__ import annotations
 
@@ -16,14 +29,18 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
-from .anvil_corrupt import INT, LONG, STRING, Edit, Tag
+from .. import runtime
+from .anvil_corrupt import BYTE, COMPOUND, INT, LIST, LONG, STRING, Edit, Tag
 from .native_v2 import _block, _echo, _point
+from .wal_forge import committed_tick, network_compound, publish_opaque_batch
 from .probe_steps import ProbeSteps
 
 SCENARIO = "native-v2-corrupt-block-entities"
 
 
 SIGN = (STRING, "minecraft:sign")
+# A record the replay validator does not check by id, holding a slot index no 3x3 or 9-slot owner accepts.
+BAD_ITEMS = (LIST, (COMPOUND, [[("Slot", (BYTE, 99)), ("id", (STRING, "minecraft:stone")), ("count", (INT, 1))]]))
 
 
 def _edit(fields: dict[str, Tag]) -> Edit:
@@ -33,38 +50,60 @@ def _edit(fields: dict[str, Tag]) -> Edit:
     return edit
 
 
-# block, setblock state (with data, so the chunk holds a record to corrupt), fields to overwrite in the
+# block, setblock state (with data, so the chunk holds a record to corrupt), edit applied to the
 # exported record, whether hydration must refuse the chunk, text the refusal must name.
-# Crafter, shelf, shulker box and conduit records are validated by the importer through their block, so
-# a corrupt one never reaches the server (mc-world test block_entities_are_validated_by_their_block).
+# Crafter and shelf records are validated by the importer through their block (mc-world test
+# block_entities_are_validated_by_their_block), so they take the WAL route (WAL_FIXTURES), and so does
+# (a conduit record cannot reach hydration: see the module docstring).
 # A beacon record only has to be a compound; its undecodable-record panic cannot be reached, so the
 # beacon fixture is the runtime-path control: an odd but decodable record is not refused and the
 # beacon keeps running every 80 ticks.
-FIXTURES: tuple[tuple[str, str, dict[str, Tag], bool, str], ...] = (
+FIXTURES: tuple[tuple[str, str, Edit, bool, str], ...] = (
     ("jukebox", 'minecraft:jukebox{RecordItem:{id:"minecraft:music_disc_13",count:1}}',
-     {"ticks_since_song_started": (LONG, -1)}, True, "jukebox"),
+     _edit({"ticks_since_song_started": (LONG, -1)}), True, "jukebox"),
     ("sculk_shrieker", "minecraft:sculk_shrieker{warning_level:1}",
-     {"warning_level": (INT, 9)}, True, "sculk_shrieker"),
-    ("beacon", 'minecraft:beacon{Levels:0}', {"id": SIGN, "Levels": (STRING, "odd")}, False, "beacon"),
+     _edit({"warning_level": (INT, 9)}), True, "sculk_shrieker"),
+    ("beacon", 'minecraft:beacon{Levels:0}', _edit({"id": SIGN, "Levels": (STRING, "odd")}), False, "beacon"),
 )
+
+# Blocks that take the WAL route: block, text the refusal must name, the forged record for a position.
+# The records use a foreign id the replay validator does not check and a slot index no owner accepts.
+WAL_FIXTURES: tuple[tuple[str, str, Callable[[dict[str, int]], list[tuple[str, Tag]]]], ...] = (
+    ("crafter", "crafter", lambda point: [("id", SIGN), ("Items", BAD_ITEMS), *_position(point)]),
+    ("oak_shelf", "shelf", lambda point: [("id", SIGN), ("Items", BAD_ITEMS), *_position(point)]),
+)
+
+
+def _position(point: dict[str, int]) -> list[tuple[str, Tag]]:
+    return [("x", (INT, point["x"])), ("y", (INT, point["y"])), ("z", (INT, point["z"]))]
+
 
 # Chunk offsets (x, z) from the player's chunk. The native client keeps its loading screen up until
 # the chunks within about 12 blocks of the camera are known, so a refused chunk may not touch the
 # player's chunk (a separate client finding); all stay inside the simulation distance of 4.
 OFFSETS = ((2, 0), (-2, 0), (0, 2))
+WAL_OFFSETS = ((2, 2), (-2, 2))
+
+
+def _centres(origin: tuple[int, int, int], offsets: tuple[tuple[int, int], ...]) -> list[dict[str, int]]:
+    chunk_x, chunk_z = origin[0] // 16, origin[2] // 16
+    return [{"x": (chunk_x + dx) * 16 + 8, "y": origin[1], "z": (chunk_z + dz) * 16 + 8}
+            for dx, dz in offsets]
 
 
 def fixture_points(origin: tuple[int, int, int]) -> list[dict[str, int]]:
-    chunk_x, chunk_z = origin[0] // 16, origin[2] // 16
-    return [{"x": (chunk_x + dx) * 16 + 8, "y": origin[1], "z": (chunk_z + dz) * 16 + 8}
-            for dx, dz in OFFSETS]
+    return _centres(origin, OFFSETS)
+
+
+def wal_points(origin: tuple[int, int, int]) -> list[dict[str, int]]:
+    return _centres(origin, WAL_OFFSETS)
 
 
 def corruptions(origin: tuple[int, int, int]) -> dict[tuple[int, int, int], Edit]:
     """The record edit per fixture position; the hook applies them to the exported world."""
     return {
-        (point["x"], point["y"], point["z"]): _edit(fields)
-        for point, (_, _, fields, _, _) in zip(fixture_points(origin), FIXTURES)
+        (point["x"], point["y"], point["z"]): edit
+        for point, (_, _, edit, _, _) in zip(fixture_points(origin), FIXTURES)
     }
 
 
@@ -105,7 +144,7 @@ def _declined(log: str) -> list[str]:
 
 
 def _prepare(steps: ProbeSteps, origin: tuple[int, int, int],
-             fixtures: tuple[tuple[str, str, dict[str, Tag], bool, str], ...],
+             fixtures: tuple[tuple[str, str, Edit, bool, str], ...],
              points: list[dict[str, int]]) -> None:
     if not callable(getattr(steps.client, "p4_restart_server", None)):
         raise RuntimeError("corrupt block entities require the clean p4_restart_server hook")
@@ -116,8 +155,8 @@ def _prepare(steps: ProbeSteps, origin: tuple[int, int, int],
     steps.report["corrupt_fixtures"] = [{**point, "block": block}
                                          for point, (block, *_rest) in zip(points, fixtures)]
     steps.client.corrupt_fixture = {
-        (point["x"], point["y"], point["z"]): _edit(fields)
-        for point, (_, _, fields, _, _) in zip(points, fixtures)
+        (point["x"], point["y"], point["z"]): edit
+        for point, (_, _, edit, _, _) in zip(points, fixtures)
     }
 
 
@@ -161,25 +200,76 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                 and loud[-1].count("unsaved entries") == len(refused_chunks))
     # The player's own chunk is intact: the platform under the player is still received.
     _block(steps, _point(origin, dy=-1), "minecraft:obsidian")
+    # Crafter and shelf records cannot come through the importer. Place the blocks, then stop cleanly:
+    # the hook publishes a forged WAL batch over the shutdown checkpoint (see wal_forge).
+    wal = wal_points(origin)
+    for point, (block, _, _) in zip(wal, WAL_FIXTURES):
+        steps.fixture(f"setblock {point['x']} {point['y']} {point['z']} minecraft:{block}")
+        _block(steps, point, f"minecraft:{block}")
+    _echo(steps, "wal_fixtures_ordered")
+    steps.report["wal_fixtures"] = [{**point, "block": block} for point, (block, _, _) in zip(wal, WAL_FIXTURES)]
+
+    def forge(world: Path) -> Path:
+        tick = committed_tick(_server_log(steps))
+        records = {
+            (point["x"], point["y"], point["z"]): network_compound(record(point))
+            for point, (_, _, record) in zip(wal, WAL_FIXTURES)
+        }
+        steps.report["forged_wal"] = {"after_checkpoint_tick": tick, "positions": [list(key) for key in records]}
+        return publish_opaque_batch(world, tick, records)
+
+    steps.client.wal_forge = forge
     # Clean shutdown: its checkpoint commits too (the log between the stop and the next start).
     stopped_at = len(_server_log(steps))
     steps.client.corrupt_fixture = None
     steps.call("minecraft_disconnect")
-    address = steps.client.p4_restart_server(steps.remaining())
+    # A hydration owner that panics on a replayed record kills the tick thread: the server exits before
+    # it listens, and the restart helper raises ChildExited.
+    try:
+        address = steps.client.p4_restart_server(steps.remaining())
+    except runtime.ChildExited as error:
+        steps.report["wal_restart_failure"] = str(error)[-800:]
+        address = None
+    steps.client.wal_forge = None
+    steps.check("server_starts_over_the_forged_wal_batch", address is not None)
     steps.call("minecraft_connect", {"server_addr": address})
     play = steps.call("minecraft_wait_for_play", {"timeout_seconds": steps.remaining()})
     steps.check("second_restart_client_entered_play", play["in_play"] is True)
     shutdown, _, restarted = _server_log(steps)[stopped_at:].partition("Solaris is listening")
     steps.check("shutdown_checkpoint_committed_beside_refused_chunks", _commits(shutdown) >= 1)
     steps.check("shutdown_checkpoint_was_not_declined", not _declined(shutdown))
+
+    def after_restart() -> str:
+        # The new process's whole log: its first line is the registry load. Hydration refuses a replayed
+        # record on the first ticks, before the listening line.
+        _, marker, started = _server_log(steps)[stopped_at:].partition("Loading game registries")
+        return marker + started
+
     # No re-import happened: the restarted server meets the same stored records and refuses them again.
-    steps.wait(lambda _: all(chunk in _server_log(steps)[stopped_at:].partition("Solaris is listening")[2]
-                             for chunk in refused_chunks), "refused_chunks_stay_refused_after_restart")
+    wal_chunks = [f"chunk ({point['x'] // 16}, {point['z'] // 16})" for point in wal]
+    steps.wait(lambda _: all(chunk in after_restart() for chunk in refused_chunks + wal_chunks),
+               "refused_chunks_stay_refused_after_restart")
+    refusals = [line for line in after_restart().splitlines() if "stored chunk unavailable" in line]
+    steps.report["refusals_after_wal_replay"] = refusals
+    for chunk, (block, named, _) in zip(wal_chunks, WAL_FIXTURES):
+        mine = [line for line in refusals if chunk in line]
+        steps.check(f"{block}_wal_record_refused_once_with_its_own_error",
+                    len(mine) == 1 and named in mine[0].lower())
+    steps.check("wal_replay_never_panicked", "panicked" not in after_restart())
+    resumed = _gametime(steps, "after_wal_replay_first")
+    steps.call("minecraft_wait_ticks", {"ticks": 100})
+    steps.check("server_keeps_ticking_after_wal_refusals", _gametime(steps, "after_wal_replay_second") > resumed + 80)
     steps.report["limits"] = [
-        "records corrupted in an exported Anvil copy and re-imported; crafter, shelf, shulker box and "
-        "conduit records cannot take this route because the importer validates them by their block",
+        "jukebox and shrieker records corrupted in an exported Anvil copy and re-imported; crafter and shelf "
+        "records cannot take this route because the importer validates them by their block, so they reach "
+        "the server as forged opaque images in a tick-WAL batch (wal_forge) published over a clean shutdown "
+        "checkpoint",
+        "no conduit fixture: no route this harness drives lets an undecodable conduit record reach "
+        "hydration (module docstring)",
         "the beacon record is decodable by construction: that fixture proves its runtime pass survives an "
         "odd record, not a refusal",
+        "the WAL-refused chunks are refused after the second start; whether a later checkpoint declines "
+        "beside them is not asserted here",
         "byte identity of a refused record is covered by the mc-core chunk_loader test, not here",
     ]
 

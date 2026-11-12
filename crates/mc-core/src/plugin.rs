@@ -1040,6 +1040,18 @@ pub(crate) fn route_command(
     {
         return false;
     }
+    // One host thread serves every plugin, so a stalled callback leaves durable
+    // events retained here. Past the limit a new command is refused, never
+    // queued: the backlog must stay under the capacity that halts the world.
+    if runtime.backlog_len() >= COMMAND_BACKLOG_LIMIT {
+        state.push_player(
+            connection,
+            crate::boundary::PlayerChange::Chat {
+                message: COMMAND_BACKLOG_REFUSAL.into(),
+            },
+        );
+        return true;
+    }
     let Some(context) = player_context(state, connection, permission >= 2) else {
         state.push_player(
             connection,

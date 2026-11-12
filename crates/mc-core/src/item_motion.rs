@@ -74,10 +74,11 @@ pub(crate) fn step<S: BlockSampler>(
 }
 
 /// Vanilla `ItemEntity.mergeWithNeighbours`: every twentieth entity tick,
-/// merge compatible item boxes expanded by `.5, 0, .5`.
-pub(crate) fn merge_neighbours(state: &mut TickState) {
+/// merge compatible item boxes expanded by `.5, 0, .5`. Returns how many
+/// item entities the pass examined (zero off the cadence).
+pub(crate) fn merge_neighbours(state: &mut TickState) -> usize {
     if !state.tick.is_multiple_of(20) {
-        return;
+        return 0;
     }
     let mut slots = std::mem::take(&mut state.serial_entity_slots);
     slots.clear();
@@ -92,24 +93,39 @@ pub(crate) fn merge_neighbours(state: &mut TickState) {
                 .is_some_and(|item| item.count > 0)
     }));
     slots.sort_unstable_by_key(|slot| item_cell(state, *slot));
+    // Merging never moves an item, so each cell is read once. Receivers run in
+    // sorted cell order and a fixed neighbour offset keeps that order, so the
+    // sorted run of each of the 27 neighbour cells only moves forward: one
+    // cursor pair per offset replaces two binary searches per neighbour whose
+    // every probe re-read a position (about 800 reads per item, a 160-180 ms
+    // spike every twentieth tick at native-100 scale).
+    let mut cells = std::mem::take(&mut state.item_merge_cells);
+    cells.clear();
+    cells.extend(slots.iter().map(|slot| item_cell(state, *slot)));
+    let mut runs = [(0, 0); 27];
 
-    for receiver in slots.iter().copied() {
+    for (index, receiver) in slots.iter().copied().enumerate() {
         if !state.entities.body(receiver).alive {
             continue;
         }
         let position = state.entities.pos(receiver);
         let receiver_id = state.entities.body(receiver).id;
-        let cell = item_cell(state, receiver);
+        let cell = cells[index];
         let mut receiver_changed = false;
+        let mut neighbour = 0;
         for y in cell.1 - 1..=cell.1 + 1 {
             for z in cell.2 - 1..=cell.2 + 1 {
                 for x in cell.0 - 1..=cell.0 + 1 {
                     let candidate_cell = (x, y, z);
-                    let start =
-                        slots.partition_point(|slot| item_cell(state, *slot) < candidate_cell);
-                    let end =
-                        slots.partition_point(|slot| item_cell(state, *slot) <= candidate_cell);
-                    for source in slots[start..end].iter().copied() {
+                    let (start, end) = &mut runs[neighbour];
+                    neighbour += 1;
+                    while *start < cells.len() && cells[*start] < candidate_cell {
+                        *start += 1;
+                    }
+                    while *end < cells.len() && cells[*end] <= candidate_cell {
+                        *end += 1;
+                    }
+                    for source in slots[*start..*end].iter().copied() {
                         if source.0 <= receiver.0 || !state.entities.body(source).alive {
                             continue;
                         }
@@ -166,8 +182,12 @@ pub(crate) fn merge_neighbours(state: &mut TickState) {
             state.appearance_changed.push(receiver_id);
         }
     }
+    let examined = slots.len();
     slots.clear();
     state.serial_entity_slots = slots;
+    cells.clear();
+    state.item_merge_cells = cells;
+    examined
 }
 
 fn item_cell(state: &TickState, slot: EntitySlot) -> (i32, i32, i32) {
@@ -251,3 +271,7 @@ pub(crate) fn throw_selected(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "item_merge_tests.rs"]
+mod merge_tests;

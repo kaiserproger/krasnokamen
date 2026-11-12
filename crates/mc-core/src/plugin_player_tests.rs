@@ -282,6 +282,103 @@ async fn menu_click_is_targeted_and_display_items_never_enter_custody() {
     assert_eq!(state.players[&entity].inventory, before);
 }
 
+/// A client that repeats a click on a plugin menu sends one durable event per
+/// click (the state id of an unchanged menu never advances). While the plugin's
+/// callbacks stall, those clicks must be dropped past the backlog limit, not fill
+/// the queue and halt the world.
+#[tokio::test]
+async fn a_stalled_plugin_drops_menu_clicks_instead_of_halting_the_world() {
+    use crate::plugin_backlog_tests::{tick_with_inputs, try_recv};
+    const CLICKS_PER_TICK: usize = 64;
+    const TICKS: usize = 64;
+    let (mut state, entity) = fixture();
+    let menu = ScriptInventoryMenu::try_new(
+        "shop-menu",
+        "Shop",
+        vec![ScriptInventoryMenuSlot::new(
+            8,
+            ScriptInventoryMenuItem::try_new("minecraft:apple", 1, Some("Buy apple".into()))
+                .unwrap(),
+        )],
+    )
+    .unwrap();
+    execute(
+        &mut state,
+        admit(
+            "shop",
+            ScriptCommand::OpenInventoryMenu {
+                player_id: ScriptPlayerId::new(1),
+                menu,
+            },
+        )
+        .await,
+    );
+    let capacity = NonZeroUsize::new(4).unwrap();
+    let (boundary, mut endpoint) = mc_script::script_boundary_pair(capacity, capacity);
+    let manifest = ScriptPluginManifest::new("shop", "Shop", "0.1.0", COMPONENT_PLUGIN_API_VERSION)
+        .declare_inventory_menus()
+        .validate()
+        .unwrap();
+    endpoint.register_plugin_routes(&manifest).unwrap();
+    state.plugin_runtime = Some(crate::plugin::PluginRuntime::with_test_boundary(boundary));
+    let clicks = |state: &TickState, count: usize| -> Vec<PlayerInput> {
+        let native = state.players[&entity].open.as_ref().unwrap();
+        (0..count)
+            .map(|_| PlayerInput::ContainerClick {
+                connection: ConnectionId(1),
+                window: native.window,
+                state_id: native.state_id,
+                slot: 8,
+                button: 0,
+                mode: ClickMode::Pickup,
+            })
+            .collect()
+    };
+    for tick in 0..TICKS {
+        let inputs = clicks(&state, CLICKS_PER_TICK);
+        let (sealed, _) = tick_with_inputs(&mut state, &inputs);
+        assert_eq!(
+            sealed,
+            Ok(true),
+            "tick {tick}: menu clicks must not halt the world while the plugin stalls"
+        );
+    }
+    assert!(
+        state.plugin_runtime.as_ref().unwrap().backlog_len()
+            < mc_script::MAX_SCRIPT_EVENT_QUEUE_CAPACITY
+    );
+
+    let written = state.tick;
+    let mut delivered_clicks = 0;
+    loop {
+        let before = delivered_clicks;
+        crate::plugin::acknowledge_events(&mut state, written);
+        while let Some(event) = try_recv(&mut endpoint) {
+            delivered_clicks += usize::from(matches!(
+                event.kind(),
+                ScriptEventKind::InventoryMenuClicked { .. }
+            ));
+        }
+        if delivered_clicks == before {
+            break;
+        }
+    }
+    assert!(delivered_clicks > 0, "clicks under the limit are delivered");
+    assert!(
+        delivered_clicks <= crate::plugin::COMMAND_BACKLOG_LIMIT + capacity.get(),
+        "clicks past the backlog limit are dropped, not queued: {delivered_clicks}"
+    );
+
+    let inputs = clicks(&state, 1);
+    let (sealed, _) = tick_with_inputs(&mut state, &inputs);
+    assert_eq!(sealed, Ok(true));
+    let mut reached_the_plugin = false;
+    while let Some(event) = try_recv(&mut endpoint) {
+        reached_the_plugin |= matches!(event.kind(), ScriptEventKind::InventoryMenuClicked { .. });
+    }
+    assert!(reached_the_plugin, "a drained plugin takes clicks again");
+}
+
 #[tokio::test]
 async fn protected_zones_restore_and_enforce_owner_operator_and_dimension() {
     let (mut state, actor) = fixture();

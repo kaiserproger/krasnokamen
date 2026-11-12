@@ -891,3 +891,6 @@ mod clock_queue_tests;
 
 #[path = "shelf_update_queue_tests.rs"]
 mod shelf_update_queue_tests;
+
+#[path = "lost_entity_frames_tests.rs"]
+mod lost_entity_frames_tests;

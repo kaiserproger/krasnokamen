@@ -213,6 +213,8 @@ AREAS = (
          "tools/harness/profiles.py (composter-chance)"),
     Area("chat-visibility", ("crates/mc-core/src/chat_visibility*", "crates/mc-core/src/dimensions_tick.rs"),
          ("profile:chat-visibility",), "tools/harness/profiles.py (chat-visibility)"),
+    Area("screen-share", ("crates/mc-edge/src/screen*",), ("scenario:native-screen-share-leave",),
+         "tools/harness/scenarios.py (native-screen-share-leave)"),
     Area("datapacks", ("crates/mc-core/src/datapacks*", "crates/mc-core/src/datapack_*",
                        "crates/mc-edge/src/recipes*"), ("profile:datapack-reload",),
          "tools/harness/profiles.py (datapack-reload)"),
@@ -244,7 +246,7 @@ VARIABLE_PROFILES = {
 # must stay inside the native allow-list in tools/harness/__main__.py (tested).
 NATIVE_WINDOWED = frozenset({
     "admin-commands", "anti-xray", "army-qa", "autocraft-qa", "block-log", "buildings-qa",
-    "chisel", "civilization-seed-qa", "chat-visibility", "claim-only-qa", "composter-chance", "datapack-reload", "dialogs",
+    "chisel", "civilization-seed-qa", "chat-visibility", "claim-only-qa", "composter-chance", "datapack-reload", "dialogs", "screen-share",
     "entities", "inventory", "native-lifecycle", "scene-shot", "settlement-map-qa",
     "singleplayer-regressions", "survival", "title-connect", "village-autonomy-qa",
     "village-owner-order-qa", "village-qa",
@@ -264,6 +266,7 @@ BACKEND_PROFILES: dict[str, tuple[str, ...]] = {
     "claim_only_qa": ("claim-only-qa",),
     "client_probes": ("core-client", "inventory", "entities", "native-lifecycle"),
     "chat_visibility": ("chat-visibility",),
+    "screen_share": ("screen-share",),
     "composter_chance": ("composter-chance",),
     "datapack_reload": ("datapack-reload",),
     "dh_gate": ("dh-gate",),

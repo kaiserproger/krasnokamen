@@ -1,0 +1,35 @@
+diff --git a/crates/mc-core/src/settlements/ui.rs b/crates/mc-core/src/settlements/ui.rs
+index 56251ca8..5d137801 100644
+--- a/crates/mc-core/src/settlements/ui.rs
++++ b/crates/mc-core/src/settlements/ui.rs
+@@ -1356,6 +1356,30 @@ fn order_create(
+         building.0.to_string(),
+         format!("solaris:{}", found.kind.name()),
+     );
++    // Checked "craft missing ingredients": plan and admit the whole chain.
++    if payload.bool("auto") == Some(true) {
++        let order = super::autocraft::Order {
++            job: job.clone(),
++            worker,
++            recipe: recipe.as_str().to_owned(),
++            count,
++            building,
++            station: at,
++            stand_at: stand,
++        };
++        let note = match super::autocraft::order(state, ctx.id, order) {
++            Ok(steps) => ctx.f(
++                Key::OrderPlanned,
++                &[
++                    ("job", &job),
++                    ("steps", &super::autocraft::describe(&steps)),
++                ],
++            ),
++            Err(super::autocraft::Refusal::Admission(failure)) => failure_text(ctx, failure),
++            Err(refusal) => ctx.f(Key::FailureOther, &[("reason", &refusal.text(ctx.lang))]),
++        };
++        return orders_screen(state, connection, ctx, &note);
++    }
+     let action = Action::ProductionStart {
+         job: job.clone(),
+         worker: worker.to_string(),

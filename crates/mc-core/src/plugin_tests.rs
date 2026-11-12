@@ -19,7 +19,7 @@ impl mc_world::ChunkGenerator for Empty {
     }
 }
 
-fn fixture() -> TickState {
+pub(crate) fn fixture() -> TickState {
     let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
     let world = crate::world::ChunkWorld::new(
         42,
@@ -350,7 +350,7 @@ fn native_wal_contains_only_touched_keys_and_replays_domain_removal_and_null() {
     state.plugins.validate().unwrap();
 }
 
-fn join_native_player(state: &mut TickState) -> crate::boundary::EntityId {
+pub(crate) fn join_native_player(state: &mut TickState) -> crate::boundary::EntityId {
     let connection = crate::boundary::ConnectionId(1);
     crate::tick::run_tick(
         state,
