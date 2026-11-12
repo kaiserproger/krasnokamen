@@ -1,0 +1,454 @@
+{
+  "seed": 100,
+  "server_view_distance": 4,
+  "client_settings": {
+    "render_distance": 6,
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule mob_drops false"
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule advance_weather false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "cmd": "weather clear"
+    },
+    {
+      "tp": [
+        1000.5,
+        175,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 200
+    },
+    {
+      "cmd": "fill 990 159 990 1010 159 1012 minecraft:grass_block"
+    },
+    {
+      "cmd": "fill 990 160 990 1010 172 1012 minecraft:air"
+    },
+    {
+      "cmd": "fill 985 160 1009 1015 176 1009 minecraft:yellow_concrete"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        12
+      ]
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "cmd": "effect give @s minecraft:night_vision 6000 0 true"
+    },
+    {
+      "wait_ticks": 200
+    },
+    {
+      "shot": "empty"
+    },
+    {
+      "cmd": "summon minecraft:zombie 1000.5 160 1003.5 {NoAI:1b,PersistenceRequired:1b,Rotation:[0f,0f],equipment:{head:{id:'minecraft:iron_helmet'}}}"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "cmd": "tick freeze"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "list_entities": {
+        "name": "alive",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "alive"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:zombie,x=1000.5,y=160,z=1003.5,distance=..2,limit=1]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "list_entities": {
+        "name": "t00",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t00"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t01",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t01"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t02",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t02"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t03",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t03"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t04",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t04"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t05",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t05"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t06",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t06"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t07",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t07"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t08",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t08"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t09",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t09"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t10",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t10"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t11",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t11"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t12",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t12"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t13",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t13"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t14",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t14"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t15",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t15"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t16",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t16"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t17",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t17"
+    },
+    {
+      "cmd": "tick step 1"
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "list_entities": {
+        "name": "t18",
+        "args": {
+          "radius": 8
+        }
+      }
+    },
+    {
+      "shot": "t18"
+    },
+    {
+      "cmd": "tick unfreeze"
+    },
+    {
+      "death_tilt": {
+        "empty": "empty",
+        "shots": [
+          "t00",
+          "t01",
+          "t02",
+          "t03",
+          "t04",
+          "t05",
+          "t06",
+          "t07",
+          "t08",
+          "t09",
+          "t10",
+          "t11",
+          "t12",
+          "t13",
+          "t14",
+          "t15",
+          "t16",
+          "t17",
+          "t18"
+        ]
+      }
+    }
+  ]
+}

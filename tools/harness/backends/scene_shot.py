@@ -294,6 +294,11 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                              and re.fullmatch(r"[A-Za-z0-9_-]+", value[key])
                              for key in ("before", "after"))
                      and type(value["day_delta"]) is int and value["day_delta"] > 0)
+        elif kind == "death_tilt":
+            valid = (isinstance(value, dict) and set(value) == {"empty", "shots"}
+                     and isinstance(value["shots"], list) and bool(value["shots"])
+                     and all(isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9_-]+", name)
+                             for name in [value["empty"], *value["shots"]]))
         elif kind == "assert_chat":
             valid = (client == "native" and isinstance(value, dict)
                      and set(value) == {"name", "contains", "excludes"}
@@ -639,6 +644,16 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                         and item.get("item_id") == "minecraft:diamond_pickaxe" and distance <= 0.6)
             probe.check("tool_wall_close_background", wall >= 10000)
             probe.check("tool_wall_visible", tool >= 500)
+        elif kind == "death_tilt":
+            from . import death_tilt_oracle
+
+            screenshots = artifact / "screenshots"
+            measured = {name: death_tilt_oracle.edges(screenshots / f"{value['empty']}.png",
+                                                      screenshots / f"{name}.png")
+                        for name in value["shots"]}
+            probe.report["death_tilt_edges"] = measured
+            for name, edges in measured.items():
+                probe.check(f"death_tilt_{name}", death_tilt_oracle.matches(name, edges))
         elif kind == "cmd":
             wait_play(probe)
             probe.call("minecraft_send_chat", {"message": value, "command": True})
@@ -778,6 +793,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-low-roof-house": "low_roof_house_scene.json",
         "native-falling-block-prediction": "falling_block_scene.json",
         "native-frozen-game-age": "frozen_game_age_scene.json",
+        "native-death-tilt": "death_tilt_scene.json",
     }
     if ctx.scenario_id in named_fixtures:
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):

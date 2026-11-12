@@ -518,6 +518,17 @@ SCENARIOS: dict[str, Scenario] = {
         proves="disabled success messages are absent, failure and chat remain visible, enabled success is visible",
         limits="native player command path; console behavior is covered separately by a Rust regression",
     ),
+    "native-death-tilt": _entry(
+        id="native-death-tilt",
+        summary="A dying zombie turns about its feet on vanilla's deathTime curve",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-death-tilt", requires=("xvfb",),
+        sources=("tools/harness/backends/scene_shot.py", "tools/harness/backends/death_tilt_oracle.py",
+                 "tools/harness/death_tilt_scene.json"),
+        fixture="private native client, one NoAI zombie killed under /tick freeze and stepped through its death against a plain backdrop",
+        proves="the silhouette's top row and tipping-side column at each stepped deathTime match the Java 26.3 frames within the measured tolerance",
+        limits="one zombie pose and camera on one rasterizer; needs a server that keeps the dead body for its 20 dead ticks",
+    ),
     "native-frozen-game-age": _entry(
         id="native-frozen-game-age",
         summary="Frozen simulated age stays fixed across teleport and local input",

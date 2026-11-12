@@ -431,6 +431,26 @@ class SceneShotTests(unittest.TestCase):
             image.save(path)
             self.assertEqual(falling_block_oracle.sand_bounds(path), (600, 300, 630, 330))
 
+    def test_named_death_tilt_scene_gates_its_own_shots(self):
+        class Context:
+            client = "native"
+            windowed = True
+            platform = None
+            scenario_id = "native-death-tilt"
+            extra_args = []
+            timeout_seconds = 300
+        with patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": ""}):
+            scenario = scene_shot.validate_scenario(Context())[0]
+            gate = [step["death_tilt"] for step in scenario["steps"] if "death_tilt" in step]
+            shots = [step["shot"] for step in scenario["steps"] if "shot" in step]
+            self.assertEqual(len(gate), 1)
+            self.assertEqual(gate[0]["empty"], "empty")
+            self.assertEqual(gate[0]["shots"], [name for name in shots if name not in ("empty", "alive")])
+            from tools.harness.backends import death_tilt_oracle
+            self.assertEqual(sorted(death_tilt_oracle.JAVA), sorted(gate[0]["shots"]))
+            with self.assertRaisesRegex(ValueError, "without overrides"):
+                scene_shot.validate_scenario(Context(), {"steps": []})
+
     def test_named_frozen_age_scene_rejects_overrides(self):
         class Context:
             client = "native"
