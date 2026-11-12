@@ -97,6 +97,11 @@ for line in sys.stdin:
     elif words[:2] == ['battle', 'roster']:
         count = 2 * state['per_side'] + 2 * (state['per_side'] // 10)
         print('Battle roster: ' + ','.join(str(uuid.uuid4()) for _ in range(count)), flush=True)
+    elif words[:2] == ['battle', 'trace']:
+        if os.environ.get('FAKE_NO_TRACE'):
+            print('Battle error: battle setup <seed> <field-100|field-1k|field-10k> [count] | battle start|pause|reset|status|roster', flush=True)
+        else:
+            print(f'Battle trace: 7 side1 r2 Advance at {words[2]}.0,64.0,{words[3]}.0 to 1.5,2.5; 8 side2 r5 Charge routing broken at 1.0,65.0,2.0 to 3.0,4.0;', flush=True)
     elif words[:2] == ['battle', 'status']:
         state['status_calls'] += 1
         per = state['per_side']
@@ -368,6 +373,78 @@ class BattleRunnerTests(unittest.TestCase):
         self.assertEqual(runner.parse_status('Battle paused tick=5 side1=1 side2=1 resident=2 active=2 horses=0')['horses'], 0)
         self.assertIsNone(runner.parse_status('Battle started tick=5'))
 
+    def test_trace_arguments_are_off_by_default_and_bounded_like_the_core(self):
+        runner = load_runner()
+        base = ['--pin', '/p', '--client', '/c', '--client-data', '/d', '--cache', '/k', '--run-dir', '/r', '--take']
+        with unittest.mock.patch('sys.argv', ['run-battle.py', *base]):
+            plain = runner.arguments()
+        self.assertEqual((plain.trace, plain.trace_every), (None, None))
+        with unittest.mock.patch('sys.argv', ['run-battle.py', *base, '--trace', '-174,316,12']):
+            traced = runner.arguments()
+        self.assertEqual((traced.trace, traced.trace_every), ((-174.0, 316.0, 12.0), 20))
+        self.assertEqual(runner.trace_command(traced.trace), 'battle trace -174 316 12')
+        self.assertEqual(runner.trace_command((0.5, -2.25, 32.0)), 'battle trace 0.5 -2.25 32')
+        for bad in (['--trace-every', '5'], ['--trace', '1,2'], ['--trace', '1,2,33'], ['--trace', '1,2,0'], ['--trace', 'nan,2,3'],
+                    ['--trace', '1,2,3', '--trace-every', '0']):
+            with unittest.mock.patch('sys.argv', ['run-battle.py', *base, *bad]), unittest.mock.patch('sys.stderr'):
+                with self.assertRaises(SystemExit):
+                    runner.arguments()
+
+    def test_trace_policy_sends_only_while_active_at_its_cadence(self):
+        runner = load_runner()
+        policy = runner.TracePolicy(20)
+        self.assertEqual(policy.batch(), 100)
+        self.assertFalse(any(policy.due(tick) for tick in range(0, 400, 7)))
+        policy.start()
+        self.assertEqual(policy.batch(), 20)
+        ticks = [500, 510, 520, 525, 539, 540, 541, 600, 619, 620]
+        self.assertEqual([tick for tick in ticks if policy.due(tick)], [500, 520, 540, 600, 620])
+        policy.stop()
+        self.assertEqual(policy.batch(), 100)
+        self.assertFalse(any(policy.due(tick) for tick in range(700, 1000, 20)))
+        coarse = runner.TracePolicy(250)
+        coarse.start()
+        self.assertEqual(coarse.batch(), 100)
+
+    def test_parse_trace_reads_members_flags_and_the_limit_marker(self):
+        runner = load_runner()
+        line = ('Battle trace: 3017 side2 r14 Charge wavering broken enemy-routing at -174.6,93.0,316.2 to -170.0,301.5;'
+                ' 12 side1 r3 Pursue at NaN,64.0,1.5 to 2.0,-3.0; (more)\n')
+        parsed = runner.parse_trace(line)
+        self.assertTrue(parsed['more'])
+        self.assertEqual(parsed['unparsed'], [])
+        self.assertEqual(parsed['members'][0], {'id': 3017, 'side': 2, 'regiment': 14, 'order': 'Charge',
+                                                'flags': ['wavering', 'broken', 'enemy-routing'],
+                                                'pos': [-174.6, 93.0, 316.2], 'to': [-170.0, 301.5]})
+        self.assertEqual((parsed['members'][1]['order'], parsed['members'][1]['flags'], parsed['members'][1]['to']), ('Pursue', [], [2.0, -3.0]))
+        self.assertEqual(runner.parse_trace('Battle trace:\n'), {'more': False, 'members': [], 'unparsed': []})
+        self.assertEqual(runner.parse_trace('Battle trace: garbage here;')['unparsed'], ['garbage here'])
+
+    def test_trace_log_pairs_each_reply_with_its_request_in_order(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as directory:
+            log = runner.TraceLog(Path(directory) / 'trace.jsonl')
+            log.request(None, probe=True)
+            log.request(140)
+            log.record('Battle trace: 1 side1 r0 Hold at 1.0,2.0,3.0 to 4.0,5.0;\n')
+            log.record('Battle trace:\n')
+            log.record('Battle trace: 2 side2 r1 Advance at 1.0,2.0,3.0 to 4.0,5.0;\n')
+            rows = [json.loads(line) for line in (Path(directory) / 'trace.jsonl').read_text().splitlines()]
+        self.assertEqual(log.rows, 3)
+        self.assertEqual([(r['requested_after_tick'], r['probe'], len(r['members'])) for r in rows], [(None, True, 1), (140, False, 0), (None, False, 1)])
+        self.assertLessEqual(rows[0]['sent_unix_ns'], rows[0]['received_unix_ns'])
+        self.assertIsNone(rows[2]['sent_unix_ns'])
+
+    def test_dry_run_shows_the_trace_plan_only_when_asked(self):
+        script = Path(__file__).with_name('run-battle.sh')
+        base = [str(script), '--dry-run', '--take', '--pin', '/p', '--client', '/c', '--client-data', '/d', '--cache', '/k', '--run-dir', '/r']
+        plain = subprocess.run(base, text=True, capture_output=True, check=True).stdout
+        self.assertNotIn('trace', plain)
+        traced = subprocess.run([*base, '--trace', '-174,316,12', '--trace-every', '20'], text=True, capture_output=True, check=True).stdout
+        self.assertIn('battle trace -174 316 12 (probe', traced)
+        self.assertIn('about every 20 recorded ticks (telemetry batches of 20), replies to /r/trace.jsonl', traced)
+        self.assertLess(traced.index('(probe'), traced.index('battle roster'))
+
     def test_server_scope_wraps_only_the_server(self):
         runner = load_runner()
         plain = argparse.Namespace(server_scope=None)
@@ -417,7 +494,7 @@ class BattleRunnerTests(unittest.TestCase):
         runner = load_runner()
         rows = [{'tick': tick, 'wall_start_unix_ns': tick * 50_000_000, 'wall_us': 20_000, 'phase_us': {'owner_post_us': 300}, 'host': None} for tick in range(1, 11)]
         quiet = argparse.Namespace(seed=1, world_seed=1, scenario='field-100', count=None, checkpoint_every_ticks=4000, phase_log=False,
-                                   status_every=0, view_distance=12, allow_marker_gaps=True, server_scope=None, take=True)
+                                   status_every=0, view_distance=12, allow_marker_gaps=True, server_scope=None, take=True, trace=None, trace_every=None)
         receipt = {'first_tick': 1, 'last_tick': 10, 'marker_gaps': 0}
         committed = lambda *ticks: ''.join(f'2026-11-11T00:00:00Z  INFO mc_core::core::journal: checkpoint committed tick={tick} total_ms=1\n' for tick in ticks)
         report = runner.take_report(quiet, rows, {'tick': 3}, receipt, 2, 10, [], 'battle setup 1 field-100', committed(1))
@@ -433,6 +510,10 @@ class BattleRunnerTests(unittest.TestCase):
         noisy = argparse.Namespace(**dict(vars(quiet), phase_log=True, status_every=100))
         reasons = runner.take_report(noisy, rows, {}, receipt, 2, 10, [], 'x', '')['unclean_reasons']
         self.assertEqual(reasons, ['phase log was on', 'battle status polled after start'])
+        traced = argparse.Namespace(**dict(vars(quiet), trace=(1.0, 2.0, 3.0), trace_every=20))
+        report = runner.take_report(traced, rows, {}, receipt, 2, 10, [], 'x', committed(1))
+        self.assertEqual(report['unclean_reasons'], ['battle trace polled after start'])
+        self.assertEqual((report['config']['trace'], report['config']['trace_every']), ('battle trace 1 2 3', 20))
         self.assertEqual(runner.take_report(quiet, rows, {}, receipt, 2, 10, [], 'x', committed(1))['server_checkpoints']['next_periodic_margin_ticks'], 4000 - 9)
         ignored = 'WARN mc_edge::config: ignoring unknown config key origin=/r/server.toml key=data.checkpoint_every_ticks\n'
         report = runner.take_report(quiet, rows, {}, receipt, 2, 10, [], 'x', ignored)
@@ -497,6 +578,10 @@ class BattleRunnerTests(unittest.TestCase):
             self.assertIsNotNone(checkpoints['last_before_window'])
             self.assertGreater(checkpoints['next_periodic_margin_ticks'], 0)
             self.assertGreaterEqual(take['window']['samples'], 300)
+            self.assertNotIn('trace', take['config'])
+            self.assertFalse(any(command.startswith('battle trace') for command in commands))
+            self.assertFalse((run / 'trace.jsonl').exists())
+            self.assertNotIn('trace', json.loads((run / 'manifest.json').read_text()))
             self.assertEqual(take['census_before_start']['regiments'], 4)
             result = json.loads((run / 'result.json').read_text())
             self.assertEqual((result['status'], result['take_clean']), ('complete', True))
@@ -512,6 +597,41 @@ class BattleRunnerTests(unittest.TestCase):
             self.assertEqual((run / 'env.txt').read_text(), '1')
             self.assertIn('checkpoint_every_ticks = 1200', (run / 'server.toml').read_text())
             self.assertFalse((run / 'take.json').exists())
+
+    def test_take_with_trace_probes_after_staging_and_traces_the_battle_at_its_cadence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            commands, run = self.run_fake_battle(Path(directory), '--take', '--checkpoint-every-ticks', '1000', '--trace', '-174,316,12', '--trace-every', '20')
+            traced = [index for index, command in enumerate(commands) if command == 'battle trace -174 316 12']
+            start, pause = commands.index('battle start'), commands.index('battle pause')
+            self.assertEqual(len(traced), len([c for c in commands if c.startswith('battle trace')]))
+            self.assertLess(commands.index('battle setup 9 field-100 10'), traced[0])
+            self.assertLess(traced[0], commands.index('battle roster'))
+            census = max(i for i, command in enumerate(commands[:start]) if command == 'battle status')
+            self.assertEqual([i for i in traced[1:] if i < census], [])
+            self.assertGreaterEqual(len([i for i in traced if start < i < pause]), 5)
+            self.assertEqual([i for i in traced if i > pause], [])
+            self.assertNotIn('battle status', commands[start:pause])
+            rows = [json.loads(line) for line in (run / 'trace.jsonl').read_text().splitlines()]
+            self.assertEqual(len(rows), len(traced))
+            self.assertEqual((rows[0]['probe'], rows[0]['requested_after_tick']), (True, None))
+            ticks = [row['requested_after_tick'] for row in rows[1:]]
+            self.assertFalse(any(row['probe'] for row in rows[1:]))
+            self.assertTrue(all(later - earlier >= 20 for earlier, later in zip(ticks, ticks[1:])))
+            self.assertTrue(all(row['members'][0]['pos'] == [-174.0, 64.0, 316.0] and row['members'][1]['flags'] == ['routing', 'broken']
+                                for row in rows))
+            take = json.loads((run / 'take.json').read_text())
+            self.assertEqual(take['unclean_reasons'], ['battle trace polled after start'])
+            self.assertEqual((take['config']['trace'], take['config']['trace_every']), ('battle trace -174 316 12', 20))
+            self.assertEqual(json.loads((run / 'result.json').read_text())['trace'], 'trace.jsonl')
+            self.assertEqual(json.loads((run / 'manifest.json').read_text())['trace_every'], 20)
+
+    def test_trace_on_a_pin_without_the_command_fails_before_the_roster(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, run = self.run_fake_battle(Path(directory), '--take', '--checkpoint-every-ticks', '1000', '--trace', '1,2,3',
+                                               expect_success=False, FAKE_NO_TRACE='1')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Battle error:', json.loads((run / 'result.json').read_text())['error'])
+            self.assertNotIn('battle start', (run / 'commands.txt').read_text().splitlines())
 
 
 if __name__ == '__main__':

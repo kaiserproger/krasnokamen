@@ -154,6 +154,19 @@ against a 23.8 ms maximum on every other tick), so ticks of the window with
 threshold is a heuristic calibrated on that ladder; the log line is exact. Either
 one inside the window makes the take not clean.
 
+`--trace X,Z,R` (off by default) is a diagnostic for one spot of the field. Right
+after `Battle staged:` the runner sends one `battle trace X Z R` as a probe; a pin
+without the command (older than `b31c2540`) fails the run there, before the
+roster. From the end of the population barrier until the recorder stops it sends
+the command about every `--trace-every` recorded ticks (default 20; the
+telemetry long-poll then asks for batches of that many samples instead of 100).
+Each reply goes to `trace.jsonl` beside `take.solrec`, paired with the telemetry
+tick it was requested after (`requested_after_tick`, `null` for the probe) and
+parsed per member: `id`, `side`, `regiment`, `order`, `flags`, `pos`, `to` (the
+heading target), plus `more` when the core's 400-member cap cut the list.
+The radius must be in (0, 32], the core's bound. A traced take is never clean:
+`take.json` lists `battle trace polled after start`.
+
 ```sh
 tools/battle/run-battle.sh --take --pin ... --client ... --client-data ... --cache ... \
   --world /absolute/stopped-flat-world --run-dir /absolute/new-run \

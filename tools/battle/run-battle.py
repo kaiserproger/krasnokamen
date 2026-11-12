@@ -22,6 +22,11 @@ from pathlib import Path
 TICKS_PER_SECOND = 20
 DEFAULT_CHECKPOINT_EVERY_TICKS = 1200
 DEFAULT_STATUS_EVERY_TICKS = 100
+DEFAULT_TRACE_EVERY_TICKS = 20
+# Samples per /telemetry.jsonl long-poll after the first; also the coarsest cadence of a per-batch hook.
+TELEMETRY_BATCH = 100
+# `battle trace` radius bound of the core (TRACE_RADIUS, crates/mc-core/src/battle/staging.rs).
+TRACE_RADIUS_MAX = 32.0
 # Take mode keeps the periodic checkpoint cadence this much longer than the take.
 TAKE_CHECKPOINT_MARGIN_SECONDS = 120
 # A tick whose owner_post_us reaches this is treated as a checkpoint capture. The capture runs on
@@ -32,6 +37,9 @@ CHECKPOINT_SPIKE_US = 50_000
 STATUS_FIELDS = ('tick', 'side1', 'side2', 'resident', 'active', 'nonzero_velocity', 'horses', 'regiments', 'dead')
 STATUS_PATTERN = re.compile(r"Battle (?:paused|running) tick=(\d+) side1=(\d+) side2=(\d+) resident=(\d+) active=(\d+)"
                             r"(?: nonzero_velocity=(\d+))? horses=(\d+)(?: regiments=(\d+))?(?: dead=(\d+))?")
+
+# One member of a `Battle trace:` reply (staging.rs BattleCommand::Trace).
+TRACE_MEMBER = re.compile(r'(\d+) side(\d+) r(\d+) (\w+)((?: [\w-]+)*) at ([^,\s]+),([^,\s]+),([^,\s]+) to ([^,\s]+),([^,\s]+)')
 
 
 def arguments():
@@ -58,6 +66,8 @@ def arguments():
     p.add_argument('--view-distance', type=int, default=12, metavar='CHUNKS', help='server and recorder view distance, 2..32')
     p.add_argument('--allow-marker-gaps', action='store_true', help='record recorder marker and telemetry tick gaps instead of failing the run; implied by --take')
     p.add_argument('--server-scope', nargs='?', const='', default=None, metavar='SLICE', help='run the server in its own transient systemd user scope (optionally under SLICE) so the cgroup memory/CPU telemetry is the server alone')
+    p.add_argument('--trace', type=trace_point, metavar='X,Z,R', help='from the end of the population barrier until the recorder stops, send `battle trace X Z R` about every --trace-every recorded ticks and write the replies to trace.jsonl; needs a server pin with the command (b31c2540 or later); default off')
+    p.add_argument('--trace-every', type=int, metavar='TICKS', help=f'trace cadence in recorded ticks, with --trace (default {DEFAULT_TRACE_EVERY_TICKS})')
     p.add_argument('--dry-run', action='store_true')
     a = p.parse_args()
     if a.world_seed is None:
@@ -72,6 +82,13 @@ def arguments():
         p.error('status interval must not be negative')
     if a.checkpoint_every_ticks is not None and a.checkpoint_every_ticks < 1:
         p.error('checkpoint cadence must be at least one tick')
+    if a.trace is None and a.trace_every is not None:
+        p.error('--trace-every needs --trace')
+    if a.trace is not None:
+        if a.trace_every is None:
+            a.trace_every = DEFAULT_TRACE_EVERY_TICKS
+        if a.trace_every < 1:
+            p.error('trace cadence must be at least one tick')
     if a.phase_log is None:
         a.phase_log = not a.take
     if a.status_every is None:
@@ -88,6 +105,21 @@ def arguments():
 def command_list(a):
     setup = f'battle setup {a.seed} {a.scenario}' + (f' {a.count}' if a.count is not None else '')
     return [setup, 'battle start', 'battle pause', 'stop']
+
+
+def trace_point(text):
+    """X,Z,R of --trace: finite numbers and a radius the core accepts."""
+    try:
+        x, z, radius = (float(part) for part in text.split(','))
+    except ValueError:
+        raise argparse.ArgumentTypeError('expected X,Z,R') from None
+    if not all(math.isfinite(v) for v in (x, z, radius)) or not 0 < radius <= TRACE_RADIUS_MAX:
+        raise argparse.ArgumentTypeError(f'expected finite X,Z and a radius in (0, {TRACE_RADIUS_MAX:g}]')
+    return x, z, radius
+
+
+def trace_command(trace):
+    return 'battle trace {:g} {:g} {:g}'.format(*trace)
 
 
 def take_checkpoint_ticks(duration):
@@ -153,6 +185,82 @@ def parse_status(line):
     return {name: int(value) for name, value in zip(STATUS_FIELDS, match.groups()) if value is not None}
 
 
+class TracePolicy:
+    """Which telemetry batches send `battle trace`: none before start(), then about every `every`
+    recorded ticks until stop(). While active the export asks for batches of `every` samples
+    (at most TELEMETRY_BATCH), so the cadence is met; one long-poll already waiting when start()
+    runs still returns after TELEMETRY_BATCH samples."""
+
+    def __init__(self, every):
+        self.every = every
+        self.active = False
+        self.last = None
+
+    def start(self):
+        self.active = True
+
+    def stop(self):
+        self.active = False
+
+    def batch(self):
+        return min(TELEMETRY_BATCH, self.every) if self.active else TELEMETRY_BATCH
+
+    def due(self, tick):
+        if not self.active:
+            return False
+        if self.last is None or tick - self.last >= self.every:
+            self.last = tick
+            return True
+        return False
+
+
+def parse_trace(line):
+    """Members of one `Battle trace:` reply; entries that do not parse are kept verbatim."""
+    body = line.split('Battle trace:', 1)[1].strip()
+    more = body.endswith('(more)')
+    if more:
+        body = body[:-len('(more)')]
+    members, unparsed = [], []
+    for entry in (part.strip() for part in body.split(';')):
+        if not entry:
+            continue
+        match = TRACE_MEMBER.fullmatch(entry)
+        if match is None:
+            unparsed.append(entry)
+            continue
+        g = match.groups()
+        members.append({'id': int(g[0]), 'side': int(g[1]), 'regiment': int(g[2]), 'order': g[3], 'flags': g[4].split(),
+                        'pos': [float(v) for v in g[5:8]], 'to': [float(v) for v in g[8:10]]})
+    return {'more': more, 'members': members, 'unparsed': unparsed}
+
+
+class TraceLog:
+    """trace.jsonl: each `Battle trace:` reply paired with its request. The console answers in order,
+    so replies pair FIFO with requests; request() runs before the command is written."""
+
+    def __init__(self, path):
+        self.path = path
+        self.lock = threading.Lock()
+        self.pending = []
+        self.rows = 0
+
+    def request(self, tick, probe=False):
+        import time
+        with self.lock:
+            self.pending.append({'requested_after_tick': tick, 'probe': probe, 'sent_unix_ns': time.time_ns()})
+
+    def record(self, line):
+        import time
+        received = time.time_ns()
+        with self.lock:
+            row = self.pending.pop(0) if self.pending else {'requested_after_tick': None, 'probe': False, 'sent_unix_ns': None}
+            row['received_unix_ns'] = received
+            row.update(parse_trace(line))
+            with self.path.open('a') as output:
+                output.write(json.dumps(row, separators=(',', ':')) + '\n')
+            self.rows += 1
+
+
 def percentile(sorted_values, q):
     """Nearest rank."""
     return sorted_values[max(1, math.ceil(len(sorted_values) * q / 100)) - 1]
@@ -211,6 +319,8 @@ def take_report(a, rows, census, receipt, first, last, telemetry_gaps, setup_com
         reasons.append('phase log was on')
     if a.status_every:
         reasons.append('battle status polled after start')
+    if a.trace is not None:
+        reasons.append('battle trace polled after start')
     if receipt.get('marker_gaps'):
         reasons.append('recorder marker gaps')
     if telemetry_gaps:
@@ -222,7 +332,8 @@ def take_report(a, rows, census, receipt, first, last, telemetry_gaps, setup_com
         'setup_command': setup_command, 'census_before_start': census,
         'config': {'checkpoint_every_ticks': a.checkpoint_every_ticks, 'phase_log': a.phase_log, 'status_every': a.status_every,
                    'view_distance': a.view_distance, 'allow_marker_gaps': a.allow_marker_gaps, 'server_scope': a.server_scope,
-                   'forced_checkpoint_before_start': a.take},
+                   'forced_checkpoint_before_start': a.take,
+                   **({'trace': trace_command(a.trace), 'trace_every': a.trace_every} if a.trace is not None else {})},
         'checkpoint_spike_threshold_us': CHECKPOINT_SPIKE_US,
         'server_checkpoints': {'ticks': checkpoint_ticks, 'in_window': inside, 'last_before_window': before[-1] if before else None,
                                'next_periodic_margin_ticks': a.checkpoint_every_ticks - (last - before[-1]) if before else None},
@@ -289,8 +400,8 @@ def watch_ready(path, process, timeout=180):
         os.close(fd)
 
 
-def telemetry_get(port, after=None):
-    params = {'wait': 'true', 'min_samples': '1' if after is None else '100'}
+def telemetry_get(port, after=None, batch=TELEMETRY_BATCH):
+    params = {'wait': 'true', 'min_samples': '1' if after is None else str(batch)}
     if after is not None:
         params['after_tick'] = str(after)
     url = f'http://127.0.0.1:{port}/telemetry.jsonl?' + urllib.parse.urlencode(params)
@@ -298,13 +409,14 @@ def telemetry_get(port, after=None):
         return response.read().decode('utf-8')
 
 
-def telemetry_worker(port, output, stop, failures, on_batch, ticks, gaps=None):
-    """Export /telemetry.jsonl. `gaps` (a list) records skipped ticks as [last, next]; None makes them fatal."""
+def telemetry_worker(port, output, stop, failures, on_batch, ticks, gaps=None, batch=None):
+    """Export /telemetry.jsonl. `gaps` (a list) records skipped ticks as [last, next]; None makes them fatal.
+    `batch` (a callable) sizes each long-poll; None keeps TELEMETRY_BATCH."""
     last = None
     try:
         with output.open('x') as target:
             while not stop.is_set():
-                text = telemetry_get(port, last)
+                text = telemetry_get(port, last) if batch is None else telemetry_get(port, last, batch())
                 rows = [json.loads(line) for line in text.splitlines() if line]
                 for row in rows:
                     tick = row['tick']
@@ -323,11 +435,13 @@ def telemetry_worker(port, output, stop, failures, on_batch, ticks, gaps=None):
         ticks.put(None)
 
 
-def stream_log(pipe, file, messages):
+def stream_log(pipe, file, messages, trace=None):
     with file.open('x') as output:
         for line in pipe:
             output.write(line)
             output.flush()
+            if trace is not None and 'Battle trace:' in line:
+                trace.record(line)
             if any(marker in line for marker in ('Solaris is listening (edge v2)', 'Battle staged:', 'Battle roster:', 'Battle started', 'Battle paused', 'Saved the game', 'Failed to save the game', 'Command failed:', 'Battle error:')):
                 messages.put(line)
     messages.put(None)
@@ -439,11 +553,12 @@ def run(a):
                          f'recorder record --server 127.0.0.1:{a.port} --username BattleRecorder --output {a.run_dir}/take.solrec --header {a.run_dir}/header.json --duration {a.duration} --ready-file {a.run_dir}/take.ready --roster-file {a.run_dir}/roster.txt --roster-ready-file {a.run_dir}/roster.ready --roster-timeout 900 --data-dir {a.client_data}',
                          'wait for recorder initial readiness',
                          f'export GET http://127.0.0.1:{a.dashboard_port}/telemetry.jsonl; before start each telemetry batch requests battle status (population barrier), after start {status_after}',
-                         commands[0], 'battle roster',
+                         commands[0], *([f'{trace_command(a.trace)} (probe: the pin must answer before battle roster)'] if a.trace is not None else []), 'battle roster',
                          'publish exact UUID roster and wait for recorder roster readiness',
                          'wait for fresh exact side counts and fully resident, active soldiers',
                          f'wait at least {a.paused_ticks} paused ticks',
                          *([f'save-all (forced checkpoint right before start, restarts the {a.checkpoint_every_ticks}-tick cadence); wait for "Saved the game"'] if a.take else []),
+                         *([f'from the end of the population barrier until the recorder stops: {trace_command(a.trace)} about every {a.trace_every} recorded ticks (telemetry batches of {min(TELEMETRY_BATCH, a.trace_every)}), replies to {a.run_dir}/trace.jsonl'] if a.trace is not None else []),
                          commands[1],
                          f'require at least {a.minimum_battle_ticks} continuously recorded battle ticks',
                          *(['write take.json: window MSPT/TPS/memory, checkpoint spikes in the shot window, clean verdict'] if a.take else []),
@@ -463,7 +578,7 @@ def run(a):
     (root / 'commands.txt').touch(exist_ok=False)
     recorder_argv = [str(client), 'record', '--server', f'127.0.0.1:{a.port}', '--username', 'BattleRecorder', '--output', str(root / 'take.solrec'), '--header', str(root / 'header.json'), '--duration', str(a.duration), '--ready-file', str(root / 'take.ready'), '--roster-file', str(root / 'roster.txt'), '--roster-ready-file', str(root / 'roster.ready'), '--roster-timeout', '900', '--data-dir', str(client_data)]
     launch_argv = server_argv(a, binary, config, server_name)
-    (root / 'manifest.json').write_text(json.dumps({'server_pin': manifest, 'client_sha256': sha256_file(client), 'seed': a.seed, 'world_seed': a.world_seed, 'scenario': a.scenario, 'count_per_side_override': a.count, 'world_source': str(a.world) if a.world else None, 'platform': platform.platform(), 'uname': list(platform.uname()), 'server_argv': launch_argv, 'recorder_argv': recorder_argv, 'server_environment_overrides': {'MC_CORE_PHASE_LOG': '1'} if a.phase_log else {}, 'server_environment_removed': [] if a.phase_log else ['MC_CORE_PHASE_LOG'], 'take': a.take, 'checkpoint_every_ticks': a.checkpoint_every_ticks, 'status_every': a.status_every, 'view_distance': a.view_distance, 'allow_marker_gaps': a.allow_marker_gaps, 'server_scope': a.server_scope}, indent=2) + '\n')
+    (root / 'manifest.json').write_text(json.dumps({'server_pin': manifest, 'client_sha256': sha256_file(client), 'seed': a.seed, 'world_seed': a.world_seed, 'scenario': a.scenario, 'count_per_side_override': a.count, 'world_source': str(a.world) if a.world else None, 'platform': platform.platform(), 'uname': list(platform.uname()), 'server_argv': launch_argv, 'recorder_argv': recorder_argv, 'server_environment_overrides': {'MC_CORE_PHASE_LOG': '1'} if a.phase_log else {}, 'server_environment_removed': [] if a.phase_log else ['MC_CORE_PHASE_LOG'], 'take': a.take, 'checkpoint_every_ticks': a.checkpoint_every_ticks, 'status_every': a.status_every, 'view_distance': a.view_distance, 'allow_marker_gaps': a.allow_marker_gaps, 'server_scope': a.server_scope, **({'trace': trace_command(a.trace), 'trace_every': a.trace_every} if a.trace is not None else {})}, indent=2) + '\n')
     with (root / 'host-commands.txt').open('x') as host:
         for cmd in (['uname', '-a'], ['lscpu']):
             host.write('$ ' + ' '.join(cmd) + '\n')
@@ -471,6 +586,8 @@ def run(a):
             subprocess.run(cmd, stdout=host, stderr=subprocess.STDOUT, check=True, text=True)
     messages, failures, ticks, stop = queue.Queue(), queue.Queue(), queue.Queue(), threading.Event()
     status_policy = StatusPolicy(a.status_every)
+    trace_policy = TracePolicy(a.trace_every) if a.trace is not None else None
+    trace_log = TraceLog(root / 'trace.jsonl') if a.trace is not None else None
     telemetry_gaps = []
     server = None
     recorder = None
@@ -486,7 +603,7 @@ def run(a):
                     record.write(command + '\n')
                 server.stdin.write(command + '\n')
                 server.stdin.flush()
-        log_thread = threading.Thread(target=stream_log, args=(server.stdout, root / 'server.log', messages), daemon=True)
+        log_thread = threading.Thread(target=stream_log, args=(server.stdout, root / 'server.log', messages, trace_log), daemon=True)
         log_thread.start()
         expect(messages, 'Solaris is listening (edge v2)')
         ignored = ignored_config_keys((root / 'server.log').read_text(errors='replace'))
@@ -509,15 +626,24 @@ def run(a):
             if dashboard.get('world', {}).get('name') != server_name:
                 raise RuntimeError('dashboard belongs to another server')
             (root / 'dashboard-identity.json').write_text(json.dumps(dashboard, indent=2) + '\n')
-            def request_status(tick):
+            def on_batch(tick):
                 if status_policy.due(tick):
                     send('battle status')
-            telemetry = threading.Thread(target=telemetry_worker, args=(a.dashboard_port, root / 'telemetry.jsonl', stop, failures, request_status, ticks, telemetry_gaps if a.allow_marker_gaps else None), daemon=True)
+                if trace_policy is not None and trace_policy.due(tick):
+                    trace_log.request(tick)
+                    send(trace_command(a.trace))
+            telemetry = threading.Thread(target=telemetry_worker, args=(a.dashboard_port, root / 'telemetry.jsonl', stop, failures, on_batch, ticks, telemetry_gaps if a.allow_marker_gaps else None, trace_policy.batch if trace_policy is not None else None), daemon=True)
             telemetry.start()
             send(commands[0])
             expect(messages, 'Battle staged:')
+            if trace_log is not None:
+                trace_log.request(None, probe=True)
+                send(trace_command(a.trace))
             send('battle roster')
             roster_line = expect(messages, 'Battle roster:')
+            # The console answers in order and the log thread records a trace reply before it forwards the roster line.
+            if trace_log is not None and trace_log.rows == 0:
+                raise RuntimeError('server answered battle roster but not battle trace: the pin predates the command (b31c2540)')
             names = roster_line.split('Battle roster:', 1)[1].strip().split(',')
             ids = [str(uuid.UUID(name)) for name in names]
             per_side = a.count or {'field-100': 100, 'field-1k': 1000, 'field-10k': 10000}[a.scenario]
@@ -544,6 +670,8 @@ def run(a):
             census = {}
             await_population(messages, per_side, paused_end or population_tick, recorder, wait=False, census=census)
             status_policy.close_barrier()
+            if trace_policy is not None:
+                trace_policy.start()
             if a.take:
                 # Restart the cadence counter outside the shot window: one capture now, none until after the take.
                 send('save-all')
@@ -552,6 +680,8 @@ def run(a):
             start_line = expect(messages, 'Battle started tick=')
             battle_start = int(start_line.split('Battle started tick=', 1)[1].strip().split()[0])
             rc = recorder.wait(timeout=a.duration + 180)
+            if trace_policy is not None:
+                trace_policy.stop()
             if rc != 0:
                 raise RuntimeError(f'recorder failed with exit {rc}')
         if not (root / 'take.solrec').is_file() or (root / 'take.solrec').stat().st_size == 0:
@@ -586,7 +716,8 @@ def run(a):
         recorded_ticks = last_tick - battle_start
         if recorded_ticks < a.minimum_battle_ticks:
             raise RuntimeError(f'recorder captured {recorded_ticks} battle ticks, fewer than requested {a.minimum_battle_ticks}')
-        result = {'status': 'complete', 'recording': 'take.solrec', 'telemetry': 'telemetry.jsonl', 'server_log': 'server.log'}
+        result = {'status': 'complete', 'recording': 'take.solrec', 'telemetry': 'telemetry.jsonl', 'server_log': 'server.log',
+                  **({'trace': 'trace.jsonl'} if trace_log is not None else {})}
         if a.take:
             # After the server exited and its log is complete: the checkpoint lines are the independent record.
             if log_thread is not None:
