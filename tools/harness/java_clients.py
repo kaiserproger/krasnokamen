@@ -236,7 +236,7 @@ def client_group(
     launch_manifest = None
     if prepare_launch and (platform == "fabric" or client_profile in {"svc", "dh"}):
         from .java_launcher import prepare_fabric_launch
-        launch_manifest = prepare_fabric_launch(artifact_dir, runtime.AGENT_ROOT, timeout_seconds)
+        launch_manifest = prepare_fabric_launch(artifact_dir, runtime.sibling_root("loader"), timeout_seconds)
     xvfb_process, display, xvfb_log = runtime.start_xvfb(artifact_dir)
     launched: list[dict[str, Any]] = []
     launched_lock = threading.Lock()

@@ -77,6 +77,27 @@ class ClientSettingsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 cli.resolve_client_settings("quilt")
 
+class SiblingRootTests(unittest.TestCase):
+    def test_a_linked_worktree_finds_the_main_checkouts_sibling_and_the_variable_wins(self) -> None:
+        # <work>/solaris (main checkout), <work>/wt/Name (git worktree), <work>/solaris-loader (sibling).
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp).resolve()
+            main, worktree, loader = work / "solaris", work / "wt" / "Name", work / "solaris-loader"
+            loader.mkdir()
+            git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "init.defaultBranch=main"]
+            subprocess.run([*git, "init", "-q", str(main)], check=True)
+            subprocess.run([*git, "-C", str(main), "commit", "-q", "--allow-empty", "-m", "base"], check=True)
+            subprocess.run([*git, "-C", str(main), "worktree", "add", "-q", "-b", "wt/Name", str(worktree)],
+                           check=True)
+            unset = {key: value for key, value in os.environ.items() if key not in runtime.SIBLING_ENV.values()}
+            with mock.patch.dict(os.environ, unset, clear=True):
+                self.assertEqual(runtime.sibling_root("loader", worktree), loader)
+                self.assertEqual(runtime.sibling_root("loader", main), loader)
+            other = work / "other-loader"
+            with mock.patch.dict(os.environ, {"SOLARIS_LOADER_ROOT": str(other)}):
+                self.assertEqual(runtime.sibling_root("loader", worktree), other)
+
+
 class DriverLabelTests(unittest.TestCase):
     def test_missing_manifest_defaults_to_draft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

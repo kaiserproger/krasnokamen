@@ -742,7 +742,7 @@ def start_java(ctx: ProfileContext, artifact: Path, address: str | None, usernam
     token, mcp_port = secrets.token_urlsafe(32), runtime.reserve_port()
     log_path = artifact / "client.log"
     ctx.client_evidence["command_index"] = len(ctx.commands)
-    ctx.commands.append([str(runtime.AGENT_ROOT / "gradlew"), ":fabric-agent:runClientMcp"])
+    ctx.commands.append([str(runtime.sibling_root("loader") / "gradlew"), ":fabric-agent:runClientMcp"])
     ctx.cwds.append(str(runtime.REPO_ROOT))
     ctx.exits.append(None)
     ctx.logs.append(str(log_path))

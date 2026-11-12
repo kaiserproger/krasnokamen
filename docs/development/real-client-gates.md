@@ -84,18 +84,19 @@ Keep these in one env file per gate wave and source it; never retype paths.
 
 ```sh
 export SOLARIS_SERVER_BINARY=<core>/target/release/solaris-v2   # release build
-export SOLARIS_CLIENT_ROOT=<client checkout>                    # default ../solaris-client
+export SOLARIS_CLIENT_ROOT=<client checkout>                    # default: solaris-client beside the main checkout
 export SOLARIS_CLIENT_BINARY=<client>/target/release/solaris-client
 # The data root from step 2:
 export SOLARIS_CLIENT_DATA_DIR=<root>/data/vanilla              # the vanilla metadata dir, not <root>
 export SOLARIS_CLIENT_RESOURCE_ROOT=<root>/resources
 export SOLARIS_CLIENT_ASSET_ROOT=<root>/assets
 export SOLARIS_CLIENT_ASSET_INDEX=<root>/assets/asset-index.json
-# Sibling repositories, only for the gates that use them:
+# Sibling repositories, only to select a checkout other than the one beside the main checkout
+# (worktrees resolve it too: runtime.sibling_root):
 # Java probes and survival: point at canonical content with adjacent protocol caches:
 export SOLARIS_SERVER_VANILLA_DATA_DIR=<content-root>/26.3
-export SOLARIS_LOADER_ROOT=<solaris-loader checkout>            # Java/Loader clients; default ../solaris-loader
-export SOLARIS_DEFAULT_PLUGINS_ROOT=<solaris-default-plugins>   # standard-pack and plugin gates
+export SOLARIS_LOADER_ROOT=<solaris-loader checkout>            # Java/Loader clients; default: beside the main checkout
+export SOLARIS_DEFAULT_PLUGINS_ROOT=<solaris-default-plugins>   # standard-pack and plugin gates; same default
 ```
 
 *Owner host:* builds land in a pooled target dir (`targets/slot-<l>`) that

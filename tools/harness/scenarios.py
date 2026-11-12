@@ -20,13 +20,12 @@ Rules for entries:
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from .runtime import REPO_ROOT
+from .runtime import REPO_ROOT, sibling_root
 
 # Evidence kinds. A graphical or client entry never falls back to TCP evidence.
 EVIDENCE_KINDS = (
@@ -1148,10 +1147,8 @@ def repo_revisions() -> dict[str, str]:
     """
     repos = {
         "solaris": REPO_ROOT,
-        "solaris-default-plugins": Path(
-            os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", REPO_ROOT.parent / "solaris-default-plugins")
-        ),
-        "solaris-loader": Path(os.environ.get("SOLARIS_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")),
+        "solaris-default-plugins": sibling_root("plugins"),
+        "solaris-loader": sibling_root("loader"),
     }
     revisions: dict[str, str] = {}
     for name, path in repos.items():

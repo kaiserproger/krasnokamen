@@ -29,7 +29,40 @@ from typing import Any
 from .matrix_api import MissingCapability
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-AGENT_ROOT = Path(os.environ.get("SOLARIS_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")).expanduser().resolve()
+# The sibling repositories beside the core checkout, and the variable that names another checkout of each.
+SIBLING_NAMES = {"client": "solaris-client", "loader": "solaris-loader", "plugins": "solaris-default-plugins"}
+SIBLING_ENV = {"client": "SOLARIS_CLIENT_ROOT", "loader": "SOLARIS_LOADER_ROOT",
+               "plugins": "SOLARIS_DEFAULT_PLUGINS_ROOT"}
+
+
+@functools.lru_cache(maxsize=None)
+def main_checkout(root: Path = REPO_ROOT) -> Path:
+    """The main working tree of the repository holding ``root``.
+
+    In the main checkout that is ``root`` itself. In a linked worktree (`git worktree add`, e.g.
+    `<work>/wt/<Name>`) it is the checkout the worktree belongs to: the parent of the shared
+    `--git-common-dir`. Without git or outside a repository it is ``root``."""
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True, text=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return root
+    common = completed.stdout.strip()
+    return Path(common).parent if completed.returncode == 0 and common else root
+
+
+def sibling_root(kind: str, root: Path = REPO_ROOT) -> Path:
+    """The checkout of sibling repository ``kind`` (a SIBLING_NAMES key).
+
+    Its SIBLING_ENV variable wins; otherwise it is the sibling beside the main checkout, so a
+    linked worktree finds the same `<work>/solaris-loader` as the main checkout instead of a
+    nonexistent `<work>/wt/solaris-loader`."""
+    override = os.environ.get(SIBLING_ENV[kind])
+    if override:
+        return Path(override).expanduser().resolve()
+    return main_checkout(root).parent / SIBLING_NAMES[kind]
+
 
 USERNAME_RE = re.compile(r"[A-Za-z0-9_]{1,16}\Z")
 CLIENT_PROFILES = ("vanilla", "loader", "svc", "dh")
@@ -298,7 +331,7 @@ def ensure_loader_gradle_home(loader_root: Path | None = None) -> Path:
     `<work>/loader-gradle-home` (beside the Loader checkout; the one `ledger probe` uses)
     exists, export it so the schema compiler and the Gradle client launch share one cache."""
     if not os.environ.get("GRADLE_USER_HOME"):
-        shared = (loader_root or AGENT_ROOT).parent / "loader-gradle-home"
+        shared = (loader_root or sibling_root("loader")).parent / "loader-gradle-home"
         if shared.is_dir():
             os.environ["GRADLE_USER_HOME"] = str(shared)
     return Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
@@ -830,7 +863,7 @@ def _agent_jar_path() -> Path:
     override = os.environ.get("SOLARIS_JAVA_AGENT_JAR")
     if override:
         return Path(override).expanduser()
-    candidates = sorted(AGENT_ROOT.glob("java-agent/build/libs/*.jar"))
+    candidates = sorted(sibling_root("loader").glob("java-agent/build/libs/*.jar"))
     if candidates:
         return candidates[0]
     raise MissingCapability(
@@ -954,7 +987,8 @@ def start_client(
                 start_new_session=True,
             )
         else:
-            gradlew = AGENT_ROOT / "gradlew"
+            loader_root = sibling_root("loader")
+            gradlew = loader_root / "gradlew"
             if not (gradlew.is_file() and os.access(gradlew, os.X_OK)):
                 raise RuntimeError(f"missing executable Gradle wrapper: {gradlew}")
             process = subprocess.Popen(
@@ -963,7 +997,7 @@ def start_client(
                     "--no-daemon",
                     "--no-configuration-cache",
                     "-p",
-                    str(AGENT_ROOT),
+                    str(loader_root),
                     f"-Psolaris.clientMcp.gameDir={game_dir}",
                     f"-Psolaris.clientMcp.username={username}",
                     task,
