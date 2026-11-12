@@ -3877,7 +3877,7 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T230749-civilization-seed-qa-llr1bc4e (server pin 107ddb91): the only newborn f7a21a80 (settlement_birth tick 50318, baby observed at sprint 42000) was seen in client censuses at (73.4,60.9,-229.9) at sprint 48000 and (73.4,60.9,-231.4) at 51000, 58 blocks from the meeting point, on the floor of a pond (world probe receipts/CivSimSeed24/snap3/probe-baby.json: dirt at y=60, water at y=61-62, banks to y=64). server.log line 638: 'resident received lethal damage tick=65504 ... activity=Panic position=[73.85, 61.0, -231.85] attacker_type=Some(\"minecraft:zombie\")'; the checkpoint (receipts/CivSimSeed24/snap3/report.json, tick 115347) holds a tombstone for it at chunk [4,-15], journal LSN 66000. Membership dropped 6 -> 5, so the gate's +2 growth never held. Not an entity-custody loss: the death is logged and the tombstone follows it. Cause: settlements/allocator.rs body_clear lets a route body wade when water is only in its foot row, but a baby (0.975 tall) has its head in that row too, so the floor of any pond passed as a ford."
-failing_first = "not recorded"
+failing_first = "Fails with only the allocator.rs fix hunk reverted (receipts/CivSimSeed24/baby-wade-fix-hunks.patch, sha256 ea5ca185): 'head-deep water is a barrier: (0.15, 0.975)', the baby body routes over the floor of two-deep water while the adult body is refused (receipts/CivSimSeed24/baby-wade-negative-control.log); at 615ca404 settlements+villager 848 passed, 0 failed (receipts/CivSimSeed24/suite-615ca404.log)."
 regression = ["cargo:mc-core:settlements::allocator::tests::routes_wade_through_foot_deep_water_but_never_deeper_or_lava"]
 
 [[bug]]
