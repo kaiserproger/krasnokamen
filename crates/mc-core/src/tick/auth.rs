@@ -146,7 +146,7 @@ pub(crate) fn unlock_session(state: &mut TickState, connection: ConnectionId) {
                 }
             };
         state.entities.row_mut(slot).loot.attributes = attributes;
-        let mut player = super::hydrate_player(connection, Some(&record));
+        let mut player = super::hydrate_player(connection, Some(&record), state.default_game_mode);
         player.inventory_menu.carried = record.carried;
         player.inventory_menu.grid = record.grid;
         player.inventory_menu.grid.resize(

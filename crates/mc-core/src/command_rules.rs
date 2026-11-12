@@ -302,6 +302,7 @@ handles!(BoolRule, false:
     ADVANCE_WEATHER = "advance_weather",
     ALLOW_ENTERING_NETHER_USING_PORTALS = "allow_entering_nether_using_portals",
     BLOCK_DROPS = "block_drops",
+    COMMAND_BLOCK_OUTPUT = "command_block_output",
     DROWNING_DAMAGE = "drowning_damage",
     ENDER_PEARLS_VANISH_ON_DEATH = "ender_pearls_vanish_on_death",
     ENTITY_DROPS = "entity_drops",
