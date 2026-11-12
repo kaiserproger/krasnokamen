@@ -29,6 +29,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
+from .. import runtime
 from .anvil_corrupt import BYTE, COMPOUND, INT, LIST, LONG, STRING, Edit, Tag
 from .native_v2 import _block, _echo, _point
 from .wal_forge import committed_tick, network_compound, publish_opaque_batch
@@ -222,8 +223,15 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     stopped_at = len(_server_log(steps))
     steps.client.corrupt_fixture = None
     steps.call("minecraft_disconnect")
-    address = steps.client.p4_restart_server(steps.remaining())
+    # A hydration owner that panics on a replayed record kills the tick thread: the server exits before
+    # it listens, and the restart helper raises ChildExited.
+    try:
+        address = steps.client.p4_restart_server(steps.remaining())
+    except runtime.ChildExited as error:
+        steps.report["wal_restart_failure"] = str(error)[-800:]
+        address = None
     steps.client.wal_forge = None
+    steps.check("server_starts_over_the_forged_wal_batch", address is not None)
     steps.call("minecraft_connect", {"server_addr": address})
     play = steps.call("minecraft_wait_for_play", {"timeout_seconds": steps.remaining()})
     steps.check("second_restart_client_entered_play", play["in_play"] is True)
