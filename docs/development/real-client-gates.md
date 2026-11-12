@@ -348,6 +348,27 @@ bed. An ordered command fence and block predicates check the bed and roof before
 the native client asserts the certification reply. This checks certification,
 not whether a villager sleeps or breeds.
 
+`upgrade_certified` (native only) takes `{"kind": "<building kind>", "level": 2|3}`:
+it waits for the newest `Certified <kind> #<id>` reply in `recent_chat`, sends
+`settlement building upgrade <id>` (a building id is a settlement and sequence
+pair, so a fixed scenario cannot spell it), waits 20 ticks and fails the named
+assertion `<kind>_upgraded_to_level_<level>` unless `Upgraded building #<id> to
+level <level>.` arrived.
+
+`native-settlement-buildings-upgrade` hand-builds a stone wall, a tower, a
+barracks with two beds and a farmer workshop with a composter inside a founded
+settlement and certifies each, expands the wall to the next level's size and
+adds a second composter, then upgrades both through `upgrade_certified`. It
+covers ISSUE-1-09 on the command path; it does not press the Buildings dialog's
+Upgrade button (`army-qa` does), build with Builders (`buildings-qa`), or cover
+gates, level 3 or the other workshop kinds.
+
+`native-settlement-radius-growth` founds a settlement of radius 8 around six
+villagers, then binds a seventh. `/settlement info` must show `radius=24
+members=6` after founding and `radius=28 members=7` after the bind (four blocks
+per resident, docs/settlements/construction.md). It reads the command reply, not
+the Settings dialog or the map territory.
+
 
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains
   its same-client-thread `game_time` and entity positions. Missing timestamps fail.
