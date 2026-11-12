@@ -260,32 +260,18 @@ dropped trigger writes. Requested work is never substituted for observation.
 
 ## Many-items benchmarks
 
-Two **noncanonical** profiles measure how the tick pays for dropped-item entities. Neither fills the
-pending table above (`publication_evidence=false`, `noncanonical=true` in the receipt).
+One **noncanonical** profile measures how the tick pays for dropped-item entities
+(`publication_evidence=false`, `noncanonical=true` in the receipt, so it fills nothing in the pending
+table above). The other many-items benchmark is no profile of its own: the kelp-polluted world is
+`native-100` run on a fixture cache that was prepared on a server still washing kelp out, and
+`--require-cache-hit` keeps a run from silently preparing a clean world in its place (about 4,000
+item entities, 1,270 moving, in the world prepared on 2026-11-12; the window scripts of that date name
+the cache). The recipe never mentions kelp or items, so a fixed server loads exactly that world and
+the receipt stays comparable across the fix.
 
-### `native-100-kelp12k`: the preserved polluted native-100 world
-
-The native-100 recipe (same 100 bots, 100,000 mobs, view/simulation distance 6, so the same cache key
-under the same `data/vanilla`) run against the world that the kelp wash-out bug filled with item
-entities: **12,218 item entities** at preparation end (about 98 % kelp), growing to roughly 19,000
-by the end of a window on a server that still washes kelp. Main preserved it read-only as
-`<work>/targets/perf-fixture-cache-kelp12k`; the profile points `--fixture-cache` there by default
-and always passes `--require-cache-hit`.
-
-- The recipe never mentions kelp or items, so a fixed server loads and measures exactly this world
-  and the receipt stays comparable across the fix (B/A on one world).
-- The profile **refuses to prepare**: with no complete entry for the cache key (the recipe or the
-  registry content changed) it fails before touching the cache directory instead of silently
-  measuring a clean world. It also pins the entry: key
-  `e374422d…`, world tree hash `f07d720e…`, 12,218 saved items; a different world fails the run.
-- Item ages in the saved world are at most about 2,900; an item despawns at age 6,000 ticks active. A
-  fixed server therefore loses the preserved items during a long window (the production rate, not a
-  fault): read the resident population per tick from the `items census:` lines, never assume it.
-
-```sh
-python3 -m tools.coreperf.profiles native-100-kelp12k "${COMMON[@]}" \
-    --server-wrapper "env MC_CORE_PHASE_LOG=1"
-```
+Items are a small part of that world's cost: in the window-d legs the item probe counted about 4 % of
+all tracked entity pairs and under 1 % of the packets (item movement is gated by the vanilla update
+interval of 20 ticks in the planner); almost all of the roughly 44,000 packets per tick are mobs.
 
 ### `items-heavy`: N item entities on a sky platform
 

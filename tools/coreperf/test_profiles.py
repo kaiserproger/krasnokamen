@@ -120,23 +120,11 @@ class ProfilesTests(unittest.TestCase):
         self.assertIn("gamerule randomTickSpeed 0", rules)
         self.assertNotIn("gamerule randomTickSpeed 3", rules)
 
-    def test_kelp12k_names_one_preserved_world_and_the_native_100_recipe(self):
-        recipe = profiles.fixture(100000, 0)
-        self.assertEqual(profiles.load.digest(recipe),
+    def test_native_100_recipe_digest_is_unchanged(self):
+        # The fixture-cache keys of every native-100 world (the kelp-polluted one included) derive from this.
+        self.assertEqual(profiles.load.digest(profiles.fixture(100000, 0)),
                          "92db3da297768ff28ba35e9e5d6da9513b8bed3dd2b3d397fe117bebe2984368")
-        self.assertEqual(profiles.PROFILES["native-100-kelp12k"], profiles.PROFILES["native-100"])
-        self.assertNotIn("native-100-kelp12k", profiles.CANONICAL_PROFILES)
-        good = {"fixture_cache": {"status": "hit"}, "fixture": {"sha256": profiles.KELP12K_WORLD_SHA256},
-                "snapshot": {"entities": {"minecraft:item": {"active": profiles.KELP12K_ITEMS}}}}
-        self.assertEqual(profiles.validate_kelp12k(profiles.KELP12K_KEY, good)["items"], profiles.KELP12K_ITEMS)
-        for broken, message in (
-                ({**good, "fixture_cache": {"status": "miss"}}, "must hit cache entry"),
-                ({**good, "fixture": {"sha256": "x"}}, "differs from the preserved"),
-                ({**good, "snapshot": {"entities": {}}}, "holds 0 item entities")):
-            with self.assertRaisesRegex(ValueError, message):
-                profiles.validate_kelp12k(profiles.KELP12K_KEY, broken)
-        with self.assertRaisesRegex(ValueError, "must hit cache entry"):
-            profiles.validate_kelp12k("other", good)
+        self.assertNotIn("native-100-kelp12k", profiles.PROFILES)
 
     def test_half_open_window_tps_and_server_only_memory(self):
         samples = [{"wall_start_unix_ns": at, "wall_us": wall} for at, wall in
@@ -948,7 +936,7 @@ class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "cache").mkdir()
-            args = argparse.Namespace(out=root / "out", profile="native-100-kelp12k", productive_npcs=None,
+            args = argparse.Namespace(out=root / "out", profile="native-100", productive_npcs=None,
                 server_bin=root / "server" / "krasnokamen", bots_bin=root / "bots" / "player-scale-bots",
                 build_receipt=root / "server" / "manifest.json", vanilla_data_dir=root, mobs=100000,
                 villagers=0, damage_victims=None, map_frames=None, churn_percent=None, daylight_zombies=None,
@@ -966,7 +954,7 @@ class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
             result = json.loads((args.out / "result.json").read_text())
             self.assertEqual(result["status"], "failed")
             self.assertIn("--require-cache-hit refuses to prepare", result["error"])
-            self.assertTrue(result["noncanonical"])
+            self.assertNotIn("noncanonical", result)
 
 
     async def test_items_heavy_preparation_requires_the_requested_saved_item_count(self):
