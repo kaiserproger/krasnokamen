@@ -1605,6 +1605,27 @@ fn shown(state: &mut TickState) -> String {
         .join("\n")
 }
 
+/// A pack that appears on disk is enabled by `/reload` (docs/OPERATING.md, vanilla `ReloadCommand`),
+/// so a following `/datapack enable` of it is the vanilla "already enabled" failure.
+#[test]
+fn a_pack_created_on_disk_is_enabled_by_reload_so_enable_says_already_enabled() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    std::fs::create_dir_all(&root).unwrap();
+    let mut state = fixture(&root);
+    pack(&root, "madeit", "\"M\"", &[]);
+    run(&mut state, "reload");
+    settle(&mut state);
+    messages(&mut state);
+    assert_eq!(run(&mut state, "datapack enable file/madeit"), Failed);
+    let reply = messages(&mut state);
+    assert_eq!(
+        key(&reply[0]),
+        "commands.datapack.enable.failed",
+        "{reply:?}"
+    );
+}
+
 /// H2: a `/reload` states every condition it finds, so a new pack that stays broken is not
 /// silent the second time.
 #[test]

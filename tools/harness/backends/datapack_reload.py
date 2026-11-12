@@ -280,8 +280,13 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     probe.fixture("datapack disable file/nometa")
     says_after("disable_of_a_skipped_pack_says_not_enabled", "Round3Begin", "is not enabled!")
 
+    # A pack that appeared on disk is enabled by the /reload above (docs/OPERATING.md), as in vanilla, so
+    # `enable` answers "already enabled". The reply is fenced: a count of pack-naming lines in the 20-line
+    # chat window cannot see it, the new line pushes an older one that named the pack out of the window.
     # A selected pack whose pack.mcmeta breaks keeps running, so the listing keeps it.
-    pack_barrier("madeit_enable_reported", "datapack enable file/madeit", "file/madeit")
+    fenced("Round3bBegin")
+    probe.fixture("datapack enable file/madeit")
+    says_after("reload_enabled_the_created_pack", "Round3bBegin", "file/madeit", "already enabled")
     (packs_dir / "madeit" / "pack.mcmeta").write_text('{"pack": {')
     fenced("Round4Begin")
     probe.fixture("datapack list enabled")
