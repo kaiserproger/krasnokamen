@@ -232,7 +232,10 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.check("shutdown_checkpoint_was_not_declined", not _declined(shutdown))
 
     def after_restart() -> str:
-        return _server_log(steps)[stopped_at:].partition("Solaris is listening")[2]
+        # The new process's whole log: its first line is the registry load. Hydration refuses a replayed
+        # record on the first ticks, before the listening line.
+        _, marker, started = _server_log(steps)[stopped_at:].partition("Loading game registries")
+        return marker + started
 
     # No re-import happened: the restarted server meets the same stored records and refuses them again.
     wal_chunks = [f"chunk ({point['x'] // 16}, {point['z'] // 16})" for point in wal]
