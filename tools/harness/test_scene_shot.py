@@ -925,6 +925,7 @@ class AssertEntitiesTests(unittest.TestCase):
                     {k: v for k, v in good["assert_entities"].items() if k != "min"}):
             with self.assertRaises(ValueError):
                 scene_shot.validate_steps([{"assert_entities": bad}], "native")
-        for name in ("idle_stroll", "night_door", "late_job", "distant_job", "breeding"):
+        for name in ("idle_stroll", "night_door", "late_job", "distant_job",
+                     "deep_water", "mob_doors", "after_hours_job", "breeding"):
             scene = json.loads((scene_shot.runtime.REPO_ROOT / "tools/harness" / f"village_{name}_scene.json").read_text())
             scene_shot.validate_steps(scene["steps"], "native")

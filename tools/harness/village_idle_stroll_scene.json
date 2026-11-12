@@ -142,6 +142,28 @@
    }
   },
   {
+   "wait_ticks": 100
+  },
+  {
+   "assert_entities": {
+    "name": "pond_swimmers_at_surface",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "min": 2,
+    "box": [
+     958,
+     202.0,
+     998,
+     963,
+     207,
+     1003
+    ]
+   }
+  },
+  {
    "wait_ticks": 1000
   },
   {
@@ -196,25 +218,6 @@
      1032,
      202,
      1032
-    ]
-   }
-  },
-  {
-   "assert_entities": {
-    "name": "pond_swimmers_at_surface",
-    "args": {
-     "radius": 64,
-     "limit": 128
-    },
-    "entity_type": "minecraft:villager",
-    "min": 2,
-    "box": [
-     958,
-     202.0,
-     998,
-     963,
-     207,
-     1003
     ]
    }
   }

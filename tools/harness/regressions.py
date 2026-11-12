@@ -105,6 +105,21 @@ _BOOLEAN_PROFILE_VERDICTS = {
     'civilization-seed-qa': frozenset({
         'new_house', 'births', 'second_building', 'iron_smelted', 'all',
     }),
+    # backends/settlement_map_qa.py VERDICTS (a test keeps the two in step).
+    'settlement-map-qa': frozenset({
+        'bell_opens_hub', 'dashboard', 'map', 'building_order', 'shortage_icons',
+        'storage_transfer', 'project_progress', 'residents', 'resources', 'production_order',
+        'localized_text', 'all',
+    }),
+}
+# Run arguments of a profile ref: (client, args after `--`) per verdict that needs another client
+# than native, and extra harness options per profile. The native client has no language option
+# (it sends ClientInformation `en_us` fixed), so the Russian text check runs on vanilla Java.
+_PROFILE_VERDICT_RUN = {
+    ('settlement-map-qa', 'localized_text'): ('java', ['--', '--language', 'ru_ru']),
+}
+_PROFILE_RUN_OPTIONS = {
+    'settlement-map-qa': ['--timeout-seconds', '3600'],
 }
 _PROFILE_VERDICTS = {
     'village-qa': ('settlement_acceptance', frozenset({
@@ -158,8 +173,9 @@ def _profile_command(profile, verdict):
         valid = verdict in _PROFILE_VERDICTS.get(profile, (None, {'all'}))[1]
     if not valid:
         raise ValueError(f'unknown verdict {profile}:{verdict}')
+    client, tail = _PROFILE_VERDICT_RUN.get((profile, verdict), ('native', []))
     return [sys.executable, '-m', 'tools.harness', 'run', profile,
-            '--client', 'native', '--windowed']
+            '--client', client, '--windowed', *_PROFILE_RUN_OPTIONS.get(profile, []), *tail]
 
 
 def _check_command(profile, check):

@@ -103,6 +103,7 @@ pub(crate) fn images(
                 border: capture.border,
                 // Shared difficulty is recovered from the root authority before ticking.
                 difficulty: Default::default(),
+                default_game_mode: Default::default(),
                 gamerules: Default::default(),
                 end_fight: capture.end_fight.clone(),
                 raids: None,

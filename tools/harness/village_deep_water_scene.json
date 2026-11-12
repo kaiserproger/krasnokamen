@@ -1,0 +1,280 @@
+{
+ "seed": 100,
+ "server_view_distance": 6,
+ "steps": [
+  {
+   "wait_play": true
+  },
+  {
+   "cmd": "gamemode creative"
+  },
+  {
+   "tp": [
+    1000.5,
+    205,
+    1000.5,
+    0,
+    0
+   ]
+  },
+  {
+   "wait_ticks": 100
+  },
+  {
+   "cmd": "gamerule advance_time false"
+  },
+  {
+   "cmd": "gamerule spawn_mobs false"
+  },
+  {
+   "cmd": "gamerule random_tick_speed 0"
+  },
+  {
+   "cmd": "time set 18000"
+  },
+  {
+   "cmd": "fill 936 199 936 1064 199 1064 minecraft:stone"
+  },
+  {
+   "cmd": "fill 936 198 936 1064 198 1064 minecraft:stone"
+  },
+  {
+   "cmd": "fill 936 200 936 1064 205 1064 minecraft:air"
+  },
+  {
+   "cmd": "fill 1000 199 1000 1004 199 1004 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 203 1000 1004 203 1004 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1000 200 1000 1004 202 1000 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1004 1004 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1000 200 1000 1000 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1004 200 1000 1004 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "setblock 1004 200 1002 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 201 1002 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1004 200 1002 minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1004 201 1002 minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1001 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1001 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1002 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1002 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1001 200 1003 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1002 200 1003 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "fill 1011 197 995 1017 199 1001 minecraft:stone"
+  },
+  {
+   "cmd": "fill 1012 198 996 1016 199 1000 minecraft:water"
+  },
+  {
+   "cmd": "fill 1011 194 1005 1017 199 1011 minecraft:stone"
+  },
+  {
+   "cmd": "fill 1012 195 1006 1016 199 1010 minecraft:water"
+  },
+  {
+   "cmd": "summon minecraft:villager 1003.5 200 1001.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1003.5 200 1002.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1003.5 200 1003.5"
+  },
+  {
+   "tp": [
+    1008.5,
+    200,
+    1008.5,
+    0,
+    0
+   ]
+  },
+  {
+   "cmd": "settlement create pondqa 32"
+  },
+  {
+   "cmd": "say vfxfence_1_created"
+  },
+  {
+   "wait_chat": "vfxfence_1_created"
+  },
+  {
+   "cmd": "settlement building certify house 1000 199 1000 1004 203 1004"
+  },
+  {
+   "cmd": "say vfxfence_2_certified"
+  },
+  {
+   "wait_chat": "vfxfence_2_certified"
+  },
+  {
+   "tp": [
+    1018.5,
+    208,
+    1003.5,
+    90,
+    50
+   ]
+  },
+  {
+   "wait_ticks": 300
+  },
+  {
+   "cmd": "time set 11000"
+  },
+  {
+   "wait_ticks": 60
+  },
+  {
+   "cmd": "tp @e[type=minecraft:villager,limit=1,sort=nearest,x=1003,y=200,z=1003] 1014.5 198 998.5"
+  },
+  {
+   "cmd": "tp @e[type=minecraft:villager,limit=1,sort=nearest,x=1003,y=200,z=1003] 1014.5 195 1008.5"
+  },
+  {
+   "wait_ticks": 5
+  },
+  {
+   "list_entities": {
+    "name": "pond_t5",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 55
+  },
+  {
+   "list_entities": {
+    "name": "pond_t60",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "shot": "deep-water-dropped"
+  },
+  {
+   "wait_ticks": 140
+  },
+  {
+   "list_entities": {
+    "name": "pond_t200",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 200
+  },
+  {
+   "list_entities": {
+    "name": "pond_t400",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 300
+  },
+  {
+   "list_entities": {
+    "name": "pond_t700",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "shot": "deep-water-day"
+  },
+  {
+   "cmd": "time set 18000"
+  },
+  {
+   "wait_ticks": 900
+  },
+  {
+   "shot": "deep-water-night"
+  },
+  {
+   "assert_entities": {
+    "name": "ponds_empty",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "box": [
+     1011,
+     190,
+     995,
+     1018,
+     203,
+     1012
+    ],
+    "min": 0,
+    "max": 0
+   }
+  },
+  {
+   "assert_entities": {
+    "name": "all_residents_asleep_home",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "box": [
+     1001,
+     199,
+     1001,
+     1003,
+     202,
+     1004
+    ],
+    "min": 3,
+    "max_height": 0.5
+   }
+  }
+ ]
+}

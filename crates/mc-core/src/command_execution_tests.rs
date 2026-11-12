@@ -463,6 +463,38 @@ fn admin_loot_give_generates_chest_loot() {
 }
 
 #[test]
+fn admin_loot_give_rolls_block_tables_like_vanilla_chest_context() {
+    // `LootCommand` rolls with the chest parameter set: no tool, so stone drops cobblestone, not stone.
+    let (mut state, alice, _) = fixture();
+    command(
+        &mut state,
+        alice,
+        "loot give @s loot minecraft:blocks/stone",
+    );
+    let cobblestone = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:cobblestone").unwrap())
+        .unwrap();
+    assert!(
+        state.players[&alice]
+            .inventory
+            .slots
+            .iter()
+            .any(|stack| !stack.is_empty() && stack.item_id == cobblestone),
+        "{:?}",
+        state.players[&alice].inventory.slots
+    );
+    assert!(!chat_contains(&state, "Unknown or unsupported loot table"));
+    command(
+        &mut state,
+        alice,
+        "loot give @s loot minecraft:blocks/no_such_block",
+    );
+    assert!(chat_contains(&state, "Unknown or unsupported loot table"));
+}
+
+#[test]
 fn admin_attribute_unknown_reports_error() {
     let (mut state, alice, _) = fixture();
     let cow = state.spawn_mob(state.registry.cow_type_id, [2.0, 80.0, 0.0], 10.0);

@@ -272,6 +272,34 @@ const INCORRECT_FOR_STONE_OR_COPPER_TOOL: &[&str] = &[
 ];
 
 const REQUIRED_BLOCK_TAGS: &[(&str, &[&str])] = &[
+    // 26.3 `#minecraft:mob_interactable_doors`: `#wooden_doors` and the eight
+    // copper doors. The settlement tick derives its villager door table from it.
+    (
+        "minecraft:mob_interactable_doors",
+        &[
+            "minecraft:oak_door",
+            "minecraft:spruce_door",
+            "minecraft:birch_door",
+            "minecraft:jungle_door",
+            "minecraft:acacia_door",
+            "minecraft:dark_oak_door",
+            "minecraft:pale_oak_door",
+            "minecraft:crimson_door",
+            "minecraft:warped_door",
+            "minecraft:mangrove_door",
+            "minecraft:bamboo_door",
+            "minecraft:cherry_door",
+            "minecraft:poplar_door",
+            "minecraft:copper_door",
+            "minecraft:exposed_copper_door",
+            "minecraft:weathered_copper_door",
+            "minecraft:oxidized_copper_door",
+            "minecraft:waxed_copper_door",
+            "minecraft:waxed_exposed_copper_door",
+            "minecraft:waxed_weathered_copper_door",
+            "minecraft:waxed_oxidized_copper_door",
+        ],
+    ),
     (
         "minecraft:sniffer_diggable_block",
         &[

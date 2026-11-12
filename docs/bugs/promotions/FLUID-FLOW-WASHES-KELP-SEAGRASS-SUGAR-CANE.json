@@ -1,0 +1,50 @@
+{
+  "id": "FLUID-FLOW-WASHES-KELP-SEAGRASS-SUGAR-CANE",
+  "verdict": "promoted",
+  "fix_commit": "af58aeb920b1403c294982c477f53e1ceabc66c1",
+  "fix_commit_full": "af58aeb920b1403c294982c477f53e1ceabc66c1",
+  "promoted_at": "2026-11-12T14:33:57+00:00",
+  "tree_head": "a5a8a86518eeef5f21d62f8e623a0e3e0906577e",
+  "tree_dirty": true,
+  "tree_sha256": "7d8337fbc34332c169d54333907586a6d2a9c20b7c54b2d6a45a92e0a3515f23",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/fluids.rs",
+    "crates/mc-core/src/registry.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/fluid_plants_tests.rs",
+    "crates/mc-core/src/fluids_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:fluids_tests::plants::kelp_growth_write_in_a_pool_washes_no_column": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:fluids_tests::plants::flowing_water_leaves_kelp_seagrass_and_sugar_cane_standing": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:fluids_tests::plants::flow_into_refuses_plants_and_still_washes_tagged_decoration": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:fluids_tests::plants::kelp_growth_write_in_a_pool_washes_no_column": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:fluids_tests::plants::flowing_water_leaves_kelp_seagrass_and_sugar_cane_standing": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:fluids_tests::plants::flow_into_refuses_plants_and_still_washes_tagged_decoration": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/solaris/.analysis/validation/20261112T143103-ledger-promote-3u6k3xvk"
+}

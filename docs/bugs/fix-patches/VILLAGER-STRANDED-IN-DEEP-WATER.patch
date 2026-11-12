@@ -1,0 +1,81 @@
+diff --git a/crates/mc-core/src/settlements/allocator.rs b/crates/mc-core/src/settlements/allocator.rs
+index c63496cb..68e21d06 100644
+--- a/crates/mc-core/src/settlements/allocator.rs
++++ b/crates/mc-core/src/settlements/allocator.rs
+@@ -688,6 +688,9 @@ pub(crate) fn standing(
+     standing_for_route(world, registry, cell, width, height, false)
+ }
+ 
++/// `can_open_doors` marks the villager navigation profile: such a body opens
++/// `#mob_interactable_doors` and, like vanilla `setCanFloat`, floats over deep
++/// water (see [`floating_stand`]).
+ pub(crate) fn standing_for_route(
+     world: &crate::world::ChunkWorld,
+     registry: &std::sync::Arc<CoreRegistry>,
+@@ -705,7 +708,14 @@ pub(crate) fn standing_for_route(
+             (b[0] <= 0.5 && b[3] >= 0.5 && b[2] <= 0.5 && b[5] >= 0.5 && b[4] <= 1.0)
+                 .then_some(b[4])
+         })
+-        .max_by(f64::total_cmp)?;
++        .max_by(f64::total_cmp);
++    let Some(top) = top else {
++        return if can_open_doors {
++            floating_stand(world, registry, cell, width, height)
++        } else {
++            None
++        };
++    };
+     let pos = [
+         f64::from(cell.x) + 0.5,
+         f64::from(cell.y - 1) + top,
+@@ -714,6 +724,34 @@ pub(crate) fn standing_for_route(
+     clear_body_for_route(world, registry, pos, width, height, can_open_doors).then_some(pos)
+ }
+ 
++/// A swimmer's feet rest this far below the water surface (vanilla swims up
++/// until the water is shallower than its 0.4-block fluid jump threshold).
++const FLOAT_DEPTH: f64 = 0.3;
++
++/// Vanilla `setCanFloat` with `WalkNodeEvaluator`: a floating mob uses the
++/// water surface as its floor. Over water at least two blocks deep (shallower
++/// water is waded on its bed) the first row above the water is standable with
++/// the feet [`FLOAT_DEPTH`] under the surface, if the body fits there.
++pub(crate) fn floating_stand(
++    world: &crate::world::ChunkWorld,
++    registry: &std::sync::Arc<CoreRegistry>,
++    cell: BlockPos,
++    width: f64,
++    height: f64,
++) -> Option<[f64; 3]> {
++    let deep = (1..=2).all(|below| {
++        world
++            .block_at(cell.x, cell.y - below, cell.z)
++            .is_some_and(|id| registry.materials.classify(id) == mc_physics::BlockMaterial::Water)
++    });
++    let pos = [
++        f64::from(cell.x) + 0.5,
++        f64::from(cell.y) - FLOAT_DEPTH,
++        f64::from(cell.z) + 0.5,
++    ];
++    (deep && clear_body_for_route(world, registry, pos, width, height, true)).then_some(pos)
++}
++
+ /// The body falls straight down the landing column from `from_y` to the
+ /// landing position `end`; every unit-spaced body position on the way (a body
+ /// is taller than one block) must be clear.
+diff --git a/crates/mc-core/src/villager/brain/motion.rs b/crates/mc-core/src/villager/brain/motion.rs
+index 24f806e6..32d739cf 100644
+--- a/crates/mc-core/src/villager/brain/motion.rs
++++ b/crates/mc-core/src/villager/brain/motion.rs
+@@ -138,7 +138,10 @@ impl MotionGeometryCache {
+             }
+             return point;
+         }
+-        let point = allocator::standing(&(state).world, &(state).registry, cell, width, height);
++        let point = allocator::standing(&(state).world, &(state).registry, cell, width, height)
++            .or_else(|| {
++                allocator::floating_stand(&(state).world, &(state).registry, cell, width, height)
++            });
+         if covered {
+             self.standing = Some((cell, point));
+         }

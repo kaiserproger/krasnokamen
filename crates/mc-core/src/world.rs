@@ -56,7 +56,7 @@ pub struct ChunkWorld {
     block_entity_replaced: HashSet<(i32, i32, i32)>,
     /// Overlay-touched chunk positions, drained by `fold_overlay`.
     touched: Vec<ChunkPos>,
-    /// Pending structural edits for villagers that can open wooden doors.
+    /// Pending structural edits for villagers that can open mob-interactable doors.
     route_touched: Vec<ChunkPos>,
     /// Chunks whose content or deferred inhabited image is newer than their
     /// native checkpoint (block edits, block-entity storage, counter intervals).
@@ -137,7 +137,7 @@ pub struct ChunkWorld {
     wire_revisions: HashMap<ChunkPos, u64>,
     /// Route geometry for door-opening villagers; physical/wire revisions stay separate.
     villager_route_revisions: HashMap<ChunkPos, u64>,
-    wooden_doors: Arc<[bool]>,
+    mob_interactable_doors: Arc<[bool]>,
     /// Pushed POI revision events since the last [`Self::swap_poi_revisions`]
     /// consume. Every `bump_revision` and every resident unload inserts its
     /// chunk (reloads report via `bump_revision`); entries coalesce per chunk
@@ -421,7 +421,7 @@ impl ChunkWorld {
             air,
             world_spawn,
             Arc::clone(&registry.light),
-            Arc::clone(&registry.wooden_doors),
+            Arc::clone(&registry.mob_interactable_doors),
         )
     }
 
@@ -446,7 +446,7 @@ impl ChunkWorld {
             air,
             world_spawn,
             Arc::clone(&registry.light),
-            Arc::clone(&registry.wooden_doors),
+            Arc::clone(&registry.mob_interactable_doors),
         )
     }
 
@@ -462,7 +462,7 @@ impl ChunkWorld {
         air: BlockStateId,
         world_spawn: [i32; 3],
         light: Arc<mc_data::block_light::BlockLightTable>,
-        wooden_doors: Arc<[bool]>,
+        mob_interactable_doors: Arc<[bool]>,
     ) -> Self {
         // Half the cores: with one worker per core, exploring players kept
         // generation at the whole CPU budget (3.2 of 6 cores measured, with
@@ -512,7 +512,7 @@ impl ChunkWorld {
             next_revision: 0,
             wire_revisions: HashMap::default(),
             villager_route_revisions: HashMap::default(),
-            wooden_doors,
+            mob_interactable_doors,
             poi_revisions: HashSet::default(),
             hydration_pending: HashSet::default(),
             eviction_check: HashSet::default(),
@@ -1098,8 +1098,8 @@ impl ChunkWorld {
         ))
     }
 
-    fn wooden_door_toggle(&self, previous: Option<u32>, state: u32) -> bool {
-        self.wooden_doors
+    fn mob_interactable_door_toggle(&self, previous: Option<u32>, state: u32) -> bool {
+        self.mob_interactable_doors
             .get(state as usize)
             .copied()
             .unwrap_or(false)
@@ -1165,7 +1165,9 @@ impl ChunkWorld {
                 self.bump_revision(chunk);
             }
         }
-        if !self.wooden_door_toggle(previous, state) && !self.route_touched.contains(&chunk) {
+        if !self.mob_interactable_door_toggle(previous, state)
+            && !self.route_touched.contains(&chunk)
+        {
             self.route_touched.push(chunk);
         }
         self.overlay.insert((x, y, z), state);

@@ -181,7 +181,7 @@ fn decorate(s: &mut TickState, rng: &mut Rng, slots: &[EntitySlot]) {
     s.require_plugin_login = true;
     for (index, &slot) in slots.iter().enumerate() {
         match index % 23 {
-            0 | 1 | 2 => {
+            0..=2 => {
                 let connection = crate::boundary::ConnectionId(index as _);
                 s.entities.set_kind(slot, EntityKind::Player { connection });
                 let mode = if index % 23 == 1 {
