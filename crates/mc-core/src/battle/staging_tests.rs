@@ -690,6 +690,25 @@ fn reset_removes_battle_units_and_ticket_not_other_mobs() {
         );
         assert!(listed.contains(state.entities.row(slot).uuid.to_string().as_str()));
     }
+    let first = &state.hostile.battle.formation.members[0];
+    let (first_id, x, z) = (first.id.0, first.pos[0], first.pos[2]);
+    let trace = execute(
+        &mut state,
+        &mut changes,
+        [0.0; 3],
+        &BattleCommand::Trace { x, z, radius: 2.0 },
+    )
+    .unwrap();
+    assert!(
+        trace.starts_with("Battle trace: ") && trace.contains(&format!(" {first_id} side1 r")),
+        "{trace}"
+    );
+    assert!(trace.contains(" to "), "{trace}");
+    assert_eq!(
+        parse(&["trace", "1", "2", "8"]).unwrap(),
+        BattleCommand::Trace { x: 1.0, z: 2.0, radius: 8.0 }
+    );
+    assert!(parse(&["trace", "1", "2", "40"]).is_err(), "radius over the cap");
     let want: rustc_hash::FxHashMap<_, _> = spawned
         .iter()
         .map(|id| {
