@@ -1,0 +1,169 @@
+diff --git a/crates/mc-core/src/core/journal.rs b/crates/mc-core/src/core/journal.rs
+index 771a334..e3068fa 100644
+--- a/crates/mc-core/src/core/journal.rs
++++ b/crates/mc-core/src/core/journal.rs
+@@ -407,6 +407,14 @@ pub(crate) fn journal_entries_for_tick(
+         });
+         state.journaled_difficulty = Some(state.difficulty);
+     }
++    if state.dimension == crate::dimensions::Dimension::Overworld
++        && state.journaled_default_game_mode != Some(state.default_game_mode)
++    {
++        entries.push(JournalEntry::DefaultGameMode {
++            value: state.default_game_mode,
++        });
++        state.journaled_default_game_mode = Some(state.default_game_mode);
++    }
+     for claim in std::mem::take(&mut state.new_generated_entity_claims) {
+         entries.push(JournalEntry::GeneratedEntityClaim { claim });
+     }
+diff --git a/crates/mc-core/src/core/recovery.rs b/crates/mc-core/src/core/recovery.rs
+index b9d6925..d91e80f 100644
+--- a/crates/mc-core/src/core/recovery.rs
++++ b/crates/mc-core/src/core/recovery.rs
+@@ -185,6 +185,8 @@ pub(super) fn load_dimension_state(
+     replay.border.validate()?;
+     tick_state.border = replay.border;
+     tick_state.difficulty = replay.difficulty;
++    tick_state.default_game_mode = replay.default_game_mode;
++    tick_state.journaled_default_game_mode = Some(replay.default_game_mode);
+     if let Some(climate) = replay.climate {
+         climate.restore(&mut tick_state)?;
+     }
+diff --git a/crates/mc-core/src/dimensions_tick.rs b/crates/mc-core/src/dimensions_tick.rs
+index 3439af9..8284c07 100644
+--- a/crates/mc-core/src/dimensions_tick.rs
++++ b/crates/mc-core/src/dimensions_tick.rs
+@@ -54,6 +54,11 @@ pub(crate) fn swap_globals(root: &mut TickState, world: &mut TickState) {
+         &mut root.journaled_difficulty,
+         &mut world.journaled_difficulty,
+     );
++    std::mem::swap(&mut root.default_game_mode, &mut world.default_game_mode);
++    std::mem::swap(
++        &mut root.journaled_default_game_mode,
++        &mut world.journaled_default_game_mode,
++    );
+     std::mem::swap(
+         &mut root.dimension_globals.reserved_uuids,
+         &mut world.dimension_globals.reserved_uuids,
+diff --git a/crates/mc-core/src/level_metadata.rs b/crates/mc-core/src/level_metadata.rs
+index b7b3edf..cb69e32 100644
+--- a/crates/mc-core/src/level_metadata.rs
++++ b/crates/mc-core/src/level_metadata.rs
+@@ -197,6 +197,16 @@ pub fn import_tags(
+             _ => Err(failure(level_path, format!("invalid Data.spawn.{key}"))),
+         };
+         manifest.world_spawn_rotation = [angle("yaw")?, angle("pitch")?];
++        // Vanilla `WorldData.GameType` (`/defaultgamemode`): absent keeps survival, any other
++        // value than the four ids fails closed rather than silently joining players in survival.
++        manifest.default_game_mode = match field(data, "GameType") {
++            None => crate::commands::GameMode::Survival,
++            Some(Tag::Int(0)) => crate::commands::GameMode::Survival,
++            Some(Tag::Int(1)) => crate::commands::GameMode::Creative,
++            Some(Tag::Int(2)) => crate::commands::GameMode::Adventure,
++            Some(Tag::Int(3)) => crate::commands::GameMode::Spectator,
++            Some(_) => return Err(failure(level_path, "invalid Data.GameType")),
++        };
+         if let Some(settings) = field(data, "difficulty_settings") {
+             let Tag::Compound(settings) = settings else {
+                 return Err(failure(level_path, "invalid difficulty_settings"));
+@@ -416,8 +426,12 @@ pub fn checkpoint_tags(
+     ] {
+         put(version, key, value);
+     }
++    put(
++        data,
++        "GameType",
++        Tag::Int(i32::from(manifest.default_game_mode.id())),
++    );
+     for (key, value) in [
+-        ("GameType", Tag::Int(0)),
+         ("initialized", Tag::Byte(1)),
+         ("allowCommands", Tag::Byte(1)),
+     ] {
+diff --git a/crates/mc-core/src/native_checkpoint.rs b/crates/mc-core/src/native_checkpoint.rs
+index 22e2ebc..a2319ba 100644
+--- a/crates/mc-core/src/native_checkpoint.rs
++++ b/crates/mc-core/src/native_checkpoint.rs
+@@ -709,6 +709,7 @@ pub fn recover_with_reader(
+             climate: manifest.climate,
+             border: image.border,
+             difficulty: manifest.difficulty,
++            default_game_mode: manifest.default_game_mode,
+             gamerules: manifest.gamerules.clone(),
+             ..Default::default()
+         };
+@@ -824,6 +825,7 @@ pub fn recover_with_reader(
+     let bossbars = root.bossbars.clone();
+     let climate = root.climate;
+     let difficulty = root.difficulty;
++    let default_game_mode = root.default_game_mode;
+     let gamerules = root.gamerules.clone();
+     let mut ids = std::collections::BTreeSet::new();
+     let mut uuids = std::collections::BTreeSet::new();
+@@ -833,6 +835,7 @@ pub fn recover_with_reader(
+         replay.bossbars = bossbars.clone();
+         replay.climate = climate;
+         replay.difficulty = difficulty;
++        replay.default_game_mode = default_game_mode;
+         replay.gamerules = gamerules.clone();
+         for (&id, entity) in &replay.entities {
+             if !ids.insert(id) || !uuids.insert(entity.uuid.clone()) {
+@@ -1023,6 +1026,7 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
+     let root = &world.dimensions[&Dimension::Overworld];
+     manifest.climate = root.climate;
+     manifest.difficulty = root.difficulty;
++    manifest.default_game_mode = root.default_game_mode;
+     manifest.gamerules = root.gamerules.clone();
+     for (uuid, player) in &root.players {
+         let mut player = player.clone();
+diff --git a/crates/mc-core/src/command_execution.rs b/crates/mc-core/src/command_execution.rs
+index ec0cf334..257c5494 100644
+--- a/crates/mc-core/src/command_execution.rs
++++ b/crates/mc-core/src/command_execution.rs
+@@ -474,11 +474,6 @@ pub(crate) fn execute(
+         }
+         Command::DefaultGameMode(mode) => {
+             state.default_game_mode = *mode;
+-            if state.dimension_globals.active {
+-                state.dimension_globals.broadcasts.push(
+-                    crate::dimensions::globals::Broadcast::DefaultGameMode(*mode),
+-                );
+-            }
+             success_feedback(
+                 state,
+                 connection,
+diff --git a/crates/mc-core/src/dimensions_globals.rs b/crates/mc-core/src/dimensions_globals.rs
+index 864f81ab..7cedb631 100644
+--- a/crates/mc-core/src/dimensions_globals.rs
++++ b/crates/mc-core/src/dimensions_globals.rs
+@@ -19,7 +19,6 @@ pub(crate) enum Broadcast {
+     Chat(mc_nbt::Tag),
+     /// Command-block output shown to operators only (vanilla `broadcastToAdmins`).
+     AdminChat(mc_nbt::Tag),
+-    DefaultGameMode(crate::commands::GameMode),
+     TeamChat {
+         members: std::collections::BTreeSet<String>,
+         content: mc_nbt::Tag,
+@@ -72,7 +71,6 @@ fn relay(world: &mut TickState, event: &Broadcast) {
+         Broadcast::Chat(content) => queue_each(world, || PlayerChange::StyledChat {
+             content: content.clone(),
+         }),
+-        Broadcast::DefaultGameMode(mode) => world.default_game_mode = *mode,
+         Broadcast::AdminChat(content) => {
+             let operators: Vec<_> = world
+                 .connections
+@@ -269,6 +267,13 @@ pub(crate) fn finish(
+             .dimension_globals
+             .broadcasts = pending;
+     }
++    // The root owns the default game mode: a command in a child world reaches the root through
++    // `swap_globals`, which leaves that child with the previous value, so every idle world is
++    // re-aligned here instead of being told by a broadcast that skips its source world.
++    let default_game_mode = state.default_game_mode;
++    for world in state.other_dimensions.values_mut() {
++        world.default_game_mode = default_game_mode;
++    }
+     roster(state);
+     let snapshot = Arc::get_mut(&mut output.snapshot).expect("unpublished root snapshot");
+     snapshot.raining = state.weather.0 != Weather::Clear;
