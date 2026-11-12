@@ -2302,11 +2302,12 @@ title = "Villagers stuck or stop pathfinding early"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1 (villagers stop short of their target and drop the route early); fixed by 8a1c5453 (2026-10-19: progressing routes are no longer replaced on the 40-tick retry; stuck or pushed villagers replan). Fix patch docs/bugs/fix-patches/ISSUE-1-05.patch is that code at the candidate (villager/brain/motion.rs: progress tracking at due checks and the replan condition); reversing it brings back a new route search at every due check, so a route the villager is still walking is searched and replaced every 40 ticks. progressing_route_is_kept_at_due_check_without_a_new_search observes that search; the older route tests guard the stalled/pushed half and stay green with the patch reversed"
-regression = ["cargo:mc-core:villager::brain::tests::route_continuation_tests::progressing_route_is_kept_at_due_check_without_a_new_search", "cargo:mc-core:villager::brain::tests::route_continuation_tests::due_replan_search_failure_keeps_valid_progress_route", "cargo:mc-core:villager::brain::tests::route_continuation_tests::pushed_off_route_replans_from_pushed_position_at_due_check", "cargo:mc-core:villager::brain::tests::route_continuation_tests::unchanged_waypoint_distance_is_stalled_not_progress", "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_claim_keeps_walking_without_forty_tick_abandon"]
+regression = ["cargo:mc-core:villager::brain::tests::route_continuation_tests::progressing_route_is_kept_at_due_check_without_a_new_search", "cargo:mc-core:villager::brain::tests::route_continuation_tests::due_replan_search_failure_keeps_valid_progress_route", "cargo:mc-core:villager::brain::tests::route_continuation_tests::pushed_off_route_replans_from_pushed_position_at_due_check", "cargo:mc-core:villager::brain::tests::route_continuation_tests::unchanged_waypoint_distance_is_stalled_not_progress", "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_claim_keeps_walking_without_forty_tick_abandon", "harness:village-qa:miner_deposit", "harness:village-qa:lumberjack"]
 failing_first = "reported"
 fix_commit = "patch:012a79cda0c63a0980159b11373de82cf67b3469bf5405692dd190f54b233d10"
+promotion = "docs/bugs/promotions/ISSUE-1-05.json"
 
 [[bug]]
 id = "ISSUE-1-06"
@@ -2527,10 +2528,11 @@ title = "Housing certification wrongly requires baby clearance"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = ["harness:scene-shot:native-low-roof-house"]
-fix_commit = "a6979209045bdae03d35ba6609a32ed71d92298c"
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1; fixed by a6979209 (2026-10-19: house certification counts a valid bed pair, not breeding headroom). Fix patch docs/bugs/fix-patches/ISSUE-1-26.patch is that hunk at the candidate (settlements/buildings.rs inspect); reversing it counts only beds with baby space again, so a bed under a low roof does not certify. The commit a6979209 also carries the ISSUE-1-28 fold and the village-qa harness, so the control reverses this one hunk only"
+regression = ["cargo:mc-core:settlements::buildings::tests::ordinary_sleep_bed_certifies_without_breeding_headroom", "harness:scene-shot:native-low-roof-house"]
+fix_commit = "patch:d621068b278bfa6128741ae7e78b112c17d93670be93099adf78012915876b5e"
+promotion = "docs/bugs/promotions/ISSUE-1-26.json"
 
 [[bug]]
 id = "ISSUE-1-27"
