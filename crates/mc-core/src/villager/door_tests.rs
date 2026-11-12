@@ -190,7 +190,10 @@ fn bound_bedless_nitwit_enters_occupied_house_at_night() {
     assert_eq!(cells.len(), 3, "bedless residents must not share a cell");
     // Issue #1 (ISSUE-1-08): every resident that walked in for the night left
     // the house door shut behind it.
-    assert!(!door_open(&state, door), "a sheltering resident left the house door open");
+    assert!(
+        !door_open(&state, door),
+        "a sheltering resident left the house door open"
+    );
 }
 
 #[test]
