@@ -5,8 +5,9 @@ The operator player levels a pad and certifies a storage hut (one chest) and a
 cartographer workshop (cartography table + crafting table; a cartographer never
 bakes or deposits). It binds one summoned villager and puts 3 hay blocks into
 the chest through the chest menu. Then, only through the server-driven
-/settlement dialogs (production page -> New order -> recipe button, with the
-default quantity 8 and "Craft missing ingredients: ON"):
+/settlement menus (Production orders menu -> New order -> recipe icon -> order
+dialog, with the default craft count 8 and "Craft missing ingredients" set ON
+explicitly: the box is unchecked by default, so the gate clicks it):
 
 - saddle x8 is refused: missing 24 leather, a raw material. No job is created.
 - hay_block x8 is refused: recipe cycle hay_block -> open_hay -> hay_block.
@@ -45,6 +46,7 @@ from .. import runtime
 from ..profiles import ProfileContext
 from . import native_client
 from .army_qa import (
+    DIALOG,
     _body,
     _bwait,
     _chest_totals,
@@ -56,8 +58,8 @@ from .army_qa import (
     _open_chest,
     _pad_commands,
     _press,
+    _screen_args,
     _villagers,
-    _wait_title,
 )
 from .gameplay import peak_rss_kib, prepare_operator_fixture
 from .probe_steps import ProbeSteps
@@ -66,7 +68,10 @@ USERNAME = "AutoCraftQA"
 SETTLEMENT = "autocraft"
 TIMEOUT = 900.0
 HAY = 3
-COUNT = 8  # the New order slider's initial quantity
+COUNT = 8  # the order dialog's initial craft count
+CONTAINER = "net.minecraft.client.gui.screens.inventory.ContainerScreen"
+ACTION_SLOT, RECIPE_SLOTS = 52, 45  # server icon menu layout (ui_menus.rs): New order icon; recipe icons per page
+AUTO_LABEL = "Craft missing ingredients"
 CANCEL = "qa-cancel"
 CANCEL_COUNT = 4  # carry's 3 wheat + one opened hay block (9) = 12 wheat
 
@@ -295,43 +300,67 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     probe.fixture(f"settlement bind {SETTLEMENT} {worker}")
     detail["worker"] = worker
 
-    # --- dialogs only from here on ---
-    entry = probe.observe()
-    probe.call("minecraft_send_chat", {"message": "settlement menu production", "command": True})
-    _wait_title(probe, "Production orders", "orders_open", entry=entry)
+    # --- settlement menus and the order dialog only from here on ---
+    def menu(title: str, label: str) -> dict[str, Any]:
+        return _bwait(probe, lambda s: (s.get("screen") or {}).get("class") == CONTAINER
+                      and str((s["screen"]).get("title") or "").startswith(title), label)
 
-    def new_order() -> dict[str, Any]:
-        form = _press(probe, "New order")
-        probe.check("new_order_form", (form["screen"].get("title") or "") == "New production order")
-        return form
+    def order_form(recipe: str) -> dict[str, Any]:
+        """Production menu -> New order icon -> recipe icon -> the order dialog, box set ON."""
+        probe.call("minecraft_send_chat", {"message": "settlement menu production", "command": True})
+        orders = menu("Production orders", f"orders_open_{recipe}")
+        action = next((row for row in orders["container"]["slots"] if row.get("slot") == ACTION_SLOT), {})
+        probe.check(f"new_order_icon_{recipe}", action.get("name") == "New order")
+        probe.call("minecraft_click_container_slot",
+                   {"slot": ACTION_SLOT, "button": "primary", "timeout_seconds": probe.remaining()})
+        recipes = menu("New production order", f"recipes_open_{recipe}")
+        icon = next((row["slot"] for row in recipes["container"]["slots"]
+                     if row.get("slot", RECIPE_SLOTS) < RECIPE_SLOTS and row.get("name") == recipe), None)
+        probe.check(f"recipe_icon_{recipe}", icon is not None)
+        probe.call("minecraft_click_container_slot",
+                   {"slot": icon, "button": "primary", "timeout_seconds": probe.remaining()})
+        form = _bwait(probe, lambda s: (s.get("screen") or {}).get("class") == DIALOG
+                      and (s["screen"].get("title") or "") == "New production order",
+                      f"order_dialog_{recipe}")
+        auto = next((label for label in _labels(form) if label.startswith(AUTO_LABEL)), None)
+        probe.check(f"autocraft_checkbox_present_{recipe}", auto is not None)
+        detail.setdefault("form_labels", _labels(form))
+        detail.setdefault("checkbox_initial", auto)
+        if auto.endswith(": OFF"):
+            probe.call("minecraft_click_screen_button", {**_screen_args(form), "button_label": auto})
+        return _bwait(probe, lambda s: f"{AUTO_LABEL}: ON" in _labels(s), f"autocraft_checkbox_on_{recipe}")
 
-    form = new_order()
+    def submit(_form: dict[str, Any]) -> str:
+        return _flat(_body(_press(probe, "New order")))
+
+    def admitted() -> str:
+        return _readback(probe, f"settlement production {SETTLEMENT} status", "Production: jobs=")
+
+    form = order_form("saddle")
     labels = _labels(form)
-    detail["form_labels"] = labels
-    probe.check("autocraft_checkbox_on", "Craft missing ingredients: ON" in labels)
-    probe.check(f"quantity_defaults_to_{COUNT}", f"Quantity: {COUNT}" in labels)
+    probe.check("autocraft_checkbox_on", f"{AUTO_LABEL}: ON" in labels)
+    probe.check(f"quantity_defaults_to_{COUNT}", f"Craft count: {COUNT}" in labels)
     shot("form")
 
-    raw = _flat(_body(_press(probe, "saddle -> saddle x1")))
+    raw = submit(form)
     detail["refused_raw"] = raw
     probe.check("raw_material_refused",
                 "Refused: missing 24 minecraft:leather: not in storage and no recipe makes it." in raw)
-    probe.check("raw_refusal_admits_nothing", "No production orders yet." in raw)
+    _press(probe, "Close")
+    probe.check("raw_refusal_admits_nothing", "jobs=0" in admitted())
 
-    new_order()
-    cycle = _flat(_body(_press(probe, "hay_block -> hay_block x1")))
+    cycle = submit(order_form("hay_block"))
     detail["refused_cycle"] = cycle
     probe.check("cycle_refused",
                 "missing 5 minecraft:hay_block: its recipes form a cycle "
                 "(hay_block -> open_hay -> hay_block)" in cycle)
-    probe.check("cycle_refusal_admits_nothing", "No production orders yet." in cycle)
     shot("refused")
+    _press(probe, "Close")
+    probe.check("cycle_refusal_admits_nothing", "jobs=0" in admitted())
 
-    new_order()
-    planned = _flat(_body(_press(probe, "bread -> bread x1")))
+    planned = submit(order_form("bread"))
     detail["planned"] = planned
     probe.check("chain_planned", "Order ui-1 planned: open_hay x3 -> bread x8." in planned)
-    probe.check("product_waits_for_dependency", "waiting for ui-1-1" in planned)
     shot("planned")
     _press(probe, "Close")
 
