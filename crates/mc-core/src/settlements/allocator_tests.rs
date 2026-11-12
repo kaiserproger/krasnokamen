@@ -107,34 +107,25 @@ fn step(state: &mut TickState) -> ChangeSet {
 }
 
 #[test]
-fn unemployed_villager_does_not_reserve_work_before_shift() {
-    let mut state = test_state();
-    state.day_time = 1000;
-    let composter = block(&state, "minecraft:composter", &[]);
-    state.world.set_block(4, 201, 4, composter);
-    state.world.fold_overlay();
-    let slot = villager(&mut state, [2.5, 201.0, 2.5]);
-    for _ in 0..60 {
-        step(&mut state);
+fn jobless_villager_claims_a_free_workstation_at_any_hour() {
+    // Vanilla AcquirePoi / AssignProfessionFromJobSite (core package) ignore
+    // the schedule; a workstation placed after work hours is claimed at once.
+    for time in [1000, 10_000, 14_000, 20_000] {
+        let mut state = test_state();
+        state.day_time = time;
+        let composter = block(&state, "minecraft:composter", &[]);
+        state.world.set_block(4, 201, 4, composter);
+        state.world.fold_overlay();
+        let slot = villager(&mut state, [2.5, 201.0, 2.5]);
+        for _ in 0..60 {
+            step(&mut state);
+        }
+        assert_eq!(
+            state.entities.row(slot).villager.as_ref().unwrap().job_site,
+            Some(BlockPos { x: 4, y: 201, z: 4 }),
+            "day time {time}"
+        );
     }
-    assert!(
-        state
-            .entities
-            .row(slot)
-            .villager
-            .as_ref()
-            .unwrap()
-            .job_site
-            .is_none()
-    );
-    state.day_time = 2000;
-    for _ in 0..240 {
-        step(&mut state);
-    }
-    assert_eq!(
-        state.entities.row(slot).villager.as_ref().unwrap().job_site,
-        Some(BlockPos { x: 4, y: 201, z: 4 })
-    );
 }
 
 #[test]
