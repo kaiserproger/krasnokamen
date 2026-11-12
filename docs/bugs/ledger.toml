@@ -2399,10 +2399,10 @@ status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = ["harness:entities:native-v2-craft-drag", "harness:entities:native-v2-craft-drag-paced", "harness:entities:native-v2-chest-drag-disconnect"]
 failing_first = "reported"
-# fix_commit is a solaris-client commit ("fix(client): keep the cursor across menu drags"), not a
-# core commit: server quick-craft code is unchanged since 1ada2ceb and kept custody with the
-# pre-fix client (receipts/CraftDrag); `ledger promote` resolves fix_commit in this repository only.
-fix_commit = "b7c48e1c7de46c34bc6611d438edfec3f37039c5"
+# Fixed in solaris-client b7c48e1c7de46c34bc6611d438edfec3f37039c5 ("fix(client): keep the cursor
+# across menu drags"); server quick-craft code is unchanged since 1ada2ceb and kept custody with the
+# pre-fix client (receipts/CraftDrag/REPORT.md). fix_commit stays empty until the owner decides how
+# client-repo fixes are promoted (ledger promote resolves fix_commit in this repository only).
 
 [[bug]]
 id = "ISSUE-1-15"
