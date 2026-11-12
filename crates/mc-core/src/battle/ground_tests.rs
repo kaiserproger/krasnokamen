@@ -536,8 +536,8 @@ fn a_body_under_an_overhang_walks_out_by_the_step_not_the_drop() {
             break;
         }
         let drive = deflect(world, registry, pos, 0.3, [0.0, 0.0], [0.0, 0.0], 1.0);
-        pos[0] += drive[0];
-        pos[2] += drive[1];
+        pos[0] += drive[0] * mc_physics::TICK_SECONDS;
+        pos[2] += drive[1] * mc_physics::TICK_SECONDS;
         if solid(pos) {
             pos[1] += 1.0;
         }
@@ -684,4 +684,119 @@ fn fleeing_riders_climb_out_of_a_gully_end() {
         .filter(|p| p[1] < 72.0 && mc_physics::mth::length2(p[0] - pocket[0], p[2] - pocket[1]) < 3.0)
         .collect();
     assert!(inside.is_empty(), "riders still boxed in the gully end: {inside:?}");
+}
+
+/// The G1 site's cave tunnel under an undercut cliff where 14 red foot
+/// stood at the end of rehearsal r7, at (-72.7, 87, 260.3): blocks of columns
+/// x -78..=-64 (left to right), rows z 256..=267, cells y 84..=97 (`#` solid),
+/// from `receipts/BvReliefBattle/cave-piles/probe.json`. The tunnel (feet 86-87,
+/// under 4-6 blocks of rock) opens east onto a valley floor at x -70..-68.
+const SITE_A: [[&str; 15]; 12] = [
+    ["###########...", "###########...", "###########...", "############..", "############..", "############..", "############..", "############..", "############..", "############..", "############..", "############..", "############..", "############..", "############.."],
+    ["###########...", "###########...", "###########...", "###########...", "###########...", "############..", "############..", "############..", "############..", "############..", "###########...", "###########...", "############..", "############..", "############.."],
+    ["###########...", "###########...", "###########...", "###########...", "###########...", "###########...", "############..", "###########...", "###########...", "###########...", "###########...", "###########...", "###########...", "###########...", "###########..."],
+    ["##########....", "###########...", "###########...", "###########...", "###########...", "###########...", "###########...", "#####.#####...", "##########....", "##########....", "##########....", "########......", "#########.....", "##########....", "##########...."],
+    ["#..#######....", "##.#######....", "##..######....", "##..#######...", "##..#######...", "###..######...", "###..######...", "###...####....", "###...####....", "###..####.....", "###...........", "###...........", "###...........", "###...........", "####.........."],
+    ["#...#####.....", "#...#####.....", "#...#####.....", "#...#####.....", "#....#####....", "##...#####....", "##....####....", "##...####.....", "##...####.....", "##............", "##............", "##............", "###...........", "###...........", "####.........."],
+    ["#...####......", "#...####......", "#...####......", "#...####......", "#...####......", "#...####......", "#....####.....", "#...####......", "##............", "##............", "##............", "###...........", "###...........", "####..........", "#####........."],
+    ["#.####........", "#..####.......", "#..####.......", "#..####.......", "#..####.......", "#..####.......", "##.####.......", "##.####.......", "##............", "##............", "###...........", "###...........", "###...........", "####..........", "######........"],
+    ["#####.........", "#.####........", "#.####........", "#.####........", "######........", "######........", "#####.........", "#####.........", "##............", "###...........", "###...........", "###...........", "####..........", "####..........", "####.........."],
+    ["#####.........", "#####.........", "#####.........", "#####.........", "#####.........", "#####.........", "#####.........", "#####.........", "##............", "###...........", "###...........", "####..........", "####..........", "####..........", "####.........."],
+    ["#####.........", "#####.........", "#####.........", "#####.........", "#####.........", "####..........", "####..........", "####..........", "###...........", "###...........", "###...........", "####..........", "####..........", "####..........", "####.........."],
+    ["####..........", "####..........", "####..........", "####..........", "####..........", "####..........", "####..........", "####..........", "####..........", "###...........", "####..........", "####..........", "###...........", "###...........", "###..........."],
+];
+
+/// Builds [`SITE_A`] into the relief fixture: real (x, y, z) + SITE_A_SHIFT.
+const SITE_A_SHIFT: [i32; 3] = [178, -20, -156];
+
+fn site_a(state: &mut TickState) {
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    for (dz, row) in SITE_A.iter().enumerate() {
+        for (dx, column) in row.iter().enumerate() {
+            let (x, z) = (-78 + dx as i32 + SITE_A_SHIFT[0], 256 + dz as i32 + SITE_A_SHIFT[2]);
+            for y in 58..=90 {
+                let cell = (y - 84 - SITE_A_SHIFT[1]) as usize;
+                let solid = y < 84 + SITE_A_SHIFT[1] || column.as_bytes().get(cell) == Some(&b'#');
+                state.world.set_block(x, y, z, if solid { stone } else { air });
+            }
+        }
+    }
+    state.world.fold_overlay();
+}
+
+/// A body in the r7 tunnel pile walks out toward the valley mouth whatever
+/// its drive, at walking pace at least.
+#[test]
+fn a_body_in_the_r7_tunnel_pile_walks_out() {
+    let mut state = relief_fixture();
+    site_a(&mut state);
+    let (world, registry) = (&state.world, &state.registry);
+    let pile = [-72.7 + 178.0, 67.0, 260.3 - 156.0];
+    let mouth = [-69.5 + 178.0 - pile[0], 262.5 - 156.0 - pile[2]];
+    for drive in [[-1.58, -1.58], [0.0, -2.0], [-2.0, 0.0], [1.58, 1.58], [0.0, 0.0], [-5.6, 0.0]] {
+        let out = deflect(world, registry, pile, 0.3, drive, drive, 1.0);
+        let along = (out[0] * mouth[0] + out[1] * mouth[1]) / mc_physics::mth::length2(mouth[0], mouth[1]);
+        assert!(along > 1.0, "drive {drive:?} -> {out:?}: not walking out (along {along})");
+    }
+}
+
+/// Foot placed in the r7 tunnel pile leave the tunnel under ordinary orders.
+#[test]
+fn foot_in_the_r7_tunnel_pile_leave_it() {
+    let mut state = relief_fixture();
+    site_a(&mut state);
+    stage(&mut state, 100);
+    let formation = &state.hostile.battle.formation;
+    let regiment = formation
+        .regiments
+        .iter()
+        .position(|r| r.spec.faction == 1 && r.spec.frontage <= 1.0)
+        .expect("a foot regiment of the first side");
+    let r = &formation.regiments[regiment];
+    let ids: Vec<_> = formation.members[r.start..r.start + r.len].iter().map(|m| m.id).take(14).collect();
+    let pile = [-72.7 + 178.0, 67.0, 260.3 - 156.0];
+    // Packed as in r7: identical to 0.1 block, never exactly coincident.
+    for (k, &id) in ids.iter().enumerate() {
+        let slot = state.entities.slot_of(id).unwrap();
+        let k = k as f64;
+        state.entities.set_pos(slot, [pile[0] + 0.004 * (k % 4.0), pile[1], pile[2] + 0.004 * (k / 4.0).floor()]);
+    }
+    for _ in 0..300 {
+        run_tick(&mut state, &[]);
+    }
+    let (world, registry) = (&state.world, &state.registry);
+    let inside: Vec<_> = ids
+        .iter()
+        .filter_map(|&id| state.entities.slot_of(id).map(|slot| state.entities.pos(slot)))
+        .filter(|p| {
+            let feet = (p[1] + 1e-3).floor() as i32;
+            cover(world, registry, p[0].floor() as i32, p[2].floor() as i32, feet + 2) > 0
+        })
+        .collect();
+    assert!(inside.is_empty(), "foot still in the tunnel: {inside:?}");
+}
+
+/// A body on foot boxed in facing a cave mouth (r7: a blue pile in a
+/// sinkhole, its tunnel north) stands; it no longer keeps a drive that
+/// physics walks under the rock the rules refused. A rider keeps it.
+#[test]
+fn a_boxed_in_body_on_foot_stands_at_a_cave_mouth() {
+    let mut state = relief_fixture();
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    for x in 120..=124 {
+        for z in -121..=-115 {
+            for y in 60..=78 {
+                let shaft = (x, z) == (122, -118) && y >= 66;
+                let tunnel = (x, z) == (122, -119) && (66..=67).contains(&y);
+                let solid = y <= 72 && !shaft && !tunnel;
+                state.world.set_block(x, y, z, if solid { stone } else { air });
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let (world, registry) = (&state.world, &state.registry);
+    let pos = [122.5, 66.0, -117.5];
+    let north = [0.0, -1.58];
+    assert_eq!(deflect_foot(world, registry, pos, 0.3, north, north, 1.0), [0.0, 0.0], "walked into the mouth");
+    assert_eq!(deflect(world, registry, pos, 0.3, north, north, 1.0), north, "a rider keeps pressing");
 }

@@ -18,9 +18,10 @@ pub(crate) const SEARCH_RADIUS: i32 = 8;
 const LOOKAHEAD: f64 = 0.45;
 /// Lateral reach, in blocks, of the search for an obstacle's nearer end.
 const AROUND: i32 = 8;
-/// Least drive, in blocks per tick, of a body walking out from under rock:
-/// the formation's walking step (`FormationRuntime::destination`).
-const WALK_OUT: f64 = 0.079;
+/// Least drive, in blocks per second (steering drives are physics
+/// velocities), of a body walking out from under rock: the formation's
+/// walking step of 0.079 blocks per tick (`FormationRuntime::destination`).
+const WALK_OUT: f64 = 0.079 / mc_physics::TICK_SECONDS;
 /// Deepest drop a body walks into, in blocks; deeper holes are steered around
 /// and never staged in (vanilla mobs avoid falls over about three blocks).
 const MAX_DROP: f64 = 2.0;
@@ -470,6 +471,27 @@ pub(crate) fn deflect(
     side: f64,
 ) -> [f64; 2] {
     steer(world, registry, pos, half_width, drive, heading, side).unwrap_or_else(|boxed| boxed)
+}
+
+/// [`deflect`] for a body on foot. Boxed in (no way ahead and no turn of up
+/// to 90 degrees crossable) it stands instead of keeping its drive: physics
+/// walked that drive into the cave mouths and over the edges the rules had
+/// just refused (r7: a blue pile at a sinkhole's tunnel mouth stepped in and
+/// out across it to the end of the take). Under rock it keeps the way out.
+pub(crate) fn deflect_foot(
+    world: &ChunkWorld,
+    registry: &CoreRegistry,
+    pos: [f64; 3],
+    half_width: f64,
+    drive: [f64; 2],
+    heading: [f64; 2],
+    side: f64,
+) -> [f64; 2] {
+    match steer(world, registry, pos, half_width, drive, heading, side) {
+        Ok(out) => out,
+        Err(out) if exit(world, registry, pos).is_some() => out,
+        Err(_) => [0.0; 2],
+    }
 }
 
 /// Ticks a mounted body boxed in by terrain keeps its way back out.
