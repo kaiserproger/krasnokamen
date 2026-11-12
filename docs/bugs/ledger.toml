@@ -4547,7 +4547,8 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "CommandGaps 2026-11-12: vanilla MinecraftServer.setDefaultGameType writes WorldData; Solaris keeps TickState.default_game_mode in memory only."
-regression = []
+fix_commit = "patch:5a9725c806ff3d464801effda449e075fce6d163482390ff450884bf4b765f6f"
+regression = ["cargo:mc-core:core::default_game_mode_persistence_tests::default_game_mode_survives_wal_restart_and_checkpoint_and_joins_new_players", "cargo:mc-core:core::default_game_mode_persistence_tests::a_bad_default_game_mode_is_refused_not_defaulted", "cargo:mc-core:level_metadata::tests::default_game_mode_is_level_dat_game_type_and_a_bad_value_fails_closed", "harness:entities:native-v2-command-persist"]
 failing_first = "not recorded"
 
 [[bug]]
@@ -4580,10 +4581,12 @@ title = "/loot give @s loot minecraft:blocks/stone reports an unknown or unsuppo
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (FINDINGS.md 'Noticed'); command_loot.rs generate(): Source::Table reads state.registry.chest_loot only."
-regression = []
+fix_commit = "patch:32eedfeb063f45f7adc94498723b3378ee66404fba9ababc92b27801a3d0579f"
+regression = ["cargo:mc-core:command_execution::tests::admin_loot_give_rolls_block_tables_like_vanilla_chest_context", "harness:entities:native-v2-command-persist"]
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/LOOT-GIVE-BLOCK-TABLES-UNSUPPORTED.json"
 
 [[bug]]
 id = "PROJECTILE-STUCK-ARROW-NEVER-FALLS"
