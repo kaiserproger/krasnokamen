@@ -2000,11 +2000,12 @@ title = "A corrupt jukebox block entity in a loaded chunk crashes the tick threa
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#JUKEBOX-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 fix_commit = "patch:6db29331caff9061527240767fba6fd5da3ba9fa7edc9d04d62bfbedf1efad71"
+promotion = "docs/bugs/promotions/JUKEBOX-HYDRATE-PANIC.json"
 
 [[bug]]
 id = "DISPENSER-MINECART-VARIANTS"
@@ -2127,7 +2128,7 @@ title = "A corrupt beacon block entity crashes the tick thread at runtime: `beac
 area = "gameplay"
 repro = "source"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BEACON-RUNTIME-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
@@ -2139,6 +2140,7 @@ ingress_proof = [
   "mc-world/src/anvil/chunk_nbt.rs:367,512: the importer accepts only compound records, checked against the block that owns them",
   "mc-core/src/command_block_entity.rs:26-129 (prepare/install): command-supplied records must be compounds; every other writer encodes a fixed compound (block_entity_defaults.rs:221, beacon.rs:139, block_log.rs:1272, mc-worldgen overworld_structures.rs:530)",
 ]
+promotion = "docs/bugs/promotions/BEACON-RUNTIME-PANIC.json"
 
 [[bug]]
 id = "SHRIEKER-HYDRATE-PANIC"
@@ -2146,11 +2148,12 @@ title = "A corrupt sculk-shrieker block entity crashes the tick thread at hydrat
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHRIEKER-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 fix_commit = "patch:34e03a31bb87400103032020267781c98c9ebb79740915acbe303611c27552b9"
+promotion = "docs/bugs/promotions/SHRIEKER-HYDRATE-PANIC.json"
 
 [[bug]]
 id = "GOAT-RAM-ABSENT"

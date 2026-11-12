@@ -1,0 +1,49 @@
+{
+  "id": "BEACON-RUNTIME-PANIC",
+  "verdict": "promoted",
+  "fix_commit": "patch:19ab1a1709043704d949d7528d2999cc206cd270a7cda6f72a72f42bf4a150a8",
+  "fix_commit_full": "patch:19ab1a1709043704d949d7528d2999cc206cd270a7cda6f72a72f42bf4a150a8",
+  "promoted_at": "2026-11-12T05:14:08+00:00",
+  "tree_head": "912759b78f69b7a3324d1776f5198087325c2801",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "19ab1a1709043704d949d7528d2999cc206cd270a7cda6f72a72f42bf4a150a8",
+  "reversed_files": [
+    "crates/mc-core/src/beacon.rs",
+    "crates/mc-core/src/tick/hydration.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-corrupt-block-entities": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T051154-native-v2-corrupt-block-entities-muim9ot9/result.json"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:entities:native-v2-corrupt-block-entities": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T051325-native-v2-corrupt-block-entities-4i48mtxs/result.json"
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/BlockerRows/.analysis/validation/20261112T050953-ledger-promote-xpojuvjb"
+}
