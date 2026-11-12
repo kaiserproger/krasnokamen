@@ -967,10 +967,11 @@ title = "F8 Leave does not delete pending server request; later Allow still gran
 area = "client"
 repro = "source"
 severity = "minor"
-status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P4"
-regression = ["cargo:mc-edge:screen::tests::leave_cancels_an_unanswered_request"]
-fix_commit = "68c0df4cef91a64a62fb1c646ff6ca791cc9f0ee"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P4 (promotion control: docs/bugs/fix-patches/P4.patch is the requests.retain line of 68c0df4c in Message::Leave; reversed, the owner's Allow after the viewer's F8 reaches the viewer again)"
+regression = ["cargo:mc-edge:screen::tests::leave_cancels_an_unanswered_request", "harness:screen-share:native-screen-share-leave"]
+fix_commit = "patch:7afa8bad2c72e3fe31326a40d46950a3a0dd47321a515ffb95cad979cf12668d"
+promotion = "docs/bugs/promotions/P4.json"
 
 [[bug]]
 id = "INTERACT-001"
