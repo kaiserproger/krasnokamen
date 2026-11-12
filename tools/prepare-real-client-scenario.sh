@@ -9,7 +9,7 @@ SCENARIO="${M78_SCENARIO:-$REPO_ROOT/tools/client-automation/scenarios/m78_smoke
 RUN_ROOT="${M78_RUN_ROOT:-$REPO_ROOT/.analysis/client-automation/runs}"
 # The Loader beside the main checkout, also from a linked worktree (as tools/harness/runtime.py sibling_root).
 MAIN_CHECKOUT="$(dirname "$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$REPO_ROOT/.git")")"
-AGENT_ROOT="${KRASNOKAMEN_LOADER_ROOT:-$(dirname "$MAIN_CHECKOUT")/krasnokamen-loader}"
+AGENT_ROOT="${KRASNOKAMEN_LOADER_ROOT:-$(dirname "$MAIN_CHECKOUT")/solaris-loader}"
 GRADLE_RUNCLIENT_TASK=":fabric-agent:runClientAgent"
 CLIENT_ADAPTER_SOURCE="auto-gradle-runclient"
 MODE="prepare"

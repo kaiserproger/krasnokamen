@@ -65,6 +65,7 @@ PROTECTED = [
     ('host path', rf'SIBLING_NAMES = \{{[^}}]*\}}'),
     ('host path', rf'\("{OLD}", "{OLD}-default-plugins", "{OLD}-loader", "{OLD}-client"\)'),
     ('host path', rf'(?<=/games/){OLD}(?![\w-])'),
+    ('host path', rf'(?<=dirname "\$MAIN_CHECKOUT"\)/){CHECKOUTS}'),
     # xtask architecture: (repository name, checkout directory) pairs, written after the rename
     ('host path', rf'(?<="{NEW}-default-plugins", "){OLD}-default-plugins'),
     ('host path', rf'(?<="{NEW}-loader", "){OLD}-loader'),

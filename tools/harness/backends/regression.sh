@@ -10,7 +10,7 @@ MANIFEST="${KRASNOKAMEN_REAL_CLIENT_MANIFEST:-$REPO_ROOT/docs/real-client-regres
 RUN_ROOT="${KRASNOKAMEN_REAL_CLIENT_RUN_ROOT:-$REPO_ROOT/.analysis/real-client-runs}"
 # The Loader beside the main checkout, also from a linked worktree (as tools/harness/runtime.py sibling_root).
 MAIN_CHECKOUT="$(dirname "$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$REPO_ROOT/.git")")"
-AGENT_ROOT="${KRASNOKAMEN_LOADER_ROOT:-$(dirname "$MAIN_CHECKOUT")/krasnokamen-loader}"
+AGENT_ROOT="${KRASNOKAMEN_LOADER_ROOT:-$(dirname "$MAIN_CHECKOUT")/solaris-loader}"
 GRADLE_RUNCLIENT_TASK=":fabric-agent:runClientAgent"
 CLIENT_ADAPTER_SOURCE="auto-gradle-runclient"
 CLIENT_KIND="gradle-runclient"
