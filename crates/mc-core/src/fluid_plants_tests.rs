@@ -91,7 +91,8 @@ fn flowing_water_leaves_kelp_seagrass_and_sugar_cane_standing() {
 #[test]
 fn flow_into_refuses_plants_and_still_washes_tagged_decoration() {
     let (mut state, _, centre) = setup();
-    let cases: [(&str, &[(&str, &str)], bool); 8] = [
+    type WashCase = (&'static str, &'static [(&'static str, &'static str)], bool);
+    let cases: [WashCase; 8] = [
         ("torch", &[], true),
         ("short_grass", &[], true),
         ("kelp", &[("age", "0")], false),
