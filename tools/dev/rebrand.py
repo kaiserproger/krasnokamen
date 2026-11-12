@@ -65,6 +65,9 @@ PROTECTED = [
     ('host path', rf'SIBLING_NAMES = \{{[^}}]*\}}'),
     ('host path', rf'\("{OLD}", "{OLD}-default-plugins", "{OLD}-loader", "{OLD}-client"\)'),
     ('host path', rf'(?<=/games/){OLD}(?![\w-])'),
+    # xtask architecture: (repository name, checkout directory) pairs, written after the rename
+    ('host path', rf'(?<="{NEW}-default-plugins", "){OLD}-default-plugins'),
+    ('host path', rf'(?<="{NEW}-loader", "){OLD}-loader'),
     # temporary names shared with the live runner
     ('tmp name (shared with the live runner)', rf'/(?:var/)?tmp/{OLD}-[\w.@%-]*'),
     ('tmp name (shared with the live runner)', rf'{OLD}-(?:bench|scene-slot|sp-slow|pw|mem-guard|mem-slots|port-locks|plugin-tutorial)[\w.%-]*'),
