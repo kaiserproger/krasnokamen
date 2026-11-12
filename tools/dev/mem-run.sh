@@ -105,7 +105,9 @@ token_slots=$(seq -s, "$build_tokens")
 [ "${SOLARIS_BUILD_LANE:-}" = background ] && token_slots=$(seq -s, $((build_tokens - 1)))
 tool=("${cmd[@]}")
 while :; do
-  case "${tool[0]:-}" in nice|ionice|timeout|env) ;; *) break ;; esac
+  # screen_audio_graph.sh (tools/harness) runs its argv inside a private PipeWire graph: look through it too,
+  # or a wrapped `ledger promote` gets no token and ledger.py refuses it (Main 2026-11-12).
+  case "${tool[0]:-}" in nice|ionice|timeout|env|screen_audio_graph.sh|*/screen_audio_graph.sh) ;; *) break ;; esac
   w=${tool[0]}
   tool=("${tool[@]:1}")
   while [[ ${tool[0]:-} == -* || ${tool[0]:-} == *=* ]]; do
