@@ -82,8 +82,8 @@ use std::collections::VecDeque;
 
 use krasnokamen_plugin_sdk::events::CommandInvoked;
 use krasnokamen_plugin_sdk::{
-    BuildContext, BuildDecision, Command, Config, DamageContext, DamageDecision, DamageTarget,
-    Event, Failure, HookActor, InitContext, LogLevel, log, message_player,
+    log, message_player, BuildContext, BuildDecision, Command, Config, DamageContext,
+    DamageDecision, DamageTarget, Event, Failure, HookActor, InitContext, LogLevel,
 };
 
 /// The command root this fixture answers when `root` is absent.

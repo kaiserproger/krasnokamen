@@ -1193,8 +1193,9 @@ impl EntityStore {
         let index = slot.0 as usize;
         #[cfg(test)]
         {
-            static TRACE: std::sync::LazyLock<bool> =
-                std::sync::LazyLock::new(|| std::env::var_os("KRASNOKAMEN_TRACE_ROW_MUT").is_some());
+            static TRACE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+                std::env::var_os("KRASNOKAMEN_TRACE_ROW_MUT").is_some()
+            });
             if *TRACE {
                 let caller = std::panic::Location::caller();
                 let counts = self

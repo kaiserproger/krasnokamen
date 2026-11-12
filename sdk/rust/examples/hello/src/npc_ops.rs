@@ -24,10 +24,10 @@ use krasnokamen_plugin_sdk::npcs::{
 };
 use krasnokamen_plugin_sdk::types::{BlockPosition, Position};
 use krasnokamen_plugin_sdk::{
-    Command, Config, Failure, LogLevel, ack_npc_work_receipts, adopt_npc, assign_npc_work,
-    cancel_npc_order, cancel_npc_work, issue_npc_order, log, message_player, query_npc_controls,
-    query_npcs, query_owned_inventory, release_npc, resume_npc_work, spawn_npc, suspend_npc_work,
-    transfer_owned_items,
+    ack_npc_work_receipts, adopt_npc, assign_npc_work, cancel_npc_order, cancel_npc_work,
+    issue_npc_order, log, message_player, query_npc_controls, query_npcs, query_owned_inventory,
+    release_npc, resume_npc_work, spawn_npc, suspend_npc_work, transfer_owned_items, Command,
+    Config, Failure, LogLevel,
 };
 
 pub(crate) const ROOT: &str = "npc";

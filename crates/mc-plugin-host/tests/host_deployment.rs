@@ -25,8 +25,8 @@ const BUNDLE_BYTES: &[u8] = b"krasnokamen-client-fixture";
 /// Its size and SHA-256, which the manifest has to declare exactly: they are the
 /// bytes really written, so the package parser verifies the artifact the way it
 /// does for a deployed package.
-const BUNDLE_SIZE: u64 = 22;
-const BUNDLE_SHA256: &str = "9ceec9527c8a41887afc870b8d120967563862cb48a2b69cf4def113e27d3ee2";
+const BUNDLE_SIZE: u64 = 26;
+const BUNDLE_SHA256: &str = "bee98f4a50ec0dffa6f2795180db1bfaa4d1bc324ab5d8b9f366aed0056bc34c";
 
 /// The client declarations one package carries.
 ///
@@ -49,7 +49,7 @@ fn write_package(root: &Path, id: &str, declarations: &str) {
     std::fs::write(
         directory.join("plugin.toml"),
         format!(
-            "id = \"{id}\"\nname = \"{id}\"\nversion = \"0.1.0\"\napi = \"0.8.0\"\n{declarations}"
+            "id = \"{id}\"\nname = \"{id}\"\nversion = \"0.1.0\"\napi = \"0.9.0\"\n{declarations}"
         ),
     )
     .expect("manifest");
@@ -341,7 +341,7 @@ async fn restart_only_reload_contract_keeps_the_running_generation_active() {
     let host = start(root.path(), &["reloadable"]);
     std::fs::write(
         root.path().join("reloadable/plugin.toml"),
-        "id = \"reloadable\"\nname = \"reloadable\"\nversion = \"0.2.0\"\napi = \"0.8.0\"\nplayer_commands = [\"different-root\"]\n",
+        "id = \"reloadable\"\nname = \"reloadable\"\nversion = \"0.2.0\"\napi = \"0.9.0\"\nplayer_commands = [\"different-root\"]\n",
     )
     .expect("candidate manifest");
 

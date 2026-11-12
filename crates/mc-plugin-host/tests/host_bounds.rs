@@ -87,7 +87,7 @@ fn guest_with_component(
 ) -> PluginInstance<Services> {
     let engine = engine(&limits).expect("engine");
     let compiled =
-        CompiledPlugin::compile(&engine, bytes, &limits, "0.8.0").expect("the fixture compiles");
+        CompiledPlugin::compile(&engine, bytes, &limits, "0.9.0").expect("the fixture compiles");
     let linker = linker::<Services>(&engine).expect("linker");
     let _ = PluginStartup::instantiate(
         &linker,
@@ -127,7 +127,7 @@ fn run_configure(
     let bytes = fixture::component_bytes();
     let engine = engine(&limits).expect("engine");
     let compiled =
-        CompiledPlugin::compile(&engine, &bytes, &limits, "0.8.0").expect("the fixture compiles");
+        CompiledPlugin::compile(&engine, &bytes, &limits, "0.9.0").expect("the fixture compiles");
     let linker = linker::<Services>(&engine).expect("linker");
     PluginStartup::instantiate(
         &linker,
@@ -160,7 +160,7 @@ fn join_event() -> Event {
 fn init_context() -> InitContext {
     InitContext {
         plugin_id: PLUGIN.to_owned(),
-        api_version: "0.8.0".to_owned(),
+        api_version: "0.9.0".to_owned(),
         world_fingerprint: String::new(),
     }
 }

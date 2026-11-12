@@ -24,7 +24,8 @@ struct TestDirectory(PathBuf);
 
 impl TestDirectory {
     fn new() -> Self {
-        let path = std::env::temp_dir().join(format!("krasnokamen-plugin-v2-{}", uuid::Uuid::new_v4()));
+        let path =
+            std::env::temp_dir().join(format!("krasnokamen-plugin-v2-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&path).expect("create isolated acceptance directory");
         Self(path)
     }
@@ -150,7 +151,7 @@ fn declared_precommit_hooks_fail_before_component_compilation_and_world_admissio
     std::fs::create_dir_all(&package).unwrap();
     std::fs::write(
         package.join("plugin.toml"),
-        "id = 'hook-owner'\nname = 'Hook owner'\nversion = '1'\napi = '0.8.0'\nhooks = ['before-damage']\n",
+        "id = 'hook-owner'\nname = 'Hook owner'\nversion = '1'\napi = '0.9.0'\nhooks = ['before-damage']\n",
     )
     .unwrap();
     std::fs::write(package.join("plugin.wasm"), b"not a component").unwrap();
@@ -737,7 +738,7 @@ async fn real_sibling_complete_deployment_admits_physical_items_and_work_recipes
         );
         assert_eq!(
             manifest["api"].as_str(),
-            Some("0.8.0"),
+            Some("0.9.0"),
             "actual deployed component API"
         );
         if source.join("config.toml").is_file() {

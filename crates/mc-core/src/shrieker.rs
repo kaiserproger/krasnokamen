@@ -207,7 +207,11 @@ fn decode(bytes: &[u8], tick: u64) -> Result<(Shrieker, Option<Pending>), String
     let shriek_until = match crate::warden::unique(&fields, "krasnokamen:shriek_until")? {
         None => 0,
         Some(Tag::Long(n)) if *n >= 0 => *n as u64,
-        _ => return Err("sculk_shrieker.krasnokamen:shriek_until: expected nonnegative long".into()),
+        _ => {
+            return Err(
+                "sculk_shrieker.krasnokamen:shriek_until: expected nonnegative long".into(),
+            );
+        }
     };
     let mut pending = crate::warden::unique(&fields, "listener")?
         .map(|tag| vibration::decode_listener(tag, tick))
@@ -215,10 +219,14 @@ fn decode(bytes: &[u8], tick: u64) -> Result<(Shrieker, Option<Pending>), String
         .flatten();
     if let Some(tag) = crate::warden::unique(&fields, "krasnokamen:event_arrival")? {
         let Tag::Long(n) = tag else {
-            return Err("sculk_shrieker.krasnokamen:event_arrival: expected nonnegative long".into());
+            return Err(
+                "sculk_shrieker.krasnokamen:event_arrival: expected nonnegative long".into(),
+            );
         };
         if *n < 0 {
-            return Err("sculk_shrieker.krasnokamen:event_arrival: expected nonnegative long".into());
+            return Err(
+                "sculk_shrieker.krasnokamen:event_arrival: expected nonnegative long".into(),
+            );
         }
         if let Some(p) = &mut pending {
             p.arrival = *n as u64;
@@ -367,7 +375,10 @@ fn encode(state: &TickState, pos: BlockPos, entry: &Shrieker) -> Vec<u8> {
         ),
     ];
     if let Some(p) = vibration::pending(state, pos) {
-        fields.push(("krasnokamen:event_arrival".into(), Tag::Long(p.arrival as i64)));
+        fields.push((
+            "krasnokamen:event_arrival".into(),
+            Tag::Long(p.arrival as i64),
+        ));
     }
     let mut bytes = Vec::new();
     mc_nbt::write_network(&mut bytes, &Tag::Compound(fields)).expect("shrieker NBT");

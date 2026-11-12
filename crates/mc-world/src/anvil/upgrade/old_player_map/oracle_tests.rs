@@ -50,8 +50,9 @@ fn canonical(tag: &mut Tag) {
 #[test]
 #[ignore = "requires local official-jar DFU manifest in KRASNOKAMEN_LEGACY_ORACLE_MANIFEST"]
 fn legacy_player_map_local_dfu_oracle() {
-    let manifest =
-        PathBuf::from(std::env::var_os("KRASNOKAMEN_LEGACY_ORACLE_MANIFEST").expect("oracle manifest"));
+    let manifest = PathBuf::from(
+        std::env::var_os("KRASNOKAMEN_LEGACY_ORACLE_MANIFEST").expect("oracle manifest"),
+    );
     let cases: Vec<Case> = serde_json::from_slice(&fs::read(&manifest).unwrap()).unwrap();
     assert!(!cases.is_empty(), "empty oracle manifest");
     let mut results = Vec::new();

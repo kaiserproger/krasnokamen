@@ -1,7 +1,7 @@
 use super::*;
 use crate::Identifier;
 use crate::block_entity_types::{
-    load_block_entity_types_report, krasnokamen_required_block_entity_types,
+    krasnokamen_required_block_entity_types, load_block_entity_types_report,
 };
 use std::collections::BTreeSet;
 

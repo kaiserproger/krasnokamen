@@ -185,7 +185,10 @@ pub(super) fn player_image_to_tag(
         ));
     }
     if persistent {
-        fields.push(("krasnokamen:Tick".into(), mc_nbt::Tag::Long(record.tick as i64)));
+        fields.push((
+            "krasnokamen:Tick".into(),
+            mc_nbt::Tag::Long(record.tick as i64),
+        ));
         fields.push((
             "krasnokamen:BurnTicks".into(),
             mc_nbt::Tag::Long(i64::from(record.burn_ticks)),
@@ -406,7 +409,12 @@ pub fn player_from_tag(
             }
             grid
         }
-        Some(_) => return Err(failure("krasnokamen:CraftingGrid", "expected item list".into())),
+        Some(_) => {
+            return Err(failure(
+                "krasnokamen:CraftingGrid",
+                "expected item list".into(),
+            ));
+        }
         None => Vec::new(),
     };
     let respawn_fields = match find("respawn").or_else(|| find("krasnokamen:RespawnState")) {
@@ -500,7 +508,12 @@ pub fn player_from_tag(
                 serde_json::from_slice(&bytes)
                     .map_err(|err| failure("KrasnokamenStatistics", err.to_string()))?
             }
-            Some(_) => return Err(failure("KrasnokamenStatistics", "expected byte array".into())),
+            Some(_) => {
+                return Err(failure(
+                    "KrasnokamenStatistics",
+                    "expected byte array".into(),
+                ));
+            }
         },
         advancement_progress,
         unlocked_recipes,
@@ -536,7 +549,12 @@ pub fn player_from_tag(
         enchantment_seed: match find("KrasnokamenGameplaySeed") {
             None => 0,
             Some(mc_nbt::Tag::Int(seed)) => *seed,
-            Some(_) => return Err(failure("KrasnokamenGameplaySeed", "expected integer".into())),
+            Some(_) => {
+                return Err(failure(
+                    "KrasnokamenGameplaySeed",
+                    "expected integer".into(),
+                ));
+            }
         },
         enchantment_offer_seed: match find("XpSeed") {
             None => 0,

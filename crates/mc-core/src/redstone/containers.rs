@@ -341,7 +341,12 @@ fn encode(state: &TickState, pos: BlockPos, name: &str, slots: &[ItemStack]) -> 
     fields.retain(|(name, _)| {
         !matches!(
             name.as_str(),
-            "id" | "x" | "y" | "z" | "Items" | "TransferCooldown" | "krasnokamen:TransferCooldownUntil"
+            "id" | "x"
+                | "y"
+                | "z"
+                | "Items"
+                | "TransferCooldown"
+                | "krasnokamen:TransferCooldownUntil"
         )
     });
     fields.extend([
