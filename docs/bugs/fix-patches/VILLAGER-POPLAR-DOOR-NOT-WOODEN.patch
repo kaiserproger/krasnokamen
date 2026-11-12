@@ -1,9 +1,9 @@
 diff --git a/crates/mc-core/src/registry.rs b/crates/mc-core/src/registry.rs
-index 32ed6f14..fde4d157 100644
+index 7068e826..c4783694 100644
 --- a/crates/mc-core/src/registry.rs
 +++ b/crates/mc-core/src/registry.rs
-@@ -410,6 +410,9 @@ impl CoreRegistry {
-             .unwrap_or(0);
+@@ -423,6 +423,9 @@ impl CoreRegistry {
+         let mut washed_by_fluids = vec![false; state_count];
          let mut hazard_flags = vec![0u8; state_count];
          let mut mob_interactable_doors = vec![false; state_count];
 +        let door_blocks = tags
@@ -12,7 +12,7 @@ index 32ed6f14..fde4d157 100644
          for state in blocks.states() {
              let name = state.block.id.as_str();
              let mut flags = 0u8;
-@@ -443,23 +446,7 @@ impl CoreRegistry {
+@@ -456,23 +459,7 @@ impl CoreRegistry {
                  flags |= HAZARD_MAGMA;
              }
              hazard_flags[state.id.0 as usize] = flags;
@@ -34,9 +34,9 @@ index 32ed6f14..fde4d157 100644
 -                    | "cherry_door"
 -            );
 +            mob_interactable_doors[state.id.0 as usize] = door_blocks.contains(&state.block.raw_id);
-         }
-         let mob_interactable_doors: Arc<[bool]> = mob_interactable_doors.into();
-         let mut collision_boxes = vec![Box::default(); state_count];
+             washed_by_fluids[state.id.0 as usize] = washed_away.contains(&state.block.raw_id)
+                 && !matches!(
+                     state.block.id.path(),
 diff --git a/crates/mc-data/src/tags.rs b/crates/mc-data/src/tags.rs
 index 9857770e..c3066f48 100644
 --- a/crates/mc-data/src/tags.rs

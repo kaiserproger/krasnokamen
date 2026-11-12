@@ -5144,7 +5144,7 @@ status = "open"
 source = "Breaker finding (BreakVillageParity, ISSUE-1-08 break-it pass on main 21607d42, agent-run): a certified house whose only door is minecraft:poplar_door; at the meeting time (9500) its resident stays inside pressed against the closed door while every other resident walks to the bell; after the player opens the door the resident goes out, walks home through it at night and sleeps, and the door stays open=true at night+600, +1200 and after a chunk-unload cycle (server truth execute if block; 2/2, artifacts 20261112T055302-scene-shot-6pk_5bzv and 20261112T055325-scene-shot-icrmzr1s, scene receipts/BreakVillageParity/glue/doors.json). A spruce door used the same way is shut every night. Vanilla 26.3: poplar_door is in #minecraft:wooden_doors and #minecraft:mob_interactable_doors (InteractWithDoor), and WalkNodeEvaluator routes through any door whose BlockSetType canOpenByHand. Source: registry.rs builds wooden_doors from an exact 12-family name list that predates poplar (26.3's tag has 13 entries), used by villager/doors.rs and the route search."
 regression = ["cargo:mc-core:villager::brain::tests::door_tests::poplar_door_route_reaches_other_side", "cargo:mc-core:registry::tests::mob_interactable_doors_table_follows_the_26_3_tag", "harness:scene-shot:native-village-mob-doors"]
 failing_first = "reported"
-fix_commit = "patch:af2a266f04e892d3fc1dbba4b2bfc9aa7494623fde8f2d17836f0ba617bd8ebe"
+fix_commit = "patch:ac9c9dd419e1d51c77c17771469e0657af539b43c3b413acbb358052b5cdbcc1"
 
 [[bug]]
 id = "VILLAGER-COPPER-DOOR-BLOCKS-RESIDENTS"
@@ -5156,7 +5156,7 @@ status = "open"
 source = "Breaker finding (BreakVillageParity, ISSUE-1-08 break-it pass on main 21607d42, agent-run): same fixture as VILLAGER-POPLAR-DOOR-NOT-WOODEN with minecraft:copper_door; the resident is shut in at the meeting time, and the player-opened copper door stays open=true all night (2/2, artifacts 20261112T055302-scene-shot-6pk_5bzv and 20261112T055325-scene-shot-icrmzr1s). Vanilla 26.3 #minecraft:mob_interactable_doors lists all eight copper doors and BlockSetType copper has canOpenByHand=true (WalkNodeEvaluator DOOR_WOOD_CLOSED), so villagers open, pass and close them. Documented deviation: docs/settlements/jobs.md says villagers open wooden doors, 'not iron or copper doors'; needs an owner disposition. Houses with a copper door still certify (buildings.rs counts any *_door)."
 regression = ["cargo:mc-core:villager::brain::tests::door_tests::copper_door_routes_reach_other_side", "cargo:mc-core:registry::tests::mob_interactable_doors_table_follows_the_26_3_tag", "harness:scene-shot:native-village-mob-doors"]
 failing_first = "reported"
-fix_commit = "patch:af2a266f04e892d3fc1dbba4b2bfc9aa7494623fde8f2d17836f0ba617bd8ebe"
+fix_commit = "patch:ac9c9dd419e1d51c77c17771469e0657af539b43c3b413acbb358052b5cdbcc1"
 
 [[bug]]
 id = "VILLAGER-AFTER-HOURS-CLAIM-NOT-EMPLOYED"
