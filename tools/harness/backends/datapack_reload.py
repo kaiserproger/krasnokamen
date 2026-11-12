@@ -132,6 +132,16 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             log.close()
 
 
+def chat_says_after(recent_chat: list[Any], after: str, *markers: str) -> bool:
+    """True when a line holding every marker is newer than the newest line holding `after`.
+
+    The client's `recent_chat` is newest first (`.rev()` in the observation), so the lines newer than
+    the fence are the ones before it in the list."""
+    lines = [str(line) for line in recent_chat]
+    fence = next((i for i, line in enumerate(lines) if after in line), None)
+    return fence is not None and any(all(m in line for m in markers) for line in lines[:fence])
+
+
 def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     probe.call("minecraft_wait_for_play", {"timeout_seconds": probe.remaining()})
     probe.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
@@ -245,12 +255,8 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
 
     def says_after(label: str, after: str, *markers: str) -> None:
         """Wait for a chat line holding every marker that arrives after the line holding `after`."""
-        def seen(state: dict[str, Any]) -> bool:
-            lines = [str(line) for line in state.get("recent_chat", [])]
-            starts = [i for i, line in enumerate(lines) if after in line]
-            return bool(starts) and any(all(m in line for m in markers) for line in lines[starts[-1] + 1:])
         try:
-            probe.wait(seen, label, timeout_seconds=30)
+            probe.wait(lambda s: chat_says_after(s.get("recent_chat", []), after, *markers), label, timeout_seconds=30)
         except TimeoutError:
             probe.report.setdefault("chat_at_timeout", {})[label] = probe.observe().get("recent_chat", [])
             raise
@@ -274,8 +280,13 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     probe.fixture("datapack disable file/nometa")
     says_after("disable_of_a_skipped_pack_says_not_enabled", "Round3Begin", "is not enabled!")
 
+    # A pack that appeared on disk is enabled by the /reload above (docs/OPERATING.md), as in vanilla, so
+    # `enable` answers "already enabled". The reply is fenced: a count of pack-naming lines in the 20-line
+    # chat window cannot see it, the new line pushes an older one that named the pack out of the window.
     # A selected pack whose pack.mcmeta breaks keeps running, so the listing keeps it.
-    pack_barrier("madeit_enable_reported", "datapack enable file/madeit", "file/madeit")
+    fenced("Round3bBegin")
+    probe.fixture("datapack enable file/madeit")
+    says_after("reload_enabled_the_created_pack", "Round3bBegin", "file/madeit", "already enabled")
     (packs_dir / "madeit" / "pack.mcmeta").write_text('{"pack": {')
     fenced("Round4Begin")
     probe.fixture("datapack list enabled")
