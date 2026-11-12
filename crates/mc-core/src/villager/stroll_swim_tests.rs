@@ -221,6 +221,46 @@ fn resident_in_a_pond_with_no_adjacent_bank_swims_to_the_bank() {
     }
 }
 
+/// VILLAGER-AFTER-HOURS-CLAIM-NOT-EMPLOYED: a workstation placed after work
+/// hours, 45 blocks from a jobless resident. Vanilla GoToPotentialJobSite runs
+/// in the Idle package too, so the claimer walks there and takes the
+/// profession instead of strolling inside the village jobless until the next
+/// work period.
+#[test]
+fn jobless_villager_walks_to_an_after_hours_claim_and_is_employed() {
+    // Idle: day ticks 10..2000 and 11000..12000.
+    for time in [1_000, 11_000, 11_500] {
+        let (mut state, _) = village_state();
+        state.day_time = time;
+        let composter = block(&state, "minecraft:composter", &[]);
+        let site = BlockPos {
+            x: 40,
+            y: 201,
+            z: 8,
+        };
+        state.world.set_block(site.x, site.y, site.z, composter);
+        state.world.fold_overlay();
+        let slot = villager(&mut state, [-5.5, 201.0, 8.5]);
+        let mut employed_at = None;
+        for tick in 0..600 {
+            step(&mut state);
+            let v = state.entities.row(slot).villager.as_ref().unwrap();
+            if v.data.profession == Profession::Farmer {
+                employed_at = Some(tick);
+                break;
+            }
+        }
+        let v = state.entities.row(slot).villager.as_ref().unwrap();
+        assert_eq!(v.job_site, Some(site), "day time {time}: the claim");
+        assert!(
+            employed_at.is_some(),
+            "day time {time}: claimed but still {:?} at {:?}",
+            v.data.profession,
+            state.entities.pos(slot)
+        );
+    }
+}
+
 #[test]
 fn resident_wading_a_sunken_ford_climbs_out_onto_the_far_bank() {
     let mut state = test_state();
