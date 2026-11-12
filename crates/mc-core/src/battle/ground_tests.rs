@@ -631,25 +631,34 @@ const GULLY: [[i32; 14]; 18] = [
     [103, 102, 101, 99, 99, 98, 98, 98, 98, 97, 97, 97, 97, 98],
 ];
 
-/// Fleeing riders that ran up a gully into its dead end climb back out
-/// instead of standing pressed into it for the rest of the battle.
-#[test]
-fn fleeing_riders_climb_out_of_a_gully_end() {
-    // Real (x, y, z) to fixture: the shelf (19, 93, 245) lands at (7, 70,
-    // 102), straight behind the second side, which flees +z.
-    const SHIFT: [i32; 3] = [-12, -23, -143];
-    let mut state = relief_fixture();
+/// Real (x, y, z) to fixture for [`GULLY`]: the shelf (19, 93, 245) lands at
+/// (7, 70, 102), straight behind the second side, which flees +z.
+const GULLY_SHIFT: [i32; 3] = [-12, -23, -143];
+
+fn gully(state: &mut TickState) {
     let (stone, air) = (state.registry.states.stone, state.registry.states.air);
     for (dz, row) in GULLY.iter().enumerate() {
         for (dx, &top) in row.iter().enumerate() {
-            let (x, z) = (8 + dx as i32 + SHIFT[0], 233 + dz as i32 + SHIFT[2]);
-            let top = top + SHIFT[1];
+            let (x, z) = (8 + dx as i32 + GULLY_SHIFT[0], 233 + dz as i32 + GULLY_SHIFT[2]);
+            let top = top + GULLY_SHIFT[1];
             for y in 60..top + 10 {
                 state.world.set_block(x, y, z, if y < top { stone } else { air });
             }
         }
     }
     state.world.fold_overlay();
+}
+
+fn in_gully(real: [f64; 3]) -> [f64; 3] {
+    [0, 1, 2].map(|axis| real[axis] + f64::from(GULLY_SHIFT[axis]))
+}
+
+/// Fleeing riders that ran up a gully into its dead end climb back out
+/// instead of standing pressed into it for the rest of the battle.
+#[test]
+fn fleeing_riders_climb_out_of_a_gully_end() {
+    let mut state = relief_fixture();
+    gully(&mut state);
     stage(&mut state, 100);
     let formation = &state.hostile.battle.formation;
     let regiment = formation
@@ -799,4 +808,55 @@ fn a_boxed_in_body_on_foot_stands_at_a_cave_mouth() {
     let north = [0.0, -1.58];
     assert_eq!(deflect_foot(world, registry, pos, 0.3, north, north, 1.0), [0.0, 0.0], "walked into the mouth");
     assert_eq!(deflect(world, registry, pos, 0.3, north, north, 1.0), north, "a rider keeps pressing");
+}
+
+/// One horse riding at a fixed point over [`GULLY`] under [`deflect`]: it
+/// stands on the support under its footprint, jumps one-block steps and is
+/// stopped by walls. Where it is after `ticks`, or once within 2 blocks.
+fn ride_at(state: &TickState, start: [f64; 3], foe: [f64; 3], ticks: usize) -> [f64; 3] {
+    let (world, registry) = (&state.world, &state.registry);
+    let horse = 0.698_242_187_5;
+    let mut pos = start;
+    for _ in 0..ticks {
+        let to = [foe[0] - pos[0], foe[2] - pos[2]];
+        let length = mc_physics::mth::length2(to[0], to[1]);
+        if length < 2.0 {
+            break;
+        }
+        let drive = to.map(|v| v / length * 4.6);
+        let out = deflect(world, registry, pos, horse, drive, drive, 1.0);
+        let next = [
+            pos[0] + out[0] * mc_physics::TICK_SECONDS,
+            pos[1],
+            pos[2] + out[1] * mc_physics::TICK_SECONDS,
+        ];
+        if let Some(Ok(y)) = support(world, registry, next, horse)
+            && y <= pos[1] + 1.0
+            && clear(world, registry, [next[0], y, next[2]], horse, 1.6) == Some(true)
+        {
+            pos = [next[0], y, next[2]];
+        }
+    }
+    pos
+}
+
+/// The r8/r9 notch: 15-17 blue horses stood pressed on the terrace at
+/// (17.7-18.1, 95, 243.9-244.3) above the gully floor where their foe stood,
+/// at (21.3, 90, 237.3). The gully descends in steps two blocks high and one
+/// wide; a horse straddling two columns stands on the higher one, and from
+/// there the next column read three deep. Measured from its centre column a
+/// step is two, and a horse riding at the foe goes down to the floor.
+#[test]
+fn a_horse_rides_down_the_notch_staircase_to_its_foe() {
+    let mut state = relief_fixture();
+    gully(&mut state);
+    let foe = in_gully([21.27, 90.0, 237.26]);
+    for start in [[18.106, 95.0, 244.027], [17.698, 95.0, 244.302], [18.046, 95.0, 243.865]] {
+        let pos = ride_at(&state, in_gully(start), foe, 200);
+        let near = mc_physics::mth::length2(foe[0] - pos[0], foe[2] - pos[2]);
+        assert!(
+            near < 2.5 && pos[1] <= foe[1] + 1.0,
+            "from {start:?} the horse stopped at {pos:?}, {near:.1} from its foe"
+        );
+    }
 }

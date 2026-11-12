@@ -286,13 +286,17 @@ pub(crate) fn audit(
 /// feet cell holds a step the cell above the step too (vanilla jump
 /// headroom) and the cell two above the feet over the body's own footprint
 /// (a jump first lifts the body where it stands: a canopy over a terrace
-/// edge stops it), ground lies within [`MAX_DROP`] blocks below the feet
-/// (a cave opening or sinkhole is an obstacle; water is no ground), and the
-/// cell has no more rock overhead than the body's own column (from open sky
-/// a cave mouth or overhang is an obstacle: fugitives walked down a ravine
-/// ramp into a cave and vanished underground; a body already under rock
-/// never goes deeper). Slots sit on block boundaries, so one body often
-/// straddles two columns. Unknown blocks are obstacles.
+/// edge stops it), ground lies within [`MAX_DROP`] blocks below the ground of
+/// the column under the body's centre (a cave opening or sinkhole is an
+/// obstacle; water is no ground), and the cell has no more rock overhead
+/// than the body's own column (from open sky a cave mouth or overhang is an
+/// obstacle: fugitives walked down a ravine ramp into a cave and vanished
+/// underground; a body already under rock never goes deeper). Slots sit on
+/// block boundaries, so one body often straddles two columns and stands on
+/// the higher: measured from there, a staircase of two-block steps one block
+/// wide read three deep and horses never rode down it (r8/r9: 15-17 blue
+/// horses on the notch terrace above their foe in the gully). Unknown blocks
+/// are obstacles.
 fn crossable(
     world: &ChunkWorld,
     registry: &CoreRegistry,
@@ -305,6 +309,10 @@ fn crossable(
     let right = [dir[1], -dir[0]];
     let edge = half_width - CONTACT;
     let feet = (pos[1] + CONTACT).floor() as i32;
+    let (cx, cz) = (pos[0].floor() as i32, pos[2].floor() as i32);
+    let low = (1..=MAX_DROP as i32 + 1)
+        .find(|&depth| solid(world, registry, cx, feet - depth, cz))
+        .map_or(feet, |depth| feet + 1 - depth);
     let mut probed = [(i32::MIN, i32::MIN); 3];
     let mut rise = None;
     let mut here = None;
@@ -315,7 +323,7 @@ fn crossable(
             continue;
         }
         probed[i] = (x, z);
-        let Some(step) = footing(world, registry, x, z, feet) else {
+        let Some(step) = footing(world, registry, x, z, feet, low) else {
             return false;
         };
         if step && !*rise.get_or_insert_with(|| free_above(world, registry, pos, half_width, feet + 2)) {
@@ -336,23 +344,27 @@ fn crossable(
 
 /// Whether a body with its feet at `feet` can stand in column (x, z): no
 /// block at head height, a step of at most one block with room above it, and
-/// ground within [`MAX_DROP`] blocks below (water is no ground). `Some(step)`
-/// when it can. Unknown blocks are obstacles.
-fn footing(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32, feet: i32) -> Option<bool> {
-    let solid = |y| {
-        world
-            .physics_block_at(x, y, z)
-            .is_none_or(|state| registry.materials.classify(state) == BlockMaterial::Solid)
-    };
+/// ground within [`MAX_DROP`] blocks below `low`, the ground the body stands
+/// on at its centre (water is no ground). `Some(step)` when it can. Unknown
+/// blocks are obstacles.
+fn footing(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32, feet: i32, low: i32) -> Option<bool> {
+    let solid = |y| solid(world, registry, x, y, z);
     let step = solid(feet);
     if solid(feet + 1) || (step && solid(feet + 2)) {
         return None;
     }
     // On level ground the cell under the feet is solid: one read.
-    if !solid(feet - 1) && (2..=MAX_DROP as i32 + 1).all(|depth| !solid(feet - depth)) {
+    if !solid(feet - 1) && (2..=feet - low + MAX_DROP as i32 + 1).all(|depth| !solid(feet - depth)) {
         return None;
     }
     Some(step)
+}
+
+/// Whether cell (x, y, z) holds a solid block; unknown blocks count as solid.
+fn solid(world: &ChunkWorld, registry: &CoreRegistry, x: i32, y: i32, z: i32) -> bool {
+    world
+        .physics_block_at(x, y, z)
+        .is_none_or(|state| registry.materials.classify(state) == BlockMaterial::Solid)
 }
 
 /// Terrain blocks (not trees) over column (x, z) at or above `y`: 0 under
@@ -399,7 +411,7 @@ fn exit(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3]) -> Option<[f
             .filter(|(dx, dz)| dx.abs().max(dz.abs()) == radius)
             .find(|&(dx, dz)| {
                 cover(world, registry, x + dx, z + dz, feet + 2) == 0
-                    && footing(world, registry, x + dx, z + dz, feet).is_some()
+                    && footing(world, registry, x + dx, z + dz, feet, feet).is_some()
             })
             .map(|(dx, dz)| {
                 [
