@@ -229,10 +229,13 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
                         help="negative control: click Help instead of Settlement")
     extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
     args = parser.parse_args(extra)
-    if ctx.client != "java" and (args.gui_scale != 3 or args.language != "en_us" or args.size != "1280x720"):
-        raise ValueError("civil display variants require --client java")
-    settings = {"gui_scale": args.gui_scale, "language": args.language,
-                "screen_size": list(map(int, args.size.split("x")))} if ctx.client == "java" else {}
+    if ctx.client != "java" and (args.gui_scale != 3 or args.size != "1280x720"):
+        raise ValueError("civil --gui-scale and --size variants require --client java")
+    # The native client takes the language from SOLARIS_CLIENT_LANGUAGE (scene_shot sets it) and
+    # sends it in ClientInformation, so the server's own Russian text is what the walk judges.
+    settings = ({"gui_scale": args.gui_scale, "language": args.language,
+                 "screen_size": list(map(int, args.size.split("x")))} if ctx.client == "java"
+                else {"language": args.language})
     def script(probe, artifact, steps, client):
         return _script(probe, artifact, steps, client, args)
     return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",

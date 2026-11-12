@@ -404,5 +404,75 @@ class SettlementMapQaTests(unittest.TestCase):
                           (12, 201, 20): "minecraft:oak_planks"})
 
 
+class NativeLanguageTests(unittest.TestCase):
+    """The native client's ClientInformation language is chosen by the harness, not fixed to en_us."""
+
+    def _scenario_for(self, client, extra):
+        ctx = gate.ProfileContext(Path("/tmp/settlement-map-qa-language"), extra_args=extra,
+                                  client=client, windowed=True)
+        with patch.object(gate.scene_shot, "run", return_value={}) as run:
+            gate.run(ctx)
+        return run.call_args.kwargs["scenario"]
+
+    def test_native_language_is_a_client_setting_and_java_keeps_its_display_options(self):
+        self.assertEqual(self._scenario_for("native", ["--language", "ru_ru"])["client_settings"],
+                         {"language": "ru_ru"})
+        self.assertEqual(self._scenario_for("native", [])["client_settings"], {"language": "en_us"})
+        self.assertEqual(self._scenario_for("java", ["--language", "ru_ru"])["client_settings"],
+                         {"gui_scale": 3, "language": "ru_ru", "screen_size": [1280, 720]})
+
+    def test_native_still_refuses_the_java_only_display_variants(self):
+        for extra in (["--gui-scale", "2"], ["--size", "1920x1080"]):
+            ctx = gate.ProfileContext(Path("/tmp/settlement-map-qa-language"), extra_args=extra,
+                                      client="native", windowed=True)
+            with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "require --client java"):
+                gate.run(ctx)
+
+    def test_native_launch_sets_the_language_env_only_for_the_client_and_restores_it(self):
+        from tools.harness import preflight
+        seen = {}
+
+        def start(*_args, **_kwargs):
+            environ = gate.scene_shot.os.environ
+            seen["language"] = environ.get("SOLARIS_CLIENT_LANGUAGE")
+            seen["settings"] = json.loads(Path(environ["SOLARIS_CLIENT_SETTINGS"]).read_text())
+            raise RuntimeError("client launch stopped")
+
+        for language, ambient in (("ru_ru", None), ("en_us", "ru_ru")):
+            with self.subTest(language=language), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                artifact = root / "artifact"
+                artifact.mkdir()
+                binary = root / "server"
+                binary.write_bytes(b"server")
+                binary.chmod(0o755)
+                (root / "playable.toml").write_text(
+                    (gate.scene_shot.runtime.REPO_ROOT / "playable.toml").read_text())
+                (root / "template").mkdir()
+                env = {"SOLARIS_SERVER_BINARY": str(binary), "XDG_DATA_HOME": str(root / "xdg")}
+                if ambient:
+                    env["SOLARIS_CLIENT_LANGUAGE"] = ambient
+                seen.clear()
+                with patch.dict("os.environ", env), \
+                        patch.object(gate.scene_shot.runtime, "REPO_ROOT", root), \
+                        patch.object(gate.scene_shot, "prepare_operator_fixture"), \
+                        patch.object(preflight, "client_template", return_value=root / "template"), \
+                        patch.object(gate.scene_shot.runtime, "start_server", return_value=Mock()), \
+                        patch.object(gate.scene_shot.runtime, "wait_port"), \
+                        patch.object(gate.scene_shot.runtime, "stop_process"), \
+                        patch.object(gate.scene_shot.runtime, "start_xvfb", return_value=(Mock(), ":99", None)), \
+                        patch.object(gate.scene_shot.native_client, "resolve_binary", return_value=binary), \
+                        patch.object(gate.scene_shot.native_client, "start", side_effect=start):
+                    ctx = gate.ProfileContext(artifact, extra_args=["--language", language],
+                                              client="native", windowed=True)
+                    with self.assertRaisesRegex(RuntimeError, "client launch stopped"):
+                        gate.run(ctx)
+                    # An ambient value is restored for the caller, not leaked or dropped.
+                    self.assertEqual(gate.scene_shot.os.environ.get("SOLARIS_CLIENT_LANGUAGE"), ambient)
+                self.assertEqual(seen["language"], language)
+                # The harness never writes the language into the persisted client settings.
+                self.assertNotIn("language", seen["settings"])
+
+
 if __name__ == "__main__":
     unittest.main()

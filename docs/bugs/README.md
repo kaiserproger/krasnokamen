@@ -31,7 +31,9 @@ failing_first = "not recorded"
 - `repro`: `manual`, `client`, `cargo`, or `source`, according to the original report.
 - `regression`: a list of green `cargo:<crate>:<exact test path>`,
   `harness:<profile>:<scenario>`, or `harness:<profile>:<verdict>` checks;
-  initially it may be empty. Profile verdicts run the windowed native client.
+  initially it may be empty. Profile verdicts run the windowed native client
+  (a run needing the Russian locale passes `-- --language ru_ru`; the native client
+  sends it in ClientInformation).
   A profile may publish boolean `details.verdicts` keyed by behaviour; the
   referenced key must be exactly `true`. The `all` key denotes the whole
   profile; when no boolean verdict map exists, `all` requires a passing

@@ -417,6 +417,12 @@ Each runs on a sky platform with spawning and time frozen; none covers terrain r
   server's building page. `--client java --windowed` uses the pages' `/settlement
   menu` commands (Loader MCP cannot press buttons inside a dialog's scroll body)
   and has no pointer tool, so hovers and cell clicks are native-only.
+  `-- --language en_us|ru_ru` (default `en_us`) selects the locale the client sends in
+  ClientInformation, so the server's settlement dialogs come back in that language, and the
+  walk then looks for the Russian titles and labels. `--client native` sets
+  `SOLARIS_CLIENT_LANGUAGE` for the native client only for that run (the harness restores the
+  caller's value and does not write the language into the client settings file); `--client java`
+  writes `lang:` in `options.txt`. `--gui-scale` and `--size` remain Java-only.
 
 ## Distant Horizons gate (`dh-gate`)
 
