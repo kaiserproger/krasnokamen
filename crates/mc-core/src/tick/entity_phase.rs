@@ -596,7 +596,12 @@ pub(super) fn prepare_rows(
     // `out` arrives empty (entity-phase scratch is empty between ticks; only
     // its capacity is reused): the parallel collect replaces `out.rows`.
     debug_assert!(out.rows.is_empty() && out.rare.is_empty());
+    let mut laps = Laps::new(
+        std::env::var_os("MC_CORE_PHASE_LOG").is_some(),
+        std::time::Instant::now(),
+    );
     let view = PrepView::of(state);
+    laps.lap("view");
     if parallel {
         use rayon::prelude::*;
         #[derive(Default)]
@@ -628,12 +633,14 @@ pub(super) fn prepare_rows(
                 part
             })
             .collect();
+        laps.lap("admit_parallel");
         let mut kept = Vec::with_capacity(parts.iter().map(|part| part.kept.len()).sum());
         for part in parts {
             kept.extend(part.kept);
             out.specials.extend(part.specials);
             out.resting.extend(part.resting);
         }
+        laps.lap("admit_concat");
         let mut is_rare = Vec::new();
         kept.par_iter()
             .map(|&(slot, flags)| {
@@ -652,12 +659,14 @@ pub(super) fn prepare_rows(
                 .enumerate()
                 .filter_map(|(index, &rare): (usize, &bool)| rare.then_some(index)),
         );
+        laps.lap("read_rows");
     } else {
         for (index, &period) in periods.iter().enumerate() {
             if period != 0 {
                 prepare_slot(&view, index, period, env, out);
             }
         }
+        laps.lap("serial_prepare");
     }
     for index in std::mem::take(&mut out.rare) {
         let slot = out.rows[index].slot;
@@ -665,6 +674,7 @@ pub(super) fn prepare_rows(
         let period = periods[slot.0 as usize];
         out.rows[index] = read_row(&view, slot, flags, period, &RarePrep::of(state, slot)).0;
     }
+    laps.lap("rare_fixup");
     // Rare helpers can change `chaser` (notably enderman anger), so project
     // only final rows. Chunk collection and concatenation retain row order.
     out.summary = if parallel {
@@ -690,6 +700,8 @@ pub(super) fn prepare_rows(
     } else {
         PrepSummary::of(&out.rows, 0)
     };
+    laps.lap("summary");
+    laps.print("prepare rows");
 }
 
 /// Slot ranges larger than this admission count prepare rows in parallel.
@@ -1087,13 +1099,16 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     #[cfg(all(test, debug_assertions))]
     sensor_bench_tests::COUNTS.set((0, 0));
     let pre_start = std::time::Instant::now();
+    let mut laps = Laps::new(std::env::var_os("MC_CORE_PHASE_LOG").is_some(), pre_start);
     if sim {
         crate::contact_hazards::hurt_by_water(state);
         crate::enderman::tick(state);
     }
+    laps.lap("pre");
     let prep_start = std::time::Instant::now();
     let pre_time = prep_start.duration_since(pre_start);
     state.entities.prepare_motion_hints(&state.registry);
+    laps.lap("motion_hints");
     let unchanged_since = state.entity_phase_revision;
     state.entity_phase_revision = state.world.revision_now();
     let EntityPhaseScratch {
@@ -1130,6 +1145,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             players.push((state.entities.body(slot).id, state.entities.pos(slot)));
         }
     }
+    laps.lap("player_motion");
     // Mob decisions run every 1/2/4 ticks at near/mid/far chunk distances.
     for (_, pos) in &players {
         let cx = mc_physics::mth::floor_i32(pos[0]).div_euclid(16);
@@ -1148,6 +1164,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             }
         }
     }
+    laps.lap("activation");
     // Exact, mostly active membership lets hot flags/positions replace per-ID
     // index traversal even when a few occupied chunks are inactive.
     if !sim {
@@ -1212,6 +1229,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             });
         }
     }
+    laps.lap("admission");
     crate::hostile::refresh_targets(state);
     let targets_empty = !crate::hostile::has_live_targets(state);
     // Reuse the sensor's current resident table before admission. Any
@@ -1223,6 +1241,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     } else {
         resident_villager_targets(&state.entities)
     };
+    laps.lap("targets_villagers");
     rows.reserve(admitted);
     let mut prepared = PrepChunk {
         rows: std::mem::take(&mut rows),
@@ -1242,6 +1261,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         admitted >= PARALLEL_PREP_MIN,
         &mut prepared,
     );
+    laps.lap("prepare_rows");
     let PrepSummary {
         has_dolphin,
         consumers,
@@ -1285,6 +1305,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             ..Default::default()
         })
     });
+    laps.lap("prep_summary");
     if rows.is_empty() && resting.is_empty() {
         periods.clear();
         activation.clear();
@@ -1305,6 +1326,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     } else {
         Vec::new()
     };
+    laps.lap("golem_targets");
     let world = &state.world;
     let registry = &state.registry;
     let chunk_loaded = |x: i32, z: i32| world.has_chunk(x.div_euclid(16), z.div_euclid(16));
@@ -1369,6 +1391,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     } else {
         Vec::new()
     };
+    laps.lap("zoglin_targets");
     // Chase searches per class this tick (over-counted: not every chaser
     // thinks). Only a class with many consumers pays for an index; the rest
     // scan linearly as before (see target_grid.rs for boundary and fence).
@@ -1418,6 +1441,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     );
     golem_grid.batch(searches.clone().filter(|row| row.is_iron_golem).map(query));
     zoglin_grid.batch(searches.filter(|row| row.hunts_living).map(query));
+    laps.lap("target_grids");
     let cows_ref = &cow_cells;
     let scope_start = std::time::Instant::now();
     // Work-stealing over the core's long-lived rayon workers (no threads
@@ -1452,6 +1476,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         },
     };
     system_graph::run(&ctx, &mut ordered);
+    laps.lap("step_scope");
     let scope_time = scope_start.elapsed();
     #[cfg(all(test, debug_assertions))]
     {
@@ -1491,6 +1516,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             body.attack_cooldown.saturating_sub(1),
         );
     }
+    laps.lap("resting_writeback");
     for (write, mut raw) in ordered.drain(..).flatten() {
         if let Some(target) = write.chase_target {
             state
@@ -1589,6 +1615,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             });
         }
     }
+    laps.lap("ordered_writeback");
     state.seq_counter = seq;
     let item_merge_start = std::time::Instant::now();
     let merge_items = if sim {
@@ -1597,6 +1624,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         0
     };
     let item_merge_time = item_merge_start.elapsed();
+    laps.lap("item_merge");
     let commit_time = commit_start.elapsed();
     let post_start = std::time::Instant::now();
     // Pickup intents: players collect mature item entities in reach.
@@ -1604,13 +1632,17 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     if sim {
         collect_pickup_intents(state, &mut intents);
     }
+    laps.lap("pickup_intents");
     // Shooting skeletons, flying arrows, swelling creepers (serial: they
     // read the world and every entity).
     if sim {
         crate::hostile::run(state, &mut intents, &specials);
+        laps.lap("hostile");
         crate::projectiles::run(state, &mut intents, &specials);
+        laps.lap("projectiles");
     }
     if std::env::var("MC_CORE_PHASE_LOG").is_ok() {
+        laps.print("entity phase");
         eprintln!(
             "  entity detail ms: scope={:.1} n={} prep={:.1} commit={:.1} post={:.1} rest={} pre={:.1} item_merge={:.1} items={}",
             scope_time.as_secs_f64() * 1000.0,

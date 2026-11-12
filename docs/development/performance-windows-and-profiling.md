@@ -84,6 +84,13 @@ comparable only with other `-p` numbers from the same session.
   milliseconds in `server.log`. If the dashboard phases add up to much less than
   the tick total, the time is in untimed sections (spawning, inputs, chunk
   ensure/evict, commit, checkpoint capture).
+  Per-callee lap lines (`tick/phase_laps.rs`, no clock when the variable is
+  unset) precede each Overworld `phase ms:` line: `  input|chunks|entity
+  systems|block|commit detail ms: <callee>=<ms> ...` (each lap is the time since
+  the previous lap, so a phase's laps sum to it), `  entity phase detail ms:`
+  and `  prepare rows detail ms:` (preparation and writeback inside the entity
+  phase). The step scope itself is one parallel lap (`step_scope`): split it
+  with perf, not laps.
 - **Worldgen:** prefer the test-only stage clocks in
   `crates/mc-worldgen/src/terrain/profile_tests.rs` over call graphs; to split a
   stage add an `end(new_index)` call and widen the totals. Use `--exact`
