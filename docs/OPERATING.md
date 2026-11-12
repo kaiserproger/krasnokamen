@@ -471,6 +471,11 @@ hash; an empty seed keeps Solaris's default rather than a random one. Importing
 `level-name` does **not** import Anvil data: convert the stopped world
 explicitly ([MIGRATION.md](MIGRATION.md)).
 
+The vanilla `gamemode` property has no TOML key. New players join in the world's
+default game mode: a converted world's `level.dat` `Data.GameType`, changed at
+runtime by `/defaultgamemode` and persisted with the world (see the `gamemode`
+row in [MIGRATION.md](MIGRATION.md)).
+
 ## Administration
 
 ### Server console and access control

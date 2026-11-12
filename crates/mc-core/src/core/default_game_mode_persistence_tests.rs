@@ -93,6 +93,67 @@ fn default_game_mode_survives_wal_restart_and_checkpoint_and_joins_new_players()
     assert_eq!(manifest.default_game_mode, GameMode::Creative);
     prune_batches_through(&directory.path().join("journal"), tick);
     assert_eq!(load().default_game_mode, GameMode::Creative);
+
+    // Recovery gives every dimension the root's value and journals nothing spurious.
+    let mut recovered = load();
+    for dimension in [
+        crate::dimensions::Dimension::Nether,
+        crate::dimensions::Dimension::End,
+    ] {
+        recovered.other_dimensions.insert(
+            dimension,
+            Box::new(recover_dimension_state(&config, dimension).unwrap()),
+        );
+    }
+    for world in recovered.other_dimensions.values() {
+        assert_eq!(
+            world.default_game_mode,
+            GameMode::Creative,
+            "{:?}",
+            world.dimension
+        );
+    }
+    let (output, _, _) = crate::tick::run_tick(&mut recovered, &[]);
+    assert!(
+        !journal_entries_for_tick(&mut recovered, &output)
+            .iter()
+            .any(|entry| matches!(entry, JournalEntry::DefaultGameMode { .. })),
+        "recovery must not re-journal the recovered value"
+    );
+
+    // A command run in the Nether world changes the shared value and is journaled exactly once.
+    let mut entries = Vec::new();
+    let (output, _, _) = crate::tick::run_tick(
+        &mut recovered,
+        &[
+            join(ConnectionId(5), "NetherOperator"),
+            PlayerInput::Command {
+                connection: ConnectionId(5),
+                command: "execute in minecraft:the_nether run defaultgamemode adventure".into(),
+                permission_level: 4,
+            },
+        ],
+    );
+    entries.extend(journal_entries_for_tick(&mut recovered, &output));
+    let (output, _, _) = crate::tick::run_tick(&mut recovered, &[]);
+    entries.extend(journal_entries_for_tick(&mut recovered, &output));
+    let written: Vec<_> = entries
+        .iter()
+        .filter_map(|entry| match entry {
+            JournalEntry::DefaultGameMode { value } => Some(*value),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(written, [GameMode::Adventure]);
+    assert_eq!(recovered.default_game_mode, GameMode::Adventure);
+    for world in recovered.other_dimensions.values() {
+        assert_eq!(
+            world.default_game_mode,
+            GameMode::Adventure,
+            "{:?}",
+            world.dimension
+        );
+    }
 }
 
 #[test]
