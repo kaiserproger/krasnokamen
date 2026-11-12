@@ -403,11 +403,23 @@ def scenario(probe: ProbeSteps, proxy: RewritingProxy, address: str) -> None:
     fence()
     probe.check("list_answers_with_command_feedback_on", listed())
 
+    # A team message is chat in every copy (vanilla TeamMsgCommand): the Full sender is shown its own
+    # copy here, a Commands-only sender is not (below).
+    probe.fixture("team add chatcrew")
+    probe.fixture("team join chatcrew @s")
+    probe.fixture("teammsg TeamMark_full")
+    fence()
+    probe.check("full_sender_sees_its_team_message", heard(probe.observe(), "TeamMark_full"))
+
     probe.call("minecraft_disconnect", {})
     join(1)
     commands_only = speak(1, "commands_only")
     probe.check("commands_only_misses_chat", not commands_only["chat"])
     probe.check("commands_only_hears_system_text", commands_only["system"])
+    probe.fixture("teammsg TeamMark_commands_only")
+    fence()
+    probe.check("commands_only_sender_gets_no_team_message_copy",
+                not heard(probe.observe(), "TeamMark_commands_only"))
 
     probe.call("minecraft_disconnect", {})
     join(2)

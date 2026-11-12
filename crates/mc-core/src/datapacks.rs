@@ -883,10 +883,14 @@ impl PackSet {
     /// priority order, then every other compatible pack found in the folder.
     pub(crate) fn listing(root: &Path, selection: &Selection) -> Result<Listing, String> {
         let mut remaining = MAX_BYTES;
-        let packs = scan(root, &mut remaining)?.packs;
+        let scanned = scan(root, &mut remaining)?;
+        let (packs, failed) = (scanned.packs, scanned.failed);
         let describe = |id: &String| {
             let description = if id == "vanilla" {
                 vanilla_description()
+            } else if let Some(error) = failed.get(id) {
+                // A selected pack that no longer loads is still running; its hover says why.
+                Tag::String(error.clone())
             } else {
                 packs.get(id).map_or_else(
                     || Tag::String(String::new()),
@@ -899,7 +903,9 @@ impl PackSet {
             enabled: selection
                 .enabled
                 .iter()
-                .filter(|id| *id == "vanilla" || packs.contains_key(*id))
+                .filter(|id| {
+                    *id == "vanilla" || packs.contains_key(*id) || failed.contains_key(*id)
+                })
                 .map(describe)
                 .collect(),
             available: packs
@@ -910,6 +916,12 @@ impl PackSet {
                 .map(|(id, _)| describe(id))
                 .collect(),
         })
+    }
+
+    /// Whether the last scan found a pack (or archive that failed to read) by this id,
+    /// selected or not: the repository "has" it, as vanilla's `getPack` means it.
+    pub(crate) fn has_pack(&self, id: &str) -> bool {
+        self.descriptions.contains_key(id) || self.failed.contains_key(id)
     }
 
     /// Whether installing `self` instead of `current` changes the registry:
@@ -926,8 +938,9 @@ impl PackSet {
     }
 
     /// One operator-facing warning per condition this load found that `previous`
-    /// did not already have: a selected pack gone from disk, and a pack whose
-    /// worldgen or dimension resources cannot be applied. Each is reported once.
+    /// did not already have: a selected pack gone from disk, a non-pack entry in the
+    /// folder, and a pack whose worldgen or dimension resources cannot be applied.
+    /// A new pack this load skipped is always stated.
     pub(crate) fn warnings(&self, previous: Option<&Self>) -> Vec<String> {
         const SHOWN: usize = 5;
         let mut warnings = Vec::new();
@@ -938,11 +951,9 @@ impl PackSet {
                 ));
             }
         }
-        for line in &self.skipped {
-            if previous.is_none_or(|previous| !previous.skipped.contains(line)) {
-                warnings.push(line.clone());
-            }
-        }
+        // A skipped new pack is stated by every start and `/reload` that finds it still
+        // broken (only those loads skip packs), so it is never silent the second time.
+        warnings.extend(self.skipped.iter().cloned());
         for name in &self.not_packs {
             if previous.is_none_or(|previous| !previous.not_packs.contains(name)) {
                 warnings.push(format!(
@@ -1086,6 +1097,8 @@ pub(crate) enum ListScope {
     Enabled,
     Available,
 }
+/// Datapack warnings the operator's chat shows per load; the server log has all of them.
+const CHAT_WARNINGS: usize = 3;
 /// A fresh pack listing: `(pack id, description component)` in vanilla order.
 pub(crate) struct Listing {
     pub(crate) enabled: Vec<(String, Tag)>,
@@ -1684,9 +1697,21 @@ fn finish(state: &mut TickState, reload: Reload, result: Result<Completed, Failu
                     Vec::new(),
                 ),
             }
-            for warning in warnings {
+            // Every warning goes to the server log, as vanilla logs them to the console;
+            // the operator's chat gets the first few and a count, never one line per entry.
+            for warning in &warnings {
                 tracing::warn!("{warning}");
+            }
+            let hidden = warnings.len().saturating_sub(CHAT_WARNINGS);
+            for warning in warnings.into_iter().take(CHAT_WARNINGS) {
                 feedback(state, connection, warning);
+            }
+            if hidden > 0 {
+                feedback(
+                    state,
+                    connection,
+                    format!("{hidden} more datapack warning(s), see the server log"),
+                );
             }
         }
         (Job::List(scope), Completed::Listing(listing)) => {

@@ -600,7 +600,11 @@ refuses to start when it fails to load (it offers `--safeMode`); Solaris has no 
 mode. A pack the saved selection already holds that no longer loads still stops the
 start and refuses the reload (old state kept), with the same pack and file in the
 error: fix or remove the named pack and start again. A non-pack entry in the folder
-(a README, a stray file) is ignored with a warning. A pack's `pack.mcmeta` `filter` (`block` entries with
+(a README, a stray file) is ignored with a warning. Every warning goes to the server log;
+a pack that stays skipped is named again by every `/reload`, and the operator's chat shows the first three and a count of the rest, as vanilla
+keeps such lines in the console. `/datapack list` keeps a selected pack whose files
+broke while it runs (its hover holds the error), and `/datapack disable` of a skipped
+pack answers "not enabled" as vanilla does for a pack the repository has. A pack's `pack.mcmeta` `filter` (`block` entries with
 optional `namespace` and `path` patterns) hides the matching functions, tags,
 recipes, block loot and predicates of every pack below it, the builtin recipes and
 block loot included. A `/datapack enable`, `disable` or

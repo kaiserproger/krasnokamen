@@ -167,6 +167,34 @@ fn say_and_private_messages_are_chat_not_system_text() {
 }
 
 #[test]
+fn team_messages_are_chat_for_every_copy_the_senders_included() {
+    let mut state = world();
+    command(&mut state, FULL, "team add crew");
+    command(&mut state, FULL, "team join crew @a");
+    let [full, other_full, system, hidden] = command(&mut state, FULL, "teammsg ahoy");
+    assert!(contains(&full, "chat.type.team.sent"), "{full:?}");
+    assert!(
+        contains(&other_full, "chat.type.team.text"),
+        "{other_full:?}"
+    );
+    assert!(
+        system.is_empty() && hidden.is_empty(),
+        "commands-only and hidden teammates get no team chat: {system:?} {hidden:?}"
+    );
+    // A commands-only sender is not sent its own chat copy; its teammates still are.
+    let [full, other_full, system, _] = command(&mut state, SYSTEM, "teammsg psst");
+    assert!(
+        system.is_empty(),
+        "a commands-only sender is not sent its own chat copy: {system:?}"
+    );
+    assert!(contains(&full, "chat.type.team.text"), "{full:?}");
+    assert!(
+        contains(&other_full, "chat.type.team.text"),
+        "{other_full:?}"
+    );
+}
+
+#[test]
 fn the_setting_changes_in_place_and_resets_when_the_player_leaves() {
     let mut state = world();
     tick(

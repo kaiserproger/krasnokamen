@@ -1198,9 +1198,10 @@ pub(crate) fn execute(
                 text(message)
             };
             for recipient in recipients {
-                // The sender's own copy is a system message; teammates' copies
-                // are chat and only reach `Full` clients.
-                if recipient != connection && !state.accepts_chat(recipient) {
+                // Every copy is chat (vanilla TeamMsgCommand sends the sender's with
+                // TEAM_MSG_COMMAND_OUTGOING), so only `Full` clients are sent one, the
+                // sender included, as with `/msg`.
+                if !state.accepts_chat(recipient) {
                     continue;
                 }
                 feedback(
