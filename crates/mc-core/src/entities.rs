@@ -448,59 +448,81 @@ impl EntityStore {
     /// Generic lifetime age is a record-tick projection, not a brain change.
     /// Advance every live row whose `admitted` byte is set (rows are
     /// independent, so the pool splits them without changing any result) and
-    /// return, ascending, the item rows whose clock reached `item_limit`.
+    /// return, ascending, the item rows whose clock reached `item_limit` and
+    /// the rows `flag` selects (two lists, expired first). `flag` is a pure
+    /// read of the row's body and its already advanced cold row, evaluated
+    /// while that cold row is hot: the despawn filter rides this sweep instead
+    /// of a second pass over 100,000 cold rows (removal path: the filter
+    /// returns to its own sweep).
     /// Its owner still removes expired entities through the ordinary hook.
     pub(crate) fn advance_admitted_ages(
         &mut self,
         admitted: &[u8],
         item_limit: u32,
         min_parallel: usize,
-    ) -> Vec<EntitySlot> {
-        fn step(
-            index: usize,
-            body: &Body,
-            row: &mut ColdRow,
-            changed: &mut u64,
-            admitted: u8,
-            stamp: u64,
-            item_limit: u32,
-        ) -> Option<EntitySlot> {
-            if admitted == 0 || !body.alive {
+        flag: impl Fn(&Body, &ColdRow) -> bool + Sync,
+    ) -> (Vec<EntitySlot>, Vec<EntitySlot>) {
+        let stamp = self.captured_tick + 1;
+        // Bit 0: item expired, bit 1: flagged by the caller.
+        let step = |index: usize,
+                    body: &Body,
+                    row: &mut ColdRow,
+                    changed: &mut u64,
+                    admitted: u8|
+         -> Option<(EntitySlot, u8)> {
+            if admitted == 0 {
                 return None;
             }
-            row.age = row.age.wrapping_add(1);
-            *changed = stamp;
-            (row.age >= item_limit && matches!(body.kind, EntityKind::Item { .. }))
-                .then_some(EntitySlot(index as u32))
-        }
+            // Dead rows keep their clock but are still probed, as the separate
+            // despawn sweep probed every admitted row.
+            let expired = body.alive && {
+                row.age = row.age.wrapping_add(1);
+                *changed = stamp;
+                row.age >= item_limit && matches!(body.kind, EntityKind::Item { .. })
+            };
+            let flagged = flag(body, row);
+            (expired || flagged).then_some((
+                EntitySlot(index as u32),
+                u8::from(expired) | u8::from(flagged) << 1,
+            ))
+        };
         debug_assert_eq!(admitted.len(), self.cold.len());
         debug_assert_eq!(self.bodies.len(), self.cold.len());
-        let stamp = self.captured_tick + 1;
-        if self.cold.len() < min_parallel {
-            return self
-                .cold
+        let hits: Vec<(EntitySlot, u8)> = if self.cold.len() < min_parallel {
+            self.cold
                 .iter_mut()
                 .zip(&self.bodies)
                 .zip(&mut self.changed_tick)
                 .zip(admitted)
                 .enumerate()
                 .filter_map(|(index, (((row, body), changed), &admitted))| {
-                    step(index, body, row, changed, admitted, stamp, item_limit)
+                    step(index, body, row, changed, admitted)
                 })
-                .collect();
+                .collect()
+        } else {
+            use rayon::prelude::*;
+            self.cold
+                .par_iter_mut()
+                .zip(self.bodies.par_iter())
+                .zip(self.changed_tick.par_iter_mut())
+                .zip(admitted.par_iter())
+                .with_min_len(2048)
+                .enumerate()
+                .filter_map(|(index, (((row, body), changed), &admitted))| {
+                    step(index, body, row, changed, admitted)
+                })
+                .collect()
+        };
+        let (mut expired, mut flagged) = (Vec::new(), Vec::new());
+        for (slot, bits) in hits {
+            if bits & 1 != 0 {
+                expired.push(slot);
+            }
+            if bits & 2 != 0 {
+                flagged.push(slot);
+            }
         }
-        use rayon::prelude::*;
-        self.cold
-            .par_iter_mut()
-            .zip(self.bodies.par_iter())
-            .zip(self.changed_tick.par_iter_mut())
-            .zip(admitted.par_iter())
-            .with_min_len(2048)
-            .enumerate()
-            .filter_map(|(index, (((row, body), changed), &admitted))| {
-                step(index, body, row, changed, admitted, stamp, item_limit)
-            })
-            .collect()
+        (expired, flagged)
     }
 
     /// Clock projection is not a gameplay dirty mark. Schedule/event changes

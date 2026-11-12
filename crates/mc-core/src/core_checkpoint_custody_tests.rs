@@ -433,7 +433,7 @@ fn custody_paths_reach_the_next_checkpoint() {
                 admitted[slot(state, cow).0 as usize] = 1;
                 state
                     .entities
-                    .advance_admitted_ages(&admitted, u32::MAX, usize::MAX);
+                    .advance_admitted_ages(&admitted, u32::MAX, usize::MAX, |_, _| false);
             }),
         ),
         (
@@ -827,9 +827,12 @@ fn randomized_custody_matches_full_capture_at_every_fence() {
                     let (world, slot) = world_mut(state, pick);
                     let mut admitted = vec![0; world.entities.len()];
                     admitted[slot.0 as usize] = 1;
-                    world
-                        .entities
-                        .advance_admitted_ages(&admitted, u32::MAX, usize::MAX);
+                    world.entities.advance_admitted_ages(
+                        &admitted,
+                        u32::MAX,
+                        usize::MAX,
+                        |_, _| false,
+                    );
                 }
                 4 => {
                     let kind = type_id(state, name);

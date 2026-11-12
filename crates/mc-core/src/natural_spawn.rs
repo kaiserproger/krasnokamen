@@ -198,18 +198,60 @@ pub fn is_night(day_time: i64) -> bool {
 /// costs more than a small population's pass.
 const MIN_PARALLEL_ROWS: usize = crate::contact_hazards::MIN_PARALLEL_ROWS;
 
+/// The global-player admission of one age pass plus the despawn candidates it
+/// found: both stay valid only while nothing removed a row since.
+struct Admitted {
+    slots: Vec<EntitySlot>,
+    /// Admitted rows [`despawn_candidate`] selects, ascending.
+    candidates: Vec<EntitySlot>,
+}
+
+/// Whether some alive row may need despawn work: an aged-out item, or a mob
+/// that is not already known to need none ([`no_work_before_category`]).
+/// A pure read of the body and the cold row, shared by the fused age sweep and
+/// despawn's own fallback sweep.
+fn despawn_candidate(
+    body: &crate::entities::Body,
+    row: &crate::entities::ColdRow,
+    peaceful_difficulty: bool,
+    no_players: bool,
+) -> bool {
+    match body.kind {
+        EntityKind::Item { .. } => row.age >= ITEM_LIFESPAN,
+        // Vanilla EnderDragon.checkDespawn is a no-op, even on Peaceful.
+        EntityKind::Mob { type_id } => {
+            !crate::end_fight::dragon_type(type_id)
+                && body.alive
+                && !no_work_before_category(row, peaceful_difficulty, no_players)
+        }
+        _ => false,
+    }
+}
+
+/// Whether [`despawn`] will have a player to measure against: the observers
+/// [`run_with`] builds (every non-spectator player with a body).
+fn has_observers(state: &TickState) -> bool {
+    state
+        .players
+        .iter()
+        .any(|(id, player)| !player.spectator() && state.entities.slot_of(*id).is_some())
+}
+
 /// Advance lifetime clocks once for every live entity before this tick's
 /// admissions. Age is anchored by record ticks, never journaled on its own.
 /// The per-row clock step is order-free (rows are independent); expired items
 /// leave in reverse slot order, which keeps compaction from invalidating the
 /// pending removals.
-/// Returns the global-player admission list when expiry removed nothing, so the
-/// despawn pass of the same tick can reuse it instead of re-admitting every row.
+/// The same sweep selects despawn's candidates while each cold row is already
+/// loaded, so the despawn pass needs no second read of 100,000 rows.
+/// Returns the global-player admission and candidates when expiry removed
+/// nothing, so the despawn pass of the same tick can reuse them instead of
+/// re-admitting and re-reading every row.
 fn age_pass(
     state: &mut TickState,
     changes: &mut ChangeSet,
     min_parallel: usize,
-) -> Option<Vec<EntitySlot>> {
+) -> Option<Admitted> {
     let mut slots = crate::tick::active_entity_slots(state, true);
     let mut admitted = std::mem::take(&mut state.serial_entity_marks);
     admitted.clear();
@@ -217,13 +259,18 @@ fn age_pass(
     for slot in &slots {
         admitted[slot.0 as usize] = 1;
     }
-    let expired = state
-        .entities
-        .advance_admitted_ages(&admitted, ITEM_LIFESPAN, min_parallel);
+    let peaceful_difficulty = state.difficulty == crate::survival::Difficulty::Peaceful;
+    let no_players = !has_observers(state);
+    let (expired, candidates) = state.entities.advance_admitted_ages(
+        &admitted,
+        ITEM_LIFESPAN,
+        min_parallel,
+        |body, row| despawn_candidate(body, row, peaceful_difficulty, no_players),
+    );
     admitted.clear();
     state.serial_entity_marks = admitted;
     if expired.is_empty() {
-        return Some(slots);
+        return Some(Admitted { slots, candidates });
     }
     let removal_start = crate::item_perf::start();
     for &slot in expired.iter().rev() {
@@ -267,9 +314,9 @@ pub(crate) fn advance_ages_reference(state: &mut TickState, changes: &mut Change
 /// Standalone age pass over the production code.
 #[cfg(test)]
 pub(crate) fn advance_ages(state: &mut TickState, changes: &mut ChangeSet) {
-    if let Some(mut slots) = age_pass(state, changes, MIN_PARALLEL_ROWS) {
-        slots.clear();
-        state.serial_entity_slots = slots;
+    if let Some(mut admitted) = age_pass(state, changes, MIN_PARALLEL_ROWS) {
+        admitted.slots.clear();
+        state.serial_entity_slots = admitted.slots;
     }
 }
 
@@ -301,13 +348,13 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
     run_with(state, changes, None, MIN_PARALLEL_ROWS);
 }
 
-/// `admitted` is a still-valid global-player admission list from [`age_pass`];
-/// the extra player slots fail despawn's mob gate, so it equals the
-/// despawn admission for every non-player row.
+/// `admitted` is a still-valid global-player admission from [`age_pass`]; the
+/// extra player slots fail despawn's mob gate, so it equals the despawn
+/// admission for every non-player row.
 fn run_with(
     state: &mut TickState,
     changes: &mut ChangeSet,
-    admitted: Option<Vec<EntitySlot>>,
+    admitted: Option<Admitted>,
     min_parallel: usize,
 ) {
     // Reuse the census-owned observer scratch across ticks: the only
@@ -520,39 +567,44 @@ fn despawn(
     players: &crate::target_grid::TargetGrid<'_>,
     rng: &mut Rng,
     changes: &mut ChangeSet,
-    admitted: Option<Vec<EntitySlot>>,
+    admitted: Option<Admitted>,
     min_parallel: usize,
 ) {
     let mut gone: Vec<EntitySlot> = Vec::new();
-    let mut slots = admitted.unwrap_or_else(|| crate::tick::active_entity_slots(state, false));
     let peaceful_difficulty = state.difficulty == crate::survival::Difficulty::Peaceful;
     let no_players = players.table().is_empty();
     // Read-only filter first: almost every resident body has no despawn work,
-    // so the pool drops them in parallel and the serial pass below (RNG draws,
-    // clock writes, removals in slot order) sees only rows that may act.
-    let acts = |slot: &EntitySlot| {
-        let row = state.entities.row(*slot);
-        match state.entities.body(*slot).kind {
-            EntityKind::Item { .. } => row.age >= ITEM_LIFESPAN,
-            EntityKind::Mob { type_id } => {
-                // Vanilla EnderDragon.checkDespawn is a no-op, even on Peaceful.
-                !crate::end_fight::dragon_type(type_id)
-                    && state.entities.body(*slot).alive
-                    && !no_work_before_category(row, peaceful_difficulty, no_players)
-            }
-            _ => false,
+    // so the serial pass below (RNG draws, clock writes, removals in slot
+    // order) sees only rows that may act. The age pass of this tick already
+    // made that selection; without it the pool makes it here.
+    let (mut slots, candidates) = match admitted {
+        Some(admitted) => {
+            debug_assert_eq!(no_players, !has_observers(state));
+            (admitted.slots, admitted.candidates)
         }
-    };
-    let candidates: Vec<EntitySlot> = if slots.len() < min_parallel {
-        slots.iter().copied().filter(|slot| acts(slot)).collect()
-    } else {
-        use rayon::prelude::*;
-        slots
-            .par_iter()
-            .copied()
-            .with_min_len(2048)
-            .filter(|slot| acts(slot))
-            .collect()
+        None => {
+            let slots = crate::tick::active_entity_slots(state, false);
+            let acts = |slot: &EntitySlot| {
+                despawn_candidate(
+                    state.entities.body(*slot),
+                    state.entities.row(*slot),
+                    peaceful_difficulty,
+                    no_players,
+                )
+            };
+            let candidates: Vec<EntitySlot> = if slots.len() < min_parallel {
+                slots.iter().copied().filter(|slot| acts(slot)).collect()
+            } else {
+                use rayon::prelude::*;
+                slots
+                    .par_iter()
+                    .copied()
+                    .with_min_len(2048)
+                    .filter(|slot| acts(slot))
+                    .collect()
+            };
+            (slots, candidates)
+        }
     };
     for &slot in &candidates {
         let row = state.entities.row(slot);
