@@ -36,9 +36,9 @@ failing_first = "not recorded"
   referenced key must be exactly `true`. The `all` key denotes the whole
   profile; when no boolean verdict map exists, `all` requires a passing
   profile receipt. Legacy profiles expose their existing `PASS` behaviour
-  maps: `village-qa` has `door_walk`, `sleep_return`, `farmer_harvest`,
-  `miner_deposit`, and `lumberjack`; autonomy, claim and army expose their
-  named behaviours. `buildings-qa` uses `<blueprint>.<behaviour>`, for
+  maps: `village-qa` has `door_walk`, `sleep_return`, `night_door`,
+  `farmer_harvest`, `miner_deposit`, and `lumberjack`; autonomy, claim and
+  army expose their named behaviours. `buildings-qa` uses `<blueprint>.<behaviour>`, for
   example `wall.L1_built`. Partial or resumed profile overrides are rejected.
   A passing profile is evidence only for symptoms its assertions actually cover.
 - `repro_check` is optional: a nonempty string or list of nonempty strings for

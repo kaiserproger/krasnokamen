@@ -89,7 +89,7 @@ fn wooden_door_route_reaches_other_side_but_iron_remains_blocked() {
 #[test]
 fn bound_bedless_nitwit_enters_occupied_house_at_night() {
     let mut state = control_state();
-    doorway(&mut state, "minecraft:oak_door");
+    let door = doorway(&mut state, "minecraft:oak_door");
     for z in 9..=14 {
         for y in 201..=203 {
             state.world.set_block(6, y, z, state.registry.states.stone);
@@ -188,6 +188,9 @@ fn bound_bedless_nitwit_enters_occupied_house_at_night() {
         })
         .collect();
     assert_eq!(cells.len(), 3, "bedless residents must not share a cell");
+    // Issue #1 (ISSUE-1-08): every resident that walked in for the night left
+    // the house door shut behind it.
+    assert!(!door_open(&state, door), "a sheltering resident left the house door open");
 }
 
 #[test]

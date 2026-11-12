@@ -2303,8 +2303,10 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+source = "https://github.com/kaiserproger/solaris/issues/1 (villagers stop short of their target and drop the route early); fixed by 8a1c5453 (2026-10-19: progressing routes are no longer replaced on the 40-tick retry; stuck or pushed villagers replan). Fix patch docs/bugs/fix-patches/ISSUE-1-05.patch is that code at the candidate (villager/brain/motion.rs: progress tracking at due checks and the replan condition); reversing it brings back the replan of every due route, which throws away a progressing route every 40 ticks"
+regression = ["cargo:mc-core:villager::brain::tests::route_continuation_tests::due_replan_search_failure_keeps_valid_progress_route", "cargo:mc-core:villager::brain::tests::route_continuation_tests::pushed_off_route_replans_from_pushed_position_at_due_check", "cargo:mc-core:villager::brain::tests::route_continuation_tests::unchanged_waypoint_distance_is_stalled_not_progress", "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_claim_keeps_walking_without_forty_tick_abandon"]
+failing_first = "reported"
+fix_commit = "patch:012a79cda0c63a0980159b11373de82cf67b3469bf5405692dd190f54b233d10"
 
 [[bug]]
 id = "ISSUE-1-06"
@@ -2333,8 +2335,10 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+source = "https://github.com/kaiserproger/solaris/issues/1 (some villagers leave house doors open at night); fixed by 8a1c5453 (2026-10-19: villagers open/close wooden doors on their route and close only doors they opened, never on another villager in the doorway). Vanilla 26.3 SleepInBed.start and InteractWithDoor close the doors a villager opened or passed through (javap of the local server jar). Fix patch docs/bugs/fix-patches/ISSUE-1-08.patch is the closing call at the candidate (villager/doors.rs interact); reversing it leaves every door a villager opened open"
+regression = ["cargo:mc-core:villager::brain::tests::door_tests::resident_opens_both_door_halves_and_closes_after_entering_bed_at_night", "cargo:mc-core:villager::brain::tests::door_tests::bound_bedless_nitwit_enters_occupied_house_at_night", "cargo:mc-core:villager::brain::tests::door_tests::interrupted_route_closes_only_the_door_the_resident_opened"]
+failing_first = "reported"
+fix_commit = "patch:ecb5306d97a64d29220b6bd0c1897411943ed19cb08bc6505f222dc882ae6083"
 
 [[bug]]
 id = "ISSUE-1-09"
@@ -2353,8 +2357,10 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+source = "https://github.com/kaiserproger/solaris/issues/1 (settlement villagers should take free jobs automatically and walk there without dropping the route); fixed by 8a1c5453 (2026-10-19: bound settlements discover free job sites across their whole radius). Fix patch docs/bugs/fix-patches/ISSUE-1-10.patch is the claim route window at the candidate (settlements/allocator.rs acquire: the search window follows the settlement claim); reversing it brings back the flat 48x16 stroll window, so a free settlement job farther away is never claimed"
+regression = ["cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_settlement_job_is_claimed_beyond_vanilla_reach", "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_claim_keeps_walking_without_forty_tick_abandon"]
+failing_first = "reported"
+fix_commit = "patch:fe58612e34bab7e5ae287f4c9d0dd604420d495b59408b7e31133a7f587aa9ee"
 
 [[bug]]
 id = "ISSUE-1-11"
@@ -2542,8 +2548,10 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
+source = "https://github.com/kaiserproger/solaris/issues/1 (comment 2026-10-19 15:55: blocks villagers changed did not reach the client); fixed by a6979209 (2026-10-19: villager commit-tail block edits are folded before the chunk snapshot is published). Fix patch docs/bugs/fix-patches/ISSUE-1-28.patch is that fold at the candidate (tick.rs publish); reversing it publishes the chunk without the villagers' commit-tail edits"
 regression = ["harness:village-qa:door_walk", "harness:village-qa:farmer_harvest", "harness:village-qa:miner_deposit", "harness:village-qa:lumberjack"]
+failing_first = "reported"
+fix_commit = "patch:b6347ae3aad17693f228d31153fe846cd59121bf85b57021678beaf241031cd7"
 
 [[bug]]
 id = "HUNT-REJOIN-LOCALE"
