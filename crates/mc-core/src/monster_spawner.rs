@@ -94,8 +94,10 @@ impl Spawner {
         self.fields
             .retain(|(name, _)| name != "krasnokamen:spawn_deadline");
         if let Some(deadline) = self.deadline {
-            self.fields
-                .push(("krasnokamen:spawn_deadline".into(), Tag::Long(deadline as i64)));
+            self.fields.push((
+                "krasnokamen:spawn_deadline".into(),
+                Tag::Long(deadline as i64),
+            ));
         }
         let pos = BlockPos {
             x: key.0,

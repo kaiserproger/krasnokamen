@@ -747,8 +747,9 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        let blocks = BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
-            .expect("the embedded required-block report is well formed");
+        let blocks =
+            BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
+                .expect("the embedded required-block report is well formed");
         let air = state_of(&blocks, "minecraft:air", &[]);
         Self {
             blocks,

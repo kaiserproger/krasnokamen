@@ -30,7 +30,8 @@ fn vanilla_headless_world_roundtrip() {
         std::env::var_os("KRASNOKAMEN_VANILLA_ROUNDTRIP_EXPORT").expect("Anvil export destination"),
     );
     let export_receipt = std::path::PathBuf::from(
-        std::env::var_os("KRASNOKAMEN_VANILLA_ROUNDTRIP_EXPORT_RECEIPT").expect("export receipt path"),
+        std::env::var_os("KRASNOKAMEN_VANILLA_ROUNDTRIP_EXPORT_RECEIPT")
+            .expect("export receipt path"),
     );
     let mut config = crate::test_support::config(root.clone(), 42);
     config.view_distance = 1;

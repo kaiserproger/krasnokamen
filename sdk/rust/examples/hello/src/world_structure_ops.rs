@@ -1,8 +1,8 @@
 //! A generic feature/worksite query example; gameplay acceptance belongs to plugins.
 use krasnokamen_plugin_sdk::events::Event;
 use krasnokamen_plugin_sdk::{
-    Command, Config, Failure, LogLevel, check_worksite, list_features, log, query_feature,
-    worksite_status,
+    check_worksite, list_features, log, query_feature, worksite_status, Command, Config, Failure,
+    LogLevel,
 };
 
 pub(crate) const ROOT: &str = "world-structure";

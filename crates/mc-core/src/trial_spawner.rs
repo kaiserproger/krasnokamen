@@ -179,7 +179,8 @@ impl Spawner {
     ) -> Result<Self, String> {
         let fields = nbt::decode(bytes)?;
         let data = SpawnerData::from_fields(fields)?;
-        let pending = if let Some(fields) = nbt::compound(&data.fields, "krasnokamen:ominous_item")? {
+        let pending = if let Some(fields) = nbt::compound(&data.fields, "krasnokamen:ominous_item")?
+        {
             let uuids = nbt::uuids(fields, "uuid")?;
             let uuid = uuids
                 .into_iter()

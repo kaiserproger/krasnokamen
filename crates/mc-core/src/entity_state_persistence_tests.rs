@@ -217,7 +217,8 @@ fn actual_checkpoint_regions_restore_persistence_idle_air_fire_and_child_size() 
     let expected_child =
         EntityStateImage::from_row(state.entities.body(child), state.entities.row(child));
     let (_, regions, _) = checkpoint_data_for(&state, 1);
-    let dir = std::env::temp_dir().join(format!("krasnokamen-spawn-state-{}", uuid::Uuid::new_v4()));
+    let dir =
+        std::env::temp_dir().join(format!("krasnokamen-spawn-state-{}", uuid::Uuid::new_v4()));
     mc_world::anvil::entity_regions::write_entity_regions(&dir, &state.registry.items, &regions, 1)
         .unwrap();
     let regions =
@@ -305,8 +306,10 @@ fn compact_timer_postimages_replay_without_appearance_or_birth_motion_changes() 
             |entry| matches!(entry, JournalEntry::Entity { id: entity, .. } if *entity == id.0)
         )
     );
-    let dir =
-        std::env::temp_dir().join(format!("krasnokamen-spawn-state-wal-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!(
+        "krasnokamen-spawn-state-wal-{}",
+        uuid::Uuid::new_v4()
+    ));
     let mut writer = JournalWriter::open(&dir, 1).unwrap();
     writer.append(1, 1, &birth).unwrap();
     writer.append(2, 2, &tail).unwrap();
@@ -346,7 +349,8 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     assert!(birth.iter().any(|entry| matches!(entry,
         JournalEntry::Entity { id: entity, .. } if *entity == id.0)));
     let checkpoint_tick = birth_output.tick;
-    let dir = std::env::temp_dir().join(format!("krasnokamen-controls-wal-{}", uuid::Uuid::new_v4()));
+    let dir =
+        std::env::temp_dir().join(format!("krasnokamen-controls-wal-{}", uuid::Uuid::new_v4()));
     let mut writer = JournalWriter::open(&dir, 1).unwrap();
     writer
         .append(checkpoint_tick, checkpoint_tick, &birth)

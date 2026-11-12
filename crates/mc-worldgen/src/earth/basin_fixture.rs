@@ -299,7 +299,8 @@ mod tests {
     #[test]
     fn lake_blocks_and_reach_ports_follow_the_plan_not_sea_level() {
         let registry =
-            BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap();
+            BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
+                .unwrap();
         let water = registry
             .block(&Identifier::parse("minecraft:water").unwrap())
             .unwrap()

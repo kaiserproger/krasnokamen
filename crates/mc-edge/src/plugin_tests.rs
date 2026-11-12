@@ -24,7 +24,8 @@ struct TestDirectory(PathBuf);
 
 impl TestDirectory {
     fn new() -> Self {
-        let path = std::env::temp_dir().join(format!("krasnokamen-plugin-v2-{}", uuid::Uuid::new_v4()));
+        let path =
+            std::env::temp_dir().join(format!("krasnokamen-plugin-v2-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&path).expect("create isolated acceptance directory");
         Self(path)
     }

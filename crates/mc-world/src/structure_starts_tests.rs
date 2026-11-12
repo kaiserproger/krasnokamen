@@ -4,7 +4,9 @@ use crate::{
     chunk::GeneratedStructureSite,
     native::{NativeChunkSnapshot, NativeStore},
 };
-use mc_data::{Identifier, blocks::krasnokamen_required_blocks_report, items::krasnokamen_required_items};
+use mc_data::{
+    Identifier, blocks::krasnokamen_required_blocks_report, items::krasnokamen_required_items,
+};
 use mc_nbt::{ListTag, Tag};
 
 fn site() -> GeneratedStructureSite {

@@ -962,7 +962,8 @@ pub fn loader_manifest_channel() -> &'static Identifier {
 
 pub fn loader_view_channel() -> &'static Identifier {
     static CHANNEL: LazyLock<Identifier> = LazyLock::new(|| {
-        Identifier::parse(LOADER_VIEW_CHANNEL).expect("static Krasnokamen Loader view channel is valid")
+        Identifier::parse(LOADER_VIEW_CHANNEL)
+            .expect("static Krasnokamen Loader view channel is valid")
     });
     &CHANNEL
 }
@@ -1030,8 +1031,9 @@ pub fn loader_hello_channel() -> &'static Identifier {
 #[must_use]
 pub fn loader_ack_channel() -> &'static Identifier {
     static CHANNEL: OnceLock<Identifier> = OnceLock::new();
-    CHANNEL
-        .get_or_init(|| Identifier::parse("krasnokamen:loader/ack").expect("static loader ack channel"))
+    CHANNEL.get_or_init(|| {
+        Identifier::parse("krasnokamen:loader/ack").expect("static loader ack channel")
+    })
 }
 
 #[must_use]

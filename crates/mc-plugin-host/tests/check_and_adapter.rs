@@ -8,7 +8,9 @@ use std::num::NonZeroUsize;
 use std::path::Path;
 
 use fixture::component_bytes;
-use mc_plugin_host::bindings::krasnokamen::plugin::commands::{Command, MessageTarget, SendMessage};
+use mc_plugin_host::bindings::krasnokamen::plugin::commands::{
+    Command, MessageTarget, SendMessage,
+};
 use mc_plugin_host::{
     AdapterError, CommandBatch, DeploymentConfig, DiscoveryMode, NoSessions, PlayerSessions,
     PluginLimits, check_deployment, to_script_batch,

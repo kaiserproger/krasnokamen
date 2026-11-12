@@ -1225,7 +1225,10 @@ fn native_checkpoint_slot_migration_and_wire_conflicts_are_atomic() {
         position: ChunkPos { x: 1, z: 1 },
         generated_slot: Some([4; 32]),
         journal_lsn: 1,
-        payload: Some(Tag::Compound(vec![("krasnokamen:WireId".into(), Tag::Int(9))])),
+        payload: Some(Tag::Compound(vec![(
+            "krasnokamen:WireId".into(),
+            Tag::Int(9),
+        )])),
     };
     commit(
         &store,
@@ -1344,7 +1347,10 @@ fn commit_checkpoint_then_crash(path: &std::path::Path) -> ! {
         position: base.pos,
         generated_slot: Some([3; 32]),
         journal_lsn: 7,
-        payload: Some(Tag::Compound(vec![("krasnokamen:WireId".into(), Tag::Int(9))])),
+        payload: Some(Tag::Compound(vec![(
+            "krasnokamen:WireId".into(),
+            Tag::Int(9),
+        )])),
     };
     store
         .commit_checkpoint(

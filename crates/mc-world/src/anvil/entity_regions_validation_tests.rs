@@ -50,9 +50,10 @@ fn malformed_import_health_and_wire_ids_fail_with_complete_record_context() {
         let entries = fields(&mut tag);
         entries.retain(|(name, _)| name != key);
         entries.push((key.into(), value));
-        let error = entity_chunk_from_nbt(&mc_data::items::krasnokamen_required_items(), &tag, path)
-            .unwrap_err()
-            .to_string();
+        let error =
+            entity_chunk_from_nbt(&mc_data::items::krasnokamen_required_items(), &tag, path)
+                .unwrap_err()
+                .to_string();
         assert!(error.contains("world/DIM1/entities/r.0.-1.mca"));
         assert!(error.contains("chunk (1, -2) entity-index 0"));
         assert!(error.contains(&uuid::Uuid::from_u128(7).to_string()));

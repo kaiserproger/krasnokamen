@@ -29,7 +29,9 @@ use mc_plugin_host::bindings::krasnokamen::plugin::client_presentation::{
     PresentClientView, StopClientSound, ViewAction, ViewField, ViewFieldValue, ViewFormation,
     ViewMarker, ViewMarkerPosition, ViewModel, ViewResourceEntry, ViewRow, ViewTab,
 };
-use mc_plugin_host::bindings::krasnokamen::plugin::commands::{Command, MessageTarget, SendMessage};
+use mc_plugin_host::bindings::krasnokamen::plugin::commands::{
+    Command, MessageTarget, SendMessage,
+};
 use mc_plugin_host::bindings::krasnokamen::plugin::types::Position;
 use mc_plugin_host::{
     AdapterError, CommandBatch, NoSessions, PluginLimits, StagingError, to_script_batch,

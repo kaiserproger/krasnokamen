@@ -347,7 +347,11 @@ mod tests {
         ] {
             assert!(fields.iter().any(|(name, _)| name == key), "has {key}");
         }
-        assert!(fields.iter().all(|(name, _)| !name.starts_with("krasnokamen:")));
+        assert!(
+            fields
+                .iter()
+                .all(|(name, _)| !name.starts_with("krasnokamen:"))
+        );
         assert!(
             fields
                 .iter()

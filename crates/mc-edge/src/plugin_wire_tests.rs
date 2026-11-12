@@ -676,10 +676,11 @@ async fn genuine_claim_gate() {
                 .unwrap();
         assert_eq!(manifest["id"].as_str(), Some(name));
     }
-    let towns: toml::Value = std::fs::read_to_string(deployment.join("krasnokamen-towns/config.toml"))
-        .unwrap()
-        .parse()
-        .unwrap();
+    let towns: toml::Value =
+        std::fs::read_to_string(deployment.join("krasnokamen-towns/config.toml"))
+            .unwrap()
+            .parse()
+            .unwrap();
     assert_eq!(towns["dimension"].as_str(), Some("minecraft:overworld"));
     assert!(
         towns["minimum_y"].as_integer().unwrap() <= 161

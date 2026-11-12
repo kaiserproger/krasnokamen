@@ -72,11 +72,13 @@
 //! own probe once the server has finished with that connection, and a driver that
 //! has to reconnect cannot know that from its own side.
 
-use krasnokamen_plugin_sdk::events::{CommandInvoked, InventoryMenuClicked, InventoryStorageOutcome};
+use krasnokamen_plugin_sdk::events::{
+    CommandInvoked, InventoryMenuClicked, InventoryStorageOutcome,
+};
 use krasnokamen_plugin_sdk::{
-    Command, Event, Failure, InventoryClick, InventoryMenuSlot, InventoryResourceDelta, LogLevel,
-    StorageGetOutcome, StorageMutation, StorageRecord, close_inventory_menu,
-    inventory_storage_transaction, log, message_player, open_inventory_menu, storage, storage_get,
+    close_inventory_menu, inventory_storage_transaction, log, message_player, open_inventory_menu,
+    storage, storage_get, Command, Event, Failure, InventoryClick, InventoryMenuSlot,
+    InventoryResourceDelta, LogLevel, StorageGetOutcome, StorageMutation, StorageRecord,
 };
 
 /// The command root the package's manifest declares for this fixture.

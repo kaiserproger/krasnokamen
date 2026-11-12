@@ -654,8 +654,10 @@ fn torn_gateway_pair_wal_replays_both_links_atomically() {
         .blocks
         .extend(pair_changes.blocks);
     let pair = crate::core::journal_entries_for_tick(&mut state, &output);
-    let directory =
-        std::env::temp_dir().join(format!("krasnokamen-gateway-crash-{}", uuid::Uuid::new_v4()));
+    let directory = std::env::temp_dir().join(format!(
+        "krasnokamen-gateway-crash-{}",
+        uuid::Uuid::new_v4()
+    ));
     let mut writer = crate::journal::JournalWriter::open(&directory, 1).unwrap();
     writer
         .append(
@@ -777,8 +779,10 @@ fn corrupt_gateway_wal_refuses_core_recovery_with_exact_cell() {
     ]);
     let mut bytes = Vec::new();
     mc_nbt::write_network(&mut bytes, &fields).unwrap();
-    let directory =
-        std::env::temp_dir().join(format!("krasnokamen-gateway-corrupt-{}", uuid::Uuid::new_v4()));
+    let directory = std::env::temp_dir().join(format!(
+        "krasnokamen-gateway-corrupt-{}",
+        uuid::Uuid::new_v4()
+    ));
     let mut writer = crate::journal::JournalWriter::open(&directory, 1).unwrap();
     publish_fixture_manifest(&directory);
     writer

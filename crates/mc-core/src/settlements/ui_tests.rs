@@ -1088,9 +1088,10 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
     assert_eq!(expected.len(), 10);
     for label in expected {
         assert!(
-            page.actions.iter().any(
-                |(text, action)| text == &label && action == "krasnokamen:settlement/project_order"
-            ),
+            page.actions
+                .iter()
+                .any(|(text, action)| text == &label
+                    && action == "krasnokamen:settlement/project_order"),
             "{label}"
         );
     }
@@ -1593,11 +1594,10 @@ fn projects_clicks_are_read_only_for_visitors_and_forged_payloads_start_nothing(
     let page = last_dialog(&click(&mut state, id, "projects", &[]));
     assert!(page.body.contains("View only"));
     assert!(
-        !page
-            .actions
-            .iter()
-            .any(|(_, action)| action == "krasnokamen:settlement/project_order"
-                || action == "krasnokamen:settlement/project_upgrade"),
+        !page.actions.iter().any(
+            |(_, action)| action == "krasnokamen:settlement/project_order"
+                || action == "krasnokamen:settlement/project_upgrade"
+        ),
         "{:?}",
         page.actions
     );

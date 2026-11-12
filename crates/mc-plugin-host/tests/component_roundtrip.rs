@@ -53,7 +53,8 @@ impl HostServices for Services {
 fn guest_module() -> PathBuf {
     let _ = component_bytes();
     let sdk = fixture::repo_root().join("sdk/rust");
-    fixture::target_directory(&sdk).join("wasm32-unknown-unknown/release/krasnokamen_hello_plugin.wasm")
+    fixture::target_directory(&sdk)
+        .join("wasm32-unknown-unknown/release/krasnokamen_hello_plugin.wasm")
 }
 
 /// Instantiate the example plugin with `config` as its `config.toml` text.

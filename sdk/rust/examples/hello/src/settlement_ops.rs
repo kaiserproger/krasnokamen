@@ -12,9 +12,9 @@
 
 use krasnokamen_plugin_sdk::events::{CommandInvoked, Event};
 use krasnokamen_plugin_sdk::{
-    Command, Config, Failure, LogLevel, bind_settlement, form_settlement_household, log,
-    plan_settlement_district, query_settlements, relocate_settlement_household, rename_settlement,
-    unbind_settlement,
+    bind_settlement, form_settlement_household, log, plan_settlement_district, query_settlements,
+    relocate_settlement_household, rename_settlement, unbind_settlement, Command, Config, Failure,
+    LogLevel,
 };
 
 /// The command root the package's manifest declares for this fixture.

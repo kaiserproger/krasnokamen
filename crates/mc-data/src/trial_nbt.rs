@@ -142,8 +142,8 @@ impl SpawnerData {
                 return Err("krasnokamen:ominous_item.eject_at: missing Long".into());
             }
             long(pending, "eject_at", 0)?;
-            let item =
-                compound(pending, "item")?.ok_or("krasnokamen:ominous_item.item: missing Compound")?;
+            let item = compound(pending, "item")?
+                .ok_or("krasnokamen:ominous_item.item: missing Compound")?;
             let items = crate::items::krasnokamen_required_items();
             if crate::item_nbt::stack_from_fields(&items, item)
                 .map_err(|e| e.to_string())?

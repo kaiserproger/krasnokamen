@@ -155,7 +155,8 @@ fn checkpoint_store_with_raw_imported_unknown_variants_opens_with_defaults() {
         state.tick,
     )
     .unwrap();
-    let root = std::env::temp_dir().join(format!("krasnokamen-variant-raw-{}", uuid::Uuid::new_v4()));
+    let root =
+        std::env::temp_dir().join(format!("krasnokamen-variant-raw-{}", uuid::Uuid::new_v4()));
     let config = crate::CoreConfig::new(root.join("checkpoint"), 42);
     crate::native_checkpoint::tests::write_manifest(&config, &Default::default()).unwrap();
     let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();

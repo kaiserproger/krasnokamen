@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 
+use krasnokamen_fuzz::{PLAY, PRE_PLAY, selector};
 use mc_data::item_stack::ItemStack;
 use mc_nbt::{ListTag, Tag, tag_type};
 use mc_protocol::codec::Identifier;
@@ -14,7 +15,6 @@ use mc_protocol::packets::handshake::{Handshake, NextState};
 use mc_protocol::packets::login::{EncryptionResponse, LoginPluginResponse, LoginStart};
 use mc_protocol::packets::play::*;
 use mc_protocol::packets::{ClientInformation, CustomPayload, Packet, configuration, status};
-use krasnokamen_fuzz::{PLAY, PRE_PLAY, selector};
 use uuid::Uuid;
 
 struct Writer {

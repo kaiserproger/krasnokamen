@@ -29,7 +29,11 @@ pub(super) fn validate(plan: &DistrictPlan) -> Result<(), &'static str> {
 
 fn institutions(branch: &str, level: u8) -> &'static [&'static str] {
     match (branch, level) {
-        ("estate", 1) => &["krasnokamen:manor_hall", "krasnokamen:farm", "krasnokamen:warehouse"],
+        ("estate", 1) => &[
+            "krasnokamen:manor_hall",
+            "krasnokamen:farm",
+            "krasnokamen:warehouse",
+        ],
         ("estate", 2) => &[
             "krasnokamen:manor_hall",
             "krasnokamen:farm",
@@ -47,7 +51,11 @@ fn institutions(branch: &str, level: u8) -> &'static [&'static str] {
             "krasnokamen:warehouse",
             "krasnokamen:keep",
         ],
-        ("town", 1) => &["krasnokamen:market", "krasnokamen:smithy", "krasnokamen:warehouse"],
+        ("town", 1) => &[
+            "krasnokamen:market",
+            "krasnokamen:smithy",
+            "krasnokamen:warehouse",
+        ],
         ("town", 2) => &[
             "krasnokamen:market",
             "krasnokamen:smithy",

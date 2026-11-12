@@ -55,9 +55,10 @@ async fn crash_child() {
     let root = std::path::PathBuf::from(
         std::env::var_os("KRASNOKAMEN_CAPTURE_CHILD_ROOT").expect("child root"),
     );
-    let domain: Domain =
-        serde_json::from_str(&std::env::var("KRASNOKAMEN_CAPTURE_CHILD_DOMAIN").expect("child domain"))
-            .unwrap();
+    let domain: Domain = serde_json::from_str(
+        &std::env::var("KRASNOKAMEN_CAPTURE_CHILD_DOMAIN").expect("child domain"),
+    )
+    .unwrap();
     let (_live, evidence) = scenario(&root, domain).await;
     published_through(&root, evidence.through_tick).await;
     let mut marker =

@@ -271,7 +271,10 @@ fn buildings_sit_on_their_footprint_cells_with_hover_and_click() {
         .expect("a house run");
     let event = field(run, "click_event").unwrap();
     assert_eq!(string(field(event, "action")), "custom");
-    assert_eq!(string(field(event, "id")), "krasnokamen:settlement/buildings");
+    assert_eq!(
+        string(field(event, "id")),
+        "krasnokamen:settlement/buildings"
+    );
     let payload = field(event, "payload").unwrap();
     assert_eq!(string(field(payload, "s")), id.0.to_string());
     assert_eq!(string(field(payload, "b")), house.0.to_string());

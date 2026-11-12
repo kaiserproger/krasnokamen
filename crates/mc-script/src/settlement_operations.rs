@@ -824,7 +824,10 @@ mod tests {
         observation.housed = 31;
         assert!(observation.validate().is_err());
         observation.housed = 24;
-        observation.working = vec!["krasnokamen:warehouse".into(), "krasnokamen:warehouse".into()];
+        observation.working = vec![
+            "krasnokamen:warehouse".into(),
+            "krasnokamen:warehouse".into(),
+        ];
         assert!(observation.validate().is_err());
         let mut snapshot = ScriptSettlementSnapshot::new(
             1,

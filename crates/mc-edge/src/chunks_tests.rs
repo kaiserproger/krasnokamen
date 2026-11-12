@@ -14,9 +14,10 @@ fn items() -> ItemRegistry {
 
 fn reports() -> (Registry, mc_world::BlockRegistry) {
     let biomes = test_biome_registry(&["minecraft:plains"]);
-    let blocks =
-        mc_world::BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
-            .expect("required blocks build");
+    let blocks = mc_world::BlockRegistry::from_report(
+        &mc_data::blocks::krasnokamen_required_blocks_report(),
+    )
+    .expect("required blocks build");
     (biomes, blocks)
 }
 

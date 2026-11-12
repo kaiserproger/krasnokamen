@@ -28,9 +28,10 @@ struct Fixtures {
 }
 
 static FIXTURES: LazyLock<Fixtures> = LazyLock::new(|| {
-    let blocks =
-        mc_world::BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
-            .unwrap();
+    let blocks = mc_world::BlockRegistry::from_report(
+        &mc_data::blocks::krasnokamen_required_blocks_report(),
+    )
+    .unwrap();
     let torch = blocks
         .block(&mc_data::Identifier::parse("minecraft:torch").unwrap())
         .unwrap()

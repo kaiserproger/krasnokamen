@@ -441,7 +441,7 @@ fn identifier_rejects_invalid_shapes() {
         "Krasnokamen:musket",  // uppercase namespace
         "krasnokamen:Musket",  // uppercase path
         "krasnokamen::",       // empty path
-        ":foo",            // empty namespace
+        ":foo",                // empty namespace
         "krasnokamen:mu sket", // space in path
     ] {
         assert!(

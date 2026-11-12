@@ -111,7 +111,10 @@ fn real_client_runner_rejects_a_scenario_missing_from_the_manifest() {
         .arg(repo_root.join("tools/harness/backends/regression.sh"))
         .arg("--check")
         .env("KRASNOKAMEN_REAL_CLIENT_MANIFEST", manifest_path)
-        .env("KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO", "undeclared-scenario")
+        .env(
+            "KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO",
+            "undeclared-scenario",
+        )
         .output()
         .expect("check undeclared scenario");
 
@@ -150,7 +153,10 @@ fn real_client_prepare_denies_operators_when_scenario_policy_is_unknown() {
         .arg(repo_root.join("tools/harness/backends/regression.sh"))
         .arg("--prepare")
         .env("KRASNOKAMEN_REAL_CLIENT_MANIFEST", manifest_path)
-        .env("KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO", "undeclared-scenario")
+        .env(
+            "KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO",
+            "undeclared-scenario",
+        )
         .env("KRASNOKAMEN_REAL_CLIENT_RUN_ROOT", run_root.path())
         .output()
         .expect("prepare undeclared scenario");

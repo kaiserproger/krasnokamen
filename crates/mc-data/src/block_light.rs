@@ -491,7 +491,10 @@ fn parse_raw(raw: RawTable) -> Result<BlockLightTable, BlockLightError> {
 
     Ok(BlockLightTable {
         version: raw.version,
-        faces: shape_faces(&crate::blocks::krasnokamen_required_blocks_report(), expected),
+        faces: shape_faces(
+            &crate::blocks::krasnokamen_required_blocks_report(),
+            expected,
+        ),
         emission,
         opacity,
         propagates_sky,

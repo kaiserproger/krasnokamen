@@ -212,7 +212,9 @@ impl Village {
 #[test]
 fn missing_wheat_is_crafted_from_stored_hay_before_bread_and_survives_restart() {
     let mut town = village(&[("minecraft:hay_block", 1)]);
-    let steps = town.submit("bake", "krasnokamen-settlements:bread", 3).unwrap();
+    let steps = town
+        .submit("bake", "krasnokamen-settlements:bread", 3)
+        .unwrap();
     assert_eq!(describe(&steps), "open_hay x1 -> bread x3");
     assert_eq!(town.jobs()["bake-1"].after, None);
     assert_eq!(town.jobs()["bake"].after.as_deref(), Some("bake-1"));
@@ -338,7 +340,9 @@ fn missing_raw_material_cycle_and_tool_refuse_without_admitting_anything() {
 #[test]
 fn cancelling_any_step_stops_the_whole_order_and_admission_is_idempotent() {
     let mut town = village(&[("minecraft:hay_block", 1)]);
-    let steps = town.submit("bake", "krasnokamen-settlements:bread", 3).unwrap();
+    let steps = town
+        .submit("bake", "krasnokamen-settlements:bread", 3)
+        .unwrap();
     let worker = town.worker;
     let again = move |steps: Vec<Step>| {
         economy::Request::Production(production::Request::Order {
@@ -385,7 +389,8 @@ fn cancelling_any_step_stops_the_whole_order_and_admission_is_idempotent() {
 #[test]
 fn a_gate_on_a_missing_or_foreign_step_is_a_corrupt_image() {
     let mut town = village(&[("minecraft:hay_block", 1)]);
-    town.submit("bake", "krasnokamen-settlements:bread", 3).unwrap();
+    town.submit("bake", "krasnokamen-settlements:bread", 3)
+        .unwrap();
     let mut state = town
         .state
         .settlements
@@ -458,7 +463,9 @@ fn a_double_chest_is_one_inventory_so_the_missing_wheat_is_planned_from_hay() {
     );
     assert_eq!(inventory::town_storage(&town.state, town.id).len(), 1);
 
-    let steps = town.submit("bake", "krasnokamen-settlements:bread", 2).unwrap();
+    let steps = town
+        .submit("bake", "krasnokamen-settlements:bread", 2)
+        .unwrap();
     assert_eq!(describe(&steps), "open_hay x1 -> bread x2");
     town.run_until("bake");
     assert_eq!(
@@ -532,7 +539,8 @@ fn a_long_chain_puts_its_intermediate_away_when_the_carry_fills_and_finishes() {
 #[test]
 fn cancelling_a_finished_dependency_cancels_the_unfinished_rest_of_its_order() {
     let mut town = village(&[("minecraft:hay_block", 1)]);
-    town.submit("bake", "krasnokamen-settlements:bread", 3).unwrap();
+    town.submit("bake", "krasnokamen-settlements:bread", 3)
+        .unwrap();
     town.run_until("bake-1");
     assert_eq!(town.jobs()["bake"].done, 0);
 

@@ -734,7 +734,10 @@ fn miner_progress_persists_through_nbt_and_durable_projection() {
         stalled_since: 777,
     };
     let fields = villager_to_fields(&items, &state, 100).unwrap();
-    let Tag::Compound(runtime) = field(&fields, "krasnokamen:VillagerRuntime").unwrap().unwrap() else {
+    let Tag::Compound(runtime) = field(&fields, "krasnokamen:VillagerRuntime")
+        .unwrap()
+        .unwrap()
+    else {
         panic!("runtime compound");
     };
     let Some(Tag::String(json)) = runtime
@@ -803,7 +806,10 @@ fn lumberjack_progress_persists_through_nbt_and_durable_projection() {
         stalled_since: 777,
     };
     let fields = villager_to_fields(&items, &state, 100).unwrap();
-    let Tag::Compound(runtime) = field(&fields, "krasnokamen:VillagerRuntime").unwrap().unwrap() else {
+    let Tag::Compound(runtime) = field(&fields, "krasnokamen:VillagerRuntime")
+        .unwrap()
+        .unwrap()
+    else {
         panic!("runtime compound");
     };
     let Some(Tag::String(json)) = runtime
@@ -847,13 +853,17 @@ fn default_worker_progress_omitted_and_invalid_present_data_fails_closed() {
     let items = mc_data::items::krasnokamen_required_items();
     let state = fixture(&items);
     let fields = villager_to_fields(&items, &state, 100).unwrap();
-    let Tag::Compound(runtime) = field(&fields, "krasnokamen:VillagerRuntime").unwrap().unwrap() else {
+    let Tag::Compound(runtime) = field(&fields, "krasnokamen:VillagerRuntime")
+        .unwrap()
+        .unwrap()
+    else {
         panic!("runtime compound");
     };
     assert!(
         runtime
             .iter()
-            .all(|(name, _)| name != "KrasnokamenMiningProgress" && name != "KrasnokamenLumberProgress"),
+            .all(|(name, _)| name != "KrasnokamenMiningProgress"
+                && name != "KrasnokamenLumberProgress"),
         "default worker progress must not emit tags"
     );
     let cases: [(&str, Tag); 10] = [
@@ -1022,7 +1032,9 @@ fn worker_anvil_projection_is_vanilla_and_runtime_role_wins_on_import() {
             field(data, "profession").unwrap(),
             Some(&Tag::String(vanilla_id.into()))
         );
-        let Tag::Compound(runtime) = field(&fields, "krasnokamen:VillagerRuntime").unwrap().unwrap()
+        let Tag::Compound(runtime) = field(&fields, "krasnokamen:VillagerRuntime")
+            .unwrap()
+            .unwrap()
         else {
             panic!("runtime compound");
         };

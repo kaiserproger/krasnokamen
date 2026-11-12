@@ -296,10 +296,10 @@ fn farmland_fallback_requires_exact_canonical_semantics() {
 
     assert!(table.is_exact_farmland_state(&farmland, &properties));
     assert!(!table.is_exact_farmland_state(&farmland, &fake_properties));
-    assert!(
-        !table
-            .is_exact_farmland_state(&Identifier::parse("krasnokamen:farmland").unwrap(), &properties,)
-    );
+    assert!(!table.is_exact_farmland_state(
+        &Identifier::parse("krasnokamen:farmland").unwrap(),
+        &properties,
+    ));
 }
 
 #[test]

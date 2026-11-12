@@ -621,7 +621,10 @@ fn summon_common_state_survives_real_wal_replay_and_native_region_restart() {
     let uuid = state.entities.row(slot).uuid;
     let expected_equipment = state.entities.row(slot).appearance.equipment.clone();
     let expected_body = state.entities.row(slot).loot.body_armor.clone();
-    let root = std::env::temp_dir().join(format!("krasnokamen-summon-common-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!(
+        "krasnokamen-summon-common-{}",
+        uuid::Uuid::new_v4()
+    ));
     let entries = crate::core::journal_entries_for_tick(&mut state, &output);
     let mut writer = crate::journal::JournalWriter::open(&root, 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
@@ -888,8 +891,10 @@ fn summon_equipment_components_match_give_and_survive_native_anvil() {
         serde_json::from_slice(&serde_json::to_vec(&wal).unwrap()).unwrap();
     assert_eq!(wal.equipment, row.appearance.equipment);
     let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
-    let root =
-        std::env::temp_dir().join(format!("krasnokamen-summon-equipment-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!(
+        "krasnokamen-summon-equipment-{}",
+        uuid::Uuid::new_v4()
+    ));
     mc_world::anvil::write_entity_regions(&root, &state.registry.items, &chunks, 0).unwrap();
     let reopened = mc_world::anvil::read_entity_regions(&root, &state.registry.items).unwrap();
     let native = reopened
