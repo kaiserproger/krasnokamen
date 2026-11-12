@@ -38,15 +38,15 @@ fn stalled_plugin_fixture() -> (TickState, mc_script::ScriptHostEndpoint) {
     (state, endpoint)
 }
 
+/// What players were sent in one tick.
+type Deliveries = Vec<(ConnectionId, Vec<PlayerChange>)>;
+
 /// One native tick with `inputs`, sealed and acknowledged the way the tick loop
 /// does. Returns the seal verdict and what the players were sent.
 pub(crate) fn tick_with_inputs(
     state: &mut TickState,
     inputs: &[PlayerInput],
-) -> (
-    Result<bool, &'static str>,
-    Vec<(ConnectionId, Vec<PlayerChange>)>,
-) {
+) -> (Result<bool, &'static str>, Deliveries) {
     let (output, deliveries, _) = crate::tick::run_tick(state, inputs);
     let sealed = crate::plugin::seal_events(state, output.tick);
     if sealed.is_ok() {
