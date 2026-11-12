@@ -314,6 +314,16 @@ SCENARIOS: dict[str, Scenario] = {
         proves="golem_detected_recently memory set at diagonal 15/15, golem heals 40->65 exactly, player melee drop strictly increases easy<normal<hard",
         limits="single golem per check; no persistence claim",
     ),
+    "native-v2-command-rows": _entry(
+        id="native-v2-command-rows", summary="Command-block source name and admin broadcast, translated command failures, /defaultgamemode for a fresh client, tellraw with a bare string",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-command-rows",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_command_rows.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="operator player, command blocks enabled, one late non-operator headless client",
+        proves="a setblock auto command block says as [@] and informs the operator as [@: ...] only while commandBlockOutput is on; kill/tp failures show translated text; a client joining after /defaultgamemode creative is creative; tellraw @s \"text\" reaches chat",
+        limits="admin broadcast checked for command-block sources only; default game mode not checked across restart",
+    ),
     "native-v2-axolotl-play-dead": _entry(
         id="native-v2-axolotl-play-dead", summary="Sourced melee on a hurt water axolotl sets play-dead metadata and Regeneration",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-axolotl-play-dead",
