@@ -775,18 +775,18 @@ class LedgerToolTests(unittest.TestCase):
         self.assertEqual(ledger._worktree_parent(Path('/work/wt/LedgerTriage')), Path('/work/wt'))
         self.assertIsNone(ledger._worktree_parent(Path('/home/user/solaris')))
 
-    def test_promote_under_a_held_build_token_is_refused_before_the_control_lock(self):
+    def test_promote_without_a_held_build_token_is_refused_before_the_control_lock(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         root = Path(directory.name) / 'wt' / 'Promoter'
         root.mkdir(parents=True)
-        with patch.dict(os.environ, {'SOLARIS_BUILD_TOKEN': '2'}):
-            with self.assertRaisesRegex(ledger.Refused, 'must not run under mem-run'):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('SOLARIS_BUILD_TOKEN', None)
+            with self.assertRaisesRegex(ledger.Refused, 'must run under mem-run'):
                 with ledger._control_lock(root):
                     pass
         self.assertFalse((root.parent / 'ledger-control.lock').exists())
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop('SOLARIS_BUILD_TOKEN', None)
+        with patch.dict(os.environ, {'SOLARIS_BUILD_TOKEN': '2'}):
             with ledger._control_lock(root):
                 self.assertTrue((root.parent / 'ledger-control.lock').exists())
 
@@ -914,8 +914,9 @@ class LedgerToolTests(unittest.TestCase):
             trees.append(tree)
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
             return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
-        self.promote(root, runner, dry_run=True)
-        self.promote(root, runner, dry_run=True)
+        with patch.dict(os.environ, {'SOLARIS_BUILD_TOKEN': '1'}):  # under wt/ a promote needs a held token
+            self.promote(root, runner, dry_run=True)
+            self.promote(root, runner, dry_run=True)
         # Same path every run: cargo reuses the build artifacts instead of growing the target dir.
         self.assertEqual(len(set(trees)), 1)
         self.assertEqual(trees[0], root.parent / 'ledger-control-candidate')

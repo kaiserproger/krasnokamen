@@ -427,17 +427,18 @@ def _worktree_parent(root):
 def _control_lock(root):
     """One promotion at a time: the control worktrees have fixed paths (so cargo reuses their build
     artifacts instead of growing the target dir by a new path per run) and the builds are heavy.
-    Lock order is this lock, then a build token per build stage (each stage runs mem-run itself).
-    A promote started under mem-run already holds a token while it waits here, and deadlocks with
-    a running promote whose next stage waits for that token (2026-11-12, 1 h host-wide stall)."""
+    Lock order is a build token, then this lock: the promote runs under mem-run (the owner host's
+    memory cap and token), and every build stage's own mem-run reuses that ancestor token. A promote
+    that took this lock without a token deadlocked with promotes holding tokens while they waited
+    here, because its next stage needed one of their tokens (2026-11-12, 1 h host-wide stall)."""
     parent = _worktree_parent(root)
     if parent is None:
         yield
         return
-    if os.environ.get('SOLARIS_BUILD_TOKEN'):
-        raise Refused('ledger promote must not run under mem-run (it holds build token '
-                      f"{os.environ['SOLARIS_BUILD_TOKEN']}): it takes wt/ledger-control.lock first "
-                      'and each build stage takes its own token; run it without the mem-run wrapper')
+    if not os.environ.get('SOLARIS_BUILD_TOKEN'):
+        raise Refused('ledger promote must run under mem-run (no build token held): it takes a build '
+                      'token first, then wt/ledger-control.lock, and its build stages reuse that token; '
+                      'run <work>/solaris/tools/dev/mem-run.sh -m 12G python3 -m tools.harness ledger promote ...')
     with (parent / 'ledger-control.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         yield
