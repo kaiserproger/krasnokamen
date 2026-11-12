@@ -5039,3 +5039,13 @@ source = "Seed-24 civilization-seed-qa, two fresh runs. llr1bc4e (server 107ddb9
 failing_first = "not recorded"
 regression = ["cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_strolls_stay_bound_to_the_village_over_many_decisions", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_resident_outside_the_village_strolls_back_toward_it", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::resident_in_deep_water_swims_up_to_the_surface"]
 fix_commit = "patch:85195e25eabb2e4a202ef619a549dfe7d3326abfb0045413fbf46e382934a38d"
+
+[[bug]]
+id = "PLUGIN-EVENT-BACKLOG-HALTS-WORLD"
+title = "A plugin whose durable-event backlog passes 1024 (a slow on_events callback while players keep sending its commands) halts the whole world without a final checkpoint instead of refusing that plugin's new commands"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "CoreAuditFable CAF-01 (receipts/CoreAuditFable/REPORT.md, queue.yaml; static read at 21607d42): crates/mc-core/src/plugin/events.rs:23-34 returns Err when retained+pending exceeds MAX_SCRIPT_EVENT_QUEUE_CAPACITY (1024, crates/mc-script/src/lib.rs:239) or delivery_failed is set; crates/mc-core/src/core/tick_loop.rs:266-271 then calls halt_authority and leaves the loop without a final checkpoint (:628-672). One mc-plugin-host thread delivers to every plugin (host.rs:703-712) and one callback may run 50M fuel / 30 s (limits.rs:84-87). Not documented in docs/PLUGINS.md or ADR 0013. Reachability on the standard pack unproven. Proof: a real component that burns its fuel in on_events while two bots send its command at the maximum rate; today every player sees 'plugin callback backlog overflow: world halted'."
+regression = []
