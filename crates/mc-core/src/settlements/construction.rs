@@ -1933,38 +1933,6 @@ pub(crate) fn tick(state: &mut TickState) {
             restore_borrowed_gatherer(state, id, profession);
             super::allocator::staff_gatherer(state, id, profession);
         }
-        if std::env::var_os("MC_CORE_PHASE_LOG").is_some() {
-            eprintln!(
-                "settlement planner: tick={} id={} demand={:?} waiting={:?} project={:?}",
-                state.tick,
-                id.0,
-                needed_gatherer(state, id),
-                waiting(state, id),
-                state
-                    .settlements
-                    .get(id)
-                    .and_then(|record| record.project.as_ref()),
-            );
-            for slot in residents(state, id) {
-                if let Some(v) = state.entities.row(slot).villager.as_ref() {
-                    eprintln!(
-                        "settlement resident: tick={} uuid={} pos={:?} profession={:?} activity={:?} sleeping={} target={:?} path={} failed={} repath={} ration={} lumber={:?}",
-                        state.tick,
-                        state.entities.row(slot).uuid,
-                        state.entities.pos(slot),
-                        v.data.profession,
-                        v.activity,
-                        v.sleeping,
-                        v.navigation_target,
-                        v.navigation_path.len(),
-                        v.navigation_search_failed,
-                        v.navigation_repath_at,
-                        v.ration_at,
-                        v.lumber_progress,
-                    );
-                }
-            }
-        }
         plan(state, id);
         if state
             .settlements
