@@ -213,6 +213,16 @@ peak_kib=$(awk -F'\t' -v k="$key" '$1 == k { v[n++] = $2 }
   "$dir/peaks" 2>/dev/null || echo 0)
 if [ "$peak_kib" -gt 0 ]; then est_kib=$(( peak_kib * 5 / 4 )); else est_kib=$(( 4 * 1024 * 1024 )); fi
 [ "$est_kib" -gt "$cap_kib" ] && est_kib=$cap_kib
+nested_scope() {  # is this runner inside a running mem-run scope (its wrapper is registered in $dir/run)?
+  local p=$PPID
+  while [ "${p:-0}" -gt 1 ]; do
+    [ -e "$dir/run/$p" ] && return 0
+    p=$(awk '$1 == "PPid:" {print $2}' "/proc/$p/status" 2>/dev/null) || p=0
+  done
+  return 1
+}
+nested=0
+[ "$exclusive" = 0 ] && nested_scope && nested=1
 if [ "$exclusive" = 1 ]; then
   # One window at a time; while it holds this lock new commands wait at start.
   exec 3>"$dir/exclusive.lock"
@@ -227,9 +237,11 @@ if [ "$exclusive" = 1 ]; then
   exec 4>&-
 else
   # Held (shared) until the wrapper has registered its scope, so a -x window that
-  # starts meanwhile always sees this command and waits for it.
+  # starts meanwhile always sees this command and waits for it. A command nested in a
+  # running scope (a ledger promote's builds and gates) does not wait: the window
+  # already waits for its ancestor, so waiting here deadlocked both (2026-11-12).
   exec 3>"$dir/exclusive.lock"
-  flock -s 3
+  [ "$nested" = 1 ] || flock -s 3
   if [ "$perf" = 1 ]; then
     exec 6>"$dir/perf"
     flock 6
@@ -308,6 +320,9 @@ if [ "${cmd[0]:-}" = cargo ]; then
     test|t|bench) [[ " ${cmd[*]} " == *" --no-run "* ]] && preemptible=1 ;;
   esac
 fi
+# A nested build is part of its running ancestor (a promote's server build): freezing it
+# for a -x window would stall the ancestor the window waits for.
+[ "$nested" = 1 ] && preemptible=0
 # Ordinary commands share the perf CPUs too, so the perf lane wins them by weight:
 # CPUWeight 10000 vs 50 per build scope (diagnostic isolation; quiet numbers need -x).
 [ "$perf" = 1 ] && { niceness=0; cpu_pin=(taskset -c "$perf_cpus"); preemptible=0; props=("${props[@]/CPUWeight=50/CPUWeight=10000}"); }
