@@ -321,7 +321,11 @@ regression = []
         failed = lambda name, **more: {'status': 'failed', 'error': f'autocraft-qa-settlements assertion failed: {name}', **more}
         # `all` of a profile that reports no verdict map: its own assertion failing is the red.
         self.assertTrue(ledger._failing_verdict(failed('raw_material_refused'), 'autocraft-qa', 'all'))
-        self.assertTrue(ledger._failing_verdict(failed('viewer_drawn'), 'settlement-map-qa', 'all'))
+        # settlement-map-qa publishes a boolean verdict map: red is an explicit false, never a bare assertion text.
+        mapped = lambda value: failed('viewer_drawn', details={'verdicts': {'all': value}})
+        self.assertTrue(ledger._failing_verdict(mapped(False), 'settlement-map-qa', 'all'))
+        self.assertFalse(ledger._failing_verdict(mapped(None), 'settlement-map-qa', 'all'))
+        self.assertFalse(ledger._failing_verdict(failed('viewer_drawn'), 'settlement-map-qa', 'all'))
         # A connection assertion, a failure before the scenario body and a missing receipt error are not.
         self.assertFalse(ledger._failing_verdict(failed('in_play'), 'autocraft-qa', 'all'))
         self.assertFalse(ledger._failing_verdict(failed('x', details={'failure': {'phase': 'client_start'}}), 'autocraft-qa', 'all'))
@@ -784,6 +788,28 @@ class LedgerToolTests(unittest.TestCase):
         self.promote(root, runner, dry_run=True)
         self.assertEqual(seen, [True, True])
         self.assertEqual((root / 'data/vanilla/res.json').read_text(), '{}')
+
+    def test_control_worktree_gets_the_translation_caches_a_java_client_joins_through(self):
+        root = self.scratch()
+        (root / '.gitignore').write_text('/data/vanilla*\n')
+        self.git(root, 'add', '.gitignore')
+        self.git(root, 'commit', '-qm', 'ignore')
+        (root / 'data/vanilla/steps/777-776/upper').mkdir(parents=True)
+        (root / 'data/vanilla/steps/777-776/upper/version.json').write_text('{}')
+        (root / 'data/vanilla-26.1.2').mkdir()
+        (root / 'data/vanilla-26.1.2/res.json').write_text('{}')
+        os.symlink('vanilla/steps', root / 'data/vanilla-steps')
+        seen = []
+        def runner(ctx, refs, tree, client):
+            data = tree / 'data'
+            seen.append((data / 'vanilla-steps/777-776/upper/version.json').is_file()
+                        and os.readlink(data / 'vanilla-steps') == 'vanilla/steps'
+                        and (data / 'vanilla-26.1.2/res.json').is_file()
+                        and not (data / 'vanilla-26.1.2').is_symlink())
+            buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
+            return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
+        self.promote(root, runner, dry_run=True)
+        self.assertEqual(seen, [True, True])
 
     def test_control_worktrees_live_beside_the_other_worktrees(self):
         self.assertEqual(ledger._worktree_parent(Path('/work/wt/LedgerTriage')), Path('/work/wt'))

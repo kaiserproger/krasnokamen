@@ -117,7 +117,7 @@ def _failing_verdict(receipt, profile, verdict):
     """A failed profile run is red for `verdict` when the receipt reports it unmet, or, for a
     verdict the profile cannot report on failure, when its own assertion failed:
 
-    - `all` of a profile without a verdict map (settlement-map-qa, autocraft-qa, village-autonomy-qa);
+    - `all` of a profile without a verdict map (autocraft-qa, village-autonomy-qa);
     - a buildings-qa `<blueprint>.<behaviour>` that never got recorded because an assertion named
       `buildings_<blueprint>_*` aborted the run (a probe check raises before the verdict is written)."""
     try:
@@ -426,13 +426,23 @@ def _split_non_test(diff, source_of):
 
 
 def _provision_data(root, tree):
-    """Give the worktree its own copy of the vanilla content cache (57 MB): a check that fails only
-    because it is missing would be a false red control. A real copy, not hard links or a symlink: a
-    check that writes in place must not change the source tree's data."""
-    source, target = root / 'data/vanilla', tree / 'data/vanilla'
-    if source.is_dir() and not target.exists():
+    """Give the worktree its own copy of every vanilla cache of `root` (data/vanilla, 461 MB, and the
+    older-release caches a Java 26.1.2 client joins through: data/vanilla-26.1.2 and the protocol steps
+    data/vanilla-steps, a relative link into data/vanilla): a check that fails only because one is
+    missing would be a false red control, or, for a Java client the server then refuses at the
+    handshake, a run that waits out its deadline (ISSUE-1-25 probe, 2026-11-12: unrunnable after 1 h).
+    A real copy, not hard links or a symlink to `root`: a check that writes in place must not change
+    the source tree's data."""
+    for source in sorted((root / 'data').glob('vanilla*')):
+        target = tree / 'data' / source.name
+        if target.exists() or target.is_symlink():
+            continue
         (tree / 'data').mkdir(exist_ok=True)
-        subprocess.run(['cp', '-a', '--', str(source), str(target)], check=True)
+        link = os.readlink(source) if source.is_symlink() else None
+        if link is not None and not os.path.isabs(link):
+            os.symlink(link, target)
+        elif source.is_dir():
+            subprocess.run(['cp', '-a', '--', str(source), str(target)], check=True)
 
 
 def _worktree_parent(root):

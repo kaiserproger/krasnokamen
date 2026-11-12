@@ -433,16 +433,35 @@ the Settings dialog or the map territory.
   normal scene actions. The harness checks the title overlay, window ownership,
   actual in-play state and integrated-server log; fixed UI coordinates are tied to
   this window size and must be checked when the Java UI changes.
-- `settlement-map-qa` reuses this lifecycle with a scripted body and judges the
-  client's own screenshots: it founds an empty town, opens its map, certifies a
-  real Storage while the map stays open (stale shot: unchanged), refreshes and
-  returns to the main page; palette pixel deltas between shots prove territory,
-  viewer and storage cells. `--client native --windowed` presses the dialog
-  buttons and drives the native pointer (`client_pointer`): a territory cell and
-  a storage cell must show tooltips, and clicking the storage must bring the
-  server's building page. `--client java --windowed` uses the pages' `/settlement
-  menu` commands (Loader MCP cannot press buttons inside a dialog's scroll body)
-  and has no pointer tool, so hovers and cell clicks are native-only.
+- `settlement-map-qa` reuses this lifecycle with a scripted body: privileged fixture
+  commands found and certify the town, then the owned window is driven by physical
+  input only. A right-click on the anchor bell opens the hub; the Settlement
+  dashboard, the map (a house cell is found by its rendered palette pixels), the
+  building page, the L2 order review and receipt, the project shortage icons and
+  material detail, the Storage page (a shift-click moves one real stack and conserves
+  it), construction progress against independently observed blocks, the Residents,
+  Resident and Household pages and Resources follow. Last, a fixture certifies a
+  workshop holding a crafting table, and the player opens Production orders, presses
+  New order, picks the `open_hay` recipe (and the workstation when asked) and confirms
+  the form with its default count; `settlement production <name> job <id>` must then
+  show the order with one of the bound residents as worker, and that resident must have
+  crafted for it (receipts), the Production orders page listing it. `--client native --windowed`
+  uses the received renderer's UI nodes; `--client java --windowed` locates labels by
+  the running vanilla version's bitmap font and takes
+  `-- --gui-scale 2|3 --language en_us|ru_ru --size 1280x720|1920x1080` (the native
+  client sends ClientInformation language `en_us` fixed and has no such options);
+  `--wrong-click` is the negative control (Help instead of Settlement).
+  The run publishes boolean `details.verdicts` whether it passes or stops (they are
+  mapped from the recorded assertions, `verdicts_from_assertions`): `bell_opens_hub`,
+  `dashboard`, `map`, `building_order`, `shortage_icons`, `storage_transfer`,
+  `project_progress`, `residents`, `resources`, `production_order`, `localized_text` (every Russian title and
+  the rendered shortage text; `ru_ru` runs only, `null` otherwise) and `all`. A verdict
+  is `false` when one of its checks failed or an earlier check already failed, and
+  `null` when the run stopped without a failed check (a lost client): the ledger reads
+  `false` as red and `null` as no evidence. A ledger ref
+  `harness:settlement-map-qa:localized_text` runs `--client java ... --language ru_ru`
+  (the receipt needs the Java prerequisites env, `receipts/BuildHost/java-prereqs.env`);
+  every other verdict runs native with `--timeout-seconds 3600`.
 
 ## Distant Horizons gate (`dh-gate`)
 
