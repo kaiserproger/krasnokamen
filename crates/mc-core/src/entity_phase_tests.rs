@@ -729,6 +729,7 @@ fn parallel_row_prep_matches_the_serial_prep_including_rare_fixups() {
         targets_empty: true,
         villagers_empty: resident_villager_targets(&state.entities).is_empty(),
         unchanged_since: state.entity_phase_revision,
+        rest_proofs: None,
     };
     let mut serial = PrepChunk::default();
     prepare_rows(&state, &periods, &env, false, &mut serial);
@@ -807,6 +808,7 @@ fn parallel_row_prep_algorithm_micro() {
         targets_empty: true,
         villagers_empty: true,
         unchanged_since: state.entity_phase_revision,
+        rest_proofs: None,
     };
     let mut out = PrepChunk::default();
     let mut expected = None;
@@ -1343,6 +1345,7 @@ fn phase_admitted(state: &mut TickState, slot: EntitySlot, period: u8) -> bool {
             targets_empty: !crate::hostile::has_live_targets(state),
             villagers_empty: resident_villager_targets(&state.entities).is_empty(),
             unchanged_since: state.entity_phase_revision,
+            rest_proofs: None,
         },
         &mut Vec::new(),
         &mut Vec::new(),
@@ -1556,6 +1559,7 @@ fn zombie_rest_release_probe_300_zombies_no_player() {
                 targets_empty: true,
                 villagers_empty: true,
                 unchanged_since: state.entity_phase_revision,
+                rest_proofs: None,
             },
             false,
             &mut out,
@@ -1774,4 +1778,67 @@ fn sensors_mob_revenge_does_not_rest_without_player_targets() {
     assert!(!can_early_rest(&mut state, mob));
     let _ = run_entity_phase(&mut state, true);
     assert_eq!(state.hostile.targets[&actor].0.0, attacker);
+}
+
+/// Negative control: dropping the footprint revision/pending check of a memo
+/// hit makes the removed-support and pending-write steps keep resting.
+#[test]
+fn rest_proof_memo_skips_repeats_and_yields_to_geometry_and_state_changes() {
+    let (mut state, slot) = resting_cow();
+    let id = state.entities.body(slot).id;
+    state.tick = (1..120)
+        .find(|&tick| {
+            crate::entity_motion::wander(state.entities.body(slot).movement, id.0, tick, 1.0)
+                == [0.0; 3]
+        })
+        .unwrap();
+    state.entities.prepare_motion_hints(&state.registry);
+    let mut proofs = RestProofs::default();
+    let runs = || REST_PHYSICS_PROOFS.with(std::cell::Cell::get);
+    // One phase: the memo begins at the world revision of its start.
+    let mut phase = |state: &TickState| {
+        proofs.begin(state.entities.len(), state.world.revision_now());
+        let mut view = PrepView::of(state);
+        view.rest_proofs = Some(&proofs);
+        early_entity_rest(
+            &view,
+            slot,
+            1,
+            state.entity_phase_revision,
+            true,
+            !crate::hostile::has_live_targets(state),
+        )
+    };
+    let before = runs();
+    assert!(phase(&state));
+    assert_eq!(runs(), before + 1, "the first decision tick proves");
+    assert!(phase(&state));
+    assert_eq!(runs(), before + 1, "an unchanged repeat is a memo hit");
+    let stone = state.world.block_at(8, 100, 8).unwrap();
+    state.world.set_block(12, 100, 8, state.registry.states.air);
+    state.world.fold_overlay();
+    assert!(phase(&state), "an unrelated edit still rests");
+    assert_eq!(runs(), before + 2, "a footprint-chunk edit re-proves");
+    state.world.set_block(8, 100, 8, state.registry.states.air);
+    state.world.fold_overlay();
+    assert!(!phase(&state), "removed support must execute");
+    state.world.set_block(8, 100, 8, stone);
+    state.world.fold_overlay();
+    assert!(phase(&state));
+    assert_eq!(runs(), before + 4);
+    state.entities.body_mut(slot).air_supply = 299;
+    assert!(!phase(&state), "air recovery must execute");
+    state.entities.body_mut(slot).air_supply = 300;
+    assert!(phase(&state));
+    assert_eq!(runs(), before + 5, "restoring the state hits the old stamp");
+    let (command, _ack) =
+        crate::command_console::ConsoleCommand::new("setblock 8 100 8 minecraft:air".to_owned());
+    command.execute(&mut state, &mut ChangeSet::default());
+    assert!(
+        state
+            .world
+            .pending_block_chunks()
+            .contains(&ChunkPos { x: 0, z: 0 })
+    );
+    assert!(!phase(&state), "a pending write defeats the memo");
 }

@@ -100,6 +100,58 @@ pub(super) struct EntityPhaseScratch {
     pub(super) periods: Vec<u8>,
     pub(super) resting: Vec<EntitySlot>,
     pub(super) coreperf: Option<std::sync::Arc<crate::boundary::CorePerfTick>>,
+    pub(super) rest_proofs: RestProofs,
+}
+
+/// Memo of the idle-rest physics proof ([`idle_wander_motion_unchanged`]).
+///
+/// Bottleneck: every decision tick of every resting, wander-quiet mob re-ran
+/// the full motion step to prove it is a bit-exact no-op, although neither the
+/// mob nor the blocks around it had changed since the last proof (about 6.9 %
+/// of the native-100 cycles; admission 2.8 ms per tick). Boundary: one stamp
+/// per dense slot, written and read only by the worker that admits that slot,
+/// valid for no longer than the blocks of its footprint chunks stay unchanged.
+/// Correctness fence: the step is a pure function of the key inputs (body,
+/// pose, velocity, impulse, air, gravity and effect inputs: see
+/// [`rest_proof_key`]) and the blocks of the footprint chunks, which is the
+/// premise `unchanged_entity_footprint` already uses on non-decision ticks. A
+/// stamp is honoured only for an equal 64-bit key and while no footprint chunk
+/// is newer than the proof's revision or has a pending write; stamps are
+/// written only for footprints with no pending write; swimmers never use it
+/// (their step reads the tick). The entity id is part of the key, so a reused
+/// slot never inherits a stamp. Removal path: delete the memo, keeping the
+/// proof call (identical result).
+#[derive(Default)]
+pub(super) struct RestProofs {
+    /// Per slot: key, revision the proof was made at.
+    stamps: Vec<[std::sync::atomic::AtomicU64; 2]>,
+    /// World revision at the start of this phase: the revision a new proof is
+    /// made at.
+    revision: u64,
+}
+
+impl RestProofs {
+    /// Start a phase over `len` slots at world revision `revision`.
+    pub(super) fn begin(&mut self, len: usize, revision: u64) {
+        if self.stamps.len() < len {
+            self.stamps.resize_with(len, Default::default);
+        }
+        self.revision = revision;
+    }
+
+    fn get(&self, slot: EntitySlot) -> Option<(u64, u64)> {
+        use std::sync::atomic::Ordering::Relaxed;
+        let [key, revision] = self.stamps.get(slot.0 as usize)?;
+        Some((key.load(Relaxed), revision.load(Relaxed)))
+    }
+
+    fn set(&self, slot: EntitySlot, key: u64) {
+        use std::sync::atomic::Ordering::Relaxed;
+        if let Some([stored, revision]) = self.stamps.get(slot.0 as usize) {
+            stored.store(key, Relaxed);
+            revision.store(self.revision, Relaxed);
+        }
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -476,7 +528,7 @@ pub(super) fn early_entity_rest(
     if motion_thinks(view.tick, flags, period) {
         // The proof samples current geometry, so unrelated edits anywhere in
         // the footprint's chunk need not reject an otherwise exact no-op.
-        return idle_wander_motion_unchanged(view, slot);
+        return idle_rest_proved(view, slot, flags);
     }
     unchanged_entity_footprint(
         view.positions[slot.0 as usize],
@@ -487,9 +539,99 @@ pub(super) fn early_entity_rest(
     )
 }
 
+/// Every input of the idle motion step except the blocks and the tick, folded
+/// into one 64-bit key (see [`RestProofs`]).
+fn rest_proof_key(view: &PrepView, slot: EntitySlot, flags: u16) -> u64 {
+    use std::hash::Hasher;
+    let index = slot.0 as usize;
+    let body = &view.bodies[index];
+    let row = view.entities.row(slot);
+    let mut hash = rustc_hash::FxHasher::default();
+    hash.write_i32(body.id.0);
+    if let EntityKind::Mob { type_id } = body.kind {
+        hash.write_u32(type_id);
+    }
+    hash.write_u8(body.movement as u8);
+    hash.write_i32(body.air_supply);
+    hash.write_u64(body.half_width.to_bits());
+    hash.write_u64(body.height.to_bits());
+    for value in view.positions[index].iter().chain(&view.velocities[index]) {
+        hash.write_u64(value.to_bits());
+    }
+    for value in view.impulses[index] {
+        hash.write_u64(value.to_bits());
+    }
+    for value in view.rotations[index] {
+        hash.write_u32(value.to_bits());
+    }
+    hash.write_u8(u8::from(view.ground[index]) | u8::from(row.controls.no_gravity) << 1);
+    if flags & MOTION_EFFECTS != 0 {
+        hash.write_u32(
+            row.active_effects
+                .level(crate::effects::EffectId::Levitation)
+                .to_bits(),
+        );
+        hash.write_u8(u8::from(
+            row.active_effects
+                .has(crate::effects::EffectId::SlowFalling),
+        ));
+    }
+    hash.finish()
+}
+
+/// [`idle_wander_motion_unchanged`] through the [`RestProofs`] memo.
+fn idle_rest_proved(view: &PrepView, slot: EntitySlot, flags: u16) -> bool {
+    let index = slot.0 as usize;
+    let body = &view.bodies[index];
+    let Some(proofs) = view
+        .rest_proofs
+        .filter(|_| body.movement != crate::blueprint::MovementClass::Swimmer)
+    else {
+        return idle_wander_motion_unchanged(view, slot);
+    };
+    if crate::entity_motion::wander(
+        body.movement,
+        body.id.0,
+        view.tick,
+        view.entities.row(slot).speed,
+    ) != [0.0; 3]
+    {
+        return false;
+    }
+    let key = rest_proof_key(view, slot, flags);
+    let pos = view.positions[index];
+    let pending = view.world.pending_block_chunks();
+    if let Some((stamped, revision)) = proofs.get(slot)
+        && stamped == key
+        && unchanged_entity_footprint(
+            pos,
+            body.half_width,
+            |cx, cz| view.world.chunk_revision(cx, cz),
+            pending,
+            revision,
+        )
+    {
+        return true;
+    }
+    let proved = idle_wander_motion_unchanged(view, slot);
+    // A pending write is visible to the sampler but not yet in any revision.
+    if proved && unchanged_entity_footprint(pos, body.half_width, |_, _| 0, pending, 0) {
+        proofs.set(slot, key);
+    }
+    proved
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Full physics proofs run on this thread (memo hits do not count).
+    pub(super) static REST_PHYSICS_PROOFS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Keep the same physics, breathing and effect integration as `step_entity`.
 /// In particular, an imported on-ground flag is not itself a support proof.
 pub(super) fn idle_wander_motion_unchanged(view: &PrepView, slot: EntitySlot) -> bool {
+    #[cfg(test)]
+    REST_PHYSICS_PROOFS.with(|runs| runs.set(runs.get() + 1));
     let body = &view.bodies[slot.0 as usize];
     let row = view.entities.row(slot);
     if crate::entity_motion::wander(body.movement, body.id.0, view.tick, row.speed) != [0.0; 3] {
@@ -600,7 +742,8 @@ pub(super) fn prepare_rows(
         std::env::var_os("MC_CORE_PHASE_LOG").is_some(),
         std::time::Instant::now(),
     );
-    let view = PrepView::of(state);
+    let mut view = PrepView::of(state);
+    view.rest_proofs = env.rest_proofs;
     laps.lap("view");
     if parallel {
         use rayon::prelude::*;
@@ -723,6 +866,7 @@ pub(super) struct PrepView<'a> {
     pub(super) hostile: &'a crate::hostile::HostileState,
     pub(super) tick: u64,
     pub(super) has_tempting_items: bool,
+    pub(super) rest_proofs: Option<&'a RestProofs>,
 }
 
 impl<'a> PrepView<'a> {
@@ -739,6 +883,7 @@ impl<'a> PrepView<'a> {
             world: &state.world,
             hostile: &state.hostile,
             tick: state.tick,
+            rest_proofs: None,
             has_tempting_items: state.players.values().any(|player| {
                 !player.spectator()
                     && [Hand::Main, Hand::Off].into_iter().any(|hand| {
@@ -834,10 +979,12 @@ impl PrepSummary {
     }
 }
 
-pub(super) struct PrepEnv {
+pub(super) struct PrepEnv<'a> {
     pub(super) targets_empty: bool,
     pub(super) villagers_empty: bool,
     pub(super) unchanged_since: u64,
+    /// The rest-proof memo, or `None` to run every proof (tests, reference).
+    pub(super) rest_proofs: Option<&'a RestProofs>,
 }
 
 /// Admit one slot: record its serial special entry and either rest it
@@ -855,6 +1002,7 @@ pub(super) fn admit_slot(
         targets_empty,
         villagers_empty,
         unchanged_since,
+        rest_proofs: _,
     } = *env;
     let slot = EntitySlot(index as u32);
     let flags = view.entities.motion_flags(slot);
@@ -1120,8 +1268,10 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         mut periods,
         mut resting,
         coreperf: _,
+        mut rest_proofs,
     } = std::mem::take(&mut state.entity_phase_scratch);
     periods.resize(state.entities.len(), 0);
+    rest_proofs.begin(state.entities.len(), state.entity_phase_revision);
     let mut admitted = 0;
     let perf_index = coreperf_index();
     let mut perf_counts = perf_index.map(|_| HashMap::default());
@@ -1257,6 +1407,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             targets_empty,
             villagers_empty: villagers.is_empty(),
             unchanged_since,
+            rest_proofs: Some(&rest_proofs),
         },
         admitted >= PARALLEL_PREP_MIN,
         &mut prepared,
@@ -1318,6 +1469,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             periods,
             resting,
             coreperf,
+            rest_proofs,
         };
         return Vec::new();
     }
@@ -1670,6 +1822,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         periods,
         resting,
         coreperf,
+        rest_proofs,
     };
     let _ = tick;
     intents
