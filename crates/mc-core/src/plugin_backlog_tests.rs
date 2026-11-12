@@ -38,9 +38,25 @@ fn stalled_plugin_fixture() -> (TickState, mc_script::ScriptHostEndpoint) {
     (state, endpoint)
 }
 
-/// One native tick with `commands` plugin commands from the player, sealed and
-/// acknowledged the way the tick loop does. Returns the seal verdict and how
-/// many commands the player was told to retry.
+/// One native tick with `inputs`, sealed and acknowledged the way the tick loop
+/// does. Returns the seal verdict and what the players were sent.
+pub(crate) fn tick_with_inputs(
+    state: &mut TickState,
+    inputs: &[PlayerInput],
+) -> (
+    Result<bool, &'static str>,
+    Vec<(ConnectionId, Vec<PlayerChange>)>,
+) {
+    let (output, deliveries, _) = crate::tick::run_tick(state, inputs);
+    let sealed = crate::plugin::seal_events(state, output.tick);
+    if sealed.is_ok() {
+        crate::plugin::acknowledge_events(state, output.tick);
+    }
+    (sealed, deliveries)
+}
+
+/// One tick with `commands` plugin commands from the player. Returns the seal
+/// verdict and how many commands the player was told to retry.
 fn tick_with_commands(
     state: &mut TickState,
     commands: usize,
@@ -52,7 +68,7 @@ fn tick_with_commands(
             permission_level: 0,
         })
         .collect();
-    let (output, deliveries, _) = crate::tick::run_tick(state, &inputs);
+    let (sealed, deliveries) = tick_with_inputs(state, &inputs);
     let refused = deliveries
         .iter()
         .flat_map(|(_, changes)| changes)
@@ -61,15 +77,13 @@ fn tick_with_commands(
                 if message == crate::plugin::COMMAND_BACKLOG_REFUSAL)
         })
         .count();
-    let sealed = crate::plugin::seal_events(state, output.tick);
-    if sealed.is_ok() {
-        crate::plugin::acknowledge_events(state, output.tick);
-    }
     (sealed, refused)
 }
 
 /// Read one event the stalled callback finally gets to, without blocking.
-fn try_recv(endpoint: &mut mc_script::ScriptHostEndpoint) -> Option<mc_script::ScriptEvent> {
+pub(crate) fn try_recv(
+    endpoint: &mut mc_script::ScriptHostEndpoint,
+) -> Option<mc_script::ScriptEvent> {
     let mut cx = Context::from_waker(Waker::noop());
     let mut next = std::pin::pin!(endpoint.recv_event());
     match next.as_mut().poll(&mut cx) {
@@ -105,16 +119,26 @@ fn a_stalled_plugin_refuses_new_commands_instead_of_halting_the_world() {
     // takes commands again.
     let written = state.tick;
     let mut delivered = 0;
+    let mut delivered_commands = 0;
     loop {
         let before = delivered;
         crate::plugin::acknowledge_events(&mut state, written);
-        while try_recv(&mut endpoint).is_some() {
+        while let Some(event) = try_recv(&mut endpoint) {
             delivered += 1;
+            delivered_commands += usize::from(matches!(
+                event.kind(),
+                mc_script::ScriptEventKind::PlayerCommand { .. }
+            ));
         }
         if delivered == before {
             break;
         }
     }
+    assert_eq!(
+        delivered_commands,
+        COMMANDS_PER_TICK * TICKS as usize - refused_total,
+        "every accepted command reaches the plugin; none is dropped"
+    );
     assert_eq!(state.plugin_runtime.as_ref().unwrap().backlog_len(), 0);
     let (sealed, refused) = tick_with_commands(&mut state, 1);
     assert_eq!(sealed, Ok(true));
