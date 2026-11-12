@@ -108,7 +108,8 @@ _BOOLEAN_PROFILE_VERDICTS = {
     # backends/settlement_map_qa.py VERDICTS (a test keeps the two in step).
     'settlement-map-qa': frozenset({
         'bell_opens_hub', 'dashboard', 'map', 'building_order', 'shortage_icons',
-        'storage_transfer', 'project_progress', 'residents', 'resources', 'localized_text', 'all',
+        'storage_transfer', 'project_progress', 'residents', 'resources', 'production_order',
+        'localized_text', 'all',
     }),
 }
 # Run arguments of a profile ref: (client, args after `--`) per verdict that needs another client

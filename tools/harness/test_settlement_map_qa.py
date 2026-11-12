@@ -441,7 +441,16 @@ def passing_run(language):
              "GUI_native_progress_advanced", "GUI_progress_matches_independent_placed_blocks"]
     names += [f"GUI menu {page(key)}" for key in ("settlement", "projects", "construction", "storage",
                                                   "residents", "resident", "household", "resources")]
+    names += production_names(language)
     return dict.fromkeys(names, True)
+
+
+def production_names(language):
+    page = lambda key: gate.PAGES[key][language == "ru_ru"]
+    return ["production_workshop_certified", f"GUI menu {page('orders')}", "production_new_order_entry",
+            f"GUI menu {page('new_order_form')}", "production_recipe_entry",
+            f"GUI dialog {page('new_order_form')}", f"GUI dialog {page('orders')}",
+            "production_order_listed", "production_order_exists", "production_order_resident_crafted"]
 
 
 class SettlementMapVerdictTests(unittest.TestCase):
@@ -453,7 +462,8 @@ class SettlementMapVerdictTests(unittest.TestCase):
     def test_every_page_text_the_script_waits_for_is_in_the_page_table(self):
         import inspect
         import re
-        source = inspect.getsource(gate._script) + inspect.getsource(gate._enter_dashboard)
+        source = (inspect.getsource(gate._script) + inspect.getsource(gate._enter_dashboard)
+                  + inspect.getsource(gate._production))
         pairs = set(re.findall(r"""label\(\s*["']([^"']+)["'],\s*["']([^"']+)["']\s*\)""", source))
         self.assertGreater(len(pairs), 10)
         self.assertEqual({pair for pair in pairs if pair not in gate.PAGES.values()}, set())
@@ -467,9 +477,11 @@ class SettlementMapVerdictTests(unittest.TestCase):
             if language == "en_us":
                 expected["localized_text"] = None  # no Russian text to judge
             self.assertEqual(verdicts, expected, language)
+        # A run recorded before the Production orders stage existed passed every stage it walked: the
+        # new stage is not evidence there, not red.
         recorded = gate.verdicts_from_assertions(RECORDED_PASS, "en_us")
-        self.assertEqual({name: value for name, value in recorded.items() if name != "localized_text"},
-                         {name: True for name in gate.VERDICTS if name != "localized_text"})
+        self.assertEqual(recorded, {**{stage: True for stage in gate.STAGES}, "production_order": None,
+                                    "localized_text": None, "all": None})
 
     def test_recorded_wrong_click_run_fails_the_dashboard_verdict_and_everything_after_it(self):
         verdicts = gate.verdicts_from_assertions(RECORDED_WRONG_CLICK, "en_us")
@@ -487,10 +499,12 @@ class SettlementMapVerdictTests(unittest.TestCase):
             self.assertTrue(ledger._failing_verdict(failed, "settlement-map-qa", check), check)
         self.assertFalse(ledger._failing_verdict(failed, "settlement-map-qa", "bell_opens_hub"))
         passed = {"status": "passed", "details": {"verdicts": gate.verdicts_from_assertions(RECORDED_PASS, "en_us")}}
-        for check in ("bell_opens_hub", "dashboard", "storage_transfer", "all"):
+        for check in ("bell_opens_hub", "dashboard", "storage_transfer"):
             regressions._profile_verdict(passed, "settlement-map-qa", check)
-        with self.assertRaises(regressions.VerdictNotMet):
-            regressions._profile_verdict(passed, "settlement-map-qa", "localized_text")
+        for check in ("localized_text", "production_order", "all"):
+            with self.assertRaises(regressions.VerdictNotMet):
+                regressions._profile_verdict(passed, "settlement-map-qa", check)
+            self.assertFalse(ledger._failing_verdict(passed, "settlement-map-qa", check))
 
     def test_each_stage_goes_false_when_one_of_its_checks_fails(self):
         failing = {
@@ -498,7 +512,7 @@ class SettlementMapVerdictTests(unittest.TestCase):
             "map": "map_territory_rendered", "building_order": "GUI dialog Projects",
             "shortage_icons": "exact_shortage_rendered", "storage_transfer": "GUI_storage_transfer_conserves_one",
             "project_progress": "GUI_native_progress_advanced", "residents": "GUI menu Household",
-            "resources": "GUI menu Resources",
+            "resources": "GUI menu Resources", "production_order": "production_order_resident_crafted",
         }
         self.assertEqual(set(failing), set(gate.STAGES))
         for stage, name in failing.items():
@@ -569,17 +583,176 @@ class SettlementMapVerdictTests(unittest.TestCase):
         russian = regressions._profile_command("settlement-map-qa", "localized_text")
         self.assertEqual(russian[-8:], ["--client", "java", "--windowed", "--timeout-seconds", "3600",
                                         "--", "--language", "ru_ru"])
-        for verdict in ("dashboard", "storage_transfer", "all"):
+        for verdict in ("dashboard", "storage_transfer", "production_order", "all"):
             command = regressions._profile_command("settlement-map-qa", verdict)
             self.assertEqual(command[-5:], ["--client", "native", "--windowed", "--timeout-seconds", "3600"])
         with self.assertRaises(ValueError):
-            regressions._profile_command("settlement-map-qa", "production_order")
+            regressions._profile_command("settlement-map-qa", "no_such_verdict")
 
     def test_the_native_lane_refuses_russian_because_its_client_cannot_ask_for_it(self):
         from types import SimpleNamespace
         ctx = SimpleNamespace(client="native", extra_args=["--", "--language", "ru_ru"], client_evidence={})
         with self.assertRaisesRegex(ValueError, "require --client java"):
             gate.run(ctx)
+
+
+class ProductionServer:
+    """A server and client stand-in for `_production`: screens change with the clicks the stage
+    makes, chat answers `settlement production mapqa job <id>` from the order the form created."""
+
+    RESIDENTS = [f"00000000-0000-0000-0000-{index:012d}" for index in range(6)]
+
+    def __init__(self, ru=False, entry=True, worker=None, crafts_after=2, chooser=False):
+        self.ru, self.entry, self.chooser = ru, entry, chooser
+        self.worker = worker or self.RESIDENTS[2]
+        self.crafts_after, self.waits = crafts_after, 0
+        self.page = lambda key: gate.PAGES[key][ru]
+        self.chat, self.screen, self.job = [], None, None
+        self.report = {"assertions": {}, "fixture_commands": []}
+        self.clicks, self.fixtures = [], []
+
+    def _menu(self, title, slots):
+        self.screen = ({"open": True, "class": gate.CONTAINER, "title": title},
+                       {"slot_count": 90, "slots": [{"slot": slot, "name": name} for slot, name in slots]})
+
+    def _dialog(self, title):
+        self.screen = ({"open": True, "class": gate.DIALOG, "title": title}, {})
+
+    def state(self):
+        screen, container = self.screen or ({"open": False}, {})
+        return {"screen": screen, "container": container, "recent_chat": list(self.chat), "in_play": True}
+
+    # ProbeSteps
+    def observe(self, **_):
+        return self.state()
+
+    def check(self, name, condition):
+        self.report["assertions"][name] = bool(condition)
+        if not condition:
+            raise RuntimeError(f"assertion failed: {name}")
+
+    def wait(self, predicate, label, **_):
+        ok = predicate(self.state())
+        self.report["assertions"][label] = ok
+        if not ok:
+            raise TimeoutError(label)
+        return self.state()
+
+    def fixture(self, command):
+        self.fixtures.append(command)
+        if " certify " in command:
+            self.chat.insert(0, "Certified cartographer #8589934595 (level 1).")
+
+    def call(self, name, arguments):
+        if name == "minecraft_wait_ticks":
+            self.waits += 1
+            if self.job and self.waits >= self.crafts_after:
+                self.job["receipts"], self.job["done"] = [{"tick": 1}], 1
+        elif name == "minecraft_send_chat" and arguments["command"] and " job " in arguments["message"]:
+            self.chat.insert(0, "[Server] " + json.dumps(self.job, separators=(",", ":")))
+        elif name == "minecraft_send_chat":
+            self.chat.insert(0, arguments["message"])
+        return {}
+
+    # Gui
+    def slot(self, slot):
+        title = self.screen[0]["title"]
+        self.clicks.append(("slot", slot))
+        if title == self.page("settlement") and slot == 28:
+            self._menu(self.page("orders"), [(45, "Back")] + ([(52, self.page("new_order"))] if self.entry else []))
+        elif title == self.page("orders") and slot == 52 and self.chooser:
+            self._dialog(self.page("choose_station"))
+        elif title == self.page("orders") and slot == 52:
+            self._menu(self.page("new_order_form"), [(0, "stick"), (1, gate.PRODUCTION_RECIPE)])
+        elif title == self.page("new_order_form") and slot == 1:
+            self._dialog(self.page("new_order_form"))
+        else:
+            raise AssertionError(f"unexpected slot {slot} on {title!r}")
+
+    def button(self, label):
+        title = self.screen[0]["title"]
+        self.clicks.append(("button", label))
+        if label.startswith("#3 ") and title == self.page("choose_station"):
+            self._menu(self.page("new_order_form"), [(0, "stick"), (1, gate.PRODUCTION_RECIPE)])
+        elif label == self.page("new_order") and title == self.page("new_order_form"):
+            self.job = {"id": "ui-1", "worker": self.worker, "recipe": "solaris-settlements:" + gate.PRODUCTION_RECIPE,
+                        "count": 8, "done": 0, "paused": None, "cancelled": False, "receipts": []}
+            self._dialog(self.page("orders"))
+        elif label == self.page("back") and title == self.page("orders"):
+            self._menu(self.page("orders"), [(0, "ui-1 · 0/8"), (45, "Back")])
+        else:
+            raise AssertionError(f"unexpected button {label!r} on {title!r}")
+
+    def escape(self):
+        self.screen = None
+
+
+class ProductionStageTests(unittest.TestCase):
+    def run_stage(self, **options):
+        server = ProductionServer(**options)
+        ru = server.ru
+        gui = Mock()
+        gui.slot.side_effect, gui.button.side_effect, gui.escape.side_effect = server.slot, server.button, server.escape
+        label = lambda en, russian: russian if ru else en
+
+        def open_dashboard():
+            server._menu(server.page("settlement"), [])
+
+        try:
+            gate._production(server, gui, label, lambda name: name, [128, 201, 0], ProductionServer.RESIDENTS,
+                             [148, 201, 20], lambda: None, open_dashboard)
+            error = None
+        except (RuntimeError, TimeoutError, StopIteration, TypeError) as caught:
+            error = caught
+        return server, error
+
+    def verdict(self, server, language):
+        earlier = {name: value for name, value in passing_run(language).items()
+                   if name not in production_names(language)}
+        return gate.verdicts_from_assertions({**earlier, **server.report["assertions"]}, language)
+
+    def test_the_order_is_created_through_the_dialogs_and_a_resident_crafts_for_it(self):
+        for language in ("en_us", "ru_ru"):
+            server, error = self.run_stage(ru=language == "ru_ru")
+            self.assertIsNone(error, language)
+            self.assertEqual(server.clicks, [("slot", 28), ("slot", 52), ("slot", 1),
+                                             ("button", server.page("new_order")), ("button", server.page("back"))])
+            self.assertEqual(server.report["assertions"].get("production_order_resident_crafted"), True)
+            self.assertIs(self.verdict(server, language)["production_order"], True, language)
+            commands = server.fixtures
+            self.assertTrue(any(" certify cartographer " in command for command in commands))
+            self.assertIn("item replace block 148 201 20 container.26 with minecraft:hay_block 8", commands)
+            # the order is made by the form, never by a production command
+            self.assertFalse([command for command in commands if "settlement production" in command])
+
+    def test_a_station_choice_is_answered_with_the_workshops_button(self):
+        server, error = self.run_stage(chooser=True)
+        self.assertIsNone(error)
+        self.assertIn(("button", "#3 Cartographer workshop: crafting_table at 159 201 -11"), server.clicks)
+
+    def test_no_new_order_entry_is_a_red_production_verdict(self):
+        server, error = self.run_stage(entry=False)
+        self.assertIn("production_new_order_entry", str(error))
+        self.assertIs(self.verdict(server, "en_us")["production_order"], False)
+        self.assertIs(self.verdict(server, "en_us")["dashboard"], True)
+
+    def test_a_job_whose_worker_is_not_a_bound_resident_is_red(self):
+        server, error = self.run_stage(worker="11111111-1111-1111-1111-111111111111")
+        self.assertIn("production_order_exists", str(error))
+        self.assertIs(self.verdict(server, "en_us")["production_order"], False)
+
+    def test_an_order_nobody_crafts_for_is_red_after_the_wait(self):
+        with patch.object(gate, "CRAFT_TIMEOUT", 0):
+            server, error = self.run_stage(crafts_after=10**9)
+        self.assertIn("production_order_resident_crafted", str(error))
+        self.assertIs(self.verdict(server, "en_us")["production_order"], False)
+
+    def test_the_readback_ignores_answers_older_than_its_marker(self):
+        server = ProductionServer()
+        server.chat = ['[Server] {"id":"ui-1","worker":"old"}']
+        server.job = {"id": "ui-1", "worker": "new"}
+        line = gate._readback(server, "settlement production mapqa job ui-1", '"id":"ui-1"', "readback")
+        self.assertIn('"new"', line)
 
 
 if __name__ == "__main__":
