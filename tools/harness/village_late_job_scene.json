@@ -1,0 +1,310 @@
+{
+ "seed": 100,
+ "server_view_distance": 6,
+ "steps": [
+  {
+   "wait_play": true
+  },
+  {
+   "cmd": "gamemode creative"
+  },
+  {
+   "tp": [
+    1000.5,
+    205,
+    1000.5,
+    0,
+    0
+   ]
+  },
+  {
+   "wait_ticks": 100
+  },
+  {
+   "cmd": "gamerule advance_time false"
+  },
+  {
+   "cmd": "gamerule spawn_mobs false"
+  },
+  {
+   "cmd": "gamerule random_tick_speed 0"
+  },
+  {
+   "cmd": "time set 3000"
+  },
+  {
+   "cmd": "fill 936 199 936 1064 199 1064 minecraft:stone"
+  },
+  {
+   "cmd": "fill 936 198 936 1064 198 1064 minecraft:stone"
+  },
+  {
+   "cmd": "fill 936 200 936 1064 202 1064 minecraft:air"
+  },
+  {
+   "cmd": "time set 10000"
+  },
+  {
+   "cmd": "fill 964 200 997 970 202 1003 minecraft:glass"
+  },
+  {
+   "cmd": "fill 965 200 998 969 201 1002 minecraft:air"
+  },
+  {
+   "cmd": "summon minecraft:villager 966.5 200 1000.5"
+  },
+  {
+   "cmd": "fill 1010 199 1000 1014 199 1004 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1010 203 1000 1014 203 1004 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1010 200 1000 1014 202 1000 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1010 200 1004 1014 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1010 200 1000 1010 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1014 200 1000 1014 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "setblock 1014 200 1002 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1014 201 1002 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1014 200 1002 minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1014 201 1002 minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1011 200 1001 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+  },
+  {
+   "cmd": "setblock 1012 200 1001 minecraft:red_bed[facing=east,part=head,occupied=false]"
+  },
+  {
+   "cmd": "fill 1020 199 1000 1024 199 1004 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1020 203 1000 1024 203 1004 minecraft:oak_planks"
+  },
+  {
+   "cmd": "fill 1020 200 1000 1024 202 1000 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1020 200 1004 1024 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1020 200 1000 1020 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "fill 1024 200 1000 1024 202 1004 minecraft:cobblestone"
+  },
+  {
+   "cmd": "setblock 1020 200 1002 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1020 201 1002 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1020 200 1002 minecraft:oak_door[facing=east,half=lower,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1020 201 1002 minecraft:oak_door[facing=east,half=upper,hinge=left,open=false]"
+  },
+  {
+   "cmd": "setblock 1022 200 1001 minecraft:lectern[facing=north]"
+  },
+  {
+   "cmd": "summon minecraft:villager 1013.5 200 1003.5"
+  },
+  {
+   "tp": [
+    1017.5,
+    200,
+    1008.5,
+    0,
+    0
+   ]
+  },
+  {
+   "cmd": "settlement create lateqa 12"
+  },
+  {
+   "cmd": "say vcgfence_1_created"
+  },
+  {
+   "wait_chat": "vcgfence_1_created"
+  },
+  {
+   "cmd": "settlement building certify house 1010 199 1000 1014 203 1004"
+  },
+  {
+   "cmd": "say vcgfence_2_house"
+  },
+  {
+   "wait_chat": "vcgfence_2_house"
+  },
+  {
+   "tp": [
+    1017.5,
+    205,
+    1008.5,
+    0,
+    40
+   ]
+  },
+  {
+   "wait_ticks": 100
+  },
+  {
+   "assert_entities": {
+    "name": "late_both_jobless_first",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "min": 2,
+    "profession": "none"
+   }
+  },
+  {
+   "cmd": "setblock 968 200 1001 minecraft:lectern[facing=north]"
+  },
+  {
+   "cmd": "settlement building certify librarian 1020 199 1000 1024 203 1004"
+  },
+  {
+   "cmd": "say vcgfence_3_late_stations"
+  },
+  {
+   "wait_chat": "vcgfence_3_late_stations"
+  },
+  {
+   "shot": "late-job-fixture"
+  },
+  {
+   "wait_ticks": 200
+  },
+  {
+   "list_entities": {
+    "name": "late_t200",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 200
+  },
+  {
+   "list_entities": {
+    "name": "late_t400",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 200
+  },
+  {
+   "list_entities": {
+    "name": "late_t600",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 200
+  },
+  {
+   "list_entities": {
+    "name": "late_t800",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 200
+  },
+  {
+   "list_entities": {
+    "name": "late_t1000",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 200
+  },
+  {
+   "list_entities": {
+    "name": "late_t1200",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "shot": "late-job-end"
+  },
+  {
+   "assert_entities": {
+    "name": "late_unbound_librarian",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "min": 1,
+    "profession": "librarian",
+    "box": [
+     960,
+     199,
+     990,
+     975,
+     202,
+     1010
+    ]
+   }
+  },
+  {
+   "assert_entities": {
+    "name": "late_bound_librarian",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "min": 1,
+    "profession": "librarian",
+    "box": [
+     1005,
+     199,
+     990,
+     1030,
+     202,
+     1010
+    ]
+   }
+  }
+ ]
+}

@@ -244,7 +244,7 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
             yield SCENE_TOOLS[kind], value
         elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities", "wait_terrain"):
             yield SCENE_TOOLS[kind], value["args"]
-        elif kind in ("timed_entities", "require_entities"):
+        elif kind in ("timed_entities", "require_entities", "assert_entities"):
             yield "minecraft_list_entities", value["args"]
         elif kind == "wait_ticks":
             yield "minecraft_wait_ticks", {"ticks": min(value, 100)}
@@ -364,6 +364,24 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and isinstance(value["samples"], list) and len(value["samples"]) == 3
                      and all(isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_-]+", item)
                              for item in value["samples"]))
+        elif kind == "assert_entities":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) <= {"name", "args", "entity_type", "box", "min", "max",
+                                        "max_height", "profession"}
+                     and {"name", "args", "entity_type", "min"} <= set(value)
+                     and isinstance(value["name"], str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and isinstance(value["args"], dict)
+                     and isinstance(value["entity_type"], str)
+                     and re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", value["entity_type"])
+                     and type(value["min"]) is int and value["min"] >= 0
+                     and type(value.get("max", 0)) is int
+                     and type(value.get("max_height", 0)) in (int, float)
+                     and value.get("profession", "farmer") in PROFESSIONS
+                     and ("box" not in value
+                          or (isinstance(value["box"], list) and len(value["box"]) == 6
+                              and all(type(n) in (int, float) and math.isfinite(n)
+                                      for n in value["box"]))))
         elif kind == "require_entities":
             valid = (isinstance(value, dict) and set(value) == {"name", "args", "types"}
                      and isinstance(value["name"], str)
@@ -396,6 +414,38 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
             valid = False
         if not valid:
             raise ValueError(f"invalid scene step: {step!r}")
+
+
+# Villager profession order of the received VillagerData metadata (wire profession ids).
+PROFESSIONS = ("none", "armorer", "butcher", "cartographer", "cleric", "farmer", "fisherman",
+               "fletcher", "leatherworker", "librarian", "mason", "nitwit", "shepherd",
+               "toolsmith", "weaponsmith")
+
+
+def matching_entities(entities: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """Received entities of `spec["entity_type"]` that satisfy every optional filter of an
+    assert_entities step: feet inside `box` (x0,y0,z0,x1,y1,z1), standing no taller than
+    `max_height` (a sleeping pose), showing the villager `profession`."""
+    found = []
+    for row in entities:
+        if row.get("entity_type") != spec["entity_type"]:
+            continue
+        x, y, z = float(row["x"]), float(row["y"]), float(row["z"])
+        box = spec.get("box")
+        if box and not (box[0] <= x <= box[3] and box[1] <= y <= box[4] and box[2] <= z <= box[5]):
+            continue
+        if "max_height" in spec:
+            bounds = row.get("bounding_box") or {}
+            if float(bounds.get("max_y", 0)) - float(bounds.get("min_y", 0)) > spec["max_height"]:
+                continue
+        if "profession" in spec:
+            data = ((row.get("received_metadata") or {}).get("19") or {}).get("value")
+            if not (isinstance(data, list) and len(data) == 3 and isinstance(data[1], int)
+                    and 0 <= data[1] < len(PROFESSIONS)
+                    and PROFESSIONS[data[1]] == spec["profession"]):
+                continue
+        found.append(row)
+    return found
 
 
 def matching_walk(entities: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any] | None:
@@ -701,6 +751,20 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             receipt = artifact / f"{name}.json"
             receipt.write_text(json.dumps(result, indent=2) + "\n")
             probe.report.setdefault("terrain_waits", []).append({"receipt": str(receipt), "result": result})
+        elif kind == "assert_entities":
+            result = probe.call("minecraft_list_entities", value["args"])
+            entities = result.get("entities")
+            if not isinstance(entities, list) or any(not isinstance(row, dict) for row in entities):
+                raise RuntimeError("entity snapshot omitted entities")
+            if type(result.get("game_time")) is not int:
+                raise RuntimeError("entity snapshot omitted same-thread game_time")
+            found = matching_entities(entities, value)
+            (artifact / f"{value['name']}.json").write_text(json.dumps(
+                {"game_time": result["game_time"], "spec": value, "matched": found,
+                 "received": entities}, indent=2) + "\n")
+            probe.check(f"{value['name']}_min", len(found) >= value["min"])
+            if "max" in value:
+                probe.check(f"{value['name']}_max", len(found) <= value["max"])
         elif kind == "require_entities":
             result = probe.call("minecraft_list_entities", value["args"])
             (artifact / f"{value['name']}.json").write_text(json.dumps(result, indent=2) + "\n")
@@ -778,6 +842,10 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-low-roof-house": "low_roof_house_scene.json",
         "native-falling-block-prediction": "falling_block_scene.json",
         "native-frozen-game-age": "frozen_game_age_scene.json",
+        "native-village-idle-stroll": "village_idle_stroll_scene.json",
+        "native-village-night-door": "village_night_door_scene.json",
+        "native-village-late-job": "village_late_job_scene.json",
+        "native-village-distant-job": "village_distant_job_scene.json",
     }
     if ctx.scenario_id in named_fixtures:
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):

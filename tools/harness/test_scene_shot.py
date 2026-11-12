@@ -741,3 +741,35 @@ class SceneShotTests(unittest.TestCase):
             options.write_text("fov:0.0\n")
             with self.assertRaisesRegex(RuntimeError, "renderDistance"):
                 scene_shot.check_java_render_distance(options, 32)
+
+
+class AssertEntitiesTests(unittest.TestCase):
+    @staticmethod
+    def villager(x, y, z, profession=0, height=1.95):
+        return {"entity_type": "minecraft:villager", "x": x, "y": y, "z": z,
+                "bounding_box": {"min_y": y, "max_y": y + height},
+                "received_metadata": {"19": {"value": ["plains", profession, 1]}}}
+
+    def test_filters_box_pose_and_profession(self):
+        rows = [self.villager(1, 70, 1), self.villager(50, 70, 1),
+                self.villager(2, 70, 2, profession=9), self.villager(3, 70, 3, height=0.2),
+                {"entity_type": "minecraft:zombie", "x": 1, "y": 70, "z": 1}]
+        spec = {"entity_type": "minecraft:villager"}
+        self.assertEqual(len(scene_shot.matching_entities(rows, spec)), 4)
+        self.assertEqual(len(scene_shot.matching_entities(rows, {**spec, "box": [0, 60, 0, 10, 80, 10]})), 3)
+        self.assertEqual(len(scene_shot.matching_entities(rows, {**spec, "max_height": 0.5})), 1)
+        self.assertEqual(len(scene_shot.matching_entities(rows, {**spec, "profession": "librarian"})), 1)
+        self.assertEqual(len(scene_shot.matching_entities(rows, {**spec, "profession": "none"})), 3)
+
+    def test_step_validation_and_village_scenes(self):
+        good = {"assert_entities": {"name": "n", "args": {"radius": 8}, "entity_type": "minecraft:villager",
+                                    "min": 1, "box": [0, 0, 0, 1, 1, 1], "profession": "librarian"}}
+        scene_shot.validate_steps([good], "native")
+        for bad in ({**good["assert_entities"], "profession": "wizard"},
+                    {**good["assert_entities"], "box": [0, 0, 0]},
+                    {k: v for k, v in good["assert_entities"].items() if k != "min"}):
+            with self.assertRaises(ValueError):
+                scene_shot.validate_steps([{"assert_entities": bad}], "native")
+        for name in ("idle_stroll", "night_door", "late_job", "distant_job"):
+            scene = json.loads((scene_shot.runtime.REPO_ROOT / "tools/harness" / f"village_{name}_scene.json").read_text())
+            scene_shot.validate_steps(scene["steps"], "native")
