@@ -1,0 +1,49 @@
+{
+  "id": "VILLAGER-WORKSTATION-IGNORED-AFTER-WORK-HOURS",
+  "verdict": "promoted",
+  "fix_commit": "patch:156f19bd4a1453a4567d979d10712812b1f622295fca37d885097af48b2a99c0",
+  "fix_commit_full": "patch:156f19bd4a1453a4567d979d10712812b1f622295fca37d885097af48b2a99c0",
+  "promoted_at": "2026-11-12T17:18:43+00:00",
+  "tree_head": "34199dc0dcf3bbbb1d65b06533e75abaa15dbfa3",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "156f19bd4a1453a4567d979d10712812b1f622295fca37d885097af48b2a99c0",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/allocator.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::allocator::tests::jobless_villager_claims_a_free_workstation_at_any_hour": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-village-late-job": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-village-late-job --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T171417-ledger-promote-bi9ntmdb/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::allocator::tests::jobless_villager_claims_a_free_workstation_at_any_hour": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:native-village-late-job": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T171712-native-village-late-job-_5xsan5g/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T165307-native-village-late-job-hzf3ubph/result.json",
+    "tree_head": "34199dc0dcf3bbbb1d65b06533e75abaa15dbfa3",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "1f1cce450019048a674d24ea7b78a67b1789f957a1b9c375f654fb3b7ff8bfa1",
+    "covers": [
+      "harness:scene-shot:native-village-late-job"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T171417-ledger-promote-bi9ntmdb"
+}

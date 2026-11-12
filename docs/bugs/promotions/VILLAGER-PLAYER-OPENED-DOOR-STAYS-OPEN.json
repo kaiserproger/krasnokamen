@@ -1,0 +1,49 @@
+{
+  "id": "VILLAGER-PLAYER-OPENED-DOOR-STAYS-OPEN",
+  "verdict": "promoted",
+  "fix_commit": "patch:8d3d9a432564e87c614ffc59aa05029dca3dd4bbd59df325dfd03f12b527a2cc",
+  "fix_commit_full": "patch:8d3d9a432564e87c614ffc59aa05029dca3dd4bbd59df325dfd03f12b527a2cc",
+  "promoted_at": "2026-11-12T17:14:17+00:00",
+  "tree_head": "34199dc0dcf3bbbb1d65b06533e75abaa15dbfa3",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "8d3d9a432564e87c614ffc59aa05029dca3dd4bbd59df325dfd03f12b527a2cc",
+  "reversed_files": [
+    "crates/mc-core/src/villager/doors.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:villager::brain::tests::door_tests::interrupted_route_closes_only_the_door_the_resident_opened": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-village-night-door": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-village-night-door --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T170935-ledger-promote-5qu3_n19/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:villager::brain::tests::door_tests::interrupted_route_closes_only_the_door_the_resident_opened": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:native-village-night-door": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T171240-native-village-night-door-8lsa8eex/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T165434-native-village-night-door-kq1gbblu/result.json",
+    "tree_head": "34199dc0dcf3bbbb1d65b06533e75abaa15dbfa3",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "1f1cce450019048a674d24ea7b78a67b1789f957a1b9c375f654fb3b7ff8bfa1",
+    "covers": [
+      "harness:scene-shot:native-village-night-door"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T170935-ledger-promote-5qu3_n19"
+}

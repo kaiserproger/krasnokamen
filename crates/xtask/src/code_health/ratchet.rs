@@ -44,8 +44,12 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // that key both the registry mapping and the capture path.
     // CivSimLanding merge of main 71d1c127, 2026-11-12: the ITEM_REGISTRY
     // cutover and main's mob ids measure 2628 together, no spare headroom.
-    vanilla_id_literals: 2_628,
-    path_equality: 114,
+    // Kelp-wash fix a5a8a865 and villager doors b293281d, 2026-11-13: the
+    // `washed_away_by_fluids` and `mob_interactable_doors` block tags resolve
+    // once at registry load (the remedy this ratchet asks for): 2631.
+    vanilla_id_literals: 2_631,
+    // Measured 113 on 87c33206, 2026-11-13.
+    path_equality: 113,
     panics: 5,
     merge_block_write_pushes: 17,
 };

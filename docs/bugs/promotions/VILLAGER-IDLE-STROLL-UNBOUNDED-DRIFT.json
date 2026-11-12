@@ -1,0 +1,68 @@
+{
+  "id": "VILLAGER-IDLE-STROLL-UNBOUNDED-DRIFT",
+  "verdict": "promoted",
+  "fix_commit": "patch:85195e25eabb2e4a202ef619a549dfe7d3326abfb0045413fbf46e382934a38d",
+  "fix_commit_full": "patch:85195e25eabb2e4a202ef619a549dfe7d3326abfb0045413fbf46e382934a38d",
+  "promoted_at": "2026-11-12T17:09:30+00:00",
+  "tree_head": "34199dc0dcf3bbbb1d65b06533e75abaa15dbfa3",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "85195e25eabb2e4a202ef619a549dfe7d3326abfb0045413fbf46e382934a38d",
+  "reversed_files": [
+    "crates/mc-core/src/entity_motion.rs",
+    "crates/mc-core/src/villager/brain.rs",
+    "crates/mc-core/src/villager/brain/motion.rs",
+    "crates/mc-physics/src/lib.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_resident_outside_the_village_strolls_back_toward_it": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::resident_in_deep_water_swims_up_to_the_surface": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_strolls_stay_bound_to_the_village_over_many_decisions": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-village-idle-stroll": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-village-idle-stroll --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T170402-ledger-promote-qkldibs3/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_resident_outside_the_village_strolls_back_toward_it": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::resident_in_deep_water_swims_up_to_the_surface": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_strolls_stay_bound_to_the_village_over_many_decisions": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:native-village-idle-stroll": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T170633-native-village-idle-stroll-l1p2jvi8/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T165011-native-village-idle-stroll-unob0blh/result.json",
+    "tree_head": "34199dc0dcf3bbbb1d65b06533e75abaa15dbfa3",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "1f1cce450019048a674d24ea7b78a67b1789f957a1b9c375f654fb3b7ff8bfa1",
+    "covers": [
+      "harness:scene-shot:native-village-idle-stroll"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T170402-ledger-promote-qkldibs3"
+}

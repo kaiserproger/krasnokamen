@@ -17,14 +17,18 @@ import os
 import re
 import subprocess
 import sys
+import time
+import uuid
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from PIL import Image, ImageChops
 
+from .. import runtime
 from ..profiles import ProfileContext
 from . import scene_shot
+from .autocraft_qa import answer_after_marker, parse_json_line
 from .probe_steps import ProbeSteps
 from .native_settlement_storage import Input
 
@@ -149,7 +153,11 @@ class Gui:
                 self.labels[label] = _label_bitmap(label, self.jar)
             points = _label_points(frame, self.labels[label], self.scale)
         if not points:
-            raise RuntimeError(f"visible GUI button {label!r} not found; frame={frame}")
+            # A button the page does not offer is a failed GUI check, like a title that never
+            # arrives; the verdict mapping reads it from the assertions.
+            self.probe.report["assertions"][f"GUI button {label}"] = False
+            with runtime.phase("assertion"):
+                raise RuntimeError(f"visible GUI button {label!r} not found; frame={frame}")
         # A dialog title/body may repeat the action label. Actions are below the
         # body; duplicated Back/exit actions have the same destination.
         point = max(points, key=lambda point: point[1])
@@ -219,6 +227,118 @@ TOLERANCE = 12
 # measured from the viewer marker, which is exactly one cell (`_largest_patch`).
 MIN_CELL = 8 * 8
 
+# (en_us, ru_ru) text of every page the script waits for. `_script` passes the same pairs to its
+# `label(...)`; test_settlement_map_qa checks that every pair there is listed here.
+PAGES = {
+    "hub": (f"Settlement {NAME}", f"Поселение {NAME}"),
+    "settlement": ("Settlement", "Поселение"),
+    "help": ("Help", "Помощь"),
+    "map": ("Map ·", "Карта ·"),
+    "house": ("House", "Дом"),
+    "order": ("Order construction L2", "Заказать стройку L2"),
+    "projects": ("Projects", "Стройка"),
+    "status": ("Status", "Статус"),
+    "construction": ("Construction", "Строительство"),
+    "waiting": ("waiting for materials", "не хватает материалов"),
+    "storage": ("Storage", "Склад"),
+    "residents": ("Residents", "Жители"),
+    "resident": ("Resident ·", "Житель ·"),
+    "household": ("Household", "Домохозяйство"),
+    "resources": ("Resources", "Ресурсы"),
+    "orders": ("Production orders", "Заказы производства"),
+    "new_order": ("New order", "Новый заказ"),
+    "new_order_form": ("New production order", "Новый заказ производства"),
+    "back": ("Back", "Назад"),
+    "choose_station": ("Choose a workstation", "Выбор рабочего места"),
+    "workstation": ("Cartographer workshop: crafting_table at", "Мастерская: Cartographer: crafting_table в"),
+}
+
+# The verdicts a receipt publishes in `details.verdicts` (registered as
+# `regressions._BOOLEAN_PROFILE_VERDICTS["settlement-map-qa"]`): one per GUI stage the run
+# walks, `localized_text` (every Russian title and text check, ru_ru runs only) and `all`.
+STAGES = ("bell_opens_hub", "dashboard", "map", "building_order", "shortage_icons",
+          "storage_transfer", "project_progress", "residents", "resources", "production_order")
+VERDICTS = (*STAGES, "localized_text", "all")
+
+
+def _stage_checks(language: str) -> dict[str, tuple[list[str], list[str]]]:
+    """stage -> (required assertion patterns, extra patterns whose failure also fails the stage).
+
+    Patterns are regexes that must match a whole assertion name of the run's report. The names
+    are the labels `probe.wait`/`probe.check` record in `_script`, with the page text of the
+    run's language; `Gui.button` records `GUI button <label>` only when the button is missing."""
+    ru = language == "ru_ru"
+    page = lambda key: PAGES[key][ru]
+    menu = lambda key: re.escape(f"GUI menu {page(key)}")
+    dialog = lambda key: re.escape(f"GUI dialog {page(key)}")
+    button = lambda key: re.escape(f"GUI button {page(key)}")
+    order = re.escape(page("order"))
+    return {
+        "bell_opens_hub": (["GUI bell target", dialog("hub")], ["GUI bell target before click"]),
+        "dashboard": ([menu("settlement")], [button("settlement"), button("help")]),
+        "map": (["dashboard_map_GUI", "map_viewer_rendered", "map_territory_rendered", "map_cell_GUI",
+                 r"GUI menu \#\d+ "], [rf"GUI button {re.escape(page('house'))} \#\d+ L1"]),
+        "building_order": ([rf"GUI dialog {order} \#\d+", dialog("projects")],
+                           [rf"GUI button {order} \#\d+", button("status")]),
+        "shortage_icons": ([menu("construction"), "upgrade_native_shortage_icons", dialog("waiting"),
+                            "exact_shortage_rendered"], []),
+        "storage_transfer": ([menu("storage"), r"GUI shift slot/\d+ applied",
+                              "GUI_storage_transfer_conserves_one"], [button("storage")]),
+        "project_progress": ([menu("projects"), menu("construction"), "GUI_native_progress_advanced",
+                              "GUI_progress_matches_independent_placed_blocks"], []),
+        "residents": ([menu("residents"), menu("resident"), menu("household")], []),
+        "resources": ([menu("resources")], []),
+        # Dashboard -> Production orders -> New order -> workstation -> recipe -> form -> confirm, then
+        # the order is read back from the server and a resident has crafted for it.
+        "production_order": ([menu("orders"), "production_workshop_certified", "production_new_order_entry",
+                              menu("new_order_form"), "production_recipe_entry", dialog("new_order_form"),
+                              dialog("orders"), "production_order_listed", "production_order_exists",
+                              "production_order_resident_crafted"],
+                             [button("new_order"), button("back")]),
+        # The Russian run's page titles and its rendered shortage text: the checks the stages above
+        # make with `label(en, ru)` text.
+        "localized_text": ([dialog("hub"), menu("settlement"), "dashboard_map_GUI", menu("projects"),
+                            menu("construction"), menu("storage"), menu("residents"), menu("resident"),
+                            menu("household"), menu("resources"), rf"GUI dialog {order} \#\d+",
+                            dialog("projects"), dialog("waiting"), "exact_shortage_rendered"], []),
+    }
+
+
+def verdicts_from_assertions(assertions: dict[str, Any], language: str) -> dict[str, bool | None]:
+    """Map a run's recorded assertions to the published verdicts.
+
+    A verdict is True when every assertion it requires was recorded True, and False when one of
+    its assertions was recorded False. Once the run has failed a check, a verdict that never got
+    its turn is False as well: the GUI path to it is broken, so it is not met. A run that
+    recorded no failed check (a lost client or a timeout outside the checks) leaves unreached
+    verdicts None, which the ledger reads as "not evidence" and never as red. `localized_text`
+    is None on an en_us run (it has no Russian text to judge); `all` is True when every other
+    verdict that applies is True."""
+    checks = _stage_checks(language)
+
+    def hits(pattern: str) -> list[str]:
+        return [name for name in assertions if re.fullmatch(pattern, name)]
+
+    verdicts: dict[str, bool | None] = {}
+    for stage, (required, extra) in checks.items():
+        if any(assertions[name] is False for pattern in (*required, *extra) for name in hits(pattern)):
+            verdicts[stage] = False
+        elif all(hits(pattern) and all(assertions[name] is True for name in hits(pattern))
+                 for pattern in required):
+            verdicts[stage] = True
+        else:
+            verdicts[stage] = None
+    if language != "ru_ru":
+        verdicts["localized_text"] = None
+    applicable = [stage for stage in checks if stage != "localized_text" or language == "ru_ru"]
+    failed = any(verdicts[stage] is False for stage in applicable)
+    for stage in applicable:
+        if verdicts[stage] is None and failed:
+            verdicts[stage] = False
+    verdicts["all"] = (True if all(verdicts[stage] is True for stage in applicable)
+                       else False if failed else None)
+    return {name: verdicts[name] for name in VERDICTS}
+
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
     parser = argparse.ArgumentParser(prog="settlement-map-qa")
@@ -230,11 +350,20 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
     args = parser.parse_args(extra)
     if ctx.client != "java" and (args.gui_scale != 3 or args.language != "en_us" or args.size != "1280x720"):
+        # The native client sends ClientInformation language "en_us" fixed (solaris-client
+        # src/protocol/network.rs `client_information`) and has no language or size option.
         raise ValueError("civil display variants require --client java")
     settings = {"gui_scale": args.gui_scale, "language": args.language,
                 "screen_size": list(map(int, args.size.split("x")))} if ctx.client == "java" else {}
     def script(probe, artifact, steps, client):
-        return _script(probe, artifact, steps, client, args)
+        # Published whether the walk passes or stops: a receipt that failed on a GUI check says
+        # which stage it was (`ledger._failing_verdict`). Before the script starts there are none.
+        try:
+            return _script(probe, artifact, steps, client, args)
+        finally:
+            published = verdicts_from_assertions(probe.report["assertions"], args.language)
+            probe.report["verdicts"] = published
+            ctx.client_evidence["verdicts"] = published
     return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",
                                          "client_settings": settings}, script=script)
 
@@ -605,8 +734,134 @@ def _setup(probe: ProbeSteps) -> tuple[list[int], int, list[int]]:
                                 for axis, expected in (("x", x + .5), ("y", y), ("z", z - 2.0))),
                "fixture_bell_approach_received", timeout_seconds=30)
     probe.report["fixture"] = {"bell": [x, y, z], "funding_chest": chest,
-                               "authored_house": building, "house_bounds": bounds}
+                               "authored_house": building, "house_bounds": bounds,
+                               "residents": sorted(taken)}
     return [x, y, z], building & 0xFFFF_FFFF, bounds
+
+
+# The Production orders stage: a certified workshop east of the bell holding a crafting table, the
+# stored hay one `open_hay` order needs, and the form's initial craft count (ui.rs `recipe_review`).
+WORKSHOP_KIND = "cartographer"
+PRODUCTION_RECIPE = "open_hay"
+PRODUCTION_COUNT = 8
+CRAFT_TIMEOUT = 900.0
+
+
+def _workshop(probe: ProbeSteps, bell: list[int]) -> tuple[int, list[int]]:
+    """Privileged fixture, not GUI evidence: a stone-floored cartographer workshop (its profession
+    table and a crafting table) certified over a cleared box. Returns (building seq, table)."""
+    x, y, z = bell
+    low, high = (x + 28, y - 1, z - 14), (x + 32, y + 3, z - 10)
+    table = [x + 31, y, z - 11]
+    probe.fixture(f"fill {low[0]} {low[1]} {low[2]} {high[0]} {high[1]} {high[2]} minecraft:air")
+    probe.fixture(f"fill {low[0]} {low[1]} {low[2]} {high[0]} {low[1]} {high[2]} minecraft:stone")
+    probe.fixture(f"setblock {x + 29} {y} {z - 11} minecraft:cartography_table")
+    probe.fixture(f"setblock {table[0]} {table[1]} {table[2]} minecraft:crafting_table")
+    _command(probe, f"settlement building certify {WORKSHOP_KIND} {low[0]} {low[1]} {low[2]} "
+                    f"{high[0]} {high[1]} {high[2]}", f"Certified {WORKSHOP_KIND} #")
+    chat = "\n".join(map(str, probe.observe().get("recent_chat", [])))
+    match = re.search(rf"Certified {WORKSHOP_KIND} #(\d+)", chat)
+    probe.check("production_workshop_certified", bool(match))
+    return int(match[1]) & 0xFFFF_FFFF, table
+
+
+def _readback(probe: ProbeSteps, command: str, needle: str, label: str) -> str:
+    """Send an owner command and return the first chat line with `needle` that is newer than a
+    marker sent just before it (`recent_chat` is newest first; an answer can trail later chat)."""
+    marker = f"mapqa {uuid.uuid4().hex[:8]}"
+    probe.call("minecraft_send_chat", {"message": marker, "command": False})
+    probe.wait(lambda state: any(marker in str(line) for line in state.get("recent_chat", [])),
+               f"{label}_marker", timeout_seconds=30)
+    probe.call("minecraft_send_chat", {"message": command, "command": True})
+    state = probe.wait(lambda state: answer_after_marker(
+        [str(line) for line in state.get("recent_chat", [])], marker, needle) is not None,
+        label, timeout_seconds=30)
+    return str(answer_after_marker([str(line) for line in state["recent_chat"]], marker, needle))
+
+
+def _is_dialog(state: dict[str, Any], title: str) -> bool:
+    screen = state.get("screen") or {}
+    return (bool(screen.get("open")) and ".screens.dialog." in str(screen.get("class", ""))
+            and screen.get("title") == title)
+
+
+def _is_menu(state: dict[str, Any], title: str) -> bool:
+    screen = state.get("screen") or {}
+    return bool(screen.get("open")) and screen.get("class") == CONTAINER and screen.get("title") == title
+
+
+def _production(probe: ProbeSteps, gui: Gui, label: Callable[[str, str], str],
+                shot: Callable[[str], str], bell: list[int], residents: list[str],
+                chest: list[int], hub: Callable[[], None], dashboard: Callable[[], None]) -> None:
+    """Create a production order through the dialogs a player uses and judge it in server truth.
+
+    Dashboard -> Production orders -> New order -> (workstation) -> recipe -> form -> New order.
+    The server then lists the order and `settlement production <name> job <id>` shows one of the
+    bound residents as its worker; the order is done only when that resident has crafted for it."""
+    seq, table = _workshop(probe, bell)
+    gui.escape()
+    hub()
+    dashboard()
+    orders, form = label("Production orders", "Заказы производства"), label("New production order", "Новый заказ производства")
+    gui.slot(28)
+    state = _menu(probe, orders)
+    shot("civil-production-empty")
+    probe.check("production_list_empty_before_order",
+                not any(row["slot"] < 45 for row in state["container"]["slots"]))
+    entry = next((row for row in state["container"]["slots"]
+                  if 45 <= row["slot"] < 54 and row.get("name") == label("New order", "Новый заказ")), None)
+    probe.check("production_new_order_entry", entry is not None)
+    gui.slot(entry["slot"])
+    # One crafting table in a certified workshop opens the recipe page; several ask for the workstation.
+    station = (f"#{seq} " + label("Cartographer workshop: crafting_table at",
+                                  "Мастерская: Cartographer: crafting_table в")
+               + f" {table[0]} {table[1]} {table[2]}")
+    chooser = label("Choose a workstation", "Выбор рабочего места")
+    state = probe.wait(lambda received: _is_menu(received, form) or _is_dialog(received, chooser),
+                       "production_workstation_offered", timeout_seconds=30)
+    if state["screen"].get("class") != CONTAINER:
+        probe.report["production_workstation_choice"] = True
+        gui.button(station)
+    state = _menu(probe, form)
+    shot("civil-production-recipes")
+    recipe = next((row for row in state["container"]["slots"]
+                   if row["slot"] < 45 and row.get("name") == PRODUCTION_RECIPE), None)
+    probe.check("production_recipe_entry", recipe is not None)
+    gui.slot(recipe["slot"])
+    _dialog(probe, form)
+    shot("civil-production-form")
+    # The order needs `open_hay` input in real storage: one hay block per craft.
+    probe.fixture(f"item replace block {chest[0]} {chest[1]} {chest[2]} container.26 "
+                  f"with minecraft:hay_block {PRODUCTION_COUNT}")
+    gui.button(label("New order", "Новый заказ"))
+    _dialog(probe, orders)
+    shot("civil-production-receipt")
+    gui.button(label("Back", "Назад"))
+    state = _menu(probe, orders)
+    shot("civil-production-listed")
+    listed = next((str(row.get("name", "")) for row in state["container"]["slots"] if row["slot"] == 0), "")
+    job = listed.split(" ", 1)[0]
+    probe.report["production_order_listed"] = listed
+    probe.check("production_order_listed", re.fullmatch(rf"{re.escape(job)} · \d+/{PRODUCTION_COUNT}", listed) is not None
+                and job.startswith("ui-"))
+    gui.escape()
+
+    def read() -> dict[str, Any]:
+        return parse_json_line(_readback(probe, f"settlement production {NAME} job {job}", f'"id":"{job}"',
+                                         "production_job_readback"))
+
+    admitted = read()
+    probe.report["production_order"] = {"job": job, "admitted": admitted}
+    probe.check("production_order_exists",
+                str(admitted["recipe"]).endswith(f":{PRODUCTION_RECIPE}") and admitted["count"] == PRODUCTION_COUNT
+                and admitted["worker"] in residents and not admitted["cancelled"])
+    deadline = time.monotonic() + CRAFT_TIMEOUT
+    current = admitted
+    while not current["receipts"] and time.monotonic() < deadline:
+        probe.call("minecraft_wait_ticks", {"ticks": 100})
+        current = read()
+    probe.report["production_order"]["crafted"] = current
+    probe.check("production_order_resident_crafted", bool(current["receipts"]) and current["done"] >= 1)
 
 
 def _script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
@@ -772,6 +1027,8 @@ def _script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], cli
         gui.slot(16)
         _menu(probe, label("Resources", "Ресурсы"))
         shot("civil-resources")
+        fixture = probe.report["fixture"]
+        _production(probe, gui, label, shot, _bell, fixture["residents"], fixture["funding_chest"], hub, dashboard)
         return shots
     finally:
         gui.close()

@@ -710,6 +710,7 @@ pub fn recover_with_reader(
             climate: manifest.climate,
             border: image.border,
             difficulty: manifest.difficulty,
+            default_game_mode: manifest.default_game_mode,
             gamerules: manifest.gamerules.clone(),
             ..Default::default()
         };
@@ -825,6 +826,7 @@ pub fn recover_with_reader(
     let bossbars = root.bossbars.clone();
     let climate = root.climate;
     let difficulty = root.difficulty;
+    let default_game_mode = root.default_game_mode;
     let gamerules = root.gamerules.clone();
     let mut ids = std::collections::BTreeSet::new();
     let mut uuids = std::collections::BTreeSet::new();
@@ -834,6 +836,7 @@ pub fn recover_with_reader(
         replay.bossbars = bossbars.clone();
         replay.climate = climate;
         replay.difficulty = difficulty;
+        replay.default_game_mode = default_game_mode;
         replay.gamerules = gamerules.clone();
         for (&id, entity) in &replay.entities {
             if !ids.insert(id) || !uuids.insert(entity.uuid.clone()) {
@@ -1027,6 +1030,7 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
     let root = &world.dimensions[&Dimension::Overworld];
     manifest.climate = root.climate;
     manifest.difficulty = root.difficulty;
+    manifest.default_game_mode = root.default_game_mode;
     manifest.gamerules = root.gamerules.clone();
     for (uuid, player) in &root.players {
         let mut player = player.clone();

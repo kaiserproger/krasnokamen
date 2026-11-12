@@ -1973,11 +1973,12 @@ fn project_status_screen(state: &mut TickState, connection: ConnectionId, ctx: &
     );
 }
 
+/// One missing material of the current project: item, missing count, why it is missing, and the
+/// item that would supply it.
+type ProjectNeed = (String, u64, String, Option<String>);
+
 /// A quote only for native admitted work, never a second blueprint planner.
-fn project_needs(
-    state: &TickState,
-    ctx: &Ctx,
-) -> Result<Vec<(String, u64, String, Option<String>)>, String> {
+fn project_needs(state: &TickState, ctx: &Ctx) -> Result<Vec<ProjectNeed>, String> {
     let record = state
         .settlements
         .get(ctx.id)

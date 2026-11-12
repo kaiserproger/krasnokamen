@@ -33,14 +33,10 @@ fn door_open(state: &TickState, pos: BlockPos) -> bool {
         .any(|(key, value)| key == "open" && value == "true")
 }
 
-#[test]
-fn wooden_door_route_reaches_other_side_but_iron_remains_blocked() {
-    for (material, expected) in [
-        ("minecraft:oak_door", true),
-        ("minecraft:crimson_door", true),
-        ("minecraft:iron_door", false),
-        ("minecraft:copper_door", false),
-    ] {
+/// The doorway route from (8.5, 201, 6.5) to z = 10 exists exactly when the
+/// villager profile may open `material`; generic NPC routes never assume it.
+fn assert_door_route(materials: &[&str], expected: bool) {
+    for material in materials {
         let mut state = test_state();
         doorway(&mut state, material);
         let mut cache = PoiCache::default();
@@ -84,6 +80,37 @@ fn wooden_door_route_reaches_other_side_but_iron_remains_blocked() {
             );
         }
     }
+}
+
+#[test]
+fn wooden_door_route_reaches_other_side_but_iron_remains_blocked() {
+    assert_door_route(&["minecraft:oak_door", "minecraft:crimson_door"], true);
+    assert_door_route(&["minecraft:iron_door"], false);
+}
+
+/// VILLAGER-POPLAR-DOOR-NOT-WOODEN: 26.3 `poplar_door` is in `#wooden_doors`.
+#[test]
+fn poplar_door_route_reaches_other_side() {
+    assert_door_route(&["minecraft:poplar_door"], true);
+}
+
+/// VILLAGER-COPPER-DOOR-BLOCKS-RESIDENTS: all eight copper doors are in
+/// `#mob_interactable_doors`.
+#[test]
+fn copper_door_routes_reach_other_side() {
+    assert_door_route(
+        &[
+            "minecraft:copper_door",
+            "minecraft:exposed_copper_door",
+            "minecraft:weathered_copper_door",
+            "minecraft:oxidized_copper_door",
+            "minecraft:waxed_copper_door",
+            "minecraft:waxed_exposed_copper_door",
+            "minecraft:waxed_weathered_copper_door",
+            "minecraft:waxed_oxidized_copper_door",
+        ],
+        true,
+    );
 }
 
 #[test]
@@ -368,7 +395,7 @@ fn opening_door_preserves_own_and_neighbour_routes_before_and_after_fold() {
             .motion_geometry
             .blocks
             .iter()
-            .any(|&id| crate::villager::doors::wooden(&state.registry, id))
+            .any(|&id| crate::villager::doors::interactable(&state.registry, id))
     );
     let mut geometry = MotionGeometryCache::default();
     assert!(geometry.begin(&state, &opener, 0.3, 1.95));

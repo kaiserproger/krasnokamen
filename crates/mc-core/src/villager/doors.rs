@@ -1,5 +1,6 @@
-//! Tick-owned wooden-door interaction, as vanilla `InteractWithDoor`: a door on
-//! the route is opened if closed and remembered either way, so the villager
+//! Tick-owned interaction with `#mob_interactable_doors` (wooden and copper),
+//! as vanilla `InteractWithDoor`: a door on the route is opened if closed and
+//! remembered either way, so the villager
 //! closes every door it passed through, whoever opened it, once no other
 //! villager is in or approaching the doorway.
 use super::VillagerState;
@@ -9,9 +10,9 @@ use crate::registry::CoreRegistry;
 use crate::tick::TickState;
 use mc_world::BlockStateId;
 
-pub(crate) fn wooden(registry: &CoreRegistry, id: u32) -> bool {
+pub(crate) fn interactable(registry: &CoreRegistry, id: u32) -> bool {
     registry
-        .wooden_doors
+        .mob_interactable_doors
         .get(id as usize)
         .copied()
         .unwrap_or(false)
@@ -19,7 +20,7 @@ pub(crate) fn wooden(registry: &CoreRegistry, id: u32) -> bool {
 
 fn door(state: &TickState, pos: BlockPos) -> Option<(BlockPos, bool)> {
     let id = state.world.block_at(pos.x, pos.y, pos.z)?;
-    if !wooden(&state.registry, id) {
+    if !interactable(&state.registry, id) {
         return None;
     }
     let block = state.registry.blocks.by_id(BlockStateId(id))?;

@@ -489,6 +489,9 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
                 native_client.capture(mcp, artifact, "village-qa-spawn")
             detail: dict[str, Any] = {"behaviour": {}, "evidence": {}, "repro": {}}
             probe.report["settlement_acceptance"] = detail
+            # A failed run keeps the behaviour verdicts it reached: `ledger promote` reads a FAIL
+            # there as the red of a negative control (a missing map is an unrunnable control).
+            evidence["scenario"] = probe.report
             _scenario(probe, detail, ctx, artifact)
             if ctx.windowed:
                 native_client.capture(mcp, artifact, "village-qa-final")

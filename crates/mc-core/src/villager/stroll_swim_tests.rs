@@ -164,6 +164,103 @@ fn resident_in_deep_water_swims_up_to_the_surface() {
     );
 }
 
+/// VILLAGER-STRANDED-IN-DEEP-WATER: a 7x7 pond dug into a stone pad (banks
+/// level with the water top) with no bank cell next to the centre. Vanilla
+/// `setCanFloat` plus `WalkNodeEvaluator` path a floating villager over the
+/// surface to the bank, and `jumpOutOfFluid` lifts it out.
+#[test]
+fn resident_in_a_pond_with_no_adjacent_bank_swims_to_the_bank() {
+    for depth in [2, 5] {
+        let mut state = test_state();
+        // The meeting hour: the resident walks to its bell.
+        state.day_time = 9_500;
+        let water = block(&state, "minecraft:water", &[]);
+        for x in 0..16 {
+            for z in 0..16 {
+                for y in 201..=205 {
+                    let pond = (4..=10).contains(&x) && (4..=10).contains(&z) && y > 205 - depth;
+                    let id = if pond {
+                        water
+                    } else {
+                        state.registry.states.stone
+                    };
+                    state.world.set_block(x, y, z, id);
+                }
+            }
+        }
+        let meeting = BlockPos { x: 1, y: 206, z: 7 };
+        let bell = block(&state, "minecraft:bell", &[]);
+        state.world.set_block(meeting.x, meeting.y, meeting.z, bell);
+        state.world.fold_overlay();
+        // On the pond floor: the nearest bank cell is four blocks away.
+        let slot = villager(&mut state, [7.5, f64::from(206 - depth), 7.5]);
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .meeting_point = Some(meeting);
+        let mut arrived = None;
+        for tick in 0..900 {
+            step(&mut state);
+            let pos = state.entities.pos(slot);
+            if arrived.is_none()
+                && (pos[0] - 1.5).powi(2) + (pos[2] - 7.5).powi(2) < 2.5 * 2.5
+                && pos[1] >= 206.0
+                && state.entities.ground(slot)
+            {
+                arrived = Some(tick);
+            }
+        }
+        assert!(
+            arrived.is_some(),
+            "{depth}-deep pond: the resident never reached the bell on the bank, ended at {:?}",
+            state.entities.pos(slot)
+        );
+    }
+}
+
+/// VILLAGER-AFTER-HOURS-CLAIM-NOT-EMPLOYED: a workstation placed after work
+/// hours, 45 blocks from a jobless resident. Vanilla GoToPotentialJobSite runs
+/// in the Idle package too, so the claimer walks there and takes the
+/// profession instead of strolling inside the village jobless until the next
+/// work period.
+#[test]
+fn jobless_villager_walks_to_an_after_hours_claim_and_is_employed() {
+    // Idle: day ticks 10..2000 and 11000..12000.
+    for time in [1_000, 11_000, 11_500] {
+        let (mut state, _) = village_state();
+        state.day_time = time;
+        let composter = block(&state, "minecraft:composter", &[]);
+        let site = BlockPos {
+            x: 40,
+            y: 201,
+            z: 8,
+        };
+        state.world.set_block(site.x, site.y, site.z, composter);
+        state.world.fold_overlay();
+        let slot = villager(&mut state, [-5.5, 201.0, 8.5]);
+        let mut employed_at = None;
+        for tick in 0..600 {
+            step(&mut state);
+            let v = state.entities.row(slot).villager.as_ref().unwrap();
+            if v.data.profession == Profession::Farmer {
+                employed_at = Some(tick);
+                break;
+            }
+        }
+        let v = state.entities.row(slot).villager.as_ref().unwrap();
+        assert_eq!(v.job_site, Some(site), "day time {time}: the claim");
+        assert!(
+            employed_at.is_some(),
+            "day time {time}: claimed but still {:?} at {:?}",
+            v.data.profession,
+            state.entities.pos(slot)
+        );
+    }
+}
+
 #[test]
 fn resident_wading_a_sunken_ford_climbs_out_onto_the_far_bank() {
     let mut state = test_state();
