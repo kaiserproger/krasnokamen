@@ -118,7 +118,11 @@ Durable lessons from those rounds: quiescence caches must keep live timers
 (burning, fire damage, portal cooldowns) and cache only geometric absence;
 per-tick fields must be projected from a tick anchor instead of journaled
 (see [lessons](lessons.md)); transparent huge pages gave no gain and were
-rejected.
+rejected. A quiescence cache is worth little while the serial owner still
+visits every row: the contact pass (2026-11-12) classifies on the pool, banks
+the proof for moved mobs from section palettes, and hands the serial owner only
+rows with a live burn clock, a cauldron under the feet or a real hazard
+(`contact detail ms:` under `MC_CORE_PHASE_LOG` splits pool and serial time).
 
 ## Load harness and the frozen old core
 
