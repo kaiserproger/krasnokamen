@@ -20,13 +20,12 @@ Rules for entries:
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from .runtime import REPO_ROOT
+from .runtime import REPO_ROOT, sibling_root
 
 # Evidence kinds. A graphical or client entry never falls back to TCP evidence.
 EVIDENCE_KINDS = (
@@ -234,6 +233,126 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="private snow golem and survival shears",
         proves="same golem changes received pumpkin flag after ordinary shears use; player collects a carved pumpkin",
         limits="face/removed-pumpkin screenshots require recorded review; no persistence or global drop count claim",
+    ),
+    "native-v2-peaceful-removal": _entry(
+        id="native-v2-peaceful-removal", summary="Peaceful removes an existing zombie but retains a cow",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-peaceful-removal",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_mobs.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="a visible zombie and cow with natural spawning disabled",
+        proves="after the peaceful command the same zombie disappears and the same cow remains visible",
+        limits="one zombie and cow; no claim about other hostile categories",
+    ),
+    "native-v2-command-score-store": _entry(
+        id="native-v2-command-score-store", summary="Damage, death protection, writable counters and execute-store",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-command-score-store",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_commands.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="operator player with empty inventory and fresh scoreboard",
+        proves="generic damage changes health; held totem and custom protection are consumed; counters, swaps and stored give/clear outcomes work",
+        limits="single player and main hand; a passing receipt and negative control are required",
+    ),
+    "native-v2-summon-age": _entry(
+        id="native-v2-summon-age", summary="Age:-24000 and IsBaby summons sync as babies",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-summon-age",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="water/horse families summoned with Age:-24000 and zombie/piglin/zoglin with IsBaby:1b",
+        proves="every summoned row reports received_baby and the squid's Age reads -24000",
+        limits="seven representative kinds; NoAI fixtures; no persistence claim",
+    ),
+    "native-v2-data-query": _entry(
+        id="native-v2-data-query", summary="data get entity/block paths return live values and absent paths error",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-data-query",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="operator with one stone and a placed chest",
+        proves="Health/Inventory/block id queries return live values and an absent path is a chat error, not empty custody",
+        limits="four query shapes only",
+    ),
+    "native-v2-death-messages": _entry(
+        id="native-v2-death-messages", summary="/kill shows the victim a generic_kill death message despite show_death_messages false",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-death-messages",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="show_death_messages false, then /kill @s",
+        proves="the dying player still receives the generic_kill message and the death screen, then respawns",
+        limits="single client is the victim; team packets excluded (pinned client parses set_player_team with pre-26.3 field order; TEAM-DEATH-VISIBILITY blocked separately)",
+    ),
+    "native-v2-score-food": _entry(
+        id="native-v2-score-food", summary="food criterion is creatable and auto-updates when hunger drains",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-score-food",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="fresh scoreboard, hunger objective",
+        proves="objective creation succeeds, score reads 20, then drops below 20 under the hunger effect without an explicit set",
+        limits="one player, one objective",
+    ),
+    "native-v2-spawner-egg": _entry(
+        id="native-v2-spawner-egg", summary="Cow egg on a spawner configures SpawnData and the spawner spawns the cow on peaceful",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-spawner-egg",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="placed spawner, day, peaceful difficulty",
+        proves="SpawnData.entity.id reads minecraft:cow after egg use, no adjacent mob appears on use, and the spawner later spawns the cow",
+        limits="one spawner, one egg, one spawned cow",
+    ),
+    "native-v2-golem": _entry(
+        id="native-v2-golem", summary="Villager detects a diagonal AABB golem, ingot repairs +25 without overheal, melee damage scales with difficulty",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-golem",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="one villager, two iron golems (NoAI repair target, AI fighter), survival player",
+        proves="golem_detected_recently memory set at diagonal 15/15, golem heals 40->65 exactly, player melee drop strictly increases easy<normal<hard",
+        limits="single golem per check; no persistence claim",
+    ),
+    "native-v2-axolotl-play-dead": _entry(
+        id="native-v2-axolotl-play-dead", summary="Sourced melee on a hurt water axolotl sets play-dead metadata and Regeneration",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-axolotl-play-dead",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="axolotl in a water pool hurt to 6 of 14 health",
+        proves="received metadata index 19 becomes true and active_effects lists minecraft:regeneration",
+        limits="chance-based roll, repeated attacks; one axolotl",
+    ),
+    "native-v2-dolphin-treasure": _entry(
+        id="native-v2-dolphin-treasure", summary="GotFish dolphin swims toward the treasure chest",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-dolphin-treasure",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="dolphin in a 13-long water channel, chest 16 blocks away, fed a real raw cod",
+        proves="after being fed a raw cod the dolphin's distance to the chest shrinks well past the starting distance",
+        limits="server approximates vanilla treasure structures with the nearest container within 48 blocks",
+    ),
+    "native-v2-goat-ram": _entry(
+        id="native-v2-goat-ram", summary="A natural goat rams a nearby stationary armor stand",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-goat-ram",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="AI goat next to a NoAI armor stand, day, creative observer (not a ram target)",
+        proves="the armor stand's received health drops below max (or it is destroyed) while the goat remains",
+        limits="natural ram cadence, single pair; horn loss on block ram is cargo-covered",
+    ),
+    "native-v2-golem-gossip": _entry(
+        id="native-v2-golem-gossip", summary="Five recently-slept villagers gossip-summon an iron golem",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-golem-gossip",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="bell plus five villagers with last_slept/last_gossip brain data merged near the current gametime, frozen day",
+        proves="an iron golem appears within 32 blocks",
+        limits="single summon attempt; brain NBT merged via data merge",
     ),
     "native-v2-cursor-close": _entry(
         id="native-v2-cursor-close", summary="Three-apple cursor closes and reopens inventory and crafting without a phantom",
@@ -886,7 +1005,8 @@ SCENARIOS: dict[str, Scenario] = {
     ),
     "native-v2-p4-damage": _entry(
         id="native-v2-p4-damage", summary="Native zombie hit and retained before/hit/after frames",
-        owner="core:harness", evidence="tcp", profile="entities", scenario_id="native-v2-p4-damage",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-p4-damage",
+        requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_p4.py"),
         fixture="native v2; nighttime zombie beside healthy survival player",
         proves="received health loss and live client/input after the hit",
@@ -909,6 +1029,15 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="held stick with clear-all and speed actions, followed by lethal generic damage",
         proves="survival at one health, one item consumed, authored speed without default totem effects",
         limits="clear/apply actions only; remove, probability, sound and codec variants have separate Cargo regressions",
+    ),
+    "native-v2-team-deaths": _entry(
+        id="native-v2-team-deaths", summary="Two native clients in different teams read each other's death messages",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-team-deaths",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_team_deaths.py"),
+        fixture="victim in team red, second windowed client in team blue; /kill, a zombie kill and each deathMessageVisibility value",
+        proves="each client's rendered chat shows generic_kill and mob death texts, and honours always/never/hideForOtherTeams/hideForOwnTeam",
+        limits="chat text of the received components and the death-screen class; no teammate peer, spectator or dimension-global roster",
     ),
     "native-v2-p4-hopper": _entry(
         id="native-v2-p4-hopper", summary="Native Q drop enters nearby hopper, exact withdrawal and no duplicate",
@@ -1047,10 +1176,8 @@ def repo_revisions() -> dict[str, str]:
     """
     repos = {
         "solaris": REPO_ROOT,
-        "solaris-default-plugins": Path(
-            os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", REPO_ROOT.parent / "solaris-default-plugins")
-        ),
-        "solaris-loader": Path(os.environ.get("SOLARIS_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")),
+        "solaris-default-plugins": sibling_root("plugins"),
+        "solaris-loader": sibling_root("loader"),
     }
     revisions: dict[str, str] = {}
     for name, path in repos.items():

@@ -20,6 +20,18 @@ pub(crate) fn translated(key: impl Into<String>, arguments: Vec<Tag>) -> Tag {
     Tag::Compound(fields)
 }
 
+/// True for a vanilla translation key such as `argument.entity.notfound.entity`; the lowercase dotted
+/// shape never occurs in the English text of an ad-hoc error, which has spaces or capitals.
+pub(crate) fn is_translation_key(message: &str) -> bool {
+    message.contains('.')
+        && message.starts_with(|first: char| first.is_ascii_lowercase())
+        && !message.ends_with('.')
+        && !message.contains("..")
+        && message.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_')
+        })
+}
+
 #[cfg(test)]
 #[path = "command_feedback_tests.rs"]
 mod tests;

@@ -687,6 +687,15 @@ Map-making command surface (full status in [COMPATIBILITY.md](COMPATIBILITY.md))
     `/summon` cannot author, `Pos`, and players are refused with a message and
     nothing changes; a removed field reverts to its default and the entity keeps
     its UUID and place.
+- `/summon` accepts the vanilla string `variant` field for cows, pigs and chickens
+  (`minecraft:temperate`, `minecraft:cold`, `minecraft:warm`) and zombie nautiluses
+  (`minecraft:temperate`, `minecraft:warm`). For example,
+  `/summon cow ~ ~ ~ {variant:"minecraft:cold"}`. The species' registry validates
+  the value before allocation; typed appearance metadata, the tick journal and
+  vanilla checkpoint fields retain it. Painting variants keep their painting
+  registry and holder codec. See the vanilla [cow](https://minecraft.wiki/w/Cow),
+  [pig](https://minecraft.wiki/w/Pig), [chicken](https://minecraft.wiki/w/Chicken)
+  and [zombie nautilus](https://minecraft.wiki/w/Zombie_Nautilus) entity data.
 - `/clone <begin> <end> <dest> [replace|masked|filtered <block|#tag>]
   [normal|force|move]` copies loaded regions within the `max_block_modifications`
   gamerule limit. Block-entity copies use the command-data snapshot; live state

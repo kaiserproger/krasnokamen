@@ -299,6 +299,38 @@ regression = []
                 with self.assertRaises(ValueError):
                     regressions._parse_ref(bad)
 
+    def test_scenario_ref_red_only_on_assertion_failure(self):
+        scene_receipt = {'status': 'failed', 'error': 'scene-shot assertion failed: house-certification_contains_0',
+                         'details': {'named_scenario': {'id': 'native-low-roof-house'}}}
+        self.assertTrue(ledger._scenario_assertion_failed(scene_receipt, 'native-low-roof-house'))
+        loader_receipt = {'status': 'failed',
+                          'error': 'loader-fabric-screen-admission assertion failed: fabric_screen_service_admitted',
+                          'details': {'named_scenario': {'id': 'loader-fabric-screen-admission'},
+                                      'failure': {'phase': 'assertion'}}}
+        self.assertTrue(ledger._scenario_assertion_failed(loader_receipt, 'loader-fabric-screen-admission'))
+        flake = {'status': 'failed', 'error': 'real fabric client did not reach Play',
+                 'details': {'named_scenario': {'id': 'loader-fabric-screen-admission'}}}
+        self.assertFalse(ledger._scenario_assertion_failed(flake, 'loader-fabric-screen-admission'))
+        wrong = {'status': 'failed', 'error': 'scene-shot assertion failed: x', 'details': {'named_scenario': {'id': 'other'}}}
+        self.assertFalse(ledger._scenario_assertion_failed(wrong, 'native-low-roof-house'))
+        # No structured scenario id: free text never decides (no `check in text` fallback).
+        self.assertFalse(ledger._scenario_assertion_failed(
+            {'status': 'failed', 'error': 'native-low-roof-house assertion failed: x', 'details': {}}, 'native-low-roof-house'))
+
+    def test_scenario_ref_connection_assertions_and_argv_text_are_not_red(self):
+        for name in ('in_play', 'restart_client_entered_play', 'reconnect_entered_play', 'client_joined'):
+            receipt = {'status': 'failed', 'error': f'native-v2-craft-drag assertion failed: {name}',
+                       'details': {'named_scenario': {'id': 'native-v2-craft-drag'}}}
+            with self.subTest(name=name):
+                self.assertFalse(ledger._scenario_assertion_failed(receipt, 'native-v2-craft-drag'))
+        joined = {'status': 'failed', 'error': 'native-v2-craft-drag assertion failed: crafted',
+                  'details': {'named_scenario': {'id': 'native-v2-craft-drag'}, 'failure': {'phase': 'join'}}}
+        self.assertFalse(ledger._scenario_assertion_failed(joined, 'native-v2-craft-drag'))
+        # The command line (argv) of a failed child is not receipt evidence.
+        argv_only = {'status': 'failed', 'error': 'child exited 1: python -m tools.harness run scenario native-v2-craft-drag',
+                     'details': {'named_scenario': {'id': 'native-v2-craft-drag'}}}
+        self.assertFalse(ledger._scenario_assertion_failed(argv_only, 'native-v2-craft-drag'))
+
     def test_open_checks_are_run(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -766,6 +798,9 @@ class LedgerToolTests(unittest.TestCase):
                  # not evidence about the check, in a probe or in a promotion control.
                  ({'status': 'failed', 'error': 'native client root is missing'}, ledger.UNRUNNABLE),
                  ({'status': 'failed', 'error': 'village-qa-settlements assertion failed: in_play'}, ledger.UNRUNNABLE),
+                 # The same scenario id disconnecting mid-run is a flake, not a red.
+                 ({'status': 'failed', 'error': 'native-v2-craft-drag assertion failed: in_play',
+                   'details': {'named_scenario': {'id': 'native-v2-craft-drag'}}}, ledger.UNRUNNABLE),
                  ({'status': 'failed', 'error': 'timed out waiting for the client'}, ledger.UNRUNNABLE),
                  ({'status': 'prepared'}, ledger.UNRUNNABLE),
                  ({'status': 'passed', 'details': {}}, ledger.UNRUNNABLE)]

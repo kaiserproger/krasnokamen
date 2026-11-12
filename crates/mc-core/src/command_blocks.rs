@@ -125,6 +125,21 @@ pub(crate) fn changed(state: &mut TickState, pos: BlockPos) {
         schedule(state, pos);
     }
 }
+/// Vanilla `CommandBlockEntity.setAutomatic(true)`, reached from `loadAdditional`: an `auto` block that
+/// is not powered schedules its first tick when its entity is loaded (`/setblock`, `/fill`, `/clone`
+/// with NBT). True when the image about to be installed asks for that.
+pub(crate) fn wakes_on_load(fields: &[(String, Tag)]) -> bool {
+    flag(fields, "auto") && !flag(fields, "powered")
+}
+/// The scheduling half of [`wakes_on_load`], run once the image is installed: the neighbour updates that
+/// `changed` answers come before the install, so without this a placed `auto:1b` block never ran.
+pub(crate) fn loaded(state: &mut TickState, pos: BlockPos) {
+    if state.enable_command_block
+        && kind(state, pos).is_some_and(|kind| kind != "chain_command_block")
+    {
+        schedule(state, pos);
+    }
+}
 fn direction(state: &TickState, pos: BlockPos) -> Option<(i32, i32, i32)> {
     let block = state
         .registry
@@ -263,12 +278,13 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
                             pos.y as f64 + 0.5,
                             pos.z as f64 + 0.5,
                         ]);
-                        let context = crate::command_context::Context::source(
+                        let mut context = crate::command_context::Context::source(
                             state,
                             crate::command_console::CONNECTION,
                             crate::command_console::EXECUTOR,
                             2,
                         );
+                        context.command_block = true;
                         let successes = crate::command_context::run(
                             state,
                             command.trim_start_matches('/'),

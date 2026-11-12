@@ -14,7 +14,7 @@ fn input_dimension(state: &TickState, input: &PlayerInput) -> Dimension {
             return dimension;
         }
     }
-    if let PlayerInput::Join { uuid, .. } = input {
+    if let PlayerInput::Join { uuid, .. } | PlayerInput::ProfileLogin { uuid, .. } = input {
         for world in
             std::iter::once(state).chain(state.other_dimensions.values().map(|world| &**world))
         {

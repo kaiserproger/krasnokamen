@@ -151,6 +151,25 @@ fn teleport_accepts_relative_coordinates_and_entity_targets() {
 }
 
 #[test]
+fn defaultgamemode_takes_exactly_one_mode_and_needs_operator() {
+    assert_eq!(
+        parse("defaultgamemode spectator", true),
+        Ok(Command::DefaultGameMode(GameMode::Spectator))
+    );
+    for text in [
+        "defaultgamemode",
+        "defaultgamemode creative @a",
+        "defaultgamemode flying",
+    ] {
+        assert!(
+            matches!(parse(text, true), Err(CommandError::Usage(_))),
+            "{text}"
+        );
+    }
+    assert!(parse("defaultgamemode creative", false).is_err());
+}
+
+#[test]
 fn gamemode_give_time_and_xp_parse_vanilla_forms() {
     assert_eq!(
         parse("gamemode creative @a", true),

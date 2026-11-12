@@ -12,6 +12,11 @@ from .backends import village_autonomy_qa as qa
 from .backends import probe_steps
 
 
+def setUpModule() -> None:
+    # .analysis/ is gitignored, so a fresh checkout or worktree lacks it.
+    (qa.runtime.REPO_ROOT / ".analysis").mkdir(exist_ok=True)
+
+
 class VillageAutonomyQaTests(unittest.TestCase):
     def test_walk_uses_path_planner_for_the_final_loaded_leg(self) -> None:
         probe = Mock()

@@ -9,6 +9,96 @@ pub(crate) fn velocity_from_vanilla_motion(motion: [f64; 3]) -> [f64; 3] {
     motion.map(|component| component * 20.0)
 }
 
+/// Why a native checkpoint entity's `variant` field is not a usable value.
+pub(crate) enum VariantError {
+    /// Not a string, or not a syntactically valid identifier: corrupt data.
+    Malformed(String),
+    /// A well-formed identifier naming no entry of the species' registry (a
+    /// datapack variant this build does not know): vanilla keeps the default.
+    Unknown(String),
+}
+
+/// Decode the climate/nautilus `variant` field of a native checkpoint entity.
+/// An absent field is the vanilla default.
+pub(crate) fn variant_from_vanilla_entity(
+    record: &mc_data::entity_nbt::VanillaEntity,
+) -> Result<Option<(u8, crate::boundary::EntityDataValue)>, VariantError> {
+    let Some(registry) = crate::blueprint::variant_registry(&record.id) else {
+        return Ok(None);
+    };
+    let Some((_, tag)) = record.extra_fields.iter().find(|(key, _)| key == "variant") else {
+        return Ok(None);
+    };
+    let mc_nbt::Tag::String(name) = tag else {
+        return Err(VariantError::Malformed("variant: expected string".into()));
+    };
+    let id = mc_data::Identifier::parse(name.as_str())
+        .map_err(|_| VariantError::Malformed(format!("variant: invalid identifier {name}")))?;
+    let value = mc_data::required_registry_entry_id(registry, &id)
+        .ok_or_else(|| VariantError::Unknown(name.to_string()))?;
+    Ok(crate::blueprint::variant_data(&record.id, value))
+}
+
+/// Add the checkpoint entity's variant to its restored appearance. A corrupt
+/// field (not a string, or not an identifier) is an error: the checkpoint
+/// fails closed. An unknown entry is dropped with a warning and the species
+/// default is kept, as vanilla does; records imported before the importer
+/// dropped such values still hold them.
+pub(crate) fn native_variant(
+    record: &mc_data::entity_nbt::VanillaEntity,
+    image: &mut crate::journal::EntityAppearanceImage,
+) -> Result<(), String> {
+    match variant_from_vanilla_entity(record) {
+        Ok(Some((index, value))) => image.extra.push((index, (&value).into())),
+        Ok(None) => {}
+        Err(VariantError::Unknown(variant)) => tracing::warn!(
+            entity = %record.uuid,
+            species = %record.id,
+            %variant,
+            "unknown variant ignored; the species default is kept"
+        ),
+        Err(VariantError::Malformed(error)) => return Err(error),
+    }
+    Ok(())
+}
+
+/// Reject a journal/checkpoint appearance whose variant value does not belong
+/// to its species: another species' value kind, the wrong metadata index, a
+/// registry id out of range, or a variant value on a species without one.
+pub(crate) fn validate_variant_images(
+    name: &str,
+    extra: &[(u8, crate::journal::EntityDataValueImage)],
+) -> Result<(), String> {
+    use crate::boundary::EntityDataValue as V;
+    let species_index = crate::blueprint::variant_data(name, 0).map(|(index, _)| index);
+    for (index, image) in extra {
+        let value = restore_data_value(image);
+        let (V::ChickenVariant(id)
+        | V::CowVariant(id)
+        | V::PigVariant(id)
+        | V::ZombieNautilusVariant(id)) = value
+        else {
+            if species_index == Some(*index) {
+                return Err(format!("variant data index {index}: not a variant value"));
+            }
+            continue;
+        };
+        let belongs = crate::blueprint::variant_data(name, id) == Some((*index, value));
+        let registry = crate::blueprint::variant_registry(name).filter(|_| belongs);
+        let Some(registry) = registry else {
+            return Err(format!(
+                "variant data index {index}: value does not belong to {name}"
+            ));
+        };
+        if mc_data::required_registry_entry(registry, id).is_none() {
+            return Err(format!(
+                "variant data index {index}: unknown {registry} id {id}"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Restore sheep's canonical vanilla fields into its synchronized wool byte.
 pub(crate) fn appearance_from_vanilla_entity(
     record: &mc_data::entity_nbt::VanillaEntity,
@@ -29,17 +119,6 @@ pub(crate) fn appearance_from_vanilla_entity(
             ("CustomName", mc_nbt::Tag::String(name)) => image.custom_name = Some(name.clone()),
             ("CustomNameVisible", mc_nbt::Tag::Byte(value)) => {
                 image.custom_name_visible = *value != 0;
-            }
-            ("variant", mc_nbt::Tag::String(name)) if record.id == "minecraft:chicken" => {
-                if let Ok(id) = mc_data::Identifier::parse(name.as_str())
-                    && let Some(variant) =
-                        mc_data::required_registry_entry_id("chicken_variant", &id)
-                {
-                    image.extra.push((
-                        crate::blueprint::CHICKEN_VARIANT_DATA_INDEX,
-                        crate::journal::EntityDataValueImage::ChickenVariant(variant),
-                    ));
-                }
             }
             ("Pumpkin", mc_nbt::Tag::Byte(value)) if record.id == "minecraft:snow_golem" => {
                 image.extra.push((
@@ -388,18 +467,33 @@ pub(super) fn entity_capture_record(
             mc_nbt::Tag::Byte(i8::from(row.appearance.baby)),
         ));
     }
-    if name == "minecraft:chicken"
-        && let Some(variant) =
-            row.appearance
-                .extra
-                .iter()
-                .find_map(|(index, value)| match (index, value) {
-                    (
-                        &crate::blueprint::CHICKEN_VARIANT_DATA_INDEX,
-                        crate::boundary::EntityDataValue::ChickenVariant(id),
-                    ) => mc_data::required_registry_entry("chicken_variant", *id),
-                    _ => None,
-                })
+    if let Some(registry) = crate::blueprint::variant_registry(&name)
+        && let Some(variant) = row.appearance.extra.iter().find_map(|(index, value)| {
+            let id = match (name.as_str(), *index, value) {
+                (
+                    crate::blueprint::VARIANT_CHICKEN,
+                    crate::blueprint::CHICKEN_VARIANT_DATA_INDEX,
+                    crate::boundary::EntityDataValue::ChickenVariant(id),
+                )
+                | (
+                    crate::blueprint::VARIANT_COW,
+                    crate::blueprint::COW_VARIANT_DATA_INDEX,
+                    crate::boundary::EntityDataValue::CowVariant(id),
+                )
+                | (
+                    crate::blueprint::VARIANT_PIG,
+                    crate::blueprint::PIG_VARIANT_DATA_INDEX,
+                    crate::boundary::EntityDataValue::PigVariant(id),
+                )
+                | (
+                    crate::blueprint::VARIANT_ZOMBIE_NAUTILUS,
+                    crate::blueprint::ZOMBIE_NAUTILUS_VARIANT_DATA_INDEX,
+                    crate::boundary::EntityDataValue::ZombieNautilusVariant(id),
+                ) => *id,
+                _ => return None,
+            };
+            mc_data::required_registry_entry(registry, id)
+        })
     {
         extra_fields.push((
             "variant".into(),

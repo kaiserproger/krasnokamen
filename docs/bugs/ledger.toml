@@ -818,9 +818,11 @@ title = "Combined server-fixes runtime4bcd34fc started screen service only for n
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SERVER-FABRIC-SCREEN-ADMISSION"
 regression = ["harness:loader-live:loader-fabric-screen-admission"]
+fix_commit = "patch:2648c6c627acfa146ef27b63ba53e169f37ed63addc88a84ee84609b6048471a"
+promotion = "docs/bugs/promotions/SERVER-FABRIC-SCREEN-ADMISSION.json"
 
 [[bug]]
 id = "NATIVE-SCREEN-AUDIO-CONSENT"
@@ -915,7 +917,7 @@ regression = ["cargo:mc-core:falling::tests::restored_due_gravity_tick_starts_th
 
 [[bug]]
 id = "GOLEM-GOSSIP"
-title = "Five eligible recently slept gossiping villagers cannot summon; owner only admits Panic route."
+title = "Five eligible recently slept gossiping villagers cannot summon; owner only admits Panic route. Graphical gate native-v2-golem-gossip is blocked until branch wt/LedgerCommandsB10 (row DATA-MUTATION-STORAGE, commits 32069cbb and 0900f85f) lands `/data merge entity` in main; the gate seeds villager state with it."
 area = "gameplay"
 repro = "manual"
 severity = "major"
@@ -929,9 +931,11 @@ title = "Live golem at diagonal15.5/15.5 is rejected by spherical detection desp
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-AABB"
-regression = ["cargo:mc-core:villager::brain::tests::golem_detection_uses_axis_aligned_range_and_ignores_dead_golems"]
+regression = ["cargo:mc-core:villager::brain::tests::golem_detection_uses_axis_aligned_range_and_ignores_dead_golems", "harness:entities:native-v2-golem"]
+fix_commit = "patch:0f67aabd72fd491262c0b0cbf7ba28255212b736f52f8c09767e6d7028e65640"
+promotion = "docs/bugs/promotions/GOLEM-AABB.json"
 
 [[bug]]
 id = "GOLEM-REPAIR"
@@ -939,9 +943,11 @@ title = "Original interaction with a60-health iron golem using an iron ingot lef
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-REPAIR"
-regression = ["cargo:mc-core:golems::tests::iron_ingot_repairs_golem_from_either_hand_without_overhealing"]
+regression = ["cargo:mc-core:golems::tests::iron_ingot_repairs_golem_from_either_hand_without_overhealing", "harness:entities:native-v2-golem"]
+fix_commit = "patch:451207291bdb4b360460fba745bb0e51bf416587a08df4355c939bbf3fff4efe"
+promotion = "docs/bugs/promotions/GOLEM-REPAIR.json"
 
 [[bug]]
 id = "GOLEM-DIFFICULTY"
@@ -949,9 +955,11 @@ title = "Original natural iron golem player hit remained15 on Easy/Normal/Hard a
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-DIFFICULTY"
-regression = ["cargo:mc-core:golems::tests::natural_golem_player_damage_scales_with_difficulty"]
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-DIFFICULTY (promotion control: docs/bugs/fix-patches/GOLEM-DIFFICULTY.patch removes Difficulty::scale_mob_damage for every mob, reproducing the original symptom that golem hits were not scaled by difficulty)"
+regression = ["cargo:mc-core:golems::tests::natural_golem_player_damage_scales_with_difficulty", "harness:entities:native-v2-golem"]
+fix_commit = "patch:e9af51b7d2043033adccaf5836671ef6457321e693510a5f2788fef1673a29e9"
+promotion = "docs/bugs/promotions/GOLEM-DIFFICULTY.json"
 
 [[bug]]
 id = "P4"
@@ -1055,7 +1063,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-PEACEFUL-REMOVAL"
-regression = ["cargo:mc-core:natural_spawn_tests::fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled"]
+regression = ["cargo:mc-core:natural_spawn_tests::fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled", "harness:entities:native-v2-peaceful-removal"]
 
 [[bug]]
 id = "SPAWN-SPAWNER-EGG"
@@ -1063,9 +1071,11 @@ title = "Using spawn egg on spawner spawns adjacent mob rather than configuring 
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-SPAWNER-EGG"
-regression = ["cargo:mc-core:spawn_egg::tests::fix_mobs_spawn_egg_configures_spawner_without_spawning_adjacent_mob"]
+regression = ["cargo:mc-core:spawn_egg::tests::fix_mobs_spawn_egg_configures_spawner_without_spawning_adjacent_mob", "cargo:mc-core:monster_spawner::tests::fix_mobs_placed_spawner_default_record_does_not_poison_chunk_hydration", "harness:entities:native-v2-spawner-egg"]
+fix_commit = "patch:3b38fe9cf26516c2f1639bd071dd6b861c688d84c797dffe598be04ffd251125"
+promotion = "docs/bugs/promotions/SPAWN-SPAWNER-EGG.json"
 
 [[bug]]
 id = "SPAWN-SPAWNER-CATEGORIES"
@@ -1073,9 +1083,11 @@ title = "Cow/passive spawner rejected by Monster-only category admission. Custom
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-SPAWNER-CATEGORIES"
-regression = ["cargo:mc-core:monster_spawner::tests::fix_mobs_passive_spawner_hydrates_and_spawns_in_peaceful", "cargo:mc-core:monster_spawner::tests::fix_mobs_spawner_accepts_custom_light_rules", "cargo:mc-core:monster_spawner::tests::fix_mobs_weighted_spawn_potential_replaces_current_data_on_reset"]
+regression = ["cargo:mc-core:monster_spawner::tests::fix_mobs_passive_spawner_hydrates_and_spawns_in_peaceful", "cargo:mc-core:monster_spawner::tests::fix_mobs_spawner_accepts_custom_light_rules", "cargo:mc-core:monster_spawner::tests::fix_mobs_weighted_spawn_potential_replaces_current_data_on_reset", "cargo:mc-core:monster_spawner::tests::fix_mobs_placed_spawner_default_record_does_not_poison_chunk_hydration", "harness:entities:native-v2-spawner-egg"]
+fix_commit = "patch:438f217eadec02dc71b53c1e41d2bd96a2f3049d3d1862528ec743603195f044"
+promotion = "docs/bugs/promotions/SPAWN-SPAWNER-CATEGORIES.json"
 
 [[bug]]
 id = "TOTEM"
@@ -1085,7 +1097,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TOTEM"
-regression = ["cargo:mc-core:tick_tests::combat_parity_tests::fix_mobs_totem_intercepts_lethal_damage_in_either_hand_but_not_void"]
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::fix_mobs_totem_intercepts_lethal_damage_in_either_hand_but_not_void", "harness:entities:native-v2-command-score-store"]
 
 [[bug]]
 id = "KILL-TYPE"
@@ -1093,9 +1105,12 @@ title = "Player /kill used out_of_world instead of generic_kill."
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#KILL-TYPE"
-regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes"]
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes", "harness:entities:native-v2-team-deaths"]
+# Fix commit lost. Patch docs/bugs/fix-patches/KILL-TYPE.patch: the control turns player /kill back into out_of_world (command_execution.rs).
+fix_commit = "patch:5af10f8099365eb55d433f08b226c1222d4e9391b1f84b116fe7bc57a2e25f15"
+promotion = "docs/bugs/promotions/KILL-TYPE.json"
 
 [[bug]]
 id = "DAMAGE-IDENTITIES"
@@ -1116,9 +1131,12 @@ title = "Death event contained English text rather than vanilla death translatio
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-COMPONENT"
-regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes"]
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes", "harness:entities:native-v2-team-deaths"]
+# Fix commit lost. Patch docs/bugs/fix-patches/DEATH-COMPONENT.patch: the control returns the pre-fix English death text instead of the translation component (death_message.rs component()).
+fix_commit = "patch:3a1a6a0e69602a5bc4c02fab1b404e437842661605fb9914840ab96bbdda9dbc"
+promotion = "docs/bugs/promotions/DEATH-COMPONENT.json"
 
 [[bug]]
 id = "DEATH-NOTIFY"
@@ -1148,7 +1166,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-CRITERIA-WRITABLE"
-regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_counter_criteria_allow_writes_and_swap_sources"]
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_counter_criteria_allow_writes_and_swap_sources", "harness:entities:native-v2-command-score-store"]
 
 [[bug]]
 id = "SCORE-TOTAL-KILLS"
@@ -1158,7 +1176,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-TOTAL-KILLS"
-regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_actual_mob_and_player_deaths_credit_distinct_kill_counters_once"]
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_actual_mob_and_player_deaths_credit_distinct_kill_counters_once", "harness:entities:native-v2-command-score-store"]
 
 [[bug]]
 id = "TEAM-DEATH-VISIBILITY"
@@ -1166,9 +1184,12 @@ title = "team modify deathMessageVisibility never was rejected before broadcast 
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEAM-DEATH-VISIBILITY"
-regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes"]
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes", "harness:entities:native-v2-team-deaths"]
+# Fix commit lost. Patch docs/bugs/fix-patches/TEAM-DEATH-VISIBILITY.patch: the control broadcasts to every player and ignores deathMessageVisibility (death_message.rs broadcast()).
+fix_commit = "patch:f3a8e761197ba9a882087db607349dd1bbe2fccee887093deb49dc9338ab0ae2"
+promotion = "docs/bugs/promotions/TEAM-DEATH-VISIBILITY.json"
 
 [[bug]]
 id = "CONTAINERS-001"
@@ -1263,7 +1284,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#EXECUTE-STORE"
-regression = ["cargo:mc-core:command_data::tests::execute_store_give_and_clear_execute_once_and_return_real_counts"]
+regression = ["cargo:mc-core:command_data::tests::execute_store_give_and_clear_execute_once_and_return_real_counts", "harness:entities:native-v2-command-score-store"]
 
 [[bug]]
 id = "P1"
@@ -1629,7 +1650,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DAMAGE-COMMAND"
-regression = ["cargo:mc-core:command_damage::tests::damage_command_commits_default_damage_and_reports_actual_rejection"]
+regression = ["cargo:mc-core:command_damage::tests::damage_command_commits_default_damage_and_reports_actual_rejection", "harness:entities:native-v2-command-score-store"]
 
 [[bug]]
 id = "HC-4"
@@ -1699,7 +1720,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-PROTECTION-COMPONENT"
-regression = ["cargo:mc-core:tick_tests::combat_parity_tests::death_protection_component_rescues_any_held_item_without_default_totem_effects"]
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::death_protection_component_rescues_any_held_item_without_default_totem_effects", "harness:entities:native-v2-command-score-store"]
 
 [[bug]]
 id = "SHUTDOWN-ERROR-LOG"
@@ -1870,9 +1891,11 @@ title = "GotFish never triggered search."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DOLPHIN-TREASURE"
-regression = ["cargo:mc-core:dolphin::tests::fed_dolphin_swims_toward_treasure_chest"]
+regression = ["cargo:mc-core:dolphin::tests::fed_dolphin_swims_toward_treasure_chest", "harness:entities:native-v2-dolphin-treasure", "cargo:mc-core:dolphin::tests::dolphin_feed_debit_reaches_the_client_inventory"]
+fix_commit = "patch:76fc3e613bf04ef8a38ff14927da187fdb3ed49fd009cd84cfcba98a21511a00"
+promotion = "docs/bugs/promotions/DOLPHIN-TREASURE.json"
 
 [[bug]]
 id = "TARGET-PROJECTILE-POWER"
@@ -2032,10 +2055,12 @@ title = "Hurt axolotls never play dead: vanilla grants a chance to drop and take
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AXOLOTL-PLAY-DEAD"
-regression = ["cargo:mc-core:mob_lanes::tests::hurt_axolotl_in_water_plays_dead_and_regenerates", "cargo:mc-core:mob_lanes::tests::playing_dead_axolotl_releases_attackers_and_wakes_after_200_active_ticks"]
+regression = ["cargo:mc-core:mob_lanes::tests::hurt_axolotl_in_water_plays_dead_and_regenerates", "cargo:mc-core:mob_lanes::tests::playing_dead_axolotl_releases_attackers_and_wakes_after_200_active_ticks", "harness:entities:native-v2-axolotl-play-dead"]
+fix_commit = "patch:5619e71a98ca75c4e0f8287a79cd9cedc7827c9a3668f0e5eb6cba233159b155"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/AXOLOTL-PLAY-DEAD.json"
 
 [[bug]]
 id = "PATROL-SPAWN-ABSENT"
@@ -2126,9 +2151,11 @@ title = "Goats never ram: no `Ram` goal kind exists in `blueprint.rs` GoalKind, 
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOAT-RAM-ABSENT"
-regression = ["cargo:mc-core:mob_lanes::tests::goat_rams_a_nearby_living_target", "cargo:mc-core:mob_lanes::tests::goat_ram_into_stone_drops_one_horn_with_instrument_and_updates_metadata"]
+regression = ["cargo:mc-core:mob_lanes::tests::goat_rams_a_nearby_living_target", "cargo:mc-core:mob_lanes::tests::goat_ram_into_stone_drops_one_horn_with_instrument_and_updates_metadata", "harness:entities:native-v2-goat-ram"]
+fix_commit = "patch:26f4b8aa95c2742a1ee15df7e88bef9c3d1cd6284af8074bad7950bfb0b9fffb"
+promotion = "docs/bugs/promotions/GOAT-RAM-ABSENT.json"
 
 [[bug]]
 id = "TURTLE-LAY-EGG-ABSENT"
@@ -2313,8 +2340,10 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+source = "https://github.com/kaiserproger/solaris/issues/1 (villagers stop short of their target and drop the route early); fixed by 8a1c5453 (2026-10-19: progressing routes are no longer replaced on the 40-tick retry; stuck or pushed villagers replan). Fix patch docs/bugs/fix-patches/ISSUE-1-05.patch is that code at the candidate (villager/brain/motion.rs: progress tracking at due checks and the replan condition); reversing it brings back a new route search at every due check, so a route the villager is still walking is searched and replaced every 40 ticks. progressing_route_is_kept_at_due_check_without_a_new_search observes that search; the older route tests guard the stalled/pushed half and stay green with the patch reversed"
+regression = ["cargo:mc-core:villager::brain::tests::route_continuation_tests::progressing_route_is_kept_at_due_check_without_a_new_search", "cargo:mc-core:villager::brain::tests::route_continuation_tests::due_replan_search_failure_keeps_valid_progress_route", "cargo:mc-core:villager::brain::tests::route_continuation_tests::pushed_off_route_replans_from_pushed_position_at_due_check", "cargo:mc-core:villager::brain::tests::route_continuation_tests::unchanged_waypoint_distance_is_stalled_not_progress", "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_claim_keeps_walking_without_forty_tick_abandon"]
+failing_first = "reported"
+fix_commit = "patch:012a79cda0c63a0980159b11373de82cf67b3469bf5405692dd190f54b233d10"
 
 [[bug]]
 id = "ISSUE-1-06"
@@ -2343,8 +2372,10 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+source = "https://github.com/kaiserproger/solaris/issues/1 (some villagers leave house doors open at night); fixed by 8a1c5453 (2026-10-19: villagers open/close wooden doors on their route and close only doors they opened, never on another villager in the doorway). Vanilla 26.3 SleepInBed.start and InteractWithDoor close the doors a villager opened or passed through (javap of the local server jar). Fix patch docs/bugs/fix-patches/ISSUE-1-08.patch is the closing call at the candidate (villager/doors.rs interact); reversing it leaves every door a villager opened open"
+regression = ["cargo:mc-core:villager::brain::tests::door_tests::resident_opens_both_door_halves_and_closes_after_entering_bed_at_night", "cargo:mc-core:villager::brain::tests::door_tests::bound_bedless_nitwit_enters_occupied_house_at_night", "cargo:mc-core:villager::brain::tests::door_tests::interrupted_route_closes_only_the_door_the_resident_opened", "harness:village-qa:night_door"]
+failing_first = "reported"
+fix_commit = "patch:ecb5306d97a64d29220b6bd0c1897411943ed19cb08bc6505f222dc882ae6083"
 
 [[bug]]
 id = "ISSUE-1-09"
@@ -2363,8 +2394,10 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+source = "https://github.com/kaiserproger/solaris/issues/1 (settlement villagers should take free jobs automatically and walk there without dropping the route); fixed by 8a1c5453 (2026-10-19: bound settlements discover free job sites across their whole radius). Fix patch docs/bugs/fix-patches/ISSUE-1-10.patch is the claim route window at the candidate (settlements/allocator.rs acquire: the search window follows the settlement claim); reversing it brings back the flat 48x16 stroll window, so a free settlement job farther away is never claimed. The distant-claim fixture puts the job's nearest standing cell 52 blocks from the villager (it was 48, still inside the flat window)"
+regression = ["cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_settlement_job_is_claimed_beyond_vanilla_reach", "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_claim_keeps_walking_without_forty_tick_abandon"]
+failing_first = "reported"
+fix_commit = "patch:fe58612e34bab7e5ae287f4c9d0dd604420d495b59408b7e31133a7f587aa9ee"
 
 [[bug]]
 id = "ISSUE-1-11"
@@ -2372,9 +2405,12 @@ title = "Villagers lose job after sleeping"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1; fixed by fa74bb6f+1f613f1d+00be6311 (merge c7eedcfb) and 5316786b+e369141d (merge ba4edd64); fix patch docs/bugs/fix-patches/ISSUE-1-11.patch is their net pre-fix-to-fix diff of the three product files, and reversing it removes exactly that code: brain.rs's stand-up search one block below the rounded sleeping cell (a woken resident stays at its bed) and the Work-period walk to the job site for a worker with no work target (a woken worker stands where it woke); allocator.rs's VillagerData sync when the allocator changes a profession (the client keeps the old job until the next sleep pose); mining.rs's surface_origin scan top back to bounds.max-1 and hostile_near back to counting any hostile in sensor range, seen or not (the woken miner parks outside its mine all day)"
 regression = ["harness:village-qa:sleep_return", "cargo:mc-core:villager::sleep_return_tests::woken_bound_resident_stands_up_and_returns_to_its_job_site", "cargo:mc-core:villager::sleep_return_tests::allocator_job_loss_reaches_the_client_villager_data_at_once", "cargo:mc-core:villager::sleep_return_tests::idle_lumberjack_walks_back_to_its_job_site_at_work_time", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_rock_outside_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_a_cave_under_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::alternate_lane_starts_on_a_floor_at_the_top_of_the_bounds"]
+failing_first = "reported"
+fix_commit = "patch:507ed17d6f5bb12a60a201b1fe8160c4c2d9bec8b4a3941aba16f7905ba8a1ba"
+promotion = "docs/bugs/promotions/ISSUE-1-11.json"
 
 [[bug]]
 id = "ISSUE-1-12"
@@ -2406,6 +2442,10 @@ status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = ["harness:entities:native-v2-craft-drag", "harness:entities:native-v2-craft-drag-paced", "harness:entities:native-v2-chest-drag-disconnect"]
 failing_first = "reported"
+# Fixed in solaris-client b7c48e1c7de46c34bc6611d438edfec3f37039c5 ("fix(client): keep the cursor
+# across menu drags"); server quick-craft code is unchanged since 1ada2ceb and kept custody with the
+# pre-fix client (receipts/CraftDrag/REPORT.md). fix_commit stays empty until the owner decides how
+# client-repo fixes are promoted (ledger promote resolves fix_commit in this repository only).
 
 [[bug]]
 id = "ISSUE-1-15"
@@ -2535,9 +2575,12 @@ title = "Surface mine does not start digging"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1; fixed by 5316786b+e369141d (merge ba4edd64); fix patch docs/bugs/fix-patches/ISSUE-1-27.patch is their net pre-fix-to-fix diff of crates/mc-core/src/villager/mining.rs, and reversing it removes exactly that code: surface_origin's scan top goes back to bounds.max-1 (alternate lanes skip a built mine's floor at the top of its bounds and start in a sealed cave below it) and hostile_near goes back to counting any hostile in sensor range, seen or not (a cave mob under the mine parks the miner 2400 ticks per lane), so the miner never starts digging"
 regression = ["harness:village-qa:miner_deposit", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_rock_outside_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_a_cave_under_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::alternate_lane_starts_on_a_floor_at_the_top_of_the_bounds"]
+failing_first = "reported"
+fix_commit = "patch:3a739f505d159bf90b041ce4c066d7517e192000fb1b3b73f3858260aaf4e7e8"
+promotion = "docs/bugs/promotions/ISSUE-1-27.json"
 
 [[bug]]
 id = "ISSUE-1-28"
@@ -2546,8 +2589,10 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
+source = "https://github.com/kaiserproger/solaris/issues/1 (comment 2026-10-19 15:55: blocks villagers changed did not reach the client); fixed by a6979209 (2026-10-19: villager commit-tail block edits are folded before the chunk snapshot is published). Fix patch docs/bugs/fix-patches/ISSUE-1-28.patch is that fold at the candidate (tick.rs publish); reversing it publishes the chunk without the villagers' commit-tail edits"
 regression = ["harness:village-qa:door_walk", "harness:village-qa:farmer_harvest", "harness:village-qa:miner_deposit", "harness:village-qa:lumberjack"]
+failing_first = "reported"
+fix_commit = "patch:b6347ae3aad17693f228d31153fe846cd59121bf85b57021678beaf241031cd7"
 
 [[bug]]
 id = "HUNT-REJOIN-LOCALE"
@@ -4249,6 +4294,17 @@ regression = []
 failing_first = "reported"
 
 [[bug]]
+id = "CLIENT-ZOMBIE-BABY-HELMET-HEIGHT"
+title = "Native baby zombie proportions and armor regions differ from the Java control"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 matched 26.3 controls on 2026-11-11: the original burning baby frame confounded the first helmet estimate. Clean fire-free native pin 90c4850a282a-844cc39b and canonical Java frames retain the same camera and subject UUID ending 0fa400000003. They confirm an elevated helmet, oversized torso/limbs and opaque native forearm armor where Java shows green forearms. The supplied child armor atlas and clean paired frames are retained under ClientQ04Variants/final-native-r1-clean and final-java-r1. Client tests: entities::solaris_models::tests::baby_zombie_head_and_helmet_follow_the_matched_control_height, entities::solaris_models::tests::baby_zombie_and_shared_husk_armor_keep_child_body_proportions, entities::solaris_models::baby_armor_alignment_tests::baby_armor_encloses_animated_body_parts."
+repro = "client"
+regression = []
+failing_first = "reported"
+
+[[bug]]
 id = "NATIVE-TOASTS-MISSING"
 title = "Native client renders no toasts: advancement-made, recipe-unlocked and other toasts that the vanilla Java client shows in the top-right corner never appear"
 area = "client"
@@ -4256,6 +4312,94 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "solaris-client 2edbb590 src/ui/packets.rs read_advancements reads the show-toast flag as `let _show` and discards it; no toast renderer exists anywhere in solaris-client/src. Paired frames: Java receipts/VisualItemsClient/20261111T140325-scene-shot-znvexbrh statue-sitting.png and framed-map.png show 'New Recipe(s) Unlocked!'; the native frames of the same scene (20261111T135619-scene-shot-gmao8eqn) show none (Main, 2026-11-11)."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-HELD-TRIDENT-ORIENTATION"
+title = "Shared trident geometry uses the wrong shaft and held-grip frame"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 paired actual-window 26.3 third-person frames, native pin 90c4850a282a-db192b2f versus Java, retain UUID ending 0fa400000004 and show the held trident displaced above its Java placement even after the candidate-only extra half-turn was removed. Main explicitly required local TridentModel.createLayer data, retained as ClientQ04Variants/javap-trident-model-create-layer-26.3.txt: neutral pivots, one 1x25x1 shaft at Y=2..27 and four base/spike boxes replace the baseline negative-Y planar approximation. In-hand placement remains owned by the supplied item graph and display transforms, not an eye-fitted offset. Actual baseline-asset reversion fails geometry, held-grip and thrown-axis regressions (2 passed, 3 failed): ClientQ04Variants/trident-layer-baseline-negative.json. The earlier baseline-angle guess stays withdrawn. Client tests: entities::presentation::tests::authored_trident_prongs_join_crossbar_at_shaft_tip, entities::presentation::tests::held_trident_preserves_coordinates_for_the_resource_item_graph, entities::presentation::tests::trident_and_arrow_authored_axes_follow_same_projectile_orientation."
+repro = "client"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-DECORATED-POT-NECK"
+title = "Native decorated pot body and neck proportions differ from the Java control"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 matched 26.3 block-special controls on 2026-11-11 first showed the native lip below Java. A raised v1 lip aligns, but clean HUD-free pairs still expose an oversized shoulder, protruding bottom stripe and narrow stepped neck against Java's broad neck. The retained supplied PNG and paired frames under ClientQ04Variants/final-native-r1-clean and final-java-r1 support an independent connected body/cap/neck fit, not copied Java model geometry. Client tests: entities::solaris_models::tests::decorated_pot_body_supports_its_neck_at_the_matched_control_height."
+repro = "client"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-BELL-AUTHORED-SILHOUETTE"
+title = "Native bell body and rim side textures are vertically inverted"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 clean HUD-free 26.3 block-special controls on 2026-11-11, native pin 90c4850a282a-844cc39b versus canonical Java: body/rim outlines agree, so the initial silhouette interpretation is withdrawn. The native body dark edge and rim stripe are vertically reversed against Java on the same block/camera. Supplied PNG inspection and emitted wall-UV regression isolate inverted side-net V, not geometry or chat brightness. Raw pairs remain in ClientQ04Variants/final-native-r1-clean and final-java-r1. Client tests: entities::solaris_models::tests::bell_wall_texels_follow_the_clean_control_orientation."
+repro = "client"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-BED-DEFAULT-TEXTURE-PATH"
+title = "The shipped bed model default texture is absent from the 26.3 resource layout"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 catalog suite observed every_shipped_model_is_well_formed fail because bed_foot.json declares entity/bed/red.png, absent from the supplied 26.3 resources. The broader suite result was 22 passed and 1 failed; focused coverage passes did not replace it. Client tests: entities::solaris_models::tests::every_shipped_model_is_well_formed, entities::solaris_models::tests::obsolete_bed_entity_texture_rigs_are_not_shipped_in_26_3, entities::asset_model_regression_tests::bed_item_uses_resource_model_halves_without_a_legacy_entity_texture."
+repro = "cargo"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-WITHER-SKULL-MATERIAL-SELECTION"
+title = "The native wither skull default material selection remains unresolved"
+area = "client"
+severity = "major"
+status = "open"
+source = "ClientQ04 production material-selection coverage observed selection/minecraft:wither_skull/adult/default return variant material not yet received/resolved despite an authored wither_skull rig. The actual production selector takes the empty family default texture and has no wither-skull material branch. This is source-fixture evidence, not a claimed runtime crash. Client tests: entities::solaris_models::tests::entity_selection_coverage_wither_skull_material_tracks_received_dangerous_flag."
+repro = "source"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-BABY-CHICKEN-LAYOUT"
+title = "Baby chickens use an inflated adult-style stack and lose their proper feet"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 clean 26.3 native/Java cold-baby pair on 2026-11-11, UUID ending 0fa400000011: the native chick is an oversized floating gray stack with no proper visible toes. The shared chicken_baby layout also serves temperate/warm babies. Main explicitly assigned that shared caller; local BabyChickenModel anatomy and the three supplied 16-pixel skin nets ground a body/beak assembly with planar shanks, toes and wings. Raw original pairs remain under ClientQ04Variants/final-native-r1-clean and final-java-r1. Client tests: entities::solaris_models::tests::baby_chicken_body_and_planar_feet_follow_the_26_3_texture_net."
+repro = "client"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-CLIMATE-COW-HORNS"
+title = "Native climate cow horns and the cold adult muzzle use the wrong shapes or net"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 clean same-camera 26.3 climate pairs on 2026-11-11 show long curved cold horns against Java short stubs, thin diagonal warm horns against squared bends, absent native calf stubs and a gray cold muzzle against Java pink nostrils. Exact four UUIDs and front/side frames are retained in expected-subjects.json, native-r1-variant-proof.json and the clean native/Java artifact roots. Supplied cow skin nets independently locate the gray horn, child stub and pink muzzle islands. Client tests: entities::solaris_models::tests::climate_cow_horns_and_cold_muzzle_follow_the_clean_controls."
+repro = "client"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-WARM-NAUTILUS-ROOT"
+title = "The authored warm zombie nautilus faces backward and its shell floats above its feet"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 clean 26.3 warm zombie nautilus pair on 2026-11-11, UUID ending 0fa400000014, has actual native received warm selection. Native front shows the green head where Java shows the shell; native side places the head on the opposite end. The short floating shell, roof-only fans and short tentacles also disagree with the paired side outline. Source-facing root, connected ground-reaching shell and fan/tentacle fits are independently authored from both retained views and the supplied PNG, not copied Java model arrays. Client tests: entities::solaris_models::tests::warm_nautilus_shell_and_face_follow_both_matched_views."
+repro = "client"
 regression = []
 failing_first = "reported"
 
@@ -4311,11 +4455,12 @@ title = "A player killed by a special mob (warden-style attack submitted as a se
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "native-v2-p4-damage rerun 20261111T131605-native-v2-p4-damage-9ys_sijn: `session failed: Play packet 0x7c sequence 14847: missing translation argument`; the same scenario with `gamerule show_death_messages false` (20261111T132303-native-v2-p4-damage-wdwexu3s) passes that point. Cause: statistics::attacker returns None for a projectile the mob owns itself, so death_message built the component without the attacker."
-regression = ["cargo:mc-core:tick_tests::combat_parity_tests::parity_special_mob_melee_death_names_the_mob_for_the_two_argument_template"]
-fix_commit = "cfac52dd669b3070289f839d08da1abce24ca033"
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::parity_special_mob_melee_death_names_the_mob_for_the_two_argument_template", "harness:entities:native-v2-p4-damage"]
+fix_commit = "4efb3ef2b116bfea021f9989dc96292c32ab20b3"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/DEATH-MESSAGE-SELF-OWNED-MOB-ATTACKER.json"
 
 [[bug]]
 id = "DEATH-MESSAGE-OUTSIDE-BORDER-KEY"
@@ -4346,11 +4491,12 @@ title = "A burning player in creative or spectator mode keeps burning: contact_h
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "native-v2-p4-damage splash row: receipts 20261111T144354-native-v2-p4-damage-uxdbw87g and 20261111T151955-native-v2-p4-damage-wtrafs5z show only minecraft:on_fire wire events after a water fill in creative. Core splash_harming_thrown_at_own_feet passes, so the potion path was not the owner."
-regression = ["cargo:mc-core:contact_hazards_tests::creative_player_burn_clock_runs_and_water_douses_it"]
+regression = ["cargo:mc-core:tick_tests::contact_hazards_tests::creative_player_burn_clock_runs_and_water_douses_it", "harness:entities:native-v2-p4-damage"]
 fix_commit = "da9bca085da0c0c542cac42f95f38b373849bd99"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/CREATIVE-PLAYER-FIRE-NEVER-DOUSED.json"
 
 [[bug]]
 id = "EDGE-WORLD-QUEUE-LOST-ENTITY-FRAMES"
@@ -4370,7 +4516,7 @@ area = "client"
 repro = "client"
 severity = "blocker"
 status = "open"
-source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F2, 2/2): server encodes the 26.3 layout (receipts/BreakJoinRows/javap/SetPlayerTeamParameters.txt: display name, prefix, suffix, visibility, collision, Optional<color>, options); solaris-client src/ui/hud.rs:304-318 decodes the old order. Being fixed on solaris-client wt/ClientTeamPacket."
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F2, 2/2): server encodes the 26.3 layout (receipts/BreakJoinRows/javap/SetPlayerTeamParameters.txt: display name, prefix, suffix, visibility, collision, Optional<color>, options); solaris-client src/ui/hud.rs:304-318 decodes the old order. Fixed in solaris-client ef4dc465 (client gate line wt/ClientGateLine d5f25569 = f4bd26d4 + ef4dc465 + census fix 04f3e0f9, pin pins/d5f25569b785-client-x86_64-unknown-linux-gnu-incr, receipts/ClientGateLine/pin.log; 3/3 team scene receipts/ClientTeamPacket/run-team{1,2,3}.log, negative control with the old client receipts/ClientTeamPacket/run-oldctl.log). Status stays open: client-repo rows wait for the owner's promotion-rule decision."
 regression = []
 failing_first = "reported"
 
@@ -4381,8 +4527,9 @@ area = "gameplay"
 repro = "client"
 severity = "minor"
 status = "open"
-source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F3, 2/2, with send_command_feedback true and false). Vanilla 26.3 accepts a bare string as a text component."
-regression = []
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F3, 2/2, with send_command_feedback true and false). Vanilla 26.3 accepts a bare string as a text component. Cause: the SystemChat planner wrote the component with the compound-only mc_nbt::write_network and dropped a bare string or list silently; vanilla ComponentSerialization encodes plain text as a string tag (the codec is ByteBufCodecs.fromCodecTrusted, any root tag)."
+fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
+regression = ["cargo:mc-edge:plan::plan_tests::styled_chat_delivers_string_and_list_components", "harness:admin-commands:all"]
 failing_first = "reported"
 
 [[bug]]
@@ -4392,8 +4539,9 @@ area = "gameplay"
 repro = "client"
 severity = "minor"
 status = "open"
-source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F6, 2/2; javap receipts/BreakJoinRows/javap/CommandBlockEntity.txt: loadAdditional -> setAutomatic -> scheduleTick)."
-regression = []
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F6, 2/2; javap receipts/BreakJoinRows/javap/CommandBlockEntity.txt: loadAdditional -> setAutomatic -> scheduleTick). Cause: the neighbour update that wakes a command block runs before the block entity image is installed, and nothing scheduled the first tick after the install."
+fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
+regression = ["cargo:mc-core:command_blocks::tests::setblock_with_auto_runs_the_command_block_but_a_powered_or_chain_one_waits"]
 failing_first = "reported"
 
 [[bug]]
@@ -4419,15 +4567,62 @@ regression = []
 failing_first = "reported"
 
 [[bug]]
-id = "COMMAND-GAPS-BREAKJOINROWS-NOTICED"
-title = "Small command gaps seen once each: defaultgamemode is an unknown command; loot table minecraft:blocks/stone reported unsupported; failure messages show the raw key argument.entity.notfound.entity; command-block say shows [Server] instead of @ and ops get no [@: ...] admin broadcast."
+id = "COMMAND-DEFAULTGAMEMODE-UNKNOWN"
+title = "defaultgamemode is an unknown command (vanilla DefaultGameModeCommands: level 2, one gamemode argument, commands.defaultgamemode.success)."
 area = "gameplay"
 repro = "client"
 severity = "minor"
 status = "open"
-source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md 'Noticed', single runs). Split into separate rows when one is picked up."
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md 'Noticed', single run). The command sets an in-memory default that players without a saved record join in; persisting it (level.dat GameType) is COMMAND-DEFAULTGAMEMODE-NOT-PERSISTED."
+fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
+regression = ["cargo:mc-core:command_context::tests::defaultgamemode_sets_the_mode_new_players_join_in", "cargo:mc-core:commands::tests::defaultgamemode_takes_exactly_one_mode_and_needs_operator"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "COMMAND-DEFAULTGAMEMODE-NOT-PERSISTED"
+title = "The /defaultgamemode setting is lost on restart: level.dat GameType is a constant 0 (level_metadata.rs) and no journal record carries the default, so new players join in survival again."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "CommandGaps 2026-11-12: vanilla MinecraftServer.setDefaultGameType writes WorldData; Solaris keeps TickState.default_game_mode in memory only."
 regression = []
-failing_first = "reported"
+failing_first = "not recorded"
+
+[[bug]]
+id = "COMMAND-FAILURE-RAW-LANG-KEY"
+title = "Global-command failures reached from the command context (kill/tp/effect with no matching entity) show the raw lang key argument.entity.notfound.entity instead of the translated text."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (FINDINGS.md 'Noticed'; scene-shot 20261111T194930-scene-shot-13ikb1el, kill @e[type=minecraft:cow,distance=..0] and tp @s NobodyHere). Cause: command_context::run delivered Err(key) strings from dimensions::travel::execute as plain chat; now a vanilla lang key is sent as a translate component."
+fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
+regression = ["cargo:mc-core:command_context::tests::global_command_failure_reaches_the_player_as_a_translatable_key", "cargo:mc-core:command_feedback::tests::translation_keys_are_told_apart_from_english_errors"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "COMMAND-BLOCK-SOURCE-NAME-AND-ADMIN-BROADCAST"
+title = "A command block's say shows [Server] instead of [@], and operators get no gray italic [@: ...] admin broadcast of its command output while commandBlockOutput and sendCommandFeedback are on."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (FINDINGS.md F6 aside); javap CommandSourceStack.sendSuccess/broadcastToAdmins and BaseCommandBlock (default name @, shouldInformAdmins = COMMAND_BLOCK_OUTPUT). Admin broadcast is implemented for command-block sources only; player and console sources do not inform other operators yet."
+fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
+regression = ["cargo:mc-core:command_blocks::tests::command_block_is_named_at_and_informs_operators_of_its_output"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "LOOT-GIVE-BLOCK-TABLES-UNSUPPORTED"
+title = "/loot give @s loot minecraft:blocks/stone reports an unknown or unsupported loot table: command_loot resolves only chest loot tables (registry.chest_loot), not block drop tables."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (FINDINGS.md 'Noticed'); command_loot.rs generate(): Source::Table reads state.registry.chest_loot only."
+regression = []
+failing_first = "not recorded"
 
 [[bug]]
 id = "PROJECTILE-STUCK-ARROW-NEVER-FALLS"
@@ -4545,3 +4740,98 @@ regression = ["cargo:mc-core:projectiles::flight_tests::adventure_and_mob_arrows
 failing_first = "reported"
 fix_commit = "cd727225"
 promotion = "docs/bugs/promotions/PROJECTILE-CAN-BREAK-NOT-EVALUATED.json"
+
+[[bug]]
+id = "LOADER-NEGOTIATE-CONFIGURATION-TIMEOUT"
+title = "A Loader client stalled for tens of seconds after the manifest (verifying or fetching bundles on a loaded host) was dropped: the edge read-timed-out in Configuration after 10 s, and the Java client closes a connection silent for 30 s, so no server read deadline alone helps."
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "fixed"
+source = "loader-live run 20261111T154235-loader-fabric-screen-admission-4rd2c0iz: server.log connection=2 stage=configuration error=read timed out in Configuration; client.log disconnect reason 'Loader negotiation failed: read timed out in Configuration' (copied to <work>/receipts/LoaderLivePromote/flake-run-20261111T154235)"
+regression = ["cargo:mc-edge:configuration::tests::loader_negotiation_keeps_a_90_second_stall_alive_with_keepalives", "cargo:mc-edge:configuration::tests::loader_negotiation_closes_a_dripping_client_at_the_total_deadline", "cargo:mc-edge:configuration::tests::required_loader_content_refuses_a_vanilla_client_with_the_loader_message_quickly"]
+failing_first = "not recorded"
+fix_commit = "patch:573f0b25b4303aecf1bcce423b6565d8cd8472c3782e3bdc4625a06b7fc32af2"
+promotion = "docs/bugs/promotions/LOADER-NEGOTIATE-CONFIGURATION-TIMEOUT.json"
+
+[[bug]]
+id = "VILLAGER-MOVED-WORKSTATION-LOSES-JOB"
+title = "A workstation moved inside its certified workshop loses the job for good: the jobless resident never claims the re-placed composter during its work period"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "BreakIssue1x11 break-it pass on ISSUE-1-11, finding F2 (receipts/BreakIssue1x11/report.md, attacks G1 2/2 and J1 1/1): setblock the farmer's composter to air and re-place it 2 blocks over in the same workshop; the farmer stays jobless the whole next work period. Cause: buildings::job_profession and allocator::acquire matched only the work points captured at certify/upgrade; a moved station was not a slot and the stale point was air."
+regression = ["cargo:mc-core:settlements::allocator::claim_tests::workstation_moved_inside_its_certified_workshop_keeps_the_job"]
+failing_first = "reported"
+fix_commit = "patch:6884038408b2e18e6a3d425394fbc33d41bb8367dd100b5b658759c6c589ce8c"
+
+[[bug]]
+id = "VILLAGER-BED-USE-SLEEPS-PLAYER-OVER-VILLAGER"
+title = "Using a bed a villager sleeps in puts the player to bed on the same click (vanilla only kicks the villager out)"
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakIssue1x11 break-it pass on ISSUE-1-11, finding F3 (receipts/BreakIssue1x11/report.md, attack C2 2/2). Vanilla 26.x javap: BedBlock.useWithoutItem calls kickVillagerOutOfBed on an occupied bed and returns before Player.startSleepInBed; SleepInBed.COOLDOWN_AFTER_BEING_WOKEN = 100. Cause: sleep::use_bed checked only player sleepers. The bed block's occupied property is still not mirrored for any sleeper (Solaris derives occupancy from sleepers)."
+regression = ["cargo:mc-core:sleep::tests::using_a_bed_a_villager_sleeps_in_only_wakes_the_villager", "cargo:mc-core:sleep::tests::kicked_villager_lies_down_again_only_after_the_wake_cooldown"]
+failing_first = "reported"
+fix_commit = "patch:2c325bc08a93459835f22e53c301cf342f429efe2c54f2af66a58fba352d5734"
+
+[[bug]]
+id = "VILLAGER-RESIDENT-HOLDS-OPEN-AIR-BED"
+title = "A settlement resident claims an open-air bed it never sleeps in, so an unbound villager next to that free bed never gets a home and never sleeps"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "BreakIssue1x11 break-it pass on ISSUE-1-11, finding F4 (receipts/BreakIssue1x11/report.md, sets F/K, 3 of 7 runs with an extra homeless resident): the unbound librarian stands 2.5-5 blocks from its outdoor bed all night with no minecraft:home; the breaker queried only 2 of 5 Brains. Cause (code read): allocator::acquire let bound residents claim any bed in the settlement radius, while villager/brain.rs shelter_night lets a resident sleep only in a roofed home bed (it shelters indoors otherwise, a tested settlement rule), so a homeless resident that searched first kept the open-air bed empty and barred to the vanilla villager. Residents now claim only roofed beds: allocator::bed_allowed gates both acquire and free_bed (breeding spare bed, newborn home), and home validation releases a resident's bed whose roof is gone or that was claimed before the rule (roof flag cached per bed head chunk revision in ValidatedPoi). Policy in docs/settlements/breeding.md and jobs.md: an open-air-only settlement gets no rations and no births."
+regression = ["cargo:mc-core:settlements::allocator::claim_tests::bound_resident_leaves_an_open_air_bed_to_a_villager_that_sleeps_in_it", "cargo:mc-core:settlements::allocator::claim_tests::breeding_spare_bed_of_a_resident_is_never_an_open_air_bed", "cargo:mc-core:settlements::allocator::claim_tests::removing_the_roof_releases_a_residents_bed", "cargo:mc-core:settlements::allocator::claim_tests::open_air_claim_recorded_before_the_rule_is_released_on_load", "cargo:mc-core:villager::brain::tests::breeding_tests::open_air_only_settlement_gives_residents_no_home_rations_or_births"]
+failing_first = "reported"
+fix_commit = "patch:493fa248dcd5e68c3e20fcf70bf81a055f92fabdfb2c0c8e981f2ec254d6be5a"
+
+[[bug]]
+id = "CIV-ADOPTED-CLOSURE-SLOW-ON-MAIN"
+title = "On main the adopted-village closure test adopted_village_with_resident_shears_produces_stock_and_builds does not finish in 10 minutes (killed at 40 minutes in a full lib run); its per-tick cost fix exists only on unmerged wt/CivSimLanding"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "VillageBreakFixes slice 3 (receipts/VillageBreakFixes/results.md 'Slice 3'): the debug test binary built at main 5b4006df runs the test past a 600 s deadline (hang/base-trace.log, exit 124); the same test at 263c7c9c was killed at Main's 40-minute deadline (adopted-village-263c7c9c.log). Traced side by side (hang/base-trace-3.log, hang/head-trace.log, same trace patch), both trees reach tick 4020 after 945 s and 948 s in an identical state: all four stock items seen, LumberCamp, Mine and farmer workshop certified, no Storage, no House, no bed anywhere, no resident home. So 400000 ticks take hours on main; it is not a loop. The fixture village has no beds until its first House is built, so the settlement roof-bed rule is not reached before that point. Same cause as CIV-ADOPTED-CLOSURE-ROOT-TICK-COST on wt/CivSimLanding (pathological construction-funding cost in villager decisions; that branch passes the test in about 115 s and carries the fix and its regression); merge that row into this one, or drop this row, when CivSimLanding lands."
+regression = ["cargo:mc-core:villager::building_autonomy_tests::adopted_village_with_resident_shears_produces_stock_and_builds"]
+failing_first = "receipts/VillageBreakFixes/hang/base-trace.log: tree 5b4006df, debug test binary run alone, exit 124 at 600 s"
+
+[[bug]]
+id = "DUPLICATE-LOGIN-LATE-CONFIGURATION-REPLACES-PLAYING"
+title = "A connection that finishes configuration after another session of the same profile is already in Play kicks the playing session instead of being refused"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "Breaker finding F7 (slice DUPLICATE-LOGIN 2): a same-profile client held in configuration through a loopback proxy and released after a second client entered Play joined and kicked the playing session (7/7 runs, both orders). Vanilla 26.3 ServerConfigurationPacketListenerImpl.handleConfigurationFinished refuses the late finisher with DUPLICATE_LOGIN_DISCONNECT_MESSAGE; only a newer login (ServerLoginPacketListenerImpl.verifyLoginAndFinishConnectionSetup -> disconnectAllPlayersWithProfile) kicks a session in Play. Custody held in every run. Arbitration lived only in crates/mc-core/src/tick/input/session.rs join."
+regression = ["cargo:mc-core:tick::duplicate_login_tests::late_configuration_finisher_is_refused_and_the_player_in_play_keeps_custody", "cargo:mc-core:tick::duplicate_login_tests::second_finisher_is_refused_even_when_it_logged_in_later", "cargo:mc-core:tick::duplicate_login_tests::newer_login_still_kicks_a_session_already_in_play_and_takes_over_custody", "cargo:mc-core:singleplayer_pause::tests::paused_owner_relogin_kicks_the_stale_session_and_joins", "cargo:mc-edge:server::duplicate_login_tests::newer_login_of_the_same_account_kicks_the_session_in_play_and_reaches_play", "cargo:mc-edge:server::duplicate_login_tests::late_configuration_finisher_receives_the_duplicate_login_reason", "cargo:mc-edge:server::duplicate_login_tests::full_server_refuses_a_same_account_login_before_kicking_the_session_in_play"]
+failing_first = "reported"
+fix_commit = "patch:e5aabfdfc59979f89e10a8dc6e6ee2f022e4a97be9bc06b3573bf065b46ab137"
+promotion = "docs/bugs/promotions/DUPLICATE-LOGIN-LATE-CONFIGURATION-REPLACES-PLAYING.json"
+
+[[bug]]
+id = "VILLAGER-PLAYER-OPENED-DOOR-STAYS-OPEN"
+title = "Villagers never close a wooden door a player left open, even after walking through it at night"
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "Breaker finding F1 (VillageBreak2, ISSUE-1-08 break-it pass, agent-run): in a certified house the player opens the spruce door by day; at time 18000 both residents walk home through it and fall asleep, and the door stays open=true all night (server truth via execute if block; native client d5f25569, server pin 4bfacdf6391f-3f0eb5d2 = main 71d1c127; scene-shot artifacts 20261112T012120-scene-shot-1449j9i8 and 20261112T012900-scene-shot-bbujr1zg, 2/2). Every door the villagers opened themselves was shut. Vanilla 26.3 InteractWithDoor opens the previous path node's door if closed and remembers it for closing either way (javap offsets 142-166), so closeDoorsThatIHaveOpenedOrPassedThrough closes doors a villager passed through. crates/mc-core/src/villager/doors.rs remembers only doors it opened, as docs/settlements/jobs.md documents (they leave player-opened doors alone): owner decision whether to keep the documented deviation."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "VILLAGER-WORKSTATION-IGNORED-AFTER-WORK-HOURS"
+title = "A jobless villager ignores a free reachable workstation from day tick 9000 until 2000 the next day, also outside any settlement"
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "Breaker finding F2 (VillageBreak2, ISSUE-1-10 break-it pass, agent-run): at time 10000 (awake, after work hours) an unbound jobless villager 51 blocks outside any settlement gets a lectern two blocks away, and a bound jobless resident's settlement certifies a librarian workshop; both stay jobless for 1200 ticks, and after time set 2500 both are librarians within 200 ticks, so the stations were valid and reachable (native client d5f25569, server pin 4bfacdf6391f-3f0eb5d2 = main 71d1c127; scene-shot artifacts 20261112T013249-scene-shot-qfcl2h4c, 20261112T013426-scene-shot-yc4y5ut8, 20261112T013520-scene-shot-dh5v6muo: unbound 3/3, bound 2/2). Vanilla 26.3 VillagerGoalPackages.getCorePackage holds AcquirePoi for POTENTIAL_JOB_SITE and AssignProfessionFromJobSite, which run whatever the schedule activity is, so an awake villager takes a free workstation at any time of day (the usual lectern reroll). crates/mc-core/src/settlements/allocator.rs acquire_pois searches jobs only while day_time is in 2000..9000, for bound and unbound villagers; docs/settlements/jobs.md documents that window: owner decision whether unbound villagers should follow vanilla."
+regression = []
+failing_first = "reported"

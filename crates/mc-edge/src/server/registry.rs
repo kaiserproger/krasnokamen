@@ -75,6 +75,11 @@ impl ConnectionRegistry {
         refusal
     }
 
+    /// Whether every player slot is taken, counting joining connections like [`admit`](Self::admit).
+    pub(super) fn is_full(&self, maximum: usize) -> bool {
+        self.inner.lock().admitted.len() >= maximum
+    }
+
     #[cfg(test)]
     pub(super) fn joining_id(&self) -> ConnectionId {
         let id = self.alloc_id();
@@ -219,6 +224,13 @@ impl ConnectionRegistry {
         if inner.joining.contains(&id) || inner.handles.contains_key(&id) {
             inner.disconnect_reasons.insert(id, reason);
         }
+    }
+
+    /// The core refused this connection's Join (no `Joined` will come, e.g. a duplicate
+    /// login): fail its join waiters now. The connection owner then reads the stashed
+    /// disconnect reason and sends it, instead of waiting out the join deadline.
+    pub fn refuse_join(&self, id: ConnectionId) {
+        self.inner.lock().join_waiters.remove(&id);
     }
 
     /// Take a stashed core-ordered disconnect reason, if the pump routed one.

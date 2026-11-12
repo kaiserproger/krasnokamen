@@ -1726,6 +1726,8 @@ fn variant_eggs_hatch_chicken_with_variant_metadata() {
             .unwrap()
             .clone();
         let image = crate::journal::EntityStateImage::from_record(&state.registry, &saved).unwrap();
+        let mut saved_appearance = crate::core::appearance_from_vanilla_entity(&saved);
+        crate::core::native_variant(&saved, &mut saved_appearance).unwrap();
         let replay = crate::journal::ReplayEntity {
             uuid: saved.uuid.to_string(),
             type_id: state.registry.entity_type_id(&saved.id).unwrap(),
@@ -1740,7 +1742,7 @@ fn variant_eggs_hatch_chicken_with_variant_metadata() {
             breed_cooldown: image.breed_cooldown,
             pickup_delay: 0,
             item: None,
-            appearance: crate::core::appearance_from_vanilla_entity(&saved),
+            appearance: saved_appearance,
             active_effects: Default::default(),
             villager: None,
             projectile: None,
@@ -2422,7 +2424,14 @@ fn splash_harming_thrown_at_own_feet_hurts_its_thrower_as_indirect_magic() {
     );
     let (id, mut record) = launch_record(&mut state, record, feet);
     let mut intents = Vec::new();
-    assert!(impact(&mut state, &mut intents, id, &mut record, None, feet));
+    assert!(impact(
+        &mut state,
+        &mut intents,
+        id,
+        &mut record,
+        None,
+        feet
+    ));
     let damage = damage_to(&intents, player);
     assert_eq!(damage.len(), 1, "{damage:?}");
     assert_eq!(damage[0].1, DamageKind::IndirectMagic);

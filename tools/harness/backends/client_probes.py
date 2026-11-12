@@ -78,6 +78,7 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
                        else 600.0 if ctx.scenario_id in (native_light.SCENARIO_ID,
                                                         "native-v2-radius-full-view",
                                                         "native-v2-p4-damage",
+                                                        "native-v2-team-deaths",
                                                         "native-v2-automation-storage",
                                                         "native-v2-lease-navigation")
                        else 1200.0 if ctx.scenario_id == "native-v2-settlement-storage"
@@ -135,7 +136,7 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     if auth_scenario:
         # The shipping solaris-auth package behind the native login gate; the harness copies
         # the sibling checkout's package into the private plugin directory.
-        root = Path(os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", runtime.REPO_ROOT.parent / "solaris-default-plugins"))
+        root = runtime.sibling_root("plugins")
         package = plugin_dir / "solaris-auth"
         package.mkdir()
         for name in ("plugin.toml", "plugin.wasm"):
@@ -330,6 +331,19 @@ seed = 81
                 peer_mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
                 mcp.p1_observer = (peer_mcp, display, client_process.pid, peer_process.pid)
                 mcp.p1_wire_trace = wire_trace
+                from . import native_focus
+
+                native_focus.acquire(display, client_process.pid, startup_timeout)
+            if ctx.scenario_id == "native-v2-team-deaths":
+                # A second windowed client on the same display: each client renders its own chat.
+                peer_ctx = replace(ctx, artifact_dir=artifact / "death-peer", client_evidence=peer_evidence)
+                evidence["death_peer_client"] = peer_evidence
+                peer_process, peer_log, peer_mcp = native_client.start(
+                    peer_ctx, native_client.resolve_binary(peer_ctx), client_address, "DeathPeer",
+                    startup_timeout, display=display)
+                peer_mcp.request_timeout_seconds = 130.0
+                peer_mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
+                mcp.death_peer = (peer_mcp, display, client_process.pid, peer_process.pid)
                 from . import native_focus
 
                 native_focus.acquire(display, client_process.pid, startup_timeout)

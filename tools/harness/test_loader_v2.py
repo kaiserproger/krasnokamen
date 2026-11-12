@@ -12,6 +12,11 @@ from . import __main__ as cli
 from . import loader, profiles, runtime
 
 
+def setUpModule() -> None:
+    # .analysis/ is gitignored, so a fresh checkout or worktree lacks it.
+    (runtime.REPO_ROOT / ".analysis").mkdir(exist_ok=True)
+
+
 class LoaderV2Tests(unittest.TestCase):
     def test_java_clients_use_private_home_for_all_platforms(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -103,6 +108,78 @@ class LoaderV2Tests(unittest.TestCase):
             self.assertEqual(result["expected_bundle_cache_files"], [])
             self.assertEqual((owner / "plugin.toml").read_text(), 'id = "server-only"\n')
             deploy.assert_not_called()
+
+    def _configured_run(self, root: Path, name: str) -> dict:
+        """One loader.run up to the Xvfb fence; returns the config port and scenario record."""
+        binary = root / "frozen"
+        binary.write_text("#!/bin/false\n")
+        binary.chmod(0o700)
+        plugins = root / "candidate"
+        plugins.mkdir(exist_ok=True)
+        artifact = root / name
+        artifact.mkdir()
+        with mock.patch.object(runtime, "start_xvfb", side_effect=RuntimeError("config fence")):
+            with self.assertRaisesRegex(RuntimeError, "config fence"):
+                loader.run("fabric", 10, artifact, {"run": mock.Mock()},
+                           server_bin=binary, plugins_dir=plugins)
+        config = tomllib.loads((artifact / "playable.toml").read_text())
+        record = json.loads((artifact / "scenario.json").read_text())
+        return {"config_port": config["network"]["port"], "record": record}
+
+    def test_each_run_takes_its_own_free_port_and_the_prompt_follows_it(self) -> None:
+        import socket
+
+        with tempfile.TemporaryDirectory(dir=runtime.REPO_ROOT / ".analysis") as temporary:
+            root = Path(temporary)
+            first = self._configured_run(root, "first")
+            # Another agent's gate is listening on the first run's port.
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
+                busy.bind(("127.0.0.1", first["config_port"]))
+                busy.listen()
+                second = self._configured_run(root, "second")
+            for run in (first, second):
+                port = run["config_port"]
+                self.assertNotEqual(port, loader.TEMPLATE_SERVER_PORT)
+                self.assertEqual(run["record"]["server_address"], f"127.0.0.1:{port}")
+                self.assertEqual(run["record"]["server_port"], port)
+                self.assertNotEqual(run["record"]["mcp_port"], port)
+            self.assertNotEqual(first["config_port"], second["config_port"])
+
+    def test_permission_prompt_titles_name_the_runs_server_address(self) -> None:
+        self.assertEqual(loader.confirmation_titles(31234), (
+            "Allow Solaris content from 127.0.0.1:31234?",
+            "Allow Solaris content from localhost:31234?",
+        ))
+        client = mock.Mock()
+        titles = []
+        def click(_tool: str, arguments: dict) -> None:
+            titles.append(arguments["expected_title"])
+            if len(titles) == 2:
+                return None
+            raise RuntimeError("no such dialog")
+        client.call_tool.side_effect = click
+        self.assertEqual(loader.confirm_loader_permission(client, 5.0, 31234),
+                         "Allow Solaris content from localhost:31234?")
+        self.assertEqual(titles, list(loader.confirmation_titles(31234)))
+
+    def test_loader_gradle_home_defaults_to_the_shared_work_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            (work / "loader-gradle-home").mkdir()
+            loader_root = work / "solaris-loader"
+            with mock.patch.dict(runtime.os.environ, {}, clear=False):
+                runtime.os.environ.pop("GRADLE_USER_HOME", None)
+                self.assertEqual(runtime.ensure_loader_gradle_home(loader_root), work / "loader-gradle-home")
+                self.assertEqual(runtime.os.environ["GRADLE_USER_HOME"], str(work / "loader-gradle-home"))
+                # An explicit choice is never overridden.
+                runtime.os.environ["GRADLE_USER_HOME"] = "/explicit"
+                self.assertEqual(runtime.ensure_loader_gradle_home(loader_root), Path("/explicit"))
+                runtime.os.environ.pop("GRADLE_USER_HOME")
+            with mock.patch.dict(runtime.os.environ, {}, clear=False):
+                runtime.os.environ.pop("GRADLE_USER_HOME", None)
+                lonely = Path(temporary) / "other" / "solaris-loader"
+                runtime.ensure_loader_gradle_home(lonely)
+                self.assertNotIn("GRADLE_USER_HOME", runtime.os.environ)
 
     def test_smoke_uses_native_settlement_commands_without_package(self) -> None:
         from . import loader_settlements

@@ -79,8 +79,59 @@ pub(crate) fn success_feedback(
     key: &str,
     arguments: Vec<Tag>,
 ) {
+    if state
+        .command_context
+        .current
+        .is_some_and(|context| context.command_block)
+    {
+        inform_admins(state, key, &arguments);
+    }
     if accepts_success(state, connection) {
         feedback(state, connection, key, arguments);
+    }
+}
+
+/// Vanilla `CommandSourceStack.broadcastToAdmins`: a command block with `commandBlockOutput` on shows
+/// its success text to every operator as gray italic `[@: ...]`, but only while
+/// `sendCommandFeedback` is on (javap `CommandSourceStack.broadcastToAdmins`,
+/// `BaseCommandBlock$CloseableCommandBlockSource.shouldInformAdmins`).
+fn inform_admins(state: &mut TickState, key: &str, arguments: &[Tag]) {
+    use crate::command_rules::{BoolRule, boolean};
+    if !boolean(state, BoolRule::SEND_COMMAND_FEEDBACK)
+        || !boolean(state, BoolRule::COMMAND_BLOCK_OUTPUT)
+    {
+        return;
+    }
+    let Tag::Compound(mut fields) = translated(
+        "chat.type.admin",
+        vec![
+            entity_name(state, crate::command_console::EXECUTOR),
+            translated(key, arguments.to_vec()),
+        ],
+    ) else {
+        unreachable!("translated builds a compound")
+    };
+    fields.push(("color".into(), Tag::String("gray".into())));
+    fields.push(("italic".into(), Tag::Byte(1)));
+    let content = Tag::Compound(fields);
+    let operators: Vec<_> = state
+        .connections
+        .all_connections()
+        .filter(|connection| state.plugin_players.is_operator(*connection))
+        .collect();
+    for connection in operators {
+        state.push_player(
+            connection,
+            PlayerChange::StyledChat {
+                content: content.clone(),
+            },
+        );
+    }
+    if state.dimension_globals.active {
+        state
+            .dimension_globals
+            .broadcasts
+            .push(crate::dimensions::globals::Broadcast::AdminChat(content));
     }
 }
 
@@ -161,7 +212,12 @@ fn plain_entity_name(state: &TickState, entity: EntityId) -> String {
 
 pub(crate) fn entity_name(state: &TickState, entity: EntityId) -> Tag {
     if entity == crate::command_console::EXECUTOR {
-        return text("Server");
+        // Vanilla `BaseCommandBlock` names its source `@`; the console is `Server`.
+        let block = state
+            .command_context
+            .current
+            .is_some_and(|context| context.command_block);
+        return text(if block { "@" } else { "Server" });
     }
     if let Some(name) = state.connections.name_of(entity) {
         return text(name);
@@ -415,6 +471,23 @@ pub(crate) fn execute(
             } else {
                 Success(changed)
             };
+        }
+        Command::DefaultGameMode(mode) => {
+            state.default_game_mode = *mode;
+            if state.dimension_globals.active {
+                state.dimension_globals.broadcasts.push(
+                    crate::dimensions::globals::Broadcast::DefaultGameMode(*mode),
+                );
+            }
+            success_feedback(
+                state,
+                connection,
+                "commands.defaultgamemode.success",
+                vec![mode_name(*mode)],
+            );
+            // Vanilla returns the number of players it forced into the mode: none without
+            // `force-gamemode`, which Solaris does not have.
+            return Success(0);
         }
         Command::Give {
             target,

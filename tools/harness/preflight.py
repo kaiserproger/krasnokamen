@@ -127,10 +127,10 @@ def check(profile: str, ctx, spec: dict) -> frozenset[str]:
             raise ValueError('SOLARIS_CLIENT_BINARY is required; provide a pinned executable outside the pooled targets')
         client_path = Path(client_binary).expanduser()
         if not client_path.is_absolute():
-            client_path = Path(os.environ.get('SOLARIS_CLIENT_ROOT', runtime.REPO_ROOT.parent / 'solaris-client')) / client_path
+            client_path = runtime.sibling_root('client') / client_path
         _binary('SOLARIS_CLIENT_BINARY', str(client_path), ctx.client_evidence, 'binary')
     if needs.intersection({'client_data', 'windowed_assets'}):
-        root = Path(os.environ.get('SOLARIS_CLIENT_ROOT', runtime.REPO_ROOT.parent / 'solaris-client')).expanduser().resolve()
+        root = runtime.sibling_root('client')
         names = ['SOLARIS_CLIENT_DATA_DIR'] if 'client_data' in needs else []
         if 'windowed_assets' in needs:
             names += ['SOLARIS_CLIENT_RESOURCE_ROOT', 'SOLARIS_CLIENT_ASSET_ROOT', 'SOLARIS_CLIENT_ASSET_INDEX']
@@ -160,14 +160,13 @@ def check(profile: str, ctx, spec: dict) -> frozenset[str]:
                 except (OSError, ValueError) as error:
                     raise ValueError(f'{name} is incomplete: {path}; bootstrap a complete asset index') from error
     if 'loader' in needs:
-        loader = Path(os.environ.get('SOLARIS_LOADER_ROOT', runtime.AGENT_ROOT)).expanduser().resolve()
+        loader = runtime.sibling_root('loader')
         if not (loader / 'gradlew').is_file() or not os.access(loader / 'gradlew', os.X_OK):
             raise ValueError(f"Loader checkout missing executable {loader / 'gradlew'}; set SOLARIS_LOADER_ROOT")
     if 'xvfb' in needs and not shutil.which('Xvfb'):
         raise ValueError('Xvfb is missing; install Xvfb for the isolated client')
     if 'plugins_root' in needs:
-        from .profiles import DEFAULT_PLUGINS_ROOT
-        root = Path(os.environ.get('SOLARIS_DEFAULT_PLUGINS_ROOT', DEFAULT_PLUGINS_ROOT)).expanduser()
+        root = runtime.sibling_root('plugins')
         if not (root / 'tools' / 'run_integration.py').is_file():
             raise ValueError(f'plugins integration runner is missing: {root}')
     if 'plugins_dir' in needs and (ctx.plugins_dir is None or not ctx.plugins_dir.is_dir()):
@@ -233,7 +232,7 @@ def client_data_root(ctx):
 
 def client_template() -> Path:
     """The client data root named by SOLARIS_CLIENT_DATA_DIR (<root>/data/vanilla)."""
-    client_root = Path(os.environ.get('SOLARIS_CLIENT_ROOT', runtime.REPO_ROOT.parent / 'solaris-client'))
+    client_root = runtime.sibling_root('client')
     data = Path(os.environ['SOLARIS_CLIENT_DATA_DIR']).expanduser()
     template = (data if data.is_absolute() else client_root / data).resolve().parent.parent
     if not (template / 'facts').is_dir() or not (template / 'resources' / 'assets').is_dir():

@@ -17,6 +17,9 @@ pub struct RosterPlayer {
 #[derive(Debug)]
 pub(crate) enum Broadcast {
     Chat(mc_nbt::Tag),
+    /// Command-block output shown to operators only (vanilla `broadcastToAdmins`).
+    AdminChat(mc_nbt::Tag),
+    DefaultGameMode(crate::commands::GameMode),
     TeamChat {
         members: std::collections::BTreeSet<String>,
         content: mc_nbt::Tag,
@@ -81,6 +84,22 @@ fn relay(world: &mut TickState, event: &Broadcast) {
                 .filter(|connection| world.accepts_chat(*connection))
                 .collect();
             for connection in recipients {
+                world.push_player(
+                    connection,
+                    PlayerChange::StyledChat {
+                        content: content.clone(),
+                    },
+                );
+            }
+        }
+        Broadcast::DefaultGameMode(mode) => world.default_game_mode = *mode,
+        Broadcast::AdminChat(content) => {
+            let operators: Vec<_> = world
+                .connections
+                .all_connections()
+                .filter(|connection| world.plugin_players.is_operator(*connection))
+                .collect();
+            for connection in operators {
                 world.push_player(
                     connection,
                     PlayerChange::StyledChat {

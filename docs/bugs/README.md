@@ -36,9 +36,9 @@ failing_first = "not recorded"
   referenced key must be exactly `true`. The `all` key denotes the whole
   profile; when no boolean verdict map exists, `all` requires a passing
   profile receipt. Legacy profiles expose their existing `PASS` behaviour
-  maps: `village-qa` has `door_walk`, `sleep_return`, `farmer_harvest`,
-  `miner_deposit`, and `lumberjack`; autonomy, claim and army expose their
-  named behaviours. `buildings-qa` uses `<blueprint>.<behaviour>`, for
+  maps: `village-qa` has `door_walk`, `sleep_return`, `night_door`,
+  `farmer_harvest`, `miner_deposit`, and `lumberjack`; autonomy, claim and
+  army expose their named behaviours. `buildings-qa` uses `<blueprint>.<behaviour>`, for
   example `wall.L1_built`. Partial or resumed profile overrides are rejected.
   A passing profile is evidence only for symptoms its assertions actually cover.
 - `repro_check` is optional: a nonempty string or list of nonempty strings for
@@ -170,8 +170,12 @@ worker, runs the negative control.
    only when the failed receipt carries an explicitly failing verdict for that
    profile check; a timeout, a client that never reached play (`in_play`), a
    missing prerequisite or any failure without a negative verdict is
-   unrunnable and cannot be a control. Scenario refs have no such verdict, so a
-   row's control needs a cargo ref or a profile verdict ref. Control worktrees
+   unrunnable and cannot be a control. A scenario ref has no verdict map; it is
+   red only when the failed receipt's `details.named_scenario.id` is the ref and
+   its own `error` reads `<id> assertion failed: <name>` (never the argv of the
+   child), with `<name>` not a connection check (`in_play`, `*_entered_play`,
+   join) and the failure not tagged before the scenario body (`join`, start-up
+   phases). Any other failure, a timeout or a join flake never counts. Control worktrees
    are temporary `git worktree`s beside the other worktrees (`<work>/wt/`),
    one promotion at a time (a lock), at fixed paths (`ledger-control-candidate`,
    `ledger-control-fix`). Every cargo build or test for such a tree runs through
@@ -300,6 +304,14 @@ The `entities` profile includes windowed native-client probes:
   block-entity NBT; the actual patterned and plain banners are captured for review.
 - `native-v2-snow-golem-shear`: ordinary shears clear the same golem's received
   pumpkin flag, reveal its face and yield one carved-pumpkin pickup.
+- `native-v2-peaceful-removal`: creates a zombie and cow with natural spawning
+  disabled, switches to peaceful and checks that the same zombie disappears
+  while the same cow remains. A graphical receipt and negative control are
+  required before this scenario can support promotion.
+- `native-v2-command-score-store`: checks generic damage, main-hand totem and
+  custom death protection, writable death/player/total kill counters and a swap,
+  stored result/success for give, clear and failed clear, and inventory counts.
+  A graphical receipt and negative control are required before promotion.
 - `native-v2-happy-ghast-harness`: an ordinary survival harness debit admits the
   graphical player and three independent native peers; a fifth peer is refused.
   Received passenger packets prove distinct seats and independent dismount.
@@ -319,6 +331,14 @@ The `entities` profile includes windowed native-client probes:
   actions saves the holder at one health, consumes one item, clears a preexisting
   slowness effect and applies authored speed without ordinary totem effects. The full P4 damage
   scenario still includes this check and the separate physical-source probes.
+- `native-v2-team-deaths`: two windowed native clients (victim in team `red`,
+  peer in team `blue`) read the chat their own client renders for a player
+  `/kill` ("was killed", generic_kill rather than out_of_world), a zombie kill
+  ("was slain by Zombie", the vanilla translation component rather than plain
+  English text) and one death per `deathMessageVisibility` value (`always`,
+  `never`, `hideForOtherTeams`, `hideForOwnTeam`); the victim's death screen
+  is asserted by class and a retained capture, its message text is not exposed
+  by the client observation.
 - `native-v2-automation-storage`: the sculk latch section tests ordinary and
   calibrated sensors at multiple distances, including a rejected frequency.
   Comparators face their input: east toward the sensor for frequency readout,

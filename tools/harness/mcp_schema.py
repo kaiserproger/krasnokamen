@@ -65,7 +65,8 @@ def loader_schema(loader: Path) -> dict[str, dict]:
         if len(matches) != 1:
             raise ValueError('cannot identify Loader Gson version')
         version = matches[0]
-        gradle = Path(os.environ.get('GRADLE_USER_HOME', Path.home() / '.gradle'))
+        from . import runtime
+        gradle = runtime.ensure_loader_gradle_home(loader)
         jars = sorted((gradle / 'caches/modules-2/files-2.1/com.google.code.gson/gson' / version)
                       .glob(f'*/gson-{version}.jar'))
         if not jars:

@@ -238,6 +238,9 @@ pub(super) fn apply_inputs<'a>(
                 permission_level,
             } => input::session::join(state, (connection, uuid, name, permission_level), changes),
             PlayerInput::Leave { connection } => input::session::leave(state, connection, changes),
+            PlayerInput::ProfileLogin { connection, uuid } => {
+                input::session::profile_login(state, (connection, uuid), changes)
+            }
             PlayerInput::RequestStats { connection } => {
                 input::social::request_stats(state, connection)
             }

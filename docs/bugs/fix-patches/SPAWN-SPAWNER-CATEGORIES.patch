@@ -1,0 +1,17 @@
+diff --git a/crates/mc-core/src/monster_spawner_data.rs b/crates/mc-core/src/monster_spawner_data.rs
+--- a/crates/mc-core/src/monster_spawner_data.rs
++++ b/crates/mc-core/src/monster_spawner_data.rs
+@@ -53,12 +53,9 @@
+             .entity_types
+             .id_of(&name)
+             .ok_or("unknown spawner entity")?;
+-        let blueprint = registry
++        registry
+             .blueprint(type_id)
+             .ok_or("spawner entity lacks blueprint")?;
+-        if blueprint.category != crate::blueprint::MobCategory::Monster {
+-            return Err("spawner entity is not a monster".into());
+-        }
+         let light = nbt::compound(fields, "custom_spawn_rules")?
+             .map(|rules| {
+                 Ok::<_, String>([

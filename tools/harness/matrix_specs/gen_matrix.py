@@ -1037,7 +1037,8 @@ for sc in SCEN:
         seen[f].add(v)
     seen["domain"].add(sc["domain"])
     seen["subject"].add(sc["subject"])
-PI_MAP = {"Join": "session.join_fresh_spawn", "PluginClientReady": "loader_content.bundle_handshake_cache", "LoaderViewRequest": "loader_content.loader_view_request",
+PI_MAP = {"Join": "session.join_fresh_spawn", "ProfileLogin": "session.join_fresh_spawn",
+          "PluginClientReady": "loader_content.bundle_handshake_cache", "LoaderViewRequest": "loader_content.loader_view_request",
           "PermissionLevel": "commands.op", "SetViewDistance": "session.view_distance_negotiation", "SetLocale": "session.locale_presentation",
           "SetChatVisibility": "chat.chat_visibility_setting",
           "Leave": "session.rejoin_restore_state", "Move": "movement.walk_sprint_jump", "MoveRotation": "movement.walk_sprint_jump", "MoveStatus": "movement.walk_sprint_jump",

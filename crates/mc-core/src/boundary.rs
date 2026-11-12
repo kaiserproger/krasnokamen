@@ -63,6 +63,15 @@ pub enum PlayerInput {
         /// Actual edge-authorized permission snapshot of the authenticated UUID.
         permission_level: u8,
     },
+    /// Edge notification that this connection's login finished, before its configuration
+    /// (vanilla `disconnectAllPlayersWithProfile`): the newer login kicks every session of
+    /// the profile already in Play with the duplicate-login reason. A session still in
+    /// configuration is not in Play and is not kicked; when its configuration ends,
+    /// [`PlayerInput::Join`] refuses it instead of replacing the player in Play.
+    ProfileLogin {
+        connection: ConnectionId,
+        uuid: Uuid,
+    },
     /// Trusted edge notification after the connection accepted a Loader bind.
     PluginClientReady { connection: ConnectionId },
     /// Trusted edge admission of a Loader key request from this negotiated
@@ -397,6 +406,7 @@ impl PlayerInput {
             Self::ConsoleCommand(_) => crate::command_console::CONNECTION,
             Self::Join { connection, .. }
             | Self::PluginClientReady { connection }
+            | Self::ProfileLogin { connection, .. }
             | Self::LoaderViewRequest { connection, .. }
             | Self::PermissionLevel { connection, .. }
             | Self::SetViewDistance { connection, .. }
@@ -733,6 +743,9 @@ pub enum EntityDataValue {
         level: i32,
     },
     ChickenVariant(u32),
+    CowVariant(u32),
+    PigVariant(u32),
+    ZombieNautilusVariant(u32),
 }
 
 /// Everything that changed in one tick, in commit order within each list.

@@ -8,8 +8,13 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from tools.harness import regressions, scenarios
+from tools.harness import regressions, runtime, scenarios
 from tools.harness.backends import singleplayer_regressions as sp
+
+
+def setUpModule() -> None:
+    # .analysis/ is gitignored, so a fresh checkout or worktree lacks it.
+    (runtime.REPO_ROOT / ".analysis").mkdir(exist_ok=True)
 
 
 class SingleplayerRegressionTests(unittest.TestCase):
@@ -93,9 +98,8 @@ class SingleplayerRegressionTests(unittest.TestCase):
                                   extra_args=[], platform=None, timeout_seconds=30,
                                   artifact_dir=artifact, client_evidence={})
             with (
-                patch.dict(sp.os.environ, {"SOLARIS_SERVER_BINARY": str(binary)}),
+                patch.dict(sp.os.environ, {"SOLARIS_SERVER_BINARY": str(binary), "SOLARIS_CLIENT_ROOT": str(template)}),
                 patch.object(sp.runtime, "REPO_ROOT", root / "repo"),
-                patch.object(sp.native_client, "_client_root", return_value=template),
                 patch.object(sp.native_client, "resolve_binary", return_value=binary),
                 patch.object(sp.runtime, "start_xvfb", side_effect=RuntimeError("fixture staged")),
             ):

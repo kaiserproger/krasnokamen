@@ -166,6 +166,11 @@ pub(crate) fn use_bed(
     let Some(slot) = state.entities.slot_of(entity) else {
         return true;
     };
+    // Vanilla BedBlock.useWithoutItem: an occupied bed only wakes the villager
+    // asleep in it; the player is not put to bed on that click.
+    if is_bed(state, head) && crate::villager::brain::kick_out_of_bed(state, head) {
+        return true;
+    }
     if !is_bed(state, head) || state.sleepers.values().any(|other| other.bed == head) {
         say(state, connection, "This bed is occupied");
         return true;

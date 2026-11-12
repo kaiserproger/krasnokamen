@@ -1374,11 +1374,19 @@ fn duplicate_login_kicks_the_old_session_and_hands_over_inventory_without_duplic
     let (_, drains, _) = crate::tick::run_tick(
         &mut state,
         &[
+            PlayerInput::ProfileLogin {
+                connection: ConnectionId(3),
+                uuid: uuid::Uuid::from_u128(1),
+            },
             PlayerInput::Join {
                 connection: ConnectionId(3),
                 uuid: uuid::Uuid::from_u128(1),
                 name: "Alice".into(),
                 permission_level: 0,
+            },
+            PlayerInput::ProfileLogin {
+                connection: ConnectionId(4),
+                uuid: uuid::Uuid::from_u128(2),
             },
             PlayerInput::Join {
                 connection: ConnectionId(4),
@@ -1386,11 +1394,19 @@ fn duplicate_login_kicks_the_old_session_and_hands_over_inventory_without_duplic
                 name: "Bob".into(),
                 permission_level: 0,
             },
+            PlayerInput::ProfileLogin {
+                connection: ConnectionId(5),
+                uuid: uuid::Uuid::from_u128(5),
+            },
             PlayerInput::Join {
                 connection: ConnectionId(5),
                 uuid: uuid::Uuid::from_u128(5),
                 name: "Fresh".into(),
                 permission_level: 0,
+            },
+            PlayerInput::ProfileLogin {
+                connection: ConnectionId(6),
+                uuid: uuid::Uuid::from_u128(5),
             },
             PlayerInput::Join {
                 connection: ConnectionId(6),

@@ -94,6 +94,12 @@ class McpClient:
             "tools/call",
             {"name": name, "arguments": arguments or {}},
         )
+        if result.get("isError") and self._lease_revoked(result):
+            # The native client revokes its automation writer lease on physical input. When it
+            # handles a harness XTest event after admitting this call under that lease, the call
+            # is refused at its fence before it runs (and since client 90c4850a captures no longer
+            # renew the lease either); the lease is gone then, so the call is issued once more.
+            result = self._request("tools/call", {"name": name, "arguments": arguments or {}})
         if result.get("isError"):
             payload = result.get("structuredContent", result)
             raise RuntimeError(f"{name} failed: {json.dumps(payload, ensure_ascii=False)}")
@@ -101,6 +107,11 @@ class McpClient:
         if not isinstance(structured, dict):
             raise RuntimeError(f"{name} response omitted structuredContent")
         return structured
+
+    @staticmethod
+    def _lease_revoked(result: dict[str, Any]) -> bool:
+        payload = result.get("structuredContent")
+        return isinstance(payload, dict) and payload.get("code") == "controller_lease_revoked"
 
     def close(self) -> None:
         if self.session_id is None:

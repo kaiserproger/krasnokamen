@@ -12,13 +12,31 @@ from .backends import village_qa
 
 
 class VillageQaHelpersTests(unittest.TestCase):
-    def test_bed_cells_are_east_foot_then_head(self) -> None:
-        foot, head = village_qa.bed_cells(192, 77, -448)
-        self.assertEqual(foot, (193, 78, -447))
-        self.assertEqual(head, (194, 78, -447))
-        self.assertTrue(village_qa.bed_facing_valid(foot, head, "east"))
-        self.assertFalse(village_qa.bed_facing_valid(head, foot, "east"))
-        self.assertFalse(village_qa.bed_facing_valid(foot, head, "west"))
+    def test_every_worker_has_an_east_bed_beside_the_walkway(self) -> None:
+        beds = village_qa.house_beds(192, 77, -448)
+        self.assertEqual(len(beds), len(village_qa.VILLAGER_ROLES))
+        self.assertEqual(beds[0], ((193, 78, -447), (194, 78, -447)))
+        for foot, head in beds:
+            self.assertTrue(village_qa.bed_facing_valid(foot, head, "east"))
+            self.assertFalse(village_qa.bed_facing_valid(head, foot, "east"))
+            self.assertFalse(village_qa.bed_facing_valid(foot, head, "west"))
+            # The interior's east column (x = hx0 + 3) is the walkway from the door.
+            self.assertLess(head[0], 192 + 3)
+        self.assertEqual(len({head for _, head in beds}), len(beds))
+        self.assertIn(village_qa.SLEEP_RETURN_JOB, village_qa.VILLAGER_ROLES)
+
+    def test_cave_zombie_in_reach_of_the_first_dig_cell_and_off_the_staircase(self) -> None:
+        # The village-qa mine: bounds origin+(14,-6,-2)..+(24,1,8), smithing table at
+        # (min x + 1, top, min z + 1); the staircase descends east from it.
+        x0, y0, z0 = 200, 77, -447
+        mine_lo = (x0 + 14, y0 - 6, z0 - 2)
+        entrance = (mine_lo[0] + 1, y0 + 1, mine_lo[2] + 1)
+        cave = village_qa.cave_hostile_feet(mine_lo, entrance)
+        first = (entrance[0] + 1, entrance[1] - 1, entrance[2])
+        self.assertTrue(village_qa.within_hostile_reach(cave, first))
+        self.assertLess(cave[0] + 1, mine_lo[0], "the pocket's shell stays outside the mine")
+        self.assertLess(cave[1] + 2, y0 - 1, "the pocket's shell stays under the pad's soil")
+        self.assertFalse(village_qa.within_hostile_reach(cave, (first[0] + 9, first[1], first[2] + 9)))
 
     def test_headroom_needs_two_air_blocks(self) -> None:
         self.assertTrue(village_qa.house_headroom_ok(78, 81))
@@ -42,10 +60,11 @@ class VillageQaHelpersTests(unittest.TestCase):
         commands = [f"fill 0 0 0 1 1 1 stone", *phases]
         self.assertEqual(village_qa.count_time_sets(commands), 5)
 
-    def test_all_behaviours_pass_requires_five_passes(self) -> None:
+    def test_all_behaviours_pass_requires_six_passes(self) -> None:
         good = {name: "PASS" for name in
-                ("door_walk", "sleep_return", "farmer_harvest", "miner_deposit", "lumberjack")}
+                ("door_walk", "sleep_return", "night_door", "farmer_harvest", "miner_deposit", "lumberjack")}
         self.assertTrue(village_qa.all_behaviours_pass(good))
+        self.assertFalse(village_qa.all_behaviours_pass(dict(good, night_door="FAIL")))
         bad = dict(good, miner_deposit="FAIL")
         self.assertFalse(village_qa.all_behaviours_pass(bad))
         inconclusive = dict(good, lumberjack="INCONCLUSIVE")

@@ -703,6 +703,12 @@ def _p4(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     native_p4.run(steps, origin, steps.report["id"].split("-", 3)[3])
 
 
+def _team_deaths(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from . import native_team_deaths
+
+    native_team_deaths.run(steps, origin)
+
+
 def _p5(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from . import native_p5
 
@@ -829,6 +835,19 @@ def _promotion_mobs(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     run(steps, origin, steps.report["id"].removeprefix("native-v2-"))
 
 
+def _promotion_commands(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_promotion_commands import run
+
+    run(steps, origin)
+
+
+def _promotion_wave1(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_promotion_wave1 import run
+
+    run(steps, origin, steps.report["id"].removeprefix("native-v2-"))
+
+
+
 def _promotion_maps(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_promotion_maps import run
 
@@ -901,6 +920,18 @@ RUNNERS = {
     "native-v2-map-inventory-player-markers": _promotion_maps,
     "native-v2-banner-placement": _promotion_banner,
     "native-v2-snow-golem-shear": _promotion_mobs,
+    "native-v2-peaceful-removal": _promotion_mobs,
+    "native-v2-command-score-store": _promotion_commands,
+    "native-v2-summon-age": _promotion_wave1,
+    "native-v2-data-query": _promotion_wave1,
+    "native-v2-death-messages": _promotion_wave1,
+    "native-v2-score-food": _promotion_wave1,
+    "native-v2-spawner-egg": _promotion_wave1,
+    "native-v2-golem": _promotion_wave1,
+    "native-v2-axolotl-play-dead": _promotion_wave1,
+    "native-v2-dolphin-treasure": _promotion_wave1,
+    "native-v2-goat-ram": _promotion_wave1,
+    "native-v2-golem-gossip": _promotion_wave1,
     "native-v2-cursor-close": _promotion_cursor,
     "native-v2-custody-mount-export": _promotion_custody,
     "native-v2-p2-optional-pack": _promotion_custody,
@@ -941,6 +972,7 @@ RUNNERS = {
     "native-v2-p4-damage": _p4,
     "native-v2-p4-identities": _p4,
     "native-v2-p4-death-protection": _p4,
+    "native-v2-team-deaths": _team_deaths,
     "native-v2-p4-hopper": _p4,
     "native-v2-p4-statistics": _p4,
     "native-v2-p5-humanoid-armor": _p5,

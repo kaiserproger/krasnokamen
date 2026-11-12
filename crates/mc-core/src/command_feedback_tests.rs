@@ -1,4 +1,4 @@
-use super::{text, translated};
+use super::{is_translation_key, text, translated};
 use mc_nbt::{Tag, tag_type};
 
 #[test]
@@ -44,4 +44,24 @@ fn translation_keeps_argument_order_and_compound_list_type() {
     };
     assert_eq!(list.element_type, tag_type::COMPOUND);
     assert_eq!(list.elements, vec![first, second]);
+}
+
+#[test]
+fn translation_keys_are_told_apart_from_english_errors() {
+    for key in [
+        "argument.entity.notfound.entity",
+        "commands.kill.success.single",
+    ] {
+        assert!(is_translation_key(key), "{key}");
+    }
+    for text in [
+        "Unknown or incomplete command",
+        "Unsupported dimension command",
+        "1.5",
+        "x.",
+        "",
+        "Item.Name",
+    ] {
+        assert!(!is_translation_key(text), "{text}");
+    }
 }

@@ -488,6 +488,33 @@ fn styled_chat_preserves_component_and_is_viewer_scoped() {
 }
 
 #[test]
+fn styled_chat_delivers_string_and_list_components() {
+    // Vanilla `ComponentSerialization` encodes plain text as a bare NBT string and a
+    // component array as a list; `/tellraw @s "text"` must reach the client.
+    let string = mc_nbt::Tag::String("plain".into());
+    let list = mc_nbt::Tag::List(mc_nbt::ListTag {
+        element_type: mc_nbt::tag_type::STRING,
+        elements: vec![
+            mc_nbt::Tag::String("a".into()),
+            mc_nbt::Tag::String("b".into()),
+        ],
+    });
+    for content in [string, list] {
+        let changes = [PlayerChange::StyledChat {
+            content: content.clone(),
+        }];
+        let packets = plan_player_changes(&changes, &mut viewer_at(7, [0.0; 3]));
+        assert_eq!(packets.len(), 1, "{content:?} was dropped");
+        let mut body = body_of(&packets[0]);
+        let packet = ClientboundSystemChat::decode(&mut body).unwrap();
+        assert_eq!(
+            mc_nbt::read_network_value(&mut &packet.content_nbt[..]).unwrap(),
+            content
+        );
+    }
+}
+
+#[test]
 fn wooden_sword_and_empty_hand_sync_own_attack_speed() {
     use mc_core::boundary::PlayerAttribute;
     use mc_data::item_components::ItemAttributeModifier;

@@ -168,6 +168,35 @@ fn dolphin_fish_claim_is_atomic_and_native_state_roundtrips() {
     assert_eq!(serde, image);
 }
 #[test]
+fn dolphin_feed_debit_reaches_the_client_inventory() {
+    // DOLPHIN-TREASURE gate: the fed fish was debited server-side but the client kept
+    // showing it (no inventory sync after the claim), so the cod looked duplicated.
+    let (mut state, actor, dolphin) = fixture();
+    let cod = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:cod").unwrap())
+        .unwrap();
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] = mc_data::ItemStack::new(cod, 1);
+    let mut intents = Vec::new();
+    assert!(interact(
+        &mut state,
+        actor,
+        dolphin,
+        Hand::Main,
+        &mut intents
+    ));
+    state.outbox.clear();
+    assert_eq!(state.merge(&mut intents), 1);
+    assert!(state.players[&actor].inventory.slots[0].is_empty());
+    let synced = state.outbox.get(&ConnectionId(1)).is_some_and(|queue| {
+        queue
+            .iter()
+            .any(|change| matches!(change, crate::boundary::PlayerChange::MenuContents { .. }))
+    });
+    assert!(synced, "the debited cod must be resynced to the client");
+}
+#[test]
 fn dolphin_follows_surfaces_and_plays_without_item_duplication() {
     let (mut state, actor, dolphin) = fixture();
     let block_at = |x, y, z| state.world.block_at(x, y, z);

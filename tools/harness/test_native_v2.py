@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import tempfile
 import unittest
@@ -280,6 +281,9 @@ class NativeV2ProbeTests(unittest.TestCase):
                 self.assertRaises(RuntimeError):
             native_p4._damage(steps, (10, 70, 10))
         self.assertIn("gamerule advance_weather false", events)
+        self.assertLess(events.index("gamerule spawn_mobs false"),
+                        events.index("kill @e[type=!minecraft:player]"))
+        self.assertLess(events.index("kill @e[type=!minecraft:player]"), events.index("time set 18000"))
         self.assertLess(events.index("weather clear"), events.index("time set 18000"))
 
     def test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world(self) -> None:
@@ -336,6 +340,27 @@ class NativeV2ProbeTests(unittest.TestCase):
         air = events.index("fill 9 70 9 11 73 11 minecraft:air")
         self.assertLess(air, events.index("wait:douse_water_drained"))
         self.assertLess(events.index("wait:douse_water_drained"), events.index("tp @s 10.5 70 10.5"))
+
+    def test_damage_thorns_row_resets_the_night_before_summoning_its_zombie(self) -> None:
+        from .backends import native_p4
+
+        class Stop(Exception):
+            pass
+
+        events: list[str] = []
+        steps = mock.MagicMock()
+        steps.fixture.side_effect = events.append
+
+        def wait(_predicate, label, **_kwargs):
+            if label == "thorns_authored_uuid_received":
+                raise Stop
+            return mock.MagicMock()
+
+        steps.wait.side_effect = wait
+        with self.assertRaises(Stop):
+            native_p4._damage_environment(steps, (10, 70, 10), 1)
+        summon = next(i for i, event in enumerate(events) if event.startswith("summon minecraft:zombie"))
+        self.assertEqual("time set 18000", events[summon - 1])
 
     def test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit(self) -> None:
         from .backends import native_p4
@@ -551,7 +576,7 @@ class NativeV2ProbeTests(unittest.TestCase):
                         username="HarnessUnit", display=":99")
             with self.assertRaisesRegex(ValueError, "platform"):
                 runtime.start_client(**args, platform="invalid")
-            with mock.patch.object(runtime, "AGENT_ROOT", root), \
+            with mock.patch.dict(os.environ, {"SOLARIS_LOADER_ROOT": str(root)}), \
                     mock.patch("tools.harness.audio.private_audio_preflight"):
                 with self.assertRaisesRegex(RuntimeError, "missing executable Gradle wrapper"):
                     runtime.start_client(**args, platform="fabric")

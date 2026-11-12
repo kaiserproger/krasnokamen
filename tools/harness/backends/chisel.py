@@ -72,7 +72,7 @@ def _package_source() -> Path:
     override = os.environ.get("SOLARIS_CHISEL_PACKAGE")
     if override:
         return Path(override).expanduser().resolve()
-    return (runtime.REPO_ROOT.parent / "solaris-default-plugins" / "chisel").resolve()
+    return runtime.sibling_root("plugins") / "chisel"
 
 
 def _copy_package(source: Path, target: Path) -> dict[str, Any]:
