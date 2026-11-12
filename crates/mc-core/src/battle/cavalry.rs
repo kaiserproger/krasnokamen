@@ -334,7 +334,9 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             } else {
                 [velocity[0], velocity[2]]
             };
-            let escape = Some(&mut battle.columns.escape[horse_bi]);
+            // Only a fugitive turns back out of a pocket: a rider with a target
+            // or a slot keeps pressing toward it, as before.
+            let escape = routing.then_some(&mut battle.columns.escape[horse_bi]);
             let velocity = super::steering::around_obstacles(frame, formation, horse, velocity, heading, escape);
             battle.columns.drive[horse_bi] = velocity;
             battle.columns.drive[bi] = [0.0; 3];
@@ -424,7 +426,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             horse,
             velocity,
             [velocity[0], velocity[2]],
-            Some(&mut battle.columns.escape[horse_bi]),
+            None,
         );
         battle.columns.drive[horse_bi] = velocity;
         battle.columns.drive[bi] = [0.0; 3];
