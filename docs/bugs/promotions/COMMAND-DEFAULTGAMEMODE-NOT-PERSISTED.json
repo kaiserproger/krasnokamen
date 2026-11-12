@@ -1,0 +1,71 @@
+{
+  "id": "COMMAND-DEFAULTGAMEMODE-NOT-PERSISTED",
+  "verdict": "promoted",
+  "fix_commit": "patch:eca69e54ae06c31d701f1e2b322f203a40d1a0d25503a1b5191efb5b0fdc1fd9",
+  "fix_commit_full": "patch:eca69e54ae06c31d701f1e2b322f203a40d1a0d25503a1b5191efb5b0fdc1fd9",
+  "promoted_at": "2026-11-12T13:57:09+00:00",
+  "tree_head": "ab8ab748b0ee9c476a74d76a8e2855da27b6c69b",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "eca69e54ae06c31d701f1e2b322f203a40d1a0d25503a1b5191efb5b0fdc1fd9",
+  "reversed_files": [
+    "crates/mc-core/src/core/journal.rs",
+    "crates/mc-core/src/core/recovery.rs",
+    "crates/mc-core/src/dimensions_tick.rs",
+    "crates/mc-core/src/level_metadata.rs",
+    "crates/mc-core/src/native_checkpoint.rs",
+    "crates/mc-core/src/command_execution.rs",
+    "crates/mc-core/src/dimensions_globals.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:core::default_game_mode_persistence_tests::a_bad_default_game_mode_is_refused_not_defaulted": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:level_metadata::tests::default_game_mode_is_level_dat_game_type_and_a_bad_value_fails_closed": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:core::default_game_mode_persistence_tests::default_game_mode_survives_wal_restart_and_checkpoint_and_joins_new_players": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-command-persist": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-command-persist --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/CommandPersistLoot/.analysis/validation/20261112T135051-ledger-promote-xnfxizw2/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:core::default_game_mode_persistence_tests::a_bad_default_game_mode_is_refused_not_defaulted": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:level_metadata::tests::default_game_mode_is_level_dat_game_type_and_a_bad_value_fails_closed": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::default_game_mode_persistence_tests::default_game_mode_survives_wal_restart_and_checkpoint_and_joins_new_players": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:entities:native-v2-command-persist": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T135634-native-v2-command-persist-xru89j1m/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/CommandPersistLoot/.analysis/validation/20261112T134530-native-v2-command-persist-4gmm4oy1/result.json",
+    "tree_head": "ab8ab748b0ee9c476a74d76a8e2855da27b6c69b",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "2aa871d61fbdf6c9902f77f7add44a8d4bd0b78ef3aaca634fde79df2d1b6c79",
+    "covers": [
+      "harness:entities:native-v2-command-persist"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/CommandPersistLoot/.analysis/validation/20261112T135051-ledger-promote-xnfxizw2"
+}
