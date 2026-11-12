@@ -74,6 +74,7 @@ CONTAINER = "net.minecraft.client.gui.screens.inventory.ContainerScreen"
 ACTION_SLOT, RECIPE_SLOTS = 52, 45  # server icon menu layout (ui_menus.rs): New order icon; recipe icons per page
 AUTO_LABEL = "Craft missing ingredients"
 RESIDENTS = 2
+BUILDER_TAG = "строитель"  # presentation.rs: the nametag profession of a Builder
 CANCEL = "qa-cancel"
 CANCEL_COUNT = 4  # carry's 3 wheat + one opened hay block (9) = 12 wheat
 
@@ -306,13 +307,26 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
         probe.fixture(f"settlement bind {SETTLEMENT} {resident}")
     detail["residents"] = residents
 
+    def nametags() -> dict[str, str]:
+        """uuid -> `<name> · <profession> · <activity>` of each summoned villager."""
+        return {str(row["entity_uuid"]): str((row.get("received_metadata") or {}).get("2", {}).get("value"))
+                for row in _villagers(probe) if str(row.get("entity_uuid")) in residents}
+
+    # The planner's street work picks its Builder within a few seconds; order only after it has, so the
+    # resident the dialog offers cannot turn into the Builder between the dialog and its submit.
+    try:
+        _bwait(probe, lambda _s: any(BUILDER_TAG in tag for tag in nametags().values()),
+               "street_builder_assigned", timeout=60.0)
+    except RuntimeError as error:
+        detail["street_builder"] = str(error)
+    detail["nametags_before_order"] = nametags()
+
     def resident_for(form: dict[str, Any]) -> str:
         """The uuid of the form's `Resident: <name>` option: the nametag of each summoned villager
         starts with that resident's name."""
         label = next(label for label in _labels(form) if label.startswith("Resident: "))
         name = label.removeprefix("Resident: ")
-        tags = {str(row["entity_uuid"]): str((row.get("received_metadata") or {}).get("2", {}).get("value"))
-                for row in _villagers(probe) if str(row.get("entity_uuid")) in residents}
+        tags = nametags()
         detail["resident_nametags"] = tags
         matching = [uuid for uuid, tag in tags.items() if tag.split(" · ")[0] == name]
         if len(matching) != 1:
