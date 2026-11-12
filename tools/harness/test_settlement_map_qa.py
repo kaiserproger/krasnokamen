@@ -404,5 +404,183 @@ class SettlementMapQaTests(unittest.TestCase):
                           (12, 201, 20): "minecraft:oak_planks"})
 
 
+# Assertions of the recorded real-client runs (their scene-shot/scenario.json, or
+# details.scenario.assertions of the passing native run `134750-v4iye6sx`); only the
+# GUI-check names matter here, the fixture and screenshot-size checks are kept as recorded.
+RECORDED_WRONG_CLICK = {  # 140953-1275_cmr: Help clicked instead of Settlement, fails on the menu
+    "in_play": True, "fixture_founder_at_anchor": True, "chat Founded mapqa": True,
+    "chat anchor=[128, 201, 0]": True, "chat Certified storage #": True,
+    "fixture_villager_0_received": True, "fixture_bell_approach_received": True,
+    "GUI bell target": True, "GUI dialog Settlement mapqa": True, "civil-hub_dimensions": True,
+    "GUI menu Settlement": False,
+}
+RECORDED_PASS = {  # 134750-v4iye6sx
+    "in_play": True, "GUI bell target": True, "GUI closed": True,
+    "GUI dialog Order construction L2 #2": True, "GUI dialog Projects": True,
+    "GUI dialog Settlement mapqa": True, "GUI dialog waiting for materials": True,
+    "GUI menu #2 ": True, "GUI menu Construction": True, "GUI menu Household": True,
+    "GUI menu Projects": True, "GUI menu Resident ·": True, "GUI menu Residents": True,
+    "GUI menu Resources": True, "GUI menu Settlement": True, "GUI menu Storage": True,
+    "GUI shift slot/81 applied": True, "GUI_native_progress_advanced": True,
+    "GUI_progress_matches_independent_placed_blocks": True, "GUI_storage_transfer_conserves_one": True,
+    "GUI_supply_deposit": True, "chat Founded mapqa": True, "civil-hub_dimensions": True,
+    "dashboard_map_GUI": True, "exact_shortage_rendered": True, "map_cell_GUI": True,
+    "map_territory_rendered": True, "map_viewer_rendered": True, "upgrade_native_shortage_icons": True,
+}
+
+
+def passing_run(language):
+    """The assertions a passing run of `language` records, written out from the page titles."""
+    ru = language == "ru_ru"
+    page = lambda key: gate.PAGES[key][ru]
+    names = ["in_play", "GUI bell target", "GUI bell target before click", f"GUI dialog {page('hub')}",
+             "dashboard_map_GUI", "map_viewer_rendered", "map_territory_rendered", "map_cell_GUI",
+             "GUI menu #2 ", f"GUI dialog {page('order')} #2", f"GUI dialog {page('projects')}",
+             "upgrade_native_shortage_icons", f"GUI dialog {page('waiting')}", "exact_shortage_rendered",
+             "GUI shift slot/81 applied", "GUI_storage_transfer_conserves_one",
+             "GUI_native_progress_advanced", "GUI_progress_matches_independent_placed_blocks"]
+    names += [f"GUI menu {page(key)}" for key in ("settlement", "projects", "construction", "storage",
+                                                  "residents", "resident", "household", "resources")]
+    return dict.fromkeys(names, True)
+
+
+class SettlementMapVerdictTests(unittest.TestCase):
+    def test_verdict_names_are_the_ledger_registration(self):
+        from tools.harness import regressions
+        self.assertEqual(set(gate.VERDICTS), regressions._BOOLEAN_PROFILE_VERDICTS["settlement-map-qa"])
+        self.assertEqual(set(gate.verdicts_from_assertions({}, "en_us")), set(gate.VERDICTS))
+
+    def test_every_page_text_the_script_waits_for_is_in_the_page_table(self):
+        import inspect
+        import re
+        source = inspect.getsource(gate._script) + inspect.getsource(gate._enter_dashboard)
+        pairs = set(re.findall(r"""label\(\s*["']([^"']+)["'],\s*["']([^"']+)["']\s*\)""", source))
+        self.assertGreater(len(pairs), 10)
+        self.assertEqual({pair for pair in pairs if pair not in gate.PAGES.values()}, set())
+        self.assertIn(f'f"Поселение {{NAME}}" if ru else f"Settlement {{NAME}}"', source)
+        self.assertEqual(gate.PAGES["hub"], (f"Settlement {gate.NAME}", f"Поселение {gate.NAME}"))
+
+    def test_a_passing_run_meets_every_verdict_in_both_languages(self):
+        for language in ("en_us", "ru_ru"):
+            verdicts = gate.verdicts_from_assertions(passing_run(language), language)
+            expected = {name: True for name in gate.VERDICTS}
+            if language == "en_us":
+                expected["localized_text"] = None  # no Russian text to judge
+            self.assertEqual(verdicts, expected, language)
+        recorded = gate.verdicts_from_assertions(RECORDED_PASS, "en_us")
+        self.assertEqual({name: value for name, value in recorded.items() if name != "localized_text"},
+                         {name: True for name in gate.VERDICTS if name != "localized_text"})
+
+    def test_recorded_wrong_click_run_fails_the_dashboard_verdict_and_everything_after_it(self):
+        verdicts = gate.verdicts_from_assertions(RECORDED_WRONG_CLICK, "en_us")
+        self.assertIs(verdicts["bell_opens_hub"], True)
+        self.assertIs(verdicts["dashboard"], False)
+        for stage in gate.STAGES[2:]:
+            self.assertIs(verdicts[stage], False, stage)
+        self.assertIs(verdicts["all"], False)
+        self.assertIsNone(verdicts["localized_text"])
+
+    def test_ledger_reads_the_recorded_wrong_click_run_as_red_and_a_pass_as_met(self):
+        from tools.harness import ledger, regressions
+        failed = {"status": "failed", "details": {"verdicts": gate.verdicts_from_assertions(RECORDED_WRONG_CLICK, "en_us")}}
+        for check in ("dashboard", "storage_transfer", "all"):
+            self.assertTrue(ledger._failing_verdict(failed, "settlement-map-qa", check), check)
+        self.assertFalse(ledger._failing_verdict(failed, "settlement-map-qa", "bell_opens_hub"))
+        passed = {"status": "passed", "details": {"verdicts": gate.verdicts_from_assertions(RECORDED_PASS, "en_us")}}
+        for check in ("bell_opens_hub", "dashboard", "storage_transfer", "all"):
+            regressions._profile_verdict(passed, "settlement-map-qa", check)
+        with self.assertRaises(regressions.VerdictNotMet):
+            regressions._profile_verdict(passed, "settlement-map-qa", "localized_text")
+
+    def test_each_stage_goes_false_when_one_of_its_checks_fails(self):
+        failing = {
+            "bell_opens_hub": "GUI dialog Settlement mapqa", "dashboard": "GUI menu Settlement",
+            "map": "map_territory_rendered", "building_order": "GUI dialog Projects",
+            "shortage_icons": "exact_shortage_rendered", "storage_transfer": "GUI_storage_transfer_conserves_one",
+            "project_progress": "GUI_native_progress_advanced", "residents": "GUI menu Household",
+            "resources": "GUI menu Resources",
+        }
+        self.assertEqual(set(failing), set(gate.STAGES))
+        for stage, name in failing.items():
+            run = passing_run("en_us")
+            run[name] = False
+            verdicts = gate.verdicts_from_assertions(run, "en_us")
+            self.assertIs(verdicts[stage], False, stage)
+            self.assertIs(verdicts["all"], False, stage)
+
+    def test_a_russian_title_that_never_arrives_fails_the_localized_text_verdict(self):
+        run = passing_run("ru_ru")
+        run["GUI menu Жители"] = False
+        verdicts = gate.verdicts_from_assertions(run, "ru_ru")
+        self.assertIs(verdicts["localized_text"], False)
+        self.assertIs(verdicts["residents"], False)
+        self.assertIs(verdicts["storage_transfer"], True)
+        # the English run of the same scene says nothing about Russian text
+        self.assertIsNone(gate.verdicts_from_assertions(passing_run("en_us"), "en_us")["localized_text"])
+
+    def test_a_run_that_stops_without_a_failed_check_leaves_unreached_verdicts_unknown(self):
+        reached = {name: True for name in ("GUI bell target", "GUI dialog Settlement mapqa", "GUI menu Settlement")}
+        verdicts = gate.verdicts_from_assertions(reached, "en_us")
+        self.assertIs(verdicts["bell_opens_hub"], True)
+        self.assertIs(verdicts["dashboard"], True)
+        for name in ("map", "storage_transfer", "resources", "all", "localized_text"):
+            self.assertIsNone(verdicts[name], name)
+        self.assertEqual(set(gate.verdicts_from_assertions({"in_play": True}, "ru_ru").values()), {None})
+        # a lost connection is not a verdict about the GUI
+        self.assertEqual(set(gate.verdicts_from_assertions({"in_play": False}, "en_us").values()), {None})
+
+    def test_a_missing_button_is_a_failed_check_of_its_stage(self):
+        gui = object.__new__(gate.Gui)
+        gui.client, gui.scale, gui.size, gui.serial = "native", 3, (1280, 720), 0
+        gui.artifact = Path("/nonexistent")
+        gui.capture = Mock(return_value="frame.png")
+        gui.probe = Mock()
+        gui.probe.report = {"assertions": {}}
+        gui.probe.observe.return_value = {"ui_nodes": [], "screen": {}}
+        with patch.object(gate.scene_shot, "png_size", return_value=(1280, 720)):
+            with self.assertRaisesRegex(RuntimeError, "visible GUI button 'Settlement' not found"):
+                gui.button("Settlement")
+        self.assertEqual(gui.probe.report["assertions"], {"GUI button Settlement": False})
+        verdicts = gate.verdicts_from_assertions({"GUI bell target": True, "GUI dialog Settlement mapqa": True,
+                                                  **gui.probe.report["assertions"]}, "en_us")
+        self.assertIs(verdicts["bell_opens_hub"], True)
+        self.assertIs(verdicts["dashboard"], False)
+
+    def test_run_publishes_the_verdicts_when_the_walk_fails(self):
+        from types import SimpleNamespace
+        ctx = SimpleNamespace(client="native", extra_args=[], client_evidence={})
+        probe = SimpleNamespace(report={"assertions": dict(RECORDED_WRONG_CLICK)})
+
+        def walk(*_):
+            raise RuntimeError("scene-shot assertion failed: GUI menu Settlement")
+
+        def scene(ctx_, scenario, script):
+            return script(probe, Path("/nonexistent"), [], "native")
+
+        with patch.object(gate, "_script", walk), patch.object(gate.scene_shot, "run", scene):
+            with self.assertRaisesRegex(RuntimeError, "GUI menu Settlement"):
+                gate.run(ctx)
+        self.assertIs(ctx.client_evidence["verdicts"]["dashboard"], False)
+        self.assertIs(ctx.client_evidence["verdicts"]["bell_opens_hub"], True)
+        self.assertEqual(probe.report["verdicts"], ctx.client_evidence["verdicts"])
+
+    def test_ledger_refs_run_the_russian_check_on_java_and_the_rest_on_native(self):
+        from tools.harness import regressions
+        russian = regressions._profile_command("settlement-map-qa", "localized_text")
+        self.assertEqual(russian[-8:], ["--client", "java", "--windowed", "--timeout-seconds", "3600",
+                                        "--", "--language", "ru_ru"])
+        for verdict in ("dashboard", "storage_transfer", "all"):
+            command = regressions._profile_command("settlement-map-qa", verdict)
+            self.assertEqual(command[-5:], ["--client", "native", "--windowed", "--timeout-seconds", "3600"])
+        with self.assertRaises(ValueError):
+            regressions._profile_command("settlement-map-qa", "production_order")
+
+    def test_the_native_lane_refuses_russian_because_its_client_cannot_ask_for_it(self):
+        from types import SimpleNamespace
+        ctx = SimpleNamespace(client="native", extra_args=["--", "--language", "ru_ru"], client_evidence={})
+        with self.assertRaisesRegex(ValueError, "require --client java"):
+            gate.run(ctx)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -2345,9 +2345,12 @@ title = "Settlement UI absent or inconvenient"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1; fixed by b34c1d0b (civil settlement UI: bell hub, dashboard, map, building and project cards) on wt/SettlementUICivil; fix patch docs/bugs/fix-patches/SETTLEMENT-UI-CIVIL.patch is the production hunks of that branch (settlements/ui.rs, ui_map.rs, ui_menus.rs, ui_text.rs, and the construction.rs #[cfg(test)] gate on has_funded_candidate that the reversed ui.rs needs); reversing it removes the dashboard, so the physical GUI path from the bell hub to the Settlement dashboard, map, order review, project shortage cards, resident pages and resources never opens. Each ref is a verdict of the settlement-map-qa real-client run (native, physical clicks); the wrong-click control (Help instead of Settlement) fails the dashboard verdict. Owner in-game check of 'inconvenient' is not automated"
+regression = ["harness:settlement-map-qa:dashboard", "harness:settlement-map-qa:map", "harness:settlement-map-qa:building_order", "harness:settlement-map-qa:shortage_icons", "harness:settlement-map-qa:project_progress", "harness:settlement-map-qa:residents", "harness:settlement-map-qa:resources"]
+failing_first = "reported"
+fix_commit = "patch:40f8383c27571409b89c202d9f47a4a636b765818e46987640a027055c870381"
+promotion = "docs/bugs/promotions/ISSUE-1-04.json"
 
 [[bug]]
 id = "ISSUE-1-05"
@@ -2566,9 +2569,12 @@ title = "Storage and assignment UI lacks inventory and icons"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1; storage half fixed by b34c1d0b (civil settlement UI, wt/SettlementUICivil): the Storage page is a 90-slot icon inventory where a shift-click moves one real stack and conserves it (settlement-map-qa verdict storage_transfer, assertion GUI_storage_transfer_conserves_one); fix patch docs/bugs/fix-patches/SETTLEMENT-UI-CIVIL.patch is the production hunks of that branch, and reversing it removes the dashboard that leads to the Storage page. Assignment half (workplace assignment from the Residents pages) has no real-client step and is not covered by this ref: split it off before promoting if the owner reads the row as covering both"
+regression = ["harness:settlement-map-qa:storage_transfer"]
+failing_first = "reported"
+fix_commit = "patch:40f8383c27571409b89c202d9f47a4a636b765818e46987640a027055c870381"
+promotion = "docs/bugs/promotions/ISSUE-1-20.json"
 
 [[bug]]
 id = "ISSUE-1-21"
@@ -2617,9 +2623,12 @@ title = "Settlement UI is not localized"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1; fixed by b34c1d0b (civil settlement UI, wt/SettlementUICivil: ui_text.rs Lang strings and every page title); fix patch docs/bugs/fix-patches/SETTLEMENT-UI-CIVIL.patch is the production hunks of that branch, and reversing it removes the localized hub and pages. The ref is the settlement-map-qa localized_text verdict on vanilla Java 26.1.2 with --language ru_ru (the native client sends ClientInformation language en_us fixed and has no language option, so its lane cannot run ru_ru): every Russian title (hub, Settlement, Map, Projects, Construction, Storage, Residents, Resident, Household, Resources, order review, waiting for materials) and the rendered shortage text must arrive"
+regression = ["harness:settlement-map-qa:localized_text"]
+failing_first = "reported"
+fix_commit = "patch:40f8383c27571409b89c202d9f47a4a636b765818e46987640a027055c870381"
+promotion = "docs/bugs/promotions/ISSUE-1-25.json"
 
 [[bug]]
 id = "ISSUE-1-26"

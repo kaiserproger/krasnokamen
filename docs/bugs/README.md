@@ -31,7 +31,9 @@ failing_first = "not recorded"
 - `repro`: `manual`, `client`, `cargo`, or `source`, according to the original report.
 - `regression`: a list of green `cargo:<crate>:<exact test path>`,
   `harness:<profile>:<scenario>`, or `harness:<profile>:<verdict>` checks;
-  initially it may be empty. Profile verdicts run the windowed native client.
+  initially it may be empty. Profile verdicts run the windowed native client,
+  except `settlement-map-qa:localized_text`, which needs the Russian locale and
+  runs vanilla Java with `--language ru_ru`.
   A profile may publish boolean `details.verdicts` keyed by behaviour; the
   referenced key must be exactly `true`. The `all` key denotes the whole
   profile; when no boolean verdict map exists, `all` requires a passing
@@ -177,7 +179,7 @@ worker, runs the negative control.
    join) and the failure not tagged before the scenario body (`join`, start-up
    phases). Any other failure, a timeout or a join flake never counts. A profile
    ref whose run cannot name a failing verdict follows the same assertion rule:
-   `all` of a profile without a verdict map (`settlement-map-qa`, `autocraft-qa`,
+   `all` of a profile without a verdict map (`autocraft-qa`,
    `village-autonomy-qa`) is red when the failed receipt's `error` reads
    `<id> assertion failed: <name>`, and a `buildings-qa` `<blueprint>.<behaviour>`
    that was never recorded is red when that assertion's name starts with
