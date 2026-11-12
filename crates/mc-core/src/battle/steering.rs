@@ -2,7 +2,8 @@
 //! The battlefield is natural relief: soldiers keep the formation's
 //! horizontal drive, physics jumps one-block steps and gravity takes them down
 //! slopes; a drive into a trunk or a wall of two or more blocks turns aside
-//! ([`super::ground::deflect`]). There is no per-soldier path search.
+//! ([`super::ground::deflect`]). There is no per-soldier path search, except
+//! a short local one for a rider boxed in a terrain pocket.
 //! Nearest front points are shared for ten ticks (AoE4 virtual-leader pattern).
 //! Separation: PSCrowd's five nearest neighbours, capped cell inspection;
 //! impulses use the existing mc-physics contact kernel, never mutate neighbours.
@@ -262,8 +263,9 @@ fn sample_movement(
 pub(crate) enum Mover<'a> {
     /// On foot: boxed in, it stands ([`super::ground::deflect_foot`]).
     Foot,
-    /// A horse with a target or a slot ([`super::ground::deflect`]).
-    Rider,
+    /// A horse with a target or a slot, and its local path out of a pocket
+    /// ([`super::ground::deflect`]).
+    Rider(&'a mut Option<super::ground::Detour>),
     /// A fleeing horse and its way out of a pocket
     /// ([`super::ground::deflect_mounted`]).
     Fugitive(&'a mut Option<super::ground::Escape>),
@@ -286,7 +288,17 @@ pub(crate) fn around_obstacles(
     let (world, registry) = (frame.world, frame.registry);
     let turned = match mover {
         Mover::Foot => super::ground::deflect_foot(world, registry, pos, half_width, drive, heading, 1.0),
-        Mover::Rider => super::ground::deflect(world, registry, pos, half_width, drive, heading, 1.0),
+        Mover::Rider(detour) => super::ground::deflect(
+            world,
+            registry,
+            pos,
+            half_width,
+            drive,
+            heading,
+            1.0,
+            detour,
+            frame.tick,
+        ),
         Mover::Fugitive(escape) => super::ground::deflect_mounted(
             world,
             registry,

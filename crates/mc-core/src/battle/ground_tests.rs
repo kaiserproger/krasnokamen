@@ -207,42 +207,42 @@ fn deflection_keeps_open_ground_and_steps_but_turns_at_trunks_and_walls() {
     let south = [0.0, 0.08];
     // Open ground and a one-block step ahead keep the exact drive (physics jumps it).
     let step = ground(5, 3);
-    assert_eq!(deflect(world, registry, step, 0.3, east, east, 1.0), east);
+    assert_eq!(deflect(world, registry, step, 0.3, east, east, 1.0, &mut None, 0), east);
     // A trunk ahead turns the drive; both ends are one block away, so `side` decides.
     let before_trunk = ground(3, 5);
-    let turned = deflect(world, registry, before_trunk, 0.3, east, east, 1.0);
+    let turned = deflect(world, registry, before_trunk, 0.3, east, east, 1.0, &mut None, 0);
     assert_ne!(turned, east);
     assert!(turned[1] > 0.0 && (mc_physics::mth::length2(turned[0], turned[1]) - 0.08).abs() < 1e-12);
-    let other = deflect(world, registry, before_trunk, 0.3, east, east, -1.0);
+    let other = deflect(world, registry, before_trunk, 0.3, east, east, -1.0, &mut None, 0);
     assert!(other[1] < 0.0);
     // A three-block wall (x -6..=2) turns bodies toward its nearer end, whatever
     // `side` says and however the crowd pushes the drive: the line splits.
-    let west_half = deflect(world, registry, ground(-5, -21), 0.3, south, south, -1.0);
+    let west_half = deflect(world, registry, ground(-5, -21), 0.3, south, south, -1.0, &mut None, 0);
     assert!(west_half[0] < 0.0, "{west_half:?}");
     let pushed = [0.03, 0.074];
-    let east_half = deflect(world, registry, ground(1, -21), 0.3, pushed, south, 1.0);
+    let east_half = deflect(world, registry, ground(1, -21), 0.3, pushed, south, 1.0, &mut None, 0);
     // Lateral dressing toward a slot behind the wall does not pull a body back.
     let dressing = [0.08, 0.0];
-    let held = deflect(world, registry, ground(-5, -21), 0.3, dressing, south, 1.0);
+    let held = deflect(world, registry, ground(-5, -21), 0.3, dressing, south, 1.0, &mut None, 0);
     assert!(held[0] < 0.0, "{held:?}");
     assert!(east_half[0] > 0.0, "{east_half:?}");
     // A body 0.42 short of the wall with a slightly oblique heading (the pose
     // that jammed the movement test): the lateral probes drift along the
     // wall's normal, yet the nearer (west) end still wins.
-    let oblique = deflect(world, registry, [-3.1307, 65.0, -20.7232], 0.3, [0.0, 1.58], [0.21, 19.62], 1.0);
+    let oblique = deflect(world, registry, [-3.1307, 65.0, -20.7232], 0.3, [0.0, 1.58], [0.21, 19.62], 1.0, &mut None, 0);
     assert!(oblique[0] < 0.0, "{oblique:?}");
     // Horses from the stalled movement test. A horse against the trunk at
     // (31, -72) with the oak's canopy (y 68) over its back cannot jump the
     // terrace step to the west (y 67): it goes round the east side.
     let horse = 0.698_242_187_5;
-    let pocket = deflect(world, registry, [30.698, 66.0, -72.698], horse, [0.0, 4.6], [0.8, 23.4], 1.0);
+    let pocket = deflect(world, registry, [30.698, 66.0, -72.698], horse, [0.0, 4.6], [0.8, 23.4], 1.0, &mut None, 0);
     assert!(pocket[0] > 0.0, "{pocket:?}");
     // A horse grazing the trunk at (40, -72) drops the drift into it, or
     // physics refuses the jump onto the terrace step ahead.
-    let graze = deflect(world, registry, [39.302, 64.0, -70.698], horse, [0.026, 4.6], [0.2, 21.4], 1.0);
+    let graze = deflect(world, registry, [39.302, 64.0, -70.698], horse, [0.026, 4.6], [0.2, 21.4], 1.0, &mut None, 0);
     assert_eq!(graze, [0.0, 4.6]);
     // A six-deep cave opening ahead is steered around, not walked into.
-    assert_ne!(deflect(world, registry, ground(-20, 19), 0.3, south, south, 1.0), south);
+    assert_ne!(deflect(world, registry, ground(-20, 19), 0.3, south, south, 1.0, &mut None, 0), south);
 }
 
 #[test]
@@ -473,15 +473,15 @@ fn a_body_under_a_terrain_roof_walks_out_toward_open_sky() {
     // Two blocks in from the roof's west edge, five from its east edge.
     let inside = [107.5, f64::from(height(107, -99)), -98.5];
     let east = [0.079, 0.0];
-    let out = deflect(world, registry, inside, 0.3, east, [20.0, 0.0], 1.0);
+    let out = deflect(world, registry, inside, 0.3, east, [20.0, 0.0], 1.0, &mut None, 0);
     assert!(out[0] < 0.0, "went deeper under the roof: {out:?}");
     // A body holding its slot under the roof (no drive) walks out too.
-    let held = deflect(world, registry, inside, 0.3, [0.0, 0.0], [0.0, 0.0], 1.0);
+    let held = deflect(world, registry, inside, 0.3, [0.0, 0.0], [0.0, 0.0], 1.0, &mut None, 0);
     assert!(held[0] < -0.05, "stayed under the roof: {held:?}");
     // Under open sky the same drive, or no drive, is returned exactly.
     let open = [107.5, f64::from(height(107, -94)), -93.5];
-    assert_eq!(deflect(world, registry, open, 0.3, east, [20.0, 0.0], 1.0), east);
-    assert_eq!(deflect(world, registry, open, 0.3, [0.0, 0.0], [20.0, 0.0], 1.0), [0.0, 0.0]);
+    assert_eq!(deflect(world, registry, open, 0.3, east, [20.0, 0.0], 1.0, &mut None, 0), east);
+    assert_eq!(deflect(world, registry, open, 0.3, [0.0, 0.0], [20.0, 0.0], 1.0, &mut None, 0), [0.0, 0.0]);
 }
 
 /// The overhang where a fugitive stayed at the end of the d0cabbab and
@@ -535,7 +535,7 @@ fn a_body_under_an_overhang_walks_out_by_the_step_not_the_drop() {
         if exit(world, registry, pos).is_none() {
             break;
         }
-        let drive = deflect(world, registry, pos, 0.3, [0.0, 0.0], [0.0, 0.0], 1.0);
+        let drive = deflect(world, registry, pos, 0.3, [0.0, 0.0], [0.0, 0.0], 1.0, &mut None, 0);
         pos[0] += drive[0] * mc_physics::TICK_SECONDS;
         pos[2] += drive[1] * mc_physics::TICK_SECONDS;
         if solid(pos) {
@@ -743,7 +743,7 @@ fn a_body_in_the_r7_tunnel_pile_walks_out() {
     let pile = [-72.7 + 178.0, 67.0, 260.3 - 156.0];
     let mouth = [-69.5 + 178.0 - pile[0], 262.5 - 156.0 - pile[2]];
     for drive in [[-1.58, -1.58], [0.0, -2.0], [-2.0, 0.0], [1.58, 1.58], [0.0, 0.0], [-5.6, 0.0]] {
-        let out = deflect(world, registry, pile, 0.3, drive, drive, 1.0);
+        let out = deflect(world, registry, pile, 0.3, drive, drive, 1.0, &mut None, 0);
         let along = (out[0] * mouth[0] + out[1] * mouth[1]) / mc_physics::mth::length2(mouth[0], mouth[1]);
         assert!(along > 1.0, "drive {drive:?} -> {out:?}: not walking out (along {along})");
     }
@@ -807,34 +807,40 @@ fn a_boxed_in_body_on_foot_stands_at_a_cave_mouth() {
     let pos = [122.5, 66.0, -117.5];
     let north = [0.0, -1.58];
     assert_eq!(deflect_foot(world, registry, pos, 0.3, north, north, 1.0), [0.0, 0.0], "walked into the mouth");
-    assert_eq!(deflect(world, registry, pos, 0.3, north, north, 1.0), north, "a rider keeps pressing");
+    assert_eq!(deflect(world, registry, pos, 0.3, north, north, 1.0, &mut None, 0), north, "a rider keeps pressing");
 }
 
-/// One horse riding at a fixed point over [`GULLY`] under [`deflect`]: it
-/// stands on the support under its footprint, jumps one-block steps and is
-/// stopped by walls. Where it is after `ticks`, or once within 2 blocks.
+/// One horse riding at a fixed point under [`deflect`]: it stands on the
+/// support under its footprint, jumps one-block steps and is stopped by walls,
+/// moving along each axis in turn, the larger component first, as physics
+/// resolves them (`mc_physics` `resolve_horizontal_axes`). Where it is after
+/// `ticks`, or once within 2 blocks.
 fn ride_at(state: &TickState, start: [f64; 3], foe: [f64; 3], ticks: usize) -> [f64; 3] {
     let (world, registry) = (&state.world, &state.registry);
     let horse = 0.698_242_187_5;
     let mut pos = start;
-    for _ in 0..ticks {
+    let mut detour = None;
+    for tick in 0..ticks {
         let to = [foe[0] - pos[0], foe[2] - pos[2]];
         let length = mc_physics::mth::length2(to[0], to[1]);
         if length < 2.0 {
             break;
         }
         let drive = to.map(|v| v / length * 4.6);
-        let out = deflect(world, registry, pos, horse, drive, drive, 1.0);
-        let next = [
-            pos[0] + out[0] * mc_physics::TICK_SECONDS,
-            pos[1],
-            pos[2] + out[1] * mc_physics::TICK_SECONDS,
-        ];
-        if let Some(Ok(y)) = support(world, registry, next, horse)
-            && y <= pos[1] + 1.0
-            && clear(world, registry, [next[0], y, next[2]], horse, 1.6) == Some(true)
-        {
-            pos = [next[0], y, next[2]];
+        let out = deflect(world, registry, pos, horse, drive, drive, 1.0, &mut detour, tick as u64);
+        let axes = if out[0].abs() < out[1].abs() { [1, 0] } else { [0, 1] };
+        for axis in axes {
+            if out[axis] == 0.0 {
+                continue;
+            }
+            let mut next = pos;
+            next[axis * 2] += out[axis] * mc_physics::TICK_SECONDS;
+            if let Some(Ok(y)) = support(world, registry, next, horse)
+                && y <= pos[1] + 1.0
+                && clear(world, registry, [next[0], y, next[2]], horse, 1.6) == Some(true)
+            {
+                pos = [next[0], y, next[2]];
+            }
         }
     }
     pos
@@ -943,4 +949,111 @@ fn a_body_walks_along_a_riser_to_its_open_end() {
         let real = [0, 1, 2].map(|axis| pos[axis] - f64::from(EDGE_SHIFT[axis]));
         assert!(real[2] > 317.5, "from {start:?} the body stayed below the riser at {real:?}");
     }
+}
+
+/// Ground heights (first air above the highest non-tree solid) round the
+/// site935 tree whose trunk stands at (21, 94, 315): columns x 11..=35 (left
+/// to right), rows z 303..=327 (top to bottom), then every log (`true`) and
+/// leaf block of the patch, from `receipts/BvReliefBattle/tree-stack/probe.json`
+/// (no overhangs). Its canopy is two leaf layers at y 96-97 over x 19..=23,
+/// z 313..=317, two blocks over ground 94; ground rises to 95 north of z 314
+/// from x 23 and east of x 24.
+const TREE: [[i32; 25]; 25] = [
+    [95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96],
+    [95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96],
+    [95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96],
+    [95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96],
+    [95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96],
+    [94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96],
+    [94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96],
+    [94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96],
+    [93, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96],
+    [93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96],
+    [93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96],
+    [93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95],
+    [92, 92, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95],
+    [92, 92, 92, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95],
+    [92, 92, 92, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95],
+    [92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95],
+    [92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95],
+    [92, 92, 92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 95, 95, 95, 95],
+    [92, 92, 92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 95, 95],
+    [92, 92, 92, 92, 92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94],
+    [92, 92, 92, 92, 92, 92, 92, 92, 92, 93, 93, 92, 92, 92, 92, 92, 92, 92, 93, 93, 93, 94, 94, 94, 94],
+    [92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 93, 93, 94, 94, 94, 94],
+    [92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 91, 91, 92, 92, 93, 93, 93, 94, 94],
+    [93, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 91, 91, 91, 91, 91, 92, 92, 93, 93, 93, 93, 93],
+    [93, 93, 92, 92, 92, 92, 92, 92, 92, 92, 92, 91, 91, 91, 91, 91, 91, 91, 91, 92, 92, 93, 93, 93, 93],
+];
+const TREE_BLOCKS: [(i32, i32, i32, bool); 96] = [
+    (23, 99, 307, false), (23, 100, 307, false), (24, 100, 307, false), (25, 99, 307, false), (25, 100, 307, false), (22, 99, 308, false),
+    (22, 100, 308, false), (23, 99, 308, false), (23, 100, 308, false), (24, 99, 308, false), (24, 100, 308, false), (24, 101, 308, false),
+    (25, 99, 308, false), (25, 100, 308, false), (26, 99, 308, false), (22, 99, 309, false), (22, 100, 309, false), (23, 99, 309, false),
+    (23, 100, 309, false), (23, 101, 309, false), (24, 95, 309, true), (24, 96, 309, true), (24, 97, 309, true), (24, 98, 309, true),
+    (24, 99, 309, true), (24, 100, 309, true), (24, 101, 309, false), (25, 99, 309, false), (25, 100, 309, false), (25, 101, 309, false),
+    (26, 99, 309, false), (26, 100, 309, false), (22, 99, 310, false), (22, 100, 310, false), (23, 99, 310, false), (23, 100, 310, false),
+    (24, 99, 310, false), (24, 100, 310, false), (24, 101, 310, false), (25, 99, 310, false), (25, 100, 310, false), (25, 101, 310, false),
+    (26, 100, 310, false), (23, 99, 311, false), (24, 99, 311, false), (24, 100, 311, false), (25, 99, 311, false), (25, 100, 311, false),
+    (20, 96, 313, false), (20, 97, 313, false), (21, 96, 313, false), (21, 97, 313, false), (22, 97, 313, false), (19, 96, 314, false),
+    (19, 97, 314, false), (20, 96, 314, false), (20, 97, 314, false), (20, 98, 314, false), (21, 96, 314, false), (21, 97, 314, false),
+    (21, 98, 314, false), (22, 96, 314, false), (22, 97, 314, false), (23, 96, 314, false), (23, 97, 314, false), (19, 96, 315, false),
+    (19, 97, 315, false), (20, 96, 315, false), (20, 97, 315, false), (20, 98, 315, false), (21, 94, 315, true), (21, 95, 315, true),
+    (21, 96, 315, true), (21, 97, 315, true), (21, 98, 315, false), (22, 96, 315, false), (22, 97, 315, false), (22, 98, 315, false),
+    (23, 96, 315, false), (23, 97, 315, false), (19, 96, 316, false), (19, 97, 316, false), (20, 96, 316, false), (20, 97, 316, false),
+    (21, 96, 316, false), (21, 97, 316, false), (21, 98, 316, false), (22, 96, 316, false), (22, 97, 316, false), (23, 96, 316, false),
+    (20, 96, 317, false), (20, 97, 317, false), (21, 96, 317, false), (21, 97, 317, false), (22, 96, 317, false), (22, 97, 317, false),
+];
+
+/// Real (x, y, z) to fixture for [`TREE`].
+const TREE_SHIFT: [i32; 3] = [-80, -30, -220];
+
+fn tree_site(state: &mut TickState) {
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    let (log, leaves) = (state_id(state, "minecraft:oak_log"), state_id(state, "minecraft:oak_leaves"));
+    for (dz, row) in TREE.iter().enumerate() {
+        for (dx, &top) in row.iter().enumerate() {
+            let (x, z) = (11 + dx as i32 + TREE_SHIFT[0], 303 + dz as i32 + TREE_SHIFT[2]);
+            let top = top + TREE_SHIFT[1];
+            for y in 55..top + 12 {
+                state.world.set_block(x, y, z, if y < top { stone } else { air });
+            }
+        }
+    }
+    for (x, y, z, trunk) in TREE_BLOCKS {
+        let at = (x + TREE_SHIFT[0], y + TREE_SHIFT[1], z + TREE_SHIFT[2]);
+        state.world.set_block(at.0, at.1, at.2, if trunk { log } else { leaves });
+    }
+    state.world.fold_overlay();
+}
+
+/// The b31c2540 post-G1 rehearsal traced `battle trace 23 315 6`: blue riders
+/// who had fled past the tree rallied at z 318-320 and rode back north-west
+/// toward the fight, and 17-24 of them stood from t 117 to the end of the take
+/// at (22.7, 94, 314.7). That is the corner between the trunk at (21, 315) to
+/// the west and the one-block step at z 313 to the north, under the canopy.
+/// A rallied rider (steered by [`deflect`]) rides out of that corner toward
+/// its target, from the corner and from where the traced riders rallied.
+#[test]
+fn a_rallied_rider_rides_out_of_the_corner_under_a_canopy() {
+    let mut state = relief_fixture();
+    tree_site(&mut state);
+    let at = |real: [f64; 3]| [0, 1, 2].map(|axis| real[axis] + f64::from(TREE_SHIFT[axis]));
+    let corner = at([22.7, 94.0, 314.7]);
+    let mut stalled = Vec::new();
+    for (start, foe) in [
+        ([22.7, 94.0, 314.7], [10.6, 94.0, 298.2]),
+        ([22.7, 94.0, 314.7], [-24.9, 94.0, 280.8]),
+        ([22.7, 94.0, 314.7], [-22.8, 94.0, 222.0]),
+        ([24.1, 94.0, 318.4], [11.3, 94.0, 297.9]),
+        ([25.7, 94.0, 319.1], [-22.7, 94.0, 279.9]),
+        ([24.0, 94.0, 316.1], [10.1, 94.0, 299.4]),
+    ] {
+        let pos = ride_at(&state, at(start), at(foe), 300);
+        let real = [0, 1, 2].map(|axis| pos[axis] - f64::from(TREE_SHIFT[axis]));
+        let from_corner = mc_physics::mth::length2(pos[0] - corner[0], pos[2] - corner[2]);
+        if from_corner <= 6.0 {
+            stalled.push(format!("from {start:?} toward {foe:?} it stayed at {real:?}"));
+        }
+    }
+    assert!(stalled.is_empty(), "riders stayed by the corner: {stalled:#?}");
 }

@@ -34,6 +34,8 @@ pub(crate) struct Columns {
     pub drive: Vec<[f64; 3]>,
     /// A horse's way out of a terrain pocket (`ground::deflect_mounted`).
     pub escape: Vec<Option<super::ground::Escape>>,
+    /// A horse's local path out of a terrain pocket (`ground::deflect`).
+    pub detour: Vec<Option<super::ground::Detour>>,
     pub ranged: Vec<bool>,
     pub reach: Vec<f64>,
     pub active: Vec<bool>,
@@ -56,6 +58,7 @@ impl Columns {
         self.targets.push(None);
         self.drive.push([0.0; 3]);
         self.escape.push(None);
+        self.detour.push(None);
         self.ranged.push(false);
         self.reach.push(0.0);
         self.active.push(false);
@@ -102,6 +105,7 @@ impl Columns {
             self.classification[bi] = None;
             self.facts[bi].valid = false;
             self.escape[bi] = None;
+            self.detour[bi] = None;
         }
         if self.facts[bi].slot != slot {
             self.facts[bi].valid = false;
