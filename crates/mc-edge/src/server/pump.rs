@@ -236,6 +236,15 @@ pub(super) fn route_outbox(
                 server
                     .connections
                     .stash_disconnect_reason(connection, reason.clone());
+                // A Disconnect without a Joined in the same ordered list is a refused Join
+                // (e.g. duplicate login): wake the connection's join wait so it can send
+                // the reason instead of waiting out the join deadline.
+                if !changes
+                    .iter()
+                    .any(|change| matches!(change, mc_core::boundary::PlayerChange::Joined { .. }))
+                {
+                    server.connections.refuse_join(connection);
+                }
                 break;
             }
         }

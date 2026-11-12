@@ -24,9 +24,14 @@ impl SingleplayerPause {
         inputs: &mut Vec<PlayerInput>,
         outbox: &std::sync::mpsc::Sender<crate::core::TimedOutboxBatch>,
     ) -> bool {
-        let joining = inputs
-            .iter()
-            .any(|input| matches!(input, PlayerInput::Join { .. }));
+        // A login (ProfileLogin precedes Join in its own batch) ends the pause like Join, so a
+        // reconnecting owner's duplicate-login kick is never dropped while paused.
+        let joining = inputs.iter().any(|input| {
+            matches!(
+                input,
+                PlayerInput::Join { .. } | PlayerInput::ProfileLogin { .. }
+            )
+        });
         let leaving = inputs
             .iter()
             .any(|input| matches!(input, PlayerInput::Leave { .. }));

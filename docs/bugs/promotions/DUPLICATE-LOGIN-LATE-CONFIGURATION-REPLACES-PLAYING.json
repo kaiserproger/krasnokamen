@@ -1,0 +1,78 @@
+{
+  "id": "DUPLICATE-LOGIN-LATE-CONFIGURATION-REPLACES-PLAYING",
+  "verdict": "promoted",
+  "fix_commit": "patch:e5aabfdfc59979f89e10a8dc6e6ee2f022e4a97be9bc06b3573bf065b46ab137",
+  "fix_commit_full": "patch:e5aabfdfc59979f89e10a8dc6e6ee2f022e4a97be9bc06b3573bf065b46ab137",
+  "promoted_at": "2026-11-12T00:17:11+00:00",
+  "tree_head": "b8fb437df3eddad5e56226cebdcbf916d1f50d9f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "e5aabfdfc59979f89e10a8dc6e6ee2f022e4a97be9bc06b3573bf065b46ab137",
+  "reversed_files": [
+    "crates/mc-core/src/tick/input/session.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:server::duplicate_login_tests::newer_login_of_the_same_account_kicks_the_session_in_play_and_reaches_play": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::duplicate_login_tests::late_configuration_finisher_is_refused_and_the_player_in_play_keeps_custody": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:tick::duplicate_login_tests::second_finisher_is_refused_even_when_it_logged_in_later": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:tick::duplicate_login_tests::newer_login_still_kicks_a_session_already_in_play_and_takes_over_custody": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::duplicate_login_tests::full_server_refuses_a_same_account_login_before_kicking_the_session_in_play": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:singleplayer_pause::tests::paused_owner_relogin_kicks_the_stale_session_and_joins": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::duplicate_login_tests::late_configuration_finisher_receives_the_duplicate_login_reason": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:server::duplicate_login_tests::newer_login_of_the_same_account_kicks_the_session_in_play_and_reaches_play": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::duplicate_login_tests::late_configuration_finisher_is_refused_and_the_player_in_play_keeps_custody": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::duplicate_login_tests::second_finisher_is_refused_even_when_it_logged_in_later": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::duplicate_login_tests::newer_login_still_kicks_a_session_already_in_play_and_takes_over_custody": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::duplicate_login_tests::full_server_refuses_a_same_account_login_before_kicking_the_session_in_play": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:singleplayer_pause::tests::paused_owner_relogin_kicks_the_stale_session_and_joins": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::duplicate_login_tests::late_configuration_finisher_receives_the_duplicate_login_reason": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/DuplicateLoginLate/.analysis/validation/20261111T235603-ledger-promote-p3obbfiu"
+}
